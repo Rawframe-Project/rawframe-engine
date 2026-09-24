@@ -6,7 +6,7 @@ The engine is at the start of its first milestone, a headless, networked, Kest-s
 
 ## Building
 
-Requirements: CMake 3.28, Ninja, and GCC 13 or Clang 18 or newer (MSVC 17.10 on Windows).
+Requirements: CMake 3.28, Ninja, and GCC 13 or Clang 19 or newer (MSVC 17.10 on Windows).
 
 ```sh
 cmake --preset clang-development
