@@ -40,6 +40,11 @@ enum class KestError : std::uint32_t {
     FrameTooSmall = 13,
     /// A call reached the heap ceiling it was given.
     HeapExhausted = 14,
+    /// The program has no one type of that name.
+    UnknownType = 15,
+    /// A lend was refused: an unknown element type, a size that disagrees,
+    /// or a type holding more than numbers.
+    LendRefused = 16,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(KestError error) noexcept {

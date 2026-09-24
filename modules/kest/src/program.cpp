@@ -4,6 +4,7 @@
 #include "state.h"
 
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 namespace rawframe::kest {
@@ -107,6 +108,18 @@ std::vector<std::string> Program::capabilitiesRequested() const {
         names.emplace_back(kName);
     }
     return names;
+}
+
+result::Result<TypeLayout> Program::layout(std::string_view type) const {
+    const std::string kName{type};
+    const KestLayout* found = nullptr;
+    if (kest_build_layout(state_->build, kName.c_str(), &found) != 1 || found == nullptr) {
+        return result::fail(result::ErrorClass::NotFound,
+                            kKestDomain,
+                            code(KestError::UnknownType),
+                            "the program declares no one type of this name");
+    }
+    return TypeLayout{.size = found->size, .alignment = found->align, .mark = kest_layout_mark(found)};
 }
 
 } // namespace rawframe::kest

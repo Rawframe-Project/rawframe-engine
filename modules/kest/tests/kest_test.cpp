@@ -57,6 +57,16 @@ constexpr std::string_view kAdd = "module t\n"
                                   "    return a + b\n"
                                   "}\n"
                                   "\n"
+                                  "fn sum(n: i32) -> i32 {\n"
+                                  "    let total = 0\n"
+                                  "    let i = 0\n"
+                                  "    while i < n {\n"
+                                  "        total = total + i\n"
+                                  "        i = i + 1\n"
+                                  "    }\n"
+                                  "    return total\n"
+                                  "}\n"
+                                  "\n"
                                   "fn spin() -> i32 {\n"
                                   "    let turns = 0\n"
                                   "    while turns >= 0 {\n"
@@ -322,4 +332,86 @@ RAWFRAME_TEST(ARunningMachineStopsWhenCancelledFromAnotherThread) {
     const auto kOutcome = (*machine)->call(*spin, frame);
     canceller.join();
     RAWFRAME_EXPECT(kOutcome.isCancelled() && kOutcome.cancelReason() == execution::CancelReason::DeadlineReached);
+}
+
+namespace {
+
+struct Mover {
+    float x = 0;
+    float y = 0;
+};
+
+constexpr std::string_view kMovers = "module t\n"
+                                     "\n"
+                                     "struct Mover {\n"
+                                     "    x: f32\n"
+                                     "    y: f32\n"
+                                     "}\n"
+                                     "\n"
+                                     "fn push(count: i32, movers: [Mover], speeds: [f32]) -> i32 {\n"
+                                     "    let i = 0\n"
+                                     "    while i < count {\n"
+                                     "        movers[i].x = movers[i].x + speeds[i]\n"
+                                     "        i = i + 1\n"
+                                     "    }\n"
+                                     "    return count\n"
+                                     "}\n";
+
+} // namespace
+
+RAWFRAME_TEST(EngineMemoryIsLentWithoutCopying) {
+    const auto kProgram = compile(kMovers);
+    const auto kLayout = kProgram->layout("Mover");
+    RAWFRAME_EXPECT(kLayout.has_value() && kLayout->size == sizeof(Mover) && kLayout->alignment == alignof(Mover));
+    RAWFRAME_EXPECT(kLayout.has_value() && kLayout->mark != 0);
+    RAWFRAME_EXPECT(refusedWith(kProgram->layout("Absent"), KestError::UnknownType));
+
+    auto machine = Machine::start(kProgram, {}, Trust::Trusted, kLimits);
+    RAWFRAME_EXPECT(machine.has_value());
+    std::array<Mover, 3> movers = {Mover{1, 0}, Mover{2, 0}, Mover{3, 0}};
+    std::array<float, 3> speeds = {10, 20, 30};
+    auto lentMovers = (*machine)->lend(movers.data(), 3, "Mover", sizeof(Mover));
+    auto lentSpeeds = (*machine)->lend(speeds.data(), 3, "f32", sizeof(float));
+    RAWFRAME_EXPECT(lentMovers.has_value() && lentSpeeds.has_value());
+    auto push = (*machine)->entry("push");
+    std::array<Value, 3> frame{};
+    frame[0].integer = 3;
+    frame[1] = *lentMovers;
+    frame[2] = *lentSpeeds;
+    RAWFRAME_EXPECT((*machine)->call(*push, frame).hasValue() && frame[0].integer == 3);
+    RAWFRAME_EXPECT(movers[0].x == 11 && movers[1].x == 22 && movers[2].x == 33);
+
+    // Kest holds each lent array to the type its parameter names.
+    frame[0].integer = 3;
+    frame[1] = *lentSpeeds;
+    frame[2] = *lentSpeeds;
+    RAWFRAME_EXPECT(failedWith((*machine)->call(*push, frame), KestError::ScriptFailed));
+
+    // And a handle past its lend is refused, not read.
+    (*machine)->endLend(*lentMovers);
+    (*machine)->endLend(*lentSpeeds);
+    frame[0].integer = 3;
+    frame[1] = *lentMovers;
+    frame[2] = *lentSpeeds;
+    RAWFRAME_EXPECT((*machine)->call(*push, frame).isError());
+    RAWFRAME_EXPECT(movers[0].x == 11);
+
+    RAWFRAME_EXPECT(refusedWith((*machine)->lend(movers.data(), 3, "Mover", 4), KestError::LendRefused));
+    RAWFRAME_EXPECT(refusedWith((*machine)->lend(movers.data(), 3, "Absent", 8), KestError::LendRefused));
+}
+
+RAWFRAME_TEST(ContinuedCallsShareOneBudget) {
+    auto machine = start(kAdd);
+    auto sum = machine->entry("sum");
+    std::array<Value, 1> frame{};
+    frame[0].integer = 100;
+    RAWFRAME_EXPECT(machine->call(*sum, frame).hasValue() && frame[0].integer == 4950);
+    const std::uint64_t kOneCall = kLimits.fuelPerCall - machine->fuelLeft();
+    RAWFRAME_EXPECT(kOneCall >= 100);
+    frame[0].integer = 100;
+    RAWFRAME_EXPECT(machine->call(*sum, frame, kest::Fuel::Continue).hasValue());
+    RAWFRAME_EXPECT(machine->fuelLeft() == kLimits.fuelPerCall - (2 * kOneCall));
+    frame[0].integer = 100;
+    RAWFRAME_EXPECT(machine->call(*sum, frame).hasValue());
+    RAWFRAME_EXPECT(machine->fuelLeft() == kLimits.fuelPerCall - kOneCall);
 }

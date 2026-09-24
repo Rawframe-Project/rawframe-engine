@@ -6,9 +6,11 @@
 #include "rawframe/result/result.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::kest {
@@ -31,6 +33,15 @@ struct CompileSettings {
 /// Immutable once compiled and shared by every machine started from it, which
 /// keep it alive. Compile and start machines from one thread at a time: Kest
 /// writes a failed start's report into the build.
+/// How the program lays a type out where memory is shared.
+struct TypeLayout {
+    std::size_t size = 0;
+    std::size_t alignment = 0;
+    /// Changes whenever the shape does: a field moved, widened, renamed, or a
+    /// case or flag inserted. What a save or schema check keeps beside bytes.
+    std::uint64_t mark = 0;
+};
+
 class Program {
 public:
     struct State;
@@ -53,6 +64,10 @@ public:
     /// program may do is exactly what it is bound, so this is the list a host
     /// reads before deciding.
     [[nodiscard]] std::vector<std::string> capabilitiesRequested() const;
+
+    /// The layout of a type the program declares, by the name a lend uses
+    /// (`Position`, or `game.Position` where two modules have one).
+    [[nodiscard]] result::Result<TypeLayout> layout(std::string_view type) const;
 
     /// For this module's own sources.
     [[nodiscard]] State& state() const noexcept {

@@ -32,6 +32,13 @@ struct MachineLimits {
     std::uint64_t fuelPerCall = 0;
 };
 
+/// Whether a call starts with a full budget or spends what the last one left.
+/// A system called once per archetype spends one budget across its calls.
+enum class Fuel : std::uint8_t {
+    Refill,
+    Continue
+};
+
 /// A function of the program, found once by name.
 struct Entry {
     std::int32_t index = -1;
@@ -56,10 +63,22 @@ public:
     [[nodiscard]] result::Result<Entry> entry(std::string_view name);
 
     /// Calls a function with `frame` holding its arguments and, afterwards,
-    /// its answer. Fuel is refilled first, and a cancellation not yet seen
-    /// answers `cancelled` without running. A refusal carries the machine's
-    /// report as its description.
-    [[nodiscard]] execution::TaskOutcome<void> call(Entry entry, std::span<Value> frame);
+    /// its answer. A cancellation already asked for answers `cancelled`
+    /// without running. A refusal carries the machine's report as its
+    /// description.
+    [[nodiscard]] execution::TaskOutcome<void> call(Entry entry, std::span<Value> frame, Fuel fuel = Fuel::Refill);
+
+    /// Lends the program `length` elements of engine memory as an array of
+    /// the program's type `element`, without copying. `elementSize` is what
+    /// the engine believes one is and is checked against the program. The
+    /// memory must outlive the lend; the program may write through it. Kest
+    /// checks at each call that a lent array is of the type the parameter
+    /// names.
+    [[nodiscard]] result::Result<Value>
+    lend(void* data, std::uint32_t length, std::string_view element, std::size_t elementSize);
+    /// Ends a lend. Any use of the handle afterwards refuses in the program
+    /// rather than reading memory the engine has moved on from.
+    void endLend(Value lent) noexcept;
 
     /// Asks the machine to stop at its next instruction; the call running, or
     /// the next one, answers `cancelled`. Safe from any thread.

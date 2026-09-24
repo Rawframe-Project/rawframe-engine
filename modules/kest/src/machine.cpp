@@ -191,7 +191,7 @@ result::Result<Entry> Machine::entry(std::string_view name) {
     return Entry{.index = kIndex, .frameSlots = kest_frame_slots(state_->runtime, kIndex)};
 }
 
-execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame) {
+execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame, Fuel fuel) {
     using Outcome = execution::TaskOutcome<void>;
     if (entry.index < 0 || frame.size() < entry.frameSlots) {
         return Outcome::failed(refuse(result::ErrorClass::InvalidArgument,
@@ -202,7 +202,9 @@ execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame) 
     // Refilling fuel also takes back Kest's own cancellation, so the request
     // is read after it: a cancel landing between the two is either seen here
     // or reaches the machine after the refill.
-    kest_fuel_set(state_->runtime, state_->fuelPerCall);
+    if (fuel == Fuel::Refill) {
+        kest_fuel_set(state_->runtime, state_->fuelPerCall);
+    }
     if (state_->cancelRequested.load(std::memory_order_acquire)) {
         return Outcome::cancelled(state_->cancelReason.load(std::memory_order_relaxed));
     }
@@ -215,7 +217,7 @@ execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame) 
         return Outcome::cancelled(state_->cancelReason.load(std::memory_order_relaxed));
     }
     const std::string kReport = takeReport();
-    // Fuel is refilled every call, so none left is this call's own doing.
+    // Nothing left is running out: a refusal leaves fuel behind.
     if (kest_fuel_left(state_->runtime) == 0) {
         return Outcome::failed(
             refuse(result::ErrorClass::ResourceExhausted, KestError::FuelExhausted, kReport).error());
@@ -225,6 +227,27 @@ execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame) 
             refuse(result::ErrorClass::ResourceExhausted, KestError::HeapExhausted, kReport).error());
     }
     return Outcome::failed(refuse(result::ErrorClass::FailedPrecondition, KestError::ScriptFailed, kReport).error());
+}
+
+result::Result<Value>
+Machine::lend(void* data, std::uint32_t length, std::string_view element, std::size_t elementSize) {
+    const std::string kElement{element};
+    const KestValue kLent = kest_borrow(state_->runtime, data, length, kElement.c_str(), elementSize);
+    if (kLent.object == nullptr) {
+        const std::string kReport = takeReport();
+        return refuse(result::ErrorClass::InvalidArgument, KestError::LendRefused, kReport);
+    }
+    Value lent{};
+    lent.object = kLent.object;
+    return lent;
+}
+
+void Machine::endLend(Value lent) noexcept {
+    KestValue value{};
+    value.object = lent.object;
+    // A value that is not a live lend of this machine has nothing to end; the
+    // report says so to whoever asks next.
+    static_cast<void>(kest_lend_ends(state_->runtime, value));
 }
 
 void Machine::cancel(execution::CancelReason reason) noexcept {
