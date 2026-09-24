@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe.world`: 8-byte `EntityHandle` with generations and slot retirement, archetype storage in aligned columns, and direct structural operations (`create`, `destroy`, `insert`, `remove`, `get`) that refuse while the structure is locked.
 - `rawframe.schema`: `ComponentTypeId` from canonical UUID text at compile time, the `Component` concept, component descriptors, and `RegistryBuilder`/`SchemaRegistry` with dense runtime IDs in stable-ID order and typed `ComponentKey<T>`.
 - `RateLimitedSink` limits log records per identity per window and reports what it held back as a `suppressed` field on the next record it passes.
 - `rawframe.composition`: participant declarations, `ParticipantRegistrar` and registrar entries listed by each host, `compose`, which runs registrars in module-ID order and reports every SPEC-0005 validation problem before anything is constructed, and `Composition`, which constructs, starts, quiesces, stops, and destroys participants in plan order with exact reverse rollback. Capabilities are typed without RTTI.
