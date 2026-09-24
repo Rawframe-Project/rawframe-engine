@@ -3,40 +3,11 @@
 #include "rawframe/test/test.h"
 
 #include <array>
-#include <atomic>
-#include <cstdlib>
 #include <new>
 #include <string>
 #include <string_view>
 
 using namespace rawframe::result;
-
-// Counts every allocation in this test executable, so a test can show that a
-// call made none.
-namespace {
-std::atomic<std::size_t> allocations{0};
-}
-
-void* operator new(std::size_t size) {
-    ++allocations;
-    if (void* memory = std::malloc(size == 0 ? 1 : size)) {
-        return memory;
-    }
-    std::abort();
-}
-
-void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    ++allocations;
-    return std::malloc(size == 0 ? 1 : size);
-}
-
-void operator delete(void* memory) noexcept {
-    std::free(memory);
-}
-
-void operator delete(void* memory, std::size_t) noexcept {
-    std::free(memory);
-}
 
 namespace {
 
@@ -59,6 +30,17 @@ Error worstCase() {
 }
 
 } // namespace
+
+RAWFRAME_TEST(TheAllocationCounterCounts) {
+    // The allocation-free claims below are only as good as the counter.
+    // A volatile pointer, so an optimizer cannot elide the pair.
+    static void* volatile held = nullptr;
+    const std::size_t kBefore = rawframe::test::allocationCount();
+    held = ::operator new(sizeof(int));
+    const std::size_t kAfter = rawframe::test::allocationCount();
+    ::operator delete(held);
+    RAWFRAME_EXPECT(!RAWFRAME_TEST_COUNTS_ALLOCATIONS || kAfter > kBefore);
+}
 
 RAWFRAME_TEST(FormattingNamesTheClassDomainCodeAndCause) {
     const Error kError = std::move(fail(ErrorClass::NotFound, kTestDomain, ErrorCode{12}, "no such save").error())
@@ -95,7 +77,7 @@ RAWFRAME_TEST(ASmallDestinationIsNeverOverrun) {
 RAWFRAME_TEST(FormattingAllocatesNothing) {
     const Error kError = worstCase();
     std::array<char, kMaximumFormattedBytes> buffer{};
-    const std::size_t kBefore = allocations.load();
+    const std::size_t kBefore = rawframe::test::allocationCount();
     static_cast<void>(formatError(kError, buffer));
-    RAWFRAME_EXPECT(allocations.load() == kBefore);
+    RAWFRAME_EXPECT(rawframe::test::allocationCount() == kBefore);
 }

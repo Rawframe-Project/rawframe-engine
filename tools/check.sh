@@ -3,7 +3,7 @@
 #
 #   tools/check.sh fast   repository rules, format, one incremental build, tests
 #   tools/check.sh        the above plus GCC and Clang in every configuration and
-#                         the sanitizers
+#                         the address and thread sanitizers
 #
 # Build trees live under out/ and are reused, so a second run only rebuilds
 # what changed.
@@ -48,7 +48,7 @@ if [ "$tier" = "fast" ]; then
     build_and_test clang-development
 else
     # Independent build trees, so they build in parallel.
-    presets=(gcc-debug gcc-shipping clang-development clang-shipping clang-sanitize)
+    presets=(gcc-debug gcc-shipping clang-development clang-shipping clang-sanitize clang-thread)
     pids=()
     for preset in "${presets[@]}"; do
         ( build_and_test "$preset" ) >"out/$preset.check.log" 2>&1 &

@@ -14,7 +14,7 @@ else()
     message(FATAL_ERROR "RAWFRAME_CONFIGURATION must be debug, development, or shipping, not '${RAWFRAME_CONFIGURATION}'")
 endif()
 
-option(RAWFRAME_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+set(RAWFRAME_SANITIZE "" CACHE STRING "Sanitizers: empty, `address` (with undefined behaviour), or `thread`")
 
 # The allowed dependency table. One line per module: `name: dep dep ...`.
 file(STRINGS "${PROJECT_SOURCE_DIR}/tools/modules.txt" rawframe_module_lines REGEX "^[a-z_]+:")
@@ -47,9 +47,15 @@ else()
         -fno-exceptions -fno-rtti
         -ffp-contract=off  # no fused multiply-add behind our back: deterministic simulation
     )
-    if(RAWFRAME_SANITIZE)
+    if(RAWFRAME_SANITIZE STREQUAL "address")
         target_compile_options(rawframe_policy INTERFACE -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
         target_link_options(rawframe_policy INTERFACE -fsanitize=address,undefined)
+    elseif(RAWFRAME_SANITIZE STREQUAL "thread")
+        target_compile_options(rawframe_policy INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
+        target_link_options(rawframe_policy INTERFACE -fsanitize=thread)
+    elseif(RAWFRAME_SANITIZE)
+        # Any false value (empty, OFF) means no sanitizer.
+        message(FATAL_ERROR "RAWFRAME_SANITIZE must be empty, address, or thread")
     endif()
 endif()
 

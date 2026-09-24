@@ -5,9 +5,23 @@
 // objects, which production code may not do (ADR-0010); a test executable is not
 // production code and has no composition root to register through.
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+
+// Whether allocationCount() counts: not under ThreadSanitizer, whose runtime
+// owns the global allocation operators.
+#if defined(__SANITIZE_THREAD__)
+#define RAWFRAME_TEST_COUNTS_ALLOCATIONS 0
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define RAWFRAME_TEST_COUNTS_ALLOCATIONS 0
+#endif
+#endif
+#ifndef RAWFRAME_TEST_COUNTS_ALLOCATIONS
+#define RAWFRAME_TEST_COUNTS_ALLOCATIONS 1
+#endif
 
 namespace rawframe::test {
 
@@ -20,6 +34,10 @@ struct Registration {
 /// Records a failed expectation. The test keeps running so that one run reports
 /// every failed expectation in it.
 void reportFailure(std::string_view file, int line, std::string_view expression) noexcept;
+
+/// Global allocations since the process started, for proving a call makes
+/// none. Always zero when RAWFRAME_TEST_COUNTS_ALLOCATIONS is 0.
+[[nodiscard]] std::size_t allocationCount() noexcept;
 
 /// How a child process ended.
 struct ChildOutcome {

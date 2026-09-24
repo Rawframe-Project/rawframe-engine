@@ -7,10 +7,7 @@
 #include "rawframe/test/test.h"
 
 #include <array>
-#include <atomic>
-#include <cstdlib>
 #include <limits>
-#include <new>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -19,33 +16,6 @@ using namespace rawframe::diagnostics;
 using rawframe::diagnostics::testing::Json;
 using rawframe::diagnostics::testing::JsonReader;
 using rawframe::diagnostics::testing::splitLines;
-
-// Counts every allocation in this test executable, so a test can show that a
-// burst of accepts made none.
-namespace {
-std::atomic<std::size_t> allocations{0};
-}
-
-void* operator new(std::size_t size) {
-    ++allocations;
-    if (void* memory = std::malloc(size == 0 ? 1 : size)) {
-        return memory;
-    }
-    std::abort();
-}
-
-void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    ++allocations;
-    return std::malloc(size == 0 ? 1 : size);
-}
-
-void operator delete(void* memory) noexcept {
-    std::free(memory);
-}
-
-void operator delete(void* memory, std::size_t) noexcept {
-    std::free(memory);
-}
 
 namespace {
 
@@ -399,14 +369,14 @@ RAWFRAME_TEST(TheStreamHeaderOpensEveryFile) {
 
 RAWFRAME_TEST(ABurstDropsTheNewestWithoutAllocating) {
     NdjsonSink sink{kStream, Sensitivity::Personal, 1024, &fixedClock};
-    const std::size_t kBefore = allocations.load();
+    const std::size_t kBefore = rawframe::test::allocationCount();
     // Nothing drains during the burst, so no file is ever touched: accept does
     // no I/O.
     for (int index = 0; index < 1000; ++index) {
         const Field kFields[] = {field("index", index)};
         sink.accept(logRecord("burst", kFields));
     }
-    RAWFRAME_EXPECT(allocations.load() == kBefore);
+    RAWFRAME_EXPECT(rawframe::test::allocationCount() == kBefore);
     const std::uint64_t kDropped = sink.droppedRecords();
     RAWFRAME_EXPECT(kDropped > 900);
 

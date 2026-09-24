@@ -27,7 +27,12 @@
     {
       "name": "clang-sanitize",
       "inherits": ["clang", "debug"],
-      "cacheVariables": { "RAWFRAME_SANITIZE": "ON" }
+      "cacheVariables": { "RAWFRAME_SANITIZE": "address" }
+    },
+    {
+      "name": "clang-thread",
+      "inherits": ["clang", "development"],
+      "cacheVariables": { "RAWFRAME_SANITIZE": "thread" }
     }
   ]
 }
