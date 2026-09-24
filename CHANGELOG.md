@@ -4,6 +4,8 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe.composition`: participant declarations, `ParticipantRegistrar` and registrar entries listed by each host, `compose`, which runs registrars in module-ID order and reports every SPEC-0005 validation problem before anything is constructed, and `Composition`, which constructs, starts, quiesces, stops, and destroys participants in plan order with exact reverse rollback. Capabilities are typed without RTTI.
+- `Executor::retireOwner` withdraws a quota so the owner can be admitted again.
 - `rawframe.execution`: monotonic time types and clocks, the cancellation tree with deadlines and failure policy, `TaskOutcome` with explicit cancellation mapping, bounded CPU and blocking-I/O executors with owner quotas and background promotion, scoped jobs that run inline when the queue is full, and async operations owned and joined by their scope. SPEC-0048 values live in `bounds.h` only, and the repository check enforces it.
 - A `clang-thread` preset runs every test under ThreadSanitizer in the full check. `RAWFRAME_SANITIZE` is now `address`, `thread`, or empty.
 - `rawframe.diagnostics`: compile-time checked event identities and field keys, the record, a router that owns time and correlation and hands out `Emitter`s, and `NdjsonSink`, which writes SPEC-0047 records with truncation, secret removal, clearance refusal, and a bounded buffer drained by its owner.
