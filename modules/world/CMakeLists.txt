@@ -8,5 +8,6 @@ rawframe_module(NAME world
 )
 
 rawframe_module_tests(NAME world SOURCES
+    tests/query_test.cpp
     tests/world_test.cpp
 )
