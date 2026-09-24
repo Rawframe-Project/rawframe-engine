@@ -9,7 +9,7 @@ if(RAWFRAME_BUILD_TESTS)
     # server makes its identity, the bots pin it, and every bot is admitted.
     add_test(NAME bots_over_quic
              COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/play.sh
-                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 8
+                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 8 1 480
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_over_quic PROPERTIES PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8")
 endif()

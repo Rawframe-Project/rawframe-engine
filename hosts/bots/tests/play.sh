@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
-# Runs a dedicated server and a bots process against each other over QUIC on
-# this machine, and prints both logs. The server makes a self-signed identity
-# and writes its fingerprint; the bots pin it. Run from the repository root.
+# Runs a dedicated server and bots processes against each other over QUIC on
+# this machine, and prints every log, the server's first. The server makes a
+# self-signed identity and writes its fingerprint; the bots pin it. Run from
+# the repository root.
 #
-#   play.sh <rawframe-server> <rawframe-bots> <bots> [server iterations] [bots iterations]
+#   play.sh <rawframe-server> <rawframe-bots> <bots per process> [processes]
+#           [bots iterations]
+#
+# Iterations are the Host's, at 120 a second; the server ticks at 60. The
+# server runs until every bots process has stopped and is then asked to stop,
+# so a slow start (a sanitizer, a busy machine) cannot end play early.
 set -euo pipefail
 
 server="$1"
 bots="$2"
 count="$3"
-server_iterations="${4:-480}"
+processes="${4:-1}"
 bots_iterations="${5:-240}"
 work="$(mktemp -d)"
-trap 'kill "${server_pid:-}" 2>/dev/null || true; rm -rf "$work"' EXIT
+pids=()
+trap 'kill "${pids[@]}" 2>/dev/null || true; rm -rf "$work"' EXIT
 
 # A port nothing holds right now.
 port="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 
 cat >"$work/server.conf" <<CONF
-host.maximum_iterations = $server_iterations
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = games/arena/arena.game
@@ -44,7 +50,14 @@ for _ in $(seq 100); do
     grep -q '"code":"listening"' "$work/server.log" 2>/dev/null && break
     sleep 0.05
 done
-"$bots" --config "$work/bots.conf" >"$work/bots.log" 2>&1 || true
+for index in $(seq "$processes"); do
+    "$bots" --config "$work/bots.conf" >"$work/bots-$index.log" 2>&1 &
+    pids+=($!)
+done
+for pid in "${pids[@]}"; do
+    wait "$pid" || true
+done
+pids=()
+kill -TERM "$server_pid"
 wait "$server_pid" || true
-server_pid=
-cat "$work/server.log" "$work/bots.log"
+cat "$work/server.log" "$work"/bots-*.log
