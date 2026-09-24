@@ -4,6 +4,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
 #include "rawframe/world/archetype.h"
+#include "rawframe/world/command_buffer.h"
 #include "rawframe/world/entity.h"
 
 #include <cstddef>
@@ -85,6 +86,13 @@ public:
     [[nodiscard]] void* getErased(EntityHandle entity, schema::ComponentRuntimeId component) noexcept;
     [[nodiscard]] bool hasErased(EntityHandle entity, schema::ComponentRuntimeId component) const noexcept;
 
+    /// Applies a command buffer in recording order and clears it. All or
+    /// nothing on capacity: if the World cannot fit every entity the buffer
+    /// creates, nothing is applied and the result is `resource_exhausted`.
+    /// Commands on entities destroyed before they apply are skipped and counted.
+    /// Requires the structure unlocked: this is the barrier.
+    [[nodiscard]] result::Result<CommitReport> apply(CommandBuffer& buffer);
+
     /// While locked, direct structural operations fail with
     /// `failed_precondition`. The scheduler locks around system execution.
     void lockStructure() noexcept {
@@ -111,6 +119,8 @@ private:
     };
 
     [[nodiscard]] result::Status checkStructure() const;
+    /// Slots a create can still use: free ones and never-used ones.
+    [[nodiscard]] std::size_t availableSlots() const noexcept;
     [[nodiscard]] result::Status checkLive(EntityHandle entity) const;
     [[nodiscard]] std::uint32_t findOrCreateArchetype(std::vector<schema::ComponentRuntimeId> components);
     [[nodiscard]] std::uint32_t transition(std::uint32_t from, schema::ComponentRuntimeId component, bool adding);

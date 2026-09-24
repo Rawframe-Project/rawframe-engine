@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <variant>
 
 namespace rawframe::world {
 
@@ -182,6 +183,61 @@ result::Status World::removeErased(EntityHandle entity, schema::ComponentRuntime
     }
     static_cast<void>(moveEntity(entity, transition(record.archetype, component, false)));
     return {};
+}
+
+std::size_t World::availableSlots() const noexcept {
+    return freeSlots_.size() + (settings_.maximumEntities - records_.size());
+}
+
+result::Result<CommitReport> World::apply(CommandBuffer& buffer) {
+    RAWFRAME_TRY(checkStructure());
+    CommitReport report;
+    report.created.assign(buffer.pending_, EntityHandle{});
+    if (buffer.pending_ > availableSlots()) {
+        buffer.clear();
+        return result::fail(result::ErrorClass::ResourceExhausted,
+                            kWorldDomain,
+                            code(WorldError::EntityCapacity),
+                            "the commit would create more entities than the World has slots for");
+    }
+    for (const CommandBuffer::Command& command : buffer.commands_) {
+        const EntityHandle kTarget = std::holds_alternative<EntityHandle>(command.target)
+                                         ? std::get<EntityHandle>(command.target)
+                                         : report.created[std::get<PendingEntity>(command.target).index];
+        if (command.kind == CommandBuffer::Kind::Create) {
+            // Capacity was checked above, so creation cannot fail here.
+            auto created = create();
+            RAWFRAME_CHECK(created.has_value(), "commit capacity was checked");
+            report.created[std::get<PendingEntity>(command.target).index] = *created;
+            ++report.applied;
+            continue;
+        }
+        if (!alive(kTarget)) {
+            ++report.skippedStale;
+            continue;
+        }
+        result::Status done;
+        switch (command.kind) {
+        case CommandBuffer::Kind::Destroy:
+            done = destroy(kTarget);
+            break;
+        case CommandBuffer::Kind::Insert: {
+            // A tag carries no value; insert still needs somewhere to point.
+            std::byte tag{};
+            done = insertErased(kTarget, command.component, command.value != nullptr ? command.value : &tag);
+            break;
+        }
+        case CommandBuffer::Kind::Remove:
+            done = removeErased(kTarget, command.component);
+            break;
+        case CommandBuffer::Kind::Create:
+            break;
+        }
+        RAWFRAME_CHECK(done.has_value(), "a structural command on a live entity cannot fail");
+        ++report.applied;
+    }
+    buffer.clear();
+    return report;
 }
 
 void* World::getErased(EntityHandle entity, schema::ComponentRuntimeId component) noexcept {
