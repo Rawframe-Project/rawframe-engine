@@ -1,0 +1,27 @@
+name: check
+
+# Runs the full check on the owner's self-hosted machine for pushes to main.
+# There is deliberately no pull_request trigger: a pull request from a fork must
+# never run code on that machine.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    runs-on: [self-hosted, linux, x64, rawframe]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+      - run: tools/check.sh full
