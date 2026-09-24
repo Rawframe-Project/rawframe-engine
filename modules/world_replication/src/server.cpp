@@ -3,8 +3,10 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_replication/errors.h"
 
+#include <algorithm>
 #include <array>
 #include <map>
+#include <span>
 
 namespace rawframe::world_replication {
 
@@ -59,8 +61,16 @@ struct ReplicationServer::State {
     std::vector<std::unique_ptr<world::System>> systems;
     std::vector<schema::ComponentRuntimeId> inputWrites;
 
-    // Scratch reused every tick.
-    std::map<world::EntityHandle, std::vector<std::pair<std::size_t, const std::byte*>>> present;
+    // Scratch reused every tick. Every replicated value is encoded once per
+    // tick, in entity then component order, and copied to each connection.
+    struct PresentValue {
+        world::EntityHandle entity;
+        std::size_t component = 0;
+        std::size_t offset = 0;
+        std::size_t length = 0;
+    };
+    std::vector<PresentValue> present;
+    std::vector<std::byte> encoded;
     std::vector<std::byte> records;
     std::vector<std::byte> datagram;
     std::vector<std::byte> frame;
@@ -166,17 +176,38 @@ struct ReplicationServer::State {
 
     void publish(world::World& world, world::TickIndex tick) {
         present.clear();
+        encoded.clear();
         for (std::size_t index = 0; index < queries.size(); ++index) {
-            const std::size_t kSize = settings.table.components[index].size;
+            const ComponentCodec& codec = settings.table.components[index];
+            const std::size_t kWire = codec.wireSize();
             queries[index].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
                 for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                    present[chunk.entities[row]].emplace_back(index, chunk.columns[0] + (row * kSize));
+                    const std::size_t kOffset = encoded.size();
+                    encoded.resize(kOffset + kWire);
+                    network::Writer writer{std::span{encoded}.subspan(kOffset)};
+                    if (!codec.encode(chunk.columns[0] + (row * codec.size), writer).has_value()) {
+                        encoded.resize(kOffset);
+                        continue;
+                    }
+                    present.push_back(PresentValue{
+                        .entity = chunk.entities[row], .component = index, .offset = kOffset, .length = kWire});
                 }
             });
         }
+        std::sort(present.begin(), present.end(), [](const PresentValue& left, const PresentValue& right) {
+            return left.entity != right.entity ? left.entity < right.entity : left.component < right.component;
+        });
         for (auto& [id, peer] : peers) {
             publishTo(peer, tick);
         }
+    }
+
+    [[nodiscard]] bool isPresent(world::EntityHandle entity) const noexcept {
+        const auto kFound = std::lower_bound(
+            present.begin(), present.end(), entity, [](const PresentValue& value, world::EntityHandle key) {
+                return value.entity < key;
+            });
+        return kFound != present.end() && kFound->entity == entity;
     }
 
     void sendPace(Peer& peer) {
@@ -199,7 +230,7 @@ struct ReplicationServer::State {
         }
         // Retire what is gone; the ID is never used again in this epoch.
         for (auto mapping = peer.mapped.begin(); mapping != peer.mapped.end();) {
-            if (present.contains(mapping->first)) {
+            if (isPresent(mapping->first)) {
                 ++mapping;
                 continue;
             }
@@ -208,15 +239,16 @@ struct ReplicationServer::State {
             mapping = peer.mapped.erase(mapping);
         }
         // Declare what is new, before any state names it.
-        for (const auto& [entity, values] : present) {
-            if (peer.mapped.contains(entity) || peer.mapped.size() >= settings.maximumMapped ||
-                peer.nextNetEntity == 0) {
+        for (std::size_t index = 0; index < present.size(); ++index) {
+            const world::EntityHandle kEntity = present[index].entity;
+            if ((index != 0 && present[index - 1].entity == kEntity) || peer.mapped.contains(kEntity) ||
+                peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0) {
                 continue;
             }
             const NetEntityId kId{peer.nextNetEntity++};
-            peer.mapped[entity] = Mapping{.id = kId};
-            peer.byNetEntity[kId.value] = entity;
-            sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
+            peer.mapped[kEntity] = Mapping{.id = kId};
+            peer.byNetEntity[kId.value] = kEntity;
+            sendMapping(peer, network::ControlFrame::MappingDeclare, kId, kEntity == peer.player);
         }
         // State for every acknowledged mapping, as many datagrams as it takes.
         const std::size_t kRoom = static_cast<std::size_t>(peer.accept.maximumDatagram);
@@ -249,29 +281,31 @@ struct ReplicationServer::State {
             used = 0;
             recordWriter = network::Writer{records};
         };
-        for (const auto& [entity, values] : present) {
-            const auto kMapping = peer.mapped.find(entity);
-            if (kMapping == peer.mapped.end() || !kMapping->second.acknowledged) {
+        const Mapping* mapping = nullptr;
+        for (std::size_t index = 0; index < present.size(); ++index) {
+            const PresentValue& value = present[index];
+            if (index == 0 || present[index - 1].entity != value.entity) {
+                const auto kMapping = peer.mapped.find(value.entity);
+                mapping = kMapping == peer.mapped.end() || !kMapping->second.acknowledged ? nullptr : &kMapping->second;
+            }
+            if (mapping == nullptr) {
                 continue;
             }
-            for (const auto& [index, value] : values) {
-                const ComponentCodec& codec = settings.table.components[index];
-                const std::size_t kRecord = 10 + codec.wireSize();
-                if (used + kRecord + kStateHeaderRoom > kRoom) {
-                    kFlush();
-                }
-                if (!encodeStateRecordHead(recordWriter, {.entity = kMapping->second.id, .component = index})
-                         .has_value() ||
-                    !codec.encode(value, recordWriter).has_value()) {
-                    // Larger than a datagram on its own: it cannot be sent.
-                    recordWriter = network::Writer{records};
-                    count = 0;
-                    used = 0;
-                    continue;
-                }
-                used = recordWriter.written().size();
-                ++count;
+            const std::size_t kRecord = 10 + value.length;
+            if (used + kRecord + kStateHeaderRoom > kRoom) {
+                kFlush();
             }
+            if (!encodeStateRecordHead(recordWriter, {.entity = mapping->id, .component = value.component})
+                     .has_value() ||
+                !recordWriter.bytes(std::span{encoded}.subspan(value.offset, value.length)).has_value()) {
+                // Larger than a datagram on its own: it cannot be sent.
+                recordWriter = network::Writer{records};
+                count = 0;
+                used = 0;
+                continue;
+            }
+            used = recordWriter.written().size();
+            ++count;
         }
         kFlush();
     }
