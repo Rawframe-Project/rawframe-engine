@@ -1,0 +1,95 @@
+#pragma once
+
+// World systems written in Kest (ADR-0084, SPEC-0005 systems). A Kest system is
+// a function of a program taking the row count and one array per data column:
+//
+//   fn integrate(count: i32, positions: [Position], velocities: [Velocity])
+//
+// It runs once per matching archetype. Read columns are lent in place; write
+// columns are lent as a journal copy that replaces the World's values only
+// when every call of the system that tick succeeded, so a refused or
+// exhausted system changes nothing.
+
+#include "rawframe/kest/doors.h"
+#include "rawframe/kest/machine.h"
+#include "rawframe/kest/program.h"
+#include "rawframe/result/result.h"
+#include "rawframe/schema/registry.h"
+#include "rawframe/schema/stable_id.h"
+#include "rawframe/world/column_query.h"
+#include "rawframe/world/schedule.h"
+#include "rawframe/world_runtime/simulation.h"
+
+#include <memory>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace rawframe::world_kest {
+
+/// One query term of a Kest system. A Read or Write column is lent as an
+/// array of the program's type `element`, which must have the component's
+/// size and alignment; With and Without only filter and name no element.
+struct KestColumn {
+    schema::ComponentTypeId component;
+    std::string_view element;
+    world::Access access = world::Access::Read;
+};
+
+struct KestSystemDeclaration {
+    std::string_view identity;
+    world::Phase phase = world::Phase::Simulation;
+    /// The Kest function, as the file names it.
+    std::string_view entry;
+    std::span<const KestColumn> columns;
+    std::span<const std::string_view> after;
+    std::span<const std::string_view> before;
+};
+
+struct KestSystemsSettings {
+    std::shared_ptr<const kest::Program> program;
+    /// Copied: the doors themselves must outlive the systems.
+    kest::DoorTable doors;
+    /// One budget per system per tick, spent across its archetypes.
+    kest::MachineLimits limits;
+    std::span<const KestSystemDeclaration> systems;
+};
+
+/// The Kest systems of one program on one machine, contributed to a World.
+/// Systems of one machine never run at the same time, which the schedule's
+/// sequential phases guarantee today; parallel waves will have to keep them
+/// on one lane.
+class KestSystems final : public world_runtime::SystemContributor {
+public:
+    /// Starts the machine and finds every entry. Checks that do not need the
+    /// registry happen here, so a bad program fails before the World starts.
+    [[nodiscard]] static result::Result<std::unique_ptr<KestSystems>> create(KestSystemsSettings settings);
+
+    ~KestSystems() override;
+
+    /// Resolves the columns against the frozen registry and checks each data
+    /// column against its Kest type and each entry's frame against its
+    /// columns.
+    [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
+                                                std::vector<world::SystemDeclaration>& systems) noexcept override;
+
+    [[nodiscard]] kest::Machine& machine() noexcept {
+        return *machine_;
+    }
+
+    class KestSystem;
+    struct Declared;
+
+    KestSystems(std::shared_ptr<const kest::Program> program,
+                std::unique_ptr<kest::Machine> machine,
+                std::vector<Declared> declared) noexcept;
+
+private:
+    std::shared_ptr<const kest::Program> program_;
+    std::unique_ptr<kest::Machine> machine_;
+    std::vector<Declared> declared_;
+    std::vector<std::unique_ptr<KestSystem>> systems_;
+};
+
+} // namespace rawframe::world_kest
