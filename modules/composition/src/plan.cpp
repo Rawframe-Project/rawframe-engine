@@ -82,6 +82,8 @@ std::string_view describe(ProblemKind kind) noexcept {
         return "dependency_cycle";
     case ProblemKind::BudgetNotNested:
         return "budget_not_nested";
+    case ProblemKind::PresentationInDedicatedServer:
+        return "presentation_in_dedicated_server";
     }
     return "unknown";
 }
@@ -126,6 +128,7 @@ void ParticipantRegistrar::submit(const ParticipantDeclaration& declaration) noe
                 .cancellation = declaration.cancellation,
                 .observabilityIdentity = std::string{declaration.observabilityIdentity},
                 .budgetOwner = std::string{declaration.budgetOwner},
+                .hostPhases = declaration.hostPhases,
             },
         .eligibility = declaration.eligibility,
     });
@@ -268,6 +271,13 @@ result::Result<Plan> compose(const CompositionRequest& request, std::vector<Prob
                                  participant.identity,
                                  "requires " + required + ", which is absent, ineligible, or not selected");
             }
+        }
+        constexpr std::uint16_t kPresentation =
+            hostPhaseBit(HostPhase::PresentationExtract) | hostPhaseBit(HostPhase::Present);
+        if (request.role == TargetRole::DedicatedServer && (participant.hostPhases & kPresentation) != 0) {
+            collector.report(ProblemKind::PresentationInDedicatedServer,
+                             participant.identity,
+                             "a dedicated server has no presentation phases");
         }
         if ((participant.executor.cpu && !request.cpuExecutor) ||
             (participant.executor.blockingIo && !request.blockingIoExecutor)) {

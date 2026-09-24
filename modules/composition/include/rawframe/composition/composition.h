@@ -109,6 +109,10 @@ public:
     [[nodiscard]] bool running() const noexcept {
         return running_;
     }
+
+    /// Runs one Host phase: every running participant that declared it, in
+    /// plan order. Does nothing unless running.
+    void runHostPhase(HostPhase phase, const HostFrame& frame) noexcept;
     [[nodiscard]] ParticipantState state(std::string_view identity) const noexcept;
 
     /// Stable owner identity for a participant: FNV-1a over its identity.

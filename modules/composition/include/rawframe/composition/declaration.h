@@ -100,6 +100,8 @@ struct ParticipantDeclaration {
     CancellationPolicy cancellation;
     std::string_view observabilityIdentity;
     std::string_view budgetOwner;
+    /// The Host phases this participant runs work in, as hostPhaseBit values.
+    std::uint16_t hostPhases = 0;
 };
 
 } // namespace rawframe::composition

@@ -20,6 +20,9 @@ void Participant::quiesce() noexcept {
 void Participant::stop() noexcept {
 }
 
+void Participant::runHostPhase(HostPhase, const HostFrame&) noexcept {
+}
+
 CapabilityObject Participant::provide(std::string_view) noexcept {
     return {};
 }
@@ -221,6 +224,18 @@ void Composition::unwind(std::size_t started) noexcept {
         slot.scope.reset();
     }
     slots_.clear();
+}
+
+void Composition::runHostPhase(HostPhase phase, const HostFrame& frame) noexcept {
+    if (!running_) {
+        return;
+    }
+    const std::uint16_t kBit = hostPhaseBit(phase);
+    for (Slot& slot : slots_) {
+        if ((slot.planned->hostPhases & kBit) != 0) {
+            slot.object->runHostPhase(phase, frame);
+        }
+    }
 }
 
 ParticipantState Composition::state(std::string_view identity) const noexcept {

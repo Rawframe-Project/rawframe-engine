@@ -1,12 +1,43 @@
 #pragma once
 
+#include "rawframe/execution/time.h"
 #include "rawframe/result/result.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 namespace rawframe::composition {
 
 class ParticipantContext;
+
+/// The Host schedule's phases, in order (SPEC-0005 Host schedule). A
+/// composition may leave a phase without providers; a dedicated server has no
+/// presentation phases at all. Nothing may reorder them.
+enum class HostPhase : std::uint8_t {
+    PlatformPoll,
+    Ingress,
+    AdvanceClocks,
+    RunWorlds,
+    PresentationExtract,
+    Present,
+    Egress,
+    Maintenance,
+    FrameEnd,
+};
+
+inline constexpr std::size_t kHostPhaseCount = 9;
+
+[[nodiscard]] constexpr std::uint16_t hostPhaseBit(HostPhase phase) noexcept {
+    return static_cast<std::uint16_t>(1U << static_cast<unsigned>(phase));
+}
+
+/// One Host iteration, as each phase sees it.
+struct HostFrame {
+    std::uint64_t iteration = 0;
+    /// Sampled once per iteration, in `advance_clocks`.
+    execution::MonotonicInstant now;
+};
 
 namespace detail {
 
@@ -55,6 +86,10 @@ public:
     /// Drains and joins owned work within the declared stop budget, then
     /// releases what it holds. Called only after `quiesce`.
     virtual void stop() noexcept;
+
+    /// Work for one Host phase this participant declared in `hostPhases`.
+    /// Called on the Host's thread, in plan order, once per iteration.
+    virtual void runHostPhase(HostPhase phase, const HostFrame& frame) noexcept;
 
     /// The object behind one of the capabilities this participant declared it
     /// provides, via `provideAs`, or an empty object for any other name.

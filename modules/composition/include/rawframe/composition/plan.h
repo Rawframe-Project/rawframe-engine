@@ -33,6 +33,7 @@ enum class ProblemKind : std::uint8_t {
     MissingExecutor,
     DependencyCycle,
     BudgetNotNested,
+    PresentationInDedicatedServer,
 };
 
 [[nodiscard]] std::string_view describe(ProblemKind kind) noexcept;
@@ -79,6 +80,7 @@ struct PlannedParticipant {
     CancellationPolicy cancellation;
     std::string observabilityIdentity;
     std::string budgetOwner;
+    std::uint16_t hostPhases = 0;
 
     struct Resolved {
         std::string capability;

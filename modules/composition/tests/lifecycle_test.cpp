@@ -226,3 +226,66 @@ RAWFRAME_TEST(AnOverrunStopIsReportedNotFatal) {
     }
     RAWFRAME_EXPECT((sink.codes == std::vector<std::string>(3, "participant_stop_overran")));
 }
+
+namespace {
+
+class Phased final : public Participant {
+public:
+    explicit Phased(std::string identity) : identity_(std::move(identity)) {
+    }
+    void runHostPhase(HostPhase phase, const HostFrame& frame) noexcept override {
+        fixture().journal.push_back(identity_ + " " + std::to_string(static_cast<int>(phase)) + " " +
+                                    std::to_string(frame.iteration));
+    }
+
+private:
+    std::string identity_;
+};
+
+rawframe::result::Result<ParticipantOwner> makePhased(ParticipantContext& context) noexcept {
+    return ParticipantOwner{new Phased{std::string{context.identity()}}};
+}
+
+} // namespace
+
+RAWFRAME_TEST(HostPhasesReachOnlyTheParticipantsThatDeclaredThem) {
+    Fixture& setup = resetFixture();
+    auto worlds = declare("worlds");
+    worlds.factory = &makePhased;
+    worlds.hostPhases = hostPhaseBit(HostPhase::RunWorlds) | hostPhaseBit(HostPhase::Maintenance);
+    auto quiet = declare("quiet");
+    quiet.factory = &makePhased;
+    auto sink = declare("sink");
+    sink.factory = &makePhased;
+    sink.hostPhases = hostPhaseBit(HostPhase::Maintenance);
+    setup.moduleA = {worlds, quiet, sink};
+    std::vector<Problem> problems;
+    auto plan = compose(request(kModuleA), problems);
+    RAWFRAME_EXPECT(plan.has_value());
+    if (!plan.has_value()) {
+        return;
+    }
+    ManualClock clock;
+    CancellationScope root{clock};
+    Composition composition{*plan, HostServices{.clock = &clock, .scope = &root}};
+    composition.runHostPhase(HostPhase::RunWorlds, HostFrame{});
+    RAWFRAME_EXPECT(composition.start().has_value());
+    for (std::uint64_t iteration = 0; iteration < 2; ++iteration) {
+        for (std::size_t phase = 0; phase < kHostPhaseCount; ++phase) {
+            composition.runHostPhase(static_cast<HostPhase>(phase), HostFrame{.iteration = iteration});
+        }
+    }
+    // Plan order is sink, worlds (identity), both after nothing.
+    const std::vector<std::string> kExpected = {
+        "worlds 3 0", "sink 7 0", "worlds 7 0", "worlds 3 1", "sink 7 1", "worlds 7 1"};
+    RAWFRAME_EXPECT(fixture().journal == kExpected);
+
+    auto renderer = declare("renderer");
+    renderer.hostPhases = hostPhaseBit(HostPhase::Present);
+    setup.moduleA = {renderer};
+    auto server = request(kModuleA);
+    server.role = TargetRole::DedicatedServer;
+    problems.clear();
+    RAWFRAME_EXPECT(!compose(server, problems).has_value());
+    RAWFRAME_EXPECT((kinds(problems) == std::vector<ProblemKind>{ProblemKind::PresentationInDedicatedServer}));
+}
