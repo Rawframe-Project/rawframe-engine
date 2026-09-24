@@ -17,6 +17,19 @@ std::unexpected<result::Error> refuse(WorldError error, std::string_view descrip
             .withContext("system", system)};
 }
 
+bool isLowerSnakeCase(std::string_view text) noexcept {
+    if (text.empty() || text.front() < 'a' || text.front() > 'z') {
+        return false;
+    }
+    for (const char kCharacter : text) {
+        if (!((kCharacter >= 'a' && kCharacter <= 'z') || (kCharacter >= '0' && kCharacter <= '9') ||
+              kCharacter == '_')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool overlaps(const std::vector<schema::ComponentRuntimeId>& left,
               const std::vector<schema::ComponentRuntimeId>& right) {
     for (const schema::ComponentRuntimeId kComponent : left) {
@@ -62,6 +75,18 @@ result::Result<Schedule> Schedule::compile(std::span<const SystemDeclaration> de
         }
         if (!byIdentity.emplace(declaration.identity, &declaration).second) {
             return refuse(WorldError::DuplicateSystem, "two systems share an identity", declaration.identity);
+        }
+        if (declaration.randomStreams.size() > kMaximumRandomStreamsPerOwner) {
+            return refuse(
+                WorldError::InvalidRandomStream, "a system declares too many random streams", declaration.identity);
+        }
+        std::set<std::string_view> streams;
+        for (const std::string_view kStream : declaration.randomStreams) {
+            if (!isLowerSnakeCase(kStream) || !streams.insert(kStream).second) {
+                return refuse(WorldError::InvalidRandomStream,
+                              "a random stream name is not lower_snake_case or is declared twice",
+                              declaration.identity);
+            }
         }
         for (const auto kAccess : {declaration.reads, declaration.writes}) {
             for (const schema::ComponentRuntimeId kComponent : kAccess) {
@@ -128,6 +153,7 @@ result::Result<Schedule> Schedule::compile(std::span<const SystemDeclaration> de
                 .reads = {declaration.reads.begin(), declaration.reads.end()},
                 .writes = {declaration.writes.begin(), declaration.writes.end()},
                 .exclusive = declaration.exclusive,
+                .randomStreams = {declaration.randomStreams.begin(), declaration.randomStreams.end()},
                 .system = declaration.system,
                 .commands = std::make_unique<CommandBuffer>(commandSettings),
             });
@@ -179,7 +205,7 @@ Schedule::runTick(World& world, TickIndex& tick, TickRate rate, diagnostics::Emi
         world.lockStructure();
         for (std::size_t index = phaseStart_[phase]; index < phaseStart_[phase + 1]; ++index) {
             Entry& entry = entries_[index];
-            SystemContext context{world, *entry.commands, tick, rate, emitter};
+            SystemContext context{world, *entry.commands, tick, rate, emitter, entry.identity, entry.randomStreams};
             if (auto ran = entry.system->run(context); !ran.has_value()) {
                 entry.commands->clear();
                 report.failures.push_back(TickReport::Failure{entry.identity, std::move(ran).error()});
@@ -190,6 +216,18 @@ Schedule::runTick(World& world, TickIndex& tick, TickRate rate, diagnostics::Emi
     RAWFRAME_TRY(applyCommands(world, kCommit, kPhaseCount, report));
     ++tick.value;
     return report;
+}
+
+result::Result<Pcg32*> SystemContext::random(std::string_view name) {
+    for (const std::string& declared : declaredStreams) {
+        if (declared == name) {
+            return &world.randomStream(system, name);
+        }
+    }
+    return result::fail(result::ErrorClass::NotFound,
+                        kWorldDomain,
+                        code(WorldError::InvalidRandomStream),
+                        "the system draws from a random stream it did not declare");
 }
 
 std::vector<std::string> Schedule::order() const {

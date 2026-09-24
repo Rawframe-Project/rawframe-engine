@@ -6,12 +6,15 @@
 #include "rawframe/world/archetype.h"
 #include "rawframe/world/command_buffer.h"
 #include "rawframe/world/entity.h"
+#include "rawframe/world/random.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -24,6 +27,8 @@ struct WorldSettings {
     /// The generation a new slot starts at. Only tests change it, to reach
     /// slot retirement without four billion reuses. Must be at least 1.
     std::uint32_t firstGeneration = 1;
+    /// The seed every random stream in this World derives from (ADR-0055).
+    RootSeed rootSeed;
 };
 
 /// One authoritative ECS identity domain: entity slots and generations,
@@ -86,6 +91,15 @@ public:
     [[nodiscard]] void* getErased(EntityHandle entity, schema::ComponentRuntimeId component) noexcept;
     [[nodiscard]] bool hasErased(EntityHandle entity, schema::ComponentRuntimeId component) const noexcept;
 
+    [[nodiscard]] RootSeed rootSeed() const noexcept {
+        return settings_.rootSeed;
+    }
+
+    /// The stream `name` of the durable owner `owner`, derived from the root
+    /// seed on first use. Its state is World state: it advances only through
+    /// its owner's draws.
+    [[nodiscard]] Pcg32& randomStream(std::string_view owner, std::string_view name);
+
     /// Applies a command buffer in recording order and clears it. All or
     /// nothing on capacity: if the World cannot fit every entity the buffer
     /// creates, nothing is applied and the result is `resource_exhausted`.
@@ -136,6 +150,7 @@ private:
     std::vector<std::unique_ptr<detail::Archetype>> archetypes_;
     std::map<std::vector<schema::ComponentRuntimeId>, std::uint32_t> archetypeIndex_;
     bool structureLocked_ = false;
+    std::map<std::pair<std::string, std::string>, Pcg32, std::less<>> randomStreams_;
 };
 
 } // namespace rawframe::world

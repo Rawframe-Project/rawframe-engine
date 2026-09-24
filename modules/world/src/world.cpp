@@ -185,6 +185,14 @@ result::Status World::removeErased(EntityHandle entity, schema::ComponentRuntime
     return {};
 }
 
+Pcg32& World::randomStream(std::string_view owner, std::string_view name) {
+    std::pair<std::string, std::string> key{owner, name};
+    if (const auto kFound = randomStreams_.find(key); kFound != randomStreams_.end()) {
+        return kFound->second;
+    }
+    return randomStreams_.emplace(std::move(key), deriveStream(settings_.rootSeed, owner, name)).first->second;
+}
+
 std::size_t World::availableSlots() const noexcept {
     return freeSlots_.size() + (settings_.maximumEntities - records_.size());
 }

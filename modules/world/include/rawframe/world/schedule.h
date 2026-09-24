@@ -43,6 +43,13 @@ struct SystemContext {
     TickIndex tick;
     TickRate rate;
     diagnostics::Emitter emitter;
+    std::string_view system;
+    std::span<const std::string> declaredStreams;
+
+    /// A random stream this system declared, owned by the World and derived
+    /// from the system's identity and the stream's name. `not_found` for a
+    /// stream the system did not declare.
+    [[nodiscard]] result::Result<Pcg32*> random(std::string_view name);
 };
 
 /// Behaviour over World data. Returning an Error discards the commands the
@@ -69,6 +76,9 @@ struct SystemDeclaration {
     std::span<const std::string_view> before;
     /// Runs alone for its World: conflicts with every other system.
     bool exclusive = false;
+    /// The random streams it draws from, by lower_snake_case name; at most
+    /// kMaximumRandomStreamsPerOwner.
+    std::span<const std::string_view> randomStreams;
     System* system = nullptr;
 };
 
@@ -119,6 +129,7 @@ private:
         std::vector<schema::ComponentRuntimeId> reads;
         std::vector<schema::ComponentRuntimeId> writes;
         bool exclusive = false;
+        std::vector<std::string> randomStreams;
         System* system = nullptr;
         std::unique_ptr<CommandBuffer> commands;
     };
