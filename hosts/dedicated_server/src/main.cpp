@@ -6,6 +6,7 @@
 #include "rawframe/host/main.h"
 
 #include "rawframe/composition/registrar.h"
+#include "rawframe/network_quic/registrar.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
@@ -14,9 +15,10 @@
 
 namespace {
 
-// The server closure: the World, a Kest game, and replication. The transport
-// joins when QUIC lands; until then replication stays off here.
-constexpr std::array<rawframe::composition::RegistrarEntry, 3> kRegistrars = {
+// The server closure: QUIC, the World, a Kest game, and replication.
+constexpr std::array<rawframe::composition::RegistrarEntry, 4> kRegistrars = {
+    rawframe::composition::RegistrarEntry{
+        "network_quic", &rawframe::network_quic::registerParticipants, rawframe::network_quic::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_kest", &rawframe::world_kest::registerParticipants, rawframe::world_kest::kScopes},
     rawframe::composition::RegistrarEntry{
