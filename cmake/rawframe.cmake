@@ -41,6 +41,9 @@ if(MSVC)
 else()
     target_compile_options(rawframe_policy INTERFACE
         -Wall -Wextra -Wpedantic -Wshadow -Werror
+        # Omitting a member that has a default from an initializer, designated or
+        # not, is the intended idiom for records and settings.
+        -Wno-missing-field-initializers
         -fno-exceptions -fno-rtti
         -ffp-contract=off  # no fused multiply-add behind our back: deterministic simulation
     )
