@@ -91,14 +91,15 @@ struct ServerSettings {
     void* admitContext = nullptr;
     std::uint64_t tickRateTicks = 60;
     std::uint64_t tickRateSeconds = 1;
-    /// Seeds epochs and nonces. Deterministic for tests and loopback; a
-    /// remote provider needs them from a secure source (D24).
-    std::uint64_t seed = 0;
+    /// Seeds epochs and nonces, for tests and runs that must repeat. Without
+    /// a seed they come from the secure source, which is what a peer on a
+    /// real network must meet (D27).
+    std::optional<std::uint64_t> seed;
 };
 
 struct ClientSettings {
     SessionProfile profile;
-    std::uint64_t seed = 0;
+    std::optional<std::uint64_t> seed;
 };
 
 class SessionCore;

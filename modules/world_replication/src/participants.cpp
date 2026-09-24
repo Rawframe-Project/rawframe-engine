@@ -80,8 +80,7 @@ public:
                 *provider_,
                 context.clock(),
                 network::ServerSettings{.profile = sessionProfile(static_cast<std::size_t>(kConnections)),
-                                        .expected = compatibilityOf(*plan),
-                                        .seed = static_cast<std::uint64_t>(context.clock().now().nanoseconds)}));
+                                        .expected = compatibilityOf(*plan)}));
         RAWFRAME_TRY_ASSIGN(
             server_,
             ReplicationServer::create(*sessions_,
@@ -178,10 +177,9 @@ public:
             Bot bot{.random =
                         world::deriveStream(world::RootSeed{kSeed + index}, "rawframe.replication.bots", "steer")};
             RAWFRAME_TRY_ASSIGN(bot.provider, transport->provider(providerProfile(1)));
-            RAWFRAME_TRY_ASSIGN(bot.sessions,
-                                network::Sessions::client(*bot.provider,
-                                                          context.clock(),
-                                                          {.profile = sessionProfile(1), .seed = kSeed + index}));
+            RAWFRAME_TRY_ASSIGN(
+                bot.sessions,
+                network::Sessions::client(*bot.provider, context.clock(), {.profile = sessionProfile(1)}));
             bot.world = std::make_unique<world::World>(registry_);
             RAWFRAME_TRY_ASSIGN(
                 bot.client,

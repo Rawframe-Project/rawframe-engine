@@ -1,8 +1,12 @@
 #include "rawframe/network/session.h"
 
+#include "rawframe/base/assert.h"
+#include "rawframe/base/secure_random.h"
 #include "rawframe/network/errors.h"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <map>
 
 namespace rawframe::network {
@@ -66,6 +70,7 @@ public:
     bool server_;
     SessionProfile profile_;
     ServerSettings serverSettings_;
+    bool seeded_ = false;
     std::uint64_t random_ = 0;
     std::uint64_t tickOrigin_ = 0;
     std::uint64_t dropped_ = 0;
@@ -74,6 +79,16 @@ public:
     std::vector<std::byte> scratch_;
 
     std::uint64_t draw() noexcept {
+        if (!seeded_) {
+            std::array<std::byte, 8> bytes{};
+            const bool kFilled = base::fillSecureRandom(bytes);
+            RAWFRAME_CHECK(kFilled, "the secure random source is unavailable");
+            std::uint64_t value = 0;
+            for (const std::byte kByte : bytes) {
+                value = (value << 8U) | std::to_integer<std::uint64_t>(kByte);
+            }
+            return value;
+        }
         random_ += 0x9e3779b97f4a7c15ULL;
         std::uint64_t mixed = random_;
         mixed = (mixed ^ (mixed >> 30U)) * 0xbf58476d1ce4e5b9ULL;
@@ -405,7 +420,8 @@ Sessions::server(Provider& provider, const execution::MonotonicSource& clock, co
     auto core = std::make_unique<SessionCore>(provider, clock, true);
     core->profile_ = settings.profile;
     core->serverSettings_ = settings;
-    core->random_ = settings.seed;
+    core->seeded_ = settings.seed.has_value();
+    core->random_ = settings.seed.value_or(0);
     return std::make_unique<Sessions>(std::move(core));
 }
 
@@ -417,7 +433,8 @@ Sessions::client(Provider& provider, const execution::MonotonicSource& clock, co
     }
     auto core = std::make_unique<SessionCore>(provider, clock, false);
     core->profile_ = settings.profile;
-    core->random_ = settings.seed;
+    core->seeded_ = settings.seed.has_value();
+    core->random_ = settings.seed.value_or(0);
     return std::make_unique<Sessions>(std::move(core));
 }
 
