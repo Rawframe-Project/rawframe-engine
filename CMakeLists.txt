@@ -21,3 +21,4 @@ endif()
 # discovered from the directory tree.
 add_subdirectory(modules/base)
 add_subdirectory(modules/result)
+add_subdirectory(modules/diagnostics)
