@@ -1,0 +1,86 @@
+module std.sort
+
+// Sorting needs to be told what comes first, and being told is a function
+// value: `fn(T, T) -> bool no.alloc no.host`. The promise is part of the type,
+// so a sort that promises both can call one and the compiler can still prove it
+// (D039). Both, because a sort that promises what it will not do has to be
+// handed something that promises the same: what it is told to compare with is
+// the one body it cannot read. See D854.
+//
+// One body, one copy per type it is called with (D040). Gapped insertion --
+// Shell's, with Knuth's `3h+1` gaps -- which is in place, allocates nothing,
+// recurses nowhere, and costs the same on any two runs of the same length and
+// shape. Plain insertion is faster on a run that is already nearly in order
+// and is quadratic on one that is not: sorting four thousand numbers out of
+// order cost two hundred and sixty million instructions, which is most of a
+// second, and costs a million now. See D1052.
+
+// `sort.by(items, sort.ascending)`: what it is sorted by is the second thing,
+// which is what the name says. It was `sort.sort`, because a module and its
+// one function had a name between them, and a call read as a stammer.
+fn by<T>(items: [T], before: fn(T, T) -> bool no.alloc no.host) no.alloc no.host {
+    let n = len(items)
+    let gap = 1
+    while gap < n / 3 {
+        gap = gap * 3 + 1
+    }
+    while gap >= 1 {
+        for i in gap..n {
+            let j = i
+            while j >= gap && before(items[j], items[j - gap]) {
+                let held = items[j]
+                items[j] = items[j - gap]
+                items[j - gap] = held
+                j -= gap
+            }
+        }
+        gap = (gap - 1) / 3
+    }
+}
+
+// And the same sort told something beside what it compares: `byWith(npcs,
+// player, nearer)` where `nearer` reads the player's position out of what it
+// was handed. This language has no closures and does not want any (D1051), so
+// what a predicate would have captured is written beside it, where a reader
+// sees it and where the promise can still be proved. Without this, sorting by
+// a distance from a point meant building an array of pairs and sorting that,
+// which is an allocation and a copy for what is the commonest sort a
+// simulation does. See D1051.
+// The same walk as `by` with one more thing passed through it, written out
+// rather than shared. `by(items, before)` could have been
+// `byWith(items, before, callIt)` over a two-line adapter, and that is what a
+// language with closures would do -- it costs 15 % of every `sort.by` in
+// every program, measured, because every comparison goes through a call
+// whose body is not known. Fourteen lines written twice is the cheaper of the
+// two. See D1051 and D1052.
+fn byWith<T, C>(items: [T], with: C, before: fn(T, T, C) -> bool no.alloc no.host) no.alloc no.host {
+    let n = len(items)
+    let gap = 1
+    while gap < n / 3 {
+        gap = gap * 3 + 1
+    }
+    while gap >= 1 {
+        for i in gap..n {
+            let j = i
+            while j >= gap && before(items[j], items[j - gap], with) {
+                let held = items[j]
+                items[j] = items[j - gap]
+                items[j - gap] = held
+                j -= gap
+            }
+        }
+        gap = (gap - 1) / 3
+    }
+}
+
+// The usual order for anything that has one. A copy per type it is asked for,
+// checked as that type — so `sort.by(words, sort.ascending)` works for text
+// and for every number, and a shape with no order of its own is refused in the
+// copy that was asked for rather than by a rule written here.
+fn ascending<T: orders>(a: T, b: T) -> bool no.alloc no.host deterministic {
+    return a < b
+}
+
+fn descending<T: orders>(a: T, b: T) -> bool no.alloc no.host deterministic {
+    return b < a
+}

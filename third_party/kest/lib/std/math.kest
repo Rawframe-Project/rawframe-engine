@@ -1,0 +1,276 @@
+module std.math
+
+import std.fdlibm
+
+// Two functions may share a name when they take different things, so there is
+// one `min` rather than a `minInt` and a `minFloat`. Which is meant is settled
+// by what is passed, and nothing converts on its own, so `min(1, 2.0)` is not
+// a question with a quiet answer.
+//
+// What cannot be written in Kest is declared instead. A host that a program
+// using this module runs against has to provide these, and a program that
+// never reaches one never asks for it. All three are exact on every machine:
+// IEEE-754 rounds a square root correctly, and a floor and a ceiling round
+// nothing.
+
+extern fn Math.sqrt(value: f64) -> f64 no.alloc deterministic
+extern fn Math.floor(value: f64) -> f64 no.alloc deterministic
+extern fn Math.ceil(value: f64) -> f64 no.alloc deterministic
+
+fn min(a: i32, b: i32) -> i32 no.alloc no.host deterministic {
+    return if a < b -> a else -> b
+}
+
+fn min(a: i64, b: i64) -> i64 no.alloc no.host deterministic {
+    return if a < b -> a else -> b
+}
+
+fn min(a: f32, b: f32) -> f32 no.alloc no.host deterministic {
+    return if a < b -> a else -> b
+}
+
+fn min(a: f64, b: f64) -> f64 no.alloc no.host deterministic {
+    return if a < b -> a else -> b
+}
+
+fn max(a: i32, b: i32) -> i32 no.alloc no.host deterministic {
+    return if a > b -> a else -> b
+}
+
+fn max(a: i64, b: i64) -> i64 no.alloc no.host deterministic {
+    return if a > b -> a else -> b
+}
+
+fn max(a: f32, b: f32) -> f32 no.alloc no.host deterministic {
+    return if a > b -> a else -> b
+}
+
+fn max(a: f64, b: f64) -> f64 no.alloc no.host deterministic {
+    return if a > b -> a else -> b
+}
+
+// The smallest `i32` is one further out than the largest, so its distance from
+// nought is not an `i32` and `abs` of it is itself: negating it wraps, which is
+// what D018 says arithmetic does at the end of a width. Nothing here refuses
+// it, because a value that wraps is what its type says happens; a program that
+// cannot have that answer holds the value away from the edge before asking.
+fn abs(value: i32) -> i32 no.alloc no.host deterministic {
+    return if value < 0 -> 0 - value else -> value
+}
+
+fn abs(value: i64) -> i64 no.alloc no.host deterministic {
+    return if value < 0 -> 0 - value else -> value
+}
+
+fn abs(value: f32) -> f32 no.alloc no.host deterministic {
+    return if value < 0.0 -> 0.0 - value else -> value
+}
+
+fn abs(value: f64) -> f64 no.alloc no.host deterministic {
+    return if value < 0.0 -> 0.0 - value else -> value
+}
+
+fn clamp(value: i32, low: i32, high: i32) -> i32 no.alloc no.host deterministic {
+    return min(max(value, low), high)
+}
+
+fn clamp(value: i64, low: i64, high: i64) -> i64 no.alloc no.host deterministic {
+    return min(max(value, low), high)
+}
+
+fn clamp(value: f32, low: f32, high: f32) -> f32 no.alloc no.host deterministic {
+    return min(max(value, low), high)
+}
+
+fn clamp(value: f64, low: f64, high: f64) -> f64 no.alloc no.host deterministic {
+    return min(max(value, low), high)
+}
+
+// Whether this is a number to go on with. A float has two answers that are not
+// one: infinity, which is what a number too big to hold comes back as, and the
+// value that is not a number, which is what a question with no answer comes
+// back as — `sqrt` of a negative is that, and so is nought divided by nought.
+// Both come out of arithmetic without a word said, and neither can be found by
+// comparing, because the one that is not a number is not equal to itself and
+// infinity is equal to itself.
+//
+// Every number less itself is nought and neither of those is, which is the
+// whole question and needs no constant. This language has no exponent in a
+// literal, so the largest `f32` cannot be written down and a check against it
+// could not be written here at all. See D378.
+fn isNumber(value: f64) -> bool no.alloc no.host deterministic {
+    return value - value == 0.0
+}
+
+fn isNumber(value: f32) -> bool no.alloc no.host deterministic {
+    return value - value == 0.0
+}
+
+// A `f32` goes through the `f64` one and comes back, because a frame works in
+// `f32` and widening one by hand at every call is the module not doing its
+// half. Widening is exact and narrowing rounds, so there is one rounding here
+// and one in the host.
+//
+// What that comes to depends on the function. `sqrt` is rounded exactly by
+// every machine that has one, and `f64` carries more than twice the digits of
+// `f32`, so the answer rounded twice is the answer rounded once: the nearest
+// `f32` to the true one. `floor` and `ceil` are exact and `round` is built out
+// of `floor`. `sin`, `cos` and `pow` are not promised to be rounded exactly by
+// anybody, so what comes back is the nearest `f32` to the host's own answer,
+// which is within a hair of the true one and is the same hair a program would
+// get by asking in `f64` itself.
+fn sqrt(value: f64) -> f64 no.alloc deterministic {
+    return Math.sqrt(value)
+}
+
+fn sqrt(value: f32) -> f32 no.alloc deterministic {
+    return f32(Math.sqrt(f64(value)))
+}
+
+fn floor(value: f64) -> f64 no.alloc deterministic {
+    return Math.floor(value)
+}
+
+fn floor(value: f32) -> f32 no.alloc deterministic {
+    return f32(Math.floor(f64(value)))
+}
+
+fn ceil(value: f64) -> f64 no.alloc deterministic {
+    return Math.ceil(value)
+}
+
+fn ceil(value: f32) -> f32 no.alloc deterministic {
+    return f32(Math.ceil(f64(value)))
+}
+
+// The sine, the cosine, where two numbers point and one number to the power of
+// another are `std.fdlibm`'s, written in Kest and inside the deterministic
+// profile, in both widths here. See D1235.
+fn sin(value: f64) -> f64 no.alloc no.host deterministic {
+    return fdlibm.sin(value)
+}
+
+fn cos(value: f64) -> f64 no.alloc no.host deterministic {
+    return fdlibm.cos(value)
+}
+
+fn pow(base: f64, exponent: f64) -> f64 no.alloc no.host deterministic {
+    return fdlibm.pow(base, exponent)
+}
+
+// Where two numbers point, in radians from the positive `x` axis and between
+// -pi and pi. A program turning towards something has a difference and wants
+// an angle, and working that out from `sin` and `cos` is working backwards.
+fn atan2(y: f64, x: f64) -> f64 no.alloc no.host deterministic {
+    return fdlibm.atan2(y, x)
+}
+
+// The angle whose tangent is `value`, between -pi/2 and pi/2.
+fn atan(value: f64) -> f64 no.alloc no.host deterministic {
+    return fdlibm.atan(value)
+}
+
+fn atan(value: f32) -> f32 no.alloc no.host deterministic {
+    return f32(fdlibm.atan(f64(value)))
+}
+
+fn sin(value: f32) -> f32 no.alloc no.host deterministic {
+    return f32(sin(f64(value)))
+}
+
+fn cos(value: f32) -> f32 no.alloc no.host deterministic {
+    return f32(cos(f64(value)))
+}
+
+fn pow(base: f32, exponent: f32) -> f32 no.alloc no.host deterministic {
+    return f32(pow(f64(base), f64(exponent)))
+}
+
+fn atan2(y: f32, x: f32) -> f32 no.alloc no.host deterministic {
+    return f32(atan2(f64(y), f64(x)))
+}
+
+// A tangent is a sine over a cosine.
+fn tan(value: f64) -> f64 no.alloc no.host deterministic {
+    return sin(value) / cos(value)
+}
+
+fn tan(value: f32) -> f32 no.alloc no.host deterministic {
+    return f32(sin(f64(value)) / cos(f64(value)))
+}
+
+// Nothing outside -1 to 1 has an angle, and asking for one is a question with
+// no answer rather than a number to make up (D013).
+fn asin(value: f64) -> f64? no.alloc deterministic {
+    if value < 0.0 - 1.0 || value > 1.0 {
+        return none
+    }
+    return fdlibm.atan2(value, Math.sqrt(1.0 - value * value))
+}
+
+fn acos(value: f64) -> f64? no.alloc deterministic {
+    if value < 0.0 - 1.0 || value > 1.0 {
+        return none
+    }
+    return fdlibm.atan2(Math.sqrt(1.0 - value * value), value)
+}
+
+// And in the width a frame works in, widened and asked of the same
+// `atan2`. What is outside -1 to 1 in one width is outside it in the other.
+fn asin(value: f32) -> f32? no.alloc deterministic {
+    if value < 0.0 - 1.0 || value > 1.0 {
+        return none
+    }
+    let wide = f64(value)
+    return f32(fdlibm.atan2(wide, Math.sqrt(1.0 - wide * wide)))
+}
+
+fn acos(value: f32) -> f32? no.alloc deterministic {
+    if value < 0.0 - 1.0 || value > 1.0 {
+        return none
+    }
+    let wide = f64(value)
+    return f32(fdlibm.atan2(Math.sqrt(1.0 - wide * wide), wide))
+}
+
+// The nearest whole number, with a half going up: `round(2.5)` is 3 and
+// `round(-2.5)` is -2, which is what `floor(value + 0.5)` says and what a
+// program that wanted anything else would write for itself.
+//
+// Written here rather than declared. Every `extern` in this module is a
+// function every host of every program that imports it has to provide, so one
+// more is a thing every host has to be changed for; what can be built out of
+// what is already declared is built.
+fn round(value: f64) -> f64 no.alloc deterministic {
+    return floor(value + 0.5)
+}
+
+fn round(value: f32) -> f32 no.alloc deterministic {
+    return f32(floor(f64(value) + 0.5))
+}
+
+// Written here rather than declared, because they are what the host already
+// gives with an operator in front.
+fn sign(value: i32) -> i32 no.alloc no.host deterministic {
+    return if value > 0 -> 1 else if value < 0 -> 0 - 1 else -> 0
+}
+
+// A sign is one of three answers whatever width it was asked about, so this
+// gives back the width those three fit in rather than the one it was handed.
+//
+// There is no `sign` for a float. Two of the values a float has are not on one
+// side of nought or the other: what is not a number is on neither, and this
+// shape would call it nought, which is the answer for a number that is exactly
+// nought and is a made-up one here. A program that wants it asks `isNumber`
+// first and then compares, which is the two questions it is really asking.
+fn sign(value: i64) -> i32 no.alloc no.host deterministic {
+    return if value > 0 -> 1 else if value < 0 -> 0 - 1 else -> 0
+}
+
+fn lerp(from: f32, to: f32, amount: f32) -> f32 no.alloc no.host deterministic {
+    return from + (to - from) * amount
+}
+
+fn lerp(from: f64, to: f64, amount: f64) -> f64 no.alloc no.host deterministic {
+    return from + (to - from) * amount
+}

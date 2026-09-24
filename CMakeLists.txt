@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(rawframe LANGUAGES CXX)
+project(rawframe LANGUAGES C CXX)
 
 # Strict C++23: no GNU extensions, and no C++20 module scanning (Rawframe uses
 # headers, and scanning needs a clang-scan-deps that not every toolchain ships).
@@ -19,6 +19,7 @@ endif()
 
 # Every module is listed here and in tools/modules.txt. A module is never
 # discovered from the directory tree.
+add_subdirectory(third_party/kest)
 add_subdirectory(modules/base)
 add_subdirectory(modules/result)
 add_subdirectory(modules/diagnostics)

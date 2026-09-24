@@ -1,0 +1,520 @@
+module std.fdlibm
+
+// The sine, the cosine, where two numbers point and one number to the power of
+// another, in `f64`, which `std.math` hands its own on to in both widths. They
+// are written in Kest rather than declared, so that they are in the
+// deterministic profile: every step of each is an addition, a multiplication or
+// a division, which IEEE-754 rounds the same way on every machine, and the two
+// engines keep each one a step of its own (D1226). Declared, they were the
+// platform's libm, which is not required to round them correctly, and two
+// platforms could differ in the last bit and then diverge. See D1235.
+//
+// They are fdlibm's algorithms, as musl and FreeBSD carry them, and every
+// constant is written as the bits of the one in those sources: a reduction by
+// quarter turns in three rounds, and a polynomial on the quarter turn. Against
+// glibc's they are within an ulp. Past two to the twentieth quarter turns,
+// about 1.6 million, the reduction musl hands to a longer algorithm is this
+// one still, so a sine or a cosine that far out is the same on every machine
+// and further from the true one than an ulp.
+//
+// Copyright (C) 1993, 2004 by Sun Microsystems, Inc. All rights reserved.
+// Developed at SunPro, a Sun Microsystems, Inc. business. Permission to use,
+// copy, modify, and distribute this software is freely granted, provided that
+// this notice is preserved.
+
+// How fdlibm reads a double: its high thirty-two bits with their sign, which
+// is where the exponent and the top of the fraction are, and its low ones.
+fn highWord(value: f64) -> i32 no.alloc no.host deterministic {
+    return i32(bits(value) >> 32)
+}
+
+fn lowWord(value: f64) -> u32 no.alloc no.host deterministic {
+    return u32(bits(value) & u64(0xFFFFFFFF))
+}
+
+// The same double with its low thirty-two bits nought, which is how fdlibm cuts
+// a number into a head it can multiply exactly and a tail.
+fn lowCleared(value: f64) -> f64 no.alloc no.host deterministic {
+    return float(bits(value) & u64(0xFFFFFFFF00000000))
+}
+
+fn withHighWord(value: f64, word: i32) -> f64 no.alloc no.host deterministic {
+    return float(u64(u32(word)) << 32 | bits(value) & u64(0xFFFFFFFF))
+}
+
+// The other sign, nought included: `0.0 - value` is nought with no sign when
+// `value` is nought, and this is nought with one.
+fn negated(value: f64) -> f64 no.alloc no.host deterministic {
+    return float(bits(value) ^ u64(0x8000000000000000))
+}
+
+// The same number without its sign, nought included.
+fn magnitude(value: f64) -> f64 no.alloc no.host deterministic {
+    return float(bits(value) & u64(0x7FFFFFFFFFFFFFFF))
+}
+
+const S1: f64 = float(u64(0xBFC5555555555549))
+const S2: f64 = float(u64(0x3F8111111110F8A6))
+const S3: f64 = float(u64(0xBF2A01A019C161D5))
+const S4: f64 = float(u64(0x3EC71DE357B1FE7D))
+const S5: f64 = float(u64(0xBE5AE5E68A2B9CEB))
+const S6: f64 = float(u64(0x3DE5D93A5ACFD57C))
+
+const C1: f64 = float(u64(0x3FA555555555554C))
+const C2: f64 = float(u64(0xBF56C16C16C15177))
+const C3: f64 = float(u64(0x3EFA01A019CB1590))
+const C4: f64 = float(u64(0xBE927E4F809C52AD))
+const C5: f64 = float(u64(0x3E21EE9EBDB4B1C4))
+const C6: f64 = float(u64(0xBDA8FAE9BE8838D4))
+
+const TO_INT: f64 = float(u64(0x4338000000000000))
+const INV_PIO2: f64 = float(u64(0x3FE45F306DC9C883))
+const PIO2_1: f64 = float(u64(0x3FF921FB54400000))
+const PIO2_2: f64 = float(u64(0x3DD0B4611A600000))
+const PIO2_2T: f64 = float(u64(0x3BA3198A2E037073))
+const PIO2_3: f64 = float(u64(0x3BA3198A2E000000))
+const PIO2_3T: f64 = float(u64(0x397B839A252049C1))
+
+fn sinKernel(x: f64, y: f64, withTail: bool) -> f64 no.alloc no.host deterministic {
+    let z = x * x
+    let w = z * z
+    let r = S2 + z * (S3 + z * S4) + z * w * (S5 + z * S6)
+    let v = z * x
+    if !withTail {
+        return x + v * (S1 + z * r)
+    }
+    return x - (z * (0.5 * y - v * r) - y - v * S1)
+}
+
+fn cosKernel(x: f64, y: f64) -> f64 no.alloc no.host deterministic {
+    let z = x * x
+    let w = z * z
+    let r = z * (C1 + z * (C2 + z * C3)) + w * w * (C4 + z * (C5 + z * C6))
+    let hz = 0.5 * z
+    let v = 1.0 - hz
+    return v + (1.0 - v - hz + (z * r - x * y))
+}
+
+// What a number is past the nearest multiple of a quarter turn, as a head and
+// a tail, and which of the four quarters that multiple is.
+struct Reduced {
+    head: f64
+    tail: f64
+    quarter: i32
+}
+
+fn reduced(x: f64) -> Reduced no.alloc no.host deterministic {
+    let turns = x * INV_PIO2 + TO_INT - TO_INT
+    let quarter = 0
+    if magnitude(turns) < 4.0e18 {
+        quarter = i32(i64(turns) & 3)
+    }
+    let t = x - turns * PIO2_1
+    let w = turns * PIO2_2
+    let r = t - w
+    w = turns * PIO2_2T - (t - r - w)
+    t = r
+    w = turns * PIO2_3
+    r = t - w
+    w = turns * PIO2_3T - (t - r - w)
+    let head = r - w
+    return Reduced(head, r - head - w, quarter)
+}
+
+fn sin(value: f64) -> f64 no.alloc no.host deterministic {
+    let high = highWord(value) & 0x7fffffff
+    if high <= 0x3fe921fb {
+        if high < 0x3e500000 {
+            return value
+        }
+        return sinKernel(value, 0.0, false)
+    }
+    if high >= 0x7ff00000 {
+        return value - value
+    }
+    let r = reduced(value)
+    return if r.quarter == 0 -> sinKernel(r.head, r.tail, true)
+        else -> if r.quarter == 1 -> cosKernel(r.head, r.tail)
+        else -> if r.quarter == 2 -> negated(sinKernel(r.head, r.tail, true))
+        else -> negated(cosKernel(r.head, r.tail))
+}
+
+fn cos(value: f64) -> f64 no.alloc no.host deterministic {
+    let high = highWord(value) & 0x7fffffff
+    if high <= 0x3fe921fb {
+        if high < 0x3e46a09e {
+            return 1.0
+        }
+        return cosKernel(value, 0.0)
+    }
+    if high >= 0x7ff00000 {
+        return value - value
+    }
+    let r = reduced(value)
+    return if r.quarter == 0 -> cosKernel(r.head, r.tail)
+        else -> if r.quarter == 1 -> negated(sinKernel(r.head, r.tail, true))
+        else -> if r.quarter == 2 -> negated(cosKernel(r.head, r.tail))
+        else -> sinKernel(r.head, r.tail, true)
+}
+
+const AT0: f64 = float(u64(0x3FD555555555550D))
+const AT1: f64 = float(u64(0xBFC999999998EBC4))
+const AT2: f64 = float(u64(0x3FC24924920083FF))
+const AT3: f64 = float(u64(0xBFBC71C6FE231671))
+const AT4: f64 = float(u64(0x3FB745CDC54C206E))
+const AT5: f64 = float(u64(0xBFB3B0F2AF749A6D))
+const AT6: f64 = float(u64(0x3FB10D66A0D03D51))
+const AT7: f64 = float(u64(0xBFADDE2D52DEFD9A))
+const AT8: f64 = float(u64(0x3FA97B4B24760DEB))
+const AT9: f64 = float(u64(0xBFA2B4442C6A6C2F))
+const AT10: f64 = float(u64(0x3F90AD3AE322DA11))
+
+const ATAN_HI0: f64 = float(u64(0x3FDDAC670561BB4F))
+const ATAN_HI1: f64 = float(u64(0x3FE921FB54442D18))
+const ATAN_HI2: f64 = float(u64(0x3FEF730BD281F69B))
+const ATAN_HI3: f64 = float(u64(0x3FF921FB54442D18))
+const ATAN_LO0: f64 = float(u64(0x3C7A2B7F222F65E2))
+const ATAN_LO1: f64 = float(u64(0x3C81A62633145C07))
+const ATAN_LO2: f64 = float(u64(0x3C7007887AF0CBBD))
+const ATAN_LO3: f64 = float(u64(0x3C91A62633145C07))
+
+fn atan(value: f64) -> f64 no.alloc no.host deterministic {
+    let whole = highWord(value)
+    let high = whole & 0x7fffffff
+    let negative = whole < 0
+    if high >= 0x44100000 {
+        if value != value {
+            return value
+        }
+        return if negative -> negated(ATAN_HI3) else -> ATAN_HI3
+    }
+    let x = value
+    let id = 0 - 1
+    if high < 0x3fdc0000 && high < 0x3e400000 {
+        return value
+    }
+    if high >= 0x3fdc0000 {
+        x = magnitude(value)
+        id = if high < 0x3fe60000 -> 0
+            else -> if high < 0x3ff30000 -> 1
+            else -> if high < 0x40038000 -> 2 else -> 3
+        x = if id == 0 -> (2.0 * x - 1.0) / (2.0 + x)
+            else -> if id == 1 -> (x - 1.0) / (x + 1.0)
+            else -> if id == 2 -> (x - 1.5) / (1.0 + 1.5 * x)
+            else -> (0.0 - 1.0) / x
+    }
+    let z = x * x
+    let w = z * z
+    let s1 = z *
+        (AT0 + w * (AT2 + w * (AT4 + w * (AT6 + w * (AT8 + w * AT10)))))
+    let s2 = w * (AT1 + w * (AT3 + w * (AT5 + w * (AT7 + w * AT9))))
+    if id < 0 {
+        return x - x * (s1 + s2)
+    }
+    let hi = if id == 0 -> ATAN_HI0
+        else -> if id == 1 -> ATAN_HI1
+        else -> if id == 2 -> ATAN_HI2 else -> ATAN_HI3
+    let lo = if id == 0 -> ATAN_LO0
+        else -> if id == 1 -> ATAN_LO1
+        else -> if id == 2 -> ATAN_LO2 else -> ATAN_LO3
+    let angle = hi - (x * (s1 + s2) - lo - x)
+    return if negative -> negated(angle) else -> angle
+}
+
+const PI: f64 = float(u64(0x400921FB54442D18))
+const PI_LO: f64 = float(u64(0x3CA1A62633145C07))
+
+// Where two numbers point, in radians from the positive `x` axis and between
+// -pi and pi. A program turning towards something has a difference and wants
+// an angle, and working that out from `sin` and `cos` is working backwards.
+fn atan2(y: f64, x: f64) -> f64 no.alloc no.host deterministic {
+    if x != x || y != y {
+        return x + y
+    }
+    let hx = highWord(x)
+    let hy = highWord(y)
+    let lx = lowWord(x)
+    let ly = lowWord(y)
+    if hx == 0x3ff00000 && lx == u32(0) {
+        return atan(y)
+    }
+    let m = hy >> 31 & 1 | hx >> 30 & 2
+    let ix = i64(hx & 0x7fffffff)
+    let iy = i64(hy & 0x7fffffff)
+    if iy == i64(0) && ly == u32(0) {
+        return if m == 0 || m == 1 -> y
+            else -> if m == 2 -> PI else -> negated(PI)
+    }
+    if ix == i64(0) && lx == u32(0) {
+        return if m & 1 == 1 -> negated(PI * 0.5) else -> PI * 0.5
+    }
+    if ix == i64(0x7ff00000) {
+        if iy == i64(0x7ff00000) {
+            return if m == 0 -> PI * 0.25
+                else -> if m == 1 -> negated(PI * 0.25)
+                else -> if m == 2 -> 3.0 * PI * 0.25
+                else -> negated(3.0 * PI * 0.25)
+        }
+        return if m == 0 -> 0.0
+            else -> if m == 1 -> negated(0.0)
+            else -> if m == 2 -> PI else -> negated(PI)
+    }
+    if ix + i64(0x04000000) < iy || iy == i64(0x7ff00000) {
+        return if m & 1 == 1 -> negated(PI * 0.5) else -> PI * 0.5
+    }
+    let z: f64 = 0.0
+    if !(m & 2 == 2 && iy + i64(0x04000000) < ix) {
+        z = atan(magnitude(y / x))
+    }
+    return if m == 0 -> z
+        else -> if m == 1 -> negated(z)
+        else -> if m == 2 -> PI - (z - PI_LO) else -> z - PI_LO - PI
+}
+
+const DP_H1: f64 = float(u64(0x3FE2B80340000000))
+const DP_L1: f64 = float(u64(0x3E4CFDEB43CFD006))
+const TWO53: f64 = float(u64(0x4340000000000000))
+const HUGE: f64 = float(u64(0x7E37E43C8800759C))
+const TINY: f64 = float(u64(0x01A56E1FC2F8F359))
+const L1: f64 = float(u64(0x3FE3333333333303))
+const L2: f64 = float(u64(0x3FDB6DB6DB6FABFF))
+const L3: f64 = float(u64(0x3FD55555518F264D))
+const L4: f64 = float(u64(0x3FD17460A91D4101))
+const L5: f64 = float(u64(0x3FCD864A93C9DB65))
+const L6: f64 = float(u64(0x3FCA7E284A454EEF))
+const P1: f64 = float(u64(0x3FC555555555553E))
+const P2: f64 = float(u64(0xBF66C16C16BEBD93))
+const P3: f64 = float(u64(0x3F11566AAF25DE2C))
+const P4: f64 = float(u64(0xBEBBBD41C5D26BF1))
+const P5: f64 = float(u64(0x3E66376972BEA4D0))
+const LG2: f64 = float(u64(0x3FE62E42FEFA39EF))
+const LG2_H: f64 = float(u64(0x3FE62E4300000000))
+const LG2_L: f64 = float(u64(0xBE205C610CA86C39))
+const OVT: f64 = float(u64(0x3C971547652B82FE))
+const CP: f64 = float(u64(0x3FEEC709DC3A03FD))
+const CP_H: f64 = float(u64(0x3FEEC709E0000000))
+const CP_L: f64 = float(u64(0xBE3E2FE0145B01F5))
+const IVLN2: f64 = float(u64(0x3FF71547652B82FE))
+const IVLN2_H: f64 = float(u64(0x3FF7154760000000))
+const IVLN2_L: f64 = float(u64(0x3E54AE0BF85DDF44))
+const THIRD: f64 = float(u64(0x3FD5555555555555))
+
+fn pow(x: f64, y: f64) -> f64 no.alloc no.host deterministic {
+    let hx = highWord(x)
+    let lx = lowWord(x)
+    let hy = highWord(y)
+    let ly = lowWord(y)
+    let ix = hx & 0x7fffffff
+    let iy = hy & 0x7fffffff
+    if iy == 0 && ly == u32(0) {
+        return 1.0
+    }
+    if hx == 0x3ff00000 && lx == u32(0) {
+        return 1.0
+    }
+    if ix > 0x7ff00000 ||
+            ix == 0x7ff00000 && lx != u32(0) ||
+            iy > 0x7ff00000 ||
+            iy == 0x7ff00000 && ly != u32(0) {
+        return x + y
+    }
+    // Whether `y` is a whole number when `x` is below nought: nought for no,
+    // one for odd, two for even.
+    let whole = 0
+    if hx < 0 {
+        if iy >= 0x43400000 {
+            whole = 2
+        } else if iy >= 0x3ff00000 {
+            let k = (iy >> 20) - 0x3ff
+            if k > 20 {
+                let j = ly >> u32(52 - k)
+                if j << u32(52 - k) == ly {
+                    whole = 2 - i32(j & u32(1))
+                }
+            } else if ly == u32(0) {
+                let j = iy >> 20 - k
+                if j << 20 - k == iy {
+                    whole = 2 - (j & 1)
+                }
+            }
+        }
+    }
+    if ly == u32(0) {
+        if iy == 0x7ff00000 {
+            if ix == 0x3ff00000 && lx == u32(0) {
+                return 1.0
+            }
+            if ix >= 0x3ff00000 {
+                return if hy >= 0 -> y else -> 0.0
+            }
+            return if hy < 0 -> negated(y) else -> 0.0
+        }
+        if iy == 0x3ff00000 {
+            return if hy < 0 -> 1.0 / x else -> x
+        }
+        if hy == 0x40000000 {
+            return x * x
+        }
+    }
+    let ax = magnitude(x)
+    if lx == u32(0) {
+        if ix == 0x7ff00000 || ix == 0 || ix == 0x3ff00000 {
+            let z = ax
+            if hy < 0 {
+                z = 1.0 / z
+            }
+            if hx < 0 {
+                if ix == 0x3ff00000 && whole == 0 {
+                    z = (z - z) / (z - z)
+                } else if whole == 1 {
+                    z = negated(z)
+                }
+            }
+            return z
+        }
+    }
+    let below = hx < 0
+    if below && whole == 0 {
+        return (x - x) / (x - x)
+    }
+    let s: f64 = if below && whole == 1 -> 0.0 - 1.0 else -> 1.0
+    let t1: f64 = 0.0
+    let t2: f64 = 0.0
+    if iy > 0x41e00000 {
+        if iy > 0x43f00000 {
+            if ix <= 0x3fefffff {
+                return if hy < 0 -> HUGE * HUGE else -> TINY * TINY
+            }
+            if ix >= 0x3ff00000 {
+                return if hy > 0 -> HUGE * HUGE else -> TINY * TINY
+            }
+        }
+        if ix < 0x3fefffff {
+            return if hy < 0 -> s * HUGE * HUGE else -> s * TINY * TINY
+        }
+        if ix > 0x3ff00000 {
+            return if hy > 0 -> s * HUGE * HUGE else -> s * TINY * TINY
+        }
+        let t = ax - 1.0
+        let w = t * t * (0.5 - t * (THIRD - t * 0.25))
+        let u = IVLN2_H * t
+        let v = t * IVLN2_L - w * IVLN2
+        t1 = lowCleared(u + v)
+        t2 = v - (t1 - u)
+    } else {
+        let n = 0
+        let high = ix
+        let a = ax
+        if high < 0x00100000 {
+            a = a * TWO53
+            n = n - 53
+            high = highWord(a)
+        }
+        n = n + (high >> 20) - 0x3ff
+        let j = high & 0x000fffff
+        high = j | 0x3ff00000
+        let k = 0
+        if j <= 0x3988E {
+            k = 0
+        } else if j < 0xBB67A {
+            k = 1
+        } else {
+            n = n + 1
+            high = high - 0x00100000
+        }
+        a = withHighWord(a, high)
+        let bp: f64 = if k == 0 -> 1.0 else -> 1.5
+        let dph: f64 = if k == 0 -> 0.0 else -> DP_H1
+        let dpl: f64 = if k == 0 -> 0.0 else -> DP_L1
+        let u = a - bp
+        let v = 1.0 / (a + bp)
+        let ss = u * v
+        let sh = lowCleared(ss)
+        let th = withHighWord(
+            0.0,
+            (high >> 1 | 0x20000000) + 0x00080000 + (k << 18)
+        )
+        let tl = a - (th - bp)
+        let sl = v * (u - sh * th - sh * tl)
+        let s2 = ss * ss
+        let r = s2 *
+            s2 *
+            (L1 + s2 * (L2 + s2 * (L3 + s2 * (L4 + s2 * (L5 + s2 * L6)))))
+        r = r + sl * (sh + ss)
+        s2 = sh * sh
+        th = lowCleared(3.0 + s2 + r)
+        tl = r - (th - 3.0 - s2)
+        u = sh * th
+        v = sl * th + tl * ss
+        let ph = lowCleared(u + v)
+        let pl = v - (ph - u)
+        let zh = CP_H * ph
+        let zl = CP_L * ph + pl * CP + dpl
+        let t = f64(n)
+        t1 = lowCleared(zh + zl + dph + t)
+        t2 = zl - (t1 - t - dph - zh)
+    }
+    let y1 = lowCleared(y)
+    let pl = (y - y1) * t1 + y * t2
+    let ph = y1 * t1
+    let z = pl + ph
+    let j = highWord(z)
+    let i = lowWord(z)
+    if j >= 0x40900000 {
+        if j != 0x40900000 || i != u32(0) {
+            return s * HUGE * HUGE
+        }
+        if pl + OVT > z - ph {
+            return s * HUGE * HUGE
+        }
+    } else if j & 0x7fffffff >= 0x4090cc00 {
+        if j != i32(u32(0xc090cc00)) || i != u32(0) {
+            return s * TINY * TINY
+        }
+        if pl <= z - ph {
+            return s * TINY * TINY
+        }
+    }
+    let low = j & 0x7fffffff
+    let k = (low >> 20) - 0x3ff
+    let n = 0
+    if low > 0x3fe00000 {
+        n = j + (0x00100000 >> k + 1)
+        k = ((n & 0x7fffffff) >> 20) - 0x3ff
+        let t = withHighWord(0.0, n & ~0x000fffff >> k)
+        n = (n & 0x000fffff | 0x00100000) >> 20 - k
+        if j < 0 {
+            n = 0 - n
+        }
+        ph = ph - t
+    }
+    let t = lowCleared(pl + ph)
+    let u = t * LG2_H
+    let v = (pl - (t - ph)) * LG2 + t * LG2_L
+    let zz = u + v
+    let w = v - (zz - u)
+    let tt = zz * zz
+    let t1b = zz - tt * (P1 + tt * (P2 + tt * (P3 + tt * (P4 + tt * P5))))
+    let r = zz * t1b / (t1b - 2.0) - (w + zz * w)
+    zz = 1.0 - (r - zz)
+    let jj = highWord(zz) + i32(u32(n) << u32(20))
+    if jj >> 20 > 0 {
+        return s * withHighWord(zz, jj)
+    }
+    // An answer below the smallest normal number: two to the `n` times it,
+    // rounded once, in steps, because two to the `n` alone is not a double
+    // there. Written here rather than called, as musl's `scalbn` is.
+    let down = n
+    if down < 0 - 1022 {
+        zz = zz * float(u64(0x0360000000000000))
+        down = down + 969
+        if down < 0 - 1022 {
+            zz = zz * float(u64(0x0360000000000000))
+            down = down + 969
+            if down < 0 - 1022 {
+                down = 0 - 1022
+            }
+        }
+    }
+    return s * (zz * float(u64(i64(0x3ff + down)) << 52))
+}

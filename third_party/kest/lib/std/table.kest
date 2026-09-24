@@ -1,0 +1,330 @@
+module std.table
+
+// A hash table, written in Kest on a generic struct and generic functions
+// (D040, D041). `hash` is the one thing the language provides, and it applies
+// exactly where `==` does (D042), so a copy over a key that does not compare
+// is refused where it is made.
+//
+// Open addressing, linear probing. The keys and the values sit next to each
+// other in two arrays and `slots` says where each one is: nought for empty,
+// -1 for a key that was taken out, and otherwise one more than the position.
+// Probing forward means a lookup reads memory in order, which is what a frame
+// budget wants and what a chain of pointers is not.
+//
+// A struct is a value (D006), so a table handed to a function is a copy of
+// the four handles rather than of what they hold. Everything that changes is
+// therefore behind one of them: `slots` is emptied and refilled rather than
+// replaced, and how many pairs there are is `len(keys)` rather than a number
+// beside it. A field written here would be written on the copy.
+//
+// All four are written `own`, so the handles are this module's and nothing
+// outside can be handed one. That is what makes the invariants above hold
+// against a program rather than merely against a careful one. See D1041.
+
+// The pairs are walked over `keys` and `values`, which are packed and in step:
+// `values[i]` is what `keys[i]` is set to, and there are `count(t)` of both.
+// The order is the order they went in, except where something was taken out
+// and the last pair moved into the hole — so it is an order, and not one to
+// rely on.
+//
+// A table is not made smaller when things are taken out of it. Nothing here
+// frees anything (D012): making the slots smaller would make a new array and
+// leave the old one where it is, so shrinking costs memory rather than giving
+// it back. What a table has held, it keeps room for until the heap is thrown
+// away.
+
+const EMPTY: i32 = 0
+const TAKEN: i32 = -1
+
+// What it holds, held in step: the pair at a place is `keys[i]` beside
+// `values[i]`, and `slots` says where a key's place is. Every one of them is
+// this module's own, because a handle handed out is a handle written through
+// and two lines of ordinary Kest used to be enough to leave the four of them
+// disagreeing — `pop(t.keys)` never wrote a field, it read one and changed
+// what it named. What reaches them from outside is what is declared below.
+// See D694 and D1041.
+struct Table<K, V> {
+    own keys: [K]
+    own values: [V]
+    own slots: [i32]
+    // How many of the slots are marks. It is an array of one rather than a
+    // number, for the same reason everything else here is behind a handle: a
+    // number written in a function would be written on that function's copy.
+    own marks: [i32]
+}
+
+// What a table starts as. `table.empty()` rather than `table.table()`, which
+// is the same stammer `sort.sort` was.
+fn empty<K, V>() -> Table<K, V> no.host deterministic {
+    let keys: [K] = array()
+    let values: [V] = array()
+    let slots = array(8, EMPTY)
+    let marks = array(1, 0)
+    return Table(keys, values, slots, marks)
+}
+
+fn count<K, V>(t: Table<K, V>) -> i32 no.alloc no.host deterministic {
+    return len(t.keys)
+}
+
+// The keys, copied, for a program that wants them in an order of its own. The
+// pair at a place is `keys[i]` and `values[i]`, and a sort that moves one and
+// not the other leaves a table that answers about a key with another key's
+// value -- measured, and once no refusal anywhere, because a handle handed out
+// is a handle written through. Now the arrays are this module's own and
+// nothing outside can be handed one, so what a program sorts is this copy
+// because it is the only thing there is to sort. Walking the pairs where they
+// are is `keyAt` and `valueAt`, which copy nothing. See D693 and D1041.
+fn keysOf<K, V>(t: Table<K, V>) -> [K] no.host deterministic {
+    let out: [K] = array()
+    for key in t.keys {
+        push(out, key)
+    }
+    return out
+}
+
+// The pair at a place, which is where a program walks what a table holds. The
+// places are nought up to `count(t)` and they are the order the pairs went in,
+// except where something was taken out and the last pair moved into the hole
+// — so it is an order, and not one to rely on. Asking past the last of them is
+// reading past the end of an array and says so, the way an array does.
+//
+// These are what `find` answers for: it gives the place a key is kept at, and
+// nothing outside this module can read the arrays it is a place in. A program
+// that wants the pairs walks them here rather than reaching in, which is what
+// D1041 is about.
+fn keyAt<K, V>(t: Table<K, V>, at: i32) -> K no.alloc no.host deterministic {
+    return t.keys[at]
+}
+
+fn valueAt<K, V>(t: Table<K, V>, at: i32) -> V no.alloc no.host deterministic {
+    return t.values[at]
+}
+
+// Which slot a key is kept in, or nothing. Everything that looks for a key
+// looks here: `find` wants the pair, `remove` wants the slot, and a second
+// probe written for the second of those would be a second place to get the
+// walk past a mark wrong.
+fn slotOf<K: compares, V>(t: Table<K, V>, key: K) -> i32? no.alloc no.host deterministic {
+    let room = len(t.slots)
+    let at = i32(hash(key) % u64(room))
+    for step in 0..room {
+        let held = t.slots[at]
+        if held == EMPTY {
+            return none
+        }
+        if held > 0 && t.keys[held - 1] == key {
+            return at
+        }
+        at += 1
+        if at == room {
+            at = 0
+        }
+    }
+    return none
+}
+
+// Where a key is, or nothing. Reads only what is already there, so a lookup
+// costs no allocation whatever the table holds.
+fn find<K: compares, V>(t: Table<K, V>, key: K) -> i32? no.alloc no.host deterministic {
+    if let slot = slotOf(t, key) {
+        return t.slots[slot] - 1
+    }
+    return none
+}
+
+// What is under a key, or nothing. It answers the way the builtin `get` on a
+// store answers, because it is the same question asked of a different thing:
+// one name, one meaning. It took a `fallback: V` beside the key until D879 —
+// which made a program build a value to throw away, and made a miss read as a
+// hit whose value happened to be that one. The default is `orElse` beside it.
+fn get<K: compares, V>(t: Table<K, V>, key: K) -> V? no.alloc no.host deterministic {
+    if let at = find(t, key) {
+        return t.values[at]
+    }
+    return none
+}
+
+// And what is under a key or this instead, which is a different question and
+// not a second way to ask the first: one asks what is there, and this one says
+// what to use when there is nothing. A program that means "nought when nobody
+// has counted it" says it here rather than at every place it looks.
+fn orElse<K: compares, V>(t: Table<K, V>, key: K, fallback: V) -> V no.alloc no.host deterministic {
+    if let found = get(t, key) {
+        return found
+    }
+    return fallback
+}
+
+fn has<K: compares, V>(t: Table<K, V>, key: K) -> bool no.alloc no.host deterministic {
+    return find(t, key) != none
+}
+
+// Puts a position in the first slot that will hold it, walking past whatever
+// is already there. Nothing is compared: this is only used where the key is
+// known to be new.
+fn place<K: compares, V>(t: Table<K, V>, key: K, where: i32) no.alloc no.host deterministic {
+    let room = len(t.slots)
+    let at = i32(hash(key) % u64(room))
+    for step in 0..room {
+        if t.slots[at] <= EMPTY {
+            t.slots[at] = where + 1
+            return
+        }
+        at += 1
+        if at == room {
+            at = 0
+        }
+    }
+}
+
+// That much room, and every key put back where its hash says it goes now. The
+// same array is emptied and refilled, because replacing it would replace the
+// copy's handle and leave the caller's table where it was. The marks go with
+// it: what they were for is a probe that has to carry on past a hole, and
+// after this there are no holes to carry on past.
+//
+// A program that knows how many pairs are coming calls this before it puts
+// them in, and what that saves is all of it: a pair costs 51 bytes of heap in
+// a table that grows into them and nothing at all in one that was told. It
+// saved half until D912 — the slots were made once and the keys and the values
+// still doubled on the way up — which is what `room` is for. Measured by
+// `check-costs.sh`, which prints both. See D910 and D912.
+fn refill<K: compares, V>(t: Table<K, V>, howMany: i32) no.host deterministic {
+    // How many pairs, rather than how many places: a table keeps twice as many
+    // slots as pairs so that a probe ends, and a program calling this knows
+    // what it is about to put in and not how this finds it again. See D914.
+    //
+    // The pairs as well as the places to find them. The slots are made here
+    // and the keys and the values are arrays this cannot replace -- a table is
+    // a value and replacing a field of it replaces the copy's handle -- so
+    // they are given room where they stand. Without that, a table told how
+    // many were coming still doubled two of its three arrays on the way up
+    // and cost half of what one told nothing cost, where an array told the
+    // same thing costs nothing at all. See D912.
+    room(t.keys, howMany)
+    room(t.values, howMany)
+    let places = howMany * 2
+    room(t.slots, places)
+    clear(t.slots)
+    for i in 0..places {
+        push(t.slots, EMPTY)
+    }
+    t.marks[0] = 0
+    for i in 0..len(t.keys) {
+        place(t, t.keys[i], i)
+    }
+}
+
+// What a table has held it keeps room for: nothing here frees anything, and
+// making the arrays smaller would make new ones and leave the old where they
+// are. That is the right default -- a table that shrank on every removal
+// would make a frame's cost depend on what that frame took out -- and it is
+// wrong for a world that spikes. A hundred thousand pairs taken down to a
+// thousand still holds 3,244,192 bytes, which is what a hundred thousand
+// need.
+//
+// So this is the cold path, and it answers a new table rather than making
+// this one smaller: a table is a value and replacing a field of it replaces
+// the copy's handle, which is the reason everything here is behind one. The
+// caller writes `by = table.compact(by)`, the way `source =
+// random.next(source)` is written. What it costs is both tables at once for
+// as long as the call takes, and the old one is gone at the next walk.
+// See D1052.
+fn compact<K: compares, V>(t: Table<K, V>) -> Table<K, V> no.host deterministic {
+    let out: Table<K, V> = empty()
+    refill(out, count(t))
+    for at in 0..count(t) {
+        set(out, keyAt(t, at), valueAt(t, at))
+    }
+    return out
+}
+
+// Setting a key that is there writes over it, so a key appears once.
+//
+// A table is refilled while more than half of it is spoken for, because
+// probing past a full one is what makes a lookup slow. A mark counts as
+// spoken for: it is not a pair and a probe does not stop at it, so a table
+// that has had things taken out of it can be all marks and no room while
+// holding almost nothing. Twice the room is for the pairs; the same room again
+// is for the marks, and which of the two is asked is which of them is
+// crowding it.
+fn set<K: compares, V>(t: Table<K, V>, key: K, value: V) no.host deterministic {
+    // A key has to be one key, which is what `hash` and `==` are asked for. A
+    // value that is not equal to itself -- a float that is not a number, or a
+    // shape holding one -- is a different key every time it is handed over, so
+    // a table given one grew by a pair nothing could find, counted it, and
+    // could never take it out again. What a table holds is what it can find,
+    // so this one is not put in. `math.isNumber` is the question a program
+    // asks before it gets here. See D893.
+    if key != key {
+        return
+    }
+    if let at = find(t, key) {
+        t.values[at] = value
+        return
+    }
+    if (len(t.keys) + t.marks[0] + 1) * 2 >= len(t.slots) {
+        if (len(t.keys) + 1) * 2 >= len(t.slots) {
+            refill(t, len(t.slots))
+        } else {
+            refill(t, len(t.slots) / 2)
+        }
+    }
+    push(t.keys, key)
+    push(t.values, value)
+    place(t, key, len(t.keys) - 1)
+}
+
+// `set` with the growth taken out, which is what `fit` is to `push`: it writes
+// where the key already is, answers false where it is not, and never reaches
+// the heap. Without it a table cannot be written to inside a promise at all --
+// `set` may grow, and a promise cannot be kept by hoping it does not -- so a
+// frame keeping a count per thing had to keep it somewhere that was not a
+// table. A program that means "this key is already here" says so here, and one
+// that does not know calls `refill` before the frame and `set` inside it and
+// keeps neither promise.
+//
+// A value that is not equal to itself is refused the way `set` refuses one,
+// because a key that cannot be found again is a key this cannot write to
+// either. See D940 and D1063.
+fn fit<K: compares, V>(t: Table<K, V>, key: K, value: V) -> bool no.alloc no.host deterministic {
+    if key != key {
+        return false
+    }
+    if let at = find(t, key) {
+        t.values[at] = value
+        return true
+    }
+    return false
+}
+
+// The one taken out leaves a mark rather than a hole, because a hole would
+// end a probe that has to carry on past it. The last pair moves into its
+// place so the two arrays stay packed.
+//
+// Two slots change and both are found by probing for the key that is kept in
+// them, which is what a hash is for. Walking every slot to find two of them is
+// the whole table for one pair, and a table is walked when it is refilled and
+// not when something is taken out of it.
+fn remove<K: compares, V>(t: Table<K, V>, key: K) -> bool no.alloc no.host deterministic {
+    if let here = slotOf(t, key) {
+        let at = t.slots[here] - 1
+        let last = len(t.keys) - 1
+        if at != last {
+            // Where the pair that is about to move is kept, found while it is
+            // still where it was and before this slot becomes a mark.
+            if let there = slotOf(t, t.keys[last]) {
+                t.slots[there] = at + 1
+            }
+            t.keys[at] = t.keys[last]
+            t.values[at] = t.values[last]
+        }
+        remove(t.keys, last)
+        remove(t.values, last)
+        t.slots[here] = TAKEN
+        t.marks[0] = t.marks[0] + 1
+        return true
+    }
+    return false
+}

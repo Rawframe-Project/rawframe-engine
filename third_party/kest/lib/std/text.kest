@@ -1,0 +1,577 @@
+module std.text
+
+// What every program that reads text writes for itself. Nothing here is a
+// builtin: it is all written in the language, out of `len`, `find`, `slice`,
+// `rest`, `matches` and the bytes.
+
+// The number a piece of text spells, or nothing when it spells something else.
+// Reads nothing but bytes, so it allocates nothing.
+fn number(digits: text) -> i32? no.alloc no.host deterministic {
+    // Counted in `i64` so that running out of room is something that can be
+    // seen: an `i32` given more than it holds wraps without a word, and a text
+    // spelling a number this cannot give back is a text this cannot read. The
+    // bound inside the walk is one past the largest, because the smallest is
+    // one further out than the largest and is spelled with a sign. See D376.
+    let value: i64 = 0
+    let negative = false
+    let seen = 0
+    for i, byte in digits {
+        if i == 0 && byte == '-' {
+            negative = true
+            continue
+        }
+        if byte < '0' || byte > '9' {
+            return none
+        }
+        value = value * 10 + i64(byte) - i64('0')
+        if value > 2147483648 {
+            return none
+        }
+        seen += 1
+    }
+    if seen == 0 {
+        return none
+    }
+    if negative {
+        return i32(0 - value)
+    }
+    if value > 2147483647 {
+        return none
+    }
+    return i32(value)
+}
+
+// The number with a point in it that a piece of text spells, or nothing when
+// it spells something else. What this reads is what this language writes:
+// `12`, `-0.5` and `3.` are numbers, and so are `1.2216752e-06`, `1e+20`,
+// `inf`, `-inf` and `nan`, because those are what a hole in a string writes
+// for the numbers it cannot spell plainly. A program that writes a number into
+// text and reads it back gets the number it had; it did not, and `1e3` was
+// refused with a rule saying a program that means that can say it another way
+// -- which is not true of a program handed the text by this language. `.5`,
+// `+1.5`, a space in front and a second point are still nothing, because
+// nothing here writes those. See D1084.
+//
+// Worked out a digit at a time in `f64` and narrowed once, which is the same
+// two roundings every other number in this module goes through.
+fn real(digits: text) -> f32? no.alloc no.host deterministic {
+    // The three words, read back as what they spell rather than as text that
+    // is not a number. A save written by this language is read by this
+    // library, and what a hole wrote is what comes back.
+    if digits == "nan" {
+        let nought: f32 = 0.0
+        return nought / nought
+    }
+    if digits == "inf" || digits == "-inf" {
+        let nought: f32 = 0.0
+        let one: f32 = 1.0
+        let endless = one / nought
+        return if digits == "inf" -> endless else -> 0.0 - endless
+    }
+    let negative = false
+    let seen = 0
+    let whole: f64 = 0.0
+    let after = false
+    // How many digits came after the point and what the exponent says, which
+    // are the same thing said twice: the value is the digits as a whole number
+    // scaled by ten that many times. Scaling once at the end rather than a
+    // digit at a time is one rounding instead of as many as there are digits.
+    let afterCount = 0
+    let inExponent = false
+    let exponentAt = 0
+    let exponent = 0
+    let exponentNegative = false
+    let exponentSeen = 0
+    for i, byte in digits {
+        if i == 0 && byte == '-' {
+            negative = true
+            continue
+        }
+        if inExponent {
+            if i == exponentAt && (byte == '-' || byte == '+') {
+                exponentNegative = byte == '-'
+                continue
+            }
+            if byte < '0' || byte > '9' {
+                return none
+            }
+            // Held where it cannot run off the end of what a number holds: an
+            // exponent past this is infinity or nought either way, and both of
+            // those are answered below.
+            if exponent < 100000 {
+                exponent = exponent * 10 + (i32(byte) - i32('0'))
+            }
+            exponentSeen += 1
+            continue
+        }
+        if byte == '.' {
+            // A second point is not a number, and a point before any digit is
+            // one of the two spellings this does not take.
+            if after || seen == 0 {
+                return none
+            }
+            after = true
+            continue
+        }
+        if byte == 'e' || byte == 'E' {
+            // An exponent with nothing in front of it is not a number either.
+            if seen == 0 {
+                return none
+            }
+            inExponent = true
+            exponentAt = i + 1
+            continue
+        }
+        if byte < '0' || byte > '9' {
+            return none
+        }
+        whole = whole * 10.0 + f64(i32(byte) - i32('0'))
+        if after {
+            afterCount += 1
+        }
+        seen += 1
+    }
+    if seen == 0 || inExponent && exponentSeen == 0 {
+        return none
+    }
+    // Where the point really is: what the exponent says, less the digits that
+    // came after the point.
+    let power = (if exponentNegative -> 0 - exponent else -> exponent) -
+        afterCount
+    // Beyond these the answer is the same as at them, and a loop that went
+    // further would be a loop a frame pays for.
+    if power > 400 {
+        power = 400
+    }
+    if power < -400 {
+        power = -400
+    }
+    let value = whole
+    let moved = 0
+    while moved < power {
+        value = value * 10.0
+        moved += 1
+    }
+    while moved > power {
+        value = value / 10.0
+        moved -= 1
+    }
+    let narrowed = f32(if negative -> 0.0 - value else -> value)
+    // More than an `f32` holds narrows to infinity, which is not the number
+    // the text spelled. `math.isNumber` is that question written down, and
+    // this module may not ask it: importing a module is requiring every
+    // `extern` it declares of every host of every program that imports this
+    // one, and `std.math` declares seven. So the question is written here, and
+    // it is the same one — every number less itself is nought, and neither
+    // infinity nor the value that is not a number is. See D378.
+    if narrowed - narrowed != 0.0 {
+        return none
+    }
+    return narrowed
+}
+
+// A number written to a chosen number of places, which is what a line of a
+// file wants: `1.5` and `1.50` are the same number and not the same line. A
+// hole in a string writes the shortest spelling that reads back as the same
+// number, which is the other question and the one a log asks.
+//
+// Places below nought or above nine are held to that, and a number too big to
+// count in whole parts is written the way a hole would write it, because
+// nothing after the point is worth anything at that size. A number that rounds
+// to nothing is written without a sign in front of it: `-0.0` is a number this
+// language has and not a thing anybody wants in a file.
+fn fixed(value: f32, places: i32) -> text no.host deterministic {
+    // What is not a number is not a number of places. It went through the
+    // rounding below and came out `0.00`, which is a nought somebody adds up
+    // one day; it is written the way a hole writes it, the same as a number
+    // too big to count in whole parts. A value is not a number exactly when it
+    // is not equal to itself, which is what this language says about that
+    // value and the one question this module can ask without importing
+    // another. See D1084.
+    if value != value {
+        return "{value}"
+    }
+    let want = places
+    if want < 0 {
+        want = 0
+    }
+    if want > 9 {
+        want = 9
+    }
+    let scale: f64 = 1.0
+    for i in 0..want {
+        scale = scale * 10.0
+    }
+    let scaled = f64(value) * scale
+    if scaled > 9007199254740992.0 || scaled < -9007199254740992.0 {
+        return "{value}"
+    }
+    // Half goes away from nought, which is what a reader means by rounding and
+    // what `math.round` does for a number without a point in it.
+    let rounded = if scaled >= 0.0 -> i64(scaled + 0.5)
+        else -> i64(scaled - 0.5)
+    let negative = rounded < 0
+    let held = if negative -> 0 - rounded else -> rounded
+    let whole = held / i64(scale)
+    let part = held % i64(scale)
+    if want == 0 {
+        return if negative -> "-{whole}" else -> "{whole}"
+    }
+
+    // The part is written with the noughts in front of it, because five
+    // hundredths and five tenths are not the same line.
+    let out: [u8] = array()
+    if negative {
+        append(out, "-")
+    }
+    append(out, "{whole}")
+    append(out, ".")
+    let step = i64(scale) / 10
+    while step > 0 {
+        push(out, u8(i32(part / step % 10) + i32('0')))
+        step = step / 10
+    }
+    return text(out)
+}
+
+// Pushed to the right of a column that wide, which is where a number belongs:
+// a column of them lines up on the point when every one is written to the same
+// places and the same width.
+//
+// A width is in bytes, because text is its bytes. `hız` is four of them and
+// `hiz` is three, so two lines holding those do not line up and nothing here
+// pretends otherwise: what a program means by a character is the program's to
+// say. Text already that wide comes back as it is, because losing the end of
+// something to fit a column is worse than a column that does not fit.
+fn right(subject: text, width: i32) -> text no.host deterministic {
+    let out: [u8] = array()
+    for i in len(subject)..width {
+        push(out, ' ')
+    }
+    append(out, subject)
+    return text(out)
+}
+
+// And to the left of it, which is where a name belongs.
+fn left(subject: text, width: i32) -> text no.host deterministic {
+    let out = bytes(subject)
+    for i in len(subject)..width {
+        push(out, ' ')
+    }
+    return text(out)
+}
+
+fn contains(subject: text, needle: text) -> bool no.alloc no.host deterministic {
+    return find(subject, needle) != none
+}
+
+fn starts(subject: text, prefix: text) -> bool no.alloc no.host deterministic {
+    return matches(subject, 0, prefix)
+}
+
+fn ends(subject: text, suffix: text) -> bool no.alloc no.host deterministic {
+    if len(suffix) > len(subject) {
+        return false
+    }
+    return matches(subject, len(subject) - len(suffix), suffix)
+}
+
+// How many bytes the character starting with this byte is written in, and
+// nought when it is not the start of one. UTF-8 says it in the first byte:
+// under 128 is one byte, and above that the number of ones at the top is the
+// number of bytes. A byte in the middle of a character says nothing about
+// where the character began, which is why this answers nought for one rather
+// than guessing.
+fn charBytes(first: u8) -> i32 no.alloc no.host deterministic {
+    if first < u8(128) {
+        return 1
+    }
+    if first < u8(192) {
+        return 0
+    }
+    if first < u8(224) {
+        return 2
+    }
+    if first < u8(240) {
+        return 3
+    }
+    if first < u8(248) {
+        return 4
+    }
+    return 0
+}
+
+// How many bytes the character at that place takes, which is what its first
+// byte says unless what follows disagrees. A character three bytes wide is
+// three bytes only if the two after it are the middles of one: a byte that
+// begins a character of its own ends the one before it, and a piece of text
+// that stops sooner ends it too. So this is the width to walk by, and
+// `charBytes` is the question about one byte on its own.
+fn charWidth(piece: text) -> i32 no.alloc no.host deterministic {
+    if piece == "" {
+        return 0
+    }
+    let wide = charBytes(piece[0])
+    if wide <= 1 {
+        return 1
+    }
+    let i = 1
+    while i < wide {
+        let after = rest(piece, i)
+        if after == "" {
+            return i
+        }
+        if charBytes(after[0]) != 0 {
+            return i
+        }
+        i += 1
+    }
+    return wide
+}
+
+// Where the character before this place begins, counted in bytes. Walking back
+// is what UTF-8 is for: the middle of a character says so in every one of its
+// bytes, so a walk back is at most three steps and needs nothing kept from the
+// walk forwards. What it lands on has to reach where it started from — bytes
+// that disagree are a byte on its own, which is what walking forwards makes of
+// them too, so the two walks agree about every place in any text at all.
+fn charBack(subject: text, at: i32) -> i32 no.alloc no.host deterministic {
+    if at <= 0 {
+        return 0
+    }
+    let here = if at > len(subject) -> len(subject) else -> at
+    let back = here - 1
+    let steps = 0
+    while back > 0 && steps < 3 && charBytes(subject[back]) == 0 {
+        back -= 1
+        steps += 1
+    }
+    if back + charWidth(rest(subject, back)) == here {
+        return back
+    }
+    return here - 1
+}
+
+// How many characters a piece of text holds, which is not how many bytes it
+// holds and is what a program means when it says how long a word is. Bytes
+// that begin no character are counted as one each, because text that is not
+// UTF-8 is still text and a count that stops at the first of them is a count
+// nobody can use.
+fn chars(subject: text) -> i32 no.alloc no.host deterministic {
+    // Walked by keeping what is left rather than by counting from the start.
+    // `rest` costs the bytes it steps over and nothing else, so the whole walk
+    // reads the text once; an index would make every step measure from the
+    // beginning again. See D374.
+    let count = 0
+    let tail = subject
+    while tail != "" {
+        tail = rest(tail, charWidth(tail))
+        count += 1
+    }
+    return count
+}
+
+// Every character of it, in order, each as text of its own. Written as a walk
+// with an index rather than as `charAt` in a loop: `charAt` counts from the
+// start every time it is asked, so asking it for every character in turn is
+// the whole of the text walked once per character. This is one walk, and it
+// pays for one piece of text each, which is what a program that wants them all
+// is asking for.
+fn charsOf(subject: text) -> [text] no.host deterministic {
+    let out: [text] = array()
+    let tail = subject
+    while tail != "" {
+        let wide = charWidth(tail)
+        push(out, slice(tail, 0, wide))
+        tail = rest(tail, wide)
+    }
+    return out
+}
+
+// The character at that place, counted in characters rather than in bytes, or
+// nothing when there is no such place. It is text of its own, because a
+// character is not a number here: what a byte means is a program's to say, and
+// what a character means is Unicode's.
+fn charAt(subject: text, index: i32) -> text? no.alloc no.host deterministic {
+    let count = 0
+    let tail = subject
+    while tail != "" {
+        // What is there rather than what the first byte said would be: text
+        // arriving a piece at a time ends in the middle of a character, and a
+        // byte that begins one of its own ends the one before it. Asking for
+        // the whole of a character that is not all here is a program stopped
+        // at a line it cannot help.
+        let step = charWidth(tail)
+        if count == index {
+            return slice(tail, 0, step)
+        }
+        tail = rest(tail, step)
+        count += 1
+    }
+    return none
+}
+
+fn isSpace(byte: u8) -> bool no.alloc no.host deterministic {
+    return byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r'
+}
+
+// Without the spaces at either end. Cuts, so it reaches the heap.
+fn trim(subject: text) -> text no.alloc no.host deterministic {
+    // Both ends found in one walk forwards, because forwards is the cheap
+    // direction: `rest` steps a byte at a time and `tail[0]` is the byte it is
+    // standing on, where `subject[to - 1]` is the walk from the front again on
+    // every step. Where the last thing that is not a space ended is what the
+    // walk remembers. See D375.
+    let from = 0
+    let tail = subject
+    while tail != "" && isSpace(tail[0]) {
+        from += 1
+        tail = rest(tail, 1)
+    }
+    let at = from
+    let to = from
+    while tail != "" {
+        if !isSpace(tail[0]) {
+            to = at + 1
+        }
+        at += 1
+        tail = rest(tail, 1)
+    }
+    return slice(subject, from, to - from)
+}
+
+// The pieces between each separator: one more of them than there are
+// separators, always. That is what makes this and `join` the two halves of one
+// thing -- `join(split(s, sep), sep)` is `s` for every `s` -- and it is the
+// rule that says what the ends are: an empty subject is one empty piece, and a
+// subject that ends with a separator has an empty piece after it. Stopping
+// where the text ran out instead lost the last piece whenever it was the empty
+// one, so `split("a,b,", ",")` was two pieces and joining them back gave
+// `a,b`. See D892.
+fn split(subject: text, separator: text) -> [text] no.host deterministic {
+    let pieces: [text] = array()
+    if len(separator) == 0 {
+        push(pieces, subject)
+        return pieces
+    }
+
+    // Each piece is copied once and what is left is not copied at all, which
+    // is what `rest` is for: the remainder of a piece of text is a place
+    // inside it. See D375.
+    let tail = subject
+    let more = true
+    while more {
+        if let at = find(tail, separator) {
+            push(pieces, slice(tail, 0, at))
+            tail = rest(tail, at + len(separator))
+        } else {
+            push(pieces, tail)
+            more = false
+        }
+    }
+    return pieces
+}
+
+// Text is its bytes, so a run of bytes is what it is built from. Gathering
+// them costs nothing and `text(bytes)` pays for the copy once, which is what
+// a loop that builds a string a piece at a time needs.
+fn bytes(subject: text) -> [u8] no.host deterministic {
+    let out: [u8] = array()
+    append(out, subject)
+    return out
+}
+
+fn append(out: [u8], piece: text) no.host deterministic {
+    push(out, piece)
+}
+
+// The same, into a buffer that was given room, which is what a frame writing a
+// line every tick wants: `push` may double the block and so can never be inside
+// a promise to reach no heap, and this cannot. It answers whether the piece
+// fitted, and a piece that did not is a buffer that has not changed at all --
+// all of it goes in or none of it does, because a piece half written is a
+// piece nobody can take back. It used to go in a byte at a time and leave what
+// fitted, which is what a loop can do and a move cannot. See D940 and D1068.
+fn fitting(out: [u8], piece: text) -> bool no.alloc no.host deterministic {
+    return fit(out, piece)
+}
+
+// And a whole number written into one the same way, most significant digit
+// first, without making any text on the way. It is the piece a tally line is
+// mostly made of.
+fn fittingNumber(out: [u8], value: i32) -> bool no.alloc no.host deterministic {
+    if value == 0 {
+        return fit(out, 48)
+    }
+    let left = value
+    if left < 0 {
+        if !fit(out, 45) {
+            return false
+        }
+    }
+    // Counted first so the digits go in the order somebody reads them, and in
+    // `i64` so the smallest `i32` has somewhere to be made positive.
+    let wide: i64 = i64(left)
+    if wide < 0 {
+        wide = 0 - wide
+    }
+    let digits = 0
+    let counting = wide
+    while counting > 0 {
+        digits += 1
+        counting = counting / 10
+    }
+    let at = digits
+    while at > 0 {
+        let divisor: i64 = 1
+        let step = 1
+        while step < at {
+            divisor = divisor * 10
+            step += 1
+        }
+        let digit = wide / divisor % 10
+        if !fit(out, u8(48 + i32(digit))) {
+            return false
+        }
+        at -= 1
+    }
+    return true
+}
+
+// The pieces with the separator between them, which is what `split` undoes.
+fn join(pieces: [text], separator: text) -> text no.host deterministic {
+    let out: [u8] = array()
+    for i in 0..len(pieces) {
+        if i > 0 {
+            append(out, separator)
+        }
+        append(out, pieces[i])
+    }
+    return text(out)
+}
+
+fn repeat(subject: text, times: i32) -> text no.host deterministic {
+    let out: [u8] = array()
+    for i in 0..times {
+        append(out, subject)
+    }
+    return text(out)
+}
+
+// ASCII only, and deliberately: a byte is a byte, and what an upper case `ı`
+// is depends on a language rather than on a table this could carry.
+fn upper(subject: text) -> text no.host deterministic {
+    let out = bytes(subject)
+    for i in 0..len(out) {
+        out[i] = if out[i] >= 'a' && out[i] <= 'z' -> out[i] - 32 else -> out[i]
+    }
+    return text(out)
+}
+
+fn lower(subject: text) -> text no.host deterministic {
+    let out = bytes(subject)
+    for i in 0..len(out) {
+        out[i] = if out[i] >= 'A' && out[i] <= 'Z' -> out[i] + 32 else -> out[i]
+    }
+    return text(out)
+}

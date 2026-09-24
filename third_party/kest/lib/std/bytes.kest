@@ -1,0 +1,239 @@
+module std.bytes
+
+import std.text
+
+// Numbers, truths and text written into a run of bytes and read back out of
+// one, which is what a save, a reload and a record on disk are made of. Every
+// number is written low byte first at its own width, a float as its bits, so
+// what is read back is what was written and the same bytes on every machine.
+// Text is the number of bytes it is, as a `u32`, and then the bytes. See D1171.
+
+// Writing is adding to the end of a run of bytes, so a save is a run of these.
+
+fn putU8(out: [u8], value: u8) no.host deterministic {
+    push(out, value)
+}
+
+fn putBool(out: [u8], value: bool) no.host deterministic {
+    push(out, if value -> u8(1) else -> u8(0))
+}
+
+// Written out a byte at a time rather than in a loop of four: the loop was
+// most of what writing one cost.
+fn putU32(out: [u8], value: u32) no.host deterministic {
+    push(out, u8(value))
+    push(out, u8(value >> u32(8)))
+    push(out, u8(value >> u32(16)))
+    push(out, u8(value >> u32(24)))
+}
+
+fn putI32(out: [u8], value: i32) no.host deterministic {
+    putU32(out, u32(value))
+}
+
+fn putU64(out: [u8], value: u64) no.host deterministic {
+    putU32(out, u32(value))
+    putU32(out, u32(value >> u64(32)))
+}
+
+fn putI64(out: [u8], value: i64) no.host deterministic {
+    putU64(out, u64(value))
+}
+
+fn putF32(out: [u8], value: f32) no.host deterministic {
+    putU32(out, bits(value))
+}
+
+fn putF64(out: [u8], value: f64) no.host deterministic {
+    putU64(out, bits(value))
+}
+
+fn putText(out: [u8], value: text) no.host deterministic {
+    putU32(out, u32(len(value)))
+    text.append(out, value)
+}
+
+// A whole run at once, which is what a world is made of: the length as a
+// `u32` and then each one as the one above writes it. A save written a column
+// at a time is a call a column rather than a call a value, and a call is most
+// of what writing one value costs.
+
+fn putBytes(out: [u8], values: [u8]) no.host deterministic {
+    room(out, len(out) + 4 + len(values))
+    putU32(out, u32(len(values)))
+    for i in 0..len(values) {
+        push(out, values[i])
+    }
+}
+
+fn putI32s(out: [u8], values: [i32]) no.host deterministic {
+    room(out, len(out) + 4 + len(values) * 4)
+    putU32(out, u32(len(values)))
+    for i in 0..len(values) {
+        let value = u32(values[i])
+        push(out, u8(value))
+        push(out, u8(value >> u32(8)))
+        push(out, u8(value >> u32(16)))
+        push(out, u8(value >> u32(24)))
+    }
+}
+
+fn putF32s(out: [u8], values: [f32]) no.host deterministic {
+    room(out, len(out) + 4 + len(values) * 4)
+    putU32(out, u32(len(values)))
+    for i in 0..len(values) {
+        let value = bits(values[i])
+        push(out, u8(value))
+        push(out, u8(value >> u32(8)))
+        push(out, u8(value >> u32(16)))
+        push(out, u8(value >> u32(24)))
+    }
+}
+
+// Reading goes along a run of bytes from the start. Two handles, held in step:
+// the bytes, and where the reading has got to with whether it ever ran short.
+// A read past the end answers nought and marks the reader short, so a restore
+// reads everything and then asks once whether what it read was all there.
+struct Reader {
+    bytes: [u8]
+    state: [i32]
+}
+
+fn reader(bytes: [u8]) -> Reader no.host deterministic {
+    return Reader(bytes, array(2, 0))
+}
+
+// Whether a read has run past the end.
+fn short(r: Reader) -> bool no.alloc no.host deterministic {
+    return r.state[1] != 0
+}
+
+// How many bytes there are still to read.
+fn left(r: Reader) -> i32 no.alloc no.host deterministic {
+    return len(r.bytes) - r.state[0]
+}
+
+// Where the next `many` bytes start, or minus one when there are not that many
+// left, which marks the reader short and reads nothing.
+fn take(r: Reader, many: i32) -> i32 no.alloc no.host deterministic {
+    let at = r.state[0]
+    if at + many > len(r.bytes) {
+        r.state[1] = 1
+        r.state[0] = len(r.bytes)
+        return 0 - 1
+    }
+    r.state[0] = at + many
+    return at
+}
+
+// The four bytes at `at`, low first, as one number.
+fn word(from: [u8], at: i32) -> u32 no.alloc no.host deterministic {
+    return u32(from[at]) |
+        u32(from[at + 1]) << u32(8) |
+        u32(from[at + 2]) << u32(16) |
+        u32(from[at + 3]) << u32(24)
+}
+
+fn readU8(r: Reader) -> u8 no.alloc no.host deterministic {
+    let at = take(r, 1)
+    if at < 0 {
+        return u8(0)
+    }
+    return r.bytes[at]
+}
+
+fn readBool(r: Reader) -> bool no.alloc no.host deterministic {
+    return readU8(r) != u8(0)
+}
+
+fn readU32(r: Reader) -> u32 no.alloc no.host deterministic {
+    let at = take(r, 4)
+    if at < 0 {
+        return u32(0)
+    }
+    return word(r.bytes, at)
+}
+
+fn readI32(r: Reader) -> i32 no.alloc no.host deterministic {
+    return i32(readU32(r))
+}
+
+fn readU64(r: Reader) -> u64 no.alloc no.host deterministic {
+    let at = take(r, 8)
+    if at < 0 {
+        return u64(0)
+    }
+    return u64(word(r.bytes, at)) | u64(word(r.bytes, at + 4)) << u64(32)
+}
+
+fn readI64(r: Reader) -> i64 no.alloc no.host deterministic {
+    return i64(readU64(r))
+}
+
+fn readF32(r: Reader) -> f32 no.alloc no.host deterministic {
+    return float(readU32(r))
+}
+
+fn readF64(r: Reader) -> f64 no.alloc no.host deterministic {
+    return float(readU64(r))
+}
+
+// A whole run as the three above wrote it. Fewer than it says there are is a
+// run of none, and marks the reader short.
+
+fn readBytes(r: Reader) -> [u8] no.host deterministic {
+    let many = i32(readU32(r))
+    let at = take(r, many)
+    if at < 0 || many < 0 {
+        return array()
+    }
+    let values: [u8] = array(many, u8(0))
+    for i in 0..many {
+        values[i] = r.bytes[at + i]
+    }
+    return values
+}
+
+fn readI32s(r: Reader) -> [i32] no.host deterministic {
+    let many = i32(readU32(r))
+    let at = take(r, many * 4)
+    if at < 0 || many < 0 {
+        return array()
+    }
+    let values: [i32] = array(many, 0)
+    for i in 0..many {
+        let value = word(r.bytes, at + i * 4)
+        values[i] = i32(value)
+    }
+    return values
+}
+
+fn readF32s(r: Reader) -> [f32] no.host deterministic {
+    let many = i32(readU32(r))
+    let at = take(r, many * 4)
+    if at < 0 || many < 0 {
+        return array()
+    }
+    let values: [f32] = array(many, 0.0)
+    for i in 0..many {
+        let value = word(r.bytes, at + i * 4)
+        values[i] = float(value)
+    }
+    return values
+}
+
+// Text as it was written. Bytes that are not there are read as the empty
+// text and mark the reader short; bytes that are there and are not UTF-8 are
+// refused where they are made into text, the way any bytes are (D971).
+fn readText(r: Reader) -> text no.host deterministic {
+    let many = i32(readU32(r))
+    let at = take(r, many)
+    if at < 0 || many < 0 {
+        return ""
+    }
+    let piece: [u8] = array()
+    for i in at..at + many {
+        push(piece, r.bytes[i])
+    }
+    return text(piece)
+}

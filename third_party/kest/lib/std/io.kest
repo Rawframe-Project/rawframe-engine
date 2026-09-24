@@ -1,0 +1,20 @@
+module std.io
+
+// Saying something is the host's to do, not the language's. A command line
+// writes to its output; an engine writes to its console; neither is something
+// this language should have decided for them.
+
+// Handing a piece of text over is not making one, so this promises nothing is
+// allocated and a frame that has promised the same may write. What holds the
+// host to it is the machine: a bound function that takes from the heap under
+// this promise is refused where it was called.
+extern fn Io.write(value: text) no.alloc
+
+fn write(value: text) no.alloc {
+    Io.write(value)
+}
+
+fn print(value: text) no.alloc {
+    Io.write(value)
+    Io.write("\n")
+}

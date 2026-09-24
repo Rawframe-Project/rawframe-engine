@@ -1,0 +1,104 @@
+module std.random
+
+// Numbers that look random, out of a state a program holds. Nothing here is
+// global and nothing asks the host: a simulation that wants to run twice and
+// see the same thing has to be able to say where its numbers came from, and a
+// generator hidden behind a name nobody passes cannot say that.
+//
+// The state is a value like any other, so a source is carried the way a count
+// is: `source = random.next(source)`, and what comes back is both the next
+// state and the next number. That is one thing to hold rather than two, and it
+// is why `next` gives a `Source` and not a number.
+//
+// This is xorshift64, which is small, fast and good enough to place things
+// with. It is not for anything that has to be unguessable.
+
+struct Source {
+    state: u64
+}
+
+// A source that starts where it is told. Nought is not a state this can leave,
+// so it is turned into one that it can.
+fn from(seed: u64) -> Source no.alloc no.host deterministic {
+    if seed == 0 {
+        return Source(88172645463325252)
+    }
+    return Source(seed)
+}
+
+fn next(s: Source) -> Source no.alloc no.host deterministic {
+    let x = s.state
+    x = x ^ x << 13
+    x = x ^ x >> 7
+    x = x ^ x << 17
+    return Source(x)
+}
+
+// What it is on, as a whole number. Every bit of it is worth as much as any
+// other, which is what lets the ones below take a part of it.
+fn number(s: Source) -> u64 no.alloc no.host deterministic {
+    return s.state
+}
+
+// Below `count`, and nought when `count` is not above nought, because there is
+// no number below one of those to give.
+//
+// This is a remainder, so a count that does not divide the whole range leaves
+// the first few numbers very slightly likelier than the rest — by about
+// `count` in eighteen billion billion, which is not a difference anything
+// counting them will see. Throwing away the numbers that cause it is the other
+// way, and it makes this a loop that might go round again, which is worse in a
+// language where a frame has a budget.
+fn below(s: Source, count: i32) -> i32 no.alloc no.host deterministic {
+    if count <= 0 {
+        return 0
+    }
+    return i32(s.state % u64(count))
+}
+
+// Between two numbers, the first included and the second not, which is how a
+// count is written everywhere else in this language.
+fn between(s: Source, from: i32, to: i32) -> i32 no.alloc no.host deterministic {
+    if to <= from {
+        return from
+    }
+    return from + below(s, to - from)
+}
+
+// Between nought and one, as a fraction. The top bits are used because they
+// are the ones a shift leaves alone.
+fn fraction(s: Source) -> f32 no.alloc no.host deterministic {
+    return f32(s.state >> 40) / 16777216.0
+}
+
+// True about that many times in a hundred.
+fn chance(s: Source, hundredths: i32) -> bool no.alloc no.host deterministic {
+    return below(s, 100) < hundredths
+}
+
+// One of them, and nothing when there are none. The source is used as it
+// stands, so a caller that wants a different one asks for the next source
+// first, the same as everything else here.
+fn one<T>(s: Source, xs: [T]) -> T? no.alloc no.host deterministic {
+    if len(xs) == 0 {
+        return none
+    }
+    return xs[below(s, len(xs))]
+}
+
+// Every arrangement as likely as any other, in place and allocating nothing.
+// The source that comes back is where the next call starts, because this used
+// as many numbers as the array is long.
+fn shuffle<T>(s: Source, xs: [T]) -> Source no.alloc no.host deterministic {
+    let source = s
+    let i = len(xs)
+    while i > 1 {
+        source = next(source)
+        let k = below(source, i)
+        i -= 1
+        let held = xs[i]
+        xs[i] = xs[k]
+        xs[k] = held
+    }
+    return source
+}

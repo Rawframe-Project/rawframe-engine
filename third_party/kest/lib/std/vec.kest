@@ -1,0 +1,194 @@
+module std.vec
+
+import std.math
+
+// Two and three components of `f32`, which is the working precision of the
+// workloads this language is for. Both are value structs (D006), so a `Vec3`
+// is three slots on the stack and twelve bytes in an array — the bytes a host
+// already has, which is why an engine can lend its positions rather than copy
+// them (D016).
+//
+// There is no operator overloading, so `vec.add(a, b)` and not `a + b`. That
+// is the language having one meaning per symbol rather than this module being
+// unfinished.
+
+struct Vec2 {
+    x: f32
+    y: f32
+}
+
+struct Vec3 {
+    x: f32
+    y: f32
+    z: f32
+}
+
+fn add(a: Vec2, b: Vec2) -> Vec2 no.alloc no.host deterministic {
+    return Vec2(a.x + b.x, a.y + b.y)
+}
+
+fn add(a: Vec3, b: Vec3) -> Vec3 no.alloc no.host deterministic {
+    return Vec3(a.x + b.x, a.y + b.y, a.z + b.z)
+}
+
+fn sub(a: Vec2, b: Vec2) -> Vec2 no.alloc no.host deterministic {
+    return Vec2(a.x - b.x, a.y - b.y)
+}
+
+fn sub(a: Vec3, b: Vec3) -> Vec3 no.alloc no.host deterministic {
+    return Vec3(a.x - b.x, a.y - b.y, a.z - b.z)
+}
+
+fn scale(v: Vec2, k: f32) -> Vec2 no.alloc no.host deterministic {
+    return Vec2(v.x * k, v.y * k)
+}
+
+fn scale(v: Vec3, k: f32) -> Vec3 no.alloc no.host deterministic {
+    return Vec3(v.x * k, v.y * k, v.z * k)
+}
+
+fn dot(a: Vec2, b: Vec2) -> f32 no.alloc no.host deterministic {
+    return a.x * b.x + a.y * b.y
+}
+
+fn dot(a: Vec3, b: Vec3) -> f32 no.alloc no.host deterministic {
+    return a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+// The one that costs nothing, which is the one a frame budget reaches for:
+// comparing two of these orders the same way comparing their lengths does,
+// without the square root. What it hands back is a square, so it runs off the
+// end of the width where a square does — the square of 1e20 is infinity — and
+// comparing works up to the size where the squares stop fitting. `length` is
+// the one that answers for every vector this width holds an answer for.
+fn lengthSquared(v: Vec2) -> f32 no.alloc no.host deterministic {
+    return dot(v, v)
+}
+
+fn lengthSquared(v: Vec3) -> f32 no.alloc no.host deterministic {
+    return dot(v, v)
+}
+
+// The square root is the host's, declared by `std.math` and provided by
+// whatever the program runs against.
+//
+// Divided by its largest component first, the way `direction` is and for the
+// same reason: the square of a vector runs off the end of an `f32` long before
+// the vector does. The length of (1e20, 1e20) is 1.41e20, which this width
+// holds perfectly well, and squaring first answered with infinity; at the
+// other end the length of (1e-21, 1e-21) came back a part in five thousand
+// out, because the squares landed among the numbers an `f32` keeps badly.
+//
+// A largest component that is not a number is the answer itself: the length of
+// a vector with an infinite component is infinite, and dividing by it would
+// make that nothing rather than everything. See D383.
+fn length(v: Vec2) -> f32 no.alloc deterministic {
+    let most = math.max(math.abs(v.x), math.abs(v.y))
+    if most == 0.0 || !math.isNumber(most) {
+        return most
+    }
+    return most * math.sqrt(lengthSquared(Vec2(v.x / most, v.y / most)))
+}
+
+fn length(v: Vec3) -> f32 no.alloc deterministic {
+    let most = math.max(math.max(math.abs(v.x), math.abs(v.y)), math.abs(v.z))
+    if most == 0.0 || !math.isNumber(most) {
+        return most
+    }
+    return most *
+        math.sqrt(lengthSquared(Vec3(v.x / most, v.y / most, v.z / most)))
+}
+
+// And the one that costs nothing between two points, which is the question a
+// frame actually asks: what is nearest, and is it inside a radius. Both of
+// those order the same way without the square root, and `lengthSquared` was
+// here for that reason while the two-point form of it was not.
+fn distanceSquared(a: Vec2, b: Vec2) -> f32 no.alloc no.host deterministic {
+    return lengthSquared(sub(a, b))
+}
+
+fn distanceSquared(a: Vec3, b: Vec3) -> f32 no.alloc no.host deterministic {
+    return lengthSquared(sub(a, b))
+}
+
+fn distance(a: Vec2, b: Vec2) -> f32 no.alloc deterministic {
+    return length(sub(a, b))
+}
+
+fn distance(a: Vec3, b: Vec3) -> f32 no.alloc deterministic {
+    return length(sub(a, b))
+}
+
+// A vector of nought length points nowhere, and there is no direction to
+// give back. That is a question with no answer rather than a zero to return
+// quietly, so it is an optional (D013).
+//
+// Divided by its largest component before anything is squared, because
+// squaring is where a direction gets lost: a vector of 1e20s squares to
+// infinity and came back as (0, 0), which is not a direction and does not say
+// so, and a vector of 1e-21s squares into what an `f32` keeps badly and came
+// back a thousandth short of a length of one. Dividing first puts every
+// component between -1 and 1 with one of them at 1, so what is squared is
+// between 1 and 3 whatever it was handed. See D382.
+fn direction(v: Vec2) -> Vec2? no.alloc deterministic {
+    let most = math.max(math.abs(v.x), math.abs(v.y))
+    if most == 0.0 {
+        return none
+    }
+    let even = Vec2(v.x / most, v.y / most)
+    // The square root of the square rather than `length`, which would divide
+    // by the largest component again: that has been done, and it is 1.
+    let size = math.sqrt(lengthSquared(even))
+    // Which can only fail to be a number if one of the components was not
+    // one: infinity over infinity is not a number, and neither is anything
+    // that was already not one.
+    if !math.isNumber(size) {
+        return none
+    }
+    return scale(even, 1.0 / size)
+}
+
+fn direction(v: Vec3) -> Vec3? no.alloc deterministic {
+    let most = math.max(math.max(math.abs(v.x), math.abs(v.y)), math.abs(v.z))
+    if most == 0.0 {
+        return none
+    }
+    let even = Vec3(v.x / most, v.y / most, v.z / most)
+    let size = math.sqrt(lengthSquared(even))
+    if !math.isNumber(size) {
+        return none
+    }
+    return scale(even, 1.0 / size)
+}
+
+fn lerp(a: Vec2, b: Vec2, amount: f32) -> Vec2 no.alloc no.host deterministic {
+    return add(a, scale(sub(b, a), amount))
+}
+
+fn lerp(a: Vec3, b: Vec3, amount: f32) -> Vec3 no.alloc no.host deterministic {
+    return add(a, scale(sub(b, a), amount))
+}
+
+// Perpendicular in two, and the one perpendicular to both in three.
+fn perpendicular(v: Vec2) -> Vec2 no.alloc no.host deterministic {
+    return Vec2(0.0 - v.y, v.x)
+}
+
+fn cross(a: Vec3, b: Vec3) -> Vec3 no.alloc no.host deterministic {
+    return Vec3(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    )
+}
+
+// A cross in two dimensions is not a vector: what is perpendicular to both is
+// out of the plane, and the whole of it is the one number saying how far. That
+// number is the `z` the three-dimensional one gives back, and what a program
+// reads off it is which side of `a` the vector `b` is on — positive one way,
+// negative the other, and nought when they lie along each other. It is `dot`
+// with one of them turned a quarter, which is the other thing this module
+// gives for two dimensions and did not put together.
+fn cross(a: Vec2, b: Vec2) -> f32 no.alloc no.host deterministic {
+    return a.x * b.y - a.y * b.x
+}

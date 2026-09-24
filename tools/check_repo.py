@@ -100,6 +100,9 @@ def check_sizes(files, findings, notes):
 
 def check_owner_rules(files, findings):
     for path in files:
+        # Vendored code is upstream's own text (third_party/README.md).
+        if path.relative_to(ROOT).parts[0] == "third_party":
+            continue
         try:
             text = path.read_text()
         except (UnicodeDecodeError, IsADirectoryError):

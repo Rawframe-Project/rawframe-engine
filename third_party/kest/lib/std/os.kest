@@ -1,0 +1,98 @@
+module std.os
+
+// What only a host can do. Everything in here is a door the host binds, which
+// is the whole of this language's answer to the question of who may touch a
+// file, a clock or the words a program was started with: nobody, unless a host
+// says so. There is no global filesystem and no ambient clock, and there is not
+// going to be one.
+//
+// That is not caution, it is the same rule the rest of the language is built
+// on. A program that promises `no.host` cannot reach any of this, the compiler
+// proves it, and what that promise then means is exactly what a reader wants it
+// to mean: this runs the same on every machine and touches nothing outside
+// itself. A program that wants a file says so in its type.
+//
+// A host that binds none of these runs programs that do not use them and
+// refuses the ones that do, before they run, by name. That is the capability
+// model: the list of what a host provides is the list of what a program may do.
+//
+// `kest` binds all of them. Another host binds what it wants to allow.
+
+// Reading a whole file. Nothing rather than empty text when it cannot be read,
+// because a file that is not there and a file with nothing in it are different
+// answers and a program that cannot tell them apart will one day have to.
+extern fn Host.fileRead(path: text) -> text?
+
+// Writing one, answering whether it arrived. The bytes are text, which is what
+// this language has: a file of anything else is a lend, and that is the host's
+// own door rather than this one.
+extern fn Host.fileWrite(path: text, bytes: text) -> bool
+
+// And whether it is there at all, which is a question a program asks before it
+// does something rather than after it has failed.
+extern fn Host.fileExists(path: text) -> bool
+
+// How many words the program was started with, and which. The name the program
+// was invoked by is not one of them: what a program wants is what it was asked
+// to do, and a host that is not a command line has no such name to give.
+extern fn Host.argCount() -> i32 no.alloc
+extern fn Host.arg(at: i32) -> text?
+
+// A clock that measures elapsed time and only goes forwards, in microseconds,
+// from somewhere nobody promises anything about. It is for measuring how long
+// something took and for nothing else: two runs do not start it at the same
+// place, and what it says is not a date.
+//
+// What a host binds to it is the host's. `kest` binds the platform's monotonic
+// clock where there is one, and says so: on a platform with none it falls back
+// to a wall clock, which can go backwards. It is not determinism and a body
+// that promises `no.host` cannot read it.
+extern fn Host.clock() -> i64 no.alloc
+
+fn read(path: text) -> text? {
+    return Host.fileRead(path)
+}
+
+fn write(path: text, bytes: text) -> bool {
+    return Host.fileWrite(path, bytes)
+}
+
+fn exists(path: text) -> bool {
+    return Host.fileExists(path)
+}
+
+fn argCount() -> i32 no.alloc {
+    return Host.argCount()
+}
+
+fn arg(at: i32) -> text? {
+    if at < 0 || at >= Host.argCount() {
+        return none
+    }
+    return Host.arg(at)
+}
+
+// All of them in one array, for a program that wants to walk them rather than
+// count them. It allocates, which is why it is not the only way to ask.
+fn args() -> [text] {
+    let all: [text] = array(Host.argCount(), "")
+    clear(all)
+    for i in 0..Host.argCount() {
+        if let one = Host.arg(i) {
+            push(all, one)
+        }
+    }
+    return all
+}
+
+// Microseconds since the clock's own start. `now() - before` is the only thing
+// to do with two of these.
+fn now() -> i64 no.alloc {
+    return Host.clock()
+}
+
+// And what that is in milliseconds, because a frame budget is written in them
+// and dividing by a thousand in three places is three places to get it wrong.
+fn millisBetween(before: i64, after: i64) -> i64 no.alloc no.host deterministic {
+    return (after - before) / 1000
+}

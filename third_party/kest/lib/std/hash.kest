@@ -1,0 +1,25 @@
+module std.hash
+
+// `hash(x)` answers for one value. A program that wants one for several — the
+// two fields it means out of a struct, a run of them, a name and a number —
+// folds them together, and what it folds them with used to be whatever the
+// reference suggested. Two programs folding the same fields differently are two
+// answers to what reads like one question, so the fold is written once, here,
+// and it is the fold this compiler uses for a program made of several files:
+// FNV-1a over the eight bytes of each number. See D665.
+
+// Where a fold begins. Folding into nought would make a run of noughts fold to
+// nought and every value that starts with one look alike.
+const start: u64 = 14695981039346656037
+
+// One number folded into what is there so far. Low byte first, which is the
+// order the compiler folds a file's mark in and the order another machine has
+// to agree with.
+fn join(mark: u64, one: u64) -> u64 no.alloc no.host deterministic {
+    let folded = mark
+    for at in 0..8 {
+        folded = folded ^ one >> u64(at * 8) & 0xff
+        folded = folded * 1099511628211
+    }
+    return folded
+}
