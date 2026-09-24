@@ -36,6 +36,9 @@ rm -rf third_party/msquic/src/bin/win*/pgo_*
 rm -rf third_party/openssl
 cp -r "$openssl_source" third_party/openssl
 rm -rf third_party/openssl/{test,demos}
+# The command-line programs' sample keys and certificates: not built, and
+# private keys have no place in this repository even as examples.
+rm -f third_party/openssl/apps/*.pem
 find third_party/openssl/doc third_party/openssl/fuzz -type f ! -name build.info -delete
 find third_party/openssl -type d -empty -delete
 

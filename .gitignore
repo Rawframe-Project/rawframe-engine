@@ -32,3 +32,6 @@ CMakeUserPresets.json
 !.env.example
 *.pem
 *.key
+
+# Vendored code is upstream's, whole: MsQuic keeps its library build in src/bin.
+!third_party/**
