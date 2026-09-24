@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- Admission payloads, generation 1: the control frame registry, 32-byte `Fingerprint`s and the protocol's own, `Hello`, `Accept`, and `Reject` with exact bounded codecs, and `compare`, which gives the first incompatibility as a reject reason with no downgrade.
 - The provider-neutral transport contract (`Provider`: listen, connect, QUIC-numbered streams, datagrams, close, and a polled queue of owned events, with every bound in a required `ProviderProfile`) and `rawframe.network_loopback`, an in-process provider whose delivery follows a clock and seeded latency, jitter, loss, and duplication. Streams never drop: a full receiving queue closes the connection; datagrams are dropped and counted instead.
 - `rawframe.network` begins with the generation-1 application wire (SPEC-0010): canonical-only QUIC varints, `Reader` and `Writer` over fixed byte ranges, stream prefaces, frames taken whole or waited for, and datagram records that consume their datagram exactly. Readers never allocate.
 - Atomic reload of a Kest game's program: `KestSystems::reload` starts a new machine, finds and checks every entry, and requires every type the World holds to keep its shape before swapping, keeping the World, systems, and schedule; the game participant watches the `.kest` files beside the program every `kest.reload_every` Host iterations and reloads in `maintenance`, logging `game_reloaded` or `game_reload_refused`.

@@ -39,6 +39,9 @@ enum class NetworkError : std::uint32_t {
     Exhausted = 12,
     /// A stream this side may not send on.
     WrongStream = 13,
+    /// A payload whose fields are present but not acceptable: a value
+    /// outside its domain, or a field over its bound when writing.
+    Malformed = 14,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(NetworkError error) noexcept {
