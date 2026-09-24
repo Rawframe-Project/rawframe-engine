@@ -31,6 +31,7 @@ inline constexpr std::uint64_t kStatePayload = 1;
 inline constexpr std::uint64_t kPacePayload = 2;
 /// Payload types on the input lane (client to server).
 inline constexpr std::uint64_t kInputWindowPayload = 1;
+inline constexpr std::uint64_t kStateAckPayload = 2;
 
 /// `mapping_declare`, `mapping_ack`, `mapping_retire`, and
 /// `mapping_retire_ack` all carry this. `owned` is set only on a declare,
@@ -90,6 +91,18 @@ struct InputWindow {
     std::uint64_t ackedServerTick = 0;
     std::vector<std::span<const std::byte>> commands;
 };
+
+/// Which state datagrams a client received (SPEC-0010's highest sequence and
+/// selective bitmap): the newest sequence, and a bit for each of the 64
+/// before it, bit i for `latest - 1 - i`. It chooses what the server sends
+/// next and is not reliability: a lost acknowledgement costs only a resend.
+struct StateAck {
+    std::uint64_t latest = 0;
+    std::uint64_t earlier = 0;
+};
+
+[[nodiscard]] result::Status encodeStateAck(network::Writer& writer, const StateAck& ack);
+[[nodiscard]] result::Result<StateAck> decodeStateAck(std::span<const std::byte> payload);
 
 [[nodiscard]] result::Status encodeInputWindow(network::Writer& writer, const InputWindow& window);
 /// The decoded commands borrow from `payload`.

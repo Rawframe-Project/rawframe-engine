@@ -41,6 +41,9 @@ struct ReplicationClient::State {
     std::uint64_t serverTick = 0;
     std::uint64_t stateSequence = 0;
     std::uint64_t consumedInputTick = 0;
+    /// State datagrams received, for the next acknowledgement.
+    StateAck received;
+    bool acknowledgementDue = false;
 
     // Input: commands for consecutive input ticks not yet consumed.
     std::uint64_t nextInputTick = 0;
@@ -119,6 +122,39 @@ struct ReplicationClient::State {
         paceSequence = std::max(paceSequence, event.sequence);
     }
 
+    /// Notes a state datagram as received: the newest sequence, and a bit per
+    /// earlier one within the acknowledgement's reach.
+    void receive(std::uint64_t sequence) noexcept {
+        constexpr std::uint64_t kBits = 64;
+        if (sequence > received.latest) {
+            const std::uint64_t kShift = sequence - received.latest;
+            const std::uint64_t kKept = kShift >= kBits ? 0 : received.earlier << kShift;
+            const std::uint64_t kOld = received.latest != 0 && kShift <= kBits ? std::uint64_t{1} << (kShift - 1) : 0;
+            received.earlier = kKept | kOld;
+            received.latest = sequence;
+        } else if (sequence < received.latest && received.latest - sequence <= kBits) {
+            received.earlier |= std::uint64_t{1} << (received.latest - sequence - 1);
+        }
+        acknowledgementDue = true;
+    }
+
+    void sendAcknowledgement() {
+        acknowledgementDue = false;
+        scratch.resize(32);
+        network::Writer writer{scratch};
+        if (encodeStateAck(writer, received).has_value() &&
+            sessions
+                ->sendDatagram(*connection,
+                               network::DatagramRecord{.lane = network::DatagramLane::Input,
+                                                       .laneEpoch = accept->inputEpoch,
+                                                       .sequence = ++inputSequence,
+                                                       .payloadType = kStateAckPayload,
+                                                       .payload = writer.written()})
+                .has_value()) {
+            ++statistics.acknowledgementsSent;
+        }
+    }
+
     void onState(const network::SessionEvent& event) {
         if (event.laneEpoch == accept->replicationEpoch && event.payloadType == kPacePayload) {
             onPace(event);
@@ -172,6 +208,7 @@ struct ReplicationClient::State {
         }
         ++statistics.stateDatagrams;
         statistics.recordsUnmapped += unmapped;
+        receive(event.sequence);
         for (const Staged& record : staged) {
             const schema::ComponentRuntimeId kId = table[record.component];
             void* const kValue = world->getErased(record.entity, kId);
@@ -258,8 +295,14 @@ void ReplicationClient::pump() {
             state.appliedAt.clear();
             state.owned = {};
             state.accept.reset();
+            state.received = {};
+            state.acknowledgementDue = false;
             break;
         }
+    }
+    // One acknowledgement per pump covers every state datagram since the last.
+    if (state.accept && state.acknowledgementDue) {
+        state.sendAcknowledgement();
     }
 }
 

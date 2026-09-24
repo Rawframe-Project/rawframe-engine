@@ -5,7 +5,9 @@
 
 #include <algorithm>
 #include <array>
+#include <deque>
 #include <map>
+#include <optional>
 #include <span>
 
 namespace rawframe::world_replication {
@@ -16,10 +18,42 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Replication
     return result::fail(errorClass, kReplicationDomain, code(error), why);
 }
 
+/// What one connection was sent of one entity's component. The value the
+/// client holds is `lastSent` once it acknowledges any datagram from
+/// `changedAt` on: every record from then carries it.
+struct Replica {
+    std::vector<std::byte> lastSent;
+    bool sent = false;
+    std::uint64_t changedAt = 0;
+    std::optional<std::uint64_t> acknowledgedAt;
+
+    [[nodiscard]] bool held(std::span<const std::byte> value) const noexcept {
+        return sent && acknowledgedAt.has_value() && *acknowledgedAt >= changedAt &&
+               std::ranges::equal(lastSent, value);
+    }
+};
+
 struct Mapping {
     NetEntityId id;
     bool acknowledged = false;
+    /// By replication table index.
+    std::vector<Replica> replicas;
 };
+
+/// One state datagram sent and not yet known to have arrived.
+struct SentState {
+    std::uint64_t sequence = 0;
+    std::uint64_t tick = 0;
+    bool acknowledged = false;
+    std::vector<std::pair<world::EntityHandle, std::size_t>> records;
+};
+
+/// State datagrams remembered per connection for acknowledgement. One not
+/// acknowledged by the time it leaves this window was lost, as far as the
+/// server is concerned, and its values go again.
+constexpr std::size_t kSentWindow = 256;
+/// A state acknowledgement covers its newest sequence and the 64 before it.
+constexpr std::uint64_t kAckBits = 64;
 
 /// One admitted connection.
 struct Peer {
@@ -36,6 +70,7 @@ struct Peer {
     std::vector<std::byte> lastCommand;
     std::uint32_t held = 0;
     std::uint64_t stateSequence = 0;
+    std::deque<SentState> sent;
     /// How far ahead of consumption the newest command arrived, last seen.
     std::int64_t measuredLead = 0;
     bool heardInput = false;
@@ -71,6 +106,7 @@ struct ReplicationServer::State {
     };
     std::vector<PresentValue> present;
     std::vector<std::byte> encoded;
+    std::vector<std::pair<world::EntityHandle, std::size_t>> inDatagram;
     std::vector<std::byte> records;
     std::vector<std::byte> datagram;
     std::vector<std::byte> frame;
@@ -111,7 +147,43 @@ struct ReplicationServer::State {
         sessions->close(peer.connection);
     }
 
+    void onStateAck(Peer& peer, const network::SessionEvent& event) {
+        const auto kAck = decodeStateAck(event.payload);
+        if (!kAck.has_value()) {
+            ++statistics.acknowledgementsRefused;
+            return;
+        }
+        // Only what this server sent can be acknowledged: a sequence it
+        // never sent, or one already forgotten, finds nothing.
+        for (auto sent = peer.sent.rbegin(); sent != peer.sent.rend(); ++sent) {
+            if (sent->sequence > kAck->latest) {
+                continue;
+            }
+            const std::uint64_t kBehind = kAck->latest - sent->sequence;
+            if (kBehind > kAckBits) {
+                break;
+            }
+            const bool kReceived = kBehind == 0 || ((kAck->earlier >> (kBehind - 1)) & 1U) != 0;
+            if (!kReceived || sent->acknowledged) {
+                continue;
+            }
+            sent->acknowledged = true;
+            for (const auto& [entity, component] : sent->records) {
+                const auto kMapping = peer.mapped.find(entity);
+                if (kMapping == peer.mapped.end() || component >= kMapping->second.replicas.size()) {
+                    continue;
+                }
+                Replica& replica = kMapping->second.replicas[component];
+                replica.acknowledgedAt = std::max(replica.acknowledgedAt.value_or(0), sent->tick);
+            }
+        }
+    }
+
     void onInput(Peer& peer, const network::SessionEvent& event) {
+        if (event.laneEpoch == peer.accept.inputEpoch && event.payloadType == kStateAckPayload) {
+            onStateAck(peer, event);
+            return;
+        }
         if (!settings.input || event.laneEpoch != peer.accept.inputEpoch || event.payloadType != kInputWindowPayload) {
             ++statistics.inputsRefused;
             return;
@@ -256,6 +328,7 @@ struct ReplicationServer::State {
         network::Writer recordWriter{records};
         std::uint64_t count = 0;
         std::size_t used = 0;
+        inDatagram.clear();
         const auto kFlush = [&] {
             if (count == 0) {
                 return;
@@ -275,20 +348,36 @@ struct ReplicationServer::State {
                                                      .payload = writer.written()};
                 if (sessions->sendDatagram(peer.connection, kState).has_value()) {
                     ++statistics.stateDatagrams;
+                    peer.sent.push_back(SentState{
+                        .sequence = peer.stateSequence, .tick = tick.value, .records = std::move(inDatagram)});
+                    if (peer.sent.size() > kSentWindow) {
+                        peer.sent.pop_front();
+                    }
                 }
             }
             count = 0;
             used = 0;
             recordWriter = network::Writer{records};
+            inDatagram.clear();
         };
-        const Mapping* mapping = nullptr;
+        Mapping* mapping = nullptr;
         for (std::size_t index = 0; index < present.size(); ++index) {
             const PresentValue& value = present[index];
             if (index == 0 || present[index - 1].entity != value.entity) {
                 const auto kMapping = peer.mapped.find(value.entity);
                 mapping = kMapping == peer.mapped.end() || !kMapping->second.acknowledged ? nullptr : &kMapping->second;
+                if (mapping != nullptr) {
+                    mapping->replicas.resize(settings.table.components.size());
+                }
             }
             if (mapping == nullptr) {
+                continue;
+            }
+            // What the client is known to hold already is not sent again.
+            Replica& replica = mapping->replicas[value.component];
+            const std::span<const std::byte> kValue = std::span{encoded}.subspan(value.offset, value.length);
+            if (replica.held(kValue)) {
+                ++statistics.recordsHeld;
                 continue;
             }
             const std::size_t kRecord = 10 + value.length;
@@ -297,15 +386,23 @@ struct ReplicationServer::State {
             }
             if (!encodeStateRecordHead(recordWriter, {.entity = mapping->id, .component = value.component})
                      .has_value() ||
-                !recordWriter.bytes(std::span{encoded}.subspan(value.offset, value.length)).has_value()) {
+                !recordWriter.bytes(kValue).has_value()) {
                 // Larger than a datagram on its own: it cannot be sent.
                 recordWriter = network::Writer{records};
                 count = 0;
                 used = 0;
+                inDatagram.clear();
                 continue;
             }
+            if (!replica.sent || !std::ranges::equal(replica.lastSent, kValue)) {
+                replica.lastSent.assign(kValue.begin(), kValue.end());
+                replica.changedAt = tick.value;
+                replica.sent = true;
+            }
+            inDatagram.emplace_back(value.entity, value.component);
             used = recordWriter.written().size();
             ++count;
+            ++statistics.recordsSent;
         }
         kFlush();
     }

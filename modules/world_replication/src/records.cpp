@@ -2,6 +2,7 @@
 
 #include "rawframe/world_replication/errors.h"
 
+#include <array>
 #include <limits>
 
 namespace rawframe::world_replication {
@@ -94,6 +95,32 @@ result::Result<Pace> decodePace(std::span<const std::byte> payload) {
         return malformed("a pace signal has bytes past its end");
     }
     return pace;
+}
+
+result::Status encodeStateAck(network::Writer& writer, const StateAck& ack) {
+    if (ack.latest == 0) {
+        return malformed("a state acknowledgement names a sequence, and sequences start at one");
+    }
+    RAWFRAME_TRY(writer.varint(ack.latest));
+    std::array<std::byte, 8> bits{};
+    for (std::size_t index = 0; index < bits.size(); ++index) {
+        bits[index] = static_cast<std::byte>((ack.earlier >> (8U * (7 - index))) & 0xFFU);
+    }
+    return writer.bytes(bits);
+}
+
+result::Result<StateAck> decodeStateAck(std::span<const std::byte> payload) {
+    network::Reader reader{payload};
+    StateAck ack;
+    RAWFRAME_TRY_ASSIGN(ack.latest, reader.varint());
+    RAWFRAME_TRY_ASSIGN(const std::span<const std::byte> kBits, reader.bytes(8));
+    for (const std::byte kByte : kBits) {
+        ack.earlier = (ack.earlier << 8U) | std::to_integer<std::uint64_t>(kByte);
+    }
+    if (ack.latest == 0 || reader.remaining() != 0) {
+        return malformed("a state acknowledgement names sequence zero or has bytes past its end");
+    }
+    return ack;
 }
 
 result::Status encodeInputWindow(network::Writer& writer, const InputWindow& window) {

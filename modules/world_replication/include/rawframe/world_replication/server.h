@@ -52,6 +52,10 @@ struct ServerReplicationSettings {
 /// What the server counted.
 struct ServerReplicationStatistics {
     std::uint64_t stateDatagrams = 0;
+    /// State records sent, and left out because the client held the value.
+    std::uint64_t recordsSent = 0;
+    std::uint64_t recordsHeld = 0;
+    std::uint64_t acknowledgementsRefused = 0;
     std::uint64_t inputsConsumed = 0;
     std::uint64_t inputsHeld = 0;
     std::uint64_t inputsNeutral = 0;

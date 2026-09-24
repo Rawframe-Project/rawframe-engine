@@ -119,6 +119,8 @@ public:
                      kServerSummary,
                      "replication server totals",
                      {diagnostics::field("stateDatagrams", kStatistics.stateDatagrams),
+                      diagnostics::field("recordsSent", kStatistics.recordsSent),
+                      diagnostics::field("recordsHeld", kStatistics.recordsHeld),
                       diagnostics::field("inputsConsumed", kStatistics.inputsConsumed),
                       diagnostics::field("inputsHeld", kStatistics.inputsHeld),
                       diagnostics::field("inputsNeutral", kStatistics.inputsNeutral),

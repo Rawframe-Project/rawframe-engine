@@ -202,6 +202,8 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
     // Pacing puts the client's input ahead of consumption within a few ticks
     // of admission, and from then on every tick consumes a real command.
     RAWFRAME_EXPECT(scenario.server->statistics().inputsConsumed > 40);
+    // Props that never move are sent until acknowledged, then left out.
+    RAWFRAME_EXPECT(scenario.server->statistics().recordsHeld > 100);
 
     // A prop destroyed on the server is retired on the client.
     RAWFRAME_EXPECT(scenario.serverWorld.destroy(props[1]).has_value());
@@ -217,9 +219,25 @@ RAWFRAME_TEST(ReplicationHoldsThroughLossAndReordering) {
                        .datagramLossPerMillion = 250'000,
                        .datagramDuplicatePerMillion = 100'000,
                        .seed = 99}};
+    // Still props: sent until a datagram carrying them is acknowledged, so a
+    // lost one is sent again, and then never again.
+    const auto kPosition = *scenario.schema->key<Position>();
+    for (int index = 0; index < 3; ++index) {
+        const world::EntityHandle kProp = *scenario.serverWorld.create();
+        RAWFRAME_EXPECT(
+            scenario.serverWorld.insert(kProp, kPosition, Position{static_cast<float>(index * 10), 7}).has_value());
+    }
     for (int step = 0; step < 120; ++step) {
         scenario.step(Steer{1, 0});
     }
+    RAWFRAME_EXPECT(scenario.mirrored() == 4);
+    int still = 0;
+    auto query = world::Query<world::Read<Position>>::resolve(*scenario.schema);
+    query->forEach(scenario.clientWorld, [&still](world::EntityHandle, const Position& position) {
+        still += position.y == 7 && (position.x == 0 || position.x == 10 || position.x == 20) ? 1 : 0;
+    });
+    RAWFRAME_EXPECT(still == 3);
+    RAWFRAME_EXPECT(scenario.server->statistics().recordsHeld > 0);
     const world::EntityHandle kOwned = scenario.client->owned();
     RAWFRAME_EXPECT(!kOwned.isNull());
     const Position* mirror = scenario.clientWorld.get(kOwned, *scenario.schema->key<Position>());

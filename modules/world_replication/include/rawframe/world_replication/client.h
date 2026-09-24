@@ -40,6 +40,7 @@ struct ClientReplicationStatistics {
     /// Refused whole: wrong epoch or malformed.
     std::uint64_t datagramsRefused = 0;
     std::uint64_t inputWindowsSent = 0;
+    std::uint64_t acknowledgementsSent = 0;
 };
 
 class ReplicationClient {

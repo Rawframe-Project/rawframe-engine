@@ -141,3 +141,22 @@ RAWFRAME_TEST(PaceSignalsCarrySignedLeads) {
     RAWFRAME_EXPECT(encodePace(writer, Pace{.measuredLead = -1, .targetLead = 2}).has_value());
     RAWFRAME_EXPECT(writer.written().size() == 2 && writer.written()[0] == std::byte{1});
 }
+
+RAWFRAME_TEST(StateAcknowledgementsCarryABitmap) {
+    std::array<std::byte, 16> out{};
+    network::Writer writer{out};
+    const StateAck kAck{.latest = 300, .earlier = 0x8000'0000'0000'0005ULL};
+    RAWFRAME_EXPECT(encodeStateAck(writer, kAck).has_value());
+    // A two-byte varint, then the bitmap most significant byte first.
+    RAWFRAME_EXPECT(writer.written().size() == 10 && writer.written()[2] == std::byte{0x80} &&
+                    writer.written()[9] == std::byte{0x05});
+    const auto kBack = decodeStateAck(writer.written());
+    RAWFRAME_EXPECT(kBack.has_value() && kBack->latest == 300 && kBack->earlier == kAck.earlier);
+    RAWFRAME_EXPECT(!decodeStateAck(writer.written().first(9)).has_value());
+    std::array<std::byte, 11> longer{};
+    std::copy(writer.written().begin(), writer.written().end(), longer.begin());
+    RAWFRAME_EXPECT(failedWith(decodeStateAck(longer), ReplicationError::Malformed));
+    std::array<std::byte, 16> zero{};
+    network::Writer zeroWriter{zero};
+    RAWFRAME_EXPECT(!encodeStateAck(zeroWriter, StateAck{}).has_value());
+}
