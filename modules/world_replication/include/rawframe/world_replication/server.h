@@ -47,14 +47,27 @@ struct ServerReplicationSettings {
     /// often each connection is told how far ahead its input does arrive.
     std::uint64_t targetInputLead = 2;
     std::uint64_t paceInterval = 10;
+    /// State bytes one connection is sent per tick, datagram framing
+    /// included and the transport's own not. When more has changed than
+    /// fits, what has waited longest goes first and the rest waits; the
+    /// connection's own player always goes first. The default is SPEC-0013's
+    /// 64 KiB/s at 60 ticks a second.
+    std::size_t stateBytesPerTick = 1092;
+    /// Ticks after which a value sent and not acknowledged is sent again,
+    /// though it has not changed.
+    std::uint64_t resendAfter = 6;
 };
 
 /// What the server counted.
 struct ServerReplicationStatistics {
     std::uint64_t stateDatagrams = 0;
+    /// Their payload bytes, all connections together.
+    std::uint64_t stateBytes = 0;
     /// State records sent, and left out because the client held the value.
     std::uint64_t recordsSent = 0;
     std::uint64_t recordsHeld = 0;
+    /// Left for a later tick by the per-connection byte budget.
+    std::uint64_t recordsDeferred = 0;
     std::uint64_t acknowledgementsRefused = 0;
     std::uint64_t inputsConsumed = 0;
     std::uint64_t inputsHeld = 0;

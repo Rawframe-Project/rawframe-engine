@@ -115,7 +115,8 @@ struct Scenario {
     std::unique_ptr<network::Sessions> clientSessions;
     std::unique_ptr<world_replication::ReplicationClient> client;
 
-    explicit Scenario(network_loopback::LoopbackConditions conditions) : network(clock, conditions) {
+    explicit Scenario(network_loopback::LoopbackConditions conditions, std::size_t stateBytesPerTick = 1092)
+        : network(clock, conditions) {
         serverSessions = *network::Sessions::server(
             *serverTransport, clock, {.profile = kSessions, .expected = compatibility(), .seed = 1});
         RAWFRAME_EXPECT(serverSessions->listen({"server"}).has_value());
@@ -123,7 +124,8 @@ struct Scenario {
             *serverSessions,
             {.table = {.components = {positionCodec(), steerCodec()}},
              .playerComponents = {Position::kComponentTypeId, Steer::kComponentTypeId},
-             .input = steerCodec()});
+             .input = steerCodec(),
+             .stateBytesPerTick = stateBytesPerTick});
         std::vector<world::SystemDeclaration> declarations;
         RAWFRAME_EXPECT(server->declareSystems(*schema, declarations).has_value());
         move = std::make_unique<Move>(*schema);
@@ -247,4 +249,37 @@ RAWFRAME_TEST(ReplicationHoldsThroughLossAndReordering) {
     const auto kServer = scenario.server->statistics();
     RAWFRAME_EXPECT(kServer.inputsConsumed > kServer.inputsNeutral);
     RAWFRAME_EXPECT(scenario.client->statistics().recordsStale > 0 || scenario.client->statistics().stateDatagrams > 0);
+}
+
+RAWFRAME_TEST(ANarrowBudgetSendsThePlayerFirstAndTheRestInTurn) {
+    // Room for the header and two or three records a tick: far less than
+    // twenty moving props need.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}, 64};
+    const auto kPosition = *scenario.schema->key<Position>();
+    const auto kSteer = *scenario.schema->key<Steer>();
+    for (int index = 0; index < 20; ++index) {
+        const world::EntityHandle kProp = *scenario.serverWorld.create();
+        RAWFRAME_EXPECT(
+            scenario.serverWorld.insert(kProp, kPosition, Position{static_cast<float>(index), 0}).has_value());
+        RAWFRAME_EXPECT(scenario.serverWorld.insert(kProp, kSteer, Steer{0, 1}).has_value());
+    }
+    for (int step = 0; step < 120; ++step) {
+        scenario.step(Steer{1, 0});
+    }
+    const auto kServer = scenario.server->statistics();
+    RAWFRAME_EXPECT(kServer.recordsDeferred > 0);
+    RAWFRAME_EXPECT(kServer.stateBytes <= kServer.stateDatagrams * 64);
+    // The player's own position is never deferred: it is exactly what the
+    // server committed at the newest tick the client heard of.
+    const Position* mirror = scenario.clientWorld.get(scenario.client->owned(), kPosition);
+    const auto kCommitted = scenario.history.find(scenario.client->serverTick());
+    RAWFRAME_EXPECT(mirror != nullptr && kCommitted != scenario.history.end() && kCommitted->second.x == mirror->x);
+    // Every prop has been sent within the last few ticks, the longest waiting
+    // first: none is further behind than the budget's turn around them.
+    int fresh = 0;
+    auto query = world::Query<world::Read<Position>>::resolve(*scenario.schema);
+    query->forEach(scenario.clientWorld, [&fresh](world::EntityHandle, const Position& position) {
+        fresh += position.y > 90 ? 1 : 0;
+    });
+    RAWFRAME_EXPECT(fresh == 20);
 }

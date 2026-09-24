@@ -25,7 +25,10 @@ struct Replica {
     std::vector<std::byte> lastSent;
     bool sent = false;
     std::uint64_t changedAt = 0;
+    std::uint64_t sentAt = 0;
     std::optional<std::uint64_t> acknowledgedAt;
+    /// Grows every tick the value needs sending and is not sent.
+    std::uint64_t priority = 0;
 
     [[nodiscard]] bool held(std::span<const std::byte> value) const noexcept {
         return sent && acknowledgedAt.has_value() && *acknowledgedAt >= changedAt &&
@@ -54,6 +57,9 @@ struct SentState {
 constexpr std::size_t kSentWindow = 256;
 /// A state acknowledgement covers its newest sequence and the 64 before it.
 constexpr std::uint64_t kAckBits = 64;
+/// What a connection's own player gains per tick: always more than anything
+/// else can have waited.
+constexpr std::uint64_t kOwnedPriority = std::uint64_t{1} << 40U;
 
 /// One admitted connection.
 struct Peer {
@@ -107,6 +113,12 @@ struct ReplicationServer::State {
     std::vector<PresentValue> present;
     std::vector<std::byte> encoded;
     std::vector<std::pair<world::EntityHandle, std::size_t>> inDatagram;
+    struct Candidate {
+        std::uint64_t priority = 0;
+        std::size_t present = 0;
+        Mapping* mapping = nullptr;
+    };
+    std::vector<Candidate> candidates;
     std::vector<std::byte> records;
     std::vector<std::byte> datagram;
     std::vector<std::byte> frame;
@@ -322,12 +334,14 @@ struct ReplicationServer::State {
             peer.byNetEntity[kId.value] = kEntity;
             sendMapping(peer, network::ControlFrame::MappingDeclare, kId, kEntity == peer.player);
         }
-        // State for every acknowledged mapping, as many datagrams as it takes.
+        // State for acknowledged mappings, as many datagrams as the byte
+        // budget allows.
         const std::size_t kRoom = static_cast<std::size_t>(peer.accept.maximumDatagram);
         records.resize(kRoom);
         network::Writer recordWriter{records};
         std::uint64_t count = 0;
         std::size_t used = 0;
+        std::size_t spent = 0;
         inDatagram.clear();
         const auto kFlush = [&] {
             if (count == 0) {
@@ -346,8 +360,10 @@ struct ReplicationServer::State {
                                                      .sequence = ++peer.stateSequence,
                                                      .payloadType = kStatePayload,
                                                      .payload = writer.written()};
+                spent += writer.written().size();
                 if (sessions->sendDatagram(peer.connection, kState).has_value()) {
                     ++statistics.stateDatagrams;
+                    statistics.stateBytes += writer.written().size();
                     peer.sent.push_back(SentState{
                         .sequence = peer.stateSequence, .tick = tick.value, .records = std::move(inDatagram)});
                     if (peer.sent.size() > kSentWindow) {
@@ -360,6 +376,10 @@ struct ReplicationServer::State {
             recordWriter = network::Writer{records};
             inDatagram.clear();
         };
+
+        // What needs sending: not known to be held, and not sent so recently
+        // that its acknowledgement may still be on the way.
+        candidates.clear();
         Mapping* mapping = nullptr;
         for (std::size_t index = 0; index < present.size(); ++index) {
             const PresentValue& value = present[index];
@@ -373,18 +393,37 @@ struct ReplicationServer::State {
             if (mapping == nullptr) {
                 continue;
             }
-            // What the client is known to hold already is not sent again.
             Replica& replica = mapping->replicas[value.component];
             const std::span<const std::byte> kValue = std::span{encoded}.subspan(value.offset, value.length);
             if (replica.held(kValue)) {
                 ++statistics.recordsHeld;
                 continue;
             }
+            if (replica.sent && tick.value - replica.sentAt < settings.resendAfter &&
+                std::ranges::equal(replica.lastSent, kValue)) {
+                continue;
+            }
+            replica.priority += value.entity == peer.player ? kOwnedPriority : 1;
+            candidates.push_back(Candidate{.priority = replica.priority, .present = index, .mapping = mapping});
+        }
+        // Longest waiting first; ties in entity order, so a run repeats.
+        std::sort(candidates.begin(), candidates.end(), [](const Candidate& left, const Candidate& right) {
+            return left.priority != right.priority ? left.priority > right.priority : left.present < right.present;
+        });
+
+        for (const Candidate& candidate : candidates) {
+            const PresentValue& value = present[candidate.present];
+            Replica& replica = candidate.mapping->replicas[value.component];
+            const std::span<const std::byte> kValue = std::span{encoded}.subspan(value.offset, value.length);
             const std::size_t kRecord = 10 + value.length;
             if (used + kRecord + kStateHeaderRoom > kRoom) {
                 kFlush();
             }
-            if (!encodeStateRecordHead(recordWriter, {.entity = mapping->id, .component = value.component})
+            if (spent + used + kRecord + kStateHeaderRoom > settings.stateBytesPerTick) {
+                ++statistics.recordsDeferred;
+                continue;
+            }
+            if (!encodeStateRecordHead(recordWriter, {.entity = candidate.mapping->id, .component = value.component})
                      .has_value() ||
                 !recordWriter.bytes(kValue).has_value()) {
                 // Larger than a datagram on its own: it cannot be sent.
@@ -399,6 +438,8 @@ struct ReplicationServer::State {
                 replica.changedAt = tick.value;
                 replica.sent = true;
             }
+            replica.sentAt = tick.value;
+            replica.priority = 0;
             inDatagram.emplace_back(value.entity, value.component);
             used = recordWriter.written().size();
             ++count;

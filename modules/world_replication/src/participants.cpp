@@ -80,14 +80,26 @@ public:
                 *provider_,
                 context.clock(),
                 network::ServerSettings{.profile = sessionProfile(static_cast<std::size_t>(kConnections)),
-                                        .expected = compatibilityOf(*plan)}));
-        RAWFRAME_TRY_ASSIGN(
-            server_,
-            ReplicationServer::create(*sessions_,
-                                      ServerReplicationSettings{.table = plan->table(),
-                                                                .playerComponents = {plan->playerComponents().begin(),
-                                                                                     plan->playerComponents().end()},
-                                                                .input = plan->input()}));
+                                        .expected = compatibilityOf(*plan),
+                                        .tickRateTicks = simulation_->rate().ticks,
+                                        .tickRateSeconds = simulation_->rate().seconds}));
+        // SPEC-0013's steady egress objective by default; the budget is per
+        // tick, so it follows the World's rate.
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kEgress,
+                            context.configuration().unsignedInteger("replication.egress_bytes_per_second", 65'536));
+        const world::TickRate kRate = simulation_->rate();
+        const std::uint64_t kPerTick = kEgress > (std::uint64_t{1} << 30U) ? 0 : kEgress * kRate.seconds / kRate.ticks;
+        if (kPerTick < 64) {
+            return missing("replication.egress_bytes_per_second allows at least 64 bytes a tick, and at most 1 GiB/s");
+        }
+        RAWFRAME_TRY_ASSIGN(server_,
+                            ReplicationServer::create(
+                                *sessions_,
+                                ServerReplicationSettings{.table = plan->table(),
+                                                          .playerComponents = {plan->playerComponents().begin(),
+                                                                               plan->playerComponents().end()},
+                                                          .input = plan->input(),
+                                                          .stateBytesPerTick = static_cast<std::size_t>(kPerTick)}));
         return simulation_->addSystems(*server_);
     }
 
@@ -119,8 +131,10 @@ public:
                      kServerSummary,
                      "replication server totals",
                      {diagnostics::field("stateDatagrams", kStatistics.stateDatagrams),
+                      diagnostics::field("stateBytes", kStatistics.stateBytes),
                       diagnostics::field("recordsSent", kStatistics.recordsSent),
                       diagnostics::field("recordsHeld", kStatistics.recordsHeld),
+                      diagnostics::field("recordsDeferred", kStatistics.recordsDeferred),
                       diagnostics::field("inputsConsumed", kStatistics.inputsConsumed),
                       diagnostics::field("inputsHeld", kStatistics.inputsHeld),
                       diagnostics::field("inputsNeutral", kStatistics.inputsNeutral),

@@ -15,6 +15,8 @@ namespace rawframe::world_replication {
 ///
 ///   replication.endpoint             where to listen; without it, nothing
 ///   replication.maximum_connections  admitted at once (64)
+///   replication.egress_bytes_per_second
+///                                    state bytes per connection (65536)
 ///
 /// `rawframe.replication.bots` plays headless clients against a server,
 /// each with its own mirror World, steering its player at random:
