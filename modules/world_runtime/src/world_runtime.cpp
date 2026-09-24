@@ -3,6 +3,7 @@
 #include "rawframe/world_runtime/registrar.h"
 #include "rawframe/world_runtime/simulation.h"
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -18,6 +19,10 @@ constexpr std::string_view kProvided[] = {kSimulation.name};
 constexpr diagnostics::EventIdentity kSystemFailed{"world_runtime", "system_failed"};
 constexpr diagnostics::EventIdentity kTickFailed{"world_runtime", "tick_failed"};
 constexpr diagnostics::EventIdentity kTickDebt{"world_runtime", "tick_debt"};
+constexpr diagnostics::EventIdentity kTickSummary{"world_runtime", "tick_summary"};
+
+/// Tick durations kept for the summary: the most recent this many.
+constexpr std::size_t kKeptTickDurations = std::size_t{1} << 16U;
 
 std::unexpected<result::Error> alreadyStarted(std::string_view description) {
     return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
@@ -95,6 +100,8 @@ public:
     result::Status start(composition::ParticipantContext& context) noexcept override {
         started_ = true;
         emitter_ = context.emitter();
+        clock_ = &context.clock();
+        durations_.reserve(kKeptTickDurations);
         RAWFRAME_TRY_ASSIGN(registry_, registryBuilder_.freeze());
         world_ = std::make_unique<world::World>(registry_, settings_.world);
         std::vector<world::SystemDeclaration> declarations;
@@ -113,6 +120,7 @@ public:
     }
 
     void stop() noexcept override {
+        summarize();
         schedule_.reset();
         world_.reset();
     }
@@ -123,7 +131,9 @@ public:
         }
         const world::TickPacer::Due kDue = pacer_->due(frame.now);
         for (std::uint32_t index = 0; index < kDue.run && running_; ++index) {
+            const execution::MonotonicInstant kStart = clock_->now();
             auto report = schedule_->runTick(*world_, tick_, settings_.rate, emitter_);
+            record(clock_->now() - kStart);
             if (!report.has_value()) {
                 // The World's state is no longer trustworthy: stop ticking and
                 // say so once. The Host decides what happens next.
@@ -156,7 +166,41 @@ public:
     }
 
 private:
+    void record(execution::MonotonicDuration duration) {
+        if (durations_.size() < kKeptTickDurations) {
+            durations_.push_back(duration.nanoseconds);
+        } else {
+            durations_[recorded_ % kKeptTickDurations] = duration.nanoseconds;
+        }
+        ++recorded_;
+    }
+
+    /// How long ticks took, for SPEC-0013's tick budget: once, at stop.
+    void summarize() {
+        if (durations_.empty()) {
+            return;
+        }
+        std::vector<std::int64_t> sorted = durations_;
+        std::sort(sorted.begin(), sorted.end());
+        const auto kAt = [&sorted](double fraction) {
+            return static_cast<double>(
+                       sorted[static_cast<std::size_t>(fraction * static_cast<double>(sorted.size() - 1))]) /
+                   1000.0;
+        };
+        emitter_.log(diagnostics::Severity::Info,
+                     kTickSummary,
+                     "World tick durations, in microseconds",
+                     {diagnostics::field("ticks", recorded_),
+                      diagnostics::field("p50", kAt(0.50)),
+                      diagnostics::field("p95", kAt(0.95)),
+                      diagnostics::field("p99", kAt(0.99)),
+                      diagnostics::field("max", kAt(1.0))});
+    }
+
     Settings settings_;
+    const execution::MonotonicSource* clock_ = nullptr;
+    std::vector<std::int64_t> durations_;
+    std::uint64_t recorded_ = 0;
     schema::RegistryBuilder registryBuilder_;
     std::vector<SystemContributor*> contributors_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
