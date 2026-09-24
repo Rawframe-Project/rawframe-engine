@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `RateLimitedSink` limits log records per identity per window and reports what it held back as a `suppressed` field on the next record it passes.
 - `rawframe.composition`: participant declarations, `ParticipantRegistrar` and registrar entries listed by each host, `compose`, which runs registrars in module-ID order and reports every SPEC-0005 validation problem before anything is constructed, and `Composition`, which constructs, starts, quiesces, stops, and destroys participants in plan order with exact reverse rollback. Capabilities are typed without RTTI.
 - `Executor::retireOwner` withdraws a quota so the owner can be admitted again.
 - `rawframe.execution`: monotonic time types and clocks, the cancellation tree with deadlines and failure policy, `TaskOutcome` with explicit cancellation mapping, bounded CPU and blocking-I/O executors with owner quotas and background promotion, scoped jobs that run inline when the queue is full, and async operations owned and joined by their scope. SPEC-0048 values live in `bounds.h` only, and the repository check enforces it.
