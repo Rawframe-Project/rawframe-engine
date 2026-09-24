@@ -10,6 +10,9 @@
 4. No `.value()` call in engine source: on a Result it throws on failure, and
    exceptions are disabled (SPEC-0004, SPEC-0050). Test for `has_value()` and
    dereference, or use RAWFRAME_TRY_ASSIGN.
+5. SPEC-0048 values live only in rawframe/execution/bounds.h: no other
+   execution source spells one of its capacities or builds a duration from a
+   literal count of seconds or milliseconds.
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -26,6 +29,8 @@ REPORT_LINES = 1000
 EM_DASH = chr(0x2014)
 ATTRIBUTION = re.compile(r"co-authored-by:|generated with|claude-session:", re.IGNORECASE)
 VALUE_CALL = re.compile(r"\.value\(\s*\)")
+BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
+BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z_]+)/', re.MULTILINE)
 
 
@@ -71,6 +76,16 @@ def check_value_calls(files, findings):
                 findings.append(f"{relative}:{number}: .value() call; test has_value() and dereference instead")
 
 
+def check_bounds_literals(files, findings):
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[:2] != ("modules", "execution") or "tests" in relative.parts or relative == BOUNDS_HEADER:
+            continue
+        for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            if BOUNDS_LITERAL.search(line.split("//")[0]):
+                findings.append(f"{relative}:{number}: a SPEC-0048 value spelled outside bounds.h")
+
+
 def check_sizes(files, findings, notes):
     for path in files:
         if path.suffix not in SOURCE_SUFFIXES or "third_party" in path.parts:
@@ -108,6 +123,7 @@ def main():
     findings, notes = [], []
     check_boundaries(files, read_modules(), findings)
     check_value_calls(files, findings)
+    check_bounds_literals(files, findings)
     check_sizes(files, findings, notes)
     check_owner_rules(files, findings)
     for note in notes:
