@@ -20,3 +20,4 @@ endif()
 # Every module is listed here and in tools/modules.txt. A module is never
 # discovered from the directory tree.
 add_subdirectory(modules/base)
+add_subdirectory(modules/result)

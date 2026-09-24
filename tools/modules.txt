@@ -4,3 +4,4 @@
 # not on it either. Keep the graph a DAG with base as its only leaf.
 
 base:
+result: base
