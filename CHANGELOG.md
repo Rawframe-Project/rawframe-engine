@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe.schema`: `ComponentTypeId` from canonical UUID text at compile time, the `Component` concept, component descriptors, and `RegistryBuilder`/`SchemaRegistry` with dense runtime IDs in stable-ID order and typed `ComponentKey<T>`.
 - `RateLimitedSink` limits log records per identity per window and reports what it held back as a `suppressed` field on the next record it passes.
 - `rawframe.composition`: participant declarations, `ParticipantRegistrar` and registrar entries listed by each host, `compose`, which runs registrars in module-ID order and reports every SPEC-0005 validation problem before anything is constructed, and `Composition`, which constructs, starts, quiesces, stops, and destroys participants in plan order with exact reverse rollback. Capabilities are typed without RTTI.
 - `Executor::retireOwner` withdraws a quota so the owner can be admitted again.

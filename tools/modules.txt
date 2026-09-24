@@ -8,3 +8,4 @@ result: base
 diagnostics: result base
 execution: diagnostics result base
 composition: execution diagnostics result base
+schema: result base
