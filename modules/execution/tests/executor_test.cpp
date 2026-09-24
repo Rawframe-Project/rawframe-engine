@@ -80,6 +80,26 @@ RAWFRAME_TEST(OwnersNeedAnAcceptedQuota) {
                                 ExecutionError::QuotaTableFull));
 }
 
+RAWFRAME_TEST(ARetiredOwnerCanBeAdmittedAgain) {
+    Gate gate;
+    Executor executor{oneWorker()};
+    RAWFRAME_EXPECT(executor.admitOwner(kOwner, Quota{.maximumPendingTasks = 4}).has_value());
+    constexpr OwnerId kGuest{5};
+    RAWFRAME_EXPECT(refusedWith(executor.retireOwner(kGuest), ErrorClass::NotFound, ExecutionError::OwnerHasNoQuota));
+    RAWFRAME_EXPECT(executor.admitOwner(kGuest, Quota{.maximumPendingTasks = 1}).has_value());
+    occupyWorker(executor, gate);
+    RAWFRAME_EXPECT(executor.submit(kGuest, Priority::Normal, []() noexcept {}).has_value());
+    RAWFRAME_EXPECT(
+        refusedWith(executor.retireOwner(kGuest), ErrorClass::FailedPrecondition, ExecutionError::OwnerHasPendingWork));
+    RAWFRAME_EXPECT(executor.runOne());
+    RAWFRAME_EXPECT(executor.retireOwner(kGuest).has_value());
+    RAWFRAME_EXPECT(refusedWith(executor.submit(kGuest, Priority::Normal, []() noexcept {}),
+                                ErrorClass::PermissionDenied,
+                                ExecutionError::OwnerHasNoQuota));
+    RAWFRAME_EXPECT(executor.admitOwner(kGuest, Quota{.maximumPendingTasks = 2}).has_value());
+    gate.open.store(true);
+}
+
 RAWFRAME_TEST(CriticalIsOnlyForTrustedOwners) {
     constexpr OwnerId kScript{2};
     constexpr OwnerId kHost{3};

@@ -56,6 +56,15 @@ Executor::~Executor() {
     stop();
 }
 
+std::size_t Executor::findOwnerLocked(OwnerId owner) const noexcept {
+    for (std::size_t index = 0; index < ownerCount_; ++index) {
+        if (owners_[index].active && owners_[index].id == owner) {
+            return index;
+        }
+    }
+    return ownerCount_;
+}
+
 result::Status Executor::admitOwner(OwnerId owner, Quota quota) {
     const std::scoped_lock kLock{mutex_};
     if (quota.maximumPendingTasks == 0) {
@@ -64,21 +73,43 @@ result::Status Executor::admitOwner(OwnerId owner, Quota quota) {
                             code(ExecutionError::ZeroQuota),
                             "a quota admits at least one pending task");
     }
-    for (std::size_t index = 0; index < ownerCount_; ++index) {
-        if (owners_[index].id == owner) {
-            return result::fail(result::ErrorClass::AlreadyExists,
-                                kExecutionDomain,
-                                code(ExecutionError::OwnerAlreadyAdmitted),
-                                "the owner already has a quota on this executor");
-        }
+    if (findOwnerLocked(owner) != ownerCount_) {
+        return result::fail(result::ErrorClass::AlreadyExists,
+                            kExecutionDomain,
+                            code(ExecutionError::OwnerAlreadyAdmitted),
+                            "the owner already has a quota on this executor");
     }
-    if (ownerCount_ == owners_.size()) {
+    std::size_t index = 0;
+    while (index < ownerCount_ && owners_[index].active) {
+        ++index;
+    }
+    if (index == owners_.size()) {
         return result::fail(result::ErrorClass::ResourceExhausted,
                             kExecutionDomain,
                             code(ExecutionError::QuotaTableFull),
                             "kMaximumQuotaOwners owners are already admitted");
     }
-    owners_[ownerCount_++] = OwnerEntry{.id = owner, .quota = quota, .pending = 0};
+    owners_[index] = OwnerEntry{.id = owner, .quota = quota, .pending = 0, .active = true};
+    ownerCount_ = std::max(ownerCount_, index + 1);
+    return {};
+}
+
+result::Status Executor::retireOwner(OwnerId owner) {
+    const std::scoped_lock kLock{mutex_};
+    const std::size_t kIndex = findOwnerLocked(owner);
+    if (kIndex == ownerCount_) {
+        return result::fail(result::ErrorClass::NotFound,
+                            kExecutionDomain,
+                            code(ExecutionError::OwnerHasNoQuota),
+                            "the owner has no quota to retire");
+    }
+    if (owners_[kIndex].pending != 0) {
+        return result::fail(result::ErrorClass::FailedPrecondition,
+                            kExecutionDomain,
+                            code(ExecutionError::OwnerHasPendingWork),
+                            "the owner still has tasks waiting");
+    }
+    owners_[kIndex].active = false;
     return {};
 }
 
@@ -92,20 +123,14 @@ result::Status Executor::submit(OwnerId owner, Priority priority, Task&& task) {
                                 code(ExecutionError::AdmissionClosed),
                                 "the executor is stopping");
         }
-        std::size_t ownerIndex = ownerCount_;
-        for (std::size_t index = 0; index < ownerCount_; ++index) {
-            if (owners_[index].id == owner) {
-                ownerIndex = index;
-                break;
-            }
-        }
-        if (ownerIndex == ownerCount_) {
+        const std::size_t kOwnerIndex = findOwnerLocked(owner);
+        if (kOwnerIndex == ownerCount_) {
             return result::fail(result::ErrorClass::PermissionDenied,
                                 kExecutionDomain,
                                 code(ExecutionError::OwnerHasNoQuota),
                                 "the owner has no accepted quota");
         }
-        OwnerEntry& entry = owners_[ownerIndex];
+        OwnerEntry& entry = owners_[kOwnerIndex];
         if (priority == Priority::Critical && !entry.quota.mayUseCritical) {
             return result::fail(result::ErrorClass::PermissionDenied,
                                 kExecutionDomain,
@@ -129,7 +154,7 @@ result::Status Executor::submit(OwnerId owner, Priority priority, Task&& task) {
         Slot& slot = slots_[kIndex];
         freeHead_ = slot.next;
         slot.task = std::move(task);
-        slot.owner = static_cast<std::uint32_t>(ownerIndex);
+        slot.owner = static_cast<std::uint32_t>(kOwnerIndex);
         slot.next = kNone;
 
         Queue& queue = queues_[static_cast<std::size_t>(priority)];

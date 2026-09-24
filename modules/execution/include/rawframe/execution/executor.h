@@ -72,6 +72,10 @@ public:
     /// the quota is zero, or kMaximumQuotaOwners owners are admitted.
     [[nodiscard]] result::Status admitOwner(OwnerId owner, Quota quota);
 
+    /// Withdraws an owner's quota, so its identity can be admitted again later.
+    /// Fails if it has tasks waiting, or was never admitted.
+    [[nodiscard]] result::Status retireOwner(OwnerId owner);
+
     /// Queues a task. Fails typed, and queues nothing, when admission is closed
     /// (`unavailable`), the owner has no quota or asks for a priority it may not
     /// use (`permission_denied`), or the owner's quota or the queue is full
@@ -120,8 +124,11 @@ private:
         OwnerId id;
         Quota quota;
         std::size_t pending = 0;
+        bool active = false; // a retired entry is reused by the next admission
     };
 
+    /// The active entry for `owner`, or ownerCount_. Requires mutex_.
+    [[nodiscard]] std::size_t findOwnerLocked(OwnerId owner) const noexcept;
     void workerLoop() noexcept;
     /// Takes the next task by priority, with background promoted once it has
     /// waited half the starvation interval. Requires mutex_.

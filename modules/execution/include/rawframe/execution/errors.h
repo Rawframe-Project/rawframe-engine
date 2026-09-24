@@ -24,6 +24,7 @@ enum class ExecutionError : std::uint32_t {
     OwnerAlreadyAdmitted = 10,
     ZeroQuota = 11,
     PriorityNotPermitted = 12,
+    OwnerHasPendingWork = 13,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(ExecutionError error) noexcept {
