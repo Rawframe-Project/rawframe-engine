@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe.network` begins with the generation-1 application wire (SPEC-0010): canonical-only QUIC varints, `Reader` and `Writer` over fixed byte ranges, stream prefaces, frames taken whole or waited for, and datagram records that consume their datagram exactly. Readers never allocate.
 - Atomic reload of a Kest game's program: `KestSystems::reload` starts a new machine, finds and checks every entry, and requires every type the World holds to keep its shape before swapping, keeping the World, systems, and schedule; the game participant watches the `.kest` files beside the program every `kest.reload_every` Host iterations and reloads in `maintenance`, logging `game_reloaded` or `game_reload_refused`.
 - Kest systems draw from the World's random streams through the engine module `rawframe.random` (`below`, `unit`); a system declares its streams (`randomStreams`, or `random <name>` in a game description) and names one by its place in that list.
 - Kest systems change the World's structure: the engine's Kest module `rawframe.world` (under `modules/world_kest/kest`, reached through a game's `kest.project`) declares the opaque `Entity` and `create`/`destroy`, each game component gets `<Kest type>.insert` and `.remove` doors, all recorded in the running system's command buffer, and a system may take its archetype's `entities` as a column. An entity created in one system run and kept is refused in any other.

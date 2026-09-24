@@ -11,6 +11,7 @@ composition: execution diagnostics result base
 schema: result base
 world: schema execution diagnostics result base
 kest: execution result base
+network: result base
 world_runtime: world composition schema execution diagnostics result base
 world_kest: world_runtime kest world composition schema execution diagnostics result base
 host: composition execution diagnostics result base

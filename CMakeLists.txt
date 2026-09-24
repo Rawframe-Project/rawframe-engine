@@ -30,6 +30,7 @@ add_subdirectory(modules/world)
 add_subdirectory(modules/kest)
 add_subdirectory(modules/world_runtime)
 add_subdirectory(modules/world_kest)
+add_subdirectory(modules/network)
 add_subdirectory(modules/host)
 
 add_subdirectory(hosts/dedicated_server)
