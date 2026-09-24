@@ -47,6 +47,8 @@ EndReason endReasonOf(CloseReason reason) noexcept {
         return EndReason::QueueExhausted;
     case CloseReason::Refused:
         return EndReason::Refused;
+    case CloseReason::Untrusted:
+        return EndReason::Untrusted;
     }
     return EndReason::Closed;
 }

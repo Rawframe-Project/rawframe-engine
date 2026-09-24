@@ -57,6 +57,8 @@ enum class EndReason : std::uint8_t {
     TimedOut,
     ProtocolViolation,
     QueueExhausted,
+    /// The transport did not trust the peer's identity.
+    Untrusted,
 };
 
 struct SessionEvent {

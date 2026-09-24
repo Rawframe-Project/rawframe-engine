@@ -74,6 +74,9 @@ enum class CloseReason : std::uint8_t {
     QueueExhausted,
     /// The listener had no room for another connection.
     Refused,
+    /// The peer's identity was not the one this side trusts: a server
+    /// certificate that does not match the pin.
+    Untrusted,
 };
 
 enum class EventKind : std::uint8_t {
