@@ -57,8 +57,8 @@ public:
                                     .target = target,
                                     .component = key.id,
                                     .value = storage,
-                                    .destroyValue = [](void* value) noexcept {
-                                        static_cast<T*>(value)->~T();
+                                    .destroyValue = [](void* stored) noexcept {
+                                        static_cast<T*>(stored)->~T();
                                     }}));
         if constexpr (!std::is_empty_v<T>) {
             ::new (storage) T(std::move(value));
