@@ -7,6 +7,9 @@
    reported from 1,000.
 3. Owner rules: no em dash in any tracked text file, and no AI attribution
    trailer in any commit message.
+4. No `.value()` call in engine source: on a Result it throws on failure, and
+   exceptions are disabled (SPEC-0004, SPEC-0050). Test for `has_value()` and
+   dereference, or use RAWFRAME_TRY_ASSIGN.
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -22,6 +25,7 @@ FAIL_LINES = 1500
 REPORT_LINES = 1000
 EM_DASH = chr(0x2014)
 ATTRIBUTION = re.compile(r"co-authored-by:|generated with|claude-session:", re.IGNORECASE)
+VALUE_CALL = re.compile(r"\.value\(\s*\)")
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z_]+)/', re.MULTILINE)
 
 
@@ -55,6 +59,16 @@ def check_boundaries(files, allowed, findings):
         for included in INCLUDE.findall(path.read_text(errors="replace")):
             if included not in permitted:
                 findings.append(f"{relative}: includes rawframe/{included}/, not allowed for module '{module}'")
+
+
+def check_value_calls(files, findings):
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[0] != "modules" or path.suffix not in SOURCE_SUFFIXES:
+            continue
+        for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            if VALUE_CALL.search(line.split("//")[0]):
+                findings.append(f"{relative}:{number}: .value() call; test has_value() and dereference instead")
 
 
 def check_sizes(files, findings, notes):
@@ -93,6 +107,7 @@ def main():
     files = [path for path in tracked_files() if path.is_file()]
     findings, notes = [], []
     check_boundaries(files, read_modules(), findings)
+    check_value_calls(files, findings)
     check_sizes(files, findings, notes)
     check_owner_rules(files, findings)
     for note in notes:
