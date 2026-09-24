@@ -4,6 +4,8 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe.host` and `rawframe-server`: the Host owns the clock, diagnostics routing and NDJSON sink, the executors, and the root scope, composes and starts the plan, runs the Host schedule at `host.iteration_rate`, drains the log in maintenance, and stops in order on a signal or after `host.maximum_iterations`. The dedicated server is a thin executable over it with the World runtime in its closure.
+- Diagnostics name repository-relative source paths, and builds define `RAWFRAME_CONFIGURATION_NAME`.
 - `rawframe.world_runtime`: the World as a participant. Other participants add components and system contributors through the `Simulation` capability while being constructed; at start it freezes the registry, builds the World and schedule, and afterwards runs the ticks its pacer owes in the Host's `run_worlds` phase, configured by `world.*` keys.
 - `Configuration`: the Runtime's bounded, immutable key/value snapshot, parsed from `key = value` lines, handed in by the host, and read by participants through their context.
 - Host schedule phases: participants declare the `HostPhase`s they work in, `Composition::runHostPhase` runs them in plan order, and a dedicated-server plan refuses presentation phases.
