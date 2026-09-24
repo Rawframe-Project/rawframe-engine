@@ -7,6 +7,7 @@
 #include "rawframe/composition/configuration.h"
 #include "rawframe/composition/registrar.h"
 #include "rawframe/host/host.h"
+#include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
 
 #include <array>
@@ -45,7 +46,9 @@ bool writeStandardOutput(void*, std::span<const char> bytes) noexcept {
 }
 
 // The server closure. Kest, networking, and replication join as they land.
-constexpr std::array<rawframe::composition::RegistrarEntry, 1> kRegistrars = {
+constexpr std::array<rawframe::composition::RegistrarEntry, 2> kRegistrars = {
+    rawframe::composition::RegistrarEntry{
+        "world_kest", &rawframe::world_kest::registerParticipants, rawframe::world_kest::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_runtime", &rawframe::world_runtime::registerParticipants, rawframe::world_runtime::kScopes},
 };

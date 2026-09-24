@@ -21,6 +21,12 @@ enum class WorldKestError : std::uint32_t {
     Cancelled = 3,
     /// An archetype holds more rows than a Kest `i32` count can say.
     TooManyRows = 4,
+    /// A game description line does not parse; the context names the line.
+    BadGameLine = 5,
+    /// A game description names a component or field it does not declare.
+    UnknownName = 6,
+    /// A game file could not be read.
+    UnreadableFile = 7,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(WorldKestError error) noexcept {

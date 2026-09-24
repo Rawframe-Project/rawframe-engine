@@ -1,0 +1,38 @@
+module movers
+
+// Movers drift by their velocity each tick and bounce off the edges of a
+// square. Every component the game declares is one of these structs.
+
+struct Position {
+    x: f32
+    y: f32
+}
+
+struct Velocity {
+    dx: f32
+    dy: f32
+}
+
+const EDGE: f32 = 100.0
+
+fn integrate(count: i32, positions: [Position], velocities: [Velocity]) {
+    let i = 0
+    while i < count {
+        positions[i].x = positions[i].x + velocities[i].dx
+        positions[i].y = positions[i].y + velocities[i].dy
+        i = i + 1
+    }
+}
+
+fn bounce(count: i32, positions: [Position], velocities: [Velocity]) {
+    let i = 0
+    while i < count {
+        if positions[i].x > EDGE || positions[i].x < 0.0 - EDGE {
+            velocities[i].dx = 0.0 - velocities[i].dx
+        }
+        if positions[i].y > EDGE || positions[i].y < 0.0 - EDGE {
+            velocities[i].dy = 0.0 - velocities[i].dy
+        }
+        i = i + 1
+    }
+}

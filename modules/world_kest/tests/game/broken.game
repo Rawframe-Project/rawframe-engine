@@ -1,0 +1,3 @@
+# Names a Kest type the program does not declare.
+program movers.kest
+component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 movers.position Place
