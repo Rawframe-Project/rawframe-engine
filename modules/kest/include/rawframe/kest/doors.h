@@ -22,8 +22,9 @@ union Value {
     void* object;
 };
 
-/// What one argument or answer of a door is. The subset of Kest's kinds the
-/// engine's doors use so far; text crosses in, not out.
+/// What one argument or answer of a door is. `Value` is a struct the program
+/// declares, of numbers and truths only, crossing by value; text crosses in,
+/// not out.
 enum class Slot : std::uint8_t {
     I32,
     I64,
@@ -32,15 +33,32 @@ enum class Slot : std::uint8_t {
     F32,
     F64,
     Bool,
-    Text
+    Text,
+    Value
+};
+
+/// One argument or answer: its slot, and for `Slot::Value` the program's
+/// name for the type (`Entity`, or `rawframe.world.Entity`).
+struct Parameter {
+    Slot slot = Slot::I64;
+    std::string_view type;
+
+    // Implicit, so a scalar parameter is written as its Slot.
+    constexpr Parameter(Slot kind) noexcept : slot(kind) {
+    }
+    constexpr Parameter(Slot kind, std::string_view name) noexcept : slot(kind), type(name) {
+    }
 };
 
 /// One crossing into a door, valid only while the door runs. Arguments are
 /// read by their position in the declaration, whatever width each is.
 class DoorCall {
 public:
-    DoorCall(Value* frame, void* machine, std::span<const Slot> takes) noexcept
-        : frame_(frame), machine_(machine), takes_(takes) {
+    /// How a bound door's arguments sit in the frame. This module's own.
+    struct Shape;
+
+    DoorCall(Value* frame, void* machine, const Shape& shape) noexcept
+        : frame_(frame), machine_(machine), shape_(&shape) {
     }
 
     [[nodiscard]] std::int64_t integer(std::size_t argument) const noexcept;
@@ -48,11 +66,18 @@ public:
     [[nodiscard]] bool boolean(std::size_t argument) const noexcept;
     /// Text the program passed; valid only while the door runs.
     [[nodiscard]] std::string_view text(std::size_t argument) const noexcept;
+    /// A `Slot::Value` argument, written into `into` exactly as the program
+    /// lays the type out where memory is shared. False, writing nothing, when
+    /// `into` is not the type's size.
+    [[nodiscard]] bool value(std::size_t argument, std::span<std::byte> into) const noexcept;
 
     /// The answer. Written last: it shares slots with the arguments.
     void answerInteger(std::int64_t value) noexcept;
     void answerReal(double value) noexcept;
     void answerBoolean(bool value) noexcept;
+    /// A `Slot::Value` answer from bytes laid out as the program lays the type
+    /// out. False, writing nothing, when `from` is not the type's size.
+    [[nodiscard]] bool answerValue(std::span<const std::byte> from) noexcept;
 
     /// The door could not do what it was asked: the call refuses at the
     /// instruction that made it, with these words, and any answer is ignored.
@@ -63,11 +88,11 @@ public:
     void spendFuel(std::uint64_t work) noexcept;
 
 private:
-    [[nodiscard]] const Value& at(std::size_t argument) const noexcept;
+    [[nodiscard]] Value* at(std::size_t argument) const noexcept;
 
     Value* frame_;
     void* machine_;
-    std::span<const Slot> takes_;
+    const Shape* shape_;
 };
 
 using DoorFunction = void (*)(DoorCall& call, void* context) noexcept;
@@ -80,9 +105,9 @@ struct Door {
     std::string_view name;
     DoorFunction function = nullptr;
     void* context = nullptr;
-    std::span<const Slot> takes;
-    /// Empty for a door that answers nothing; at most one slot otherwise.
-    std::span<const Slot> gives;
+    std::span<const Parameter> takes;
+    /// Empty for a door that answers nothing; at most one otherwise.
+    std::span<const Parameter> gives;
     bool safeForUntrusted = false;
 };
 

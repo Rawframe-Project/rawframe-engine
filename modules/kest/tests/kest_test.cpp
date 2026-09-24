@@ -114,9 +114,9 @@ void tick(kest::DoorCall&, void* context) noexcept {
     ++static_cast<Doorway*>(context)->ticks;
 }
 
-constexpr std::array<Slot, 1> kI32 = {Slot::I32};
-constexpr std::array<Slot, 1> kI64 = {Slot::I64};
-constexpr std::array<Slot, 2> kTextAndI32 = {Slot::Text, Slot::I32};
+constexpr std::array<kest::Parameter, 1> kI32 = {Slot::I32};
+constexpr std::array<kest::Parameter, 1> kI64 = {Slot::I64};
+constexpr std::array<kest::Parameter, 2> kTextAndI32 = {Slot::Text, Slot::I32};
 
 DoorTable table(Doorway& doorway, bool safe = true) {
     DoorTable doors;
@@ -260,7 +260,7 @@ RAWFRAME_TEST(DoorsAreCheckedBeforeAnythingRuns) {
 
     RAWFRAME_EXPECT(
         refusedWith(wrongShape.add(Door{.name = "Clock.tick", .function = &tick}), KestError::DuplicateDoor));
-    constexpr std::array<Slot, 1> kText = {Slot::Text};
+    constexpr std::array<kest::Parameter, 1> kText = {Slot::Text};
     RAWFRAME_EXPECT(refusedWith(wrongShape.add(Door{.name = "Text.out", .function = &tick, .gives = kText}),
                                 KestError::DoorShapeMismatch));
 }
@@ -435,4 +435,88 @@ RAWFRAME_TEST(ProgramsCompileFromDisk) {
     RAWFRAME_EXPECT(refusedWith(Program::compileFile(kLibrary + "absent.kest", {.library = kLibrary}, &report),
                                 KestError::DoesNotCompile));
     RAWFRAME_EXPECT(report.find("absent.kest") != std::string::npos);
+}
+
+namespace {
+
+struct Pair {
+    std::int32_t a = 0;
+    float b = 0;
+    bool on = false;
+};
+
+constexpr std::string_view kPairs = "module t\n"
+                                    "\n"
+                                    "struct Pair {\n"
+                                    "    a: i32\n"
+                                    "    b: f32\n"
+                                    "    on: bool\n"
+                                    "}\n"
+                                    "\n"
+                                    "extern fn Engine.twice(pair: Pair, extra: i64) -> Pair no.alloc\n"
+                                    "\n"
+                                    "fn run(x: i32) -> f32 {\n"
+                                    "    let doubled = Engine.twice(Pair(x, 2.5, false), 7)\n"
+                                    "    if doubled.on {\n"
+                                    "        return doubled.b + f32(doubled.a)\n"
+                                    "    }\n"
+                                    "    return 0.0\n"
+                                    "}\n";
+
+void twice(kest::DoorCall& call, void*) noexcept {
+    Pair pair;
+    if (!call.value(0, std::as_writable_bytes(std::span{&pair, 1}))) {
+        call.fail("not a pair");
+        return;
+    }
+    const std::int64_t kExtra = call.integer(1);
+    pair.a = static_cast<std::int32_t>((pair.a * 2) + kExtra);
+    pair.b *= 2;
+    pair.on = !pair.on;
+    if (!call.answerValue(std::as_bytes(std::span{&pair, 1}))) {
+        call.fail("could not answer");
+    }
+}
+
+constexpr std::array<kest::Parameter, 2> kPairAndI64 = {kest::Parameter{Slot::Value, "Pair"}, Slot::I64};
+constexpr std::array<kest::Parameter, 1> kPair = {kest::Parameter{Slot::Value, "Pair"}};
+
+} // namespace
+
+RAWFRAME_TEST(StructsCrossDoorsByValue) {
+    const auto kProgram = compile(kPairs);
+    const auto kLayout = kProgram->layout("Pair");
+    RAWFRAME_EXPECT(kLayout.has_value() && kLayout->size == sizeof(Pair));
+    DoorTable doors;
+    RAWFRAME_EXPECT(
+        doors.add(Door{.name = "Engine.twice", .function = &twice, .takes = kPairAndI64, .gives = kPair}).has_value());
+    auto machine = Machine::start(kProgram, doors, Trust::Trusted, kLimits);
+    RAWFRAME_EXPECT(machine.has_value());
+    if (!machine.has_value()) {
+        return;
+    }
+    auto run = (*machine)->entry("run");
+    std::array<Value, 1> frame{};
+    frame[0].integer = 5;
+    RAWFRAME_EXPECT((*machine)->call(*run, frame).hasValue());
+    // (5 * 2 + 7) + 2.5 * 2.
+    RAWFRAME_EXPECT(frame[0].real == 22.0);
+    // Negative numbers keep their sign across the crossing both ways.
+    frame[0].integer = -5;
+    RAWFRAME_EXPECT((*machine)->call(*run, frame).hasValue());
+    RAWFRAME_EXPECT(frame[0].real == 2.0);
+}
+
+RAWFRAME_TEST(ValueDoorsNameTheirType) {
+    const auto kProgram = compile(kPairs);
+    constexpr std::array<kest::Parameter, 2> kWrongType = {kest::Parameter{Slot::Value, "Mover"}, Slot::I64};
+    DoorTable wrong;
+    RAWFRAME_EXPECT(
+        wrong.add(Door{.name = "Engine.twice", .function = &twice, .takes = kWrongType, .gives = kPair}).has_value());
+    RAWFRAME_EXPECT(
+        refusedWith(Machine::start(kProgram, wrong, Trust::Trusted, kLimits), KestError::DoorShapeMismatch));
+    constexpr std::array<kest::Parameter, 1> kUntyped = {Slot::Value};
+    DoorTable untyped;
+    RAWFRAME_EXPECT(refusedWith(untyped.add(Door{.name = "Engine.twice", .function = &twice, .takes = kUntyped}),
+                                KestError::DoorShapeMismatch));
 }

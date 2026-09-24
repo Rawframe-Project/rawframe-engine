@@ -15,13 +15,13 @@ namespace {
 struct Binding {
     DoorFunction function = nullptr;
     void* context = nullptr;
-    std::span<const Slot> takes;
+    DoorCall::Shape shape;
     std::string name;
 };
 
 void crossing(KestValue* frame, KestRuntime* runtime, void* context) {
     const Binding& binding = *static_cast<const Binding*>(context);
-    DoorCall call{reinterpret_cast<Value*>(frame), runtime, binding.takes};
+    DoorCall call{reinterpret_cast<Value*>(frame), runtime, binding.shape};
     binding.function(call, binding.context);
 }
 
@@ -43,28 +43,55 @@ std::uint8_t kindOf(Slot slot) noexcept {
         return KEST_L_BOOL;
     case Slot::Text:
         return KEST_L_TEXT;
+    case Slot::Value:
+        return KEST_L_NOTHING;
     }
     return KEST_L_NOTHING;
 }
 
-bool sameSlot(const KestLayout* layout, Slot slot) noexcept {
-    return layout != nullptr && layout->count == 1 && layout->pieces[0].kind == kindOf(slot);
+/// Whether what the program declared at one place of an extern is what the
+/// door says it is. A value must be the very type the door names: same
+/// program type, same shape mark, and made only of what crosses by value.
+bool sameParameter(KestBuild* build, const KestLayout* layout, const Parameter& parameter) {
+    if (layout == nullptr) {
+        return false;
+    }
+    if (parameter.slot != Slot::Value) {
+        return layout->count == 1 && layout->pieces[0].kind == kindOf(parameter.slot);
+    }
+    const std::string kType{parameter.type};
+    const KestLayout* named = nullptr;
+    return kest_build_layout(build, kType.c_str(), &named) == 1 && named != nullptr &&
+           kest_layout_mark(named) == kest_layout_mark(layout) && crossesByValue(layout);
 }
 
-/// Whether the door's slots are exactly what the program declared for the
-/// extern at `at`: a C function bound to a name is otherwise read with
-/// whatever frame the program built.
-bool sameShape(KestBuild* build, std::uint32_t at, const Door& door) noexcept {
+/// Checks the door against the extern at `at` and says where each argument
+/// sits: a C function bound to a name is otherwise read with whatever frame
+/// the program built.
+bool shapeOf(KestBuild* build, std::uint32_t at, const Door& door, DoorCall::Shape& shape) {
     if (kest_extern_takes(build, at) != door.takes.size()) {
         return false;
     }
+    std::uint32_t offset = 0;
     for (std::uint32_t which = 0; which < door.takes.size(); ++which) {
-        if (!sameSlot(kest_extern_layout(build, at, which), door.takes[which])) {
+        const KestLayout* const kLayout = kest_extern_layout(build, at, which);
+        if (!sameParameter(build, kLayout, door.takes[which])) {
             return false;
         }
+        shape.slots.push_back(door.takes[which].slot);
+        shape.offsets.push_back(offset);
+        shape.layouts.push_back(door.takes[which].slot == Slot::Value ? kLayout : nullptr);
+        offset += kLayout->slots;
     }
     const KestLayout* const kGives = kest_extern_gives(build, at);
-    return door.gives.empty() ? kGives == nullptr : sameSlot(kGives, door.gives[0]);
+    if (door.gives.empty()) {
+        return kGives == nullptr;
+    }
+    if (!sameParameter(build, kGives, door.gives[0])) {
+        return false;
+    }
+    shape.gives = door.gives[0].slot == Slot::Value ? kGives : nullptr;
+    return true;
 }
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, KestError error, std::string_view description) {
@@ -119,7 +146,8 @@ result::Result<std::unique_ptr<Machine>> Machine::start(std::shared_ptr<const Pr
                           KestError::UnknownDoor,
                           "the program asks for a door this table does not hold");
         }
-        if (!sameShape(kBuild, at, *kDoor)) {
+        DoorCall::Shape shape;
+        if (!shapeOf(kBuild, at, *kDoor, shape)) {
             return refuse(result::ErrorClass::InvalidArgument,
                           KestError::DoorShapeMismatch,
                           "a door's slots differ from what the program declared for it");
@@ -129,8 +157,10 @@ result::Result<std::unique_ptr<Machine>> Machine::start(std::shared_ptr<const Pr
                           KestError::DoorNotForUntrusted,
                           "untrusted code asks for a door not marked safe for it");
         }
-        state->bindings.push_back(Binding{
-            .function = kDoor->function, .context = kDoor->context, .takes = kDoor->takes, .name = std::string{kName}});
+        state->bindings.push_back(Binding{.function = kDoor->function,
+                                          .context = kDoor->context,
+                                          .shape = std::move(shape),
+                                          .name = std::string{kName}});
     }
     if (trust == Trust::Untrusted) {
         return refuse(result::ErrorClass::Unsupported,
