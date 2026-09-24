@@ -137,7 +137,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     return badLine(number, WorldKestError::BadGameLine, "a system column or edge names nothing");
                 }
                 const std::string kName{kWords[at + 1]};
-                if (kWhat == "after") {
+                if (kWhat == "random") {
+                    system.randomStreams.push_back(kName);
+                } else if (kWhat == "after") {
                     system.after.push_back(kName);
                 } else if (kWhat == "before") {
                     system.before.push_back(kName);
@@ -148,7 +150,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     return badLine(number,
                                    WorldKestError::BadGameLine,
                                    "a system column is entities, or read, write, with, or without a component; an "
-                                   "edge is after or before a system");
+                                   "edge is after or before a system; a stream is random and its name");
                 }
             }
             game.systems.push_back(std::move(system));

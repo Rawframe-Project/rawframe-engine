@@ -13,14 +13,15 @@
 //   spawn 3 game.position x=0 y=0 game.velocity dx=1 dy=2
 //
 // `program` is relative to the description; a program that creates or names
-// entities imports `rawframe.world`, found through its `kest.project`. A
+// entities imports `rawframe.world`, and one that draws random numbers
+// imports `rawframe.random`, both found through its `kest.project`. A
 // `system` line takes an identity, a phase, the Kest function, then its
 // columns in the function's order: `entities`, or `read`, `write`, `with`, or
-// `without` before a component; and `after` or `before` before another system
-// of the same phase. Every component may be inserted and removed by the
-// program through `<Kest type>.insert` and `<Kest type>.remove`. A `spawn`
-// line creates entities with the listed components; a field not given is
-// zero.
+// `without` before a component; `after` or `before` before another system of
+// the same phase; and `random` before each stream it draws from. Every
+// component may be inserted and removed by the program through
+// `<Kest type>.insert` and `<Kest type>.remove`. A `spawn` line creates
+// entities with the listed components; a field not given is zero.
 
 #include "rawframe/result/result.h"
 #include "rawframe/schema/stable_id.h"
@@ -60,6 +61,8 @@ struct GameSystem {
     std::vector<GameColumn> columns;
     std::vector<std::string> after;
     std::vector<std::string> before;
+    /// World random streams, drawn from by place through `rawframe.random`.
+    std::vector<std::string> randomStreams;
 };
 
 struct GameFieldValue {

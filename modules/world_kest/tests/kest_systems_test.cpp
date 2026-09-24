@@ -339,3 +339,100 @@ RAWFRAME_TEST(AnEntityMadeInOneRunIsNotTakenInAnother) {
     // The creation itself still happened at the barrier.
     RAWFRAME_EXPECT(world.entityCount() == 2);
 }
+
+namespace {
+
+constexpr std::string_view kDice = "module dice\n"
+                                   "\n"
+                                   "import rawframe.random\n"
+                                   "\n"
+                                   "struct Die {\n"
+                                   "    face: u32\n"
+                                   "    spin: f64\n"
+                                   "}\n"
+                                   "\n"
+                                   "fn roll(count: i32, dice: [Die]) {\n"
+                                   "    let i = 0\n"
+                                   "    while i < count {\n"
+                                   "        dice[i].face = random.below(0, 6) + 1\n"
+                                   "        dice[i].spin = random.unit(1)\n"
+                                   "        i = i + 1\n"
+                                   "    }\n"
+                                   "}\n"
+                                   "\n"
+                                   "fn cheat(count: i32, dice: [Die]) {\n"
+                                   "    dice[0].face = random.below(2, 6)\n"
+                                   "}\n";
+
+struct Die {
+    std::uint32_t face;
+    double spin;
+};
+
+constexpr auto kDieId = schema::ComponentTypeId::fromText("b83e5f21-7d49-4c0a-a6e2-1f94c8d3b705");
+
+/// Rolls three dice for five ticks under `seed` and returns every face and
+/// spin, or nothing when a tick reports a failure.
+std::vector<Die> roll(std::uint64_t seed, std::string_view entry) {
+    const std::array<kest::SourceFile, 2> kFiles = {
+        kest::SourceFile{.path = "dice.kest", .text = std::string{kDice}},
+        kest::SourceFile{.path = "rawframe/random.kest",
+                         .text = readText(std::string{RAWFRAME_WORLD_KEST_MODULES} + "rawframe/random.kest")}};
+    auto compiled = kest::Program::compile(kFiles, {});
+    RAWFRAME_EXPECT(compiled.has_value());
+    schema::RegistryBuilder builder;
+    builder.add(schema::ComponentDescriptor{
+        .id = kDieId, .name = "test.die", .size = 16, .alignment = 8, .plainData = true, .operations = {}});
+    const auto kRegistry = *builder.freeze();
+    world::World world{kRegistry, world::WorldSettings{.rootSeed = world::RootSeed{seed}}};
+    const auto kDie = *kRegistry->find(kDieId);
+    for (int index = 0; index < 3; ++index) {
+        Die die{};
+        const world::EntityHandle kEntity = *world.create();
+        RAWFRAME_EXPECT(world.insertErased(kEntity, kDie, &die).has_value());
+    }
+    constexpr std::array<KestColumn, 1> kDieColumns = {
+        KestColumn{.component = kDieId, .element = "Die", .access = world::Access::Write}};
+    constexpr std::array<std::string_view, 2> kStreams = {"faces", "spins"};
+    const std::array<KestSystemDeclaration, 1> kDeclarations = {KestSystemDeclaration{
+        .identity = "dice.roll", .entry = entry, .columns = kDieColumns, .randomStreams = kStreams}};
+    auto kest = KestSystems::create({.program = *compiled, .limits = kLimits, .systems = kDeclarations});
+    RAWFRAME_EXPECT(kest.has_value());
+    world::Schedule ticks = schedule(**kest, *kRegistry);
+    world::TickIndex tick;
+    std::vector<Die> seen;
+    for (int round = 0; round < 5; ++round) {
+        auto report = ticks.runTick(world, tick, *world::TickRate::of(60));
+        if (!report.has_value() || !report->failures.empty()) {
+            return {};
+        }
+        const auto kQuery = std::array<world::ColumnTerm, 1>{world::ColumnTerm{kDie, world::Access::Read}};
+        auto query = world::ColumnQuery::resolve(kQuery, *kRegistry);
+        query->forEachChunk(world, [&seen](const world::ColumnChunk& chunk) {
+            const auto* values = reinterpret_cast<const Die*>(chunk.columns[0]);
+            seen.insert(seen.end(), values, values + chunk.entities.size());
+        });
+    }
+    return seen;
+}
+
+} // namespace
+
+RAWFRAME_TEST(KestSystemsDrawFromTheWorldsStreams) {
+    const std::vector<Die> kFirst = roll(1234, "roll");
+    const std::vector<Die> kAgain = roll(1234, "roll");
+    const std::vector<Die> kOther = roll(4321, "roll");
+    RAWFRAME_EXPECT(kFirst.size() == 15 && kAgain.size() == 15 && kOther.size() == 15);
+    bool same = kFirst.size() == kAgain.size();
+    bool differs = false;
+    bool inRange = true;
+    for (std::size_t index = 0; index < kFirst.size() && index < kAgain.size() && index < kOther.size(); ++index) {
+        same = same && kFirst[index].face == kAgain[index].face && kFirst[index].spin == kAgain[index].spin;
+        differs = differs || kFirst[index].face != kOther[index].face || kFirst[index].spin != kOther[index].spin;
+        inRange = inRange && kFirst[index].face >= 1 && kFirst[index].face <= 6 && kFirst[index].spin >= 0 &&
+                  kFirst[index].spin < 1;
+    }
+    RAWFRAME_EXPECT(same && differs && inRange);
+    // A stream the system did not declare fails the system.
+    RAWFRAME_EXPECT(roll(1234, "cheat").empty());
+}

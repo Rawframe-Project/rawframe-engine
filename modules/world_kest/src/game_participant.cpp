@@ -146,6 +146,7 @@ public:
             }
             after_.emplace_back(system.after.begin(), system.after.end());
             before_.emplace_back(system.before.begin(), system.before.end());
+            streams_.emplace_back(system.randomStreams.begin(), system.randomStreams.end());
         }
         std::vector<KestSystemDeclaration> declarations;
         for (std::size_t index = 0; index < game_.systems.size(); ++index) {
@@ -155,7 +156,8 @@ public:
                                                          .entry = system.entry,
                                                          .columns = columns_[index],
                                                          .after = after_[index],
-                                                         .before = before_[index]});
+                                                         .before = before_[index],
+                                                         .randomStreams = streams_[index]});
         }
         for (const GameComponent& component : game_.components) {
             components_.push_back(KestComponent{.component = component.id, .kestType = component.kestType});
@@ -242,6 +244,7 @@ private:
     std::vector<KestComponent> components_;
     std::vector<std::vector<std::string_view>> after_;
     std::vector<std::vector<std::string_view>> before_;
+    std::vector<std::vector<std::string_view>> streams_;
     std::unique_ptr<KestSystems> systems_;
 };
 

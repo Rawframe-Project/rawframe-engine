@@ -118,6 +118,48 @@ void destroyDoor(kest::DoorCall& call, void* context) noexcept {
     }
 }
 
+/// The stream a draw names, or null once the call has been failed.
+world::Pcg32* streamOf(kest::DoorCall& call, Doorway& doorway) {
+    if (doorway.context == nullptr) {
+        call.fail("random streams are drawn from only while a system runs");
+        return nullptr;
+    }
+    const std::int64_t kIndex = call.integer(0);
+    const auto kStreams = doorway.context->declaredStreams;
+    if (kIndex < 0 || static_cast<std::uint64_t>(kIndex) >= kStreams.size()) {
+        call.fail("the system declared no random stream at that place");
+        return nullptr;
+    }
+    auto stream = doorway.context->random(kStreams[static_cast<std::size_t>(kIndex)]);
+    return stream.has_value() ? *stream : nullptr;
+}
+
+void belowDoor(kest::DoorCall& call, void* context) noexcept {
+    Doorway& doorway = *static_cast<Doorway*>(context);
+    world::Pcg32* const kStream = streamOf(call, doorway);
+    if (kStream == nullptr) {
+        return;
+    }
+    const auto kBound = static_cast<std::uint32_t>(call.integer(1));
+    if (kBound == 0) {
+        call.fail("a draw below nought has nothing to draw");
+        return;
+    }
+    call.answerInteger(kStream->nextBelow(kBound));
+}
+
+void unitDoor(kest::DoorCall& call, void* context) noexcept {
+    Doorway& doorway = *static_cast<Doorway*>(context);
+    if (world::Pcg32* const kStream = streamOf(call, doorway)) {
+        call.answerReal(kStream->nextDouble());
+    }
+}
+
+constexpr std::array<kest::Parameter, 2> kStreamAndBound = {kest::Slot::I32, kest::Slot::U32};
+constexpr std::array<kest::Parameter, 1> kStream = {kest::Slot::I32};
+constexpr std::array<kest::Parameter, 1> kU32 = {kest::Slot::U32};
+constexpr std::array<kest::Parameter, 1> kF64 = {kest::Slot::F64};
+
 void insertDoor(kest::DoorCall& call, void* context) noexcept {
     Doorway::Component& component = *static_cast<Doorway::Component*>(context);
     Doorway& doorway = *component.doorway;
@@ -169,8 +211,10 @@ struct KestSystems::Declared {
     std::vector<Column> columns;
     std::vector<std::string> after;
     std::vector<std::string> before;
+    std::vector<std::string> randomStreams;
     std::vector<std::string_view> afterViews;
     std::vector<std::string_view> beforeViews;
+    std::vector<std::string_view> streamViews;
 };
 
 class KestSystems::KestSystem final : public world::System {
@@ -375,6 +419,13 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         .name = "World.create", .function = &createDoor, .context = doorway.get(), .gives = kEntityParameter}));
     RAWFRAME_TRY(doors.add(kest::Door{
         .name = "World.destroy", .function = &destroyDoor, .context = doorway.get(), .takes = kEntityParameter}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Random.below",
+                                      .function = &belowDoor,
+                                      .context = doorway.get(),
+                                      .takes = kStreamAndBound,
+                                      .gives = kU32}));
+    RAWFRAME_TRY(doors.add(kest::Door{
+        .name = "Random.unit", .function = &unitDoor, .context = doorway.get(), .takes = kStream, .gives = kF64}));
     for (Doorway::Component& component : doorway->components) {
         component.insertTakes[1] = kest::Parameter{kest::Slot::Value, component.kestType};
         RAWFRAME_TRY(doors.add(kest::Door{.name = component.insertName,
@@ -397,8 +448,10 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                       .columns = {},
                       .after = {system.after.begin(), system.after.end()},
                       .before = {system.before.begin(), system.before.end()},
+                      .randomStreams = {system.randomStreams.begin(), system.randomStreams.end()},
                       .afterViews = {},
-                      .beforeViews = {}};
+                      .beforeViews = {},
+                      .streamViews = {}};
         std::size_t data = 0;
         for (const KestColumn& column : system.columns) {
             if (carriesData(column)) {
@@ -422,6 +475,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
     for (Declared& copy : declared) {
         copy.afterViews.assign(copy.after.begin(), copy.after.end());
         copy.beforeViews.assign(copy.before.begin(), copy.before.end());
+        copy.streamViews.assign(copy.randomStreams.begin(), copy.randomStreams.end());
     }
     return std::make_unique<KestSystems>(
         std::move(settings.program), std::move(doorway), std::move(machine), std::move(declared));
@@ -483,6 +537,7 @@ result::Status KestSystems::declareSystems(const schema::SchemaRegistry& registr
                                                    .writes = system->writes(),
                                                    .after = declared.afterViews,
                                                    .before = declared.beforeViews,
+                                                   .randomStreams = declared.streamViews,
                                                    .system = system.get()});
         systems_.push_back(std::move(system));
     }

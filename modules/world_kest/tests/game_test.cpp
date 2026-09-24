@@ -40,7 +40,8 @@ RAWFRAME_TEST(AGameDescriptionParses) {
     auto game = parseGame("# movers\n"
                           "program movers.kest\n"
                           "\n"
-                          "system a.move simulation integrate write a.position read a.velocity after a.input\n"
+                          "system a.move simulation integrate entities write a.position read a.velocity after a.input "
+                          "random drift\n"
                           "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.position Position  # later is fine\n"
                           "component 5b1c9e22-4f07-4d3a-8c6b-91e7d2a0f4c8 a.velocity Velocity\r\n"
                           "spawn 2 a.position x=1 a.velocity\n");
@@ -50,8 +51,10 @@ RAWFRAME_TEST(AGameDescriptionParses) {
     }
     RAWFRAME_EXPECT(game->program == "movers.kest");
     RAWFRAME_EXPECT(game->components.size() == 2 && game->components[1].kestType == "Velocity");
-    RAWFRAME_EXPECT(game->systems.size() == 1 && game->systems[0].columns.size() == 2);
-    RAWFRAME_EXPECT(game->systems[0].columns[0].access == world::Access::Write);
+    RAWFRAME_EXPECT(game->systems.size() == 1 && game->systems[0].columns.size() == 3);
+    RAWFRAME_EXPECT(game->systems[0].columns[0].entities);
+    RAWFRAME_EXPECT(game->systems[0].columns[1].access == world::Access::Write);
+    RAWFRAME_EXPECT((game->systems[0].randomStreams == std::vector<std::string>{"drift"}));
     RAWFRAME_EXPECT((game->systems[0].after == std::vector<std::string>{"a.input"}));
     RAWFRAME_EXPECT(game->spawns.size() == 1 && game->spawns[0].count == 2);
     RAWFRAME_EXPECT(game->spawns[0].components.size() == 2 && game->spawns[0].components[0].fields.size() == 1);

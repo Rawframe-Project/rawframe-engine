@@ -62,12 +62,16 @@ struct KestSystemDeclaration {
     std::span<const KestColumn> columns;
     std::span<const std::string_view> after;
     std::span<const std::string_view> before;
+    /// The World random streams the system draws from; the program names one
+    /// by its place in this list (`rawframe.random`).
+    std::span<const std::string_view> randomStreams;
 };
 
 struct KestSystemsSettings {
     std::shared_ptr<const kest::Program> program;
-    /// Copied: the doors themselves must outlive the systems. `World.create`
-    /// and `World.destroy` and each component's doors are added to it.
+    /// Copied: the doors themselves must outlive the systems. `World.create`,
+    /// `World.destroy`, `Random.below`, `Random.unit`, and each component's
+    /// doors are added to it.
     kest::DoorTable doors;
     std::span<const KestComponent> components;
     /// One budget per system per tick, spent across its archetypes.

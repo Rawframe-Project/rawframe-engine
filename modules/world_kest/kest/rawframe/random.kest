@@ -1,0 +1,20 @@
+module rawframe.random
+
+// Draws from the World's random streams (ADR-0055, D22). A system names the
+// streams it draws from where it is declared; `stream` is a place in that
+// list, from nought. Each stream is derived from the World's root seed, the
+// system, and the stream's name, so a run with one seed draws the same.
+
+extern fn Random.below(stream: i32, bound: u32) -> u32
+extern fn Random.unit(stream: i32) -> f64
+
+// A whole number from nought up to but not including `bound`, which is not
+// nought, with no bias.
+fn below(stream: i32, bound: u32) -> u32 {
+    return Random.below(stream, bound)
+}
+
+// A real from nought up to but not including one.
+fn unit(stream: i32) -> f64 {
+    return Random.unit(stream)
+}
