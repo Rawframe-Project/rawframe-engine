@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Repository rules the compiler cannot see.
 
-1. Module boundaries: a module's sources include only its own headers and the
-   headers of modules on its line in tools/modules.txt.
+1. Module boundaries: a module's or host's sources include only its own
+   headers and the headers of modules on its line in tools/modules.txt.
 2. File size (STD-0001): handwritten source fails at 1,500 lines and is
    reported from 1,000.
 3. Owner rules: no em dash in any tracked text file, and no AI attribution
@@ -51,7 +51,7 @@ def read_modules():
 def check_boundaries(files, allowed, findings):
     for path in files:
         relative = path.relative_to(ROOT)
-        if relative.parts[0] != "modules" or path.suffix not in SOURCE_SUFFIXES:
+        if relative.parts[0] not in ("modules", "hosts") or path.suffix not in SOURCE_SUFFIXES:
             continue
         module = relative.parts[1]
         if module not in allowed:
@@ -69,7 +69,7 @@ def check_boundaries(files, allowed, findings):
 def check_value_calls(files, findings):
     for path in files:
         relative = path.relative_to(ROOT)
-        if relative.parts[0] != "modules" or path.suffix not in SOURCE_SUFFIXES:
+        if relative.parts[0] not in ("modules", "hosts") or path.suffix not in SOURCE_SUFFIXES:
             continue
         for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if VALUE_CALL.search(line.split("//")[0]):

@@ -28,7 +28,9 @@ endforeach()
 
 add_library(rawframe_policy INTERFACE)
 target_compile_features(rawframe_policy INTERFACE cxx_std_23)
-target_compile_definitions(rawframe_policy INTERFACE RAWFRAME_ASSERTIONS=${RAWFRAME_ASSERTION_LEVEL})
+target_compile_definitions(rawframe_policy INTERFACE
+    RAWFRAME_ASSERTIONS=${RAWFRAME_ASSERTION_LEVEL}
+    RAWFRAME_CONFIGURATION_NAME="${RAWFRAME_CONFIGURATION}")
 
 if(MSVC)
     target_compile_options(rawframe_policy INTERFACE
@@ -46,6 +48,9 @@ else()
         -Wno-missing-field-initializers
         -fno-exceptions -fno-rtti
         -ffp-contract=off  # no fused multiply-add behind our back: deterministic simulation
+        # Source locations in diagnostics name repository paths, never the
+        # build machine's directories.
+        -fmacro-prefix-map=${PROJECT_SOURCE_DIR}/=
     )
     if(RAWFRAME_SANITIZE STREQUAL "address")
         target_compile_options(rawframe_policy INTERFACE -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
@@ -81,6 +86,29 @@ function(rawframe_module)
     target_link_libraries(${target} PUBLIC rawframe_policy)
     foreach(dep IN LISTS arg_DEPS)
         target_link_libraries(${target} PUBLIC rawframe::${dep})
+    endforeach()
+endfunction()
+
+# Declares a host: a process entry under hosts/<name>, checked against
+# tools/modules.txt like a module. Nothing may depend on a host.
+#
+#   rawframe_host(NAME dedicated_server OUTPUT rawframe-server SOURCES src/main.cpp DEPS host)
+function(rawframe_host)
+    cmake_parse_arguments(arg "" "NAME;OUTPUT" "SOURCES;DEPS" ${ARGN})
+    if(NOT RAWFRAME_KNOWN_MODULE_${arg_NAME})
+        message(FATAL_ERROR "host '${arg_NAME}' is not listed in tools/modules.txt")
+    endif()
+    foreach(dep IN LISTS arg_DEPS)
+        if(NOT dep IN_LIST RAWFRAME_ALLOWED_DEPS_${arg_NAME})
+            message(FATAL_ERROR "host '${arg_NAME}' may not depend on '${dep}' (tools/modules.txt)")
+        endif()
+    endforeach()
+    set(target rawframe_host_${arg_NAME})
+    add_executable(${target} ${arg_SOURCES})
+    set_target_properties(${target} PROPERTIES OUTPUT_NAME ${arg_OUTPUT})
+    target_link_libraries(${target} PRIVATE rawframe_policy)
+    foreach(dep IN LISTS arg_DEPS)
+        target_link_libraries(${target} PRIVATE rawframe::${dep})
     endforeach()
 endfunction()
 
