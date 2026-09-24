@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Runs the fast check before every push. Install once with:
+#   git config core.hooksPath tools/hooks
+exec "$(git rev-parse --show-toplevel)/tools/check.sh" fast
