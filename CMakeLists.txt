@@ -32,6 +32,7 @@ add_subdirectory(modules/world_runtime)
 add_subdirectory(modules/world_kest)
 add_subdirectory(modules/network)
 add_subdirectory(modules/network_loopback)
+add_subdirectory(modules/world_replication)
 add_subdirectory(modules/host)
 
 add_subdirectory(hosts/dedicated_server)

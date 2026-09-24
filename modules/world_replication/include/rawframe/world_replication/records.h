@@ -1,0 +1,87 @@
+#pragma once
+
+// Replication payloads, generation 1 (SPEC-0010 mapping protocol, SPEC-0041
+// input window and state header). Mapping frames ride the control stream;
+// state and input ride their datagram lanes. Every decoder is exact.
+
+#include "rawframe/network/wire.h"
+#include "rawframe/result/result.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <vector>
+
+namespace rawframe::world_replication {
+
+/// A connection-local name for a replicated entity: never zero, never reused
+/// within its replication epoch, never an EntityHandle's bits.
+struct NetEntityId {
+    std::uint32_t value = 0;
+
+    [[nodiscard]] constexpr bool valid() const noexcept {
+        return value != 0;
+    }
+    friend constexpr bool operator==(NetEntityId, NetEntityId) noexcept = default;
+    friend constexpr auto operator<=>(NetEntityId, NetEntityId) noexcept = default;
+};
+
+/// Payload types on the state lane (server to client).
+inline constexpr std::uint64_t kStatePayload = 1;
+/// Payload types on the input lane (client to server).
+inline constexpr std::uint64_t kInputWindowPayload = 1;
+
+/// `mapping_declare`, `mapping_ack`, `mapping_retire`, and
+/// `mapping_retire_ack` all carry this. `owned` is set only on a declare,
+/// for the entity the receiving connection plays.
+struct MappingRecord {
+    std::uint64_t replicationEpoch = 0;
+    NetEntityId entity;
+    bool owned = false;
+};
+
+[[nodiscard]] result::Status encodeMapping(network::Writer& writer, const MappingRecord& record);
+[[nodiscard]] result::Result<MappingRecord> decodeMapping(std::span<const std::byte> payload);
+
+/// The start of every state payload.
+struct StateHeader {
+    /// The committed tick the state was read at.
+    std::uint64_t serverTick = 0;
+    /// The newest input tick consumed for this connection by then.
+    std::uint64_t consumedInputTick = 0;
+    std::uint64_t recordCount = 0;
+};
+
+[[nodiscard]] result::Status encodeStateHeader(network::Writer& writer, const StateHeader& header);
+[[nodiscard]] result::Result<StateHeader> decodeStateHeader(network::Reader& reader);
+
+/// Each state record: which entity, which row of the replication table, then
+/// the component's value in its codec's wire form.
+struct StateRecordHead {
+    NetEntityId entity;
+    std::uint64_t component = 0;
+};
+
+[[nodiscard]] result::Status encodeStateRecordHead(network::Writer& writer, const StateRecordHead& head);
+[[nodiscard]] result::Result<StateRecordHead> decodeStateRecordHead(network::Reader& reader,
+                                                                    std::size_t componentCount);
+
+/// The most commands one input window carries, and the most bytes each.
+inline constexpr std::size_t kMaximumInputWindow = 16;
+inline constexpr std::size_t kMaximumInputCommand = 256;
+
+/// SPEC-0041's input window: the newest input tick, the commands for the
+/// consecutive ticks ending there, oldest first, and the state the client
+/// has applied.
+struct InputWindow {
+    std::uint64_t newestInputTick = 0;
+    std::uint64_t ackedStateSequence = 0;
+    std::uint64_t ackedServerTick = 0;
+    std::vector<std::span<const std::byte>> commands;
+};
+
+[[nodiscard]] result::Status encodeInputWindow(network::Writer& writer, const InputWindow& window);
+/// The decoded commands borrow from `payload`.
+[[nodiscard]] result::Result<InputWindow> decodeInputWindow(std::span<const std::byte> payload);
+
+} // namespace rawframe::world_replication
