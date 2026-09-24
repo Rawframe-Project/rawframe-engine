@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe/base/sha256.h`: SHA-256 (FIPS 180-4), incremental or whole, for fingerprints; checked against the NIST vectors.
 - `world_kest::codecFor` builds a component's replication codec from its Kest layout. A scenario runs a Kest game on a server World replicated over loopback to 64 bot clients steering their own players among 200 props for 300 ticks, and reports the server tick: p50 2.4 ms, p99 3.2 ms in a shipping build on the owner's machine.
 - Server-authoritative replication. `ReplicationServer` gives each admitted connection a player entity, declares and retires `NetEntityId` mappings on the control stream, consumes input windows exactly once per input tick in `apply_inputs` (holding the last command, then neutral, when one is missing), publishes self-sufficient state datagrams for acknowledged mappings in `replication`, and paces each client's input lead (SPEC-0041 pace signal). `ReplicationClient` mirrors mapped entities in a client World, applies only whole, validated datagrams and never an older value over a newer one, and sends redundant input windows.
 - `tests/scenarios`: scenario tests across modules; the first runs a server World and a client World over loopback, through loss, duplication, and reordering, and checks the mirror equals what the server committed.
