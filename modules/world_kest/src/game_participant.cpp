@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 namespace rawframe::world_kest {
 
@@ -20,6 +21,29 @@ constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
 constexpr std::size_t kMaximumGameFileBytes = std::size_t{1} << 20U;
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
+constexpr diagnostics::EventIdentity kGameReloaded{"world_kest", "game_reloaded"};
+constexpr diagnostics::EventIdentity kReloadRefused{"world_kest", "game_reload_refused"};
+
+/// The newest modification among the `.kest` files beside the program, or
+/// nullopt when the directory cannot be read.
+std::optional<std::filesystem::file_time_type> newestSource(const std::filesystem::path& directory) {
+    std::error_code error;
+    std::filesystem::directory_iterator entries{directory, error};
+    if (error) {
+        return std::nullopt;
+    }
+    std::optional<std::filesystem::file_time_type> newest;
+    for (const std::filesystem::directory_entry& entry : entries) {
+        if (entry.path().extension() != ".kest") {
+            continue;
+        }
+        const auto kWritten = entry.last_write_time(error);
+        if (!error && (!newest || kWritten > *newest)) {
+            newest = kWritten;
+        }
+    }
+    return newest;
+}
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldKestError error, std::string_view why) {
     return result::fail(errorClass, kWorldKestDomain, code(error), why);
@@ -113,6 +137,10 @@ public:
             compile.library = std::string{*kLibrary};
         }
         const std::string kProgram = (std::filesystem::path{path}.parent_path() / game_.program).string();
+        programPath_ = kProgram;
+        compile_ = compile;
+        RAWFRAME_TRY_ASSIGN(reloadEvery_, configuration.unsignedInteger("kest.reload_every", 0));
+        sourcesWritten_ = newestSource(std::filesystem::path{kProgram}.parent_path());
         std::string report;
         auto program = kest::Program::compileFile(kProgram, compile, &report);
         if (!program.has_value()) {
@@ -178,6 +206,7 @@ public:
     }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
+        emitter_ = context.emitter();
         if (simulation_ == nullptr) {
             return {};
         }
@@ -225,6 +254,33 @@ public:
         return {};
     }
 
+    /// Between ticks, on the Host thread: when the program's sources changed,
+    /// compiles and swaps it in, or says why not and keeps the old one.
+    void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
+        if (systems_ == nullptr || reloadEvery_ == 0 || frame.iteration % reloadEvery_ != 0) {
+            return;
+        }
+        const auto kWritten = newestSource(std::filesystem::path{programPath_}.parent_path());
+        if (!kWritten || kWritten == sourcesWritten_) {
+            return;
+        }
+        sourcesWritten_ = kWritten;
+        std::string report;
+        auto program = kest::Program::compileFile(programPath_, compile_, &report);
+        result::Status reloaded = program.has_value()
+                                      ? systems_->reload(*program)
+                                      : result::Status{std::unexpected<result::Error>{std::move(program).error()}};
+        if (!reloaded.has_value()) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kReloadRefused,
+                         "a changed Kest program was not reloaded; the running one continues",
+                         {diagnostics::field("error", reloaded.error().description()),
+                          diagnostics::field("report", std::string_view{report})});
+            return;
+        }
+        emitter_.log(diagnostics::Severity::Info, kGameReloaded, "the Kest program was reloaded");
+    }
+
 private:
     [[nodiscard]] const GameComponent* componentNamed(std::string_view name) const noexcept {
         for (const GameComponent& component : game_.components) {
@@ -237,6 +293,11 @@ private:
     }
 
     world_runtime::Simulation* simulation_ = nullptr;
+    diagnostics::Emitter emitter_;
+    std::string programPath_;
+    kest::CompileSettings compile_;
+    std::uint64_t reloadEvery_ = 0;
+    std::optional<std::filesystem::file_time_type> sourcesWritten_;
     GameDescription game_;
     std::shared_ptr<const kest::Program> program_;
     std::vector<kest::TypeLayout> layouts_;
@@ -267,6 +328,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "world_kest.game",
         .budgetOwner = "world",
+        .hostPhases = composition::hostPhaseBit(composition::HostPhase::Maintenance),
     });
 }
 

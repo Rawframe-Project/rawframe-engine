@@ -436,3 +436,61 @@ RAWFRAME_TEST(KestSystemsDrawFromTheWorldsStreams) {
     // A stream the system did not declare fails the system.
     RAWFRAME_EXPECT(roll(1234, "cheat").empty());
 }
+
+namespace {
+
+std::shared_ptr<const kest::Program> programFrom(std::string_view text) {
+    const std::array<kest::SourceFile, 1> kFiles = {kest::SourceFile{.path = "game.kest", .text = std::string{text}}};
+    auto compiled = kest::Program::compile(kFiles, {});
+    RAWFRAME_EXPECT(compiled.has_value());
+    return compiled.has_value() ? *compiled : nullptr;
+}
+
+/// The program with its movers going the other way, and nothing else changed.
+std::string reversed() {
+    std::string text{kProgram};
+    const std::string kForward = "positions[i].x = positions[i].x + velocities[i].dx";
+    text.replace(text.find(kForward), kForward.size(), "positions[i].x = positions[i].x - velocities[i].dx");
+    return text;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AProgramReloadsAtomicallyKeepingTheWorld) {
+    const auto kRegistry = registry();
+    world::World world{kRegistry};
+    const Movers kMovers = spawn(world);
+    const std::array<KestSystemDeclaration, 1> kDeclarations = {
+        KestSystemDeclaration{.identity = "game.integrate", .entry = "integrate", .columns = kMotion}};
+    auto kest = systems(kDeclarations);
+    world::Schedule ticks = schedule(*kest, *kRegistry);
+    world::TickIndex tick;
+    const auto kPosition = *world.registry().key<Position>();
+    const auto kTickOnce = [&] {
+        auto report = ticks.runTick(world, tick, *world::TickRate::of(60));
+        RAWFRAME_EXPECT(report.has_value() && report->failures.empty());
+    };
+    kTickOnce();
+    kTickOnce();
+    RAWFRAME_EXPECT(world.get(kMovers.plain[0], kPosition)->x == 2);
+
+    // Same shapes, other behaviour: the World and schedule stay, the code changes.
+    RAWFRAME_EXPECT(kest->reload(programFrom(reversed())).has_value());
+    kTickOnce();
+    RAWFRAME_EXPECT(world.get(kMovers.plain[0], kPosition)->x == 1);
+
+    // A program changing a shape the World holds, or losing an entry, is
+    // refused and the running one carries on.
+    std::string wider{kProgram};
+    const std::string kLastField = "    y: f32\n}";
+    wider.replace(wider.find(kLastField), kLastField.size(), "    y: f32\n    z: f32\n}");
+    const auto kWider = kest->reload(programFrom(wider));
+    RAWFRAME_EXPECT(!kWider.has_value() &&
+                    kWider.error().code() == world_kest::code(world_kest::WorldKestError::ColumnMismatch));
+    std::string renamed = reversed();
+    const std::string kEntry = "fn integrate(";
+    renamed.replace(renamed.find(kEntry), kEntry.size(), "fn integrated(");
+    RAWFRAME_EXPECT(!kest->reload(programFrom(renamed)).has_value());
+    kTickOnce();
+    RAWFRAME_EXPECT(world.get(kMovers.plain[0], kPosition)->x == 0);
+}

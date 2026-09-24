@@ -97,6 +97,14 @@ public:
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;
 
+    /// Replaces the program, keeping the World, the systems, and their
+    /// schedule: a new machine is started and every entry found and checked
+    /// before anything changes, and every Kest type the systems lend or insert
+    /// must keep its shape mark, since the World holds values of it. Call it
+    /// between ticks, never while a system of this set runs. On refusal the
+    /// old program keeps running.
+    [[nodiscard]] result::Status reload(std::shared_ptr<const kest::Program> program);
+
     [[nodiscard]] kest::Machine& machine() noexcept {
         return *machine_;
     }
@@ -107,11 +115,15 @@ public:
 
     KestSystems(std::shared_ptr<const kest::Program> program,
                 std::unique_ptr<Doorway> doorway,
+                kest::DoorTable doors,
+                kest::MachineLimits limits,
                 std::unique_ptr<kest::Machine> machine,
                 std::vector<Declared> declared) noexcept;
 
 private:
     std::shared_ptr<const kest::Program> program_;
+    kest::DoorTable doors_;
+    kest::MachineLimits limits_;
     // Before the machine: its doors point into it, so it goes last.
     std::unique_ptr<Doorway> doorway_;
     std::unique_ptr<kest::Machine> machine_;

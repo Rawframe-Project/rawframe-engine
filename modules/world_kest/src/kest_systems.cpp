@@ -207,6 +207,7 @@ struct KestSystems::Declared {
 
     std::string identity;
     world::Phase phase;
+    std::string entryName;
     kest::Entry entry;
     std::vector<Column> columns;
     std::vector<std::string> after;
@@ -238,6 +239,12 @@ public:
         reads_ = query_.reads();
         writes_ = query_.writes();
         frame_.resize(entry_.frameSlots);
+    }
+
+    /// Points the system at a reloaded program's machine and entry.
+    void retarget(kest::Machine& machine, kest::Entry entry) noexcept {
+        machine_ = &machine;
+        entry_ = entry;
     }
 
     [[nodiscard]] std::span<const schema::ComponentRuntimeId> reads() const noexcept {
@@ -390,10 +397,66 @@ private:
 
 KestSystems::KestSystems(std::shared_ptr<const kest::Program> program,
                          std::unique_ptr<Doorway> doorway,
+                         kest::DoorTable doors,
+                         kest::MachineLimits limits,
                          std::unique_ptr<kest::Machine> machine,
                          std::vector<Declared> declared) noexcept
-    : program_(std::move(program)), doorway_(std::move(doorway)), machine_(std::move(machine)),
-      declared_(std::move(declared)) {
+    : program_(std::move(program)), doors_(std::move(doors)), limits_(limits), doorway_(std::move(doorway)),
+      machine_(std::move(machine)), declared_(std::move(declared)) {
+}
+
+result::Status KestSystems::reload(std::shared_ptr<const kest::Program> program) {
+    if (program == nullptr) {
+        return refuse(result::ErrorClass::InvalidArgument, WorldKestError::EntryMismatch, "a reload needs a program");
+    }
+    // Every shape the World holds values of must be the same shape.
+    const auto kSameShape = [&](std::string_view type) -> result::Status {
+        RAWFRAME_TRY_ASSIGN(const kest::TypeLayout kOld, program_->layout(type));
+        RAWFRAME_TRY_ASSIGN(const kest::TypeLayout kNew, program->layout(type));
+        if (kOld.mark != kNew.mark) {
+            return std::unexpected<result::Error>{refuse(result::ErrorClass::FailedPrecondition,
+                                                         WorldKestError::ColumnMismatch,
+                                                         "a reloaded program changes the shape of a type the World "
+                                                         "holds")
+                                                      .error()
+                                                      .withContext("type", type)};
+        }
+        return {};
+    };
+    for (const Doorway::Component& component : doorway_->components) {
+        RAWFRAME_TRY(kSameShape(component.kestType));
+    }
+    for (const Declared& declared : declared_) {
+        for (const Declared::Column& column : declared.columns) {
+            if (column.entities) {
+                RAWFRAME_TRY(kSameShape(kEntityType));
+            } else if (column.access == world::Access::Read || column.access == world::Access::Write) {
+                RAWFRAME_TRY(kSameShape(column.element));
+            }
+        }
+    }
+    RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine,
+                        kest::Machine::start(program, doors_, kest::Trust::Trusted, limits_));
+    std::vector<kest::Entry> entries;
+    for (const Declared& declared : declared_) {
+        RAWFRAME_TRY_ASSIGN(const kest::Entry kEntry, machine->entry(declared.entryName));
+        if (kEntry.frameSlots != declared.entry.frameSlots) {
+            return refuse(result::ErrorClass::FailedPrecondition,
+                          WorldKestError::EntryMismatch,
+                          "a reloaded system takes other columns than it was declared with");
+        }
+        entries.push_back(kEntry);
+    }
+    // Everything checked: the swap cannot fail.
+    for (std::size_t index = 0; index < declared_.size(); ++index) {
+        declared_[index].entry = entries[index];
+        if (index < systems_.size()) {
+            systems_[index]->retarget(*machine, entries[index]);
+        }
+    }
+    machine_ = std::move(machine);
+    program_ = std::move(program);
+    return {};
 }
 
 KestSystems::~KestSystems() = default;
@@ -444,6 +507,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         RAWFRAME_TRY_ASSIGN(const kest::Entry kEntry, machine->entry(system.entry));
         Declared copy{.identity = std::string{system.identity},
                       .phase = system.phase,
+                      .entryName = std::string{system.entry},
                       .entry = kEntry,
                       .columns = {},
                       .after = {system.after.begin(), system.after.end()},
@@ -477,8 +541,12 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         copy.beforeViews.assign(copy.before.begin(), copy.before.end());
         copy.streamViews.assign(copy.randomStreams.begin(), copy.randomStreams.end());
     }
-    return std::make_unique<KestSystems>(
-        std::move(settings.program), std::move(doorway), std::move(machine), std::move(declared));
+    return std::make_unique<KestSystems>(std::move(settings.program),
+                                         std::move(doorway),
+                                         std::move(doors),
+                                         settings.limits,
+                                         std::move(machine),
+                                         std::move(declared));
 }
 
 result::Status KestSystems::declareSystems(const schema::SchemaRegistry& registry,

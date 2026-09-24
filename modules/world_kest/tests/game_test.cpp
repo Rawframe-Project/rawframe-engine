@@ -11,6 +11,9 @@
 #include "rawframe/world_runtime/simulation.h"
 
 #include <array>
+#include <chrono>
+#include <cstdio>
+#include <filesystem>
 #include <string>
 #include <utility>
 #include <vector>
@@ -257,4 +260,96 @@ RAWFRAME_TEST(KestSystemsCreateAndDestroyEntities) {
     RAWFRAME_EXPECT(kLast.size() == 2 && kLast[0] == 30.0F && kLast[1] == 30.0F);
     composition.stop();
     simulation = nullptr;
+}
+
+namespace {
+
+void writeText(const std::filesystem::path& path, std::string_view text) {
+    if (std::FILE* file = std::fopen(path.string().c_str(), "wb")) {
+        std::fwrite(text.data(), 1, text.size(), file);
+        std::fclose(file);
+    }
+}
+
+std::string readText(const std::filesystem::path& path) {
+    std::string text;
+    if (std::FILE* file = std::fopen(path.string().c_str(), "rb")) {
+        char chunk[4096];
+        std::size_t got = 0;
+        while ((got = std::fread(chunk, 1, sizeof chunk, file)) != 0) {
+            text.append(chunk, got);
+        }
+        std::fclose(file);
+    }
+    return text;
+}
+
+/// Rewrites the program and moves its time on, so the change is seen however
+/// coarse the file system's clock is.
+void rewrite(const std::filesystem::path& path, std::string_view text, int step) {
+    writeText(path, text);
+    std::error_code error;
+    const auto kWritten = std::filesystem::last_write_time(path, error);
+    std::filesystem::last_write_time(path, kWritten + std::chrono::seconds{step}, error);
+}
+
+} // namespace
+
+RAWFRAME_TEST(AChangedProgramReloadsBetweenTicks) {
+    std::error_code error;
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path(error) /
+        ("rawframe-reload-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::remove_all(kDirectory, error);
+    std::filesystem::create_directories(kDirectory, error);
+    const std::string kSource = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest");
+    writeText(kDirectory / "movers.kest", kSource);
+    writeText(kDirectory / "movers.game", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game"));
+
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const std::string kText = "kest.game = " + (kDirectory / "movers.game").string() +
+                              "\nkest.library = " + RAWFRAME_KEST_LIBRARY +
+                              "\nkest.reload_every = 1\nworld.tick_rate = 10\n";
+    const auto kConfiguration = composition::Configuration::parse(kText);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    std::uint64_t iteration = 0;
+    const auto kIterate = [&] {
+        clock.advance(execution::MonotonicDuration::fromMilliseconds(100));
+        const composition::HostFrame kFrame{.iteration = iteration++, .now = clock.now()};
+        composition.runHostPhase(composition::HostPhase::RunWorlds, kFrame);
+        composition.runHostPhase(composition::HostPhase::Maintenance, kFrame);
+    };
+    const auto kFirstX = [] {
+        return positions().front().first;
+    };
+    kIterate();
+    kIterate();
+    RAWFRAME_EXPECT(kFirstX() == 2.0F);
+
+    // Movers now drift backwards; the World keeps its positions.
+    std::string backwards = kSource;
+    const std::string kForward = "positions[i].x + velocities[i].dx";
+    backwards.replace(backwards.find(kForward), kForward.size(), "positions[i].x - velocities[i].dx");
+    rewrite(kDirectory / "movers.kest", backwards, 5);
+    kIterate(); // ticks forward once more, then reloads in maintenance
+    RAWFRAME_EXPECT(kFirstX() == 3.0F);
+    kIterate();
+    RAWFRAME_EXPECT(kFirstX() == 2.0F);
+
+    // A program that does not compile is refused and the last one runs on.
+    rewrite(kDirectory / "movers.kest", "module movers\nfn broken( {\n", 10);
+    kIterate();
+    kIterate();
+    RAWFRAME_EXPECT(kFirstX() == 0.0F);
+    composition.stop();
+    simulation = nullptr;
+    std::filesystem::remove_all(kDirectory, error);
 }
