@@ -19,6 +19,9 @@ namespace rawframe::world_kest {
 ///   kest.fuel_per_system  steps one system may take per tick (10000000)
 ///   kest.reload_every     every this many Host iterations, reload the program
 ///                         if a `.kest` file beside it changed; 0 never (0)
+///   kest.plan_only        true: compile the game and provide its replication
+///                         plan, but add nothing to the World, for a process
+///                         that plays the game on a server elsewhere (false)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);

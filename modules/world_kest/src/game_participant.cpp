@@ -145,6 +145,12 @@ public:
         programPath_ = kProgram;
         compile_ = compile;
         RAWFRAME_TRY_ASSIGN(reloadEvery_, configuration.unsignedInteger("kest.reload_every", 0));
+        const auto kPlanOnly = configuration.text("kest.plan_only");
+        if (kPlanOnly.has_value() && *kPlanOnly != "true" && *kPlanOnly != "false") {
+            return refuse(
+                result::ErrorClass::InvalidArgument, WorldKestError::UnknownName, "kest.plan_only is true or false");
+        }
+        planOnly_ = kPlanOnly == "true";
         sourcesWritten_ = newestSource(std::filesystem::path{kProgram}.parent_path());
         std::string report;
         auto program = kest::Program::compileFile(kProgram, compile, &report);
@@ -162,10 +168,17 @@ public:
                                                                .alignment = layout.alignment,
                                                                .plainData = true,
                                                                .operations = {}});
-            RAWFRAME_TRY(simulation_->addComponent(descriptors_.back()));
+            if (!planOnly_) {
+                RAWFRAME_TRY(simulation_->addComponent(descriptors_.back()));
+            }
             layouts_.push_back(std::move(layout));
         }
         RAWFRAME_TRY(planReplication(kText, kProgram));
+        if (planOnly_) {
+            // A process that plays the game elsewhere needs what replicates,
+            // not the game running here.
+            return {};
+        }
 
         columns_.resize(game_.systems.size());
         for (std::size_t index = 0; index < game_.systems.size(); ++index) {
@@ -214,7 +227,7 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
-        if (simulation_ == nullptr) {
+        if (simulation_ == nullptr || planOnly_) {
             return {};
         }
         world::World& world = *simulation_->world();
@@ -361,6 +374,7 @@ private:
     std::string programPath_;
     kest::CompileSettings compile_;
     std::uint64_t reloadEvery_ = 0;
+    bool planOnly_ = false;
     std::optional<std::filesystem::file_time_type> sourcesWritten_;
     GameDescription game_;
     std::shared_ptr<const kest::Program> program_;
