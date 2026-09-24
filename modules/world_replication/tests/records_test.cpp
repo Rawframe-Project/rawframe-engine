@@ -126,3 +126,18 @@ RAWFRAME_TEST(InputWindowsAreBounded) {
         std::byte{0}, std::byte{2}, std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}};
     RAWFRAME_EXPECT(failedWith(decodeInputWindow(kBeforeZero), ReplicationError::Malformed));
 }
+
+RAWFRAME_TEST(PaceSignalsCarrySignedLeads) {
+    for (const std::int64_t kLead : {std::int64_t{0}, std::int64_t{-1}, std::int64_t{5}, std::int64_t{-300}}) {
+        std::array<std::byte, 16> out{};
+        network::Writer writer{out};
+        RAWFRAME_EXPECT(encodePace(writer, Pace{.measuredLead = kLead, .targetLead = 2}).has_value());
+        const auto kBack = decodePace(writer.written());
+        RAWFRAME_EXPECT(kBack.has_value() && kBack->measuredLead == kLead && kBack->targetLead == 2);
+    }
+    // Minus one is one byte: zigzag keeps small leads small either way.
+    std::array<std::byte, 16> out{};
+    network::Writer writer{out};
+    RAWFRAME_EXPECT(encodePace(writer, Pace{.measuredLead = -1, .targetLead = 2}).has_value());
+    RAWFRAME_EXPECT(writer.written().size() == 2 && writer.written()[0] == std::byte{1});
+}

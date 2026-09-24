@@ -76,6 +76,26 @@ result::Result<StateRecordHead> decodeStateRecordHead(network::Reader& reader, s
     return head;
 }
 
+result::Status encodePace(network::Writer& writer, const Pace& pace) {
+    // A signed value as a varint, by zigzag: 0, -1, 1, -2, ... to 0, 1, 2, 3.
+    const auto kZigzag =
+        (static_cast<std::uint64_t>(pace.measuredLead) << 1U) ^ static_cast<std::uint64_t>(pace.measuredLead >> 63);
+    RAWFRAME_TRY(writer.varint(kZigzag));
+    return writer.varint(pace.targetLead);
+}
+
+result::Result<Pace> decodePace(std::span<const std::byte> payload) {
+    network::Reader reader{payload};
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kZigzag, reader.varint());
+    Pace pace;
+    pace.measuredLead = static_cast<std::int64_t>(kZigzag >> 1U) ^ -static_cast<std::int64_t>(kZigzag & 1U);
+    RAWFRAME_TRY_ASSIGN(pace.targetLead, reader.varintAtMost(kMaximumInputWindow));
+    if (reader.remaining() != 0) {
+        return malformed("a pace signal has bytes past its end");
+    }
+    return pace;
+}
+
 result::Status encodeInputWindow(network::Writer& writer, const InputWindow& window) {
     if (window.commands.empty() || window.commands.size() > kMaximumInputWindow ||
         window.newestInputTick + 1 < window.commands.size()) {

@@ -36,3 +36,8 @@ add_subdirectory(modules/world_replication)
 add_subdirectory(modules/host)
 
 add_subdirectory(hosts/dedicated_server)
+
+# Scenarios: several modules and hosts together, the way a game uses them.
+if(RAWFRAME_BUILD_TESTS)
+    add_subdirectory(tests/scenarios)
+endif()

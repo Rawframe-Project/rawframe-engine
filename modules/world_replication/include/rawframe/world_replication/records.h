@@ -28,6 +28,7 @@ struct NetEntityId {
 
 /// Payload types on the state lane (server to client).
 inline constexpr std::uint64_t kStatePayload = 1;
+inline constexpr std::uint64_t kPacePayload = 2;
 /// Payload types on the input lane (client to server).
 inline constexpr std::uint64_t kInputWindowPayload = 1;
 
@@ -65,6 +66,16 @@ struct StateRecordHead {
 [[nodiscard]] result::Status encodeStateRecordHead(network::Writer& writer, const StateRecordHead& head);
 [[nodiscard]] result::Result<StateRecordHead> decodeStateRecordHead(network::Reader& reader,
                                                                     std::size_t componentCount);
+
+/// SPEC-0041's pace signal: how far ahead of consumption this connection's
+/// newest input arrives, and how far the server wants it.
+struct Pace {
+    std::int64_t measuredLead = 0;
+    std::uint64_t targetLead = 0;
+};
+
+[[nodiscard]] result::Status encodePace(network::Writer& writer, const Pace& pace);
+[[nodiscard]] result::Result<Pace> decodePace(std::span<const std::byte> payload);
 
 /// The most commands one input window carries, and the most bytes each.
 inline constexpr std::size_t kMaximumInputWindow = 16;

@@ -1,0 +1,322 @@
+#include "rawframe/world_replication/client.h"
+
+#include "rawframe/world_replication/errors.h"
+
+#include <algorithm>
+#include <cstring>
+#include <map>
+#include <vector>
+
+namespace rawframe::world_replication {
+
+namespace {
+
+std::unexpected<result::Error> refuse(result::ErrorClass errorClass, ReplicationError error, std::string_view why) {
+    return result::fail(errorClass, kReplicationDomain, code(error), why);
+}
+
+struct Staged {
+    std::uint32_t net = 0;
+    world::EntityHandle entity;
+    std::size_t component = 0;
+    std::size_t offset = 0;
+};
+
+} // namespace
+
+struct ReplicationClient::State {
+    network::Sessions* sessions = nullptr;
+    world::World* world = nullptr;
+    ClientReplicationSettings settings;
+    std::vector<schema::ComponentRuntimeId> table;
+    ClientReplicationStatistics statistics;
+
+    std::optional<network::ConnectionId> connection;
+    std::optional<network::Accept> accept;
+    bool ended = false;
+    std::map<std::uint32_t, world::EntityHandle> mirrored;
+    /// The server tick each entity's component was last applied at.
+    std::map<std::pair<std::uint32_t, std::size_t>, std::uint64_t> appliedAt;
+    world::EntityHandle owned;
+    std::uint64_t serverTick = 0;
+    std::uint64_t stateSequence = 0;
+    std::uint64_t consumedInputTick = 0;
+
+    // Input: commands for consecutive input ticks not yet consumed.
+    std::uint64_t nextInputTick = 0;
+    std::uint64_t paceSequence = 0;
+    std::map<std::uint64_t, std::vector<std::byte>> unconsumed;
+    std::uint64_t inputSequence = 0;
+
+    std::vector<network::SessionEvent> events;
+    std::vector<std::byte> staging;
+    std::vector<Staged> staged;
+    std::vector<std::byte> scratch;
+
+    void acknowledge(network::ControlFrame type, NetEntityId entity) {
+        scratch.resize(32);
+        network::Writer writer{scratch};
+        if (encodeMapping(writer, MappingRecord{.replicationEpoch = accept->replicationEpoch, .entity = entity})
+                .has_value()) {
+            static_cast<void>(sessions->sendFrame(*connection, type, writer.written()));
+        }
+    }
+
+    void onFrame(const network::SessionEvent& event) {
+        const auto kType = static_cast<network::ControlFrame>(event.frameType);
+        if (kType != network::ControlFrame::MappingDeclare && kType != network::ControlFrame::MappingRetire) {
+            return;
+        }
+        const auto kRecord = decodeMapping(event.payload);
+        if (!kRecord.has_value() || kRecord->replicationEpoch != accept->replicationEpoch) {
+            return;
+        }
+        if (kType == network::ControlFrame::MappingDeclare) {
+            if (mirrored.contains(kRecord->entity.value) || mirrored.size() >= settings.maximumMapped) {
+                sessions->close(*connection);
+                return;
+            }
+            auto entity = world->create();
+            if (!entity.has_value()) {
+                sessions->close(*connection);
+                return;
+            }
+            mirrored[kRecord->entity.value] = *entity;
+            if (kRecord->owned) {
+                owned = *entity;
+            }
+            acknowledge(network::ControlFrame::MappingAck, kRecord->entity);
+            return;
+        }
+        const auto kMirror = mirrored.find(kRecord->entity.value);
+        if (kMirror != mirrored.end()) {
+            static_cast<void>(world->destroy(kMirror->second));
+            if (kMirror->second == owned) {
+                owned = {};
+            }
+            mirrored.erase(kMirror);
+            // IDs are never reused in an epoch, so nothing late can reach a
+            // replacement; what is kept of the retired one can go.
+            appliedAt.erase(appliedAt.lower_bound({kRecord->entity.value, 0}),
+                            appliedAt.lower_bound({kRecord->entity.value + 1, 0}));
+        }
+        acknowledge(network::ControlFrame::MappingRetireAck, kRecord->entity);
+    }
+
+    /// The server says how early this client's input arrives; a client that
+    /// is late labels its next commands further ahead (it never goes back:
+    /// a tick once labelled keeps its command).
+    void onPace(const network::SessionEvent& event) {
+        const auto kPace = decodePace(event.payload);
+        if (!kPace.has_value()) {
+            ++statistics.datagramsRefused;
+            return;
+        }
+        const auto kTarget = static_cast<std::int64_t>(kPace->targetLead);
+        if (kPace->measuredLead < kTarget && event.sequence > paceSequence) {
+            nextInputTick += static_cast<std::uint64_t>(kTarget - kPace->measuredLead);
+        }
+        paceSequence = std::max(paceSequence, event.sequence);
+    }
+
+    void onState(const network::SessionEvent& event) {
+        if (event.laneEpoch == accept->replicationEpoch && event.payloadType == kPacePayload) {
+            onPace(event);
+            return;
+        }
+        if (event.laneEpoch != accept->replicationEpoch || event.payloadType != kStatePayload) {
+            ++statistics.datagramsRefused;
+            return;
+        }
+        // Decode it all first; apply only a datagram that decodes whole.
+        network::Reader reader{event.payload};
+        const auto kHeader = decodeStateHeader(reader);
+        if (!kHeader.has_value()) {
+            ++statistics.datagramsRefused;
+            return;
+        }
+        staging.clear();
+        staged.clear();
+        std::uint64_t unmapped = 0;
+        for (std::uint64_t index = 0; index < kHeader->recordCount; ++index) {
+            const auto kHead = decodeStateRecordHead(reader, settings.table.components.size());
+            if (!kHead.has_value()) {
+                ++statistics.datagramsRefused;
+                return;
+            }
+            const ComponentCodec& codec = settings.table.components[kHead->component];
+            const std::size_t kOffset = staging.size();
+            staging.resize(kOffset + codec.size);
+            if (!codec.decode(reader, staging.data() + kOffset).has_value()) {
+                ++statistics.datagramsRefused;
+                return;
+            }
+            const auto kMirror = mirrored.find(kHead->entity.value);
+            if (kMirror == mirrored.end()) {
+                ++unmapped;
+                continue;
+            }
+            const auto kApplied = appliedAt.find({kHead->entity.value, kHead->component});
+            if (kApplied != appliedAt.end() && kApplied->second > kHeader->serverTick) {
+                ++statistics.recordsStale;
+                continue;
+            }
+            staged.push_back(Staged{.net = kHead->entity.value,
+                                    .entity = kMirror->second,
+                                    .component = kHead->component,
+                                    .offset = kOffset});
+        }
+        if (reader.remaining() != 0) {
+            ++statistics.datagramsRefused;
+            return;
+        }
+        ++statistics.stateDatagrams;
+        statistics.recordsUnmapped += unmapped;
+        for (const Staged& record : staged) {
+            const schema::ComponentRuntimeId kId = table[record.component];
+            void* const kValue = world->getErased(record.entity, kId);
+            if (kValue != nullptr) {
+                std::memcpy(kValue, staging.data() + record.offset, settings.table.components[record.component].size);
+            } else {
+                static_cast<void>(world->insertErased(record.entity, kId, staging.data() + record.offset));
+            }
+            appliedAt[{record.net, record.component}] = kHeader->serverTick;
+            ++statistics.recordsApplied;
+        }
+        serverTick = std::max(serverTick, kHeader->serverTick);
+        stateSequence = std::max(stateSequence, event.sequence);
+        consumedInputTick = std::max(consumedInputTick, kHeader->consumedInputTick);
+    }
+};
+
+ReplicationClient::ReplicationClient(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
+}
+
+ReplicationClient::~ReplicationClient() = default;
+
+result::Result<std::unique_ptr<ReplicationClient>>
+ReplicationClient::create(network::Sessions& sessions, world::World& world, ClientReplicationSettings settings) {
+    auto state = std::make_unique<State>();
+    for (const ComponentCodec& codec : settings.table.components) {
+        RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, world.registry().find(codec.component));
+        const schema::ComponentDescriptor& descriptor = world.registry().descriptor(kId);
+        if (!codec.valid() || !descriptor.plainData || descriptor.size != codec.size) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          ReplicationError::FieldUnsupported,
+                          "a replicated component is not plain data of its codec's size");
+        }
+        state->table.push_back(kId);
+    }
+    if (settings.input && !settings.input->valid()) {
+        return refuse(
+            result::ErrorClass::InvalidArgument, ReplicationError::FieldUnsupported, "an invalid input codec");
+    }
+    state->sessions = &sessions;
+    state->world = &world;
+    state->settings = std::move(settings);
+    return std::make_unique<ReplicationClient>(std::move(state));
+}
+
+result::Status ReplicationClient::connect(const network::Endpoint& endpoint, const network::Hello& hello) {
+    RAWFRAME_TRY_ASSIGN(const network::ConnectionId kConnection, state_->sessions->connect(endpoint, hello));
+    state_->connection = kConnection;
+    return {};
+}
+
+void ReplicationClient::pump() {
+    State& state = *state_;
+    state.events.clear();
+    state.sessions->pump(state.events);
+    for (const network::SessionEvent& event : state.events) {
+        if (!state.connection || !(event.connection == *state.connection)) {
+            continue;
+        }
+        switch (event.kind) {
+        case network::SessionEventKind::Admitted:
+            state.accept = event.accept;
+            state.consumedInputTick = event.accept.tickOrigin;
+            state.nextInputTick = event.accept.tickOrigin + 1;
+            break;
+        case network::SessionEventKind::Frame:
+            if (state.accept) {
+                state.onFrame(event);
+            }
+            break;
+        case network::SessionEventKind::Datagram:
+            if (state.accept) {
+                state.onState(event);
+            }
+            break;
+        case network::SessionEventKind::Rejected:
+            break;
+        case network::SessionEventKind::Ended:
+            state.ended = true;
+            for (const auto& [id, entity] : state.mirrored) {
+                static_cast<void>(state.world->destroy(entity));
+            }
+            state.mirrored.clear();
+            state.appliedAt.clear();
+            state.owned = {};
+            state.accept.reset();
+            break;
+        }
+    }
+}
+
+bool ReplicationClient::admitted() const noexcept {
+    return state_->accept.has_value();
+}
+
+bool ReplicationClient::ended() const noexcept {
+    return state_->ended;
+}
+
+world::EntityHandle ReplicationClient::owned() const noexcept {
+    return state_->owned;
+}
+
+std::uint64_t ReplicationClient::serverTick() const noexcept {
+    return state_->serverTick;
+}
+
+result::Status ReplicationClient::submitInput(std::span<const std::byte> value) {
+    State& state = *state_;
+    if (!state.accept || !state.settings.input || value.size() != state.settings.input->size) {
+        return refuse(result::ErrorClass::FailedPrecondition,
+                      ReplicationError::InputRefused,
+                      "input needs an admitted session and a value of the input component's size");
+    }
+    // Commands the server consumed are done.
+    state.unconsumed.erase(state.unconsumed.begin(), state.unconsumed.upper_bound(state.consumedInputTick));
+    std::vector<std::byte> wire(state.settings.input->wireSize());
+    network::Writer commandWriter{wire};
+    RAWFRAME_TRY(state.settings.input->encode(value.data(), commandWriter));
+    state.unconsumed[state.nextInputTick++] = std::move(wire);
+    while (state.unconsumed.size() > kMaximumInputWindow) {
+        state.unconsumed.erase(state.unconsumed.begin());
+    }
+    InputWindow window{.newestInputTick = state.unconsumed.rbegin()->first,
+                       .ackedStateSequence = state.stateSequence,
+                       .ackedServerTick = state.serverTick,
+                       .commands = {}};
+    for (const auto& [tick, command] : state.unconsumed) {
+        window.commands.emplace_back(command);
+    }
+    state.scratch.resize(2048);
+    network::Writer writer{state.scratch};
+    RAWFRAME_TRY(encodeInputWindow(writer, window));
+    RAWFRAME_TRY(state.sessions->sendDatagram(*state.connection,
+                                              network::DatagramRecord{.lane = network::DatagramLane::Input,
+                                                                      .laneEpoch = state.accept->inputEpoch,
+                                                                      .sequence = ++state.inputSequence,
+                                                                      .payloadType = kInputWindowPayload,
+                                                                      .payload = writer.written()}));
+    ++state.statistics.inputWindowsSent;
+    return {};
+}
+
+ClientReplicationStatistics ReplicationClient::statistics() const noexcept {
+    return state_->statistics;
+}
+
+} // namespace rawframe::world_replication
