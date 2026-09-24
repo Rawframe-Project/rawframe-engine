@@ -4,6 +4,8 @@ rawframe_module(NAME world
     SOURCES
         src/archetype.cpp
         src/command_buffer.cpp
+        src/schedule.cpp
+        src/time.cpp
         src/world.cpp
     DEPS schema execution diagnostics result base
 )
@@ -11,5 +13,6 @@ rawframe_module(NAME world
 rawframe_module_tests(NAME world SOURCES
     tests/command_buffer_test.cpp
     tests/query_test.cpp
+    tests/schedule_test.cpp
     tests/world_test.cpp
 )

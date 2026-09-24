@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- World schedule and time: the eight closed phases, `System` and `SystemDeclaration`, `Schedule::compile` (refuses duplicates, unknown or cross-phase edges, cycles, and access outside the registry) with deterministic order, `runTick` with the commit barrier and per-system failure isolation, `TickIndex`, exact rational `TickRate`, and `TickPacer` for bounded catch-up with measured debt.
 - World command buffers: `CommandBuffer` records create, destroy, insert, and remove within fixed limits, and `World::apply` applies them in order at the barrier, all or nothing on capacity, skipping and counting commands on entities already gone.
 - World queries: `Query<Read<T>, Write<U>, With<V>, Without<W>>` resolves against the registry, caches matching archetypes, iterates in history order, and reports the components it reads and writes.
 - `rawframe.world`: 8-byte `EntityHandle` with generations and slot retirement, archetype storage in aligned columns, and direct structural operations (`create`, `destroy`, `insert`, `remove`, `get`) that refuse while the structure is locked.
