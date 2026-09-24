@@ -37,6 +37,9 @@ struct ComponentDescriptor {
     std::string_view name;
     std::size_t size = 0; // zero for a tag
     std::size_t alignment = 1;
+    /// Trivially copyable: its bytes are its value, so storage may copy them
+    /// and a script may be lent them.
+    bool plainData = false;
     ComponentOperations operations;
 };
 
@@ -47,6 +50,7 @@ template <Component T> [[nodiscard]] constexpr ComponentDescriptor describeCompo
         .name = T::kComponentName,
         .size = kTag ? 0 : sizeof(T),
         .alignment = alignof(T),
+        .plainData = std::is_trivially_copyable_v<T>,
         .operations = ComponentOperations{
             .moveConstruct =
                 [](void* destination, void* source) noexcept {

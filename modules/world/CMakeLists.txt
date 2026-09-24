@@ -3,6 +3,7 @@
 rawframe_module(NAME world
     SOURCES
         src/archetype.cpp
+        src/column_query.cpp
         src/command_buffer.cpp
         src/random.cpp
         src/schedule.cpp
@@ -12,6 +13,7 @@ rawframe_module(NAME world
 )
 
 rawframe_module_tests(NAME world SOURCES
+    tests/column_query_test.cpp
     tests/command_buffer_test.cpp
     tests/query_test.cpp
     tests/random_test.cpp
