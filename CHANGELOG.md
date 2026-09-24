@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe.world_runtime`: the World as a participant. Other participants add components and system contributors through the `Simulation` capability while being constructed; at start it freezes the registry, builds the World and schedule, and afterwards runs the ticks its pacer owes in the Host's `run_worlds` phase, configured by `world.*` keys.
 - `Configuration`: the Runtime's bounded, immutable key/value snapshot, parsed from `key = value` lines, handed in by the host, and read by participants through their context.
 - Host schedule phases: participants declare the `HostPhase`s they work in, `Composition::runHostPhase` runs them in plan order, and a dedicated-server plan refuses presentation phases.
 - Deterministic randomness: PCG32 XSH-RR and SplitMix64 checked against their published vectors, identity-derived streams, indexed draws, Lemire bounded integers, 53-bit doubles, 24-bit floats, Fisher-Yates shuffle, and weighted choice, all one pinned identity. A World has a root seed and owns stream state; systems declare the streams they draw from.

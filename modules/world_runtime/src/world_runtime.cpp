@@ -1,0 +1,192 @@
+#include "rawframe/composition/composition.h"
+#include "rawframe/world_runtime/errors.h"
+#include "rawframe/world_runtime/registrar.h"
+#include "rawframe/world_runtime/simulation.h"
+
+#include <limits>
+#include <memory>
+#include <optional>
+#include <string>
+
+namespace rawframe::world_runtime {
+
+namespace {
+
+constexpr std::string_view kIdentity = "rawframe.world_runtime.world";
+constexpr std::string_view kProvided[] = {kSimulation.name};
+
+constexpr diagnostics::EventIdentity kSystemFailed{"world_runtime", "system_failed"};
+constexpr diagnostics::EventIdentity kTickFailed{"world_runtime", "tick_failed"};
+constexpr diagnostics::EventIdentity kTickDebt{"world_runtime", "tick_debt"};
+
+std::unexpected<result::Error> alreadyStarted(std::string_view description) {
+    return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
+                                                       kWorldRuntimeDomain,
+                                                       code(WorldRuntimeError::AlreadyStarted),
+                                                       description)
+                                              .error()};
+}
+
+struct Settings {
+    world::TickRate rate;
+    std::uint32_t maximumTicksPerIteration = 4;
+    world::WorldSettings world;
+};
+
+result::Result<Settings> readSettings(const composition::Configuration& configuration) {
+    constexpr std::uint64_t kMaximum32 = std::numeric_limits<std::uint32_t>::max();
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kTicks, configuration.unsignedInteger("world.tick_rate", 60));
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kSeconds, configuration.unsignedInteger("world.tick_rate_seconds", 1));
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kCatchUp,
+                        configuration.unsignedInteger("world.maximum_ticks_per_iteration", 4));
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kSeed, configuration.unsignedInteger("world.root_seed", 0));
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kEntities,
+                        configuration.unsignedInteger("world.maximum_entities", std::uint64_t{1} << 20U));
+    if (kTicks > kMaximum32 || kSeconds > kMaximum32 || kCatchUp == 0 || kCatchUp > kMaximum32 || kEntities == 0 ||
+        kEntities > kMaximum32) {
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            kWorldRuntimeDomain,
+                            code(WorldRuntimeError::SettingOutOfRange),
+                            "a world setting is out of range");
+    }
+    RAWFRAME_TRY_ASSIGN(const world::TickRate kRate,
+                        world::TickRate::of(static_cast<std::uint32_t>(kTicks), static_cast<std::uint32_t>(kSeconds)));
+    return Settings{
+        .rate = kRate,
+        .maximumTicksPerIteration = static_cast<std::uint32_t>(kCatchUp),
+        .world = world::WorldSettings{.maximumEntities = static_cast<std::uint32_t>(kEntities),
+                                      .rootSeed = world::RootSeed{kSeed}},
+    };
+}
+
+/// The World participant: owns the registry, World, schedule, and pacer, and
+/// runs due ticks in `run_worlds`.
+class WorldRuntime final : public composition::Participant, public Simulation {
+public:
+    explicit WorldRuntime(Settings settings) noexcept : settings_(settings) {
+    }
+
+    result::Status addComponent(const schema::ComponentDescriptor& descriptor) override {
+        if (started_) {
+            return alreadyStarted("components are added before the World starts");
+        }
+        registryBuilder_.add(descriptor);
+        return {};
+    }
+
+    result::Status addSystems(SystemContributor& contributor) override {
+        if (started_) {
+            return alreadyStarted("systems are added before the World starts");
+        }
+        contributors_.push_back(&contributor);
+        return {};
+    }
+
+    world::World* world() noexcept override {
+        return world_.get();
+    }
+    world::TickIndex tick() const noexcept override {
+        return tick_;
+    }
+    world::TickRate rate() const noexcept override {
+        return settings_.rate;
+    }
+
+    result::Status start(composition::ParticipantContext& context) noexcept override {
+        started_ = true;
+        emitter_ = context.emitter();
+        RAWFRAME_TRY_ASSIGN(registry_, registryBuilder_.freeze());
+        world_ = std::make_unique<world::World>(registry_, settings_.world);
+        std::vector<world::SystemDeclaration> declarations;
+        for (SystemContributor* contributor : contributors_) {
+            RAWFRAME_TRY(contributor->declareSystems(*registry_, declarations));
+        }
+        RAWFRAME_TRY_ASSIGN(world::Schedule schedule, world::Schedule::compile(declarations, *registry_));
+        schedule_.emplace(std::move(schedule));
+        pacer_.emplace(settings_.rate, settings_.maximumTicksPerIteration, context.clock().now());
+        running_ = true;
+        return {};
+    }
+
+    void quiesce() noexcept override {
+        running_ = false;
+    }
+
+    void stop() noexcept override {
+        schedule_.reset();
+        world_.reset();
+    }
+
+    void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
+        if (!running_) {
+            return;
+        }
+        const world::TickPacer::Due kDue = pacer_->due(frame.now);
+        for (std::uint32_t index = 0; index < kDue.run && running_; ++index) {
+            auto report = schedule_->runTick(*world_, tick_, settings_.rate, emitter_);
+            if (!report.has_value()) {
+                // The World's state is no longer trustworthy: stop ticking and
+                // say so once. The Host decides what happens next.
+                running_ = false;
+                emitter_.log(diagnostics::Severity::Critical,
+                             kTickFailed,
+                             "a World tick failed at its barrier",
+                             {diagnostics::field("tick", tick_.value)});
+                break;
+            }
+            for (const auto& failure : report->failures) {
+                emitter_.log(diagnostics::Severity::Warning,
+                             kSystemFailed,
+                             "a system returned an error; its commands were discarded",
+                             {diagnostics::field("system", std::string_view{failure.system}),
+                              diagnostics::field("tick", report->tick.value)});
+            }
+            pacer_->ran(1);
+        }
+        if (kDue.debt != 0) {
+            emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
+        }
+    }
+
+    composition::CapabilityObject provide(std::string_view capability) noexcept override {
+        if (capability == kSimulation.name) {
+            return composition::provideAs<Simulation>(*this);
+        }
+        return {};
+    }
+
+private:
+    Settings settings_;
+    schema::RegistryBuilder registryBuilder_;
+    std::vector<SystemContributor*> contributors_;
+    std::shared_ptr<const schema::SchemaRegistry> registry_;
+    std::unique_ptr<world::World> world_;
+    std::optional<world::Schedule> schedule_;
+    std::optional<world::TickPacer> pacer_;
+    world::TickIndex tick_;
+    diagnostics::Emitter emitter_;
+    bool started_ = false;
+    bool running_ = false;
+};
+
+result::Result<composition::ParticipantOwner> makeWorldRuntime(composition::ParticipantContext& context) noexcept {
+    RAWFRAME_TRY_ASSIGN(const Settings kSettings, readSettings(context.configuration()));
+    return composition::ParticipantOwner{new WorldRuntime{kSettings}};
+}
+
+} // namespace
+
+void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = kIdentity,
+        .factory = &makeWorldRuntime,
+        .scope = composition::LifetimeScope::World,
+        .providedCapabilities = kProvided,
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
+        .observabilityIdentity = "world_runtime.world",
+        .budgetOwner = "world",
+        .hostPhases = composition::hostPhaseBit(composition::HostPhase::RunWorlds),
+    });
+}
+
+} // namespace rawframe::world_runtime
