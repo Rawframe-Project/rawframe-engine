@@ -267,6 +267,10 @@ bool ReplicationClient::admitted() const noexcept {
     return state_->accept.has_value();
 }
 
+const std::optional<network::Accept>& ReplicationClient::accept() const noexcept {
+    return state_->accept;
+}
+
 bool ReplicationClient::ended() const noexcept {
     return state_->ended;
 }

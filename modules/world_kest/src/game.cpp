@@ -154,6 +154,21 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 }
             }
             game.systems.push_back(std::move(system));
+        } else if (kKeyword == "replicate" || kKeyword == "player") {
+            std::vector<std::string>& into = kKeyword == "replicate" ? game.replicated : game.player;
+            if (kWords.size() < 2) {
+                return badLine(number, WorldKestError::BadGameLine, "a replicate or player line names components");
+            }
+            for (std::size_t at = 1; at < kWords.size(); ++at) {
+                into.emplace_back(kWords[at]);
+                uses.emplace_back(number, std::string{kWords[at]});
+            }
+        } else if (kKeyword == "input") {
+            if (kWords.size() != 2 || !game.input.empty()) {
+                return badLine(number, WorldKestError::BadGameLine, "a game names at most one input component");
+            }
+            game.input = kWords[1];
+            uses.emplace_back(number, game.input);
         } else if (kKeyword == "spawn") {
             std::uint32_t count = 0;
             const auto kCount = kWords.size() >= 2
@@ -183,8 +198,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.spawns.push_back(std::move(spawn));
         } else {
-            return badLine(
-                number, WorldKestError::BadGameLine, "a line starts with program, component, system, or spawn");
+            return badLine(number,
+                           WorldKestError::BadGameLine,
+                           "a line starts with program, component, system, spawn, replicate, player, or input");
         }
     }
     if (!haveProgram) {

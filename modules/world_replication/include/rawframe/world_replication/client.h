@@ -56,6 +56,8 @@ public:
     void pump();
 
     [[nodiscard]] bool admitted() const noexcept;
+    /// What the server granted, once admitted.
+    [[nodiscard]] const std::optional<network::Accept>& accept() const noexcept;
     /// Whether the session is over, admitted or not.
     [[nodiscard]] bool ended() const noexcept;
     /// The mirror of the entity this client plays, once declared.

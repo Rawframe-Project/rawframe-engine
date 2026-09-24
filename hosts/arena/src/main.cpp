@@ -1,11 +1,13 @@
-// The dedicated server process entry (ADR-0017): one Host whose composition
-// is the server closure. It owns no engine semantics.
+// A server and headless bots in one process over the loopback network, for
+// measuring a networked Kest game without a second machine or a real
+// transport. Not a product: a Tool-role host for scenarios and budgets.
 //
-//   rawframe-server [--config <file>]
+//   rawframe-arena [--config <file>]
 
 #include "rawframe/host/main.h"
 
 #include "rawframe/composition/registrar.h"
+#include "rawframe/network_loopback/registrar.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
@@ -14,9 +16,9 @@
 
 namespace {
 
-// The server closure: the World, a Kest game, and replication. The transport
-// joins when QUIC lands; until then replication stays off here.
-constexpr std::array<rawframe::composition::RegistrarEntry, 3> kRegistrars = {
+constexpr std::array<rawframe::composition::RegistrarEntry, 4> kRegistrars = {
+    rawframe::composition::RegistrarEntry{
+        "network_loopback", &rawframe::network_loopback::registerParticipants, rawframe::network_loopback::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_kest", &rawframe::world_kest::registerParticipants, rawframe::world_kest::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -28,9 +30,8 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 3> kRegistrars = {
 } // namespace
 
 int main(int argc, char** argv) {
-    return rawframe::host::hostMain(argc,
-                                    argv,
-                                    {.name = "rawframe-server",
-                                     .role = rawframe::composition::TargetRole::DedicatedServer,
-                                     .registrars = kRegistrars});
+    return rawframe::host::hostMain(
+        argc,
+        argv,
+        {.name = "rawframe-arena", .role = rawframe::composition::TargetRole::Tool, .registrars = kRegistrars});
 }

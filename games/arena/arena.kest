@@ -1,0 +1,23 @@
+module arena
+
+// The sample networked game: players steer through a field of drifting props.
+// Every component is one of these structs; the engine moves them with `drive`.
+
+struct Position {
+    x: f32
+    y: f32
+}
+
+struct Steer {
+    dx: f32
+    dy: f32
+}
+
+fn drive(count: i32, positions: [Position], steers: [Steer]) {
+    let i = 0
+    while i < count {
+        positions[i].x = positions[i].x + steers[i].dx
+        positions[i].y = positions[i].y + steers[i].dy
+        i = i + 1
+    }
+}

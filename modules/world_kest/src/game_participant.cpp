@@ -1,10 +1,14 @@
+#include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/kest/errors.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/kest_systems.h"
 #include "rawframe/world_kest/registrar.h"
+#include "rawframe/world_kest/replication.h"
+#include "rawframe/world_replication/plan.h"
 
+#include <algorithm>
 #include <charconv>
 #include <cstdio>
 #include <cstring>
@@ -18,6 +22,7 @@ namespace {
 
 constexpr std::string_view kIdentity = "rawframe.world_kest.game";
 constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
+constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.name};
 constexpr std::size_t kMaximumGameFileBytes = std::size_t{1} << 20U;
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
@@ -122,7 +127,7 @@ bool writeField(kest::FieldKind kind, std::string_view text, std::byte* into) {
 
 /// The loaded game. Everything the registry and the systems borrow (names,
 /// declarations) lives here, and this participant lives as long as the World.
-class GameParticipant final : public composition::Participant {
+class GameParticipant final : public composition::Participant, public world_replication::ReplicationPlan {
 public:
     GameParticipant() noexcept = default;
 
@@ -151,14 +156,16 @@ public:
 
         for (const GameComponent& component : game_.components) {
             RAWFRAME_TRY_ASSIGN(kest::TypeLayout layout, program_->layout(component.kestType));
-            RAWFRAME_TRY(simulation_->addComponent(schema::ComponentDescriptor{.id = component.id,
-                                                                               .name = component.name,
-                                                                               .size = layout.size,
-                                                                               .alignment = layout.alignment,
-                                                                               .plainData = true,
-                                                                               .operations = {}}));
+            descriptors_.push_back(schema::ComponentDescriptor{.id = component.id,
+                                                               .name = component.name,
+                                                               .size = layout.size,
+                                                               .alignment = layout.alignment,
+                                                               .plainData = true,
+                                                               .operations = {}});
+            RAWFRAME_TRY(simulation_->addComponent(descriptors_.back()));
             layouts_.push_back(std::move(layout));
         }
+        RAWFRAME_TRY(planReplication(kText, kProgram));
 
         columns_.resize(game_.systems.size());
         for (std::size_t index = 0; index < game_.systems.size(); ++index) {
@@ -281,7 +288,64 @@ public:
         emitter_.log(diagnostics::Severity::Info, kGameReloaded, "the Kest program was reloaded");
     }
 
+    std::span<const schema::ComponentDescriptor> components() const noexcept override {
+        return descriptors_;
+    }
+    const world_replication::ReplicationTable& table() const noexcept override {
+        return table_;
+    }
+    std::span<const schema::ComponentTypeId> playerComponents() const noexcept override {
+        return playerComponents_;
+    }
+    const std::optional<world_replication::ComponentCodec>& input() const noexcept override {
+        return input_;
+    }
+    network::Fingerprint game() const noexcept override {
+        return fingerprint_;
+    }
+
+    composition::CapabilityObject provide(std::string_view capability) noexcept override {
+        if (capability == world_replication::kReplicationPlan.name) {
+            return composition::provideAs<world_replication::ReplicationPlan>(*this);
+        }
+        return {};
+    }
+
 private:
+    /// What replicates, from the description; and the game's identity: the
+    /// description and its program, hashed together.
+    result::Status planReplication(std::string_view description, const std::string& programPath) {
+        const auto kCodec = [this](std::string_view name) -> result::Result<world_replication::ComponentCodec> {
+            const GameComponent& component = *componentNamed(name);
+            const std::size_t kIndex = static_cast<std::size_t>(&component - game_.components.data());
+            return codecFor(component.id, layouts_[kIndex]);
+        };
+        std::vector<world_replication::ComponentCodec> codecs;
+        for (const std::string& name : game_.replicated) {
+            RAWFRAME_TRY_ASSIGN(world_replication::ComponentCodec codec, kCodec(name));
+            codecs.push_back(std::move(codec));
+        }
+        // Wire order is stable identity order, whatever order the text lists.
+        std::sort(codecs.begin(), codecs.end(), [](const auto& left, const auto& right) {
+            return left.component < right.component;
+        });
+        table_.components = std::move(codecs);
+        for (const std::string& name : game_.player) {
+            playerComponents_.push_back(componentNamed(name)->id);
+        }
+        if (!game_.input.empty()) {
+            RAWFRAME_TRY_ASSIGN(input_, kCodec(game_.input));
+        }
+        RAWFRAME_TRY_ASSIGN(const std::string kProgramText, readFile(programPath));
+        base::Sha256 hasher;
+        hasher.update("rawframe.world_kest.game.v1");
+        hasher.update(description);
+        hasher.update(std::string_view{"\0", 1});
+        hasher.update(kProgramText);
+        fingerprint_.bytes = hasher.finish();
+        return {};
+    }
+
     [[nodiscard]] const GameComponent* componentNamed(std::string_view name) const noexcept {
         for (const GameComponent& component : game_.components) {
             if (component.name == name) {
@@ -301,6 +365,11 @@ private:
     GameDescription game_;
     std::shared_ptr<const kest::Program> program_;
     std::vector<kest::TypeLayout> layouts_;
+    std::vector<schema::ComponentDescriptor> descriptors_;
+    world_replication::ReplicationTable table_;
+    std::vector<schema::ComponentTypeId> playerComponents_;
+    std::optional<world_replication::ComponentCodec> input_;
+    network::Fingerprint fingerprint_;
     std::vector<std::vector<KestColumn>> columns_;
     std::vector<KestComponent> components_;
     std::vector<std::vector<std::string_view>> after_;
@@ -324,6 +393,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .identity = kIdentity,
         .factory = &makeGame,
         .scope = composition::LifetimeScope::World,
+        .providedCapabilities = kProvides,
         .requiredCapabilities = kNeeds,
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "world_kest.game",

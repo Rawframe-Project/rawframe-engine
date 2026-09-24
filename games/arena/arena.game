@@ -1,0 +1,13 @@
+# The sample networked game: players steer, props drift.
+program arena.kest
+
+component 4e8c1a27-b6d3-4f90-8a15-c3e72d9b0f46 arena.position Position
+component a93f6d05-1c8e-4b72-9e40-5d2b8f7c1a63 arena.steer Steer
+
+system arena.drive simulation drive write arena.position read arena.steer
+
+spawn 200 arena.position x=0 y=0 arena.steer dx=0 dy=0.25
+
+replicate arena.position arena.steer
+player arena.position arena.steer
+input arena.steer
