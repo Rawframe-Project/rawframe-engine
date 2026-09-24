@@ -27,6 +27,7 @@ add_subdirectory(modules/execution)
 add_subdirectory(modules/composition)
 add_subdirectory(modules/schema)
 add_subdirectory(modules/world)
+add_subdirectory(modules/kest)
 add_subdirectory(modules/world_runtime)
 add_subdirectory(modules/host)
 

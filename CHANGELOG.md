@@ -4,6 +4,8 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe.kest`: Kest programs compiled from handed source files, `DoorTable`s of typed doors checked against what each program declares and marked safe or not for untrusted code, and `Machine`s with required heap and fuel limits whose calls answer `TaskOutcome` (fuel and heap exhaustion are `resource_exhausted`, cancellation is not an error). Untrusted machines are refused until Kest's untrusted profile exists. `addStandardMath` binds the three doors `std.math` asks for.
+- Kest is vendored under `third_party/kest` at a pinned revision and built as a C11 static library; the project now enables C.
 - `rawframe.host` and `rawframe-server`: the Host owns the clock, diagnostics routing and NDJSON sink, the executors, and the root scope, composes and starts the plan, runs the Host schedule at `host.iteration_rate`, drains the log in maintenance, and stops in order on a signal or after `host.maximum_iterations`. The dedicated server is a thin executable over it with the World runtime in its closure.
 - Diagnostics name repository-relative source paths, and builds define `RAWFRAME_CONFIGURATION_NAME`.
 - `rawframe.world_runtime`: the World as a participant. Other participants add components and system contributors through the `Simulation` capability while being constructed; at start it freezes the registry, builds the World and schedule, and afterwards runs the ticks its pacer owes in the Host's `run_worlds` phase, configured by `world.*` keys.

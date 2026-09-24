@@ -10,6 +10,7 @@ execution: diagnostics result base
 composition: execution diagnostics result base
 schema: result base
 world: schema execution diagnostics result base
+kest: execution result base
 world_runtime: world composition schema execution diagnostics result base
 host: composition execution diagnostics result base
 dedicated_server: host world_runtime composition diagnostics result base

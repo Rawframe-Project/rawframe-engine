@@ -1,0 +1,112 @@
+#include "rawframe/kest/program.h"
+
+#include "rawframe/kest/errors.h"
+#include "state.h"
+
+#include <cstdlib>
+#include <vector>
+
+namespace rawframe::kest {
+
+ReportFile::ReportFile() noexcept {
+#if defined(__unix__) || defined(__APPLE__)
+    file_ = ::open_memstream(&buffer_, &size_);
+#else
+    file_ = std::tmpfile();
+#endif
+}
+
+ReportFile::~ReportFile() {
+    if (file_ != nullptr) {
+        std::fclose(file_);
+    }
+    std::free(buffer_);
+}
+
+std::string ReportFile::text() {
+    if (file_ == nullptr) {
+        return {};
+    }
+    std::string text;
+#if defined(__unix__) || defined(__APPLE__)
+    std::fflush(file_);
+    text.assign(buffer_ != nullptr ? buffer_ : "", size_);
+#else
+    std::fflush(file_);
+    std::rewind(file_);
+    char chunk[512];
+    std::size_t got = 0;
+    while ((got = std::fread(chunk, 1, sizeof chunk, file_)) != 0) {
+        text.append(chunk, got);
+    }
+#endif
+    while (!text.empty() && text.back() == '\n') {
+        text.pop_back();
+    }
+    return text;
+}
+
+Program::Program(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
+}
+
+Program::~Program() = default;
+
+result::Result<std::shared_ptr<const Program>>
+Program::compile(std::span<const SourceFile> files, const CompileSettings& settings, std::string* report) {
+    // The header and the library must be one version of Kest: every struct
+    // below is a promise only the matching library keeps.
+    if (kest_abi_version() != KEST_ABI_VERSION) {
+        return result::fail(result::ErrorClass::Internal,
+                            kKestDomain,
+                            code(KestError::AbiMismatch),
+                            "the linked Kest library is not the version its header describes");
+    }
+    if (files.empty() || settings.roomBytes == 0) {
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            kKestDomain,
+                            code(KestError::DoesNotCompile),
+                            "a program needs at least one file and a finite room to compile in");
+    }
+    std::vector<KestFile> handed;
+    handed.reserve(files.size());
+    for (const SourceFile& file : files) {
+        handed.push_back(KestFile{.path = file.path.c_str(), .text = file.text.c_str(), .length = file.text.size()});
+    }
+    ReportFile errors;
+    KestBuild* const kBuild = kest_build_from(handed.data(),
+                                              static_cast<std::uint32_t>(handed.size()),
+                                              settings.library.empty() ? nullptr : settings.library.c_str(),
+                                              errors.file(),
+                                              KEST_FORM_TEXT,
+                                              settings.roomBytes);
+    if (kBuild == nullptr) {
+        if (report != nullptr) {
+            *report = errors.text();
+        }
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            kKestDomain,
+                            code(KestError::DoesNotCompile),
+                            "the Kest program does not compile");
+    }
+    auto state = std::make_unique<State>();
+    state->build = kBuild;
+    return std::make_shared<const Program>(std::move(state));
+}
+
+std::vector<std::string> Program::doorsRequested() const {
+    std::vector<std::string> names;
+    for (std::uint32_t at = 0; const char* const kName = kest_build_extern(state_->build, at); ++at) {
+        names.emplace_back(kName);
+    }
+    return names;
+}
+
+std::vector<std::string> Program::capabilitiesRequested() const {
+    std::vector<std::string> names;
+    for (std::uint32_t at = 0; const char* const kName = kest_build_capability(state_->build, at); ++at) {
+        names.emplace_back(kName);
+    }
+    return names;
+}
+
+} // namespace rawframe::kest
