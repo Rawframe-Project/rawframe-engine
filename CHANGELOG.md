@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `Configuration`: the Runtime's bounded, immutable key/value snapshot, parsed from `key = value` lines, handed in by the host, and read by participants through their context.
 - Host schedule phases: participants declare the `HostPhase`s they work in, `Composition::runHostPhase` runs them in plan order, and a dedicated-server plan refuses presentation phases.
 - Deterministic randomness: PCG32 XSH-RR and SplitMix64 checked against their published vectors, identity-derived streams, indexed draws, Lemire bounded integers, 53-bit doubles, 24-bit floats, Fisher-Yates shuffle, and weighted choice, all one pinned identity. A World has a root seed and owns stream state; systems declare the streams they draw from.
 - World schedule and time: the eight closed phases, `System` and `SystemDeclaration`, `Schedule::compile` (refuses duplicates, unknown or cross-phase edges, cycles, and access outside the registry) with deterministic order, `runTick` with the commit barrier and per-system failure isolation, `TickIndex`, exact rational `TickRate`, and `TickPacer` for bounded catch-up with measured debt.

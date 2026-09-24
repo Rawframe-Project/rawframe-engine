@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rawframe/composition/configuration.h"
 #include "rawframe/composition/errors.h"
 #include "rawframe/composition/participant.h"
 #include "rawframe/composition/plan.h"
@@ -28,6 +29,8 @@ struct HostServices {
     execution::Executor* cpu = nullptr;
     execution::Executor* blockingIo = nullptr;
     diagnostics::Emitter emitter;
+    /// The Runtime's configuration snapshot; null reads as empty.
+    const Configuration* configuration = nullptr;
 };
 
 /// What a participant's factory and `start` receive: its own identity, scope,
@@ -71,6 +74,8 @@ public:
     [[nodiscard]] execution::Executor* blockingIoExecutor() const noexcept;
     [[nodiscard]] const execution::MonotonicSource& clock() const noexcept;
     [[nodiscard]] diagnostics::Emitter emitter() const noexcept;
+    /// The Runtime's configuration snapshot, empty if the host gave none.
+    [[nodiscard]] const Configuration& configuration() const noexcept;
 
 private:
     [[nodiscard]] result::Result<CapabilityObject> resolve(std::string_view capability) noexcept;

@@ -17,6 +17,7 @@ enum class CompositionError : std::uint32_t {
     CapabilityNotResolved = 2,
     CapabilityTypeMismatch = 3,
     CapabilityNotProvided = 4,
+    BadConfiguration = 5,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(CompositionError error) noexcept {

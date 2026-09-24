@@ -64,6 +64,12 @@ diagnostics::Emitter ParticipantContext::emitter() const noexcept {
     return composition_->services_.emitter;
 }
 
+const Configuration& ParticipantContext::configuration() const noexcept {
+    static const Configuration kEmpty;
+    const Configuration* configuration = composition_->services_.configuration;
+    return configuration != nullptr ? *configuration : kEmpty;
+}
+
 result::Result<CapabilityObject> ParticipantContext::resolve(std::string_view capability) noexcept {
     for (const auto& resolved : composition_->slots_[index_].planned->capabilities) {
         if (resolved.capability != capability) {
