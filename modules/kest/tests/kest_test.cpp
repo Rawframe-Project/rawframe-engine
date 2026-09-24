@@ -5,6 +5,7 @@
 #include "rawframe/kest/machine.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <fstream>
@@ -365,6 +366,12 @@ RAWFRAME_TEST(EngineMemoryIsLentWithoutCopying) {
     RAWFRAME_EXPECT(kLayout.has_value() && kLayout->size == sizeof(Mover) && kLayout->alignment == alignof(Mover));
     RAWFRAME_EXPECT(kLayout.has_value() && kLayout->mark != 0);
     RAWFRAME_EXPECT(refusedWith(kProgram->layout("Absent"), KestError::UnknownType));
+    RAWFRAME_EXPECT(kLayout.has_value() && kLayout->fields.size() == 2);
+    if (kLayout.has_value() && kLayout->fields.size() == 2) {
+        RAWFRAME_EXPECT(kLayout->fields[0].name == "x" && kLayout->fields[0].offset == 0);
+        RAWFRAME_EXPECT(kLayout->fields[1].name == "y" && kLayout->fields[1].offset == 4);
+        RAWFRAME_EXPECT(kLayout->fields[1].kind == kest::FieldKind::F32);
+    }
 
     auto machine = Machine::start(kProgram, {}, Trust::Trusted, kLimits);
     RAWFRAME_EXPECT(machine.has_value());
@@ -414,4 +421,18 @@ RAWFRAME_TEST(ContinuedCallsShareOneBudget) {
     frame[0].integer = 100;
     RAWFRAME_EXPECT(machine->call(*sum, frame).hasValue());
     RAWFRAME_EXPECT(machine->fuelLeft() == kLimits.fuelPerCall - kOneCall);
+}
+
+RAWFRAME_TEST(ProgramsCompileFromDisk) {
+    const std::string kLibrary = RAWFRAME_KEST_LIBRARY;
+    auto program = Program::compileFile(kLibrary + "std/math.kest", {.library = kLibrary});
+    RAWFRAME_EXPECT(program.has_value());
+    if (program.has_value()) {
+        const auto kRequested = (*program)->doorsRequested();
+        RAWFRAME_EXPECT(std::find(kRequested.begin(), kRequested.end(), "Math.sqrt") != kRequested.end());
+    }
+    std::string report;
+    RAWFRAME_EXPECT(refusedWith(Program::compileFile(kLibrary + "absent.kest", {.library = kLibrary}, &report),
+                                KestError::DoesNotCompile));
+    RAWFRAME_EXPECT(report.find("absent.kest") != std::string::npos);
 }

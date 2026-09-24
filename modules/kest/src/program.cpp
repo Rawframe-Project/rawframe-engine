@@ -47,13 +47,38 @@ std::string ReportFile::text() {
     return text;
 }
 
-Program::Program(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
+namespace {
+
+FieldKind fieldKind(std::uint8_t kind) noexcept {
+    switch (kind) {
+    case KEST_L_I8:
+        return FieldKind::I8;
+    case KEST_L_I16:
+        return FieldKind::I16;
+    case KEST_L_I32:
+        return FieldKind::I32;
+    case KEST_L_I64:
+        return FieldKind::I64;
+    case KEST_L_U8:
+        return FieldKind::U8;
+    case KEST_L_U16:
+        return FieldKind::U16;
+    case KEST_L_U32:
+        return FieldKind::U32;
+    case KEST_L_U64:
+        return FieldKind::U64;
+    case KEST_L_F32:
+        return FieldKind::F32;
+    case KEST_L_F64:
+        return FieldKind::F64;
+    case KEST_L_BOOL:
+        return FieldKind::Bool;
+    default:
+        return FieldKind::Other;
+    }
 }
 
-Program::~Program() = default;
-
-result::Result<std::shared_ptr<const Program>>
-Program::compile(std::span<const SourceFile> files, const CompileSettings& settings, std::string* report) {
+result::Status checkAbi() {
     // The header and the library must be one version of Kest: every struct
     // below is a promise only the matching library keeps.
     if (kest_abi_version() != KEST_ABI_VERSION) {
@@ -62,6 +87,34 @@ Program::compile(std::span<const SourceFile> files, const CompileSettings& setti
                             code(KestError::AbiMismatch),
                             "the linked Kest library is not the version its header describes");
     }
+    return {};
+}
+
+result::Result<std::shared_ptr<const Program>> finish(KestBuild* build, ReportFile& errors, std::string* report) {
+    if (build == nullptr) {
+        if (report != nullptr) {
+            *report = errors.text();
+        }
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            kKestDomain,
+                            code(KestError::DoesNotCompile),
+                            "the Kest program does not compile");
+    }
+    auto state = std::make_unique<Program::State>();
+    state->build = build;
+    return std::make_shared<const Program>(std::move(state));
+}
+
+} // namespace
+
+Program::Program(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
+}
+
+Program::~Program() = default;
+
+result::Result<std::shared_ptr<const Program>>
+Program::compile(std::span<const SourceFile> files, const CompileSettings& settings, std::string* report) {
+    RAWFRAME_TRY(checkAbi());
     if (files.empty() || settings.roomBytes == 0) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kKestDomain,
@@ -80,18 +133,25 @@ Program::compile(std::span<const SourceFile> files, const CompileSettings& setti
                                               errors.file(),
                                               KEST_FORM_TEXT,
                                               settings.roomBytes);
-    if (kBuild == nullptr) {
-        if (report != nullptr) {
-            *report = errors.text();
-        }
+    return finish(kBuild, errors, report);
+}
+
+result::Result<std::shared_ptr<const Program>>
+Program::compileFile(const std::string& path, const CompileSettings& settings, std::string* report) {
+    RAWFRAME_TRY(checkAbi());
+    if (path.empty() || settings.roomBytes == 0) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kKestDomain,
                             code(KestError::DoesNotCompile),
-                            "the Kest program does not compile");
+                            "a program needs a path and a finite room to compile in");
     }
-    auto state = std::make_unique<State>();
-    state->build = kBuild;
-    return std::make_shared<const Program>(std::move(state));
+    ReportFile errors;
+    KestBuild* const kBuild = kest_build(path.c_str(),
+                                         settings.library.empty() ? nullptr : settings.library.c_str(),
+                                         errors.file(),
+                                         KEST_FORM_TEXT,
+                                         settings.roomBytes);
+    return finish(kBuild, errors, report);
 }
 
 std::vector<std::string> Program::doorsRequested() const {
@@ -119,7 +179,16 @@ result::Result<TypeLayout> Program::layout(std::string_view type) const {
                             code(KestError::UnknownType),
                             "the program declares no one type of this name");
     }
-    return TypeLayout{.size = found->size, .alignment = found->align, .mark = kest_layout_mark(found)};
+    TypeLayout layout{.size = found->size, .alignment = found->align, .mark = kest_layout_mark(found), .fields = {}};
+    if (!found->tagged) {
+        for (std::uint16_t index = 0; index < found->count; ++index) {
+            const KestPiece& piece = found->pieces[index];
+            layout.fields.push_back(Field{.name = piece.name != nullptr ? piece.name : "",
+                                          .offset = piece.offset,
+                                          .kind = fieldKind(piece.kind)});
+        }
+    }
+    return layout;
 }
 
 } // namespace rawframe::kest
