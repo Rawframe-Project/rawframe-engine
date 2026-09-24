@@ -113,8 +113,13 @@ RAWFRAME_TEST(AStopRequestEndsAnUnboundedRun) {
     reset();
     std::string log;
     std::atomic<bool> stop{false};
+    // The request comes once the loop is running, however long starting took
+    // on a loaded machine.
     std::thread requester{[&stop] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        while (counts.runWorlds.load() == 0 && counts.stopped.load() == 0) {
+            std::this_thread::yield();
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
         stop.store(true, std::memory_order_release);
     }};
     const auto kExit = run("host.iteration_rate = 500", log, &stop);
