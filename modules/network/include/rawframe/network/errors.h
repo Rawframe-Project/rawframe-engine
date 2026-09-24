@@ -27,6 +27,18 @@ enum class NetworkError : std::uint32_t {
     WrongVersion = 6,
     /// No room left in the output.
     BufferFull = 7,
+    /// A required finite limit is zero, or a setting is out of range.
+    InvalidProfile = 8,
+    /// No listener at that endpoint, or the endpoint is already taken.
+    Unreachable = 9,
+    /// The connection is closed, failed, or was never this provider's.
+    StaleConnection = 10,
+    /// A stream or datagram larger than the profile allows.
+    TooLarge = 11,
+    /// A queue or connection limit is reached.
+    Exhausted = 12,
+    /// A stream this side may not send on.
+    WrongStream = 13,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(NetworkError error) noexcept {
