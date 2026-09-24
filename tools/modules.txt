@@ -14,7 +14,7 @@ kest: execution result base
 network: execution result base
 network_loopback: network execution result base
 world_runtime: world composition schema execution diagnostics result base
-world_kest: world_runtime kest world composition schema execution diagnostics result base
+world_kest: world_replication world_runtime kest network world composition schema execution diagnostics result base
 world_replication: world_runtime network world composition schema execution diagnostics result base
 host: composition execution diagnostics result base
 dedicated_server: host world_kest world_runtime composition diagnostics result base
