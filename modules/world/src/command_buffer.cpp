@@ -2,6 +2,8 @@
 
 #include "rawframe/world/errors.h"
 
+#include <cstring>
+
 namespace rawframe::world {
 
 CommandBuffer::CommandBuffer(CommandBufferSettings settings) : settings_(settings) {
@@ -21,7 +23,7 @@ CommandBuffer::~CommandBuffer() {
 
 void CommandBuffer::clear() noexcept {
     for (const Command& command : commands_) {
-        if (command.value != nullptr) {
+        if (command.value != nullptr && command.destroyValue != nullptr) {
             command.destroyValue(command.value);
         }
     }
@@ -58,6 +60,24 @@ result::Result<PendingEntity> CommandBuffer::create() {
     RAWFRAME_TRY(record(Command{.kind = Kind::Create, .target = kPending}));
     ++pending_;
     return kPending;
+}
+
+result::Status CommandBuffer::insertBytes(CommandTarget target,
+                                          schema::ComponentRuntimeId component,
+                                          const schema::ComponentDescriptor& descriptor,
+                                          std::span<const std::byte> value) {
+    if (!descriptor.plainData || value.size() != descriptor.size || descriptor.alignment > alignof(std::max_align_t)) {
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            kWorldDomain,
+                            code(WorldError::InvalidValue),
+                            "only plain data of the component's own size is inserted from bytes");
+    }
+    void* storage = nullptr;
+    if (descriptor.size != 0) {
+        RAWFRAME_TRY_ASSIGN(storage, reserveValue(descriptor.size, descriptor.alignment));
+        std::memcpy(storage, value.data(), value.size());
+    }
+    return record(Command{.kind = Kind::Insert, .target = target, .component = component, .value = storage});
 }
 
 result::Status CommandBuffer::destroy(EntityHandle entity) {

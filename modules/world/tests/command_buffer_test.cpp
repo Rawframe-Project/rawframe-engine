@@ -5,6 +5,9 @@
 #include "rawframe/test/test.h"
 #include "rawframe/world/errors.h"
 
+#include <array>
+#include <span>
+
 using namespace rawframe::world;
 using namespace rawframe::world::testing;
 
@@ -116,4 +119,35 @@ RAWFRAME_TEST(ApplyIsTheBarrierAndNeedsTheStructureUnlocked) {
     RAWFRAME_EXPECT(!kLocked.has_value() && kLocked.error().code() == code(WorldError::StructureLocked));
     world.unlockStructure();
     RAWFRAME_EXPECT(world.apply(commands).has_value() && world.entityCount() == 1);
+}
+
+RAWFRAME_TEST(PlainDataIsBufferedFromBytes) {
+    World world{makeRegistry()};
+    const Keys kKeys = keysOf(world.registry());
+    const auto& kPosition = world.registry().descriptor(kKeys.position.id);
+    CommandBuffer commands;
+    const auto kSpawned = commands.create();
+    const Position kValue{5, 6};
+    RAWFRAME_EXPECT(commands.insertBytes(*kSpawned, kKeys.position.id, kPosition, std::as_bytes(std::span{&kValue, 1}))
+                        .has_value());
+    const auto kReport = world.apply(commands);
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->created.size() == 1);
+    const EntityHandle kEntity = kReport->created[0];
+    RAWFRAME_EXPECT(world.get(kEntity, kKeys.position)->x == 5 && world.get(kEntity, kKeys.position)->y == 6);
+
+    commands.clear();
+    RAWFRAME_EXPECT(commands.removeErased(kEntity, kKeys.position.id).has_value());
+    RAWFRAME_EXPECT(world.apply(commands).has_value());
+    RAWFRAME_EXPECT(world.get(kEntity, kKeys.position) == nullptr);
+
+    // Bytes of another size, or a component that is not plain data, are refused.
+    commands.clear();
+    const std::int32_t kShort = 1;
+    const auto kWrongSize =
+        commands.insertBytes(kEntity, kKeys.position.id, kPosition, std::as_bytes(std::span{&kShort, 1}));
+    RAWFRAME_EXPECT(!kWrongSize.has_value() && kWrongSize.error().code() == code(WorldError::InvalidValue));
+    const auto& kTracked = world.registry().descriptor(kKeys.tracked.id);
+    std::array<std::byte, sizeof(Tracked)> bytes{};
+    RAWFRAME_EXPECT(!commands.insertBytes(kEntity, kKeys.tracked.id, kTracked, bytes).has_value());
+    RAWFRAME_EXPECT(commands.empty());
 }

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <new>
+#include <span>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -71,6 +72,19 @@ public:
         return record(Command{.kind = Kind::Remove, .target = target, .component = key.id});
     }
 
+    /// Records an insert of a plain-data component known only by runtime ID,
+    /// from its bytes; `descriptor` is the registry's for `component`. For
+    /// callers without the C++ type, such as a script. Refuses
+    /// (`invalid_argument`) a component that is not plain data and bytes of
+    /// another size.
+    [[nodiscard]] result::Status insertBytes(CommandTarget target,
+                                             schema::ComponentRuntimeId component,
+                                             const schema::ComponentDescriptor& descriptor,
+                                             std::span<const std::byte> value);
+    [[nodiscard]] result::Status removeErased(CommandTarget target, schema::ComponentRuntimeId component) {
+        return record(Command{.kind = Kind::Remove, .target = target, .component = component});
+    }
+
     [[nodiscard]] std::size_t size() const noexcept {
         return commands_.size();
     }
@@ -96,6 +110,7 @@ private:
         CommandTarget target;
         schema::ComponentRuntimeId component;
         void* value = nullptr; // an insert's buffered value, or null for a tag
+        // Null for plain data, which has nothing to destroy.
         void (*destroyValue)(void* value) noexcept = nullptr;
     };
 
