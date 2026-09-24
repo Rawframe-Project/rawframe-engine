@@ -39,6 +39,7 @@ add_subdirectory(modules/host)
 
 add_subdirectory(hosts/dedicated_server)
 add_subdirectory(hosts/arena)
+add_subdirectory(hosts/bots)
 
 # Scenarios: several modules and hosts together, the way a game uses them.
 if(RAWFRAME_BUILD_TESTS)

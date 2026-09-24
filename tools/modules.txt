@@ -20,3 +20,4 @@ world_replication: world_runtime network world composition schema execution diag
 host: composition execution diagnostics result base
 dedicated_server: host network_quic world_replication world_kest world_runtime composition diagnostics result base
 arena: host network_loopback world_replication world_kest world_runtime composition diagnostics result base
+bots: host network_quic world_replication world_kest world_runtime composition diagnostics result base
