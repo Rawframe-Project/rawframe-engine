@@ -1,0 +1,10 @@
+# Guns and bullets: entities made and destroyed by Kest systems.
+program shooter.kest
+
+component 3c9a1f47-8e2b-4d61-a5c3-7f08e9b2d416 shooter.gun Gun
+component 91d4e2b8-5a7c-4f03-8e16-2b9c0d7a4e53 shooter.bullet Bullet
+
+system shooter.fire simulation fire write shooter.gun
+system shooter.fly simulation fly write shooter.bullet entities after shooter.fire
+
+spawn 2 shooter.gun cooldown=0

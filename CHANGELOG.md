@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- Kest systems change the World's structure: the engine's Kest module `rawframe.world` (under `modules/world_kest/kest`, reached through a game's `kest.project`) declares the opaque `Entity` and `create`/`destroy`, each game component gets `<Kest type>.insert` and `.remove` doors, all recorded in the running system's command buffer, and a system may take its archetype's `entities` as a column. An entity created in one system run and kept is refused in any other.
 - `CommandBuffer::insertBytes` and `removeErased` record structural changes for a component known only by runtime ID; bytes are accepted only for plain data of the component's size.
 - Kest doors take and give structs by value: a door parameter is now a `Parameter` (a `Slot`, and for `Slot::Value` the program's type name), checked against the program's type by shape mark; `DoorCall::value` and `answerValue` convert between the frame and the type's shared-memory layout.
 - Kest-scripted games: a line-based game description (`program`, `component <uuid> <name> <Kest type>`, `system`, `spawn`) parsed by `parseGame`, and the `rawframe.world_kest.game` participant, which loads the file named by `kest.game`, compiles its program, registers each Kest struct as a layout-only component under its stable ID, contributes the Kest systems, and spawns the starting entities. `rawframe-server` includes it; a CTest runs the server on a sample game.

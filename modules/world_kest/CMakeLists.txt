@@ -11,5 +11,6 @@ rawframe_module_tests(NAME world_kest SOURCES tests/game_test.cpp tests/kest_sys
 if(TARGET rawframe_world_kest_tests)
     target_compile_definitions(rawframe_world_kest_tests PRIVATE
         RAWFRAME_KEST_LIBRARY="${RAWFRAME_KEST_LIBRARY}"
-        RAWFRAME_WORLD_KEST_GAMES="${CMAKE_CURRENT_SOURCE_DIR}/tests/game/")
+        RAWFRAME_WORLD_KEST_GAMES="${CMAKE_CURRENT_SOURCE_DIR}/tests/game/"
+        RAWFRAME_WORLD_KEST_MODULES="${CMAKE_CURRENT_SOURCE_DIR}/kest/")
 endif()

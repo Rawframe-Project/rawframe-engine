@@ -7,6 +7,7 @@
 #include "rawframe/world_kest/kest_systems.h"
 
 #include <array>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -251,4 +252,90 @@ RAWFRAME_TEST(ShapesAreCheckedBeforeAnythingRuns) {
     constexpr std::array<KestColumn, 1> kNamed = {
         KestColumn{.component = Named::kComponentTypeId, .element = "Wide", .access = world::Access::Write}};
     RAWFRAME_EXPECT(kRefusedAtDeclare(kNamed, "wide"));
+}
+
+namespace {
+
+constexpr std::string_view kKeeper = "module keeper\n"
+                                     "\n"
+                                     "import rawframe.world\n"
+                                     "\n"
+                                     "struct Link {\n"
+                                     "    target: world.Entity\n"
+                                     "}\n"
+                                     "\n"
+                                     "fn make(count: i32, links: [Link]) {\n"
+                                     "    let i = 0\n"
+                                     "    while i < count {\n"
+                                     "        links[i] = Link(world.create())\n"
+                                     "        i = i + 1\n"
+                                     "    }\n"
+                                     "}\n"
+                                     "\n"
+                                     "fn kill(count: i32, links: [Link]) {\n"
+                                     "    let i = 0\n"
+                                     "    while i < count {\n"
+                                     "        world.destroy(links[i].target)\n"
+                                     "        i = i + 1\n"
+                                     "    }\n"
+                                     "}\n";
+
+std::string readText(const std::string& path) {
+    std::string text;
+    if (std::FILE* file = std::fopen(path.c_str(), "rb")) {
+        char chunk[4096];
+        std::size_t got = 0;
+        while ((got = std::fread(chunk, 1, sizeof chunk, file)) != 0) {
+            text.append(chunk, got);
+        }
+        std::fclose(file);
+    }
+    return text;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AnEntityMadeInOneRunIsNotTakenInAnother) {
+    const std::array<kest::SourceFile, 2> kFiles = {
+        kest::SourceFile{.path = "keeper.kest", .text = std::string{kKeeper}},
+        kest::SourceFile{.path = "rawframe/world.kest",
+                         .text = readText(std::string{RAWFRAME_WORLD_KEST_MODULES} + "rawframe/world.kest")}};
+    auto compiled = kest::Program::compile(kFiles, {});
+    RAWFRAME_EXPECT(compiled.has_value());
+    if (!compiled.has_value()) {
+        return;
+    }
+    constexpr auto kLinkId = schema::ComponentTypeId::fromText("e4b7c1d9-2a36-4f58-9b0e-5c71d3a8f262");
+    schema::RegistryBuilder builder;
+    builder.add(schema::ComponentDescriptor{
+        .id = kLinkId, .name = "test.link", .size = 8, .alignment = 4, .plainData = true, .operations = {}});
+    const auto kRegistry = *builder.freeze();
+    world::World world{kRegistry};
+    const auto kLink = *kRegistry->find(kLinkId);
+    std::array<std::uint32_t, 2> zero{};
+    const world::EntityHandle kHolder = *world.create();
+    RAWFRAME_EXPECT(world.insertErased(kHolder, kLink, zero.data()).has_value());
+
+    constexpr std::array<KestColumn, 1> kLinks = {
+        KestColumn{.component = kLinkId, .element = "Link", .access = world::Access::Write}};
+    const std::array<KestSystemDeclaration, 2> kDeclarations = {
+        KestSystemDeclaration{.identity = "keeper.make", .entry = "make", .columns = kLinks},
+        KestSystemDeclaration{
+            .identity = "keeper.kill", .phase = world::Phase::PostSimulation, .entry = "kill", .columns = kLinks}};
+    auto kest = KestSystems::create({.program = *compiled, .limits = kLimits, .systems = kDeclarations});
+    RAWFRAME_EXPECT(kest.has_value());
+    if (!kest.has_value()) {
+        return;
+    }
+    world::Schedule ticks = schedule(**kest, *kRegistry);
+    world::TickIndex tick;
+    auto report = ticks.runTick(world, tick, *world::TickRate::of(60));
+    // `make` stored an entity that exists only inside its own run; `kill`,
+    // another run, is refused for naming it.
+    RAWFRAME_EXPECT(report.has_value() && report->failures.size() == 1);
+    RAWFRAME_EXPECT(report.has_value() && report->failures[0].system == "keeper.kill");
+    RAWFRAME_EXPECT(report.has_value() &&
+                    report->failures[0].error.description().find("another system run") != std::string_view::npos);
+    // The creation itself still happened at the barrier.
+    RAWFRAME_EXPECT(world.entityCount() == 2);
 }

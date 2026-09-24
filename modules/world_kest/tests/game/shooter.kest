@@ -1,0 +1,44 @@
+module shooter
+
+// Guns fire a bullet every fourth tick; bullets fly and are destroyed once
+// past the edge. Everything structural goes through rawframe.world.
+
+import rawframe.world
+
+struct Gun {
+    cooldown: i32
+}
+
+struct Bullet {
+    x: f32
+    speed: f32
+}
+
+const EDGE: f32 = 50.0
+
+extern fn Bullet.insert(entity: world.Entity, value: Bullet)
+
+fn fire(count: i32, guns: [Gun]) {
+    let i = 0
+    while i < count {
+        if guns[i].cooldown <= 0 {
+            let shot = world.create()
+            Bullet.insert(shot, Bullet(0.0, 10.0))
+            guns[i].cooldown = 3
+        } else {
+            guns[i].cooldown = guns[i].cooldown - 1
+        }
+        i = i + 1
+    }
+}
+
+fn fly(count: i32, bullets: [Bullet], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        bullets[i].x = bullets[i].x + bullets[i].speed
+        if bullets[i].x > EDGE {
+            world.destroy(entities[i])
+        }
+        i = i + 1
+    }
+}

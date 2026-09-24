@@ -8,7 +8,8 @@
 // It runs once per matching archetype. Read columns are lent in place; write
 // columns are lent as a journal copy that replaces the World's values only
 // when every call of the system that tick succeeded, so a refused or
-// exhausted system changes nothing.
+// exhausted system changes nothing. Structural changes go through doors into
+// the system's command buffer, discarded with it when the system fails.
 
 #include "rawframe/kest/doors.h"
 #include "rawframe/kest/machine.h"
@@ -31,10 +32,26 @@ namespace rawframe::world_kest {
 /// One query term of a Kest system. A Read or Write column is lent as an
 /// array of the program's type `element`, which must have the component's
 /// size and alignment; With and Without only filter and name no element.
+/// The Kest type of an entity, declared by the engine's own Kest module
+/// (`modules/world_kest/kest/rawframe/world.kest`).
+inline constexpr std::string_view kEntityType = "rawframe.world.Entity";
+
 struct KestColumn {
     schema::ComponentTypeId component;
     std::string_view element;
     world::Access access = world::Access::Read;
+    /// Lends the archetype's entities, as `[rawframe.world.Entity]`, in
+    /// place of a component column; the other fields are not read.
+    bool entities = false;
+};
+
+/// A component programs may add and take away through the doors
+/// `<kestType>.insert(entity: Entity, value: <kestType>)` and
+/// `<kestType>.remove(entity: Entity)`, recorded in the running system's
+/// command buffer. It must be plain data shaped like its Kest type.
+struct KestComponent {
+    schema::ComponentTypeId component;
+    std::string_view kestType;
 };
 
 struct KestSystemDeclaration {
@@ -49,8 +66,10 @@ struct KestSystemDeclaration {
 
 struct KestSystemsSettings {
     std::shared_ptr<const kest::Program> program;
-    /// Copied: the doors themselves must outlive the systems.
+    /// Copied: the doors themselves must outlive the systems. `World.create`
+    /// and `World.destroy` and each component's doors are added to it.
     kest::DoorTable doors;
+    std::span<const KestComponent> components;
     /// One budget per system per tick, spent across its archetypes.
     kest::MachineLimits limits;
     std::span<const KestSystemDeclaration> systems;
@@ -80,13 +99,17 @@ public:
 
     class KestSystem;
     struct Declared;
+    struct Doorway;
 
     KestSystems(std::shared_ptr<const kest::Program> program,
+                std::unique_ptr<Doorway> doorway,
                 std::unique_ptr<kest::Machine> machine,
                 std::vector<Declared> declared) noexcept;
 
 private:
     std::shared_ptr<const kest::Program> program_;
+    // Before the machine: its doors point into it, so it goes last.
+    std::unique_ptr<Doorway> doorway_;
     std::unique_ptr<kest::Machine> machine_;
     std::vector<Declared> declared_;
     std::vector<std::unique_ptr<KestSystem>> systems_;

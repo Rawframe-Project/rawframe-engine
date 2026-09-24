@@ -1,0 +1,29 @@
+module rawframe.world
+
+// The engine's side of a Kest-scripted World (D22). A game's `kest.project`
+// names this directory as a source, and its systems import this module.
+
+// An entity of the World a system runs in. The engine makes every one: the
+// fields are this module's own, so a program holds, passes, and stores one
+// but never reads or forges the numbers inside. SPEC-0006 hands a runtime
+// handle to no script as a number.
+struct Entity {
+    own slot: u32
+    own generation: u32
+}
+
+extern fn World.create() -> Entity
+extern fn World.destroy(entity: Entity)
+
+// Records the creation of an entity, which exists from the next barrier.
+// Until then what comes back names it only inside the system run that made
+// it: to insert its components, not to keep.
+fn create() -> Entity {
+    return World.create()
+}
+
+// Records that an entity is destroyed at the next barrier. Destroying one
+// that is already gone by then is skipped, not refused.
+fn destroy(entity: Entity) {
+    World.destroy(entity)
+}

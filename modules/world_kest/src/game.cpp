@@ -114,7 +114,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                                     .kestType = std::string{kWords[3]}});
         } else if (kKeyword == "system") {
             const auto kPhase = kWords.size() >= 4 ? phaseNamed(kWords[2]) : std::nullopt;
-            if (!kPhase || kWords.size() % 2 != 0) {
+            if (!kPhase) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
                                "a system line is `system <identity> <phase> <entry>` then pairs");
@@ -127,6 +127,15 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                               .before = {}};
             for (std::size_t at = 4; at < kWords.size(); at += 2) {
                 const std::string_view kWhat = kWords[at];
+                if (kWhat == "entities") {
+                    system.columns.push_back(
+                        GameColumn{.access = world::Access::Read, .component = {}, .entities = true});
+                    --at;
+                    continue;
+                }
+                if (at + 1 == kWords.size()) {
+                    return badLine(number, WorldKestError::BadGameLine, "a system column or edge names nothing");
+                }
                 const std::string kName{kWords[at + 1]};
                 if (kWhat == "after") {
                     system.after.push_back(kName);
@@ -138,7 +147,8 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 } else {
                     return badLine(number,
                                    WorldKestError::BadGameLine,
-                                   "a system column is read, write, with, or without; an edge is after or before");
+                                   "a system column is entities, or read, write, with, or without a component; an "
+                                   "edge is after or before a system");
                 }
             }
             game.systems.push_back(std::move(system));

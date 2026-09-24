@@ -136,6 +136,10 @@ public:
         for (std::size_t index = 0; index < game_.systems.size(); ++index) {
             const GameSystem& system = game_.systems[index];
             for (const GameColumn& column : system.columns) {
+                if (column.entities) {
+                    columns_[index].push_back(KestColumn{.component = {}, .element = {}, .entities = true});
+                    continue;
+                }
                 const GameComponent& component = *componentNamed(column.component);
                 columns_[index].push_back(
                     KestColumn{.component = component.id, .element = component.kestType, .access = column.access});
@@ -153,6 +157,9 @@ public:
                                                          .after = after_[index],
                                                          .before = before_[index]});
         }
+        for (const GameComponent& component : game_.components) {
+            components_.push_back(KestComponent{.component = component.id, .kestType = component.kestType});
+        }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap, configuration.unsignedInteger("kest.heap_bytes", 64U << 20U));
@@ -162,6 +169,7 @@ public:
                             KestSystems::create(KestSystemsSettings{
                                 .program = program_,
                                 .doors = std::move(doors),
+                                .components = components_,
                                 .limits = {.heapBytes = static_cast<std::size_t>(kHeap), .fuelPerCall = kFuel},
                                 .systems = declarations}));
         return simulation_->addSystems(*systems_);
@@ -231,6 +239,7 @@ private:
     std::shared_ptr<const kest::Program> program_;
     std::vector<kest::TypeLayout> layouts_;
     std::vector<std::vector<KestColumn>> columns_;
+    std::vector<KestComponent> components_;
     std::vector<std::vector<std::string_view>> after_;
     std::vector<std::vector<std::string_view>> before_;
     std::unique_ptr<KestSystems> systems_;

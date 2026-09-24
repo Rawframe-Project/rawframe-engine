@@ -198,3 +198,60 @@ RAWFRAME_TEST(AGameThatDoesNotLoadFailsTheStart) {
         RAWFRAME_EXPECT(!composition.start().has_value());
     }
 }
+
+namespace {
+
+/// Every bullet's x, in iteration order.
+std::vector<float> bullets() {
+    world::World& world = *simulation->world();
+    const auto kId = world.registry().find(schema::ComponentTypeId::fromText("91d4e2b8-5a7c-4f03-8e16-2b9c0d7a4e53"));
+    const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
+    auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+    std::vector<float> found;
+    query->forEachChunk(world, [&found](const world::ColumnChunk& chunk) {
+        const auto* values = reinterpret_cast<const float*>(chunk.columns[0]);
+        for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+            found.push_back(values[row * 2]);
+        }
+    });
+    return found;
+}
+
+} // namespace
+
+RAWFRAME_TEST(KestSystemsCreateAndDestroyEntities) {
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "shooter.game\n" +
+                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 10\n" +
+                              "world.maximum_ticks_per_iteration = 1\n";
+    const auto kConfiguration = composition::Configuration::parse(kText);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    auto started = composition.start();
+    RAWFRAME_EXPECT(started.has_value());
+    if (!started.has_value()) {
+        return;
+    }
+    std::vector<std::size_t> alive;
+    for (std::uint64_t tick = 0; tick < 20; ++tick) {
+        clock.advance(execution::MonotonicDuration::fromMilliseconds(100));
+        composition.runHostPhase(composition::HostPhase::RunWorlds,
+                                 composition::HostFrame{.iteration = tick, .now = clock.now()});
+        alive.push_back(bullets().size());
+    }
+    // Each gun fires every fourth tick from the first; a bullet exists from
+    // that tick's barrier, moves 10 a tick from the next, and is destroyed at
+    // the barrier of its sixth move, which takes it past 50.
+    const std::vector<std::size_t> kExpected = {2, 2, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2};
+    RAWFRAME_EXPECT(alive == kExpected);
+    const auto kLast = bullets();
+    RAWFRAME_EXPECT(kLast.size() == 2 && kLast[0] == 30.0F && kLast[1] == 30.0F);
+    composition.stop();
+    simulation = nullptr;
+}
