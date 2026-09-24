@@ -5,6 +5,7 @@
 #include "rawframe/test/test.h"
 #include "rawframe/world/errors.h"
 
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <map>
@@ -174,4 +175,34 @@ RAWFRAME_TEST(ChurnKeepsHandlesAndValuesConsistent) {
     for (const EntityHandle kEntity : dead) {
         RAWFRAME_EXPECT(!world.alive(kEntity));
     }
+}
+
+RAWFRAME_TEST(LayoutOnlyComponentsMoveAsBytes) {
+    // A component known only by its layout, as a Kest-declared one is.
+    rawframe::schema::ComponentDescriptor pair{
+        .id = rawframe::schema::ComponentTypeId::fromText("6f1d2c3b-4a59-4e87-9b6a-0c1d2e3f4a5b"),
+        .name = "test.layout_only",
+        .size = 8,
+        .alignment = 4,
+        .plainData = true,
+        .operations = {}};
+    rawframe::schema::RegistryBuilder builder;
+    builder.add(pair).add<Position>();
+    auto registry = builder.freeze();
+    RAWFRAME_EXPECT(registry.has_value());
+    World world{*registry};
+    const auto kPair = *(*registry)->find(pair.id);
+    const auto kPosition = *(*registry)->key<Position>();
+    const EntityHandle kEntity = *world.create();
+    std::array<std::int32_t, 2> value = {7, 9};
+    RAWFRAME_EXPECT(world.insertErased(kEntity, kPair, value.data()).has_value());
+    // Moving the entity to another archetype carries the bytes along.
+    RAWFRAME_EXPECT(world.insert(kEntity, kPosition, Position{1, 2}).has_value());
+    const auto* stored = static_cast<const std::int32_t*>(world.getErased(kEntity, kPair));
+    RAWFRAME_EXPECT(stored != nullptr && stored[0] == 7 && stored[1] == 9);
+    value = {3, 4};
+    RAWFRAME_EXPECT(world.insertErased(kEntity, kPair, value.data()).has_value());
+    stored = static_cast<const std::int32_t*>(world.getErased(kEntity, kPair));
+    RAWFRAME_EXPECT(stored[0] == 3 && stored[1] == 4);
+    RAWFRAME_EXPECT(world.destroy(kEntity).has_value());
 }

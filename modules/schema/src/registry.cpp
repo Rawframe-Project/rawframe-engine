@@ -37,6 +37,16 @@ result::Result<std::shared_ptr<const SchemaRegistry>> RegistryBuilder::freeze() 
                                 code(SchemaError::InvalidComponentName),
                                 "a component name is empty or longer than kMaximumComponentNameBytes");
         }
+        // Only plain data may move as bytes: anything else needs its own move
+        // and destroy.
+        const bool kMissing =
+            descriptor.operations.moveConstruct == nullptr || descriptor.operations.destroy == nullptr;
+        if (descriptor.size != 0 && kMissing && !descriptor.plainData) {
+            return result::fail(result::ErrorClass::InvalidArgument,
+                                kSchemaDomain,
+                                code(SchemaError::MissingOperations),
+                                "a component that is not plain data has no move or destroy");
+        }
     }
     std::sort(
         components.begin(), components.end(), [](const ComponentDescriptor& left, const ComponentDescriptor& right) {

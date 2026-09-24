@@ -44,7 +44,7 @@ Archetype::Archetype(std::vector<schema::ComponentRuntimeId> components, const s
 Archetype::~Archetype() {
     for (Column& column : columns_) {
         for (std::size_t row = 0; row < entities_.size(); ++row) {
-            column.operations.destroy(column.at(row));
+            column.destroy(column.at(row));
         }
         if (column.data != nullptr) {
             freeColumn(column.data, column.alignment);
@@ -72,8 +72,8 @@ void Archetype::grow() {
     for (Column& column : columns_) {
         std::byte* data = allocateColumn(kCapacity * column.size, column.alignment);
         for (std::size_t row = 0; row < entities_.size(); ++row) {
-            column.operations.moveConstruct(data + (row * column.size), column.at(row));
-            column.operations.destroy(column.at(row));
+            column.moveConstruct(data + (row * column.size), column.at(row));
+            column.destroy(column.at(row));
         }
         if (column.data != nullptr) {
             freeColumn(column.data, column.alignment);
@@ -95,10 +95,10 @@ std::size_t Archetype::appendRow(EntityHandle entity) {
 EntityHandle Archetype::removeRow(std::size_t row) noexcept {
     const std::size_t kLast = entities_.size() - 1;
     for (Column& column : columns_) {
-        column.operations.destroy(column.at(row));
+        column.destroy(column.at(row));
         if (row != kLast) {
-            column.operations.moveConstruct(column.at(row), column.at(kLast));
-            column.operations.destroy(column.at(kLast));
+            column.moveConstruct(column.at(row), column.at(kLast));
+            column.destroy(column.at(kLast));
         }
     }
     EntityHandle moved{};

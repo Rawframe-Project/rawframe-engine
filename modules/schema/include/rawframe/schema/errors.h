@@ -17,6 +17,7 @@ enum class SchemaError : std::uint32_t {
     InvalidComponentName = 3,
     DuplicateComponentId = 4,
     DuplicateComponentName = 5,
+    MissingOperations = 6,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(SchemaError error) noexcept {

@@ -114,5 +114,17 @@ RAWFRAME_TEST(DuplicatesAndInvalidDescriptorsAreRefused) {
     noName.add(unnamed);
     RAWFRAME_EXPECT(failedWith(noName.freeze(), SchemaError::InvalidComponentName));
 
+    ComponentDescriptor bare = describeComponent<Position>();
+    bare.operations = {};
+    bare.plainData = false;
+    RegistryBuilder noOperations;
+    noOperations.add(bare);
+    RAWFRAME_EXPECT(failedWith(noOperations.freeze(), SchemaError::MissingOperations));
+    // Plain data may go without: it moves as bytes.
+    bare.plainData = true;
+    RegistryBuilder plain;
+    plain.add(bare);
+    RAWFRAME_EXPECT(plain.freeze().has_value());
+
     RAWFRAME_EXPECT(RegistryBuilder{}.freeze().has_value());
 }

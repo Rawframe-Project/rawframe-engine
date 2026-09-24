@@ -25,7 +25,8 @@ concept Component = std::is_object_v<T> && !std::is_polymorphic_v<T> && std::is_
                     };
 
 /// How storage moves and destroys values of a component it knows only by
-/// descriptor.
+/// descriptor. Both may be null for plain data, which moves as bytes and has
+/// nothing to destroy: a component described only by its layout.
 struct ComponentOperations {
     void (*moveConstruct)(void* destination, void* source) noexcept = nullptr;
     void (*destroy)(void* value) noexcept = nullptr;

@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <vector>
 
@@ -22,6 +23,22 @@ struct Column {
 
     [[nodiscard]] void* at(std::size_t row) const noexcept {
         return data + (row * size);
+    }
+
+    /// Moves a value in. Plain data described only by its layout, such as a
+    /// Kest-declared component, has no operations and moves as bytes.
+    void moveConstruct(void* destination, void* source) const noexcept {
+        if (operations.moveConstruct != nullptr) {
+            operations.moveConstruct(destination, source);
+        } else {
+            std::memcpy(destination, source, size);
+        }
+    }
+
+    void destroy(void* value) const noexcept {
+        if (operations.destroy != nullptr) {
+            operations.destroy(value);
+        }
     }
 };
 

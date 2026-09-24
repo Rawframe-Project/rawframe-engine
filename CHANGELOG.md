@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- A plain-data component may have no move or destroy operations: storage moves it as bytes. This is how components described only by a layout, such as Kest-declared ones, are stored. Freezing refuses a component that is neither plain data nor has both operations.
 - `TypeLayout::fields` lists every scalar of a Kest type with its path name, offset, and `FieldKind`; `Program::compileFile` compiles a program and its imports from disk.
 - `rawframe.world_kest`: World systems written in Kest. `KestSystems` starts one machine for a program, runs each declared Kest function once per matching archetype with the row count and one lent array per read or written column, and contributes the systems to a World as a `SystemContributor`. Written columns are journaled and land only when every call of the system that tick succeeded; one budget covers a system's calls in a tick. Column components must be plain data with the size and alignment of their Kest type.
 - `Machine::lend` and `endLend` lend engine memory to a program as an array of one of its types without copying; `Program::layout` reports a type's size, alignment, and shape mark; `Fuel::Continue` lets several calls spend one budget.

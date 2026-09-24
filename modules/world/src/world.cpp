@@ -137,7 +137,7 @@ std::size_t World::moveEntity(EntityHandle entity, std::uint32_t to) {
         const int kTo = target.columnIndex(kComponent);
         if (kFrom >= 0 && kTo >= 0) {
             detail::Column& into = target.column(kTo);
-            into.operations.moveConstruct(into.at(kRow), source.column(kFrom).at(record.row));
+            into.moveConstruct(into.at(kRow), source.column(kFrom).at(record.row));
         }
     }
     // Destroys the moved-from values and whatever did not come along.
@@ -159,8 +159,8 @@ result::Status World::insertErased(EntityHandle entity, schema::ComponentRuntime
     if (current.has(component)) {
         if (descriptor.size != 0) {
             detail::Column& column = current.column(current.columnIndex(component));
-            column.operations.destroy(column.at(record.row));
-            column.operations.moveConstruct(column.at(record.row), value);
+            column.destroy(column.at(record.row));
+            column.moveConstruct(column.at(record.row), value);
         }
         return {};
     }
@@ -169,7 +169,7 @@ result::Status World::insertErased(EntityHandle entity, schema::ComponentRuntime
     if (descriptor.size != 0) {
         detail::Archetype& target = *archetypes_[kTarget];
         detail::Column& column = target.column(target.columnIndex(component));
-        column.operations.moveConstruct(column.at(kRow), value);
+        column.moveConstruct(column.at(kRow), value);
     }
     return {};
 }
