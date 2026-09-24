@@ -1,0 +1,34 @@
+# Editors and operating systems
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build and generated output
+build/
+out/
+dist/
+bin/
+obj/
+.cache/
+.tmp/
+tmp/
+coverage/
+CMakeUserPresets.json
+
+# Logs and crash artifacts
+*.log
+*.dmp
+*.core
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key

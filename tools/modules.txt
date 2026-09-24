@@ -1,0 +1,6 @@
+# The module graph (ADR-0002). One line per module: `name: allowed dependencies`.
+# The build refuses a dependency that is not on the module's line, and
+# tools/check_repo.py refuses an #include of another module's headers that is
+# not on it either. Keep the graph a DAG with base as its only leaf.
+
+base:

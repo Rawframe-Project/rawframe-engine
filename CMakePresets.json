@@ -1,0 +1,33 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    { "name": "gcc", "hidden": true, "inherits": "base", "cacheVariables": { "CMAKE_CXX_COMPILER": "g++" } },
+    { "name": "clang", "hidden": true, "inherits": "base", "cacheVariables": { "CMAKE_CXX_COMPILER": "clang++" } },
+    { "name": "debug", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "RAWFRAME_CONFIGURATION": "debug" } },
+    { "name": "development", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo", "RAWFRAME_CONFIGURATION": "development" } },
+    { "name": "shipping", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "RAWFRAME_CONFIGURATION": "shipping" } },
+
+    { "name": "gcc-debug", "inherits": ["gcc", "debug"] },
+    { "name": "gcc-development", "inherits": ["gcc", "development"] },
+    { "name": "gcc-shipping", "inherits": ["gcc", "shipping"] },
+    { "name": "clang-debug", "inherits": ["clang", "debug"] },
+    { "name": "clang-development", "inherits": ["clang", "development"] },
+    { "name": "clang-shipping", "inherits": ["clang", "shipping"] },
+    {
+      "name": "clang-sanitize",
+      "inherits": ["clang", "debug"],
+      "cacheVariables": { "RAWFRAME_SANITIZE": "ON" }
+    }
+  ]
+}
