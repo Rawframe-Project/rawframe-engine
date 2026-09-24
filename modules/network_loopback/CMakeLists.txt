@@ -6,4 +6,4 @@ rawframe_module(NAME network_loopback
     DEPS network execution result base
 )
 
-rawframe_module_tests(NAME network_loopback SOURCES tests/loopback_test.cpp)
+rawframe_module_tests(NAME network_loopback SOURCES tests/loopback_test.cpp tests/session_test.cpp)
