@@ -1,0 +1,256 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sirac Ozmen
+//
+// Joints: the seven joint types, their defs, limits, motors,
+// springs, constraint force readback and breaking.
+
+#ifndef MAUL3D_JOINT_H
+#define MAUL3D_JOINT_H
+
+#include "body.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+    typedef enum m3JointType
+    {
+        m3_sphericalJoint = 0, // ball: pins two body-frame points together
+        m3_revoluteJoint = 1,  // hinge: one rotation axis, limits, motor
+        m3_prismaticJoint = 2, // slider: one translation axis, limits, motor
+        m3_fixedJoint = 3,     // weld: full 6-DOF lock at the create pose
+        m3_distanceJoint = 4,  // rope/rod: anchor distance in [lower, upper]
+        m3_genericJoint = 5,   // 6-DOF: per-axis lock/free/limit + one motor
+        m3_wheelJoint = 6,
+        /// FILTER: no constraint rows at all; the joint's
+        /// whole effect is the connected-pair collision filter
+        /// (create with collideConnected false). Ragdoll sibling
+        /// limbs stop grinding without buying a single solver row.
+        m3_filterJoint = 7,
+        /// PARALLEL: keeps localAxisA on body A parallel to
+        /// localAxisB on body B (two angular rows); every
+        /// translation and the twist about the shared axis stay
+        /// free. Platform linkages without the full revolute.
+        m3_parallelJoint = 8,
+        /// MOTOR: a servo weld. Drives body B toward a target
+        /// pose relative to body A's create-time joint frame: a soft
+        /// 3-DOF rotation drive plus a soft 3-DOF translation drive,
+        /// each budget-capped. Tune with m3Joint_SetSpring (the
+        /// shared stiffness), aim with m3Joint_SetMotorPose, budget
+        /// with m3Joint_SetLimits (lower = max force, upper = max
+        /// torque, 0 = uncapped; the documented motor slot map).
+        /// Without a spring the servo idles completely free. A
+        /// fresh servo aims at its own create pose.
+        m3_motorJoint = 9,
+        /// GEAR: couples spin so that spinA + ratio * spinB
+        /// keeps its create value, where spinX is body X's rotation
+        /// about its own axis localAxisX. Positive ratio is the
+        /// external mesh (counter-rotation: ratio 2 turns B half as
+        /// fast, backwards); negative couples same-direction (belt
+        /// or internal ring). MOUNTING CONTRACT (documented): both
+        /// bodies must be hinged on a common rigid frame (revolute
+        /// or wheel joints to the same chassis); the gear adds no
+        /// reaction on that frame and holds no other degree of
+        /// freedom. Angle drift is corrected softly, so the mesh
+        /// cannot creep under load.
+        m3_gearJoint = 10,
+        /// PULLEY: a rope from localAnchorA up over the
+        /// WORLD point groundAnchorA, across to groundAnchorB and
+        /// down to localAnchorB: length1 + ratio * length2 keeps
+        /// its create value (ratio > 0). The rope is RIGID both
+        /// ways (it can push; pair it with a distance rope when
+        /// slack matters). Block and tackle: ratio 2 lifts B twice
+        /// as slow with twice the force.
+        m3_pulleyJoint = 11,
+    } m3JointType;
+
+    /// Per-axis behavior of the generic joint, in the joint frame
+    /// built from localAxisA/localAxisB (the frame's z axis).
+    typedef enum m3AxisMode
+    {
+        m3_axisLocked = 0,
+        m3_axisFree = 1,
+        m3_axisLimited = 2,
+    } m3AxisMode;
+
+    /// Build with m3DefaultJointDef; hand-rolled defs are rejected
+    /// loudly. Anchors are body-frame points on each body.
+    typedef struct m3JointDef
+    {
+        int32_t type; // m3JointType
+        m3BodyId bodyIdA;
+        m3BodyId bodyIdB;
+        m3Vec3 localAnchorA;
+        m3Vec3 localAnchorB;
+        /// Hinge axis per body frame (unit; revolute only). The two
+        /// axes must map to the same world direction at create time
+        /// for a well-posed hinge.
+        m3Vec3 localAxisA;
+        m3Vec3 localAxisB;
+        /// Limits and motor share names across joint types: for the
+        /// revolute they are angles (radians) and a torque cap, for
+        /// the prismatic translations (meters) and a force cap.
+        bool enableLimit;
+        m3real lowerLimit;
+        m3real upperLimit;
+        bool enableMotor;
+        m3real motorSpeed; // rad/s or m/s by joint type
+        m3real maxMotorEffort;
+        /// Spherical only: the swing cone (the shoulder). enableLimit
+        /// doubles as the twist range for the spherical, using
+        /// lowerLimit and upperLimit as twist angles.
+        bool enableCone;
+        m3real coneAngle; // radians from the A frame's z-axis
+        /// Distance joints REQUIRE enableLimit with
+        /// 0 <= lowerLimit <= upperLimit meters (a rod is lower ==
+        /// upper; a rope is a range). Their optional spring reuses
+        /// the motor fields, documented reuse: enableMotor turns it
+        /// on, motorSpeed is the spring hertz (> 0), maxMotorEffort
+        /// is the damping ratio (>= 0); coneAngle (a further
+        /// documented reuse) is the spring's rest length when
+        /// positive and must sit inside [lower, upper]; when zero,
+        /// the rest length is the upper limit. Fixed joints ignore axes
+        /// and limits entirely: they weld the create-time pose.
+        /// Jointed bodies do not collide with each other unless this
+        /// is set (the classic chain-fight guard).
+        bool collideConnected;
+        /// The generic joint. Modes are m3AxisMode per joint
+        /// frame axis; limits are meters (linear) and radians
+        /// (angular), used only where the mode is limited. One
+        /// motor: genericMotorAxis picks 0..2 (linear) or 3..5
+        /// (angular), 255 for none; it drives motorSpeed with the
+        /// maxMotorEffort cap on a free or limited axis. Angular
+        /// limits come with a v1 contract: at most ONE angular axis
+        /// may be limited, and the other two must be BOTH locked
+        /// (a hinge with range) or BOTH free (a twist-limited
+        /// ball); anything else refuses loudly. Growing this def
+        /// bumps the cookie: stale-compiled callers are refused
+        /// loudly instead of misread (the freeze's mechanism).
+        /// The wheel joint, the OPTIONAL rigid-wheel path for
+        /// vehicles (the raycast vehicle stays the default): the
+        /// wheel body B slides along a suspension axis fixed in the
+        /// chassis A and spins freely about its axle. localAxisA is
+        /// the SUSPENSION axis (chassis frame, usually down);
+        /// localAxisB is the AXLE (wheel frame, its spin axis). The
+        /// axle is captured at create, snapped exactly perpendicular
+        /// to the suspension axis; more than a small skew (|dot| >
+        /// 0.1) refuses loudly. enableLimit bounds the suspension
+        /// translation in meters; enableMotor drives the SPIN
+        /// (rad/s, torque cap): the drive axle. The suspension
+        /// spring is the joint drive: m3Joint_SetSpring plus
+        /// m3Joint_SetTargetTranslation. m3Joint_GetAngle reads the
+        /// spin angle, m3Joint_GetTranslation the suspension travel.
+        /// Breakage applies unchanged: a capped axle snaps
+        /// deterministically and the wheel body rolls away.
+        uint8_t genericLinear[3];
+        uint8_t genericAngular[3];
+        uint8_t genericMotorAxis;
+        uint8_t genericReserved;
+        m3real genericLinearLower[3];
+        m3real genericLinearUpper[3];
+        m3real genericAngularLower[3];
+        m3real genericAngularUpper[3];
+        /// Gear and pulley: the coupling ratio (gear: any
+        /// nonzero, sign picks the mesh; pulley: > 0) and the
+        /// pulley's two fixed WORLD anchor points. Growing this def
+        /// bumps the cookie: stale-compiled callers refuse loudly.
+        m3real ratio;
+        m3Pos3 groundAnchorA;
+        m3Pos3 groundAnchorB;
+        int32_t internalValue;
+    } m3JointDef;
+
+    /// The pinned joint defaults: spherical type, zero anchors, unit
+    /// z axes, everything disabled, collideConnected off, and the
+    /// def cookie every create demands.
+    M3_API m3JointDef m3DefaultJointDef(void);
+
+    /// Create a joint between two distinct bodies of the same world
+    /// (at least one dynamic). Returns the null id on a bad def, a
+    /// stale body, or an exhausted pool. Journaled; replay verifies
+    /// the minted id. Destroying either body destroys the joint.
+    M3_API m3JointId m3CreateJoint(m3WorldId worldId, const m3JointDef* def);
+    M3_API void m3DestroyJoint(m3JointId jointId);
+    M3_API bool m3Joint_IsValid(m3JointId jointId);
+    /// Readback, as in Maul2D. Thread class: reader.
+    M3_API m3WorldId m3Joint_GetWorld(m3JointId jointId);
+    M3_API m3JointType m3Joint_GetType(m3JointId jointId);
+    M3_API m3BodyId m3Joint_GetBodyA(m3JointId jointId);
+    M3_API m3BodyId m3Joint_GetBodyB(m3JointId jointId);
+
+    /// Runtime joint control. All journaled; both bodies wake
+    /// on any change. Limits and motor reuse the def semantics per
+    /// type (angles for revolute and spherical twist, meters for
+    /// prismatic and distance); toggling zeroes the row's stored
+    /// impulse so a stale warm start cannot kick.
+    M3_API void m3Joint_SetLimits(m3JointId jointId, bool enable, float lower, float upper);
+    M3_API void m3Joint_SetMotor(m3JointId jointId, bool enable, float speed, float maxEffort);
+
+    /// Aim the MOTOR joint: offset in body A's joint frame,
+    /// rotation as the target relative orientation. Journaled;
+    /// refused loudly on other types and hostile values.
+    M3_API void m3Joint_SetMotorPose(m3JointId jointId, m3Vec3 offset, m3Quat rotation);
+
+    /// Wheel steering: a soft target-angle drive about the
+    /// strut axis. While enabled, the wheel's frame-x lock becomes
+    /// the drive (frame y stays locked), so the axle yaws toward
+    /// targetAngle (radians, |target| <= 1) at the given stiffness;
+    /// maxEffort > 0 caps the torque, 0 leaves it uncapped. Wheel
+    /// joints only; refused loudly elsewhere. Journaled.
+    M3_API void m3Joint_SetSteer(m3JointId jointId, bool enable, float targetAngle, float hertz,
+                                 float zeta, float maxEffort);
+
+    /// The current strut twist in radians (wheel joints; 0 for
+    /// every other type and stale ids).
+    M3_API float m3Joint_GetSteerAngle(m3JointId jointId);
+
+    /// Let (or forbid) the two jointed bodies collide with each
+    /// other. Journaled; binds at the next step's pair scan.
+    M3_API void m3Joint_SetCollideConnected(m3JointId jointId, bool collide);
+    M3_API bool m3Joint_GetCollideConnected(m3JointId jointId);
+
+    /// Breakage: rollback games need breakage as a deterministic in-step
+    /// state transition, not a host poll racing the journal. When
+    /// either reaction magnitude exceeds its cap at the end of a
+    /// step, the joint destroys itself and emits the joint break
+    /// event (see world.h). Zero disables a cap; both zero (the
+    /// default) means unbreakable.
+    M3_API void m3Joint_SetBreakThresholds(m3JointId jointId, float maxForce, float maxTorque);
+
+    /// Reaction readback: MAGNITUDES of the last step's
+    /// constraint reactions, assembled per type from the stored
+    /// solver rows (linear rows into force, angular rows into
+    /// torque; the generic joint reports a conservative sum). Reads
+    /// 0 before the first step after a restore (documented
+    /// transient).
+    M3_API m3real m3Joint_GetConstraintForce(m3JointId jointId);
+    M3_API m3real m3Joint_GetConstraintTorque(m3JointId jointId);
+
+    /// Geometry reads: the revolute twist angle about the hinge
+    /// (radians) and the prismatic translation along the slide axis
+    /// (meters). Wrong-type calls read 0.
+    M3_API m3real m3Joint_GetAngle(m3JointId jointId);
+    M3_API m3real m3Joint_GetTranslation(m3JointId jointId);
+
+    /// Position drive: a soft
+    /// constraint with the given frequency and damping ratio pulls
+    /// the joint toward its target. Revolute drives the hinge angle,
+    /// prismatic the translation, spherical the relative rotation;
+    /// other types refuse. Toggling zeroes the spring's stored
+    /// impulse. All journaled; both bodies wake.
+    M3_API void m3Joint_SetSpring(m3JointId jointId, bool enable, float hertz, float dampingRatio);
+    M3_API void m3Joint_SetTargetAngle(m3JointId jointId, float radians);
+    M3_API void m3Joint_SetTargetTranslation(m3JointId jointId, float meters);
+    /// The target must be a unit rotation; garbage refuses loudly by
+    /// doing nothing. The target lives in the JOINT FRAMES (frame z
+    /// is the create-time local axis): it is the desired rotation of
+    /// frame B relative to frame A. Pick
+    /// your axes at create time so the frame reads naturally.
+    M3_API void m3Joint_SetTargetRotation(m3JointId jointId, m3Quat target);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
