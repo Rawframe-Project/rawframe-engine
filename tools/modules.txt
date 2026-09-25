@@ -28,6 +28,7 @@ world: schema execution diagnostics result base
 kest: execution result base
 kest_library: kest document result base
 scene: schema document result base
+authoring: scene schema document result base
 network: composition execution diagnostics result base
 network_loopback: network composition execution diagnostics result base
 network_quic: network composition execution diagnostics result base

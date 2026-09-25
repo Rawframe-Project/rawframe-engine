@@ -14,9 +14,10 @@
 5. SPEC-0048 values live only in rawframe/execution/bounds.h: no other
    execution source spells one of its capacities or builds a duration from a
    literal count of seconds or milliseconds.
-6. The dedicated server's closure (ADR-0017, ADR-0038, ADR-0050): nothing
-   the `dedicated_server` line reaches, however far down, is a presentation
-   module: no audio and no localization (D147).
+6. The dedicated server's closure (ADR-0017, ADR-0038, ADR-0050, ADR-0065):
+   nothing the `dedicated_server` line reaches, however far down, is a
+   presentation or authoring module: no audio, no localization (D147), and
+   no authoring transactions (D149).
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -39,7 +40,7 @@ BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
 # header includes one.
 PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h|cgltf\.h)', re.MULTILINE)
 SERVER = "dedicated_server"
-PRESENTATION = {"audio", "world_audio", "localization", "world_localization"}
+NOT_IN_SERVER = {"audio", "world_audio", "localization", "world_localization", "authoring"}
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 
 
@@ -83,8 +84,8 @@ def check_server_closure(allowed, findings):
             if dependency not in reached:
                 reached.add(dependency)
                 pending.append(dependency)
-    for module in sorted(reached & PRESENTATION):
-        findings.append(f"tools/modules.txt: the dedicated server's closure reaches presentation module '{module}'")
+    for module in sorted(reached & NOT_IN_SERVER):
+        findings.append(f"tools/modules.txt: the dedicated server's closure reaches module '{module}', which it may not")
 
 
 def check_providers(files, findings):
