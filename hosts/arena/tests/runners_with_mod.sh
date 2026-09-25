@@ -116,7 +116,7 @@ fi
 
 # Stung: the handler is loaded, and every score kept has taken hits in twos.
 rm -rf "$work/saves"
-run "$work/stung.composition" 1200
+run "$work/stung.composition" 600
 grep -q '"code":"game_loaded".*"modHandlers":1' "$work/log.ndjson"
 taken=$(python3 - "$work/saves" <<'PY'
 import glob, struct, sys
