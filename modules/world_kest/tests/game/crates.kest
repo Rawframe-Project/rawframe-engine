@@ -1,7 +1,8 @@
 module crates
 
-// Crates dropped on the ground; any that has come to rest is kicked upward,
-// so the World never settles.
+// Crates dropped on the ground; any that has come to rest on something, as a
+// short ray down from its underside finds, is kicked upward, so the World
+// never settles.
 
 import rawframe.physics2d
 
@@ -9,7 +10,8 @@ fn kick(count: i32, impulses: [physics2d.Impulse2D], poses: [physics2d.Pose2D], 
         velocities: [physics2d.Velocity2D]) {
     let i = 0
     while i < count {
-        let resting = velocities[i].y < 0.01 && velocities[i].y > -0.01 && poses[i].y < 1.1
+        let below = physics2d.castRay(poses[i].x, poses[i].y - 0.55, 0.0, -0.1)
+        let resting = velocities[i].y < 0.01 && velocities[i].y > -0.01 && below.hit
         if bodies[i].motion == physics2d.DYNAMIC && resting {
             impulses[i].y = 3.0
         }

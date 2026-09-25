@@ -20,6 +20,7 @@
 // nothing here depends on addresses, hash order, or time.
 
 #include "rawframe/composition/participant.h"
+#include "rawframe/physics2d/components.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_runtime/simulation.h"
@@ -61,7 +62,23 @@ struct Physics2DStatistics {
 
 inline constexpr std::string_view kStepSystem = "rawframe.physics2d.step";
 
-class Physics2D final : public world_runtime::SystemContributor {
+/// Questions about where bodies are, answered from the last step: what
+/// gameplay sees between steps (SPEC-0037 queries against committed state).
+/// Only from the World's thread, between steps or from a system.
+class Physics2DQueries {
+public:
+    Physics2DQueries() = default;
+    Physics2DQueries(const Physics2DQueries&) = delete;
+    Physics2DQueries& operator=(const Physics2DQueries&) = delete;
+    virtual ~Physics2DQueries() = default;
+
+    /// The closest body along the ray from the origin to the origin plus
+    /// `toward`; sensors included.
+    [[nodiscard]] virtual RayHit2D
+    castRay(double originX, double originY, float towardX, float towardY) const noexcept = 0;
+};
+
+class Physics2D final : public world_runtime::SystemContributor, public Physics2DQueries {
 public:
     /// Refuses settings out of range (`invalid_settings`), a processor that
     /// cannot run the build's kernels (`unsupported`), and a process with
@@ -78,6 +95,9 @@ public:
     /// The physics world's state digest after the last step: equal on two
     /// machines exactly when every body is.
     [[nodiscard]] std::uint64_t digest() const noexcept;
+
+    [[nodiscard]] RayHit2D
+    castRay(double originX, double originY, float towardX, float towardY) const noexcept override;
 
     struct State;
     explicit Physics2D(std::unique_ptr<State> state) noexcept;
@@ -97,6 +117,9 @@ public:
 
     /// None for a game without 2D physics.
     [[nodiscard]] virtual const std::optional<Physics2DSettings>& physics2d() const noexcept = 0;
+    /// Where the game's scripts ask about bodies, from the physics made for
+    /// it until that physics goes (null).
+    virtual void attach(const Physics2DQueries* queries) noexcept = 0;
 };
 
 inline constexpr composition::Capability<Physics2DPlan> kPhysics2DPlan{"rawframe.physics2d.plan"};

@@ -461,6 +461,22 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
     return {};
 }
 
+RayHit2D Physics2D::castRay(double originX, double originY, float towardX, float towardY) const noexcept {
+    const m2RayCastResult kResult = m2World_CastRayClosest(
+        state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, m2DefaultQueryFilter());
+    if (!kResult.hit) {
+        return RayHit2D{};
+    }
+    return RayHit2D{.hit = true,
+                    .inside = kResult.normal.x == 0 && kResult.normal.y == 0,
+                    .entity = state_->ownerOf(kResult.shapeId),
+                    .x = kResult.point.x,
+                    .y = kResult.point.y,
+                    .normalX = kResult.normal.x,
+                    .normalY = kResult.normal.y,
+                    .fraction = kResult.fraction};
+}
+
 Physics2DStatistics Physics2D::statistics() const noexcept {
     return state_->statistics;
 }

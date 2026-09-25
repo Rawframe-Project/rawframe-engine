@@ -234,6 +234,26 @@ RAWFRAME_TEST(ASensorIsToldWhatPassesThroughIt) {
     RAWFRAME_EXPECT(scene.physics->statistics().overlapsBegun == 1 && scene.physics->statistics().contactsBegun == 0);
 }
 
+RAWFRAME_TEST(ARayFindsTheClosestBody) {
+    Scene scene;
+    const world::EntityHandle kGroundEntity = scene.body(kGround, {.x = 0, .y = 0});
+    const world::EntityHandle kBallEntity = scene.body(kBall, {.x = 3, .y = 5});
+    scene.run(1);
+    // Straight down onto the ground's top, half a meter up.
+    const RayHit2D kDown = scene.physics->castRay(0, 5, 0, -10);
+    RAWFRAME_EXPECT(kDown.hit && !kDown.inside && kDown.entity == kGroundEntity);
+    RAWFRAME_EXPECT(std::abs(kDown.y - 0.5) < 0.001 && kDown.normalY > 0.99F &&
+                    std::abs(kDown.fraction - 0.45F) < 0.001F);
+    // Sideways into the ball, where it was after the last step.
+    const RayHit2D kAcross = scene.physics->castRay(0, scene.pose(kBallEntity).y, 10, 0);
+    RAWFRAME_EXPECT(kAcross.hit && kAcross.entity == kBallEntity && std::abs(kAcross.x - 2.75) < 0.001);
+    // Starting inside the ground, and missing everything.
+    const RayHit2D kInside = scene.physics->castRay(0, 0, 0, -1);
+    RAWFRAME_EXPECT(kInside.hit && kInside.inside && kInside.entity == kGroundEntity);
+    const RayHit2D kMiss = scene.physics->castRay(0, 5, 0, 10);
+    RAWFRAME_EXPECT(!kMiss.hit && kMiss.entity.isNull());
+}
+
 RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {
     for (const Physics2DSettings& kSettings : {Physics2DSettings{.substeps = 0},
                                                Physics2DSettings{.bodyCapacity = 0},

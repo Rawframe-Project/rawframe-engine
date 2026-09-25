@@ -56,6 +56,25 @@ constexpr std::array<ComponentField, 13> kContactFields = {{
     {"visitor.generation", offsetof(Contact2D, visitor) + offsetof(world::EntityHandle, generation), FieldType::U32},
 }};
 
+constexpr std::array<ComponentField, 9> kRayHitFields = {{
+    {"hit", offsetof(RayHit2D, hit), FieldType::Bool},
+    {"inside", offsetof(RayHit2D, inside), FieldType::Bool},
+    {"entity.slot", offsetof(RayHit2D, entity) + offsetof(world::EntityHandle, slot), FieldType::U32},
+    {"entity.generation", offsetof(RayHit2D, entity) + offsetof(world::EntityHandle, generation), FieldType::U32},
+    {"x", offsetof(RayHit2D, x), FieldType::F64},
+    {"y", offsetof(RayHit2D, y), FieldType::F64},
+    {"normalX", offsetof(RayHit2D, normalX), FieldType::F32},
+    {"normalY", offsetof(RayHit2D, normalY), FieldType::F32},
+    {"fraction", offsetof(RayHit2D, fraction), FieldType::F32},
+}};
+
+const ComponentLayout kRayHitLayout{.id = {},
+                                    .name = {},
+                                    .scriptType = "RayHit2D",
+                                    .size = sizeof(RayHit2D),
+                                    .alignment = alignof(RayHit2D),
+                                    .fields = kRayHitFields};
+
 template <typename T>
 constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const ComponentField> fields) noexcept {
     return ComponentLayout{.id = T::kComponentTypeId,
@@ -78,6 +97,10 @@ const std::array<ComponentLayout, 5> kLayouts = {
 
 std::span<const ComponentLayout> componentLayouts() noexcept {
     return kLayouts;
+}
+
+const ComponentLayout& rayHitLayout() noexcept {
+    return kRayHitLayout;
 }
 
 } // namespace rawframe::physics2d

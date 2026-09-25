@@ -237,6 +237,13 @@ public:
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
+        if (game_.physics2d.has_value()) {
+            RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRay",
+                                              .function = &castRayDoor,
+                                              .context = this,
+                                              .takes = kRayTakes,
+                                              .gives = kRayGives}));
+        }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap, configuration.unsignedInteger("kest.heap_bytes", 64U << 20U));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kFuel,
                             configuration.unsignedInteger("kest.fuel_per_system", 10'000'000));
@@ -362,6 +369,9 @@ public:
 
     const std::optional<physics2d::Physics2DSettings>& physics2d() const noexcept override {
         return physics2d_;
+    }
+    void attach(const physics2d::Physics2DQueries* queries) noexcept override {
+        queries_ = queries;
     }
 
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
@@ -507,6 +517,27 @@ private:
         return {};
     }
 
+    static constexpr std::array<kest::Parameter, 4> kRayTakes = {kest::Parameter{kest::Slot::F64},
+                                                                 kest::Parameter{kest::Slot::F64},
+                                                                 kest::Parameter{kest::Slot::F32},
+                                                                 kest::Parameter{kest::Slot::F32}};
+    static constexpr std::array<kest::Parameter, 1> kRayGives = {
+        kest::Parameter{kest::Slot::Value, "rawframe.physics2d.RayHit2D"}};
+
+    /// `Physics2D.castRay`: the physics made for this game answers.
+    static void castRayDoor(kest::DoorCall& call, void* context) noexcept {
+        const auto& self = *static_cast<const GameParticipant*>(context);
+        if (self.queries_ == nullptr) {
+            call.fail("this World has no physics to ask");
+            return;
+        }
+        const physics2d::RayHit2D kHit = self.queries_->castRay(
+            call.real(0), call.real(1), static_cast<float>(call.real(2)), static_cast<float>(call.real(3)));
+        if (!call.answerValue(std::as_bytes(std::span{&kHit, 1}))) {
+            call.fail("the program's RayHit2D is not the engine's");
+        }
+    }
+
     /// A component's layout as the program has it. A program lays out only
     /// the types it uses, so an engine physics component it never names is
     /// laid out as the engine lays it out.
@@ -558,9 +589,17 @@ private:
                 return std::nullopt;
             }
         };
+        std::vector<std::pair<const physics2d::ComponentLayout*, kest::TypeLayout>> checked;
         for (const physics2d::ComponentLayout& engine : physics2d::componentLayouts()) {
             const GameComponent& component = *componentNamed(engine.name);
-            const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(&component - game_.components.data())];
+            checked.emplace_back(&engine, layouts_[static_cast<std::size_t>(&component - game_.components.data())]);
+        }
+        // The ray's answer, if the program uses it.
+        if (auto rayHit = program_->layout(physics2d::rayHitLayout().scriptType)) {
+            checked.emplace_back(&physics2d::rayHitLayout(), std::move(*rayHit));
+        }
+        for (const auto& [kEngine, layout] : checked) {
+            const physics2d::ComponentLayout& engine = *kEngine;
             bool same = layout.size == engine.size && layout.alignment == engine.alignment &&
                         layout.fields.size() == engine.fields.size();
             for (std::size_t index = 0; same && index < layout.fields.size(); ++index) {
@@ -700,6 +739,7 @@ private:
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;
     std::optional<physics2d::Physics2DSettings> physics2d_;
+    const physics2d::Physics2DQueries* queries_ = nullptr;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.
     std::optional<GameEntityField> unwritable_;

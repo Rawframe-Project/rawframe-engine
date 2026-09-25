@@ -23,12 +23,24 @@ class WorldParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
         RAWFRAME_TRY_ASSIGN(world_runtime::Simulation * simulation, context.capability(world_runtime::kSimulation));
-        RAWFRAME_TRY_ASSIGN(const Physics2DPlan* plan, context.capability(kPhysics2DPlan));
-        if (!plan->physics2d().has_value()) {
+        RAWFRAME_TRY_ASSIGN(plan_, context.capability(kPhysics2DPlan));
+        if (!plan_->physics2d().has_value()) {
+            plan_ = nullptr;
             return {};
         }
-        RAWFRAME_TRY_ASSIGN(physics_, Physics2D::create(*plan->physics2d()));
-        return simulation->addSystems(*physics_);
+        RAWFRAME_TRY_ASSIGN(physics_, Physics2D::create(*plan_->physics2d()));
+        RAWFRAME_TRY(simulation->addSystems(*physics_));
+        plan_->attach(physics_.get());
+        return {};
+    }
+
+    WorldParticipant() noexcept = default;
+    WorldParticipant(const WorldParticipant&) = delete;
+    WorldParticipant& operator=(const WorldParticipant&) = delete;
+    ~WorldParticipant() override {
+        if (plan_ != nullptr) {
+            plan_->attach(nullptr);
+        }
     }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
@@ -63,6 +75,7 @@ public:
     }
 
 private:
+    Physics2DPlan* plan_ = nullptr;
     std::unique_ptr<Physics2D> physics_;
     diagnostics::Emitter emitter_;
 };

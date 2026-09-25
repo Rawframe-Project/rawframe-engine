@@ -122,6 +122,21 @@ struct Contact2D {
     world::EntityHandle visitor;
 };
 
+/// What a ray found: the closest body along it, where, the surface's normal
+/// there, and how far along the ray (0 at its origin, 1 at its end). A ray
+/// that starts inside a body hits it `inside`, at its origin, with no normal.
+/// Not a component: a value a query answers.
+struct RayHit2D {
+    bool hit = false;
+    bool inside = false;
+    world::EntityHandle entity;
+    double x = 0;
+    double y = 0;
+    float normalX = 0;
+    float normalY = 0;
+    float fraction = 0;
+};
+
 enum class FieldType : std::uint8_t {
     U8,
     U32,
@@ -151,5 +166,8 @@ struct ComponentLayout {
 /// An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const ComponentLayout> componentLayouts() noexcept;
+
+/// RayHit2D as a script must declare it; its identity is none.
+[[nodiscard]] const ComponentLayout& rayHitLayout() noexcept;
 
 } // namespace rawframe::physics2d

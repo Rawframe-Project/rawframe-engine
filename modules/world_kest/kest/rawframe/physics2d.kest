@@ -80,3 +80,25 @@ struct Contact2D {
     hitNormalY: f32
     visitor: world.Entity
 }
+
+// What a ray found: the closest body along it, where, the surface's normal
+// there, and how far along the ray (0 at its origin, 1 at its end). A ray
+// that starts inside a body hits it `inside`, at its origin, with no normal.
+struct RayHit2D {
+    hit: bool
+    inside: bool
+    entity: world.Entity
+    x: f64
+    y: f64
+    normalX: f32
+    normalY: f32
+    fraction: f32
+}
+
+extern fn Physics2D.castRay(originX: f64, originY: f64, towardX: f32, towardY: f32) -> RayHit2D
+
+// The closest body along the ray from the origin to the origin plus
+// `toward`, where bodies were after the last step; sensors included.
+fn castRay(originX: f64, originY: f64, towardX: f32, towardY: f32) -> RayHit2D {
+    return Physics2D.castRay(originX, originY, towardX, towardY)
+}
