@@ -39,6 +39,13 @@ enum class SourceForm : std::uint8_t {
 /// The clip in the runtime's short-form tier, 16-bit PCM WAVE.
 [[nodiscard]] std::vector<std::byte> cook(const audio::Clip& clip);
 
+/// The clip at `rate`, for cooking: a windowed-sinc filter at the ratio of
+/// the two rates exactly, passing up to 95% of the lower rate's Nyquist and
+/// holding what lies above it near -90 dB. Only import tooling resamples
+/// this way; playback's one resampling stage is the mixer's. Refuses rates
+/// outside 8 to 192 kHz and ratios needing more than 48,000 phases.
+[[nodiscard]] result::Result<audio::Clip> resample(const audio::Clip& clip, std::uint32_t rate);
+
 struct OpusSettings {
     /// Bits a second; nought lets the encoder choose for the channels.
     std::uint32_t bitrate = 0;
@@ -47,8 +54,8 @@ struct OpusSettings {
 };
 
 /// The clip in the lossy tier, cooked Opus (`audio::decodeCookedOpus` reads
-/// it), in packets of 20 ms. Refuses (`BadSound`) a clip not at 48 kHz, the
-/// one rate cooked Opus holds: import resamples nothing.
+/// it), in packets of 20 ms, resampled first to 48 kHz, the one rate cooked
+/// Opus holds, if it is not there already.
 [[nodiscard]] result::Result<std::vector<std::byte>> cookOpus(const audio::Clip& clip,
                                                               const OpusSettings& settings = {});
 

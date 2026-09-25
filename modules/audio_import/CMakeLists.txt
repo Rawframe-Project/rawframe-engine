@@ -3,7 +3,7 @@
 # or server closure may depend on it, and the source decoders it holds are
 # trusted only with an author's own files.
 rawframe_module(NAME audio_import
-    SOURCES src/import.cpp
+    SOURCES src/import.cpp src/resample.cpp
     DEPS audio result base
 )
 # miniaudio's MP3 decoder and stb_vorbis, in C, with miniaudio internal to

@@ -207,9 +207,12 @@ RAWFRAME_TEST(OpusCooksAndDecodesInLine) {
         RAWFRAME_EXPECT(kError < -20);
         std::printf("  %u channels: %zu bytes cooked, error %.1f dB\n", kChannels, kCooked->size(), kError);
     }
-    // A source at another rate is not resampled into Opus.
+    // A source at another rate is resampled to Opus's 48 kHz: a quarter
+    // second at 44.1 kHz comes back a quarter second at 48 kHz.
     const auto kMp3 = importSound(fixture("tone.mp3"));
-    RAWFRAME_EXPECT(kMp3.has_value() && badSound(cookOpus(*kMp3)));
+    const auto kCookedMp3 = kMp3.has_value() ? cookOpus(*kMp3) : result::Result<std::vector<std::byte>>{};
+    const auto kBack = kCookedMp3.has_value() ? audio::decodeCooked(*kCookedMp3) : result::Result<audio::Clip>{};
+    RAWFRAME_EXPECT(kBack.has_value() && kBack->rate == audio::kOpusRate && kBack->frames() == 12'000);
 }
 
 RAWFRAME_TEST(CookedOpusIsRefusedWhenItLies) {
@@ -256,4 +259,77 @@ RAWFRAME_TEST(CookedOpusIsRefusedWhenItLies) {
         refused += audio::decodeCookedOpus(damaged).has_value() ? 0 : 1;
     }
     std::printf("  %zu of 500 damaged cooked sounds refused\n", refused);
+}
+
+namespace {
+
+audio::Clip toneAt(std::uint32_t rate, std::uint32_t channels, float hertz, float seconds) {
+    audio::Clip clip;
+    clip.channels = channels;
+    clip.rate = rate;
+    const auto kFrames = static_cast<std::size_t>(seconds * static_cast<float>(rate));
+    for (std::size_t frame = 0; frame < kFrames; ++frame) {
+        for (std::uint32_t channel = 0; channel < channels; ++channel) {
+            const double kPhase = 2.0 * std::numbers::pi * (hertz * (channel + 1)) * static_cast<double>(frame) / rate;
+            clip.samples.push_back(static_cast<float>(0.5 * std::sin(kPhase)));
+        }
+    }
+    return clip;
+}
+
+/// The error of a resampled tone against the tone computed at the new
+/// rate, in decibels, away from the ends the filter reaches past.
+float errorAgainst(const audio::Clip& made, float hertz) {
+    const audio::Clip kExact = toneAt(made.rate, made.channels, hertz, 1.0F);
+    double signal = 0;
+    double error = 0;
+    for (std::size_t frame = made.rate / 10; frame < made.frames() - (made.rate / 10); ++frame) {
+        for (std::uint32_t channel = 0; channel < made.channels; ++channel) {
+            const std::size_t kAt = (frame * made.channels) + channel;
+            signal += static_cast<double>(kExact.samples[kAt]) * kExact.samples[kAt];
+            error += static_cast<double>(made.samples[kAt] - kExact.samples[kAt]) *
+                     (made.samples[kAt] - kExact.samples[kAt]);
+        }
+    }
+    return static_cast<float>(10.0 * std::log10(error / signal));
+}
+
+} // namespace
+
+RAWFRAME_TEST(ResamplingKeepsWhatFitsAndDropsWhatDoesNot) {
+    // Up from 44.1 kHz and 22.05 kHz, and down from 96 kHz, a tone in band
+    // (and its octave on the right) comes out as the tone computed there.
+    for (const std::uint32_t kFrom : {44'100U, 22'050U, 96'000U, 8'000U}) {
+        const auto kMade = resample(toneAt(kFrom, 2, 1'000, 1.0F), 48'000);
+        RAWFRAME_EXPECT(kMade.has_value() && kMade->rate == 48'000 && kMade->channels == 2 &&
+                        kMade->frames() == 48'000);
+        if (kMade.has_value()) {
+            const float kError = errorAgainst(*kMade, 1'000);
+            std::printf("  from %u Hz: error %.1f dB\n", kFrom, kError);
+            RAWFRAME_EXPECT(kError < -80);
+        }
+    }
+    // Down from 96 kHz, a 30 kHz tone, above the new Nyquist, is gone.
+    const auto kAbove = resample(toneAt(96'000, 1, 30'000, 1.0F), 48'000);
+    float peak = 0;
+    for (std::size_t frame = 4'800; frame + 4'800 < kAbove->frames(); ++frame) {
+        peak = std::max(peak, std::abs(kAbove->samples[frame]));
+    }
+    std::printf("  30 kHz from 96 kHz: %.1f dB\n", 20.0 * std::log10(peak / 0.5));
+    RAWFRAME_EXPECT(20.0 * std::log10(peak / 0.5) < -80);
+    // A constant stays constant; the same rate is the same clip; the same
+    // input gives the same output.
+    audio::Clip constant;
+    constant.rate = 44'100;
+    constant.samples.assign(44'100, 0.25F);
+    const auto kFlat = resample(constant, 48'000);
+    RAWFRAME_EXPECT(std::abs(kFlat->samples[24'000] - 0.25F) < 1e-6F);
+    const audio::Clip kSame = toneAt(48'000, 1, 440, 0.1F);
+    RAWFRAME_EXPECT(resample(kSame, 48'000)->samples == kSame.samples);
+    RAWFRAME_EXPECT(resample(constant, 48'000)->samples == kFlat->samples);
+    RAWFRAME_EXPECT(badSound(resample(constant, 4'000)));
+    // 44,101 against 48,000 has no common factor: 48,000 phases, the most.
+    constant.rate = 44'101;
+    RAWFRAME_EXPECT(resample(constant, 48'000).has_value());
+    RAWFRAME_EXPECT(badSound(resample(constant, 48'001)));
 }

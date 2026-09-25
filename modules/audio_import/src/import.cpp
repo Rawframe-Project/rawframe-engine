@@ -123,10 +123,10 @@ struct EncoderRelease {
 
 } // namespace
 
-result::Result<std::vector<std::byte>> cookOpus(const audio::Clip& clip, const OpusSettings& settings) {
-    if (clip.rate != audio::kOpusRate || clip.channels < 1 || clip.channels > 2 || clip.frames() == 0 ||
-        clip.frames() > 0xFFFF'FFFFU) {
-        return refuse("cooked Opus holds one or two channels at 48 kHz");
+result::Result<std::vector<std::byte>> cookOpus(const audio::Clip& source, const OpusSettings& settings) {
+    RAWFRAME_TRY_ASSIGN(const audio::Clip clip, resample(source, audio::kOpusRate));
+    if (clip.channels < 1 || clip.channels > 2 || clip.frames() == 0 || clip.frames() > 0xFFFF'FFFFU) {
+        return refuse("cooked Opus holds one or two channels");
     }
     const auto kChannels = static_cast<int>(clip.channels);
     int status = OPUS_OK;
