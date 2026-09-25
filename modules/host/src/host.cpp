@@ -4,10 +4,12 @@
 #include "rawframe/composition/plan.h"
 #include "rawframe/diagnostics/emitter.h"
 #include "rawframe/diagnostics/router.h"
+#include "rawframe/execution/bounds.h"
 #include "rawframe/execution/cancellation.h"
 #include "rawframe/execution/executor.h"
 #include "rawframe/execution/time.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <optional>
@@ -96,8 +98,16 @@ struct Settings {
     execution::MonotonicDuration shutdownBudget = execution::MonotonicDuration::fromSeconds(5);
     execution::MonotonicDuration drain = execution::MonotonicDuration::fromSeconds(5);
     execution::MonotonicDuration stall = execution::MonotonicDuration::fromSeconds(10);
+    std::optional<execution::MonotonicDuration> supervisorGrace;
     Severity minimumSeverity = Severity::Info;
 };
+
+/// The longest a stop can take: the drain, the composition's stop, then the
+/// blocking-I/O and CPU executors each draining and joining.
+execution::MonotonicDuration shutdownBound(const Settings& settings) noexcept {
+    const execution::MonotonicDuration kExecutor = execution::kExecutorDrainBudget + execution::kExecutorJoinBudget;
+    return settings.drain + settings.shutdownBudget + kExecutor + kExecutor;
+}
 
 /// Reads the host keys. Returns the key at fault on failure.
 std::optional<std::string_view> readSettings(const composition::Configuration& configuration, Settings& settings) {
@@ -138,6 +148,23 @@ std::optional<std::string_view> readSettings(const composition::Configuration& c
         return "host.stall_ms";
     }
     settings.stall = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kStall));
+    if (configuration.text("host.supervisor_grace_ms")) {
+        const auto kGrace = configuration.unsignedInteger("host.supervisor_grace_ms", 0);
+        if (!kGrace.has_value() || *kGrace > 3'600'000) {
+            return "host.supervisor_grace_ms";
+        }
+        settings.supervisorGrace = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kGrace));
+    }
+    if (settings.supervisorGrace) {
+        // SPEC-0012: every shutdown phase together stays under the grace a
+        // supervisor gives, with a margin of a tenth of it, at least a second.
+        const execution::MonotonicDuration kMargin =
+            std::max(execution::MonotonicDuration::fromSeconds(1),
+                     execution::MonotonicDuration{settings.supervisorGrace->nanoseconds / 10});
+        if (shutdownBound(settings) + kMargin > *settings.supervisorGrace) {
+            return "host.supervisor_grace_ms";
+        }
+    }
     if (const auto kSeverity = configuration.text("diagnostics.minimum_severity")) {
         const auto kParsed = severityNamed(*kSeverity);
         if (!kParsed) {
@@ -306,7 +333,8 @@ HostExit runHost(const HostRequest& request) noexcept {
                  kStarted,
                  "host started",
                  {diagnostics::field("participants", plan->participants().size()),
-                  diagnostics::field("cpuWorkers", cpu.workerCount())});
+                  diagnostics::field("cpuWorkers", cpu.workerCount()),
+                  diagnostics::field("shutdownBoundMs", shutdownBound(settings).nanoseconds / 1'000'000)});
     kEnter(composition::HostState::Ready, "started");
     // Immediate activation, the only policy until a supervised one is
     // accepted: admission opens as soon as the Host is ready.
@@ -414,7 +442,8 @@ HostExit runHost(const HostRequest& request) noexcept {
                  kStopped,
                  "host stopped",
                  {diagnostics::field("health", composition::describe(health.health)),
-                  diagnostics::field("exit", static_cast<std::uint64_t>(exit))});
+                  diagnostics::field("exit", static_cast<std::uint64_t>(exit)),
+                  diagnostics::field("shutdownMs", (clock.now() - drainStart).nanoseconds / 1'000'000)});
     router.stop();
     kDrain();
     return exit;

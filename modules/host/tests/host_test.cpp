@@ -318,7 +318,18 @@ RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {
     log.clear();
     RAWFRAME_EXPECT(run("diagnostics.minimum_severity = loud", log) == host::HostExit::StartupFailed);
 
+    // A supervisor's grace too short for the drain, the shutdown budget, and
+    // the executors' budgets (5 + 5 + 6 seconds) and a tenth of it.
     log.clear();
+    RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 17000", log) == host::HostExit::StartupFailed);
+    RAWFRAME_EXPECT(mentions(log, "host.supervisor_grace_ms"));
+    log.clear();
+    RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 18000\nhost.maximum_iterations = 1", log) ==
+                    host::HostExit::Stopped);
+    RAWFRAME_EXPECT(mentions(log, "\"shutdownBoundMs\":16000") && mentions(log, "\"shutdownMs\":"));
+
+    log.clear();
+    reset();
     requireMissing = true;
     RAWFRAME_EXPECT(run("host.maximum_iterations = 3", log) == host::HostExit::StartupFailed);
     RAWFRAME_EXPECT(mentions(log, "\"code\":\"plan_problem\"") && mentions(log, "missing_provider"));

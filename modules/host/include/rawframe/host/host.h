@@ -82,6 +82,10 @@ struct HostRequest {
 ///   host.shutdown_budget_ms    the composition's stop budget (5000)
 ///   host.drain_ms              longest a drain waits for connections (5000)
 ///   host.stall_ms              an executor stall that is unhealthy (10000)
+///   host.supervisor_grace_ms   the grace a supervisor gives a stop; the
+///                              drain, the shutdown budget, and the executors'
+///                              budgets together, plus a tenth of it (at least
+///                              a second), must fit (none)
 ///   diagnostics.minimum_severity  trace, debug, info, warning, error, critical (info)
 [[nodiscard]] HostExit runHost(const HostRequest& request) noexcept;
 
