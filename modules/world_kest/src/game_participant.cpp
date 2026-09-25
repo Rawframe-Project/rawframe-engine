@@ -418,7 +418,13 @@ private:
         const auto kCodec = [this](std::string_view name) -> result::Result<world_replication::ComponentCodec> {
             const GameComponent& component = *componentNamed(name);
             const std::size_t kIndex = static_cast<std::size_t>(&component - game_.components.data());
-            return codecFor(component.id, layouts_[kIndex]);
+            std::vector<std::string> entities;
+            for (const GameEntityField& field : game_.entityFields) {
+                if (field.component == component.name) {
+                    entities.push_back(field.field);
+                }
+            }
+            return codecFor(component.id, layouts_[kIndex], entities);
         };
         std::vector<world_replication::ComponentCodec> codecs;
         for (const std::string& name : game_.replicated) {
@@ -466,9 +472,20 @@ private:
         if (game_.input.empty()) {
             return kRefuse("a game that predicts needs input to predict from", "input");
         }
+        // An entity a replicated value names is the mirror's on a client and
+        // the predictor's own there: never the same bits to compare.
+        const auto kNamesEntities = [this](const std::string& name) {
+            const schema::ComponentTypeId kId = componentNamed(name)->id;
+            return std::ranges::any_of(table_.components, [kId](const world_replication::ComponentCodec& codec) {
+                return codec.component == kId && codec.namesEntities();
+            });
+        };
         for (const std::string& name : game_.predicted) {
             if (!kIn(game_.player, name) || !kIn(game_.replicated, name)) {
                 return kRefuse("a predicted component is one of the player's and replicates", name);
+            }
+            if (kNamesEntities(name)) {
+                return kRefuse("a predicted component names no entity", name);
             }
             predicted_.push_back(componentNamed(name)->id);
         }
@@ -517,6 +534,9 @@ private:
         for (const std::string& name : game_.nearby) {
             if (!kIn(game_.replicated, name)) {
                 return kRefuse("a nearby component replicates", name);
+            }
+            if (kNamesEntities(name)) {
+                return kRefuse("a nearby component names no entity", name);
             }
             nearby_.push_back(componentNamed(name)->id);
         }

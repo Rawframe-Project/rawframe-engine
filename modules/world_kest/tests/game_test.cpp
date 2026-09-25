@@ -12,6 +12,7 @@
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/registrar.h"
+#include "rawframe/world_kest/replication.h"
 #include "rawframe/world_runtime/registrar.h"
 #include "rawframe/world_runtime/simulation.h"
 
@@ -302,6 +303,41 @@ RAWFRAME_TEST(WithoutAGameNothingLoads) {
     composition.stop();
 }
 
+RAWFRAME_TEST(AReplicatedComponentMayNameEntities) {
+    // An entity field crosses once, as the receiver's name for it; its
+    // generation does not cross apart.
+    const kest::TypeLayout kLink{.size = 12,
+                                 .alignment = 4,
+                                 .mark = 0,
+                                 .fields = {{"next.slot", 0, kest::FieldKind::U32},
+                                            {"next.generation", 4, kest::FieldKind::U32},
+                                            {"hops", 8, kest::FieldKind::I32}}};
+    const std::array<std::string, 1> kEntities = {"next"};
+    constexpr auto kLinkId = schema::ComponentTypeId::fromText("5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84");
+    const auto kCodec = world_kest::codecFor(kLinkId, kLink, kEntities);
+    RAWFRAME_EXPECT(kCodec.has_value() && kCodec->valid() && kCodec->namesEntities() && kCodec->fields.size() == 2 &&
+                    kCodec->fields[0].offset == 0 && kCodec->fields[0].kind == world_replication::WireKind::Entity &&
+                    kCodec->wireSize() == 8);
+    const auto kPlain = world_kest::codecFor(kLinkId, kLink, {});
+    RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->namesEntities() && kPlain->fields.size() == 3);
+
+    // And a game that replicates one starts.
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kRegistrars,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    const auto kConfiguration =
+        composition::Configuration::parse(std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
+                                          "sharedlinks.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n");
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    composition.stop();
+}
+
 RAWFRAME_TEST(AGameThatDoesNotLoadFailsTheStart) {
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(
@@ -315,7 +351,9 @@ RAWFRAME_TEST(AGameThatDoesNotLoadFailsTheStart) {
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
                                          "mispredicted.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n",
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
-                                         "misinterested.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n"}) {
+                                         "misinterested.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n",
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
+                                         "mislinked.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n"}) {
         const auto kConfiguration = composition::Configuration::parse(kText);
         composition::Composition composition{
             *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};

@@ -39,6 +39,16 @@ struct Steer {
     float dy = 0;
 };
 
+/// Which entity something aims at: a reference that crosses as the
+/// receiver's name for the entity.
+struct Aim {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("0e4d7b92-3a61-4f8c-b5d2-9c17e6a04f38");
+    static constexpr std::string_view kComponentName = "scenario.aim";
+    world::EntityHandle target;
+    float range = 0;
+};
+
 ComponentCodec positionCodec() {
     return {.component = Position::kComponentTypeId,
             .size = sizeof(Position),
@@ -51,9 +61,15 @@ ComponentCodec steerCodec() {
             .fields = {{offsetof(Steer, dx), WireKind::F32}, {offsetof(Steer, dy), WireKind::F32}}};
 }
 
+ComponentCodec aimCodec() {
+    return {.component = Aim::kComponentTypeId,
+            .size = sizeof(Aim),
+            .fields = {{offsetof(Aim, target), WireKind::Entity}, {offsetof(Aim, range), WireKind::F32}}};
+}
+
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
-    builder.add<Position>().add<Steer>();
+    builder.add<Position>().add<Steer>().add<Aim>();
     return *builder.freeze();
 }
 
@@ -176,7 +192,7 @@ struct Scenario {
         RAWFRAME_EXPECT(serverSessions->listen({"server"}).has_value());
         server = *world_replication::ReplicationServer::create(
             *serverSessions,
-            {.table = {.components = {positionCodec(), steerCodec()}},
+            {.table = {.components = {positionCodec(), steerCodec(), aimCodec()}},
              .playerComponents = {Position::kComponentTypeId, Steer::kComponentTypeId},
              .input = steerCodec(),
              .interest = std::move(options.interest),
@@ -191,7 +207,7 @@ struct Scenario {
         client = *world_replication::ReplicationClient::create(
             *clientSessions,
             clientWorld,
-            {.table = {.components = {positionCodec(), steerCodec()}},
+            {.table = {.components = {positionCodec(), steerCodec(), aimCodec()}},
              .input = steerCodec(),
              .prediction = options.predicting ? std::optional{world_replication::PredictionSettings{
                                                     .predictor = &predictor,
@@ -296,6 +312,52 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
         scenario.step(Steer{});
     }
     RAWFRAME_EXPECT(scenario.mirrored() == 3);
+}
+
+RAWFRAME_TEST(AnEntityNamedInAValueIsTheClientsMirrorOfIt) {
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    const auto kPosition = *scenario.schema->key<Position>();
+    const auto kAim = *scenario.schema->key<Aim>();
+    // A target, a turret aiming at it, and a turret aiming at something
+    // that is never replicated.
+    const world::EntityHandle kTarget = *scenario.serverWorld.create();
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kTarget, kPosition, Position{42, 0}).has_value());
+    const world::EntityHandle kHidden = *scenario.serverWorld.create();
+    const world::EntityHandle kTurret = *scenario.serverWorld.create();
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kTurret, kPosition, Position{1, 0}).has_value());
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kTurret, kAim, Aim{.target = kTarget, .range = 5}).has_value());
+    const world::EntityHandle kBlind = *scenario.serverWorld.create();
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kBlind, kPosition, Position{2, 0}).has_value());
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kBlind, kAim, Aim{.target = kHidden, .range = 6}).has_value());
+    for (int step = 0; step < 60; ++step) {
+        scenario.step(Steer{});
+    }
+    const auto kAimOf = [&](float range) {
+        Aim found{.target = {}, .range = -1};
+        auto query = world::Query<world::Read<Aim>>::resolve(*scenario.schema);
+        query->forEach(scenario.clientWorld, [&](world::EntityHandle, const Aim& aim) {
+            if (aim.range == range) {
+                found = aim;
+            }
+        });
+        return found;
+    };
+    // The turret aims at the client's entity standing for the target, not
+    // at the server's handle.
+    const Aim kSeen = kAimOf(5);
+    RAWFRAME_EXPECT(kSeen.range == 5 && !kSeen.target.isNull());
+    const Position* aimedAt = scenario.clientWorld.get(kSeen.target, kPosition);
+    RAWFRAME_EXPECT(aimedAt != nullptr && aimedAt->x == 42);
+    // What the client has never been told of is named as no entity.
+    const Aim kBlindSeen = kAimOf(6);
+    RAWFRAME_EXPECT(kBlindSeen.range == 6 && kBlindSeen.target.isNull());
+
+    // Once the target is gone, the turret aims at nothing again.
+    RAWFRAME_EXPECT(scenario.serverWorld.destroy(kTarget).has_value());
+    for (int step = 0; step < 10; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(kAimOf(5).target.isNull());
 }
 
 RAWFRAME_TEST(ReplicationHoldsThroughLossAndReordering) {

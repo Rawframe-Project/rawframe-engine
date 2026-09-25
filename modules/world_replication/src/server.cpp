@@ -119,6 +119,25 @@ struct Peer {
     bool heardInput = false;
 };
 
+/// An entity by the ID of the mapping a connection has acknowledged for it:
+/// what it may be named by in a value sent there.
+class PeerNames final : public EntityNames {
+public:
+    explicit PeerNames(const Peer& peer) noexcept : peer_(&peer) {
+    }
+    [[nodiscard]] std::uint32_t netOf(world::EntityHandle entity) const noexcept override {
+        const auto kMapping = peer_->mapped.find(entity);
+        return kMapping != peer_->mapped.end() && kMapping->second.acknowledged ? kMapping->second.id.value : 0;
+    }
+    [[nodiscard]] world::EntityHandle entityOf(std::uint32_t net) const noexcept override {
+        const auto kFound = peer_->byNetEntity.find(net);
+        return kFound != peer_->byNetEntity.end() ? kFound->second : world::EntityHandle{};
+    }
+
+private:
+    const Peer* peer_;
+};
+
 /// Bytes a state datagram's framing takes around its payload, at most.
 constexpr std::size_t kStateHeaderRoom = 3 * 8;
 
@@ -153,9 +172,15 @@ struct ReplicationServer::State {
         std::size_t component = 0;
         std::size_t offset = 0;
         std::size_t length = 0;
+        /// The value in memory, while publish runs.
+        const std::byte* source = nullptr;
     };
     std::vector<PresentValue> present;
     std::vector<std::byte> encoded;
+    /// Values that name entities, encoded again for one connection, and
+    /// where each is, by present index.
+    std::vector<std::byte> named;
+    std::vector<std::size_t> namedAt;
     /// Every positioned entity, in entity order, when interest is spatial.
     struct Located {
         world::EntityHandle entity;
@@ -325,7 +350,8 @@ struct ReplicationServer::State {
             // for it arriving later is too late (SPEC-0041).
             peer.consumedInputTick = peer.nextInputTick++;
             network::Reader reader{command};
-            static_cast<void>(settings.input->decode(reader, kValue));
+            const PeerNames kNames{peer};
+            static_cast<void>(settings.input->decode(reader, kValue, &kNames));
         }
     }
 
@@ -357,8 +383,11 @@ struct ReplicationServer::State {
                         encoded.resize(kOffset);
                         continue;
                     }
-                    present.push_back(PresentValue{
-                        .entity = chunk.entities[row], .component = index, .offset = kOffset, .length = kWire});
+                    present.push_back(PresentValue{.entity = chunk.entities[row],
+                                                   .component = index,
+                                                   .offset = kOffset,
+                                                   .length = kWire,
+                                                   .source = chunk.columns[0] + (row * codec.size)});
                 }
             });
         }
@@ -558,6 +587,15 @@ struct ReplicationServer::State {
         candidates.clear();
         Mapping* mapping = nullptr;
         known = peer.mapped.begin();
+        named.clear();
+        namedAt.assign(present.size(), 0);
+        const PeerNames kNames{peer};
+        const auto kValueOf = [this](std::size_t index) {
+            const PresentValue& value = present[index];
+            return settings.table.components[value.component].namesEntities()
+                       ? std::span<const std::byte>{named}.subspan(namedAt[index], value.length)
+                       : std::span<const std::byte>{encoded}.subspan(value.offset, value.length);
+        };
         for (std::size_t index = 0; index < present.size(); ++index) {
             const PresentValue& value = present[index];
             if (index == 0 || present[index - 1].entity != value.entity) {
@@ -575,7 +613,15 @@ struct ReplicationServer::State {
                 continue;
             }
             Replica& replica = mapping->replicas[value.component];
-            const std::span<const std::byte> kValue = std::span{encoded}.subspan(value.offset, value.length);
+            // An entity it names goes by this connection's name for it.
+            const ComponentCodec& codec = settings.table.components[value.component];
+            if (codec.namesEntities()) {
+                namedAt[index] = named.size();
+                named.resize(named.size() + value.length);
+                network::Writer writer{std::span{named}.subspan(namedAt[index])};
+                static_cast<void>(codec.encode(value.source, writer, &kNames));
+            }
+            const std::span<const std::byte> kValue = kValueOf(index);
             if (replica.held(kValue)) {
                 ++statistics.recordsHeld;
                 continue;
@@ -595,7 +641,7 @@ struct ReplicationServer::State {
         for (const Candidate& candidate : candidates) {
             const PresentValue& value = present[candidate.present];
             Replica& replica = candidate.mapping->replicas[value.component];
-            const std::span<const std::byte> kValue = std::span{encoded}.subspan(value.offset, value.length);
+            const std::span<const std::byte> kValue = kValueOf(candidate.present);
             const std::size_t kRecord = 10 + value.length;
             if (used + kRecord + kStateHeaderRoom > kRoom) {
                 kFlush();

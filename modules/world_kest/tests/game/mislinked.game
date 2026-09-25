@@ -1,0 +1,11 @@
+# Prediction declared wrongly: a predicted component names an entity, which
+# the client's predictor and its mirror call by different handles.
+program linked.kest
+
+component 5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84 linked.link Link
+entity linked.link next
+
+replicate linked.link
+player linked.link
+input linked.link
+predict linked.link

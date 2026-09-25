@@ -25,6 +25,28 @@ struct Staged {
     std::size_t offset = 0;
 };
 
+/// Entities by the IDs this client mirrors them under.
+class MirrorNames final : public EntityNames {
+public:
+    explicit MirrorNames(const std::map<std::uint32_t, world::EntityHandle>& mirrored) noexcept : mirrored_(&mirrored) {
+    }
+    [[nodiscard]] std::uint32_t netOf(world::EntityHandle entity) const noexcept override {
+        for (const auto& [kNet, kEntity] : *mirrored_) {
+            if (kEntity == entity) {
+                return kNet;
+            }
+        }
+        return 0;
+    }
+    [[nodiscard]] world::EntityHandle entityOf(std::uint32_t net) const noexcept override {
+        const auto kFound = mirrored_->find(net);
+        return kFound != mirrored_->end() ? kFound->second : world::EntityHandle{};
+    }
+
+private:
+    const std::map<std::uint32_t, world::EntityHandle>* mirrored_;
+};
+
 } // namespace
 
 struct ReplicationClient::State {
@@ -38,6 +60,7 @@ struct ReplicationClient::State {
     std::optional<network::Accept> accept;
     bool ended = false;
     std::map<std::uint32_t, world::EntityHandle> mirrored;
+    MirrorNames names{mirrored};
     /// The server tick each entity's component was last applied at.
     std::map<std::pair<std::uint32_t, std::size_t>, std::uint64_t> appliedAt;
     world::EntityHandle owned;
@@ -202,7 +225,7 @@ struct ReplicationClient::State {
             const ComponentCodec& codec = settings.table.components[kHead->component];
             const std::size_t kOffset = staging.size();
             staging.resize(kOffset + codec.size);
-            if (!codec.decode(reader, staging.data() + kOffset).has_value()) {
+            if (!codec.decode(reader, staging.data() + kOffset, &names).has_value()) {
                 ++statistics.datagramsRefused;
                 return;
             }
@@ -514,7 +537,7 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
     std::vector<std::byte> wire(state.settings.input->wireSize() +
                                 (state.settings.perception ? kMaximumPerceptionBytes : 0));
     network::Writer commandWriter{wire};
-    RAWFRAME_TRY(state.settings.input->encode(value.data(), commandWriter));
+    RAWFRAME_TRY(state.settings.input->encode(value.data(), commandWriter, &state.names));
     if (state.settings.perception) {
         // What is shown now: between two states, or the newest.
         PerceptionContext seen{.baseTick = state.serverTick, .fraction = 0};

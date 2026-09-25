@@ -2,6 +2,7 @@
 
 #include "rawframe/world_replication/errors.h"
 
+#include <algorithm>
 #include <optional>
 
 namespace rawframe::world_kest {
@@ -41,10 +42,24 @@ std::optional<world_replication::WireKind> wireKind(kest::FieldKind kind) noexce
 
 } // namespace
 
-result::Result<world_replication::ComponentCodec> codecFor(schema::ComponentTypeId component,
-                                                           const kest::TypeLayout& layout) {
+result::Result<world_replication::ComponentCodec>
+codecFor(schema::ComponentTypeId component, const kest::TypeLayout& layout, std::span<const std::string> entities) {
     world_replication::ComponentCodec codec{.component = component, .size = layout.size, .fields = {}};
+    const auto kEntityPart = [&entities](const std::string& name, std::string_view part) {
+        return std::ranges::any_of(entities, [&](const std::string& entity) {
+            return name.size() == entity.size() + part.size() && name.starts_with(entity) && name.ends_with(part);
+        });
+    };
     for (const kest::Field& field : layout.fields) {
+        // An entity crosses once, by its slot's place; its generation with it.
+        if (kEntityPart(field.name, ".generation")) {
+            continue;
+        }
+        if (kEntityPart(field.name, ".slot")) {
+            codec.fields.push_back(
+                world_replication::WireField{.offset = field.offset, .kind = world_replication::WireKind::Entity});
+            continue;
+        }
         const auto kKind = wireKind(field.kind);
         if (!kKind) {
             return std::unexpected<result::Error>{

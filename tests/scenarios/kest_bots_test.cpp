@@ -98,8 +98,8 @@ RAWFRAME_TEST(SixtyFourBotsPlayAKestGame) {
             .id = id, .name = name, .size = layout.size, .alignment = layout.alignment, .plainData = true});
     }
     const auto kRegistry = *builder.freeze();
-    const auto kPositionCodec = *world_kest::codecFor(kPositionId, kPositionLayout);
-    const auto kSteerCodec = *world_kest::codecFor(kSteerId, kSteerLayout);
+    const auto kPositionCodec = *world_kest::codecFor(kPositionId, kPositionLayout, {});
+    const auto kSteerCodec = *world_kest::codecFor(kSteerId, kSteerLayout, {});
     const world_replication::ReplicationTable kTable{.components = {kPositionCodec, kSteerCodec}};
 
     ManualClock clock;

@@ -8,12 +8,17 @@
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_replication/codec.h"
 
+#include <span>
+#include <string>
+
 namespace rawframe::world_kest {
 
-/// The codec for a component laid out as `layout`. Refuses (`unsupported`)
-/// a type with a field that is not a number or a truth, since only those
-/// cross the wire in generation 1.
-[[nodiscard]] result::Result<world_replication::ComponentCodec> codecFor(schema::ComponentTypeId component,
-                                                                         const kest::TypeLayout& layout);
+/// The codec for a component laid out as `layout`, whose fields named in
+/// `entities` hold a `rawframe.world.Entity` (their `.slot` and
+/// `.generation`), which cross as the receiver's name for the entity.
+/// Refuses (`unsupported`) a type with any other field that is not a number
+/// or a truth.
+[[nodiscard]] result::Result<world_replication::ComponentCodec>
+codecFor(schema::ComponentTypeId component, const kest::TypeLayout& layout, std::span<const std::string> entities);
 
 } // namespace rawframe::world_kest
