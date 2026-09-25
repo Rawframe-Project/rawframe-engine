@@ -1,12 +1,13 @@
 // A game's Mod API surface (SPEC-0042, D177): its policy, namespace and
 // version, the mods a curated game approves, and its data points; and each
 // way a description gets them wrong; and a mod's description cooked with its
-// scenes (D178).
+// scenes (D178); and SPEC-0042's validation of a Composition's mods (D179).
 
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/cooked_mod.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/mod.h"
 
 #include <string>
@@ -131,4 +132,84 @@ RAWFRAME_TEST(ACookedModReadsAsWritten) {
     swapped.replace(swapped.find("more.scene"), 10, "zzzz.scene");
     RAWFRAME_EXPECT(!world_kest::readCookedMod(swapped).has_value());
     RAWFRAME_EXPECT(!world_kest::readCookedMod("{}").has_value());
+}
+
+namespace {
+
+world_kest::ComposedMod modOf(std::string subject, std::string_view text) {
+    return world_kest::ComposedMod{.subject = std::move(subject), .description = *world_kest::parseMod(text)};
+}
+
+/// Whether `mods` are refused for `game` as ModRefused, naming `part` in
+/// its context.
+bool refusedWith(const world_kest::GameDescription& game,
+                 const std::vector<world_kest::ComposedMod>& mods,
+                 std::string_view part,
+                 const std::vector<std::string>& held = {"raid.rules"}) {
+    const auto kChecked = world_kest::checkMods(game, "acme/raid", mods, held);
+    if (kChecked.has_value() || kChecked.error().code() != code(world_kest::WorldKestError::ModRefused)) {
+        return false;
+    }
+    for (const result::ContextField& field : kChecked.error().context()) {
+        if (field.value.find(part) != std::string_view::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AGameTakesOnlyTheModsItsPolicyAllows) {
+    const auto kGame = parseGame(kBase + "mods curated\nmodapi raid 3\napprove fan/horde\napprove fan/bosses\n"
+                                         "extension enemies data raid.enemy multi\n"
+                                         "extension rules data raid.rules exclusive required\n");
+    RAWFRAME_EXPECT(kGame.has_value());
+    if (!kGame.has_value()) {
+        return;
+    }
+    const std::string kHorde = "target acme/raid\nmodapi >=2 <4\ncontribute enemies wave.scene\n";
+    const std::vector<world_kest::ComposedMod> kTaken = {
+        modOf("fan/bosses", "target acme/raid\nmodapi 3\ncontribute enemies bosses.scene\n"),
+        modOf("fan/horde", kHorde)};
+    // Approved, targeting it, in range, on its points: taken, and none too.
+    const std::vector<std::string> kGameHolds = {"raid.rules"};
+    RAWFRAME_EXPECT(world_kest::checkMods(*kGame, "acme/raid", kTaken, kGameHolds).has_value());
+    RAWFRAME_EXPECT(world_kest::checkMods(*kGame, "acme/raid", {}, kGameHolds).has_value());
+    // Not approved; another game; out of range; an unknown point.
+    RAWFRAME_EXPECT(refusedWith(*kGame, {modOf("fan/other", kHorde)}, "fan/other"));
+    RAWFRAME_EXPECT(refusedWith(*kGame, {modOf("fan/horde", "target acme/siege\nmodapi 3\n")}, "acme/siege"));
+    RAWFRAME_EXPECT(refusedWith(*kGame, {modOf("fan/horde", "target acme/raid\nmodapi >=4\n")}, "fan/horde"));
+    RAWFRAME_EXPECT(
+        refusedWith(*kGame, {modOf("fan/horde", "target acme/raid\nmodapi 3\ncontribute bosses b.scene\n")}, "bosses"));
+    // Two claimants of the exclusive point, each named, whatever order.
+    const std::vector<world_kest::ComposedMod> kClaimed = {
+        modOf("fan/bosses", "target acme/raid\nmodapi 3\ncontribute rules hard.scene\n"),
+        modOf("fan/horde", "target acme/raid\nmodapi 3\ncontribute rules easy.scene\n")};
+    RAWFRAME_EXPECT(refusedWith(*kGame, kClaimed, "fan/bosses:hard.scene fan/horde:easy.scene"));
+    // A required point the game's own scenes do not fill needs a mod.
+    RAWFRAME_EXPECT(refusedWith(*kGame, {}, "rules", {}));
+    RAWFRAME_EXPECT(world_kest::checkMods(*kGame, "acme/raid", std::span{kClaimed}.first(1), {}).has_value());
+    // A closed game takes none.
+    RAWFRAME_EXPECT(refusedWith(*parseGame(kBase), {modOf("fan/horde", kHorde)}, "fan/horde"));
+}
+
+RAWFRAME_TEST(AGameFillsItsOwnRequiredPointsOrIsNotRead) {
+    const std::string kGame = kBase + "scene rules.scene\nmods open\nmodapi raid 1\n"
+                                      "extension rules data raid.rules exclusive required\n";
+    // Scenes in their canonical form, as hall.scene is written.
+    const std::string kEmpty = "{\n  \"kind\": \"rawframe.scene\",\n  \"formatVersion\": 1,\n  \"schema\": {},\n"
+                               "  \"entities\": []\n}\n";
+    const std::string kRules = "{\n  \"kind\": \"rawframe.scene\",\n  \"formatVersion\": 1,\n  \"schema\": {\n"
+                               "    \"raid.rules\": \"b1e3cd3c575b7a33\"\n  },\n  \"entities\": [\n    {\n"
+                               "      \"id\": \"909c0889-a695-4893-a218-b36b9eb97339\",\n      \"components\": {\n"
+                               "        \"raid.rules\": {}\n      }\n    }\n  ]\n}\n";
+    const auto kRead = [&kGame](const std::string& scene) {
+        return world_kest::GameFiles::fromHeld(
+            "raid.game", {{"raid.game", kGame}, {"rules.scene", scene}, {"raid.kest", ""}}, nullptr);
+    };
+    const auto kUnfilled = kRead(kEmpty);
+    RAWFRAME_EXPECT(!kUnfilled.has_value() && kUnfilled.error().code() == code(world_kest::WorldKestError::ModRefused));
+    const auto kFilled = kRead(kRules);
+    RAWFRAME_EXPECT(kFilled.has_value() && kFilled->modScenes().empty());
 }

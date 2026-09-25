@@ -12,8 +12,10 @@
 //   contribute <point> <scene>    once for each scene a point takes
 
 #include "rawframe/result/result.h"
+#include "rawframe/world_kest/game.h"
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -58,5 +60,26 @@ inline constexpr std::size_t kMaximumModLines = 1024;
 
 /// Whether `version` of a game's Mod API satisfies every bound.
 [[nodiscard]] bool accepts(const std::vector<ModApiBound>& range, std::uint32_t version) noexcept;
+
+/// A mod as a Composition names it: its subject and its description.
+struct ComposedMod {
+    std::string subject;
+    ModDescription description;
+};
+
+/// SPEC-0042's Composition-build validation (D179): whether the game
+/// `game`, of subject `gameSubject`, takes `mods`, whose own scenes hold the
+/// components `gameHolds`. Refused (`invalid_argument`, `ModRefused`) for:
+/// - any mod of a closed game, or one a curated game does not approve;
+/// - a mod targeting another game, or whose range the game's version is
+///   outside;
+/// - a contribution to a point the game does not declare;
+/// - two claimants of an exclusive point, every one named;
+/// - a required point no mod fills and whose component none of the game's
+///   own scenes hold.
+[[nodiscard]] result::Status checkMods(const GameDescription& game,
+                                       std::string_view gameSubject,
+                                       std::span<const ComposedMod> mods,
+                                       std::span<const std::string> gameHolds);
 
 } // namespace rawframe::world_kest

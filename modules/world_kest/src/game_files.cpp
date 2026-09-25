@@ -7,11 +7,14 @@
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/content/sidecar.h"
+#include "rawframe/document/json.h"
 #include "rawframe/kest_library/library.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/cooked_game.h"
+#include "rawframe/world_kest/cooked_mod.h"
 #include "rawframe/world_kest/errors.h"
+#include "rawframe/world_kest/mod.h"
 
 #include <algorithm>
 #include <array>
@@ -232,7 +235,102 @@ void GameFiles::seal() {
             field(digest, file.text);
         }
     }
+    for (const GameModScene& scene : modScenes_) {
+        field(digest, scene.mod);
+        field(digest, scene.point);
+        field(digest, scene.text);
+    }
     digest_ = digest.finish();
+}
+
+namespace {
+
+/// The name of every component an entity of `text`, a scene, holds.
+void componentsOf(std::string_view text, std::vector<std::string>& held) {
+    const auto kScene = document::parse(text);
+    const document::Value* entities = kScene.has_value() ? kScene->find("entities") : nullptr;
+    if (entities == nullptr || entities->kind() != document::Value::Kind::Array) {
+        return;
+    }
+    for (const document::Value& entity : entities->items()) {
+        const document::Value* components = entity.find("components");
+        if (components == nullptr || components->kind() != document::Value::Kind::Object) {
+            continue;
+        }
+        for (const std::string& name : components->names()) {
+            if (std::ranges::find(held, name) == held.end()) {
+                held.push_back(name);
+            }
+        }
+    }
+}
+
+std::unexpected<result::Error> modRefused(std::string_view why, std::string_view mod) {
+    return std::unexpected<result::Error>{
+        result::fail(result::ErrorClass::InvalidArgument, kWorldKestDomain, code(WorldKestError::ModRefused), why)
+            .error()
+            .withContext("mod", mod)};
+}
+
+} // namespace
+
+result::Status GameFiles::readMods(game_content::GameContent* content) {
+    std::vector<std::string> held;
+    for (const Named& scene : scenes_) {
+        componentsOf(scene.text, held);
+    }
+    for (const auto& [kId, kText] : instanced_) {
+        componentsOf(kText, held);
+    }
+    const game_content::ComposedBuild* game = content != nullptr ? content->composedGame() : nullptr;
+    if (game == nullptr) {
+        return checkMods(description_, "", {}, held);
+    }
+    const content::ResourceTypeId kModType{kCookedModType};
+    const content::ResourceTypeId kSceneType{scene::kSceneType};
+    const std::array<content::AdmittedRepresentation, 1> kAdmitted = {content::AdmittedRepresentation{
+        .type = kModType, .representation = *content::RepresentationId::parse(kCookedModRepresentation)}};
+    std::vector<ComposedMod> mods;
+    std::vector<CookedMod> cooked;
+    for (const game_content::ComposedBuild& build : content->composedMods()) {
+        if (mods.empty()) {
+            RAWFRAME_TRY(content->admit(kAdmitted));
+        }
+        // A mod's Build holds its one description.
+        const auto kIsMod = [&kModType](const content::ManifestEntry& entry) {
+            return entry.type == kModType;
+        };
+        const auto kEntry = std::ranges::find_if(build.entries, kIsMod);
+        if (kEntry == build.entries.end() || std::ranges::count_if(build.entries, kIsMod) != 1) {
+            return modRefused("a mod's Build holds one mod description", build.reference.subject);
+        }
+        RAWFRAME_TRY_ASSIGN(const std::string kRecord,
+                            readResource(content->store(), content::ResourceRef{.id = kEntry->id, .type = kModType}));
+        RAWFRAME_TRY_ASSIGN(CookedMod read, readCookedMod(kRecord));
+        RAWFRAME_TRY_ASSIGN(ModDescription description, parseMod(read.text));
+        mods.push_back(ComposedMod{.subject = build.reference.subject, .description = std::move(description)});
+        cooked.push_back(std::move(read));
+    }
+    RAWFRAME_TRY(checkMods(description_, game->reference.subject, mods, held));
+    // Taken: each contributed scene, as the mod's record names it.
+    for (std::size_t at = 0; at < mods.size(); ++at) {
+        for (const ModContribution& contribution : mods[at].description.contributions) {
+            const CookedGameScene* const kScene = cooked[at].scene(contribution.scene);
+            if (kScene == nullptr) {
+                return modRefused("a cooked mod does not name the resource of a scene it contributes",
+                                  mods[at].subject);
+            }
+            RAWFRAME_TRY_ASSIGN(
+                std::string text,
+                readResource(content->store(),
+                             content::ResourceRef{.id = content::ResourceId{kScene->scene}, .type = kSceneType}));
+            modScenes_.push_back(GameModScene{.mod = mods[at].subject,
+                                              .point = contribution.point,
+                                              .text = std::move(text),
+                                              .identity = kScene->scene});
+        }
+    }
+    return {};
 }
 
 result::Status GameFiles::readMeshes(game_content::GameContent* content, const std::vector<base::Bits128>& resources) {
@@ -430,6 +528,7 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
     for (std::string& name : programNames(game.description_)) {
         game.programs_.push_back(Program{.name = name, .entry = name, .sources = 0});
     }
+    RAWFRAME_TRY(game.readMods(nullptr));
     game.seal();
     return game;
 }
@@ -597,6 +696,7 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
                                          .entry = kProgram->entry,
                                          .sources = static_cast<std::size_t>(found - read.begin())});
     }
+    RAWFRAME_TRY(game.readMods(&content));
     game.seal();
     return game;
 }

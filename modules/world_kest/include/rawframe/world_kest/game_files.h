@@ -42,6 +42,15 @@ struct GameText {
     base::Bits128 document{};
 };
 
+/// A scene a mod contributes to one of the game's points (D179): the mod's
+/// subject, the point, the scene's text, and its resource identity.
+struct GameModScene {
+    std::string mod;
+    std::string point;
+    std::string text;
+    base::Bits128 identity{};
+};
+
 class GameFiles {
 public:
     /// No game: `named()` is false and nothing else is asked.
@@ -126,6 +135,13 @@ public:
     /// game's graphs name, or their clips do, its text; refused
     /// (`unreadable_file`) for any other.
     [[nodiscard]] result::Result<std::string_view> animationDocument(base::Bits128 id) const;
+    /// The scenes the Composition's mods contribute, once the game has taken
+    /// them under its policy (SPEC-0042, D179): in the record's mod order,
+    /// each mod's in the order of its lines. None for a game not read from a
+    /// Composition, whose required points its own scenes must fill.
+    [[nodiscard]] const std::vector<GameModScene>& modScenes() const noexcept {
+        return modScenes_;
+    }
     /// Compiles the program the description names `name`.
     [[nodiscard]] result::Result<std::shared_ptr<const kest::Program>>
     compile(std::string_view name, const kest::CompileSettings& settings = {}, std::string* report = nullptr) const;
@@ -175,6 +191,10 @@ private:
     /// `read`, which is asked for a document of a kind by its identity.
     result::Status
     readAnimations(const std::function<result::Result<std::string>(base::Bits128, animation::DocumentKind)>& read);
+    /// Takes the mods of the Composition `content` is, if it is one, under
+    /// the game's policy, and reads the scenes they contribute; with none,
+    /// checks that the game fills its own required points.
+    result::Status readMods(game_content::GameContent* content);
     /// The digest of what has been read, set last.
     void seal();
 
@@ -188,6 +208,7 @@ private:
     std::vector<Program> programs_;
     std::vector<physics3d::BodyMesh> meshes_;
     std::vector<GameText> texts_;
+    std::vector<GameModScene> modScenes_;
     /// The digest of each mesh's cooked bytes, in the same order.
     std::vector<base::Sha256Digest> meshDigests_;
     /// Each animator's graph, in the order of its lines.
