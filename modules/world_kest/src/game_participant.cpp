@@ -488,7 +488,7 @@ private:
                     std::ranges::find(values, physics2d::Body2D::kComponentTypeId, &SpawnValues::value_type::first);
                 if (kBody == values.end() ||
                     static_cast<std::uint8_t>(kBody->second[offsetof(physics2d::Body2D, motion)]) !=
-                        static_cast<std::uint8_t>(physics2d::Motion::Static)) {
+                        static_cast<std::uint8_t>(physics::Motion::Static)) {
                     continue;
                 }
                 for (std::uint32_t made = 0; made < spawn.count; ++made) {

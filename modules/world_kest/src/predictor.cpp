@@ -146,7 +146,7 @@ public:
             return value.component == physics2d::Body2D::kComponentTypeId &&
                    value.value.size() == sizeof(physics2d::Body2D) &&
                    std::to_integer<std::uint8_t>(value.value[offsetof(physics2d::Body2D, motion)]) ==
-                       static_cast<std::uint8_t>(physics2d::Motion::Static);
+                       static_cast<std::uint8_t>(physics::Motion::Static);
         };
         std::map<std::uint32_t, world::EntityHandle> kept;
         for (std::size_t first = 0; first < values.size();) {

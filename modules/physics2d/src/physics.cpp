@@ -68,7 +68,7 @@ template <typename T> [[nodiscard]] bool same(const T& left, const T& right) noe
     const bool kHeight = body.shape == static_cast<std::uint8_t>(Shape::Circle) ||
                          (body.shape == static_cast<std::uint8_t>(Shape::Box) && body.height > 0) ||
                          (body.shape == static_cast<std::uint8_t>(Shape::Capsule) && body.height >= 0);
-    return body.motion <= static_cast<std::uint8_t>(Motion::Dynamic) && kShape && body.width > 0 && kHeight &&
+    return body.motion <= static_cast<std::uint8_t>(physics::Motion::Dynamic) && kShape && body.width > 0 && kHeight &&
            finite(body.width) && finite(body.height) && body.density >= 0 && finite(body.density) &&
            body.friction >= 0 && finite(body.friction) && body.restitution >= 0 && body.restitution <= 1 &&
            body.linearDamping >= 0 && finite(body.linearDamping) && body.angularDamping >= 0 &&
@@ -383,7 +383,7 @@ struct Physics2D::State {
         controlled.groundNormalX = 0;
         controlled.groundNormalY = 0;
         const Body2D& body = entry.made;
-        if (entry.refused || body.motion != static_cast<std::uint8_t>(Motion::Kinematic) ||
+        if (entry.refused || body.motion != static_cast<std::uint8_t>(physics::Motion::Kinematic) ||
             body.shape != static_cast<std::uint8_t>(Shape::Capsule) || body.sensor ||
             !finite(controlled.groundNormal) || !finite(controlled.snap) || !(seconds > 0)) {
             return;

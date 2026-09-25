@@ -181,7 +181,7 @@ Played play(bool unseen) {
     RAWFRAME_EXPECT(server
                         .insert(kTarget,
                                 *kSchema->key<Body2D>(),
-                                Body2D{.motion = static_cast<std::uint8_t>(physics2d::Motion::Kinematic),
+                                Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Kinematic),
                                        .shape = static_cast<std::uint8_t>(physics2d::Shape::Box),
                                        .width = 0.5F,
                                        .height = 0.5F})

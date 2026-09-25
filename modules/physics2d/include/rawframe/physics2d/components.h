@@ -15,6 +15,7 @@
 // a matching declaration holds.
 
 #include "rawframe/physics/layout.h"
+#include "rawframe/physics/motion.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/entity.h"
 
@@ -24,12 +25,6 @@
 #include <string_view>
 
 namespace rawframe::physics2d {
-
-enum class Motion : std::uint8_t {
-    Static = 0,
-    Kinematic = 1,
-    Dynamic = 2,
-};
 
 enum class Shape : std::uint8_t {
     /// `width` is the radius.

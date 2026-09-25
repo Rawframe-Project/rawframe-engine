@@ -51,7 +51,7 @@ struct Scene {
     }
 
     world::EntityHandle character(const Pose2D& pose, float snap = 0) {
-        const world::EntityHandle kEntity = body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
+        const world::EntityHandle kEntity = body(Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Kinematic),
                                                         .shape = static_cast<std::uint8_t>(Shape::Capsule),
                                                         .fixedRotation = true,
                                                         .width = 0.3F,
@@ -93,20 +93,20 @@ struct Scene {
     }
 };
 
-constexpr Body2D kGround{.motion = static_cast<std::uint8_t>(Motion::Static),
+constexpr Body2D kGround{.motion = static_cast<std::uint8_t>(physics::Motion::Static),
                          .shape = static_cast<std::uint8_t>(Shape::Box),
                          .width = 10,
                          .height = 0.5F,
                          .friction = 0.6F};
 
-constexpr Body2D kCrate{.motion = static_cast<std::uint8_t>(Motion::Dynamic),
+constexpr Body2D kCrate{.motion = static_cast<std::uint8_t>(physics::Motion::Dynamic),
                         .shape = static_cast<std::uint8_t>(Shape::Box),
                         .width = 0.5F,
                         .height = 0.5F,
                         .density = 1,
                         .friction = 0.6F};
 
-constexpr Body2D kBall{.motion = static_cast<std::uint8_t>(Motion::Dynamic),
+constexpr Body2D kBall{.motion = static_cast<std::uint8_t>(physics::Motion::Dynamic),
                        .shape = static_cast<std::uint8_t>(Shape::Circle),
                        .width = 0.25F,
                        .density = 1,
@@ -299,7 +299,7 @@ RAWFRAME_TEST(CollisionClassesDecideWhatMeets) {
         return body;
     };
     Body2D still = kCrate;
-    still.motion = static_cast<std::uint8_t>(Motion::Static);
+    still.motion = static_cast<std::uint8_t>(physics::Motion::Static);
     const world::EntityHandle kRunner = scene.body(kOf(kBall, kPlayer), {.x = 0, .y = 0}, {.x = 4});
     const world::EntityHandle kGhostEntity = scene.body(kOf(still, kGhost), {.x = 2, .y = 0});
     const world::EntityHandle kCoinEntity = scene.body(kOf(still, kCoin), {.x = 4, .y = 0});
@@ -383,7 +383,7 @@ RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {
 RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
     Scene scene;
     const world::EntityHandle kFloor = scene.body(kGround, {.x = 0, .y = 0});
-    scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Static),
+    scene.body(Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Static),
                       .shape = static_cast<std::uint8_t>(Shape::Box),
                       .width = 0.5F,
                       .height = 2},
@@ -413,7 +413,7 @@ RAWFRAME_TEST(ACharacterSlidesDownASteepSlopeAndStandsOnAGentleOne) {
     // Two slopes rising to the right, of 60 and of 20 degrees.
     const auto kSlope = [](Scene& scene, double x, float degrees) {
         const float kRadians = degrees * 3.14159265F / 180;
-        scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Static),
+        scene.body(Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Static),
                           .shape = static_cast<std::uint8_t>(Shape::Box),
                           .width = 5,
                           .height = 0.5F},
@@ -450,7 +450,7 @@ RAWFRAME_TEST(ACharacterRunningDownhillSnapsToTheSlope) {
     const auto kRun = [](float snap) {
         Scene scene;
         const float kRadians = 20 * 3.14159265F / 180;
-        scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Static),
+        scene.body(Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Static),
                           .shape = static_cast<std::uint8_t>(Shape::Box),
                           .width = 8,
                           .height = 0.5F},
@@ -489,17 +489,18 @@ RAWFRAME_TEST(ARayAmongOneClassSeesThroughTheRest) {
     constexpr std::uint64_t kUndeclared = 0x52;
     Scene scene({.gravityY = 0, .historyTicks = 8, .collision = {.classes = {{kPlayer, "player"}}}});
     // A wall of no class between the origin and a player moving up.
-    const world::EntityHandle kWall = scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Static),
+    const world::EntityHandle kWall = scene.body(Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Static),
                                                         .shape = static_cast<std::uint8_t>(Shape::Box),
                                                         .width = 0.5F,
                                                         .height = 2},
                                                  {.x = 2});
-    const world::EntityHandle kTarget = scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
-                                                          .shape = static_cast<std::uint8_t>(Shape::Circle),
-                                                          .collisionClass = kPlayer,
-                                                          .width = 0.5F},
-                                                   {.x = 5},
-                                                   {.y = 3});
+    const world::EntityHandle kTarget =
+        scene.body(Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Kinematic),
+                          .shape = static_cast<std::uint8_t>(Shape::Circle),
+                          .collisionClass = kPlayer,
+                          .width = 0.5F},
+                   {.x = 5},
+                   {.y = 3});
     scene.run(10);
     RAWFRAME_EXPECT(scene.physics->castRay(0, 0.5, 10, 0, kEveryClass).entity == kWall);
     // Where the player is now, and not where it was.
