@@ -52,6 +52,9 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
         onLink("scene.set_field", R"(, "field": "on", "value": null)"),
         onLink("scene.set_reference", R"(, "field": "target", "target": ")" + std::string{kDoor} + "\""),
         onLink("scene.set_reference", R"(, "field": "target", "target": null)"),
+        onLink("scene.revert_field", R"(, "field": "target")"),
+        onLink("scene.revert_component", ""),
+        operation("scene.restore_entity", ""),
     };
     std::string joined;
     for (const std::string& each : kAll) {
@@ -66,6 +69,11 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
                     std::get<SetField>(kRead->operations[9]).value.whole == UINT64_MAX &&
                     std::get<SetField>(kRead->operations[11]).value.kind == FieldInput::Kind::Default);
     RAWFRAME_EXPECT(!std::get<SetReference>(kRead->operations[13]).target.has_value());
+    RAWFRAME_EXPECT(std::get<RevertField>(kRead->operations[14]).field == "target" &&
+                    std::holds_alternative<RevertComponent>(kRead->operations[15]) &&
+                    std::holds_alternative<RestoreEntity>(kRead->operations[16]));
+    RAWFRAME_EXPECT(
+        refusedWith(readRequest(request(onLink("scene.revert_field", ""))), AuthoringError::ValidationFailed));
     const auto kRemark =
         readRequest(request(R"({"operation": "scene.remark_component", "component": ")" + std::string{kLink} + "\"}"));
     RAWFRAME_EXPECT(kRemark.has_value() && std::holds_alternative<RemarkComponent>(kRemark->operations[0]));

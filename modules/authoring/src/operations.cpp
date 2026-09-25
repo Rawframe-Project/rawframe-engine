@@ -1,5 +1,6 @@
 #include "rawframe/authoring/operations.h"
 
+#include "operation_parts.h"
 #include "rawframe/authoring/errors.h"
 #include "rawframe/document/json.h"
 
@@ -18,7 +19,7 @@ constexpr std::size_t kMaximumBatchOperations = 4096;
 
 constexpr std::array<InputDeclaration, 3> kCreateInputs = {
     {{"entity", InputType::Entity}, {"name", InputType::Text}, {"place", InputType::OptionalPlace}}};
-constexpr std::array<InputDeclaration, 1> kDestroyInputs = {{{"entity", InputType::Entity}}};
+constexpr std::array<InputDeclaration, 1> kEntityInputs = {{{"entity", InputType::Entity}}};
 constexpr std::array<InputDeclaration, 2> kRenameInputs = {{{"entity", InputType::Entity}, {"name", InputType::Text}}};
 constexpr std::array<InputDeclaration, 2> kMoveInputs = {{{"entity", InputType::Entity}, {"place", InputType::Place}}};
 constexpr std::array<InputDeclaration, 2> kComponentInputs = {
@@ -33,10 +34,12 @@ constexpr std::array<InputDeclaration, 4> kSetReferenceInputs = {{{"entity", Inp
                                                                   {"target", InputType::OptionalEntity}}};
 
 constexpr std::array<InputDeclaration, 1> kRemarkInputs = {{{"component", InputType::Component}}};
+constexpr std::array<InputDeclaration, 3> kRevertFieldInputs = {
+    {{"entity", InputType::Entity}, {"component", InputType::Component}, {"field", InputType::Field}}};
 
-constexpr std::array<OperationDeclaration, 9> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 12> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
-    {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kDestroyInputs},
+    {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
     {.name = "scene.move_entity", .targets = "rawframe.scene entity", .inputs = kMoveInputs},
     {.name = "scene.add_component", .targets = "rawframe.scene component", .inputs = kComponentInputs},
@@ -44,6 +47,9 @@ constexpr std::array<OperationDeclaration, 9> kDeclarations = {{
     {.name = "scene.set_field", .targets = "rawframe.scene field", .inputs = kSetFieldInputs},
     {.name = "scene.set_reference", .targets = "rawframe.scene field", .inputs = kSetReferenceInputs},
     {.name = "scene.remark_component", .targets = "rawframe.scene schema", .inputs = kRemarkInputs},
+    {.name = "scene.revert_field", .targets = "rawframe.scene field", .inputs = kRevertFieldInputs},
+    {.name = "scene.revert_component", .targets = "rawframe.scene component", .inputs = kComponentInputs},
+    {.name = "scene.restore_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
 }};
 
 std::unexpected<result::Error>
@@ -53,21 +59,17 @@ refuse(const Operation& operation, result::ErrorClass errorClass, AuthoringError
                                               .withContext("operation", declarationOf(operation).name)};
 }
 
-std::unexpected<result::Error> notFound(const Operation& operation, std::string_view why) {
-    return refuse(operation, result::ErrorClass::NotFound, AuthoringError::TargetNotFound, why);
-}
-
-std::unexpected<result::Error> invalid(const Operation& operation, std::string_view why) {
-    return refuse(operation, result::ErrorClass::InvalidArgument, AuthoringError::ValidationFailed, why);
-}
-
-std::unexpected<result::Error> conflict(const Operation& operation, std::string_view why) {
-    return refuse(operation, result::ErrorClass::Conflict, AuthoringError::Conflict, why);
-}
-
 const scene::SceneEntity* entityOf(const scene::Scene& scene, base::Bits128 id) {
     const auto kFound = std::ranges::find(scene.entities, id, &scene::SceneEntity::id);
     return kFound != scene.entities.end() ? &*kFound : nullptr;
+}
+
+/// The instance that brings `id`, if one does.
+const scene::SceneInstance* instanceOf(const scene::Scene& scene, base::Bits128 id) {
+    const auto kFound = std::ranges::find_if(scene.instances, [id](const scene::SceneInstance& instance) {
+        return std::ranges::contains(instance.entities, id, &scene::IdentityMapping::instance);
+    });
+    return kFound != scene.instances.end() ? &*kFound : nullptr;
 }
 
 std::size_t placeOf(const scene::Scene& scene, base::Bits128 id) {
@@ -75,77 +77,8 @@ std::size_t placeOf(const scene::Scene& scene, base::Bits128 id) {
                                     scene.entities.begin());
 }
 
-std::uint64_t markOf(const scene::Scene& scene, std::string_view component) {
-    const auto kFound = std::ranges::find(scene.schema, component, &scene::SchemaMark::component);
-    return kFound != scene.schema.end() ? kFound->mark : 0;
-}
-
 ComponentRecord recordOf(const scene::Scene& scene, const scene::SceneComponent& component) {
     return ComponentRecord{.name = component.name, .mark = markOf(scene, component.name), .fields = component.fields};
-}
-
-/// Whether anything in the scene but `entity` itself names it.
-bool referenced(const scene::Scene& scene, base::Bits128 entity) {
-    for (const scene::SceneEntity& each : scene.entities) {
-        if (each.id == entity) {
-            continue;
-        }
-        for (const scene::SceneComponent& component : each.components) {
-            for (const scene::SceneField& field : component.fields) {
-                if (field.value.kind == scene::FieldValue::Kind::Entity && field.value.entity == entity) {
-                    return true;
-                }
-            }
-        }
-    }
-    for (const scene::SceneInstance& instance : scene.instances) {
-        for (const scene::Override& each : instance.overrides) {
-            if (std::ranges::any_of(each.fields, [entity](const scene::SceneField& field) {
-                    return field.value.kind == scene::FieldValue::Kind::Entity && field.value.entity == entity;
-                })) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-/// The value a field input writes; none for the field's default.
-result::Result<std::optional<scene::FieldValue>>
-valueOf(const Operation& operation, const FieldInput& input, FieldKind kind) {
-    using Kind = FieldInput::Kind;
-    const bool kFits = input.kind == Kind::Default || (input.kind == Kind::Signed && kind == FieldKind::Signed) ||
-                       (input.kind == Kind::Unsigned && kind == FieldKind::Unsigned) ||
-                       (input.kind == Kind::Real && kind == FieldKind::Real) ||
-                       (input.kind == Kind::Truth && kind == FieldKind::Truth);
-    if (!kFits) {
-        return invalid(operation, "a field's value is of the field's kind");
-    }
-    std::string text;
-    switch (input.kind) {
-    case Kind::Default:
-        return std::optional<scene::FieldValue>{};
-    case Kind::Truth:
-        return input.truth ? std::optional{scene::FieldValue{.kind = scene::FieldValue::Kind::True}}
-                           : std::optional<scene::FieldValue>{};
-    case Kind::Signed:
-        text = std::to_string(input.integer);
-        break;
-    case Kind::Unsigned:
-        text = std::to_string(input.whole);
-        break;
-    case Kind::Real:
-        if (!std::isfinite(input.real)) {
-            return invalid(operation, "a real field's value is finite");
-        }
-        text = document::write(document::Value::real(input.real == 0.0 ? 0.0 : input.real));
-        text.pop_back();
-        break;
-    }
-    if (text == "0") {
-        return std::optional<scene::FieldValue>{};
-    }
-    return std::optional{scene::FieldValue{.kind = scene::FieldValue::Kind::Number, .number = std::move(text)}};
 }
 
 /// The component an operation names, present on the entity.
@@ -240,12 +173,30 @@ std::vector<std::string> residualOf(const scene::Scene& scene, const ComponentSc
 /// Validates `operation` against `scene` and derives its deltas, touching
 /// nothing.
 result::Result<Journal> derive(const scene::Scene& scene, const Operation& operation, const ComponentCatalog& catalog) {
+    const std::optional<base::Bits128> kNamed = std::visit(
+        [](const auto& each) -> std::optional<base::Bits128> {
+            if constexpr (requires { each.entity; }) {
+                return each.entity;
+            } else {
+                return std::nullopt;
+            }
+        },
+        operation);
+    if (kNamed.has_value() && !std::holds_alternative<CreateEntity>(operation)) {
+        if (const scene::SceneInstance* instance = instanceOf(scene, *kNamed)) {
+            return derivePatch(scene, operation, catalog, *instance, *kNamed);
+        }
+        if (std::holds_alternative<RevertField>(operation) || std::holds_alternative<RevertComponent>(operation) ||
+            std::holds_alternative<RestoreEntity>(operation)) {
+            return notFound(operation, "no instance of the scene brings that entity");
+        }
+    }
     Journal journal;
     if (const auto* create = std::get_if<CreateEntity>(&operation)) {
         if (create->entity == base::Bits128{}) {
             return invalid(operation, "an entity's SourceEntityId is not nought");
         }
-        if (entityOf(scene, create->entity) != nullptr) {
+        if (entityOf(scene, create->entity) != nullptr || instanceOf(scene, create->entity) != nullptr) {
             return conflict(operation, "the scene already has an entity of that id");
         }
         const std::size_t kPlace = create->place.value_or(scene.entities.size());
@@ -301,10 +252,7 @@ result::Result<Journal> derive(const scene::Scene& scene, const Operation& opera
         if (kTarget.component != nullptr) {
             return conflict(operation, "the entity already has that component");
         }
-        const auto kMark = std::ranges::find(scene.schema, kTarget.schema->name, &scene::SchemaMark::component);
-        if (kMark != scene.schema.end() && kMark->mark != kTarget.schema->mark) {
-            return invalid(operation, "the scene was authored against another layout of that component");
-        }
+        RAWFRAME_TRY(sameLayout(scene, operation, *kTarget.schema));
         journal.push_back(
             Delta{.kind = DeltaKind::AddComponent,
                   .entity = add->entity,
@@ -364,7 +312,7 @@ result::Result<Journal> derive(const scene::Scene& scene, const Operation& opera
         if (kReference) {
             const std::optional<base::Bits128>& target = std::get<SetReference>(operation).target;
             if (target.has_value()) {
-                if (entityOf(scene, *target) == nullptr) {
+                if (!present(scene, *target)) {
                     return invalid(operation, "a reference names an entity of the scene");
                 }
                 after = scene::FieldValue{.kind = scene::FieldValue::Kind::Entity, .entity = *target};
@@ -402,6 +350,104 @@ result::Status fresh(const AuthoredScene& scene, std::uint64_t generation, const
 }
 
 } // namespace
+
+std::unexpected<result::Error> notFound(const Operation& operation, std::string_view why) {
+    return refuse(operation, result::ErrorClass::NotFound, AuthoringError::TargetNotFound, why);
+}
+
+std::unexpected<result::Error> invalid(const Operation& operation, std::string_view why) {
+    return refuse(operation, result::ErrorClass::InvalidArgument, AuthoringError::ValidationFailed, why);
+}
+
+std::unexpected<result::Error> conflict(const Operation& operation, std::string_view why) {
+    return refuse(operation, result::ErrorClass::Conflict, AuthoringError::Conflict, why);
+}
+
+std::uint64_t markOf(const scene::Scene& scene, std::string_view component) {
+    const auto kFound = std::ranges::find(scene.schema, component, &scene::SchemaMark::component);
+    return kFound != scene.schema.end() ? kFound->mark : 0;
+}
+
+result::Status sameLayout(const scene::Scene& scene, const Operation& operation, const ComponentSchema& component) {
+    const auto kMark = std::ranges::find(scene.schema, component.name, &scene::SchemaMark::component);
+    if (kMark != scene.schema.end() && kMark->mark != component.mark) {
+        return invalid(operation, "the scene was authored against another layout of that component");
+    }
+    return {};
+}
+
+bool referenced(const scene::Scene& scene, base::Bits128 entity) {
+    const auto kNames = [entity](const std::vector<scene::SceneField>& fields) {
+        return std::ranges::any_of(fields, [entity](const scene::SceneField& field) {
+            return field.value.kind == scene::FieldValue::Kind::Entity && field.value.entity == entity;
+        });
+    };
+    for (const scene::SceneEntity& each : scene.entities) {
+        if (each.id != entity &&
+            std::ranges::any_of(each.components, [&kNames](const scene::SceneComponent& component) {
+                return kNames(component.fields);
+            })) {
+            return true;
+        }
+    }
+    for (const scene::SceneInstance& instance : scene.instances) {
+        for (const scene::Override& each : instance.overrides) {
+            if (each.entity != entity && kNames(each.fields)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool present(const scene::Scene& scene, base::Bits128 entity) {
+    if (std::ranges::contains(scene.entities, entity, &scene::SceneEntity::id)) {
+        return true;
+    }
+    return std::ranges::any_of(scene.instances, [entity](const scene::SceneInstance& instance) {
+        return std::ranges::contains(instance.entities, entity, &scene::IdentityMapping::instance) &&
+               !std::ranges::any_of(instance.overrides, [entity](const scene::Override& each) {
+                   return each.entity == entity && each.component.empty();
+               });
+    });
+}
+
+result::Result<std::optional<scene::FieldValue>>
+valueOf(const Operation& operation, const FieldInput& input, FieldKind kind) {
+    using Kind = FieldInput::Kind;
+    const bool kFits = input.kind == Kind::Default || (input.kind == Kind::Signed && kind == FieldKind::Signed) ||
+                       (input.kind == Kind::Unsigned && kind == FieldKind::Unsigned) ||
+                       (input.kind == Kind::Real && kind == FieldKind::Real) ||
+                       (input.kind == Kind::Truth && kind == FieldKind::Truth);
+    if (!kFits) {
+        return invalid(operation, "a field's value is of the field's kind");
+    }
+    std::string text;
+    switch (input.kind) {
+    case Kind::Default:
+        return std::optional<scene::FieldValue>{};
+    case Kind::Truth:
+        return input.truth ? std::optional{scene::FieldValue{.kind = scene::FieldValue::Kind::True}}
+                           : std::optional<scene::FieldValue>{};
+    case Kind::Signed:
+        text = std::to_string(input.integer);
+        break;
+    case Kind::Unsigned:
+        text = std::to_string(input.whole);
+        break;
+    case Kind::Real:
+        if (!std::isfinite(input.real)) {
+            return invalid(operation, "a real field's value is finite");
+        }
+        text = document::write(document::Value::real(input.real == 0.0 ? 0.0 : input.real));
+        text.pop_back();
+        break;
+    }
+    if (text == "0") {
+        return std::optional<scene::FieldValue>{};
+    }
+    return std::optional{scene::FieldValue{.kind = scene::FieldValue::Kind::Number, .number = std::move(text)}};
+}
 
 result::Status ComponentCatalog::add(ComponentSchema component) {
     std::set<std::string_view> names;

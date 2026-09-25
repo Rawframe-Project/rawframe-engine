@@ -181,6 +181,18 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{
             SetReference{.entity = *kEntity, .component = {*kComponent}, .field = *field, .target = kTarget}};
     }
+    case 9:
+        if (!kComponent.has_value() || field == nullptr) {
+            return kBad();
+        }
+        return Operation{RevertField{.entity = *kEntity, .component = {*kComponent}, .field = *field}};
+    case 10:
+        if (!kComponent.has_value()) {
+            return kBad();
+        }
+        return Operation{RevertComponent{.entity = *kEntity, .component = {*kComponent}}};
+    case 11:
+        return Operation{RestoreEntity{.entity = *kEntity}};
     default:
         return kBad();
     }

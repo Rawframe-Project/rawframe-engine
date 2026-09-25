@@ -12,6 +12,14 @@
 // `ComponentCatalog`, the schema authority a caller builds from a game;
 // no request addresses by a name the document happens to use.
 //
+// An entity an instance brings (D96) is addressed the same way, and the
+// same verbs change it through the instance's patch (D154): a field set on
+// it is a `set` entry, a component added or removed an `add` or `remove`
+// entry, and destroying it its removal. Its name and place are its source
+// scene's. The revert verbs drop what the patch does, so the source's
+// value holds again. What the source scene itself holds is checked when
+// the instance is resolved, not here.
+//
 // Every request names the generation it was computed against. Validation
 // runs in SPEC-0040's order, addressing, staleness, schema and meaning,
 // limits, and only then stages; `DryRun` runs exactly that validation and
@@ -142,6 +150,23 @@ struct RemarkComponent {
     schema::ComponentTypeId component{};
 };
 
+/// Drops an instance's own value for one field of one of its entities.
+struct RevertField {
+    base::Bits128 entity{};
+    schema::ComponentTypeId component{};
+    std::string field;
+};
+/// Drops whatever an instance does to one component of one of its
+/// entities: its values, its addition, or its removal.
+struct RevertComponent {
+    base::Bits128 entity{};
+    schema::ComponentTypeId component{};
+};
+/// Takes back an instance's removal of one of its entities.
+struct RestoreEntity {
+    base::Bits128 entity{};
+};
+
 using Operation = std::variant<CreateEntity,
                                DestroyEntity,
                                RenameEntity,
@@ -150,7 +175,10 @@ using Operation = std::variant<CreateEntity,
                                RemoveComponent,
                                SetField,
                                SetReference,
-                               RemarkComponent>;
+                               RemarkComponent,
+                               RevertField,
+                               RevertComponent,
+                               RestoreEntity>;
 
 /// SPEC-0040's history classes; every operation here is `Undoable`.
 enum class HistoryClass : std::uint8_t {

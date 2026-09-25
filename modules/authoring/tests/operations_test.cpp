@@ -270,3 +270,96 @@ RAWFRAME_TEST(AComponentIsRemarkedOnlyWhenEveryFieldCarriesOver) {
     RAWFRAME_EXPECT(refusedWith(execute(scene, 2, RemarkComponent{.component = kUnknown}, kCatalog),
                                 AuthoringError::TargetNotFound));
 }
+
+RAWFRAME_TEST(AnInstancesEntitiesChangeThroughItsPatch) {
+    const base::Bits128 kCrate{1, 4};
+    const base::Bits128 kShelf{1, 5};
+    // A spawn point, and an instance of a storeroom bringing a crate and a
+    // shelf.
+    const scene::Scene kRoom{
+        .schema = {{.component = "game.position", .mark = 0xa1}},
+        .entities = {{.id = kSpawn,
+                      .name = {},
+                      .components = {{.name = "game.position",
+                                      .fields = {{.name = "x",
+                                                  .value = {.kind = scene::FieldValue::Kind::Number,
+                                                            .number = "1.5"}}}}}}},
+        .instances = {{.scene = base::Bits128{9, 1},
+                       .entities = {{.source = base::Bits128{7, 1}, .instance = kCrate},
+                                    {.source = base::Bits128{7, 2}, .instance = kShelf}},
+                       .overrides = {}}}};
+    auto opened = AuthoredScene::open(base::Bits128{7, 7}, *scene::writeScene(kRoom));
+    AuthoredScene& room = **opened;
+    const ComponentCatalog kCatalog = catalog();
+    const auto kRun = [&](const Operation& operation) {
+        return execute(room, room.generation(), operation, kCatalog);
+    };
+    const auto kPatch = [&room] {
+        return room.scene().instances[0].overrides;
+    };
+
+    // A field set is a set entry; a default is written out, since it
+    // differs from the source's; a revert drops one field.
+    RAWFRAME_EXPECT(kRun(SetField{.entity = kCrate, .component = kPosition, .field = "x", .value = real(2.0)}));
+    RAWFRAME_EXPECT(kRun(SetField{.entity = kCrate, .component = kPosition, .field = "lit", .value = {}}));
+    RAWFRAME_EXPECT(kPatch().size() == 1 && kPatch()[0].kind == scene::Override::Kind::Set &&
+                    kPatch()[0].fields.size() == 2 &&
+                    kPatch()[0].fields[0].value.kind == scene::FieldValue::Kind::False &&
+                    kPatch()[0].fields[1].value.number == "2");
+    RAWFRAME_EXPECT(kRun(RevertField{.entity = kCrate, .component = kPosition, .field = "x"}));
+    RAWFRAME_EXPECT(kPatch().size() == 1 && kPatch()[0].fields.size() == 1);
+    RAWFRAME_EXPECT(refusedWith(kRun(RevertField{.entity = kCrate, .component = kPosition, .field = "x"}),
+                                AuthoringError::TargetNotFound));
+
+    // A component the instance adds is an add entry, its fields in a
+    // component's form, and removing it drops the entry and its mark.
+    RAWFRAME_EXPECT(kRun(AddComponent{.entity = kShelf, .component = kLink}));
+    RAWFRAME_EXPECT(kRun(SetReference{.entity = kShelf, .component = kLink, .field = "target", .target = kSpawn}));
+    RAWFRAME_EXPECT(kPatch().size() == 2 && kPatch()[1].kind == scene::Override::Kind::Add &&
+                    kPatch()[1].fields[0].value.entity == kSpawn && room.scene().schema.size() == 2);
+    RAWFRAME_EXPECT(
+        refusedWith(kRun(SetReference{.entity = kCrate, .component = kLink, .field = "target", .target = std::nullopt}),
+                    AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(kRun(RemoveComponent{.entity = kShelf, .component = kLink}));
+    RAWFRAME_EXPECT(kPatch().size() == 1 && room.scene().schema.size() == 1);
+
+    // A component the source holds is removed by a remove entry, which
+    // replaces what the instance set; the removed one takes no field and
+    // is not added back over it; a revert brings the source's back.
+    RAWFRAME_EXPECT(kRun(RemoveComponent{.entity = kCrate, .component = kPosition}));
+    RAWFRAME_EXPECT(kPatch().size() == 1 && kPatch()[0].kind == scene::Override::Kind::Remove &&
+                    kPatch()[0].fields.empty());
+    RAWFRAME_EXPECT(
+        refusedWith(kRun(SetField{.entity = kCrate, .component = kPosition, .field = "x", .value = real(1.0)}),
+                    AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(
+        refusedWith(kRun(AddComponent{.entity = kCrate, .component = kPosition}), AuthoringError::Conflict));
+    RAWFRAME_EXPECT(kRun(RevertComponent{.entity = kCrate, .component = kPosition}));
+    RAWFRAME_EXPECT(kPatch().empty());
+    RAWFRAME_EXPECT(refusedWith(kRun(RenameEntity{.entity = kCrate, .name = "box"}), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(
+        refusedWith(kRun(RevertComponent{.entity = kSpawn, .component = kPosition}), AuthoringError::TargetNotFound));
+
+    // An entity the scene names is not removed; one nothing names is, its
+    // entries going with it, and nothing may name it or take its id after.
+    RAWFRAME_EXPECT(kRun(AddComponent{.entity = kSpawn, .component = kLink}));
+    const Operation kToShelf = SetReference{.entity = kSpawn, .component = kLink, .field = "target", .target = kShelf};
+    RAWFRAME_EXPECT(kRun(kToShelf));
+    RAWFRAME_EXPECT(refusedWith(kRun(DestroyEntity{.entity = kShelf}), AuthoringError::Conflict));
+    RAWFRAME_EXPECT(
+        kRun(SetReference{.entity = kSpawn, .component = kLink, .field = "target", .target = std::nullopt}));
+    RAWFRAME_EXPECT(kRun(SetField{.entity = kShelf, .component = kPosition, .field = "x", .value = real(3.0)}));
+    const std::string kBeforeRemoval = room.text();
+    const auto kRemoved = kRun(DestroyEntity{.entity = kShelf});
+    RAWFRAME_EXPECT(kRemoved.has_value() && kRemoved->deltas == 2 && kPatch().size() == 1 &&
+                    kPatch()[0].component.empty());
+    RAWFRAME_EXPECT(refusedWith(kRun(kToShelf), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(kRun(CreateEntity{.entity = kShelf, .name = "again"}), AuthoringError::Conflict));
+    RAWFRAME_EXPECT(refusedWith(kRun(SetField{.entity = kShelf, .component = kPosition, .field = "x", .value = {}}),
+                                AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(room.undo(room.generation()).has_value() && room.text() == kBeforeRemoval);
+    RAWFRAME_EXPECT(room.redo(room.generation()).has_value());
+    RAWFRAME_EXPECT(kRun(RestoreEntity{.entity = kShelf}) && kPatch().empty());
+    RAWFRAME_EXPECT(refusedWith(kRun(RestoreEntity{.entity = kShelf}), AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(scene::readScene(room.text()).has_value());
+}
