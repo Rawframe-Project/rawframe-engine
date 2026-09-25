@@ -37,7 +37,9 @@ result::Result<std::unique_ptr<KestAdmission>> KestAdmission::create(std::shared
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine,
                         kest::Machine::start(std::move(program), kNoDoors, kest::Trust::Trusted, limits));
     RAWFRAME_TRY_ASSIGN(const kest::Entry kEntry, machine->entry(entry));
-    if (kEntry.frameSlots != 2) {
+    const kest::Argument kTakes[] = {{.slot = kest::Slot::U32, .lent = true}, {.slot = kest::Slot::U32, .lent = true}};
+    if (!machine->checkArguments(kEntry, kTakes).has_value() ||
+        !machine->checkAnswer(kEntry, kest::Slot::U32).has_value()) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kWorldKestDomain,
                             code(WorldKestError::EntryMismatch),

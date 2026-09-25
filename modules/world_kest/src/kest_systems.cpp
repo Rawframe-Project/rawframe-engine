@@ -17,8 +17,17 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldKestEr
     return result::fail(errorClass, kWorldKestDomain, code(error), why);
 }
 
-bool carriesData(const KestColumn& column) noexcept {
+/// Whether a column, as declared or as kept, is lent to the system as an
+/// array.
+template <typename Column> bool carriesData(const Column& column) noexcept {
     return column.entities || column.access == world::Access::Read || column.access == world::Access::Write;
+}
+
+/// What a system takes: the count, then one lent array per data column.
+std::vector<kest::Argument> systemArguments(std::size_t data) {
+    std::vector<kest::Argument> takes(1 + data, kest::Argument{.slot = kest::Slot::I32, .lent = true});
+    takes[0].lent = false;
+    return takes;
 }
 
 std::size_t roundUp(std::size_t value, std::size_t alignment) noexcept {
@@ -530,7 +539,10 @@ result::Status KestSystems::reload(std::shared_ptr<const kest::Program> program)
     std::vector<kest::Entry> entries;
     for (const Declared& declared : declared_) {
         RAWFRAME_TRY_ASSIGN(const kest::Entry kEntry, machine->entry(declared.entryName));
-        if (kEntry.frameSlots != declared.entry.frameSlots) {
+        const auto kData =
+            static_cast<std::size_t>(std::ranges::count_if(declared.columns, &carriesData<Declared::Column>));
+        if (kEntry.frameSlots != declared.entry.frameSlots ||
+            !machine->checkArguments(kEntry, systemArguments(kData)).has_value()) {
             return refuse(result::ErrorClass::FailedPrecondition,
                           WorldKestError::EntryMismatch,
                           "a reloaded system takes other columns than it was declared with");
@@ -643,7 +655,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         }
         // The count, then one array per data column; an answer, if any, is
         // one slot and fits over the count.
-        if (kEntry.frameSlots != 1 + data) {
+        if (kEntry.frameSlots != 1 + data || !machine->checkArguments(kEntry, systemArguments(data)).has_value()) {
             return refuse(result::ErrorClass::InvalidArgument,
                           WorldKestError::EntryMismatch,
                           "a Kest system takes a count and one array per lent column");
