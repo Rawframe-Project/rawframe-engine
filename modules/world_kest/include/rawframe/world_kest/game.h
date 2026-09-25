@@ -281,6 +281,41 @@ struct GameSave {
     std::vector<std::string> components;
 };
 
+/// Who may mod a game (ADR-0023): no one, the mods the game approves by
+/// subject, or any correctly signed one meeting its Mod API.
+enum class ModPolicy : std::uint8_t {
+    Closed,
+    Curated,
+    Open,
+};
+
+/// One extension point of a game's Mod API (SPEC-0042), from an `extension
+/// <name> data <component> multi|exclusive [required]` line. The engine's
+/// points are `data` alone for now: declarative values of one component,
+/// never executed (D177).
+struct GameExtensionPoint {
+    /// Its identity is `<namespace>/<name>`.
+    std::string name;
+    /// The component each contribution is a value of.
+    std::string accepts;
+    /// At most one contribution; otherwise any number.
+    bool exclusive = false;
+    /// At least one contribution, or the Composition is invalid.
+    bool required = false;
+};
+
+/// A game's Mod API surface (SPEC-0042, D177): its policy from a `mods
+/// closed|curated|open` line (closed without one), its namespace and
+/// version from a `modapi <namespace> <version>` line, the mods a curated
+/// game approves from `approve <publisher/name>` lines, and its points.
+struct GameModApi {
+    ModPolicy policy = ModPolicy::Closed;
+    std::string modNamespace;
+    std::uint32_t version = 0;
+    std::vector<std::string> approved;
+    std::vector<GameExtensionPoint> points;
+};
+
 struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
@@ -330,6 +365,8 @@ struct GameDescription {
     /// The project's default locale, from a `locale <tag>` line; empty for
     /// each table's source locale. A client checks the tag.
     std::string locale;
+    /// Who may mod the game and where (SPEC-0042).
+    GameModApi mods;
     /// The program's admission rule, from an `admission <function>` line;
     /// empty admits every client the engine does.
     std::string admission;

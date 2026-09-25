@@ -1,5 +1,6 @@
 #include "rawframe/world_kest/game.h"
 
+#include "mod_api.h"
 #include "physics_facts.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_animation/components.h"
@@ -98,6 +99,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     std::size_t sampleLine = 0;
     GameControls controls;
     std::size_t number = 0;
+    ModLines modLines;
     // Names are checked once every component line has been read, so a
     // description may list components after the systems that use them.
     std::vector<std::pair<std::size_t, std::string>> uses;
@@ -121,7 +123,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             continue;
         }
         const std::string_view kKeyword = kWords[0];
-        if (kKeyword == "program") {
+        if (modKeyword(kKeyword)) {
+            RAWFRAME_TRY(readModLine(kWords, number, game, modLines));
+        } else if (kKeyword == "program") {
             if (haveProgram || kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names exactly one program");
             }
@@ -557,6 +561,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     if (mixerLine != 0) {
         game.audio = std::move(audio);
     }
+    RAWFRAME_TRY(checkModApi(game, modLines));
     return game;
 }
 
