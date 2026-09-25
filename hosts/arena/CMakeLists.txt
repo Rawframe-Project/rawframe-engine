@@ -13,4 +13,11 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(arena_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":16,\"admitted\":16")
+    # Sixteen bots play the sample physics game: eleven bodies of the level
+    # and one ball for each player are made, and nothing is refused.
+    add_test(NAME crates_bots
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/crates.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(crates_bots PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":27,\"bodiesRemoved\":0,\"bodiesRefused\":0")
 endif()

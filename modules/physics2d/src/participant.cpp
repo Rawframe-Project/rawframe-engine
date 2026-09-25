@@ -3,7 +3,10 @@
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/world_runtime/simulation.h"
 
+#include <array>
+#include <cstdint>
 #include <memory>
+#include <string_view>
 
 namespace rawframe::physics2d {
 
@@ -38,6 +41,12 @@ public:
             return;
         }
         const Physics2DStatistics kStatistics = physics_->statistics();
+        // As sixteen hex digits: every bit, never a negative number.
+        std::array<char, 16> digest{};
+        const std::uint64_t kDigest = physics_->digest();
+        for (std::size_t index = 0; index < digest.size(); ++index) {
+            digest[index] = "0123456789abcdef"[(kDigest >> (4U * (15U - index))) & 0xFU];
+        }
         emitter_.log(diagnostics::Severity::Info,
                      kSummary,
                      "2D physics totals",
@@ -48,7 +57,7 @@ public:
                       diagnostics::field("teleports", kStatistics.teleports),
                       diagnostics::field("velocitiesSet", kStatistics.velocitiesSet),
                       diagnostics::field("impulses", kStatistics.impulses),
-                      diagnostics::field("digest", physics_->digest())});
+                      diagnostics::field("digest", std::string_view{digest.data(), digest.size()})});
     }
 
 private:

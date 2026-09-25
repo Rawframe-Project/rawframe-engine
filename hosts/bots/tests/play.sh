@@ -5,7 +5,7 @@
 # the repository root.
 #
 #   play.sh <rawframe-server> <rawframe-bots> <bots per process> [processes]
-#           [bots iterations]
+#           [bots iterations] [game]
 #
 # Iterations are the Host's, at 120 a second; the server ticks at 60. The
 # server runs until every bots process has stopped and is then asked to stop,
@@ -17,6 +17,7 @@ bots="$2"
 count="$3"
 processes="${4:-1}"
 bots_iterations="${5:-240}"
+game="${6:-games/arena/arena.game}"
 work="$(mktemp -d)"
 pids=()
 trap 'kill "${pids[@]}" 2>/dev/null || true; rm -rf "$work"' EXIT
@@ -27,7 +28,7 @@ port="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK
 cat >"$work/server.conf" <<CONF
 host.iteration_rate = 120
 world.tick_rate = 60
-kest.game = games/arena/arena.game
+kest.game = $game
 kest.library = third_party/kest/lib/
 network.quic.self_signed = true
 network.quic.fingerprint_file = $work/fingerprint
@@ -36,7 +37,7 @@ CONF
 cat >"$work/bots.conf" <<CONF
 host.maximum_iterations = $bots_iterations
 host.iteration_rate = 120
-kest.game = games/arena/arena.game
+kest.game = $game
 kest.library = third_party/kest/lib/
 kest.plan_only = true
 network.quic.pin_file = $work/fingerprint

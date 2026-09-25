@@ -1,0 +1,41 @@
+module crates
+
+// The sample physics game: players are balls that roll along the ground and
+// shove a pile of crates about. Everything that moves is a Maul2D body; the
+// systems here only make players and push them.
+
+import rawframe.physics2d
+import rawframe.random
+
+// What a player asks for: -1 to 1 along each axis.
+struct Steer {
+    dx: f32
+    dy: f32
+}
+
+// A player's entity arrives with its components zeroed: here it becomes a
+// ball dropped somewhere over the ground.
+fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D]) {
+    let i = 0
+    while i < count {
+        if bodies[i].width == 0.0 {
+            bodies[i] = physics2d.Body2D(physics2d.DYNAMIC, physics2d.CIRCLE, false, false, 0.4, 0.0, 1.0, 0.8,
+                                         0.1, 0.2, 0.5)
+            poses[i] = physics2d.Pose2D(random.unit(0) * 30.0 - 15.0, 3.0, 1.0, 0.0)
+        }
+        i = i + 1
+    }
+}
+
+// Rolling along the ground, and a hop when asked hard enough and nearly at
+// rest upward.
+fn push(count: i32, steers: [Steer], impulses: [physics2d.Impulse2D], velocities: [physics2d.Velocity2D]) {
+    let i = 0
+    while i < count {
+        impulses[i].x = steers[i].dx * 0.05
+        if steers[i].dy > 0.8 && velocities[i].y < 0.05 && velocities[i].y > -0.05 {
+            impulses[i].y = 2.0
+        }
+        i = i + 1
+    }
+}
