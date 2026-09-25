@@ -31,6 +31,9 @@ ATTRIBUTION = re.compile(r"co-authored-by:|generated with|claude-session:", re.I
 VALUE_CALL = re.compile(r"\.value\(\s*\)")
 BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
 BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
+# Vendored providers stay behind their module (ADR-0005, ADR-0038): no public
+# header includes one.
+PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|msquic\.h|openssl/|maul2d/|maul3d/|kest/)', re.MULTILINE)
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 
 
@@ -64,6 +67,15 @@ def check_boundaries(files, allowed, findings):
         for included in INCLUDE.findall(path.read_text(errors="replace")):
             if included not in permitted:
                 findings.append(f"{relative}: includes rawframe/{included}/, not allowed for module '{module}'")
+
+
+def check_providers(files, findings):
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[0] != "modules" or len(relative.parts) < 3 or relative.parts[2] != "include":
+            continue
+        for included in PROVIDER_INCLUDE.findall(path.read_text(errors="replace")):
+            findings.append(f"{relative}: includes the provider {included} in a public header")
 
 
 def check_value_calls(files, findings):
@@ -125,6 +137,7 @@ def main():
     files = [path for path in tracked_files() if path.is_file()]
     findings, notes = [], []
     check_boundaries(files, read_modules(), findings)
+    check_providers(files, findings)
     check_value_calls(files, findings)
     check_bounds_literals(files, findings)
     check_sizes(files, findings, notes)
