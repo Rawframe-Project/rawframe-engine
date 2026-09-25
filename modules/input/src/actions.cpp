@@ -1,10 +1,12 @@
 #include "rawframe/input/actions.h"
 
+#include "binding_document.h"
 #include "rawframe/document/errors.h"
 #include "rawframe/document/json.h"
 #include "rawframe/document/record.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <set>
 #include <string>
@@ -113,20 +115,40 @@ result::Result<std::optional<Control>> singleControl(const Record& record, Devic
     return std::optional{kControl};
 }
 
-result::Result<Binding> readBinding(const Value& value, const Action& action, const std::string& path) {
-    RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kBindingFields, path));
-    Binding binding;
-    RAWFRAME_TRY_ASSIGN(const std::int64_t kSlot, kRecord.integer("slot", 0));
+result::Result<std::uint32_t> readSlot(const Record& record) {
+    RAWFRAME_TRY_ASSIGN(const std::int64_t kSlot, record.integer("slot", 0));
     if (kSlot < 0 || kSlot > 0xFFFF) {
-        return invalid(kRecord.pathOf("slot"), "a slot is an ordinal below 65536");
+        return invalid(record.pathOf("slot"), "a slot is an ordinal below 65536");
     }
-    binding.slot = static_cast<std::uint32_t>(kSlot);
-    RAWFRAME_TRY_ASSIGN(const std::string_view kDevice, kRecord.text("device"));
+    return static_cast<std::uint32_t>(kSlot);
+}
+
+result::Result<DeviceClass> readDeviceClass(const Record& record) {
+    RAWFRAME_TRY_ASSIGN(const std::string_view kDevice, record.text("device"));
     const auto kClass = deviceClassNamed(kDevice);
     if (!kClass) {
-        return invalid(kRecord.pathOf("device"), "a device class is keyboard, mouse, or gamepad");
+        return invalid(record.pathOf("device"), "a device class is keyboard, mouse, or gamepad");
     }
-    binding.device = *kClass;
+    return *kClass;
+}
+
+} // namespace
+
+result::Result<Binding>
+readBinding(const Value& value, const Action& action, const std::string& path, const Binding* key) {
+    RAWFRAME_TRY_ASSIGN(const Record kRecord,
+                        Record::of(value,
+                                   key != nullptr ? std::span<const std::string_view>{kBindingFields}.subspan(2)
+                                                  : std::span<const std::string_view>{kBindingFields},
+                                   path));
+    Binding binding;
+    if (key != nullptr) {
+        binding.slot = key->slot;
+        binding.device = key->device;
+    } else {
+        RAWFRAME_TRY_ASSIGN(binding.slot, readSlot(kRecord));
+        RAWFRAME_TRY_ASSIGN(binding.device, readDeviceClass(kRecord));
+    }
     RAWFRAME_TRY_ASSIGN(const Value* logical, kRecord.optional("logicalKey", Value::Kind::String));
     if (logical != nullptr) {
         return invalid(kRecord.pathOf("logicalKey"), "logical keys are not read yet; bind the physical key");
@@ -235,6 +257,87 @@ result::Result<Binding> readBinding(const Value& value, const Action& action, co
     return binding;
 }
 
+namespace {
+
+/// The shortest text that reads back to the same float.
+document::Value floatNumber(float number) {
+    std::array<char, 32> buffer{};
+    const auto [kEnd, kError] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), number);
+    static_cast<void>(kError);
+    return document::Value::numberText(std::string{buffer.data(), kEnd});
+}
+
+} // namespace
+
+document::Value bindingDocument(const Binding& binding, bool keyed) {
+    Value record = Value::object();
+    if (!keyed) {
+        if (binding.slot != 0) {
+            record.add("slot", Value::integer(binding.slot));
+        }
+        record.add("device", Value::string(std::string{nameOf(binding.device)}));
+    }
+    const auto kNamed = [](Control control) {
+        return Value::string(std::string{nameOf(control)});
+    };
+    switch (binding.composite) {
+    case Composite::None:
+        record.add(binding.device == DeviceClass::Keyboard ? "physicalKey" : "control", kNamed(binding.controls[0]));
+        break;
+    case Composite::Pair: {
+        Value pair = Value::object();
+        pair.add("negative", kNamed(binding.controls[0]));
+        pair.add("positive", kNamed(binding.controls[1]));
+        record.add("pair", std::move(pair));
+        break;
+    }
+    case Composite::Quad: {
+        Value quad = Value::object();
+        for (std::size_t part = 0; part < kQuadFields.size(); ++part) {
+            quad.add(std::string{kQuadFields[part]}, kNamed(binding.controls[part]));
+        }
+        record.add("quad", std::move(quad));
+        break;
+    }
+    }
+    if (binding.composite == Composite::Quad && binding.mode == CompositeMode::Digital) {
+        record.add("mode", Value::string("digital"));
+    }
+    if (binding.modifiers != 0) {
+        Value modifiers = Value::array();
+        for (const auto& [kName, kModifier] : {std::pair{"ctrl", Modifier::Ctrl},
+                                               std::pair{"shift", Modifier::Shift},
+                                               std::pair{"alt", Modifier::Alt},
+                                               std::pair{"meta", Modifier::Meta}}) {
+            if ((binding.modifiers & static_cast<std::uint8_t>(kModifier)) != 0) {
+                modifiers.push(Value::string(kName));
+            }
+        }
+        record.add("modifiers", std::move(modifiers));
+    }
+    if (binding.exactModifiers) {
+        record.add("exactModifiers", Value::boolean(true));
+    }
+    if (binding.deadzoneLower != 0.2F) {
+        record.add("deadzoneLower", floatNumber(binding.deadzoneLower));
+    }
+    if (binding.deadzoneUpper != 1.0F) {
+        record.add("deadzoneUpper", floatNumber(binding.deadzoneUpper));
+    }
+    if (binding.invertX) {
+        record.add("invertX", Value::boolean(true));
+    }
+    if (binding.invertY) {
+        record.add("invertY", Value::boolean(true));
+    }
+    if (binding.scale != 1.0F) {
+        record.add("scale", floatNumber(binding.scale));
+    }
+    return record;
+}
+
+namespace {
+
 result::Result<Action> readAction(const Value& value, const std::string& path, const ActionSetLimits& limits) {
     RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kActionFields, path));
     Action action;
@@ -274,7 +377,7 @@ result::Result<Action> readAction(const Value& value, const std::string& path, c
         std::set<std::pair<DeviceClass, std::uint32_t>> slots;
         for (std::size_t index = 0; index < bindings->items().size(); ++index) {
             const std::string kPath = indexed(kRecord.pathOf("bindings"), index);
-            RAWFRAME_TRY_ASSIGN(Binding binding, readBinding(bindings->items()[index], action, kPath));
+            RAWFRAME_TRY_ASSIGN(Binding binding, readBinding(bindings->items()[index], action, kPath, nullptr));
             if (!slots.emplace(binding.device, binding.slot).second) {
                 return invalid(kPath, "a slot of a device class holds one binding");
             }
