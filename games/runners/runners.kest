@@ -1,0 +1,94 @@
+module runners
+
+// The sample platformer: players are characters (rawframe.physics2d's
+// Character2D) that run, jump, and shoot along the level.
+
+import rawframe.physics2d
+import rawframe.random
+import rawframe.replication
+
+// The runners' collision class (runners.game): what a shot meets.
+const RUNNER: u64 = 0x2ebcd16c10c5f6a4
+
+// What a player asks for, each -1 to 1: to run left or right, to jump (above
+// a half), where to aim, and to fire (above a half).
+struct Stick {
+    run: f32
+    jump: f32
+    aimX: f32
+    aimY: f32
+    fire: f32
+}
+
+// Shots fired and shots that met another runner, and the ticks until the
+// next may be fired.
+struct Score {
+    shots: i32
+    hits: i32
+    cooldown: i32
+}
+
+// A player's entity arrives with its components zeroed: here it becomes a
+// runner standing somewhere on the ground.
+fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], characters: [physics2d.Character2D]) {
+    let i = 0
+    while i < count {
+        if bodies[i].width == 0.0 {
+            bodies[i] = physics2d.Body2D(physics2d.KINEMATIC, physics2d.CAPSULE, true, false, false, RUNNER, 0.3,
+                                         0.4, 0.0, 0.0, 0.0, 0.0, 0.0)
+            poses[i] = physics2d.Pose2D(random.unit(0) * 40.0 - 20.0, 1.3, 1.0, 0.0)
+            characters[i] = physics2d.Character2D(0.7, 0.2, physics2d.AIRBORNE, 0.0, 0.0)
+        }
+        i = i + 1
+    }
+}
+
+// Six meters a second either way; on ground, a jump when asked, and in the
+// air, a fall that quickens to twenty meters a second.
+fn run(count: i32, sticks: [Stick], characters: [physics2d.Character2D], velocities: [physics2d.Velocity2D]) {
+    let i = 0
+    while i < count {
+        velocities[i].x = sticks[i].run * 6.0
+        let grounded = characters[i].ground == physics2d.GROUNDED
+        let fall = velocities[i].y - 0.5
+        if grounded {
+            fall = 0.0
+        }
+        if grounded && sticks[i].jump > 0.5 {
+            fall = 10.0
+        }
+        if fall < -20.0 {
+            fall = -20.0
+        }
+        velocities[i].y = fall
+        i = i + 1
+    }
+}
+
+// A shot every third of a second while firing: from the runner's side it
+// faces, thirty meters out, at the other runners where its player saw them.
+fn shoot(count: i32, sticks: [Stick], poses: [physics2d.Pose2D], seen: [replication.Perception], scores: [Score]) {
+    let i = 0
+    while i < count {
+        let ready = scores[i].cooldown == 0
+        if scores[i].cooldown > 0 {
+            scores[i].cooldown = scores[i].cooldown - 1
+        }
+        if ready && sticks[i].fire > 0.5 {
+            let side: f64 = 0.35
+            let reach: f32 = 30.0
+            if sticks[i].aimX < 0.0 {
+                side = -0.35
+                reach = -30.0
+            }
+            let hit = physics2d.castRayAtAmong(RUNNER, poses[i].x + side, poses[i].y + 0.2, reach,
+                                               sticks[i].aimY * 15.0, seen[i])
+            scores[i].shots = scores[i].shots + 1
+            if hit.hit && !hit.inside {
+                scores[i].hits = scores[i].hits + 1
+            }
+            scores[i].cooldown = 20
+        }
+        i = i + 1
+    }
+}

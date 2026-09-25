@@ -27,4 +27,19 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(crates_prediction PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,")
+    # Sixteen bots play the sample platformer: nine bodies of the level and
+    # one runner for each player are made, and the runners move as
+    # characters.
+    add_test(NAME runners_bots
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(runners_bots PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":25,\"bodiesRemoved\":0,\"bodiesRefused\":0,.*\"characterMoves\":[1-9]")
+    # Four bots predict their runners: a thousand ticks confirmed, the
+    # rollbacks only those of admission.
+    add_test(NAME runners_prediction
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_prediction.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(runners_prediction PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
 endif()

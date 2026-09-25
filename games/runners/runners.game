@@ -1,0 +1,38 @@
+# The sample platformer: players are characters running and jumping about a
+# level of platforms and slopes and shooting at each other, where the shooter
+# saw the others. Everything a player does moves no dynamic body, so a client
+# predicts its own runner exactly; each client is sent what is within 30
+# meters and sees the others between states.
+program runners.kest
+physics2d gravity 0 -10 substeps 4
+
+collision class runner 2ebcd16c10c5f6a4
+
+component 6b05cdb4-0683-437a-aaac-7ad990b2ddb4 runners.stick Stick
+component f6453556-fcdd-46e8-9208-866fade389cf runners.score Score
+
+system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
+system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity before rawframe.physics2d.step predicted
+system runners.shoot simulation shoot read runners.stick read rawframe.physics2d.pose read rawframe.replication.perception write runners.score before rawframe.physics2d.step
+
+# The ground, eighty meters wide, and walls at its ends.
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=40 height=0.5 rawframe.physics2d.pose rawframe.physics2d.velocity
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=0.5 height=10 rawframe.physics2d.pose x=-40 y=10 rawframe.physics2d.velocity
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=0.5 height=10 rawframe.physics2d.pose x=40 y=10 rawframe.physics2d.velocity
+
+# Platforms to jump up to.
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=3 height=0.25 rawframe.physics2d.pose x=-15 y=3 rawframe.physics2d.velocity
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=3 height=0.25 rawframe.physics2d.pose x=0 y=5 rawframe.physics2d.velocity
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=3 height=0.25 rawframe.physics2d.pose x=15 y=3 rawframe.physics2d.velocity
+
+# Slopes of 20 degrees at both ends, and one of 55 too steep to stand on.
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=4 height=0.5 rawframe.physics2d.pose x=-28 y=1 c=0.9397 s=-0.3420 rawframe.physics2d.velocity
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=4 height=0.5 rawframe.physics2d.pose x=28 y=1 c=0.9397 s=0.3420 rawframe.physics2d.velocity
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=2 height=0.5 rawframe.physics2d.pose x=34 y=1.5 c=0.5736 s=0.8192 rawframe.physics2d.velocity
+
+replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score
+player runners.stick runners.score rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
+input runners.stick perceived
+interest rawframe.physics2d.pose x y within 30
+interpolate rawframe.physics2d.pose
+predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick
