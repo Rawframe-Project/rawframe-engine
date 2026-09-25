@@ -294,7 +294,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
         return report.has_value() ? std::move(*report) : CookReport{};
     };
     const CookReport kFirst = kCook();
-    RAWFRAME_EXPECT(kFirst.cooked == 7 && kFirst.failures.empty());
+    RAWFRAME_EXPECT(kFirst.cooked == 8 && kFirst.failures.empty());
     const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
         const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
         if (!kManifest.has_value()) {
@@ -313,12 +313,13 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     if (!kGameRead.has_value()) {
         return;
     }
-    // The text as written; the three documents it names; its scene by
+    // The text as written; the three documents it names; its two scenes by
     // resource; both programs as
     // entries of the project's sources.
     RAWFRAME_EXPECT(kGameRead->text == readText(kGame / "runners.game"));
     RAWFRAME_EXPECT(kGameRead->files.size() == 3 && kGameRead->file("runners.actions") != nullptr &&
-                    kGameRead->scenes.size() == 1 && kGameRead->scene("level.scene") != nullptr &&
+                    kGameRead->scenes.size() == 2 && kGameRead->scene("level.scene") != nullptr &&
+                    kGameRead->scene("hall.scene") != nullptr &&
                     kGameRead->scene("level.scene")->scene ==
                         base::parseBits128Hex("52771075251e7361deaecf4939c72e56").value &&
                     kGameRead->file("runners.mixer") != nullptr && kGameRead->file("shot.sound") != nullptr &&

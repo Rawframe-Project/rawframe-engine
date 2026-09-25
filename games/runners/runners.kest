@@ -33,6 +33,12 @@ struct Hit {
 extern fn Hit.insert(entity: world.Entity, value: Hit)
 extern fn Hit.remove(entity: world.Entity)
 
+// How long this level has been played, over every run of the server: the
+// hall (hall.scene) is persistent, and the game's save keeps its age.
+struct Age {
+    ticks: u64
+}
+
 // A player's entity arrives with its components zeroed: here it becomes a
 // runner standing somewhere on the ground.
 fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], characters: [physics2d.Character2D]) {
@@ -109,6 +115,15 @@ fn hurt(count: i32, scores: [Score], hits: [Hit], entities: [world.Entity]) {
     while i < count {
         scores[i].taken = scores[i].taken + 1
         Hit.remove(entities[i])
+        i = i + 1
+    }
+}
+
+// The hall ages a tick with every tick played.
+fn age(count: i32, ages: [Age]) {
+    let i = 0
+    while i < count {
+        ages[i].ticks = ages[i].ticks + u64(1)
         i = i + 1
     }
 }

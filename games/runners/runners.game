@@ -12,16 +12,23 @@ component 6b05cdb4-0683-437a-aaac-7ad990b2ddb4 runners.stick Stick
 component f6453556-fcdd-46e8-9208-866fade389cf runners.score Score
 component 4a1a3d29-28e9-46fe-aae0-6bb3576ca9b3 runners.hit Hit
 component 5f3691c6-292c-4054-b868-142fe8a4448f runners.emitter Emitter
+component 8c4e2a17-5b90-4d3f-a6e8-1f7c9d0b2e53 runners.age Age
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity before rawframe.physics2d.step predicted
 system runners.shoot simulation shoot read runners.stick read rawframe.physics2d.pose read rawframe.replication.perception write runners.score write runners.emitter before rawframe.physics2d.step
 system runners.hurt simulation hurt write runners.score read runners.hit entities
+system runners.age simulation age write runners.age
 
 # The level (level.scene): the ground, eighty meters wide, walls at its
 # ends, three platforms to jump up to, slopes of 20 degrees at both ends,
 # and one of 55 too steep to stand on.
 scene level.scene
+
+# The hall (hall.scene): one persistent entity that keeps how long the level
+# has been played. A server with `save.directory` keeps it between runs.
+scene hall.scene
+save hall runners.age
 
 replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter
 player runners.stick runners.score runners.emitter rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
