@@ -344,11 +344,11 @@ result::Result<std::size_t> Sounds::add(LoadedSound sound) {
 
 result::Status Sounds::supply(std::size_t sound, std::size_t variant, std::shared_ptr<const Clip> clip) {
     State& state = *state_;
-    if (sound >= state.sounds.size() || state.sounds[sound].declaration.loading != Loading::OnDemand ||
+    if (sound >= state.sounds.size() || state.sounds[sound].declaration.loading == Loading::Stream ||
         variant >= state.sounds[sound].clips.size()) {
         return refuse(result::ErrorClass::InvalidArgument,
                       AudioError::BadPlay,
-                      "only an on-demand sound's own variants are supplied");
+                      "only a preloaded or on-demand sound's own variants are supplied a clip");
     }
     LoadedSound& loaded = state.sounds[sound];
     RAWFRAME_TRY_ASSIGN(state.lengths[sound][variant], State::lengthOf(loaded.declaration, clip.get()));
@@ -356,6 +356,24 @@ result::Status Sounds::supply(std::size_t sound, std::size_t variant, std::share
     state.complete[sound] = std::ranges::none_of(loaded.clips, [](const auto& each) {
         return each == nullptr;
     });
+    return {};
+}
+
+result::Status
+Sounds::supplyCooked(std::size_t sound, std::size_t variant, std::shared_ptr<const std::vector<std::byte>> cooked) {
+    State& state = *state_;
+    if (sound >= state.sounds.size() || state.sounds[sound].declaration.loading != Loading::Stream ||
+        variant >= state.sounds[sound].cooked.size()) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      AudioError::BadPlay,
+                      "only a streamed sound's own variants are supplied cooked bytes");
+    }
+    auto stream = Stream::open(cooked);
+    if (!stream.has_value()) {
+        return std::unexpected<result::Error>{std::move(stream).error()};
+    }
+    state.lengths[sound][variant] = {(*stream)->frames(), (*stream)->rate()};
+    state.sounds[sound].cooked[variant] = std::move(cooked);
     return {};
 }
 

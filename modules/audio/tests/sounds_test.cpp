@@ -262,7 +262,14 @@ RAWFRAME_TEST(AStreamedSoundPlaysAsItsPreloadedSelf) {
     RAWFRAME_EXPECT(!unstreamed->add(streamed).has_value());
     Streamer streamer;
     auto withStreamer = *Sounds::create(*mixer, layout(), {.streamer = &streamer});
-    RAWFRAME_EXPECT(withStreamer->add(streamed).has_value());
+    const auto kStreamed = withStreamer->add(streamed);
+    RAWFRAME_EXPECT(kStreamed.has_value());
+    // A new revision of its cooked bytes is taken if it opens as a stream,
+    // never a clip; bytes that are no stream leave the old one.
+    RAWFRAME_EXPECT(withStreamer->supplyCooked(*kStreamed, 0, cookedFixture()).has_value());
+    RAWFRAME_EXPECT(!withStreamer->supplyCooked(*kStreamed, 0, std::make_shared<const std::vector<std::byte>>(8)));
+    RAWFRAME_EXPECT(!withStreamer->supply(*kStreamed, 0, clipOf(0.5F)).has_value());
+    RAWFRAME_EXPECT(withStreamer->play(*kStreamed).has_value());
     streamed.clips.push_back(clipOf(0.5F));
     RAWFRAME_EXPECT(!withStreamer->add(streamed).has_value());
 }
@@ -343,12 +350,11 @@ RAWFRAME_TEST(AnOnDemandSoundAsksForItsVariantsOnceAndPlaysWhenTheyAreIn) {
     // Half in is not in.
     RAWFRAME_EXPECT(sounds->supply(kRare, 0, clipOf(0.1F)).has_value());
     RAWFRAME_EXPECT(!sounds->play(kRare).has_value());
-    // A variant that is no clip, one out of range, and a sound that is not
-    // on demand are refused.
+    // A variant that is no clip, one out of range, and cooked bytes for a
+    // sound that does not stream are refused.
     RAWFRAME_EXPECT(!sounds->supply(kRare, 1, clipOf(0.3F, 0)).has_value());
     RAWFRAME_EXPECT(!sounds->supply(kRare, 2, clipOf(0.3F)).has_value());
-    const std::size_t kPreloaded = *sounds->add(declared({0.2F}, SoundDeclaration{.bus = kSfx}));
-    RAWFRAME_EXPECT(!sounds->supply(kPreloaded, 0, clipOf(0.2F)).has_value());
+    RAWFRAME_EXPECT(!sounds->supplyCooked(kRare, 0, nullptr).has_value());
     // All in: it plays its variants in sequence, and is never asked for
     // again.
     RAWFRAME_EXPECT(sounds->supply(kRare, 1, clipOf(0.3F)).has_value());
@@ -358,4 +364,23 @@ RAWFRAME_TEST(AnOnDemandSoundAsksForItsVariantsOnceAndPlaysWhenTheyAreIn) {
     RAWFRAME_EXPECT(sounds->play(kRare).has_value());
     RAWFRAME_EXPECT(std::abs(heard(*mixer).first - (0.4F * kCentre)) < 1e-5F);
     RAWFRAME_EXPECT(sounds->takeWanted().empty() && sounds->statistics().notLoaded == 4);
+}
+
+RAWFRAME_TEST(AReplacedVariantPlaysFromTheNextPlayOn) {
+    auto mixer = *Mixer::create(layout(), {});
+    auto sounds = *Sounds::create(*mixer, layout(), {});
+    const std::size_t kSound = *sounds->add(declared({0.2F}, SoundDeclaration{.bus = kSfx}));
+    const float kCentre = 1.0F / std::sqrt(2.0F);
+    RAWFRAME_EXPECT(sounds->play(kSound).has_value());
+    RAWFRAME_EXPECT(std::abs(heard(*mixer).first - (0.2F * kCentre)) < 1e-5F);
+    // A new revision: the play under way finishes on the old one, the next
+    // is the new one.
+    RAWFRAME_EXPECT(sounds->supply(kSound, 0, clipOf(0.05F)).has_value());
+    RAWFRAME_EXPECT(std::abs(heard(*mixer).first - (0.2F * kCentre)) < 1e-5F);
+    RAWFRAME_EXPECT(sounds->play(kSound).has_value());
+    RAWFRAME_EXPECT(std::abs(heard(*mixer).first - (0.25F * kCentre)) < 1e-5F);
+    // An empty revision is refused and the last good one stays.
+    RAWFRAME_EXPECT(!sounds->supply(kSound, 0, clipOf(0.3F, 0)).has_value());
+    RAWFRAME_EXPECT(sounds->play(kSound).has_value());
+    RAWFRAME_EXPECT(std::abs(heard(*mixer).first - (0.3F * kCentre)) < 1e-5F);
 }

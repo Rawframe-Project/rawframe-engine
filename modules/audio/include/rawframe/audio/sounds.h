@@ -97,9 +97,15 @@ public:
     /// past a clip's end, and a streamed sound without a streamer.
     [[nodiscard]] result::Result<std::size_t> add(LoadedSound sound);
 
-    /// Supplies variant `variant` of on-demand sound `sound`, refused as
-    /// `add` refuses a clip, and for a sound that is not on demand.
+    /// Supplies variant `variant` of a preloaded or on-demand sound, or
+    /// replaces it with a new revision: plays from now on use it, plays
+    /// under way finish on the old one. Refused as `add` refuses a clip, and
+    /// for a streamed sound; a refused replacement leaves the old variant.
     [[nodiscard]] result::Status supply(std::size_t sound, std::size_t variant, std::shared_ptr<const Clip> clip);
+    /// Replaces variant `variant` of a streamed sound with a new revision of
+    /// its cooked bytes, as `supply` replaces a clip.
+    [[nodiscard]] result::Status
+    supplyCooked(std::size_t sound, std::size_t variant, std::shared_ptr<const std::vector<std::byte>> cooked);
     /// The on-demand sounds played since last asked while their variants
     /// were not all in, each named once ever: whoever reads them supplies
     /// them.
