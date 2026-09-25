@@ -21,8 +21,11 @@
 // the same phase; and `random` before each stream it draws from. Every
 // component may be inserted and removed by the program through
 // `<Kest type>.insert` and `<Kest type>.remove`. A `spawn` line creates
-// entities with the listed components; a field not given is zero. For
-// networked play, `replicate` lists the components that replicate, `player`
+// entities with the listed components; a field not given is zero. A
+// `scene <file>` line names a scene document (rawframe/scene/scene.h)
+// beside the description whose entities the World starts with too; its
+// components are the description's, each with the layout the scene was
+// authored against. For networked play, `replicate` lists the components that replicate, `player`
 // the components each connected player's entity starts with, and `input` the
 // one component a player's input is written into; `input <component>
 // perceived` also gives each player a `rawframe.replication.perception`
@@ -212,6 +215,9 @@ struct GameDescription {
     std::vector<GameComponent> components;
     std::vector<GameSystem> systems;
     std::vector<GameSpawn> spawns;
+    /// Scene documents (rawframe/scene/scene.h) whose entities the World
+    /// starts with, beside any `spawn` lines, from `scene <file>` lines.
+    std::vector<std::string> scenes;
     /// Networked play: what replicates, what a player starts with, and
     /// which component a player's input is written into.
     std::vector<std::string> replicated;

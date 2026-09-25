@@ -3,7 +3,7 @@
 # receipt. Import tooling only; no client or server closure may depend on it.
 rawframe_module(NAME cook
     SOURCES src/audio.cpp src/cook.cpp src/game.cpp src/kest.cpp
-    DEPS world_kest input kest_library kest audio_import audio content document result base
+    DEPS scene world_kest input kest_library kest audio_import audio content document result base
 )
 
 rawframe_module_tests(NAME cook SOURCES tests/cook_test.cpp)

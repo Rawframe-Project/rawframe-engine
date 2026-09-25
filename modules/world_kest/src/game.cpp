@@ -130,6 +130,14 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             controls.actions = kWords[1];
             actionsLine = number;
+        } else if (kKeyword == "scene") {
+            if (kWords.size() != 2) {
+                return badLine(number, WorldKestError::BadGameLine, "a scene line is `scene <file>`");
+            }
+            if (std::ranges::contains(game.scenes, kWords[1])) {
+                return badLine(number, WorldKestError::BadGameLine, "a scene is named once");
+            }
+            game.scenes.emplace_back(kWords[1]);
         } else if (kKeyword == "mixer") {
             if (mixerLine != 0 || kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names one mixer layout, `mixer <file>`");

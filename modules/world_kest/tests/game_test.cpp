@@ -6,11 +6,13 @@
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/registrar.h"
+#include "rawframe/scene/scene.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/query.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_kest/replication.h"
 #include "rawframe/world_runtime/registrar.h"
@@ -275,6 +277,26 @@ std::vector<std::pair<float, float>> positions() {
     return found;
 }
 
+void writeText(const std::filesystem::path& path, std::string_view text) {
+    if (std::FILE* file = std::fopen(path.string().c_str(), "wb")) {
+        std::fwrite(text.data(), 1, text.size(), file);
+        std::fclose(file);
+    }
+}
+
+std::string readText(const std::filesystem::path& path) {
+    std::string text;
+    if (std::FILE* file = std::fopen(path.string().c_str(), "rb")) {
+        char chunk[4096];
+        std::size_t got = 0;
+        while ((got = std::fread(chunk, 1, sizeof chunk, file)) != 0) {
+            text.append(chunk, got);
+        }
+        std::fclose(file);
+    }
+    return text;
+}
+
 } // namespace
 
 RAWFRAME_TEST(AKestGameRunsInTheWorld) {
@@ -319,6 +341,92 @@ RAWFRAME_TEST(AKestGameRunsInTheWorld) {
     RAWFRAME_EXPECT(bounced);
     composition.stop();
     simulation = nullptr;
+}
+
+RAWFRAME_TEST(AGameStartsWithItsScenes) {
+    // Movers with their starting entities in a scene, not spawn lines: two
+    // at rest where the scene puts them, one moving, and one spawn line.
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-scene-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory);
+    writeText(kDirectory / "movers.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest"));
+    std::string game = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game");
+    game = game.substr(0, game.find("spawn 3"));
+    game += "spawn 1 movers.position x=1 y=1 movers.velocity\nscene start.scene\n";
+    writeText(kDirectory / "movers.game", game);
+
+    // The marks the scene is authored against: the program's layouts.
+    writeText(kDirectory / "start.scene", "");
+    auto files = world_kest::GameFiles::fromDirectory(kDirectory / "movers.game");
+    RAWFRAME_EXPECT(files.has_value());
+    const auto kProgram = files.has_value() ? files->compile("movers.kest") : std::unexpected{files.error().clone()};
+    RAWFRAME_EXPECT(kProgram.has_value());
+    if (!kProgram.has_value()) {
+        return;
+    }
+    const std::uint64_t kPosition = (*kProgram)->layout("Position")->mark;
+    const std::uint64_t kVelocity = (*kProgram)->layout("Velocity")->mark;
+    const auto kNumber = [](std::string text) {
+        return scene::FieldValue{.kind = scene::FieldValue::Kind::Number, .number = std::move(text)};
+    };
+    scene::Scene start{
+        .schema = {{.component = "movers.position", .mark = kPosition},
+                   {.component = "movers.velocity", .mark = kVelocity}},
+        .entities = {
+            {.id = base::Bits128{.high = 0, .low = 1},
+             .name = "resting",
+             .components = {{.name = "movers.position", .fields = {{.name = "x", .value = kNumber("-5")}}},
+                            {.name = "movers.velocity", .fields = {}}}},
+            {.id = base::Bits128{.high = 0, .low = 2},
+             .components = {{.name = "movers.position", .fields = {{.name = "y", .value = kNumber("7.5")}}},
+                            {.name = "movers.velocity", .fields = {{.name = "dx", .value = kNumber("2")}}}}},
+        }};
+    const auto kRun =
+        [&kDirectory](const scene::Scene& written) -> std::optional<std::vector<std::pair<float, float>>> {
+        writeText(kDirectory / "start.scene", *scene::writeScene(written));
+        std::vector<composition::Problem> problems;
+        auto plan = composition::compose(
+            composition::CompositionRequest{.registrars = kWatched,
+                                            .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+            problems);
+        const auto kConfiguration =
+            composition::Configuration::parse("kest.game = " + (kDirectory / "movers.game").string() +
+                                              "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n");
+        execution::ManualClock clock;
+        execution::CancellationScope root{clock};
+        composition::Composition composition{
+            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        if (!composition.start().has_value()) {
+            simulation = nullptr;
+            return std::nullopt;
+        }
+        clock.advance(execution::MonotonicDuration::fromSeconds(1));
+        composition.runHostPhase(composition::HostPhase::RunWorlds,
+                                 composition::HostFrame{.iteration = 0, .now = clock.now()});
+        auto found = positions();
+        composition.stop();
+        simulation = nullptr;
+        std::ranges::sort(found);
+        return found;
+    };
+    const auto kFound = kRun(start);
+    RAWFRAME_EXPECT(kFound.has_value());
+    if (kFound.has_value()) {
+        // Ten ticks: the spawn line's and the resting one stay, the moving
+        // one goes twenty meters.
+        const std::vector<std::pair<float, float>> kExpected = {{-5.0F, 0.0F}, {1.0F, 1.0F}, {20.0F, 7.5F}};
+        RAWFRAME_EXPECT(*kFound == kExpected);
+    }
+    // Authored against another layout, or naming another component: the
+    // game does not start.
+    scene::Scene stale = start;
+    stale.schema[0].mark ^= 1U;
+    RAWFRAME_EXPECT(!kRun(stale).has_value());
+    scene::Scene stranger = start;
+    stranger.schema.push_back({.component = "movers.spin", .mark = 1});
+    stranger.entities[0].components.push_back({.name = "movers.spin", .fields = {}});
+    RAWFRAME_EXPECT(!kRun(stranger).has_value());
+    std::filesystem::remove_all(kDirectory);
 }
 
 RAWFRAME_TEST(WithoutAGameNothingLoads) {
@@ -686,26 +794,6 @@ RAWFRAME_TEST(ARunnerHitIsToldSo) {
 }
 
 namespace {
-
-void writeText(const std::filesystem::path& path, std::string_view text) {
-    if (std::FILE* file = std::fopen(path.string().c_str(), "wb")) {
-        std::fwrite(text.data(), 1, text.size(), file);
-        std::fclose(file);
-    }
-}
-
-std::string readText(const std::filesystem::path& path) {
-    std::string text;
-    if (std::FILE* file = std::fopen(path.string().c_str(), "rb")) {
-        char chunk[4096];
-        std::size_t got = 0;
-        while ((got = std::fread(chunk, 1, sizeof chunk, file)) != 0) {
-            text.append(chunk, got);
-        }
-        std::fclose(file);
-    }
-    return text;
-}
 
 /// Rewrites the program and moves its time on, so the change is seen however
 /// coarse the file system's clock is.

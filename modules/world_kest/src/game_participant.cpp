@@ -8,6 +8,7 @@
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/physics.h"
 #include "rawframe/physics3d/physics.h"
+#include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/game_files.h"
@@ -161,6 +162,7 @@ public:
             }
             layouts_.push_back(std::move(layout));
         }
+        RAWFRAME_TRY(addScenes(files));
         RAWFRAME_TRY(planReplication(files.digest()));
         RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planInterest());
@@ -586,6 +588,63 @@ private:
     }
 
     using SpawnValues = std::vector<std::pair<schema::ComponentTypeId, std::vector<std::byte>>>;
+
+    /// Each scene the description names, as the spawns of its entities, one
+    /// each: its components must be the game's, laid out as the scene was
+    /// authored against.
+    result::Status addScenes(const GameFiles& files) {
+        const auto kRefuse =
+            [](WorldKestError error, std::string_view why, std::string_view scene, std::string_view name) {
+                return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument, error, why)
+                                                          .error()
+                                                          .withContext("scene", scene)
+                                                          .withContext("name", name)};
+            };
+        for (const std::string& path : game_.scenes) {
+            RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.document(path));
+            auto read = scene::readScene(kText);
+            if (!read.has_value()) {
+                return std::unexpected<result::Error>{std::move(read).error().withContext("scene", path)};
+            }
+            for (const scene::SchemaMark& mark : read->schema) {
+                const auto kComponent = std::ranges::find(game_.components, mark.component, &GameComponent::name);
+                if (kComponent == game_.components.end()) {
+                    return kRefuse(WorldKestError::UnknownName,
+                                   "a scene names a component the game does not declare",
+                                   path,
+                                   mark.component);
+                }
+                const std::size_t kIndex = static_cast<std::size_t>(kComponent - game_.components.begin());
+                if (layouts_[kIndex].mark != mark.mark) {
+                    return kRefuse(WorldKestError::BadGameLine,
+                                   "a scene was authored against another layout of a component",
+                                   path,
+                                   mark.component);
+                }
+            }
+            for (const scene::SceneEntity& entity : read->entities) {
+                GameSpawn spawn{.count = 1, .components = {}};
+                for (const scene::SceneComponent& component : entity.components) {
+                    GameSpawnComponent part{.component = component.name, .fields = {}};
+                    for (const scene::SceneField& field : component.fields) {
+                        if (field.value.kind == scene::FieldValue::Kind::Entity) {
+                            return kRefuse(WorldKestError::BadGameLine,
+                                           "references between a scene's entities are not spawned yet",
+                                           path,
+                                           field.name);
+                        }
+                        part.fields.push_back(GameFieldValue{.field = field.name,
+                                                             .value = field.value.kind == scene::FieldValue::Kind::True
+                                                                          ? std::string{"true"}
+                                                                          : field.value.number});
+                    }
+                    spawn.components.push_back(std::move(part));
+                }
+                game_.spawns.push_back(std::move(spawn));
+            }
+        }
+        return {};
+    }
 
     /// The values one spawn line gives each of its components.
     [[nodiscard]] result::Result<SpawnValues> spawnValues(const GameSpawn& spawn) const {

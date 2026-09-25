@@ -82,6 +82,7 @@ std::vector<std::string> documentNames(const GameDescription& description) {
     if (description.controls) {
         names.push_back(description.controls->actions);
     }
+    names.insert(names.end(), description.scenes.begin(), description.scenes.end());
     if (description.audio) {
         names.push_back(description.audio->mixer);
         for (const GameSound& sound : description.audio->sounds) {

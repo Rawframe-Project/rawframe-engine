@@ -351,6 +351,15 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
     fs::rename(kProject.base / "aside", kGame / "kest.project.rfmeta");
     RAWFRAME_EXPECT(kCook().failures.empty());
+
+    // A scene it names is carried in it; one that does not read is refused.
+    writeText(kGame / "runners.game", readText(kGame / "runners.game") + "scene level.scene\n");
+    writeText(
+        kGame / "level.scene",
+        "{\n  \"kind\": \"rawframe.scene\",\n  \"formatVersion\": 1,\n  \"schema\": {},\n  \"entities\": []\n}\n");
+    RAWFRAME_EXPECT(kCook().failures.empty() && kCooked().has_value() && kCooked()->file("level.scene") != nullptr);
+    writeText(kGame / "level.scene", "{}\n");
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
 }
 
 RAWFRAME_TEST(NothingIsPublishedUnlessNothingFailed) {

@@ -15,7 +15,7 @@ assets: content execution result base
 game_content: signature content composition document execution diagnostics result base
 audio: world schema execution diagnostics document result base
 audio_import: audio result base
-cook: world_kest input kest_library kest audio_import audio content document execution result base
+cook: scene world_kest input kest_library kest audio_import audio content document execution result base
 build: signature content document result base
 input: document result base
 schema: result base
@@ -31,7 +31,7 @@ physics: world schema execution diagnostics result base
 world_runtime: world_snapshot world composition schema execution diagnostics result base
 physics2d: physics world_runtime world composition schema execution diagnostics result base
 physics3d: physics world_runtime world composition schema execution diagnostics result base
-world_kest: game_content content kest_library physics2d physics3d physics world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics document result base
+world_kest: scene game_content content kest_library physics2d physics3d physics world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics document result base
 world_replication: game_content world_runtime network world composition schema execution diagnostics result base
 input_kest: input document world_kest world_replication kest world composition execution diagnostics result base
 world_audio: game_content assets content audio physics2d physics3d world_replication world_kest kest world composition schema execution diagnostics document result base
@@ -40,5 +40,5 @@ dedicated_server: host game_content network_quic physics2d physics3d world_repli
 arena: host game_content input_kest world_audio audio network_loopback physics2d physics3d world_replication world_kest world_runtime composition diagnostics result base
 bots: host game_content input_kest world_audio audio network_quic world_replication world_kest world_runtime composition diagnostics result base
 import: audio_import audio result base
-cook_tool: cook world_kest input kest_library kest audio_import audio content document execution result base
+cook_tool: cook scene world_kest input kest_library kest audio_import audio content document execution result base
 build_tool: build signature content document result base
