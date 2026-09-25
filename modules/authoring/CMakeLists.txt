@@ -3,7 +3,7 @@
 # undo. Toolchain only: no game runtime, dedicated server, or export
 # closure contains it (tools/check_repo.py holds the server's).
 rawframe_module(NAME authoring
-    SOURCES src/authored_scene.cpp src/delta.cpp src/operations.cpp src/patches.cpp src/queries.cpp src/request.cpp
+    SOURCES src/authored_scene.cpp src/delta.cpp src/journal.cpp src/operations.cpp src/patches.cpp src/queries.cpp src/request.cpp
     DEPS scene schema document result base
 )
 
