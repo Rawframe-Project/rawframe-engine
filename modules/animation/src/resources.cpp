@@ -19,6 +19,9 @@ std::optional<DocumentKind> documentKind(std::string_view text) {
     if (*kind->text() == "animation.graph") {
         return DocumentKind::Graph;
     }
+    if (*kind->text() == "animation.mask") {
+        return DocumentKind::Mask;
+    }
     return std::nullopt;
 }
 

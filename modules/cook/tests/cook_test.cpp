@@ -5,6 +5,7 @@
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
+#include "rawframe/animation/mask.h"
 #include "rawframe/animation/resources.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/audio/decode.h"
@@ -481,6 +482,9 @@ RAWFRAME_TEST(AnimationDocumentsCookIntoResourcesOfTheirKind) {
     writeText(kRig / "body.rfanim.rfmeta", sidecar("000000000000000000000000000000b1", "", "rawframe.animation"));
     writeText(kRig / "walk.rfanim.rfmeta", sidecar("000000000000000000000000000000b2", "", "rawframe.animation"));
     writeText(kRig / "moves.rfanim.rfmeta", sidecar("000000000000000000000000000000b3", "", "rawframe.animation"));
+    writeText(kRig / "whole.rfanim",
+              *animation::writeMask(animation::Mask{.skeleton = kSkeletonId, .chains = {{.root = {1, 1}}}}));
+    writeText(kRig / "whole.rfanim.rfmeta", sidecar("000000000000000000000000000000b4", "", "rawframe.animation"));
     static const std::array<Importer, 2> kImporters = {animationImporter(), audioImporter()};
     const auto kCook = [&kProject] {
         auto report = cookSources(CookRequest{
@@ -488,7 +492,7 @@ RAWFRAME_TEST(AnimationDocumentsCookIntoResourcesOfTheirKind) {
         RAWFRAME_EXPECT(report.has_value());
         return report.has_value() ? std::move(*report) : CookReport{};
     };
-    RAWFRAME_EXPECT(kCook().cooked == 5);
+    RAWFRAME_EXPECT(kCook().cooked == 6);
     // Each of its kind, its text as it was.
     const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
     RAWFRAME_EXPECT(kManifest.has_value());
@@ -500,12 +504,15 @@ RAWFRAME_TEST(AnimationDocumentsCookIntoResourcesOfTheirKind) {
                             each.representation.text() == animation::kSkeletonRepresentation &&
                             readText(kProject.output / each.locator) == kSkeletonText);
         }
-        kinds += each.type.value == animation::kClipType || each.type.value == animation::kGraphType ? 1 : 0;
+        kinds += each.type.value == animation::kClipType || each.type.value == animation::kGraphType ||
+                         each.type.value == animation::kMaskType
+                     ? 1
+                     : 0;
     }
-    RAWFRAME_EXPECT(kinds == 3);
+    RAWFRAME_EXPECT(kinds == 4);
     // Not in its one form, or of no kind the importer knows: refused.
     writeText(kRig / "walk.rfanim", *animation::writeClip(kClip) + " ");
-    writeText(kRig / "moves.rfanim", "{\"kind\": \"animation.mask\"}\n");
+    writeText(kRig / "moves.rfanim", "{\"kind\": \"animation.pose\"}\n");
     RAWFRAME_EXPECT(kCook().failures.size() == 2);
 }
 

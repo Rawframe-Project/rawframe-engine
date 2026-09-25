@@ -36,6 +36,9 @@ enum class AnimationError : std::uint32_t {
     BadSource = 6,
     /// A source that requires an extension the importer does not support.
     UnsupportedExtension = 7,
+    /// A mask document that is not one, or not in its one form: no chain, a
+    /// root twice or out of order, a weight outside nought to one.
+    MaskInvalid = 8,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(AnimationError error) noexcept {

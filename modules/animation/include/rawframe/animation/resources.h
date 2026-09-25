@@ -19,11 +19,14 @@ inline constexpr base::Bits128 kClipType = base::parseBits128Hex("b9e95e43b18bef
 inline constexpr std::string_view kClipRepresentation = "rawframe.animation.clip";
 inline constexpr base::Bits128 kGraphType = base::parseBits128Hex("f36bb4007f7e69033303c765ee51637f").value;
 inline constexpr std::string_view kGraphRepresentation = "rawframe.animation.graph";
+inline constexpr base::Bits128 kMaskType = base::parseBits128Hex("5d0a7e3c91b24f68a0c3e7d1942b6f85").value;
+inline constexpr std::string_view kMaskRepresentation = "rawframe.animation.mask";
 
 enum class DocumentKind : std::uint8_t {
     Skeleton,
     Clip,
     Graph,
+    Mask,
 };
 
 /// Which animation document a text says it is, by its `kind`; none for

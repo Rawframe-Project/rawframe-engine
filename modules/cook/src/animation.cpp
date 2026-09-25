@@ -2,6 +2,7 @@
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
+#include "rawframe/animation/mask.h"
 #include "rawframe/animation/resources.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/cook/errors.h"
@@ -26,7 +27,7 @@ result::Result<Artifact> cookAnimation(std::span<const std::byte> source, std::s
     const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
     const std::optional<animation::DocumentKind> kKind = animation::documentKind(kText);
     if (!kKind.has_value()) {
-        return refuse("an animation document is a skeleton, a clip, or a graph");
+        return refuse("an animation document is a skeleton, a clip, a graph, or a mask");
     }
     base::Bits128 type;
     std::string_view representation;
@@ -45,6 +46,11 @@ result::Result<Artifact> cookAnimation(std::span<const std::byte> source, std::s
         RAWFRAME_TRY(animation::readGraph(kText));
         type = animation::kGraphType;
         representation = animation::kGraphRepresentation;
+        break;
+    case animation::DocumentKind::Mask:
+        RAWFRAME_TRY(animation::readMask(kText));
+        type = animation::kMaskType;
+        representation = animation::kMaskRepresentation;
         break;
     }
     return Artifact{.type = content::ResourceTypeId{type},
