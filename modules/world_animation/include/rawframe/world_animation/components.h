@@ -39,6 +39,39 @@ struct Animator {
     std::uint64_t request = 0;
 };
 
+/// Root motion (SPEC-0035, D134): on an entity with an Animator, asks that
+/// the skeleton's root motion source move the character rather than its
+/// pose. Every step writes how the character moved and turned in it, in
+/// its own frame as it was before, and the running whole since the
+/// component was added; a step that plays nothing moved it nowhere. The
+/// game's movement reads it after `rawframe.animation.step`. A dedicated
+/// server plays only animators of `Simulation` relevance, so a character
+/// its animation moves is one.
+struct RootMotion {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("70bcba44-b0d4-4384-8219-149da8023c44");
+    static constexpr std::string_view kComponentName = "rawframe.animation.root_motion";
+
+    /// This step's move, and its turn as a unit quaternion.
+    double moveX = 0;
+    double moveY = 0;
+    double moveZ = 0;
+    double turnX = 0;
+    double turnY = 0;
+    double turnZ = 0;
+    double turnW = 1;
+    /// Every step's move and turn composed: where the character is, and
+    /// how it faces, from where it was when the component was added. A
+    /// facing of all noughts is the identity, as a spawn line leaves it.
+    double travelX = 0;
+    double travelY = 0;
+    double travelZ = 0;
+    double facingX = 0;
+    double facingY = 0;
+    double facingZ = 0;
+    double facingW = 1;
+};
+
 /// The engine's animation components as a script must declare them.
 [[nodiscard]] std::span<const schema::ComponentLayout> componentLayouts() noexcept;
 

@@ -122,6 +122,13 @@ void toModelSpace(std::span<const std::optional<BoneIndex>> parents, const Pose&
     }
 }
 
+Transform composed(const Transform& a, const Transform& b) noexcept {
+    const std::array<double, 3> kMoved = rotated(a.rotation, b.translation);
+    return Transform{
+        .translation = {a.translation[0] + kMoved[0], a.translation[1] + kMoved[1], a.translation[2] + kMoved[2]},
+        .rotation = normalized(multiplied(a.rotation, b.rotation))};
+}
+
 result::Result<BoundClip>
 BoundClip::bind(std::shared_ptr<const Clip> clip, const Skeleton& skeleton, base::Bits128 skeletonId) {
     if (clip->skeleton.has_value() && *clip->skeleton != skeletonId) {

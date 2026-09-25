@@ -247,3 +247,25 @@ RAWFRAME_TEST(AnAnimatorsSubsetIsAMaskOfItsSkeleton) {
     RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::DedicatedServer, 1).has_value());
     std::filesystem::remove_all(kGame);
 }
+
+RAWFRAME_TEST(AGamesRootMotionMovesItsEntityNotItsPose) {
+    // The pendulum's root taking its x as root motion, and a fourth swing
+    // asking for it: two thirds of a second in, that swing has ticked as
+    // the others have, but its bone is where its entity is, while theirs
+    // reach eight ninths of a meter.
+    const std::filesystem::path kGame = writeGame("rooted", "speed: f32");
+    animation::Skeleton rig = *animation::readSkeleton(readText(kGame / "rig" / "pendulum.rfanim"));
+    rig.rootMotion = animation::RootMotionSource{.translation = {true, false, false}};
+    writeText(kGame / "rig" / "pendulum.rfanim", *animation::writeSkeleton(rig));
+    writeText(kGame / "swing.game",
+              readText(kGame / "swing.game") +
+                  "spawn 1 swing.gait speed=1 rawframe.animation.animator graph=swinging.rfanim relevance=1 "
+                  "rawframe.animation.root_motion\n");
+    const auto kPlayed = play(kGame, composition::TargetRole::Client, 40);
+    RAWFRAME_EXPECT(kPlayed.has_value() && kPlayed->size() == 4);
+    if (kPlayed.has_value() && kPlayed->size() == 4) {
+        RAWFRAME_EXPECT(std::abs((*kPlayed)[0].gait.reach - (8.0 / 9.0)) < 1e-9 && (*kPlayed)[0].gait.ticks == 1);
+        RAWFRAME_EXPECT((*kPlayed)[3].gait.reach == 0.0 && (*kPlayed)[3].gait.ticks == 1);
+    }
+    std::filesystem::remove_all(kGame);
+}

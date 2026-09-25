@@ -491,11 +491,13 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     game.components.push_back(GameComponent{.id = world::Persistent::kComponentTypeId,
                                             .name = std::string{world::Persistent::kComponentName},
                                             .kestType = "Persistent"});
-    // Animators play on the engine's component, named by their identity.
+    // Animators play on the engine's components: the Animator, named by
+    // their identity, and root motion.
     if (!game.animators.empty()) {
-        const schema::ComponentLayout& animator = world_animation::componentLayouts().front();
-        game.components.push_back(GameComponent{
-            .id = animator.id, .name = std::string{animator.name}, .kestType = std::string{animator.scriptType}});
+        for (const schema::ComponentLayout& layout : world_animation::componentLayouts()) {
+            game.components.push_back(GameComponent{
+                .id = layout.id, .name = std::string{layout.name}, .kestType = std::string{layout.scriptType}});
+        }
     }
     for (const auto& [line, name] : uses) {
         if (!declared(game, name)) {

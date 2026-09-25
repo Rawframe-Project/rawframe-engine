@@ -7,6 +7,7 @@
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_replication/perception.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 
@@ -109,8 +110,10 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
         engine = perceptionLayout();
     } else if (component.id == world::Persistent::kComponentTypeId) {
         engine = persistentLayout();
-    } else if (component.id == world_animation::Animator::kComponentTypeId) {
-        engine = engineLayout(world_animation::componentLayouts().front());
+    } else if (const auto kAnimation =
+                   std::ranges::find(world_animation::componentLayouts(), component.id, &schema::ComponentLayout::id);
+               kAnimation != world_animation::componentLayouts().end()) {
+        engine = engineLayout(*kAnimation);
     } else if (game.physics.has_value()) {
         for (const schema::ComponentLayout& owned : physicsFacts(game.physics->dimensions).components) {
             if (owned.id == component.id) {

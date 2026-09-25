@@ -30,6 +30,30 @@ struct Animator {
     request: u64
 }
 
+// Root motion (D134): beside an Animator, asks that the skeleton's root
+// motion source move the character rather than its pose. Every step
+// writes this step's move and turn (a unit quaternion) in the character's
+// own frame as it was before, and the running whole since the component
+// was added, where a facing of all noughts is the identity; a step that
+// plays nothing moved it nowhere. Movement reads it after
+// `rawframe.animation.step`.
+struct RootMotion {
+    moveX: f64
+    moveY: f64
+    moveZ: f64
+    turnX: f64
+    turnY: f64
+    turnZ: f64
+    turnW: f64
+    travelX: f64
+    travelY: f64
+    travelZ: f64
+    facingX: f64
+    facingY: f64
+    facingZ: f64
+    facingW: f64
+}
+
 // A bone where the last step posed it, in the entity's own frame (model
 // space): its origin, and its rotation as a unit quaternion. Not `posed`
 // for an entity not played here, or past its skeleton's last bone.

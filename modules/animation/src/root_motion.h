@@ -22,9 +22,6 @@ struct RootTracks {
     const Track* rotation = nullptr;
 };
 
-/// `a`, then `b` from where `a` left the character.
-[[nodiscard]] Transform then(const Transform& a, const Transform& b) noexcept;
-
 /// How the character moved over `delta` seconds from the playhead `from`
 /// to where the playhead `landed` (what `advance` made of it), across
 /// every wrap of a looping clip between.

@@ -103,7 +103,7 @@ AnimationSettings settings(bool simulationOnly = false) {
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
-    builder.add<Animator>().add<Stride>();
+    builder.add<Animator>().add<Stride>().add<RootMotion>();
     return *builder.freeze();
 }
 
@@ -247,6 +247,46 @@ RAWFRAME_TEST(AServerPosesOnlyItsSubset) {
     // The server leaves the arm at its bind; a client poses it whatever
     // the subset says.
     RAWFRAME_EXPECT(kArmAt(true) == 2.0 && kArmAt(false) == 4.0);
+}
+
+RAWFRAME_TEST(RootMotionMovesTheCharacterNotItsPose) {
+    // Two meters a second along x, taken by the skeleton's source.
+    using namespace animation;
+    Skeleton walker = rig();
+    walker.rootMotion = RootMotionSource{.translation = {true, false, false}};
+    const auto kWalk =
+        std::make_shared<const Clip>(Clip{.skeleton = kSkeletonId,
+                                          .duration = 1.0,
+                                          .loop = Loop::Loop,
+                                          .tracks = {Track{.bone = kRoot,
+                                                           .channel = Channel::Translation,
+                                                           .keys = {Key{.value = {}}},
+                                                           .drift = std::array<double, 4>{2, 0, 0, 0}}}});
+    const Graph kGraph{.parameters = {},
+                       .nodes = {GraphNode{.id = 1, .node = ClipNode{.clip = kWalkId}},
+                                 GraphNode{.id = 2, .node = OutputNode{.pose = {.node = 1}}}},
+                       .presentation = {}};
+    const std::vector<NamedClip> kClips{{kWalkId, kWalk}};
+    Stage stage{AnimationSettings{
+        .animators = {AnimatorSettings{.id = kLocomotion,
+                                       .graph = *CompiledGraph::compile(kGraph, walker, kSkeletonId, kClips)}}}};
+    const world::EntityHandle kMoved = stage.walker(0.0F);
+    const world::EntityHandle kKept = stage.walker(0.0F);
+    RAWFRAME_EXPECT(stage.world.insert(kMoved, *stage.schema->key<RootMotion>(), RootMotion{}).has_value());
+    stage.run(30);
+    // Half a second: a meter traveled, a thirtieth of it in the last step,
+    // and the pose left where the entity is. Without the component the
+    // motion stays in the pose.
+    const RootMotion& motion = *stage.world.get(kMoved, *stage.schema->key<RootMotion>());
+    RAWFRAME_EXPECT(std::abs(motion.travelX - 1.0) < 1e-9 && std::abs(motion.moveX - (1.0 / 30.0)) < 1e-9);
+    RAWFRAME_EXPECT(motion.turnW == 1.0 && motion.facingW == 1.0 && motion.travelY == 0.0);
+    RAWFRAME_EXPECT(stage.animation->pose(kMoved)->bones[0].translation[0] == 0.0);
+    RAWFRAME_EXPECT(std::abs(stage.animation->pose(kKept)->bones[0].translation[0] - 1.0) < 1e-9);
+    // Playing nothing, it moves nowhere, and the whole stays.
+    stage.animator(kMoved).graph = 0x78;
+    stage.run(1);
+    const RootMotion& still = *stage.world.get(kMoved, *stage.schema->key<RootMotion>());
+    RAWFRAME_EXPECT(still.moveX == 0.0 && std::abs(still.travelX - 1.0) < 1e-9);
 }
 
 RAWFRAME_TEST(ParametersNotOfTheirTypeAreRefused) {

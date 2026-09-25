@@ -58,22 +58,15 @@ Transform repeated(Transform move, double count) {
     Transform made;
     while (left != 0) {
         if ((left & 1U) != 0) {
-            made = then(made, move);
+            made = composed(made, move);
         }
-        move = then(move, move);
+        move = composed(move, move);
         left >>= 1U;
     }
     return made;
 }
 
 } // namespace
-
-Transform then(const Transform& a, const Transform& b) noexcept {
-    const std::array<double, 3> kMoved = rotated(a.rotation, b.translation);
-    return Transform{
-        .translation = {a.translation[0] + kMoved[0], a.translation[1] + kMoved[1], a.translation[2] + kMoved[2]},
-        .rotation = normalized(multiplied(a.rotation, b.rotation))};
-}
 
 std::array<double, 4>
 twistOf(const RootMotionSource& source, const std::array<double, 4>& rotation, const std::array<double, 4>& bind) {
@@ -116,10 +109,12 @@ Transform motionOver(const Clip& clip,
     const Transform kEnd = placedAt(clip, tracks, source, rootBind, clip.duration, true);
     if (kWraps > 0.0) {
         const Transform kPeriod = between(kStart, kEnd);
-        return then(then(between(kAt(from), kEnd), repeated(kPeriod, kWraps - 1.0)), between(kStart, kAt(landed)));
+        return composed(composed(between(kAt(from), kEnd), repeated(kPeriod, kWraps - 1.0)),
+                        between(kStart, kAt(landed)));
     }
     const Transform kBackPeriod = between(kEnd, kStart);
-    return then(then(between(kAt(from), kStart), repeated(kBackPeriod, -kWraps - 1.0)), between(kEnd, kAt(landed)));
+    return composed(composed(between(kAt(from), kStart), repeated(kBackPeriod, -kWraps - 1.0)),
+                    between(kEnd, kAt(landed)));
 }
 
 Transform blendedMotion(std::span<const Transform* const> moves, std::span<const double> shares) {

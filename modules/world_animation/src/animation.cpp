@@ -5,7 +5,9 @@
 #include "rawframe/world_animation/errors.h"
 
 #include <algorithm>
+#include <array>
 #include <bit>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <set>
@@ -80,6 +82,8 @@ struct WorldAnimation::State {
     std::vector<schema::ComponentRuntimeId> reads;
     std::vector<schema::ComponentRuntimeId> writes;
     std::optional<world::Query<world::Write<Animator>>> query;
+    /// None in a World without root motion.
+    std::optional<schema::ComponentKey<RootMotion>> rootMotion;
     std::unique_ptr<world::System> system;
 
     struct Playing {
@@ -130,6 +134,12 @@ struct WorldAnimation::State {
         for (const auto& [kEntity, animator] : rows) {
             animator->events = 0;
             const std::uint64_t kRequest = std::exchange(animator->request, 0);
+            RootMotion* moved = rootMotion.has_value() ? stepped.get(kEntity, *rootMotion) : nullptr;
+            if (moved != nullptr) {
+                moved->moveX = moved->moveY = moved->moveZ = 0.0;
+                moved->turnX = moved->turnY = moved->turnZ = 0.0;
+                moved->turnW = 1.0;
+            }
             Playing* played = play(kEntity, *animator);
             if (played == nullptr) {
                 continue;
@@ -150,8 +160,13 @@ struct WorldAnimation::State {
                                settings.simulationOnly
                                    ? std::span<const std::uint8_t>{settings.animators[played->settings].subset}
                                    : std::span<const std::uint8_t>{});
-            animation::toModelSpace(played->instance.graph().parents(), local, played->pose);
             digested.update(std::as_bytes(std::span{&kEntity, 1}));
+            if (moved != nullptr) {
+                animation::removeRootMotion(played->instance.graph(), local);
+                commitMotion(played->instance.rootMotion(), *moved);
+                digested.update(std::as_bytes(std::span{moved, 1}));
+            }
+            animation::toModelSpace(played->instance.graph().parents(), local, played->pose);
             for (const animation::Transform& bone : played->pose.bones) {
                 digested.update(std::as_bytes(std::span{bone.translation}));
                 digested.update(std::as_bytes(std::span{bone.rotation}));
@@ -167,6 +182,33 @@ struct WorldAnimation::State {
             digest = (digest << 8U) | std::to_integer<std::uint64_t>(kDigest[at]);
         }
         return {};
+    }
+
+    /// A step's move onto its entity's RootMotion, and onto the whole.
+    static void commitMotion(const animation::Transform& move, RootMotion& moved) {
+        moved.moveX = move.translation[0];
+        moved.moveY = move.translation[1];
+        moved.moveZ = move.translation[2];
+        moved.turnX = move.rotation[0];
+        moved.turnY = move.rotation[1];
+        moved.turnZ = move.rotation[2];
+        moved.turnW = move.rotation[3];
+        animation::Transform whole{.translation = {moved.travelX, moved.travelY, moved.travelZ},
+                                   .rotation = {moved.facingX, moved.facingY, moved.facingZ, moved.facingW}};
+        const bool kFacing = std::ranges::all_of(whole.rotation,
+                                                 [](double each) {
+                                                     return std::isfinite(each);
+                                                 }) &&
+                             whole.rotation != std::array<double, 4>{};
+        whole.rotation = kFacing ? whole.rotation : std::array<double, 4>{0.0, 0.0, 0.0, 1.0};
+        whole = animation::composed(whole, move);
+        moved.travelX = whole.translation[0];
+        moved.travelY = whole.translation[1];
+        moved.travelZ = whole.translation[2];
+        moved.facingX = whole.rotation[0];
+        moved.facingY = whole.rotation[1];
+        moved.facingZ = whole.rotation[2];
+        moved.facingW = whole.rotation[3];
     }
 
     /// The entity's instance as its Animator now says, made or made again
@@ -313,6 +355,11 @@ result::Status WorldAnimation::declareSystems(const schema::SchemaRegistry& regi
         }
     }
     state.writes = {state.animatorComponent};
+    state.rootMotion.reset();
+    if (const auto kMotion = registry.find(RootMotion::kComponentTypeId)) {
+        RAWFRAME_TRY_ASSIGN(state.rootMotion, registry.key<RootMotion>());
+        state.writes.push_back(*kMotion);
+    }
     state.system = std::make_unique<Step>(state);
     systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
                                                .phase = world::Phase::Simulation,

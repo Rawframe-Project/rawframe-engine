@@ -36,6 +36,11 @@ struct Pose {
 /// the parent, rotations multiplied, scales multiplied).
 void toModelSpace(std::span<const std::optional<BoneIndex>> parents, const Pose& local, Pose& model);
 
+/// `a`, then `b` from where `a` left: `b`'s translation turned by `a`'s
+/// rotation and added on, and the rotations multiplied. For moves, whose
+/// scale is one; the result's is.
+[[nodiscard]] Transform composed(const Transform& a, const Transform& b) noexcept;
+
 /// A clip with each track's bone found in one skeleton.
 class BoundClip {
 public:
