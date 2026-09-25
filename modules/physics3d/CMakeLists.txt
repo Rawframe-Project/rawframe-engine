@@ -3,7 +3,7 @@
 # with 3D physics. Maul3D is linked privately, so no header above this
 # module can include it.
 rawframe_module(NAME physics3d
-    SOURCES src/characters.cpp src/components.cpp src/participant.cpp src/physics.cpp
+    SOURCES src/characters.cpp src/components.cpp src/joints.cpp src/meshes.cpp src/participant.cpp src/physics.cpp
     DEPS mesh physics world_runtime world composition schema execution diagnostics result base
 )
 target_link_libraries(rawframe_physics3d PRIVATE maul3d::maul3d)

@@ -1,6 +1,8 @@
 #include "rawframe/physics3d/physics.h"
 
 #include "characters.h"
+#include "joints.h"
+#include "meshes.h"
 #include "rawframe/physics/filters.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/errors.h"
@@ -166,75 +168,6 @@ struct Turned {
     return 0;
 }
 
-/// The most vertices and triangles Maul3D takes in one mesh shape.
-constexpr std::size_t kPieceMost = 65'535;
-
-/// A mesh as Maul3D takes it: pieces of at most kPieceMost vertices and
-/// triangles, and how far from its origin any of it reaches.
-struct PreparedMesh {
-    struct Piece {
-        std::vector<m3Vec3> vertices;
-        std::vector<std::uint16_t> indices;
-    };
-    std::vector<Piece> pieces;
-    double reach = 0;
-};
-
-/// Triangles in order, a piece closed when the next might not fit. A
-/// triangle of no area touches nothing and is left out, since Maul3D's
-/// contacts need a face's normal.
-[[nodiscard]] PreparedMesh prepare(const mesh::Mesh& source) {
-    PreparedMesh out;
-    std::vector<std::int32_t> local(source.positions.size(), -1);
-    std::vector<std::uint32_t> used;
-    PreparedMesh::Piece piece;
-    const auto kClose = [&] {
-        if (!piece.indices.empty()) {
-            out.pieces.push_back(std::move(piece));
-        }
-        piece = {};
-        for (const std::uint32_t kGlobal : used) {
-            local[kGlobal] = -1;
-        }
-        used.clear();
-    };
-    for (std::size_t first = 0; first < source.indices.size(); first += 3) {
-        const std::array<std::uint32_t, 3> kCorners = {
-            source.indices[first], source.indices[first + 1], source.indices[first + 2]};
-        const mesh::Vector3& kA = source.positions[kCorners[0]];
-        const mesh::Vector3& kB = source.positions[kCorners[1]];
-        const mesh::Vector3& kC = source.positions[kCorners[2]];
-        const Turned kAb{double{kB[0]} - kA[0], double{kB[1]} - kA[1], double{kB[2]} - kA[2]};
-        const Turned kAc{double{kC[0]} - kA[0], double{kC[1]} - kA[1], double{kC[2]} - kA[2]};
-        const Turned kCross{
-            (kAb.y * kAc.z) - (kAb.z * kAc.y), (kAb.z * kAc.x) - (kAb.x * kAc.z), (kAb.x * kAc.y) - (kAb.y * kAc.x)};
-        if (kCross.x == 0 && kCross.y == 0 && kCross.z == 0) {
-            continue;
-        }
-        // Three new vertices at most: closing a little early is harmless.
-        if (piece.vertices.size() + 3 > kPieceMost || piece.indices.size() / 3 == kPieceMost) {
-            kClose();
-        }
-        for (const std::uint32_t kGlobal : kCorners) {
-            if (local[kGlobal] < 0) {
-                local[kGlobal] = static_cast<std::int32_t>(piece.vertices.size());
-                used.push_back(kGlobal);
-                const mesh::Vector3& kPoint = source.positions[kGlobal];
-                piece.vertices.push_back(m3Vec3{kPoint[0], kPoint[1], kPoint[2]});
-            }
-            piece.indices.push_back(static_cast<std::uint16_t>(local[kGlobal]));
-        }
-    }
-    kClose();
-    for (const mesh::Vector3& kPoint : source.positions) {
-        const double kX = kPoint[0];
-        const double kY = kPoint[1];
-        const double kZ = kPoint[2];
-        out.reach = std::max(out.reach, std::sqrt((kX * kX) + (kY * kY) + (kZ * kZ)));
-    }
-    return out;
-}
-
 /// Whether the segment from `origin` along `toward` passes within `reach` of
 /// `center`.
 [[nodiscard]] bool passesNear(Turned origin, Turned toward, Turned center, double reach) noexcept {
@@ -294,102 +227,6 @@ struct Row {
 
 [[nodiscard]] bool sameBody(m3BodyId left, m3BodyId right) noexcept {
     return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
-}
-
-/// One entity's joint: the joint made, what it was made of, and between
-/// which bodies, to tell when either was made again.
-struct MappedJoint {
-    m3JointId joint{};
-    Joint3D made;
-    m3BodyId a{};
-    m3BodyId b{};
-    bool refused = false;
-};
-
-/// Field by field, for the padding a Joint3D may have.
-[[nodiscard]] bool same(const Joint3D& left, const Joint3D& right) noexcept {
-    constexpr std::array kReals = {
-        &Joint3D::anchorAX,      &Joint3D::anchorAY,      &Joint3D::anchorAZ,      &Joint3D::anchorBX,
-        &Joint3D::anchorBY,      &Joint3D::anchorBZ,      &Joint3D::axisAX,        &Joint3D::axisAY,
-        &Joint3D::axisAZ,        &Joint3D::axisBX,        &Joint3D::axisBY,        &Joint3D::axisBZ,
-        &Joint3D::linearLowerX,  &Joint3D::linearLowerY,  &Joint3D::linearLowerZ,  &Joint3D::linearUpperX,
-        &Joint3D::linearUpperY,  &Joint3D::linearUpperZ,  &Joint3D::angularLowerX, &Joint3D::angularLowerY,
-        &Joint3D::angularLowerZ, &Joint3D::angularUpperX, &Joint3D::angularUpperY, &Joint3D::angularUpperZ,
-        &Joint3D::motorSpeed,    &Joint3D::motorEffort};
-    constexpr std::array kBytes = {&Joint3D::linearX,
-                                   &Joint3D::linearY,
-                                   &Joint3D::linearZ,
-                                   &Joint3D::angularX,
-                                   &Joint3D::angularY,
-                                   &Joint3D::angularZ,
-                                   &Joint3D::motor};
-    return left.a == right.a && left.b == right.b && left.collideConnected == right.collideConnected &&
-           std::ranges::all_of(kReals,
-                               [&](float Joint3D::* field) {
-                                   return std::bit_cast<std::uint32_t>(left.*field) ==
-                                          std::bit_cast<std::uint32_t>(right.*field);
-                               }) &&
-           std::ranges::all_of(kBytes, [&](std::uint8_t Joint3D::* field) {
-               return left.*field == right.*field;
-           });
-}
-
-/// A joint's axis in a body's frame: unit, all noughts as +z; none for one
-/// that is not finite.
-[[nodiscard]] std::optional<m3Vec3> jointAxis(float x, float y, float z) noexcept {
-    const double kLength = std::sqrt((double{x} * x) + (double{y} * y) + (double{z} * z));
-    if (!std::isfinite(kLength)) {
-        return std::nullopt;
-    }
-    if (kLength == 0) {
-        return m3Vec3{0, 0, 1};
-    }
-    return m3Vec3{static_cast<float>(x / kLength), static_cast<float>(y / kLength), static_cast<float>(z / kLength)};
-}
-
-/// The Maul3D generic joint a Joint3D is, between two bodies; none for
-/// values out of range. Maul3D refuses the rest (a limit's order, the
-/// angular contract, a motor on a locked axis) when the joint is made.
-[[nodiscard]] std::optional<m3JointDef> jointDef(const Joint3D& joint, m3BodyId a, m3BodyId b) noexcept {
-    const auto kAxisA = jointAxis(joint.axisAX, joint.axisAY, joint.axisAZ);
-    const auto kAxisB = jointAxis(joint.axisBX, joint.axisBY, joint.axisBZ);
-    const std::array<std::uint8_t, 6> kModes = {
-        joint.linearX, joint.linearY, joint.linearZ, joint.angularX, joint.angularY, joint.angularZ};
-    if (!kAxisA || !kAxisB || joint.motor > 6 || std::ranges::any_of(kModes, [](std::uint8_t mode) {
-            return mode > static_cast<std::uint8_t>(physics::JointAxis::Limited);
-        })) {
-        return std::nullopt;
-    }
-    m3JointDef definition = m3DefaultJointDef();
-    definition.type = m3_genericJoint;
-    definition.bodyIdA = a;
-    definition.bodyIdB = b;
-    definition.localAnchorA = m3Vec3{joint.anchorAX, joint.anchorAY, joint.anchorAZ};
-    definition.localAnchorB = m3Vec3{joint.anchorBX, joint.anchorBY, joint.anchorBZ};
-    definition.localAxisA = *kAxisA;
-    definition.localAxisB = *kAxisB;
-    definition.collideConnected = joint.collideConnected;
-    // The modes are Maul3D's own numbers: locked, free, limited.
-    for (std::size_t axis = 0; axis < 3; ++axis) {
-        definition.genericLinear[axis] = kModes[axis];
-        definition.genericAngular[axis] = kModes[3 + axis];
-    }
-    definition.genericLinearLower[0] = joint.linearLowerX;
-    definition.genericLinearLower[1] = joint.linearLowerY;
-    definition.genericLinearLower[2] = joint.linearLowerZ;
-    definition.genericLinearUpper[0] = joint.linearUpperX;
-    definition.genericLinearUpper[1] = joint.linearUpperY;
-    definition.genericLinearUpper[2] = joint.linearUpperZ;
-    definition.genericAngularLower[0] = joint.angularLowerX;
-    definition.genericAngularLower[1] = joint.angularLowerY;
-    definition.genericAngularLower[2] = joint.angularLowerZ;
-    definition.genericAngularUpper[0] = joint.angularUpperX;
-    definition.genericAngularUpper[1] = joint.angularUpperY;
-    definition.genericAngularUpper[2] = joint.angularUpperZ;
-    definition.genericMotorAxis = joint.motor == 0 ? std::uint8_t{255} : static_cast<std::uint8_t>(joint.motor - 1);
-    definition.motorSpeed = joint.motorSpeed;
-    definition.maxMotorEffort = joint.motorEffort;
-    return definition;
 }
 
 } // namespace
