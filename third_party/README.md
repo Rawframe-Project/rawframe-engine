@@ -12,6 +12,7 @@ apply to vendored files; the code is upstream's, not ours.
 | Maul3D 0.0.1 | `Rawframe-Project/maul3d` | `a8f590b6d38afcf75133dd3d63777d09ba984c7a` | MIT | `include/`, `src/`, `LICENSE` |
 | miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 (stb_vorbis v1.22: public domain or MIT) | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |
 | MsQuic 2.6.1 | `microsoft/msquic` | `a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83` | MIT | build files, `src/` without tests, tools, or Windows PGO data, notices |
+| Opus 1.5.2 | `xiph/opus` | `ddbe48383984d56acd9e1ab6a090c54ca6b735a6` | BSD-3-Clause | `include/`, `src/`, `celt/`, `silk/`, the three source lists, `COPYING` |
 | OpenSSL 3.5 | `openssl/openssl` | `453eaaa9e6bb1304730abacfbb73d51868cb6ab9` | Apache-2.0 | everything but `test/`, `demos/`, the programs' sample keys, and the documentation and fuzzers other than their `build.info` files |
 
 To move the Kest pin, run `tools/update_kest.sh <kest checkout> <revision>`,
@@ -28,6 +29,12 @@ and proceed as for Kest. The runtime builds only its device layer
 (ADR-0038), and the audio module keeps its types out of every public header;
 its MP3 decoder and stb_vorbis are built only into import tooling, never into
 a runtime closure (ADR-0058).
+
+To move the Opus pin, run `tools/update_opus.sh <checkout> <revision>` and
+proceed as for Kest; the build reads upstream's own source lists, so a new
+source file needs nothing here. It is built in floating point, portable C
+only, without the deep-learning extensions: import tooling encodes and the
+client decodes (ADR-0058).
 
 MsQuic and OpenSSL move together: the OpenSSL revision is the one the MsQuic
 revision pins as its `submodules/openssl`. Run
