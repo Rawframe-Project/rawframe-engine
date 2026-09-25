@@ -10,6 +10,7 @@
 
 #include "rawframe/result/result.h"
 #include "rawframe/schema/component.h"
+#include "rawframe/world/time.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -33,6 +34,9 @@ public:
     /// One tick: `input` into the input component, then every predicted
     /// system in schedule order, as the server runs that tick.
     [[nodiscard]] virtual result::Status step(std::span<const std::byte> input) = 0;
+    /// The server's tick rate, told on admission before any step: what a
+    /// tick's length is, for systems that integrate over time.
+    virtual void rate(world::TickRate rate) noexcept = 0;
 };
 
 struct PredictionSettings {

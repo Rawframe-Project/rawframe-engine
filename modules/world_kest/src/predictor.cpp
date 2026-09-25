@@ -134,11 +134,14 @@ public:
         return {};
     }
 
+    void rate(world::TickRate rate) noexcept override {
+        rate_ = rate;
+    }
+
     result::Status step(std::span<const std::byte> input) override {
         RAWFRAME_TRY(set(registry_->descriptor(input_).id, input));
         // A system that fails leaves the tick to the server's correction.
-        RAWFRAME_TRY_ASSIGN(const world::TickReport kReport,
-                            schedule_->runTick(*world_, tick_, *world::TickRate::of(60)));
+        RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, schedule_->runTick(*world_, tick_, rate_));
         if (!kReport.failures.empty()) {
             return result::fail(result::ErrorClass::Internal,
                                 kWorldKestDomain,
@@ -167,6 +170,7 @@ private:
     const physics2d::Physics2DQueries* queries_ = nullptr;
     std::optional<world::Schedule> schedule_;
     world::TickIndex tick_;
+    world::TickRate rate_;
 };
 
 } // namespace

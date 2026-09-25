@@ -387,6 +387,12 @@ void ReplicationClient::pump() {
             if (state.interpolation) {
                 state.interpolation->admitted(event.accept.tickRateTicks, event.accept.tickRateSeconds);
             }
+            if (state.prediction) {
+                if (const auto kRate = world::TickRate::of(static_cast<std::uint32_t>(event.accept.tickRateTicks),
+                                                           static_cast<std::uint32_t>(event.accept.tickRateSeconds))) {
+                    state.settings.prediction->predictor->rate(*kRate);
+                }
+            }
             break;
         case network::SessionEventKind::Frame:
             if (state.accept) {
