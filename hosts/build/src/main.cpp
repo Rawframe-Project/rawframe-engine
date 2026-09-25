@@ -7,11 +7,18 @@
 //   rawframe-build <cooked> <output> <subject> <version> <platform>
 //                  <architecture> <side> <configuration> <profile> [<key>]
 //   rawframe-build key <publisher> <directory>
+//   rawframe-build install <build> <library>
+//   rawframe-build compose <library> <game root> <profile> <record>
 //
 // `key` writes `<kid>.key`, the secret, readable by its owner only, and
-// `<publisher>.keys`, the publisher key set that readers pin.
+// `<publisher>.keys`, the publisher key set that readers pin. `install`
+// copies a Build into a library as `builds/<root>/`; `compose` writes the
+// CompositionRecord of the library's Build of that root as the Game, and
+// prints its CompositionId.
 
 #include "rawframe/build/build.h"
+#include "rawframe/content/composition_record.h"
+#include "rawframe/document/json.h"
 #include "rawframe/signature/signature.h"
 
 #include <chrono>
@@ -38,10 +45,14 @@ void print(const rawframe::result::Error& error) {
                  error.description().data());
 }
 
+std::int64_t unixNow() {
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
 int makeKey(std::string_view publisher, const std::filesystem::path& directory) {
     const auto kKey = rawframe::build::generatePublisherKey(publisher);
-    const std::int64_t kNow =
-        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    const std::int64_t kNow = unixNow();
     const auto kKeys = kKey.has_value() ? rawframe::build::keySetOf(*kKey, kNow)
                                         : rawframe::result::Result<rawframe::signature::PublisherKeySet>{
                                               std::unexpected<rawframe::result::Error>{kKey.error().clone()}};
@@ -69,16 +80,92 @@ int makeKey(std::string_view publisher, const std::filesystem::path& directory) 
     return 0;
 }
 
+std::string readText(const std::filesystem::path& path) {
+    std::ifstream file{path, std::ios::binary};
+    return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+}
+
+/// A Build's manifest's identity section, or none: what `install` and
+/// `compose` read of a Build.
+std::optional<rawframe::document::Value> identityOf(const std::filesystem::path& build) {
+    auto manifest = rawframe::document::parseCanonicalRecord(
+        readText(build / "build.manifest"), rawframe::document::ReadLimits{.maximumBytes = 64U << 20U});
+    if (!manifest.has_value() || manifest->find("identity") == nullptr) {
+        return std::nullopt;
+    }
+    return *manifest->find("identity");
+}
+
+int install(const std::filesystem::path& build, const std::filesystem::path& library) {
+    const auto kIdentity = identityOf(build);
+    const auto kBytes = kIdentity.has_value() ? rawframe::document::writeCanonicalRecord(*kIdentity)
+                                              : rawframe::result::Result<std::string>{std::string{}};
+    if (!kIdentity.has_value() || !kBytes.has_value()) {
+        std::fputs("rawframe-build: install: not a Build\n", stderr);
+        return 1;
+    }
+    const rawframe::content::ContentDigest kRoot{.bytes = rawframe::base::sha256(*kBytes)};
+    const std::filesystem::path kInto = library / "builds" / kRoot.text().substr(7);
+    std::error_code error;
+    std::filesystem::create_directories(kInto, error);
+    std::filesystem::copy(build,
+                          kInto,
+                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing,
+                          error);
+    if (error) {
+        std::fputs("rawframe-build: install: the Build cannot be copied\n", stderr);
+        return 1;
+    }
+    std::printf("installed %s\n", kRoot.text().c_str());
+    return 0;
+}
+
+int compose(const std::filesystem::path& library,
+            std::string_view root,
+            std::string_view profile,
+            const std::filesystem::path& record) {
+    const auto kRoot = rawframe::content::ContentDigest::parse(root);
+    const auto kIdentity = kRoot.has_value() ? identityOf(library / "builds" / kRoot->text().substr(7)) : std::nullopt;
+    const rawframe::document::Value* subject = kIdentity.has_value() ? kIdentity->find("subject") : nullptr;
+    const rawframe::document::Value* version = kIdentity.has_value() ? kIdentity->find("version") : nullptr;
+    if (subject == nullptr || version == nullptr || subject->text() == nullptr || version->text() == nullptr) {
+        std::fputs("rawframe-build: compose: the library has no such Build\n", stderr);
+        return 1;
+    }
+    const auto kText = rawframe::content::writeComposition(rawframe::content::CompositionRecord{
+        .game = {.subject = *subject->text(), .version = *version->text(), .build = kRoot->bytes},
+        .mods = {},
+        .packages = {},
+        .profile = std::string{profile},
+        .createdAt = unixNow()});
+    if (!kText.has_value()) {
+        print(kText.error());
+        return 1;
+    }
+    std::ofstream{record, std::ios::binary} << *kText;
+    const rawframe::content::ContentDigest kId{.bytes = rawframe::content::compositionIdOf(*kText)};
+    std::printf("composition %s\n", kId.text().c_str());
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     if (argc == 4 && std::string_view{argv[1]} == "key") {
         return makeKey(argv[2], argv[3]);
     }
+    if (argc == 4 && std::string_view{argv[1]} == "install") {
+        return install(argv[2], argv[3]);
+    }
+    if (argc == 6 && std::string_view{argv[1]} == "compose") {
+        return compose(argv[2], argv[3], argv[4], argv[5]);
+    }
     if (argc != 10 && argc != 11) {
         std::fputs("usage: rawframe-build <cooked> <output> <subject> <version> <platform> <architecture> <side> "
                    "<configuration> <profile> [<key>]\n"
-                   "       rawframe-build key <publisher> <directory>\n",
+                   "       rawframe-build key <publisher> <directory>\n"
+                   "       rawframe-build install <build> <library>\n"
+                   "       rawframe-build compose <library> <game root> <profile> <record>\n",
                    stderr);
         return 2;
     }
