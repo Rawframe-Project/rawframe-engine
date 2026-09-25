@@ -10,6 +10,12 @@
 //   target <publisher/name>
 //   modapi <constraint>...        >=2 <4, =3, or 3 alone
 //   contribute <point> <scene>    once for each scene a point takes
+//   program <file>                the Kest program its handlers are in
+//   handle <point> <function>     a function of it as an event's handler
+//
+// A mod with handlers names one program, compiled from the Kest sources of
+// the `kest.project` beside it and run on a machine of its own under Kest's
+// untrusted profile (D181).
 
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
@@ -42,11 +48,21 @@ struct ModContribution {
     std::string scene;
 };
 
+struct ModHandler {
+    /// The event point's name in the target's Mod API namespace.
+    std::string point;
+    /// The function of the mod's program that handles it.
+    std::string function;
+};
+
 struct ModDescription {
     std::string target;
     /// Every bound holds of a version the mod accepts.
     std::vector<ModApiBound> modApi;
     std::vector<ModContribution> contributions;
+    /// The program its handlers are in; empty for a mod without handlers.
+    std::string program;
+    std::vector<ModHandler> handlers;
 };
 
 /// The most lines a mod description may have.
@@ -54,8 +70,9 @@ inline constexpr std::size_t kMaximumModLines = 1024;
 
 /// Parses a description. Refuses (`invalid_argument`, `BadGameLine`, with
 /// the line as context) an unknown keyword, a target or range missing, given
-/// twice, or outside its grammar, a range no version satisfies, and a
-/// contribution named twice.
+/// twice, or outside its grammar, a range no version satisfies, a
+/// contribution or handler named twice, handlers without a program, and a
+/// program without handlers.
 [[nodiscard]] result::Result<ModDescription> parseMod(std::string_view text);
 
 /// Whether `version` of a game's Mod API satisfies every bound.
@@ -73,7 +90,8 @@ struct ComposedMod {
 /// - any mod of a closed game, or one a curated game does not approve;
 /// - a mod targeting another game, or whose range the game's version is
 ///   outside;
-/// - a contribution to a point the game does not declare;
+/// - values for a point the game does not declare as a data point, or a
+///   handler for one it does not declare as an event point;
 /// - two claimants of an exclusive point, every one named;
 /// - a required point no mod fills and whose component none of the game's
 ///   own scenes hold.

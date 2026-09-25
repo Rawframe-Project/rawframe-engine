@@ -70,25 +70,52 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
         lines.firstApproval = lines.firstApproval == 0 ? line : lines.firstApproval;
         return {};
     }
-    // `extension <name> data <component> multi|exclusive [required]`.
-    if (words.size() >= 3 && (words[2] == "event" || words[2] == "service" || words[2] == "replacement")) {
+    // `extension <name> data <component> multi|exclusive [required]`, or
+    // `extension <name> event <component> after <system> [write
+    // <component>]... multi|exclusive [required]`.
+    if (words.size() >= 3 && (words[2] == "service" || words[2] == "replacement")) {
         return badLine(line,
                        WorldKestError::BadGameLine,
-                       "event, service, and replacement points wait for mods' own machines; a point is `data` for now");
+                       "service and replacement points are not built yet; a point is `data` or `event`");
     }
-    const bool kRequired = words.size() == 6 && words[5] == "required";
-    if ((words.size() != 5 && !kRequired) || words[2] != "data" || !validName(words[1]) ||
-        (words[4] != "multi" && words[4] != "exclusive") ||
-        std::ranges::contains(mods.points, words[1], &GameExtensionPoint::name)) {
-        return badLine(
-            line,
-            WorldKestError::BadGameLine,
-            "a game declares each point once, `extension <name> data <component> multi|exclusive [required]`");
+    const bool kRequired = words.size() >= 5 && words.back() == "required";
+    const std::span<const std::string_view> kBody = words.first(words.size() - (kRequired ? 1 : 0));
+    const std::string_view kOccupancy = kBody.size() >= 5 ? kBody.back() : std::string_view{};
+    GameExtensionPoint point{.name = words.size() >= 2 ? std::string{words[1]} : std::string{},
+                             .kind = GameExtensionPoint::Kind::Data,
+                             .accepts = kBody.size() >= 4 ? std::string{kBody[3]} : std::string{},
+                             .after = {},
+                             .writes = {},
+                             .exclusive = kOccupancy == "exclusive",
+                             .required = kRequired};
+    bool shaped = kBody.size() >= 5 && validName(point.name) && (kOccupancy == "multi" || kOccupancy == "exclusive") &&
+                  !std::ranges::contains(mods.points, point.name, &GameExtensionPoint::name);
+    if (shaped && kBody[2] == "event") {
+        point.kind = GameExtensionPoint::Kind::Event;
+        // After the component: `after <system>`, then `write <component>`
+        // pairs, then the occupancy.
+        const std::span<const std::string_view> kClauses = kBody.subspan(4, kBody.size() - 5);
+        shaped = kClauses.size() >= 2 && kClauses.size() % 2 == 0 && kClauses[0] == "after";
+        for (std::size_t at = 0; shaped && at < kClauses.size(); at += 2) {
+            if (at == 0) {
+                point.after = kClauses[1];
+                continue;
+            }
+            shaped = kClauses[at] == "write" && kClauses[at + 1] != point.accepts &&
+                     !std::ranges::contains(point.writes, kClauses[at + 1]);
+            point.writes.emplace_back(kClauses[at + 1]);
+        }
+    } else {
+        shaped = shaped && kBody.size() == 5 && kBody[2] == "data";
     }
-    mods.points.push_back(GameExtensionPoint{.name = std::string{words[1]},
-                                             .accepts = std::string{words[3]},
-                                             .exclusive = words[4] == "exclusive",
-                                             .required = kRequired});
+    if (!shaped) {
+        return badLine(line,
+                       WorldKestError::BadGameLine,
+                       "a game declares each point once, `extension <name> data <component> multi|exclusive "
+                       "[required]` or `extension <name> event <component> after <system> [write <component>]... "
+                       "multi|exclusive [required]`");
+    }
+    mods.points.push_back(std::move(point));
     lines.firstPoint = lines.firstPoint == 0 ? line : lines.firstPoint;
     return {};
 }
@@ -104,10 +131,20 @@ result::Status checkModApi(const GameDescription& game, const ModLines& lines) {
         return badLine(lines.firstApproval, WorldKestError::BadGameLine, "only a curated game approves mods");
     }
     for (const GameExtensionPoint& point : mods.points) {
-        if (!std::ranges::contains(game.components, point.accepts, &GameComponent::name)) {
+        const bool kKnown = std::ranges::contains(game.components, point.accepts, &GameComponent::name) &&
+                            std::ranges::all_of(point.writes, [&game](const std::string& written) {
+                                return std::ranges::contains(game.components, written, &GameComponent::name);
+                            });
+        if (!kKnown) {
             return badLine(lines.firstPoint,
                            WorldKestError::UnknownName,
-                           "an extension point accepts a component the game does not declare");
+                           "an extension point names only components the game declares");
+        }
+        if (point.kind == GameExtensionPoint::Kind::Event &&
+            !std::ranges::contains(game.systems, point.after, &GameSystem::identity)) {
+            return badLine(lines.firstPoint,
+                           WorldKestError::UnknownName,
+                           "an event point's handlers run after a system the game declares");
         }
     }
     return {};

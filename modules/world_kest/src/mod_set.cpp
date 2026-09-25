@@ -37,11 +37,25 @@ result::Status checkMods(const GameDescription& game,
                                                       .withContext("mod", mod.subject)
                                                       .withContext("version", std::to_string(api.version))};
         }
+        // Values go to data points, handlers to event points.
+        const auto kKnown = [&api](std::string_view name, GameExtensionPoint::Kind kind) {
+            return std::ranges::any_of(api.points, [name, kind](const GameExtensionPoint& point) {
+                return point.name == name && point.kind == kind;
+            });
+        };
         for (const ModContribution& contribution : mod.description.contributions) {
-            if (std::ranges::find(api.points, contribution.point, &GameExtensionPoint::name) == api.points.end()) {
-                return std::unexpected<result::Error>{refused("a mod contributes to a point the game does not declare")
+            if (!kKnown(contribution.point, GameExtensionPoint::Kind::Data)) {
+                return std::unexpected<result::Error>{
+                    refused("a mod contributes values to a data point the game does not declare")
+                        .withContext("mod", mod.subject)
+                        .withContext("point", contribution.point)};
+            }
+        }
+        for (const ModHandler& handler : mod.description.handlers) {
+            if (!kKnown(handler.point, GameExtensionPoint::Kind::Event)) {
+                return std::unexpected<result::Error>{refused("a mod handles an event point the game does not declare")
                                                           .withContext("mod", mod.subject)
-                                                          .withContext("point", contribution.point)};
+                                                          .withContext("point", handler.point)};
             }
         }
     }
@@ -56,13 +70,23 @@ result::Status checkMods(const GameDescription& game,
                     ++count;
                 }
             }
+            for (const ModHandler& handler : mod.description.handlers) {
+                if (handler.point == point.name) {
+                    claimants += (count == 0 ? "" : " ") + mod.subject + ":" + handler.function;
+                    ++count;
+                }
+            }
         }
         if (point.exclusive && count > 1) {
             return std::unexpected<result::Error>{refused("an exclusive point has more than one claimant")
                                                       .withContext("point", point.name)
                                                       .withContext("claimants", claimants)};
         }
-        if (point.required && count == 0 && std::ranges::find(gameHolds, point.accepts) == gameHolds.end()) {
+        // The game fills a data point itself where its scenes hold the
+        // component; an event point only a mod fills.
+        const bool kGameFills = point.kind == GameExtensionPoint::Kind::Data &&
+                                std::ranges::find(gameHolds, point.accepts) != gameHolds.end();
+        if (point.required && count == 0 && !kGameFills) {
             return std::unexpected<result::Error>{
                 refused("a required point is filled by no mod and not by the game").withContext("point", point.name)};
         }

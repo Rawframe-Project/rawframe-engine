@@ -107,7 +107,8 @@ RAWFRAME_TEST(ACookedModReadsAsWritten) {
     const base::Bits128 kMore = base::parseBits128Hex("000000000000000000000000000000b3").value;
     const world_kest::CookedMod kMod{
         .text = "target acme/raid\nmodapi 3\n",
-        .scenes = {{.path = "wave.scene", .scene = kWave}, {.path = "more.scene", .scene = kMore}}};
+        .scenes = {{.path = "wave.scene", .scene = kWave}, {.path = "more.scene", .scene = kMore}},
+        .programs = {{.path = "horde.kest", .sources = kMore, .entry = "horde.kest"}}};
     const auto kWritten = world_kest::writeCookedMod(kMod);
     RAWFRAME_EXPECT(kWritten.has_value());
     if (!kWritten.has_value()) {
@@ -117,7 +118,8 @@ RAWFRAME_TEST(ACookedModReadsAsWritten) {
     const auto kRead = world_kest::readCookedMod(*kWritten);
     RAWFRAME_EXPECT(kRead.has_value() && kRead->text == kMod.text && kRead->scenes.size() == 2 &&
                     kRead->scenes[0].path == "more.scene" && kRead->scene("wave.scene") != nullptr &&
-                    kRead->scene("wave.scene")->scene == kWave);
+                    kRead->scene("wave.scene")->scene == kWave && kRead->programs.size() == 1 &&
+                    kRead->programs[0].sources == kMore && kRead->programs[0].entry == "horde.kest");
     RAWFRAME_EXPECT(kRead.has_value() && world_kest::writeCookedMod(*kRead).value_or("") == *kWritten);
     // A scene named twice or of no identity is not written; a record of
     // another kind, a member too many, or a scene out of order is not read.
@@ -125,6 +127,9 @@ RAWFRAME_TEST(ACookedModReadsAsWritten) {
         !world_kest::writeCookedMod({.scenes = {{.path = "a", .scene = kWave}, {.path = "a", .scene = kMore}}})
              .has_value());
     RAWFRAME_EXPECT(!world_kest::writeCookedMod({.scenes = {{.path = "a", .scene = {}}}}).has_value());
+    world_kest::CookedMod twoPrograms = kMod;
+    twoPrograms.programs.push_back({.path = "other.kest", .sources = kWave, .entry = "other.kest"});
+    RAWFRAME_EXPECT(!world_kest::writeCookedMod(twoPrograms).has_value());
     std::string other = *kWritten;
     other.replace(other.find("mod.description"), 15, "game.descriptio");
     RAWFRAME_EXPECT(!world_kest::readCookedMod(other).has_value());
@@ -212,4 +217,66 @@ RAWFRAME_TEST(AGameFillsItsOwnRequiredPointsOrIsNotRead) {
     RAWFRAME_EXPECT(!kUnfilled.has_value() && kUnfilled.error().code() == code(world_kest::WorldKestError::ModRefused));
     const auto kFilled = kRead(kRules);
     RAWFRAME_EXPECT(kFilled.has_value() && kFilled->modScenes().empty());
+}
+
+RAWFRAME_TEST(AnEventPointTakesHandlersAfterASystem) {
+    const std::string kSystems = "system raid.fight simulation fight write raid.enemy\n";
+    const auto kGame = parseGame(kBase + kSystems +
+                                 "mods open\nmodapi raid 1\nextension spawned data raid.enemy multi\n"
+                                 "extension hits event raid.enemy after raid.fight write raid.rules multi\n"
+                                 "extension rule event raid.rules after raid.fight exclusive\n");
+    RAWFRAME_EXPECT(kGame.has_value());
+    if (!kGame.has_value()) {
+        return;
+    }
+    using Kind = world_kest::GameExtensionPoint::Kind;
+    const auto& kPoints = kGame->mods.points;
+    RAWFRAME_EXPECT(kPoints.size() == 3 && kPoints[0].kind == Kind::Data && kPoints[1].kind == Kind::Event &&
+                    kPoints[1].accepts == "raid.enemy" && kPoints[1].after == "raid.fight" &&
+                    kPoints[1].writes == std::vector<std::string>{"raid.rules"} && kPoints[2].writes.empty() &&
+                    kPoints[2].exclusive);
+    // After no system or one it does not declare, writing what it reads or
+    // twice, an unknown component, another clause, and kinds not built are
+    // refused.
+    for (const std::string_view kLine :
+         {"extension hits event raid.enemy multi\n",
+          "extension hits event raid.enemy after raid.rest multi\n",
+          "extension hits event raid.enemy after raid.fight write raid.enemy multi\n",
+          "extension hits event raid.enemy after raid.fight write raid.rules write raid.rules multi\n",
+          "extension hits event raid.enemy after raid.fight write raid.boss multi\n",
+          "extension hits event raid.enemy after raid.fight read raid.rules multi\n",
+          "extension hits service raid.enemy multi\n",
+          "extension\n"}) {
+        RAWFRAME_EXPECT(refused(kSystems + "modapi raid 1\n" + std::string{kLine}));
+    }
+
+    // A mod handles an event with a function of its one program.
+    const auto kMod =
+        world_kest::parseMod("target acme/raid\nmodapi 1\nprogram horde.kest\nhandle hits bounty\nhandle hits tally\n");
+    RAWFRAME_EXPECT(kMod.has_value() && kMod->program == "horde.kest" && kMod->handlers.size() == 2 &&
+                    kMod->handlers[1].function == "tally");
+    for (const std::string_view kText :
+         {"target acme/raid\nmodapi 1\nhandle hits bounty\n",
+          "target acme/raid\nmodapi 1\nprogram horde.kest\n",
+          "target acme/raid\nmodapi 1\nprogram a.kest\nprogram b.kest\nhandle hits bounty\n",
+          "target acme/raid\nmodapi 1\nprogram a.kest\nhandle hits bounty\nhandle hits bounty\n",
+          "target acme/raid\nmodapi 1\nprogram a.kest\nhandle hits\n"}) {
+        RAWFRAME_EXPECT(!world_kest::parseMod(kText).has_value());
+    }
+
+    // Handlers go to event points and values to data points; an exclusive
+    // event with two handlers names both.
+    const std::vector<world_kest::ComposedMod> kHandled = {
+        modOf("fan/horde", "target acme/raid\nmodapi 1\nprogram horde.kest\nhandle hits bounty\n")};
+    RAWFRAME_EXPECT(world_kest::checkMods(*kGame, "acme/raid", kHandled, {}).has_value());
+    RAWFRAME_EXPECT(
+        refusedWith(*kGame,
+                    {modOf("fan/horde", "target acme/raid\nmodapi 1\nprogram h.kest\nhandle spawned bounty\n")},
+                    "spawned"));
+    RAWFRAME_EXPECT(
+        refusedWith(*kGame, {modOf("fan/horde", "target acme/raid\nmodapi 1\ncontribute hits wave.scene\n")}, "hits"));
+    RAWFRAME_EXPECT(refusedWith(*kGame,
+                                {modOf("fan/horde", "target acme/raid\nmodapi 1\nprogram h.kest\nhandle rule a\n"),
+                                 modOf("fan/more", "target acme/raid\nmodapi 1\nprogram m.kest\nhandle rule b\n")},
+                                "fan/horde:a fan/more:b"));
 }

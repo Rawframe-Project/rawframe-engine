@@ -289,15 +289,29 @@ enum class ModPolicy : std::uint8_t {
     Open,
 };
 
-/// One extension point of a game's Mod API (SPEC-0042), from an `extension
-/// <name> data <component> multi|exclusive [required]` line. The engine's
-/// points are `data` alone for now: declarative values of one component,
-/// never executed (D177).
+/// One extension point of a game's Mod API (SPEC-0042). A `data` point,
+/// from `extension <name> data <component> multi|exclusive [required]`,
+/// takes declarative values of one component, never executed (D177). An
+/// `event` point, from `extension <name> event <component> after <system>
+/// [write <component>]... multi|exclusive [required]`, takes handlers: Kest
+/// functions of a mod's own untrusted machine, run as systems right after
+/// the game's system, over the entities holding the event's component, which
+/// they read, and the components the point lets them write (D181).
 struct GameExtensionPoint {
+    enum class Kind : std::uint8_t {
+        Data,
+        Event
+    };
     /// Its identity is `<namespace>/<name>`.
     std::string name;
-    /// The component each contribution is a value of.
+    Kind kind = Kind::Data;
+    /// The component each contribution is a value of, or that an event's
+    /// entities hold.
     std::string accepts;
+    /// An event's: the game system its handlers run after, and what they
+    /// may write.
+    std::string after;
+    std::vector<std::string> writes;
     /// At most one contribution; otherwise any number.
     bool exclusive = false;
     /// At least one contribution, or the Composition is invalid.

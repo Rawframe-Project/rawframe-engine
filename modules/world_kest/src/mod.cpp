@@ -84,6 +84,7 @@ result::Result<ModDescription> parseMod(std::string_view text) {
     std::size_t number = 0;
     std::size_t targetLine = 0;
     std::size_t modApiLine = 0;
+    std::size_t programLine = 0;
     while (!text.empty()) {
         const std::size_t kEnd = text.find('\n');
         std::string_view line = text.substr(0, kEnd);
@@ -137,12 +138,29 @@ result::Result<ModDescription> parseMod(std::string_view text) {
             }
             mod.contributions.push_back(
                 ModContribution{.point = std::string{kWords[1]}, .scene = std::string{kWords[2]}});
+        } else if (kWords[0] == "program") {
+            if (programLine != 0 || kWords.size() != 2) {
+                return badLine(number, "a mod names one program, `program <file>`");
+            }
+            mod.program = kWords[1];
+            programLine = number;
+        } else if (kWords[0] == "handle") {
+            if (kWords.size() != 3 || std::ranges::any_of(mod.handlers, [&kWords](const ModHandler& each) {
+                    return each.point == kWords[1] && each.function == kWords[2];
+                })) {
+                return badLine(number, "a mod handles an event with each function once, `handle <point> <function>`");
+            }
+            mod.handlers.push_back(ModHandler{.point = std::string{kWords[1]}, .function = std::string{kWords[2]}});
         } else {
-            return badLine(number, "a mod description line is target, modapi, or contribute");
+            return badLine(number, "a mod description line is target, modapi, contribute, program, or handle");
         }
     }
     if (targetLine == 0 || modApiLine == 0) {
         return badLine(number, "a mod names its target and its Mod API range");
+    }
+    if (mod.handlers.empty() != mod.program.empty()) {
+        return badLine(programLine != 0 ? programLine : number,
+                       "a mod with handlers names their program, and only then");
     }
     return mod;
 }
