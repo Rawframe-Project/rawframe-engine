@@ -3,6 +3,7 @@
 #include "frame.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/manifest.h"
+#include "rawframe/content/product.h"
 #include "rawframe/document/json.h"
 #include "rawframe/signature/errors.h"
 
@@ -359,7 +360,7 @@ result::Result<BuildContent> ContentSource::build(const std::filesystem::path& r
         return invalidBuild("a Build identity names its subject, version, and resources, each with its chunks");
     }
     // Signed by this publisher's key, so a Build of this publisher's only.
-    if (subject->substr(0, subject->find('/')) != publisher.publisher) {
+    if (publisherOf(*subject) != publisher.publisher) {
         return std::unexpected<result::Error>{result::fail(result::ErrorClass::PermissionDenied,
                                                            signature::kSignatureDomain,
                                                            code(signature::SignatureError::UnknownKey),

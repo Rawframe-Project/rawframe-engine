@@ -4,6 +4,7 @@
 #include "rawframe/build/chunking.h"
 #include "rawframe/build/errors.h"
 #include "rawframe/content/manifest.h"
+#include "rawframe/content/product.h"
 #include "rawframe/document/json.h"
 
 #include <algorithm>
@@ -149,100 +150,19 @@ result::Status checkIdentity(const BuildIdentity& identity) {
     const bool kConfiguration = identity.configuration == "build.debug" ||
                                 identity.configuration == "build.development" ||
                                 identity.configuration == "build.shipping";
-    if (!validSubject(identity.subject) || !validVersion(identity.version) || !validVersion(identity.engine) ||
-        !token(identity.platform, 32) || !token(identity.architecture, 32) || !kSide || !kConfiguration ||
-        !token(identity.profile, 64)) {
+    if (!content::validSubject(identity.subject) || !content::validVersion(identity.version) ||
+        !content::validVersion(identity.engine) || !token(identity.platform, 32) || !token(identity.architecture, 32) ||
+        !kSide || !kConfiguration || !token(identity.profile, 64)) {
         return refuse(BuildError::BadIdentity, "a Build identity field is outside its grammar");
     }
     return {};
 }
 
-bool semverIdentifier(std::string_view part, bool numericNeedsNoLeadingZero) noexcept {
-    if (part.empty() || !std::ranges::all_of(part, [](char each) {
-            return (each >= '0' && each <= '9') || (each >= 'a' && each <= 'z') || (each >= 'A' && each <= 'Z') ||
-                   each == '-';
-        })) {
-        return false;
-    }
-    const bool kNumeric = std::ranges::all_of(part, [](char each) {
-        return each >= '0' && each <= '9';
-    });
-    return !numericNeedsNoLeadingZero || !kNumeric || part.size() == 1 || part.front() != '0';
-}
-
-bool dotted(std::string_view text, bool numericNeedsNoLeadingZero) noexcept {
-    while (true) {
-        const std::size_t kDot = text.find('.');
-        if (!semverIdentifier(text.substr(0, kDot), numericNeedsNoLeadingZero)) {
-            return false;
-        }
-        if (kDot == std::string_view::npos) {
-            return true;
-        }
-        text.remove_prefix(kDot + 1);
-    }
-}
-
 } // namespace
-
-bool validVersion(std::string_view text) noexcept {
-    if (text.empty() || text.size() > 64) {
-        return false;
-    }
-    std::string_view core = text;
-    const std::size_t kPlus = core.find('+');
-    if (kPlus != std::string_view::npos) {
-        if (!dotted(core.substr(kPlus + 1), false)) {
-            return false;
-        }
-        core = core.substr(0, kPlus);
-    }
-    const std::size_t kDash = core.find('-');
-    if (kDash != std::string_view::npos) {
-        if (!dotted(core.substr(kDash + 1), true)) {
-            return false;
-        }
-        core = core.substr(0, kDash);
-    }
-    int numbers = 0;
-    while (true) {
-        const std::size_t kDot = core.find('.');
-        const std::string_view kNumber = core.substr(0, kDot);
-        if (kNumber.empty() ||
-            !std::ranges::all_of(kNumber,
-                                 [](char each) {
-                                     return each >= '0' && each <= '9';
-                                 }) ||
-            (kNumber.size() > 1 && kNumber.front() == '0')) {
-            return false;
-        }
-        ++numbers;
-        if (kDot == std::string_view::npos) {
-            break;
-        }
-        core.remove_prefix(kDot + 1);
-    }
-    return numbers == 3;
-}
-
-bool validSubject(std::string_view text) noexcept {
-    const std::size_t kSlash = text.find('/');
-    if (kSlash == std::string_view::npos) {
-        return false;
-    }
-    const auto kSegment = [](std::string_view segment) {
-        return !segment.empty() && segment.front() != '-' && segment.back() != '-' &&
-               std::ranges::all_of(segment, [](char each) {
-                   return (each >= 'a' && each <= 'z') || (each >= '0' && each <= '9') || each == '-';
-               });
-    };
-    return kSegment(text.substr(0, kSlash)) && kSegment(text.substr(kSlash + 1));
-}
 
 result::Result<BuildReport> packBuild(const BuildRequest& request) {
     RAWFRAME_TRY(checkIdentity(request.identity));
-    if (request.signer != nullptr &&
-        request.identity.subject.substr(0, request.identity.subject.find('/')) != request.signer->publisher) {
+    if (request.signer != nullptr && content::publisherOf(request.identity.subject) != request.signer->publisher) {
         return refuse(BuildError::BadKey, "a Build is signed by its own publisher's key");
     }
     if (within(request.output, request.cooked) || within(request.cooked, request.output)) {

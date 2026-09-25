@@ -67,9 +67,4 @@ struct BuildReport {
 /// every blob, the packaging receipt last.
 [[nodiscard]] result::Result<BuildReport> packBuild(const BuildRequest& request);
 
-/// Whether `text` is a Semantic Versioning 2.0.0 version.
-[[nodiscard]] bool validVersion(std::string_view text) noexcept;
-/// Whether `text` is a `publisher/name` subject.
-[[nodiscard]] bool validSubject(std::string_view text) noexcept;
-
 } // namespace rawframe::build

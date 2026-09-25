@@ -8,6 +8,7 @@
 #include "rawframe/build/build.h"
 #include "rawframe/build/errors.h"
 #include "rawframe/content/manifest.h"
+#include "rawframe/content/product.h"
 #include "rawframe/content/store.h"
 #include "rawframe/document/json.h"
 #include "rawframe/test/test.h"
@@ -134,10 +135,10 @@ RAWFRAME_TEST(IdentityFieldsKeepTheirGrammar) {
         each.platform = "Linux";
     }));
     for (const std::string_view kGood : {"0.0.0", "1.2.3-rc.1", "1.2.3+build.5", "10.20.30-alpha-1.0+001"}) {
-        RAWFRAME_EXPECT(validVersion(kGood));
+        RAWFRAME_EXPECT(content::validVersion(kGood));
     }
     for (const std::string_view kBad : {"1.2", "1.2.3.4", "1.2.3-01", "1.2.3-", "1.2.3+", "v1.2.3", "1.2.3-a..b"}) {
-        RAWFRAME_EXPECT(!validVersion(kBad));
+        RAWFRAME_EXPECT(!content::validVersion(kBad));
     }
 }
 
