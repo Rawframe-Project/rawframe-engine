@@ -20,6 +20,13 @@ Presets exist for `gcc` and `clang` in each of the three configurations (`debug`
 
 `tools/check.sh fast` runs the repository rules, the formatter, one build, and the tests. `tools/check.sh` runs everything: both compilers, every configuration, and the sanitizers. Install the pre-push hook with `git config core.hooksPath tools/hooks`.
 
+The full check needs, beyond GCC and Clang 20 with `clang-format-20`:
+
+- the web build's toolchain: `libc++-20-dev-wasm32`, `libclang-rt-20-dev-wasm32`, `wasi-libc`, `lld-20`, and Node.js 18 or later;
+- Python 3 with `python3-aioquic`, an independent HTTP/3 and WebTransport implementation that plays the browser in `network_quic`'s tests.
+
+On Debian or Ubuntu, `apt-get install` installs each of them under the name given.
+
 ## Layout
 
 | Path | Holds |
