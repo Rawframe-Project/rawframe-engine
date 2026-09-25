@@ -5,9 +5,13 @@
 // compiles with the engine's own library (D86). One owner reads them, once
 // for the Runtime, and every part of the process that plays, hears, or
 // controls the game takes them from it rather than opening paths itself.
+// They come from a directory in development, or from the Runtime's content
+// as the cook made them (D88, D90), and are the same game either way.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/participant.h"
+#include "rawframe/content/identity.h"
+#include "rawframe/game_content/game_content.h"
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
@@ -31,6 +35,14 @@ public:
     /// file under the description's directory. Programs compile from the
     /// files as they are when asked, so a changed file is seen.
     [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path);
+    /// The game whose cooked description is `description` in `content`
+    /// (D88): its documents from the description's record, and each
+    /// program's files from the Kest sources resource it names (D87). Admits
+    /// both representations, and waits for each read. Refused when a read
+    /// fails, a record does not read, or the description uses a name the
+    /// record does not answer.
+    [[nodiscard]] static result::Result<GameFiles> fromContent(game_content::GameContent& content,
+                                                               content::ResourceId description);
 
     [[nodiscard]] bool named() const noexcept {
         return named_;
@@ -63,12 +75,25 @@ private:
         std::string name;
         std::string text;
     };
+    /// A program the description names: its entry among the files of one
+    /// of `sources_`.
+    struct Program {
+        std::string name;
+        std::string entry;
+        std::size_t sources = 0;
+    };
+
+    /// The digest of what has been read, set last.
+    void seal();
 
     bool named_ = false;
     std::string text_;
     GameDescription description_;
     std::vector<Named> documents_;
-    std::vector<kest::SourceFile> files_;
+    std::vector<Program> programs_;
+    /// Each set of Kest files a program compiles from: one read from a
+    /// directory, or one for each Kest sources resource named.
+    std::vector<std::vector<kest::SourceFile>> sources_;
     base::Sha256Digest digest_{};
     std::optional<std::filesystem::path> directory_;
 };

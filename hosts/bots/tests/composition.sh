@@ -3,7 +3,9 @@
 # cooked content is packed, signed, and installed in a library, two
 # CompositionRecords name the same Build under two profiles, and bots
 # naming the server's Composition are admitted while bots naming the other
-# are not. Prints the bots' summaries, the agreeing run's first. Run from
+# are not. The server reads the game from its directory and the bots from
+# the Composition's cooked description, and the two are one game to
+# admission. Prints the bots' summaries, the agreeing run's first. Run from
 # the repository root.
 #
 #   composition.sh <rawframe-server> <rawframe-bots> <rawframe-build> <cooked content> <work directory>
@@ -32,9 +34,12 @@ settings() {
 settings "$work/tool.composition" "$work/server.settings"
 settings "$work/tool.composition" "$work/agree.settings"
 settings "$work/other.composition" "$work/differ.settings"
+# The bots name the game by its cooked description's identity.
+resource=$(sed -n 's/.*"resourceId": "\([0-9a-f]*\)".*/\1/p' games/runners/runners.game.rfmeta)
+printf 'kest.game_resource = %s\n' "$resource" | tee -a "$work/agree.settings" >>"$work/differ.settings"
 
 game=games/runners/runners.game
-"$play" "$server" "$bots" 2 1 240 "$game" "$work/server.settings" "$work/agree.settings" |
+"$play" "$server" "$bots" 2 1 240 "$game" "$work/server.settings" "$work/agree.settings" "" |
     grep -o '"code":"bots_summary".*"admitted":[0-9]*'
-"$play" "$server" "$bots" 2 1 240 "$game" "$work/server.settings" "$work/differ.settings" |
+"$play" "$server" "$bots" 2 1 240 "$game" "$work/server.settings" "$work/differ.settings" "" |
     grep -o '"code":"bots_summary".*"admitted":[0-9]*'

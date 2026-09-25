@@ -15,7 +15,10 @@ namespace rawframe::world_kest {
 /// spawns the starting entities when it starts, and may reload the program
 /// in the Host's `maintenance` phase, between ticks. Configuration keys:
 ///
-///   kest.game             the game description's path; without it nothing loads
+///   kest.game             the game description's path, in development
+///   kest.game_resource    or its cooked description's resource identity in
+///                         the Runtime's content (32 hex digits); without
+///                         either nothing loads
 ///   kest.heap_bytes       the game machine's heap ceiling (67108864)
 ///   kest.fuel_per_system  steps one system may take per tick (10000000)
 ///   kest.reload_every     every this many Host iterations, reload the program

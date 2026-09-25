@@ -49,8 +49,8 @@ if(RAWFRAME_BUILD_TESTS)
                          FIXTURES_SETUP runners_content
                          PASS_REGULAR_EXPRESSION "failed 0")
     # Runners' cooked content packed into a Build from its receipt, and a
-    # client that reads its sounds from the Build, named by its root hash:
-    # shots are heard.
+    # process started outside the repository that reads the game itself and
+    # its sounds from the Build, named by its Composition: shots are heard.
     add_test(NAME runners_from_build
              COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_from_build.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_build_tool> ${PROJECT_SOURCE_DIR} ${CONTENT}

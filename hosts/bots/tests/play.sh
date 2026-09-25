@@ -6,8 +6,11 @@
 #
 #   play.sh <rawframe-server> <rawframe-bots> <bots per process> [processes]
 #           [bots iterations] [game] [server settings] [bots settings]
+#           [bots game]
 #
 # The settings files, when given, are appended to each side's configuration.
+# The bots read the game at [bots game], the server's by default; an empty
+# one names none, for bots whose settings name the game another way.
 #
 # Iterations are the Host's, at 120 a second; the server ticks at 60. The
 # server runs until every bots process has stopped and is then asked to stop,
@@ -22,6 +25,7 @@ bots_iterations="${5:-240}"
 game="${6:-games/arena/arena.game}"
 server_settings="${7:-/dev/null}"
 bots_settings="${8:-/dev/null}"
+bots_game="${9-$game}"
 work="$(mktemp -d)"
 pids=()
 trap 'kill "${pids[@]}" 2>/dev/null || true; rm -rf "$work"' EXIT
@@ -41,12 +45,14 @@ cat "$server_settings" >>"$work/server.conf"
 cat >"$work/bots.conf" <<CONF
 host.maximum_iterations = $bots_iterations
 host.iteration_rate = 120
-kest.game = $game
 kest.plan_only = true
 network.quic.pin_file = $work/fingerprint
 bots.count = $count
 bots.endpoint = 127.0.0.1:$port
 CONF
+if [ -n "$bots_game" ]; then
+    printf 'kest.game = %s\n' "$bots_game" >>"$work/bots.conf"
+fi
 cat "$bots_settings" >>"$work/bots.conf"
 
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
