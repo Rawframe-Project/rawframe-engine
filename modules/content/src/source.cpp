@@ -1,5 +1,6 @@
 #include "source.h"
 
+#include "frame.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/document/json.h"
@@ -152,13 +153,14 @@ private:
     dev_t device_;
 };
 
-/// SPEC-0021's chunk, as the manifest lists it; generation 1 of this reader
-/// takes `raw` blobs, whose bytes are their content.
+/// SPEC-0021's chunk, as the manifest lists it: a `raw` blob is its
+/// content, a `zstd` blob one Zstandard frame of it.
 struct Chunk {
     ContentDigest content;
     std::uint64_t size = 0;
     ContentDigest blob;
     std::uint64_t blobSize = 0;
+    bool compressed = false;
 };
 
 /// SPEC-0021's hard ceilings.
@@ -185,10 +187,17 @@ public:
             const std::string kHex = chunk.blob.text().substr(7);
             RAWFRAME_TRY_ASSIGN(std::vector<std::byte> blob,
                                 blobs_.read("sha256/" + kHex.substr(0, 2) + "/" + kHex.substr(2), chunk.blobSize));
-            if (!sameDigest(ContentDigest::of(blob), chunk.blob) ||
-                !sameDigest(ContentDigest::of(blob), chunk.content)) {
+            if (!sameDigest(ContentDigest::of(blob), chunk.blob)) {
                 return refuse(
                     ContentError::DigestMismatch, result::ErrorClass::DataLoss, "a blob is not what the Build says");
+            }
+            if (chunk.compressed) {
+                RAWFRAME_TRY_ASSIGN(blob, decompressFrame(blob, chunk.size));
+            }
+            if (!sameDigest(ContentDigest::of(blob), chunk.content)) {
+                return refuse(ContentError::DigestMismatch,
+                              result::ErrorClass::DataLoss,
+                              "a chunk's content is not what the Build says");
             }
             bytes.insert(bytes.end(), blob.begin(), blob.end());
         }
@@ -242,13 +251,16 @@ result::Result<std::vector<Chunk>> chunksOf(const document::Value& list, std::ui
         if (!kContent.has_value() || !kBlob.has_value()) {
             return invalidBuild("a chunk's digest is not a digest");
         }
-        // A raw blob is its content; zstd blobs wait for a reader that
-        // decompresses them.
-        if (*codec != "raw" || !sameDigest(*kContent, *kBlob) || *kSize != *kBlobSize) {
-            return invalidBuild("this reader takes raw chunks only, whose blob is their content");
+        // A raw blob is its content; a zstd one is smaller than its content,
+        // or the packer would have stored it raw.
+        const bool kRaw = *codec == "raw" && sameDigest(*kContent, *kBlob) && *kSize == *kBlobSize;
+        const bool kZstd = *codec == "zstd" && *kBlobSize < *kSize;
+        if (!kRaw && !kZstd) {
+            return invalidBuild("a chunk is raw, its blob its content, or zstd, its blob smaller than its content");
         }
         covered += *kSize;
-        chunks.push_back(Chunk{.content = *kContent, .size = *kSize, .blob = *kBlob, .blobSize = *kBlobSize});
+        chunks.push_back(
+            Chunk{.content = *kContent, .size = *kSize, .blob = *kBlob, .blobSize = *kBlobSize, .compressed = kZstd});
     }
     if (covered != size) {
         return invalidBuild("a resource's chunks do not cover it exactly");

@@ -15,6 +15,7 @@
 #include <tuple>
 #include <unistd.h>
 #include <vector>
+#include <zstd.h>
 
 using namespace rawframe;
 using namespace rawframe::content;
@@ -361,4 +362,124 @@ RAWFRAME_TEST(ABuildIsReadInItsVerificationOrder) {
         std::ofstream{kBuild.root / "build.manifest", std::ios::app} << "\n";
         RAWFRAME_EXPECT(readOfBuild(kBuild, 1).first == code(ContentError::ManifestInvalid).value);
     }
+}
+
+namespace {
+
+/// A Build of one resource, 3, of `text`, in one chunk whose blob is
+/// `blob` with codec zstd.
+struct ZstdBuild {
+    std::filesystem::path root =
+        std::filesystem::temp_directory_path() / ("rawframe-content-zstd-" + std::to_string(::getpid()));
+    base::Sha256Digest rootHash{};
+
+    ZstdBuild(std::string_view text, const std::vector<std::byte>& blob) {
+        std::filesystem::remove_all(root);
+        const std::string kBlob = ContentDigest::of(blob).text();
+        const std::string kHex = kBlob.substr(7);
+        std::filesystem::create_directories(root / "sha256" / kHex.substr(0, 2));
+        std::ofstream{root / "sha256" / kHex.substr(0, 2) / kHex.substr(2), std::ios::binary}.write(
+            reinterpret_cast<const char*>(blob.data()), static_cast<std::streamsize>(blob.size()));
+        std::array<char, 32> id{};
+        base::formatBits128Hex(idOf(3).value, id);
+        std::array<char, 32> type{};
+        base::formatBits128Hex(kSoundType.value, type);
+        const std::string kContent = ContentDigest::of(bytesOf(text)).text();
+        document::Value resource = document::Value::object();
+        resource.add("resource", document::Value::string(std::string{id.data(), id.size()}));
+        resource.add("type", document::Value::string(std::string{type.data(), type.size()}));
+        resource.add("representation", document::Value::string("rawframe.audio.opus"));
+        resource.add("digest", document::Value::string(kContent));
+        resource.add("size", document::Value::integer(static_cast<std::int64_t>(text.size())));
+        document::Value resources = document::Value::array();
+        resources.push(std::move(resource));
+        document::Value chunk = document::Value::object();
+        chunk.add("content", document::Value::string(kContent));
+        chunk.add("size", document::Value::integer(static_cast<std::int64_t>(text.size())));
+        chunk.add("blob", document::Value::string(kBlob));
+        chunk.add("blob_size", document::Value::integer(static_cast<std::int64_t>(blob.size())));
+        chunk.add("codec", document::Value::string("zstd"));
+        document::Value list = document::Value::array();
+        list.push(std::move(chunk));
+        document::Value chunks = document::Value::object();
+        chunks.add(std::string{id.data(), id.size()}, std::move(list));
+        document::Value identity = document::Value::object();
+        identity.add("subject", document::Value::string("rawframe/test"));
+        identity.add("version", document::Value::string("1.0.0"));
+        identity.add("resources", std::move(resources));
+        rootHash = base::sha256(*document::writeCanonicalRecord(identity));
+        document::Value manifest = document::Value::object();
+        manifest.add("schema", document::Value::integer(1));
+        manifest.add("identity", std::move(identity));
+        manifest.add("chunks", std::move(chunks));
+        std::ofstream{root / "build.manifest", std::ios::binary} << *document::writeCanonicalRecord(manifest);
+    }
+    ~ZstdBuild() {
+        std::filesystem::remove_all(root);
+    }
+    ZstdBuild(const ZstdBuild&) = delete;
+    ZstdBuild& operator=(const ZstdBuild&) = delete;
+
+    [[nodiscard]] std::pair<std::uint32_t, std::string> read() const {
+        auto opened = ContentSource::build(root, rootHash);
+        if (!opened.has_value()) {
+            return {opened.error().code().value, "refused"};
+        }
+        std::vector<BoundManifest> manifests = {BoundManifest{.entries = opened->entries, .source = 0}};
+        const std::vector<AdmittedRepresentation> kAdmitted = {
+            {.type = kSoundType, .representation = *RepresentationId::parse("rawframe.audio.opus")}};
+        Fixture fixture{std::move(opened->source)};
+        fixture.store->publish(*ContentCatalog::build(manifests, kAdmitted, 1, 1));
+        return outcomeOf(fixture.store->read(ResourceRef{.id = idOf(3), .type = kSoundType}));
+    }
+};
+
+/// One Zstandard frame of `text`, its content size written or not.
+std::vector<std::byte> frameOf(std::string_view text, bool contentSize = true) {
+    ZSTD_CCtx* context = ZSTD_createCCtx();
+    ZSTD_CCtx_setParameter(context, ZSTD_c_contentSizeFlag, contentSize ? 1 : 0);
+    std::vector<std::byte> frame(ZSTD_compressBound(text.size()));
+    const std::size_t kMade = ZSTD_compress2(context, frame.data(), frame.size(), text.data(), text.size());
+    ZSTD_freeCCtx(context);
+    frame.resize(ZSTD_isError(kMade) != 0U ? 0 : kMade);
+    return frame;
+}
+
+} // namespace
+
+RAWFRAME_TEST(ZstandardChunksAreBoundedAsSpecified) {
+    std::string text;
+    while (text.size() < 4096) {
+        text += "every shot sounds from where it was fired; ";
+    }
+    // One frame of the declared size: read as its content.
+    RAWFRAME_EXPECT(ZstdBuild(text, frameOf(text)).read() == read(text));
+    const auto kInvalid = code(ContentError::ManifestInvalid).value;
+    // Bytes after the frame, a second frame, a frame of another size, and one
+    // that does not say its size.
+    std::vector<std::byte> trailing = frameOf(text);
+    trailing.push_back(std::byte{0});
+    RAWFRAME_EXPECT(ZstdBuild(text, trailing).read().first == kInvalid);
+    std::vector<std::byte> twice = frameOf(text.substr(0, 2048));
+    const std::vector<std::byte> kSecond = frameOf(text.substr(2048));
+    twice.insert(twice.end(), kSecond.begin(), kSecond.end());
+    RAWFRAME_EXPECT(ZstdBuild(text, twice).read().first == kInvalid);
+    RAWFRAME_EXPECT(ZstdBuild(text, frameOf(text.substr(1))).read().first == kInvalid);
+    RAWFRAME_EXPECT(ZstdBuild(text, frameOf(text, false)).read().first == kInvalid);
+    // A skippable frame: its magic, its length, and its payload.
+    std::vector<std::byte> skippable = {std::byte{0x50},
+                                        std::byte{0x2a},
+                                        std::byte{0x4d},
+                                        std::byte{0x18},
+                                        std::byte{4},
+                                        std::byte{0},
+                                        std::byte{0},
+                                        std::byte{0},
+                                        std::byte{1},
+                                        std::byte{2},
+                                        std::byte{3},
+                                        std::byte{4}};
+    RAWFRAME_EXPECT(ZstdBuild(text, skippable).read().first == kInvalid);
+    // Not a frame at all.
+    RAWFRAME_EXPECT(ZstdBuild(text, std::vector<std::byte>(64, std::byte{7})).read().first == kInvalid);
 }
