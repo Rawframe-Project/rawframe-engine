@@ -74,8 +74,10 @@ class CompiledGraph {
 public:
     /// Refuses (`GraphInvalid`) a graph that does not validate or holds a
     /// quarantined node, and (`BindingInvalid`) a clip node whose clip is
-    /// not among `clips` or does not bind to the skeleton, or a mask node
-    /// whose mask is not among `masks` or is of another skeleton.
+    /// not among `clips` or does not bind to the skeleton, a mask node
+    /// whose mask is not among `masks` or is of another skeleton, or a
+    /// stage naming a bone the skeleton lacks, or a two-bone tip without a
+    /// parent and a grandparent.
     [[nodiscard]] static result::Result<std::shared_ptr<const CompiledGraph>>
     compile(const Graph& graph,
             const Skeleton& skeleton,
@@ -188,6 +190,28 @@ public:
         std::optional<std::size_t> rootRotation;
     };
 
+    /// A modifier stage as it plays: its bones by their place, and each
+    /// number a literal or a parameter's value.
+    struct Stage {
+        struct Number {
+            double literal = 0.0;
+            std::optional<ParameterIndex> parameter;
+        };
+        /// Two-bone IK's tip, parent, and grandparent, or the one bone a
+        /// look-at turns.
+        std::array<BoneIndex, 3> bones{};
+        bool lookAt = false;
+        std::array<Number, 3> goal{};
+        std::optional<std::array<Number, 3>> pole;
+        std::array<double, 3> axis{};
+        Number weight;
+        Relevance relevance = Relevance::Presentation;
+    };
+
+    [[nodiscard]] std::span<const Stage> stages() const noexcept {
+        return stages_;
+    }
+
     /// The step playing the node of id `node`; none for a node the output
     /// does not reach, or no node.
     [[nodiscard]] std::optional<std::size_t> step(std::uint64_t node) const noexcept;
@@ -203,6 +227,7 @@ public:
 private:
     std::vector<Parameter> parameters_;
     std::vector<Step> steps_;
+    std::vector<Stage> stages_;
     Pose bind_;
     Pose unchanged_;
     std::vector<std::optional<BoneIndex>> parents_;
@@ -334,8 +359,14 @@ public:
     /// and cost nothing.
     void evaluate(const GraphInstance& instance, Pose& pose, std::span<const std::uint8_t> only = {});
 
+    /// SPEC-0035's modifier stages on a local pose the instance evaluated,
+    /// in their declared order: all of them, or with `simulationOnly` only
+    /// those of `Simulation` relevance. Goals are in the entity's own frame.
+    void modify(const GraphInstance& instance, Pose& local, bool simulationOnly = false);
+
 private:
     std::vector<Pose> poses_;
+    Pose model_;
 };
 
 /// Takes the root motion source's channels out of a local pose of the

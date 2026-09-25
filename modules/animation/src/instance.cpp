@@ -355,6 +355,41 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
     if (made->steps_.back().delta) {
         return invalid("a graph's output is a pose, not differences");
     }
+    const auto kNumber = [&kParameter, &kLiteral](const Scalar& scalar) {
+        return Stage::Number{.literal = kLiteral(scalar), .parameter = kParameter(scalar)};
+    };
+    const auto kNumbers = [&kNumber](const Triple& triple) {
+        return std::array<Stage::Number, 3>{kNumber(triple[0]), kNumber(triple[1]), kNumber(triple[2])};
+    };
+    for (const Modifier& modifier : graph.modifiers) {
+        Stage stage{.weight = kNumber(modifier.weight), .relevance = modifier.relevance};
+        if (const auto* kIk = std::get_if<TwoBoneIk>(&modifier.stage)) {
+            const std::optional<BoneIndex> kTip = skeleton.find(kIk->tip);
+            const std::optional<BoneIndex> kParent =
+                kTip.has_value() ? skeleton.bones[kTip->value].parent : std::optional<BoneIndex>{};
+            const std::optional<BoneIndex> kGrandparent =
+                kParent.has_value() ? skeleton.bones[kParent->value].parent : std::optional<BoneIndex>{};
+            if (!kGrandparent.has_value()) {
+                return unbound("a two-bone IK tip is a bone of the skeleton with a parent and a grandparent");
+            }
+            stage.bones = {*kTip, *kParent, *kGrandparent};
+            stage.goal = kNumbers(kIk->goal);
+            if (kIk->pole.has_value()) {
+                stage.pole = kNumbers(*kIk->pole);
+            }
+        } else {
+            const auto& look = std::get<LookAt>(modifier.stage);
+            const std::optional<BoneIndex> kBone = skeleton.find(look.bone);
+            if (!kBone.has_value()) {
+                return unbound("a look-at bone is a bone of the skeleton");
+            }
+            stage.bones = {*kBone, *kBone, *kBone};
+            stage.lookAt = true;
+            stage.goal = kNumbers(look.goal);
+            stage.axis = look.axis;
+        }
+        made->stages_.push_back(stage);
+    }
     // Each clip follows the first synced node that takes it, in evaluation
     // order.
     for (std::size_t at = 0; at < made->steps_.size(); ++at) {

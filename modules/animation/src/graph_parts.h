@@ -13,6 +13,7 @@
 #include <span>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace rawframe::animation {
 
@@ -58,6 +59,14 @@ phaseSyncOf(const document::Value& params);
 /// Refuses (`GraphInvalid`) a declared leader that is none of `inputs`.
 [[nodiscard]] result::Status phaseSyncInForm(const std::optional<PhaseSync>& sync,
                                              std::span<const std::string_view> inputs);
+
+/// A graph's modifier stages as its document holds them, and read back;
+/// refuses (`GraphInvalid`) a stage out of its form or of a type this
+/// engine does not know.
+[[nodiscard]] document::Value modifiersValue(std::span<const Modifier> modifiers);
+[[nodiscard]] result::Result<std::vector<Modifier>> modifiersOf(const document::Value& value);
+/// Refuses (`GraphInvalid`, `OverLimit`) stages out of their rules.
+[[nodiscard]] result::Status modifiersInForm(const Graph& graph, const GraphLimits& limits);
 
 /// A blend space node's params, and its inputs: one a point.
 [[nodiscard]] document::Value blendSpaceParams(const BlendSpace1DNode& node);

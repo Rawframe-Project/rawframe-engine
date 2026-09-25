@@ -613,7 +613,7 @@ result::Status validate(const Graph& graph, const GraphLimits& limits) {
             return graphInvalid("a graph's presentation draws its nodes, once each, in order");
         }
     }
-    return {};
+    return modifiersInForm(graph, limits);
 }
 
 result::Result<std::string> writeGraph(const Graph& graph, const GraphLimits& limits) {
@@ -632,6 +632,9 @@ result::Result<std::string> writeGraph(const Graph& graph, const GraphLimits& li
     made.add("kind", Value::string("animation.graph"));
     made.add("interface", interfaceValue(graph));
     made.add("graph", std::move(nodes));
+    if (!graph.modifiers.empty()) {
+        made.add("modifiers", modifiersValue(graph.modifiers));
+    }
     if (!graph.presentation.empty()) {
         Value presentation = Value::object();
         for (const auto& [kNode, kDrawing] : graph.presentation) {
@@ -650,15 +653,21 @@ result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits
     }
     const Value* kind = parsed->find("kind");
     const bool kDrawn = parsed->find("presentation") != nullptr;
-    const bool kShape = kDrawn ? hasMembers(*parsed, {"formatVersion", "kind", "interface", "graph", "presentation"})
-                               : hasMembers(*parsed, {"formatVersion", "kind", "interface", "graph"});
+    const Value* modifiers = parsed->find("modifiers");
+    const bool kShape =
+        parsed->kind() == Value::Kind::Object &&
+        parsed->names().size() == 4 + (kDrawn ? 1U : 0U) + (modifiers != nullptr ? 1U : 0U) &&
+        std::ranges::all_of(std::array<std::string_view, 4>{"formatVersion", "kind", "interface", "graph"},
+                            [&parsed](std::string_view name) {
+                                return parsed->find(name) != nullptr;
+                            });
     if (!kShape || parsed->find("formatVersion")->integer() != 1 || kind->text() == nullptr ||
         *kind->text() != "animation.graph" || !hasMembers(*parsed->find("interface"), {"parameters"}) ||
         parsed->find("interface")->find("parameters")->kind() != Value::Kind::Object ||
         parsed->find("graph")->kind() != Value::Kind::Object ||
         (kDrawn && parsed->find("presentation")->kind() != Value::Kind::Object)) {
         return graphInvalid("a graph is format version 1, kind animation.graph, an interface of parameters, its nodes, "
-                            "and an optional presentation");
+                            "optional modifiers, and an optional presentation");
     }
     const Value& parameters = *parsed->find("interface")->find("parameters");
     const Value& nodes = *parsed->find("graph");
@@ -678,6 +687,9 @@ result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits
         }
         RAWFRAME_TRY_ASSIGN(GraphNode made, nodeOf(*kNodeId, nodes.items()[at]));
         graph.nodes.push_back(std::move(made));
+    }
+    if (modifiers != nullptr) {
+        RAWFRAME_TRY_ASSIGN(graph.modifiers, modifiersOf(*modifiers));
     }
     if (kDrawn) {
         const Value& presentation = *parsed->find("presentation");
@@ -780,6 +792,9 @@ result::Result<base::Sha256Digest> semanticHash(const Graph& graph) {
     hashed.add("kind", Value::string("animation.graph"));
     hashed.add("interface", interfaceValue(graph));
     hashed.add("outputs", std::move(outputs));
+    if (!graph.modifiers.empty()) {
+        hashed.add("modifiers", modifiersValue(graph.modifiers));
+    }
     return base::sha256(document::writeCompact(hashed));
 }
 

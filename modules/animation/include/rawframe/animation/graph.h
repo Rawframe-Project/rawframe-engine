@@ -109,6 +109,24 @@
 // A 2D blend space's triangles each name three of its points in name order,
 // are in order, and have area; no two overlap, and every point is in one.
 //
+// A graph may declare `modifiers` (D138): SPEC-0035's procedural stages,
+// which are not nodes but run in their written order on the pose the graph
+// made, each `{"type": t, "params": {...}}`:
+//
+//   `rawframe/two_bone_ik@1`
+//                        turns `tip`'s grandparent and bends its parent so
+//                        `tip` reaches `goal`, bending toward `pole` or,
+//                        without one, the way the chain already bends
+//   `rawframe/look_at@1` turns `bone` so its own `axis` (default
+//                        `[0, 0, 1]`) points at `goal`
+//
+// Bones are targets (32 hex digits). A goal or a pole is three numbers in
+// the entity's own frame, each a literal or a `float` parameter, which is
+// how World data reaches a stage. Each also takes a `weight` (default 1),
+// how much of its turn it makes, and a `relevance` (`presentation`, the
+// default, or `simulation`, which a dedicated server runs too). A type
+// this engine does not know is refused.
+//
 // A node of any other type is quarantined: kept byte for byte and written
 // back, while a graph holding one cannot be hashed or played. An optional
 // `presentation` object holds what editors draw, keyed by node, and never
@@ -384,9 +402,45 @@ struct GraphNode {
     friend bool operator==(const GraphNode&, const GraphNode&) = default;
 };
 
+/// Three numbers a stage takes: a place in the entity's own frame.
+using Triple = std::array<Scalar, 3>;
+
+/// Two-bone IK: `tip`'s grandparent turned and its parent bent so `tip`
+/// reaches `goal`, or as near as the chain's length allows.
+struct TwoBoneIk {
+    base::Bits128 tip;
+    Triple goal{0.0, 0.0, 0.0};
+    /// Where the chain bends toward; none keeps the plane it bends in.
+    std::optional<Triple> pole;
+
+    friend bool operator==(const TwoBoneIk&, const TwoBoneIk&) = default;
+};
+
+/// Look-at: `bone` turned so its own `axis` points at `goal`.
+struct LookAt {
+    base::Bits128 bone;
+    Triple goal{0.0, 0.0, 0.0};
+    std::array<double, 3> axis{0.0, 0.0, 1.0};
+
+    friend bool operator==(const LookAt&, const LookAt&) = default;
+};
+
+/// SPEC-0035's modifier stage: run on the graph's pose, by its weight
+/// (from nought, none of its turn, to one, all of it), where its relevance
+/// says.
+struct Modifier {
+    std::variant<TwoBoneIk, LookAt> stage;
+    Scalar weight = 1.0;
+    Relevance relevance = Relevance::Presentation;
+
+    friend bool operator==(const Modifier&, const Modifier&) = default;
+};
+
 struct Graph {
     std::vector<Parameter> parameters;
     std::vector<GraphNode> nodes;
+    /// In the order they run.
+    std::vector<Modifier> modifiers;
     /// Each node's drawing, as its compact text; never meaning.
     std::vector<std::pair<std::uint64_t, std::string>> presentation;
 
@@ -405,6 +459,7 @@ struct GraphLimits {
     std::size_t maximumParameters = 256;
     std::size_t maximumTransitions = 256;
     std::size_t maximumConditions = 16;
+    std::size_t maximumModifiers = 16;
 };
 
 /// Refuses (`GraphInvalid`) a graph out of its rules: an id twice, a
