@@ -92,16 +92,152 @@ def locales():
     return body
 
 
-def write(name, body):
+CATEGORIES = ["zero", "one", "two", "few", "many", "other"]
+TOKEN = re.compile(r"\s*(\.\.|!=|=|%|,|[a-z]+|[0-9]+)")
+
+
+def tokens(rule):
+    made, at = [], 0
+    rule = rule.strip()
+    while at < len(rule):
+        match = TOKEN.match(rule, at)
+        if not match:
+            raise ValueError(f"cannot read plural rule {rule!r} at {at}")
+        made.append(match.group(1))
+        at = match.end()
+    return made
+
+
+def compile_condition(rule):
+    """A CLDR plural condition as a C++ expression over `o`."""
+    words = tokens(rule)
+    at = 0
+
+    def take():
+        nonlocal at
+        at += 1
+        return words[at - 1]
+
+    def relation():
+        operand = take()
+        if operand not in "nivwfte" or len(operand) != 1:
+            raise ValueError(f"unknown operand {operand!r} in {rule!r}")
+        modulus = None
+        if at < len(words) and words[at] == "%":
+            take()
+            modulus = take()
+        compare = take()
+        values = f"o.{'i' if operand == 'n' else operand}"
+        if modulus is not None:
+            values = f"({values} % {modulus}ULL)"
+        ranges = []
+        while True:
+            low = take()
+            if at < len(words) and words[at] == "..":
+                take()
+                high = take()
+                # An unsigned value is never below nought.
+                below = "" if int(low) == 0 else f"{values} >= {low}ULL && "
+                ranges.append(f"({below}{values} <= {high}ULL)")
+            else:
+                ranges.append(f"{values} == {low}ULL")
+            if at < len(words) and words[at] == ",":
+                take()
+                continue
+            break
+        held = " || ".join(ranges)
+        if operand == "n":
+            # n is an integer only when no fraction digit is other than
+            # nought.
+            held = f"o.t == 0 && ({held})"
+        return f"({held})" if compare == "=" else f"!({held})"
+
+    def conjunction():
+        parts = [relation()]
+        while at < len(words) and words[at] == "and":
+            take()
+            parts.append(relation())
+        return " && ".join(parts)
+
+    parts = [conjunction()]
+    while at < len(words) and words[at] == "or":
+        take()
+        parts.append(conjunction())
+    return " || ".join(f"({part})" for part in parts)
+
+
+def plural_rules():
+    rules = {}
+    functions = []
+    tables = {}
+    for kind in ("cardinal", "ordinal"):
+        data = supplemental("plurals" if kind == "cardinal" else "ordinals")[f"plurals-type-{kind}"]
+        entries = []
+        for locale, counts in data.items():
+            if locale != "root" and not TAG.match(locale):
+                continue
+            body = []
+            for category in CATEGORIES[:-1]:
+                text = counts.get(f"pluralRule-count-{category}")
+                if text is None:
+                    continue
+                condition = text.split("@")[0].strip()
+                if condition:
+                    body.append(f"    if ({compile_condition(condition)}) {{\n        return PluralCategory::{category.title()};\n    }}")
+            body.append("    return PluralCategory::Other;")
+            code = "\n".join(body)
+            if code not in rules:
+                rules[code] = f"rule{len(rules)}"
+                functions.append(f"PluralCategory {rules[code]}([[maybe_unused]] const PluralOperands& o) noexcept {{\n{code}\n}}\n")
+            entries.append((locale, rules[code]))
+        tables[kind] = sorted(entries)
+    out = ["namespace {\n", *functions, "} // namespace\n"]
+    for kind, entries in tables.items():
+        rows = "\n".join(f"    RuleSet{{{literal(locale)}, &{name}}}," for locale, name in entries)
+        out.append(f"constexpr std::array<RuleSet, {len(entries)}> k{kind.title()}{{{{\n{rows}\n}}}};\n")
+        out.append(f"std::span<const RuleSet> {kind}Rules() noexcept {{\n    return k{kind.title()};\n}}\n")
+    return "\n".join(out)
+
+
+def plural_samples():
+    """CLDR's own examples of each category, the rules' conformance oracle."""
+    rows = []
+    for kind in ("cardinal", "ordinal"):
+        data = supplemental("plurals" if kind == "cardinal" else "ordinals")[f"plurals-type-{kind}"]
+        for locale, counts in sorted(data.items()):
+            if locale != "root" and not TAG.match(locale):
+                continue
+            for category in CATEGORIES:
+                text = counts.get(f"pluralRule-count-{category}")
+                if text is None:
+                    continue
+                for group in text.split("@")[1:]:
+                    for sample in group.split(maxsplit=1)[1].split(","):
+                        sample = sample.strip()
+                        if not sample or sample == "\u2026" or "c" in sample or "e" in sample:
+                            continue
+                        for end in sample.split("~"):
+                            rows.append((locale, kind == "ordinal", end, category))
+    lines = "\n".join(
+        f"    PluralSample{{{literal(locale)}, {'true' if ordinal else 'false'}, {literal(number)}, PluralCategory::{category.title()}}},"
+        for locale, ordinal, number, category in rows
+    )
+    return (
+        f"constexpr std::array<PluralSample, {len(rows)}> kSamples{{{{\n{lines}\n}}}};\n\n"
+        "std::span<const PluralSample> pluralSamples() noexcept {\n    return kSamples;\n}\n"
+    )
+
+
+def write(name, body, header='"../cldr.h"', namespace="rawframe::localization::cldr", out=None):
     version = supplemental("plurals")["version"]["_cldrVersion"]
     text = (
         f"// Made by tools/generate_cldr.py from CLDR {version}; do not edit.\n\n"
-        '#include "../cldr.h"\n\n#include <array>\n#include <span>\n#include <string_view>\n\n'
-        "namespace rawframe::localization::cldr {\n\n"
+        f"#include {header}\n\n#include <array>\n#include <span>\n#include <string_view>\n\n"
+        f"namespace {namespace} {{\n\n"
         f"{body}\n"
-        "} // namespace rawframe::localization::cldr\n"
+        f"}} // namespace {namespace}\n"
     )
-    path = OUT / name
+    path = (out or OUT) / name
     path.write_text(text, encoding="utf-8")
     subprocess.run(["clang-format-20", "-i", str(path)], check=True)
     print(f"wrote {path.relative_to(ROOT)}")
@@ -110,6 +246,10 @@ def write(name, body):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     write("locales.cpp", locales())
+    write("plurals.cpp", plural_rules(), header='"../plural_rules.h"')
+    samples = ROOT / "modules" / "localization" / "tests" / "generated"
+    samples.mkdir(parents=True, exist_ok=True)
+    write("plural_samples.cpp", plural_samples(), header='"../plural_samples.h"', namespace="rawframe::localization::oracle", out=samples)
     return 0
 
 
