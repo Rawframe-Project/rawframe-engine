@@ -221,7 +221,8 @@ RAWFRAME_TEST(VoicesAndTheQueueAreFinite) {
         mixer->setBusVolume(kMusic, -1);
     }
     RAWFRAME_EXPECT(mixer->statistics().queueFull > 0);
-    RAWFRAME_EXPECT(!mixer->play(kClip, {.bus = 9}).has_value() && !mixer->play(nullptr, {}).has_value());
+    RAWFRAME_EXPECT(!mixer->play(kClip, {.bus = 9}).has_value() &&
+                    !mixer->play(std::shared_ptr<const Clip>{}, {}).has_value());
 }
 
 RAWFRAME_TEST(TheMixThreadRendersWhileTheOwnerPlays) {

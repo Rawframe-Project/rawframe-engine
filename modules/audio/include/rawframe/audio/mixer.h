@@ -18,6 +18,8 @@
 
 namespace rawframe::audio {
 
+class Stream;
+
 /// Decoded sound in memory: interleaved float samples of one or two
 /// channels at a rate. Immutable once made; shared by every playback of it.
 struct Clip {
@@ -104,6 +106,10 @@ public:
     /// Starts a clip. Refuses (`ResourceExhausted`) when every voice is in
     /// use or the command queue is full, and a bus the layout lacks.
     [[nodiscard]] result::Result<Playback> play(std::shared_ptr<const Clip> clip, const PlayParameters& parameters);
+    /// Starts a stream, which one voice plays at a time; its loop is the
+    /// stream's own, so a play of one asks for no loop or start frame.
+    /// Refuses as a clip's play does.
+    [[nodiscard]] result::Result<Playback> play(std::shared_ptr<Stream> stream, const PlayParameters& parameters);
     /// Fades out over `fade` seconds (at least the shortest fade), then
     /// finishes.
     void stop(Playback playback, float fade = 0);

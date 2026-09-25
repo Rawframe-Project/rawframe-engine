@@ -2,6 +2,7 @@
 
 #include "effects.h"
 #include "rawframe/audio/errors.h"
+#include "rawframe/audio/stream.h"
 
 #include <algorithm>
 #include <array>
@@ -64,6 +65,7 @@ struct Command {
     std::uint32_t voice = 0;
     std::uint32_t generation = 0;
     const Clip* clip = nullptr;
+    Stream* stream = nullptr;
     std::uint32_t bus = 0;
     /// Play and Volume: linear gain; Pitch: the ratio; Stop: fade frames;
     /// BusVolume: linear gain; BusMuted: nonzero for muted.
@@ -98,6 +100,7 @@ std::pair<float, float> panGains(std::uint32_t channels, float pan) noexcept {
 /// The owner's view of one voice.
 struct Slot {
     std::shared_ptr<const Clip> clip;
+    std::shared_ptr<Stream> stream;
     std::uint32_t generation = 0;
     PlaybackState state = PlaybackState::Finished;
     bool used = false;
@@ -108,6 +111,8 @@ struct Voice {
     bool active = false;
     std::uint32_t generation = 0;
     const Clip* clip = nullptr;
+    Stream* stream = nullptr;
+    std::uint32_t channels = 1;
     std::uint32_t bus = 0;
     double position = 0;
     float pitch = 1;
@@ -198,10 +203,14 @@ struct Mixer::State {
         switch (command.kind) {
         case Command::Kind::Play: {
             Voice& voice = voices[command.voice];
-            const auto [kLeft, kRight] = panGains(command.clip->channels, command.pan);
+            const std::uint32_t kChannels =
+                command.stream != nullptr ? command.stream->channels() : command.clip->channels;
+            const auto [kLeft, kRight] = panGains(kChannels, command.pan);
             voice = Voice{.active = true,
                           .generation = command.generation,
                           .clip = command.clip,
+                          .stream = command.stream,
+                          .channels = kChannels,
                           .bus = command.bus,
                           .position = static_cast<double>(command.startFrame),
                           .pitch = command.pitch,
@@ -211,8 +220,9 @@ struct Mixer::State {
                           .right = kRight,
                           .loop = command.loop,
                           .loopStart = command.loopStart,
-                          .loopEnd = command.loopEnd == 0 ? static_cast<std::uint32_t>(command.clip->frames())
-                                                          : command.loopEnd};
+                          .loopEnd = command.loopEnd != 0 || command.clip == nullptr
+                                         ? command.loopEnd
+                                         : static_cast<std::uint32_t>(command.clip->frames())};
             break;
         }
         case Command::Kind::Stop: {
@@ -234,7 +244,7 @@ struct Mixer::State {
         case Command::Kind::Pan: {
             Voice& voice = voices[command.voice];
             if (voice.active && voice.generation == command.generation) {
-                std::tie(voice.left, voice.right) = panGains(voice.clip->channels, command.pan);
+                std::tie(voice.left, voice.right) = panGains(voice.channels, command.pan);
             }
             break;
         }
@@ -252,6 +262,10 @@ struct Mixer::State {
 
     /// One voice into its bus for `frames` frames.
     void mixVoice(Voice& voice, std::size_t frames) noexcept {
+        if (voice.stream != nullptr) {
+            mixStream(voice, frames);
+            return;
+        }
         const Clip& clip = *voice.clip;
         const std::size_t kLength = clip.frames();
         const double kStep = voice.pitch * static_cast<double>(clip.rate) / static_cast<double>(settings.rate);
@@ -294,6 +308,53 @@ struct Mixer::State {
                 out[(frame * 2) + channel] += kValue;
             }
             voice.position += kStep;
+        }
+        voice.currentGain = voice.gain;
+    }
+
+    /// One streaming voice into its bus: its position counts from the
+    /// stream's next frame, and what it passes is consumed. A ring run dry
+    /// holds the voice where it is, silent, and counts each frame.
+    void mixStream(Voice& voice, std::size_t frames) noexcept {
+        Stream& stream = *voice.stream;
+        const double kStep = voice.pitch * static_cast<double>(stream.rate()) / static_cast<double>(settings.rate);
+        float* const out = buses[voice.bus].buffer.data();
+        const float kFrom = voice.currentGain;
+        const float kRamp = (voice.gain - kFrom) / static_cast<float>(frames);
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            const auto kWhole = static_cast<std::size_t>(voice.position);
+            const bool kEnded = stream.ended();
+            const std::size_t kAvailable = stream.available();
+            if (kAvailable < kWhole + 2) {
+                if (kEnded && kAvailable <= kWhole) {
+                    finish(voice);
+                    return;
+                }
+                if (!kEnded) {
+                    stream.countUnderrun();
+                    continue;
+                }
+            }
+            if (voice.stopping) {
+                voice.fade -= voice.fadeStep;
+                if (voice.fade <= 0) {
+                    finish(voice);
+                    return;
+                }
+            }
+            const auto kPart = static_cast<float>(voice.position - static_cast<double>(kWhole));
+            const float kGain = (kFrom + (kRamp * static_cast<float>(frame))) * voice.fade;
+            const bool kLast = kAvailable < kWhole + 2;
+            for (std::uint32_t channel = 0; channel < 2; ++channel) {
+                const float kA = stream.sample(kWhole, channel);
+                const float kB = kLast ? 0.0F : stream.sample(kWhole + 1, channel);
+                out[(frame * 2) + channel] +=
+                    (kA + ((kB - kA) * kPart)) * kGain * (channel == 0 ? voice.left : voice.right);
+            }
+            voice.position += kStep;
+            const auto kPassed = std::min(static_cast<std::size_t>(voice.position), kAvailable);
+            stream.consume(kPassed);
+            voice.position -= static_cast<double>(kPassed);
         }
         voice.currentGain = voice.gain;
     }
@@ -428,7 +489,57 @@ result::Result<Playback> Mixer::play(std::shared_ptr<const Clip> clip, const Pla
                             code(AudioError::QueueFull),
                             "the mix thread's command queue is full");
     }
-    *kFree = Slot{.clip = std::move(clip), .generation = kGeneration, .state = PlaybackState::Playing, .used = true};
+    *kFree = Slot{.clip = std::move(clip),
+                  .stream = nullptr,
+                  .generation = kGeneration,
+                  .state = PlaybackState::Playing,
+                  .used = true};
+    return Playback{.voice = kVoice, .generation = kGeneration};
+}
+
+result::Result<Playback> Mixer::play(std::shared_ptr<Stream> stream, const PlayParameters& parameters) {
+    State& state = *state_;
+    if (stream == nullptr || parameters.bus >= state.layout.buses.size() || !(parameters.pitch > 0) ||
+        !std::isfinite(parameters.pitch) || parameters.loop || parameters.startFrame != 0) {
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            kAudioDomain,
+                            code(AudioError::BadPlay),
+                            "a stream's play needs a bus of the layout and a pitch above nought, and no loop or "
+                            "start frame of its own");
+    }
+    const auto kFree = std::ranges::find(state.slots, false, &Slot::used);
+    if (kFree == state.slots.end()) {
+        ++state.statistics.voicesExhausted;
+        return result::fail(
+            result::ErrorClass::ResourceExhausted, kAudioDomain, code(AudioError::NoVoice), "every voice is in use");
+    }
+    if (!stream->claimPlay()) {
+        return result::fail(result::ErrorClass::FailedPrecondition,
+                            kAudioDomain,
+                            code(AudioError::BadPlay),
+                            "the stream is already playing");
+    }
+    const auto kVoice = static_cast<std::uint32_t>(kFree - state.slots.begin());
+    const std::uint32_t kGeneration = kFree->generation + 1;
+    if (!state.send(Command{.kind = Command::Kind::Play,
+                            .voice = kVoice,
+                            .generation = kGeneration,
+                            .stream = stream.get(),
+                            .bus = static_cast<std::uint32_t>(parameters.bus),
+                            .value = gainOf(parameters.volume),
+                            .pitch = parameters.pitch,
+                            .pan = std::clamp(parameters.pan, -1.0F, 1.0F)})) {
+        stream->releasePlay();
+        return result::fail(result::ErrorClass::ResourceExhausted,
+                            kAudioDomain,
+                            code(AudioError::QueueFull),
+                            "the mix thread's command queue is full");
+    }
+    *kFree = Slot{.clip = nullptr,
+                  .stream = std::move(stream),
+                  .generation = kGeneration,
+                  .state = PlaybackState::Playing,
+                  .used = true};
     return Playback{.voice = kVoice, .generation = kGeneration};
 }
 
@@ -540,9 +651,15 @@ void Mixer::collect() {
     while (state.finished.pop(done)) {
         Slot& slot = state.slots[done.voice];
         if (slot.generation == done.generation) {
-            // The clip is released here, on the owner's thread.
-            slot =
-                Slot{.clip = nullptr, .generation = slot.generation, .state = PlaybackState::Finished, .used = false};
+            // The clip or stream is released here, on the owner's thread.
+            if (slot.stream != nullptr) {
+                slot.stream->releasePlay();
+            }
+            slot = Slot{.clip = nullptr,
+                        .stream = nullptr,
+                        .generation = slot.generation,
+                        .state = PlaybackState::Finished,
+                        .used = false};
         }
     }
 }
