@@ -4,8 +4,10 @@
 #   tools/check.sh fast   repository rules, format, one incremental build, tests
 #   tools/check.sh        the above plus GCC and Clang in every configuration,
 #                         the address and thread sanitizers, the web build
-#                         (wasm32 without threads, tests under Node), and the
-#                         tick budget (tools/bench.sh check) once all pass
+#                         (wasm32 without threads, tests under Node), the web
+#                         page against the dedicated server over WebTransport,
+#                         and the tick budget (tools/bench.sh check) once all
+#                         pass
 #
 # Build trees live under out/ and are reused, so a second run only rebuilds
 # what changed.
@@ -61,6 +63,18 @@ else
         cat "out/${presets[$i]}.check.log"
         grep -q '^FAILED' "out/${presets[$i]}.check.log" && failures=$((failures + 1))
     done
+    # Two trees at once: the browser's page modules drive the web client
+    # against the native dedicated server over WebTransport (D173).
+    if [ "$failures" -eq 0 ]; then
+        step "web page"
+        if ! node --no-warnings hosts/web_client/tests/browser_page.mjs \
+            out/clang-development/hosts/dedicated_server/rawframe-server \
+            out/wasm-development/hosts/web_client/rawframe-web-client.wasm "$PWD" >out/web-page.log 2>&1; then
+            tail -30 out/web-page.log; fail "web page"
+        else
+            grep '^page:' out/web-page.log
+        fi
+    fi
     # Measured last, alone, so the builds do not share the machine with it.
     if [ "$failures" -eq 0 ]; then
         step "tick budget"
