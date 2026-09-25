@@ -20,6 +20,13 @@ enum class LocalizationError : std::uint32_t {
     LocaleUnknown = 2,
     /// More than a named limit allows.
     OverLimit = 3,
+    /// A message out of SPEC-0033's MessageFormat subset.
+    MessageInvalid = 4,
+    /// A format call without an argument its message reads.
+    ArgumentMissing = 5,
+    /// A format call's argument of a type its message's function does not
+    /// take (SPEC-0033's argument typing).
+    ArgumentMistyped = 6,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(LocalizationError error) noexcept {
