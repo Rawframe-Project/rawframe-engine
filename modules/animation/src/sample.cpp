@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <tuple>
 
 namespace rawframe::animation {
@@ -141,6 +142,11 @@ BoundClip::bind(std::shared_ptr<const Clip> clip, const Skeleton& skeleton, base
     std::ranges::sort(targets);
     BoundClip made;
     for (const Track& track : clip->tracks) {
+        if (track.property.has_value()) {
+            // Not a bone's: no bone of any skeleton.
+            made.bones_.push_back(BoneIndex{UINT32_MAX});
+            continue;
+        }
         const auto kFound = std::ranges::lower_bound(targets, track.bone, {}, [](const auto& target) {
             return std::get<0>(target);
         });
@@ -161,7 +167,7 @@ void BoundClip::sample(double time, Pose& pose, std::span<const std::uint8_t> on
     RAWFRAME_CHECK(pose.bones.size() == boneCount_, "a pose of the clip's skeleton");
     RAWFRAME_CHECK(only.empty() || only.size() == boneCount_, "a subset of the clip's skeleton");
     for (std::size_t at = 0; at < bones_.size(); ++at) {
-        if (!only.empty() && only[bones_[at].value] == 0) {
+        if (clip_->tracks[at].property.has_value() || (!only.empty() && only[bones_[at].value] == 0)) {
             continue;
         }
         const Track& track = clip_->tracks[at];
@@ -176,6 +182,9 @@ void BoundClip::sample(double time, Pose& pose, std::span<const std::uint8_t> on
             break;
         case Channel::Scale:
             bone.scale = {kValue[0], kValue[1], kValue[2]};
+            break;
+        case Channel::Float:
+        case Channel::Discrete:
             break;
         }
     }

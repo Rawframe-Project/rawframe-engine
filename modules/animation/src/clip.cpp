@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <map>
 #include <span>
 #include <tuple>
@@ -24,7 +25,9 @@ std::unexpected<result::Error> overLimit(std::string_view why) {
     return result::fail(result::ErrorClass::InvalidArgument, kAnimationDomain, code(AnimationError::OverLimit), why);
 }
 
-constexpr std::array<std::string_view, 3> kChannels{"translation", "rotation", "scale"};
+constexpr std::array<std::string_view, 5> kChannels{"translation", "rotation", "scale", "float", "discrete"};
+/// A discrete key's greatest value: a u32's.
+constexpr double kDiscreteLimit = 4294967295.0;
 constexpr std::array<std::string_view, 3> kInterpolations{"linear", "step", "cubic"};
 constexpr std::array<std::string_view, 2> kLoops{"clamp", "loop"};
 constexpr std::array<std::string_view, 2> kBases{"bind", "first_frame"};
@@ -70,6 +73,11 @@ result::Status keysInForm(const Clip& clip, const Track& track, const ClipLimits
         }
         if (track.channel == Channel::Rotation && (kCubic || !unit(key.value))) {
             return invalid("a rotation's keys are unit quaternions, stepped or turned by slerp");
+        }
+        if (track.channel == Channel::Discrete &&
+            (key.interpolation != Interpolation::Step || key.value[0] != std::trunc(key.value[0]) ||
+             key.value[0] < 0.0 || key.value[0] > kDiscreteLimit)) {
+            return invalid("a discrete track's keys are stepped whole numbers from nought to 4294967295");
         }
     }
     return {};
@@ -142,20 +150,33 @@ result::Result<Key> readKey(const Value& each, std::size_t width) {
 
 result::Result<Track> readTrack(const Value& each, const ClipLimits& limits) {
     const bool kDrifts = each.find("drift") != nullptr;
-    const std::optional<base::Bits128> kBone = (kDrifts ? hasMembers(each, {"bone", "channel", "keys", "drift"})
-                                                        : hasMembers(each, {"bone", "channel", "keys"}))
-                                                   ? bits128Of(each.find("bone"))
-                                                   : std::nullopt;
+    const bool kProperty = each.find("component") != nullptr;
+    std::optional<PropertyBinding> property;
+    std::optional<base::Bits128> kBone;
+    if (kProperty && hasMembers(each, {"component", "field", "channel", "keys"})) {
+        const std::optional<base::Bits128> kComponent = bits128Of(each.find("component"));
+        if (kComponent.has_value() && each.find("field")->kind() == Value::Kind::String) {
+            property = PropertyBinding{.component = *kComponent, .field = *each.find("field")->text()};
+            kBone = base::Bits128{};
+        }
+    } else if (!kProperty && (kDrifts ? hasMembers(each, {"bone", "channel", "keys", "drift"})
+                                      : hasMembers(each, {"bone", "channel", "keys"}))) {
+        kBone = bits128Of(each.find("bone"));
+    }
     const std::optional<std::size_t> kChannel =
         kBone.has_value() ? placeOf(kChannels, each.find("channel")) : std::nullopt;
     if (!kChannel.has_value() || each.find("keys")->kind() != Value::Kind::Array) {
-        return invalid("a track is a bone, a channel, keys, and an optional drift");
+        return invalid("a track is a bone or a component's field, a channel, keys, and a bone's optional drift");
     }
     const Value& keys = *each.find("keys");
     if (keys.items().size() > limits.maximumKeys) {
         return overLimit("a track has more keys than its limit");
     }
-    Track track{.bone = *kBone, .channel = static_cast<Channel>(*kChannel), .keys = {}, .drift = std::nullopt};
+    Track track{.bone = *kBone,
+                .channel = static_cast<Channel>(*kChannel),
+                .keys = {},
+                .drift = std::nullopt,
+                .property = std::move(property)};
     if (kDrifts) {
         track.drift = numbersOf(each.find("drift"), widthOf(track.channel));
         if (!track.drift.has_value()) {
@@ -181,13 +202,28 @@ result::Status validate(const Clip& clip, const ClipLimits& limits) {
     if (!(clip.duration > 0.0) || !finite(std::span{&clip.duration, 1})) {
         return invalid("a clip's duration is a finite number of seconds past nought");
     }
-    if (clip.skeleton == base::Bits128{} || (!clip.tracks.empty() && !clip.skeleton.has_value())) {
+    const bool kBones = std::ranges::any_of(clip.tracks, [](const Track& track) {
+        return !track.property.has_value();
+    });
+    if (clip.skeleton == base::Bits128{} || (kBones && !clip.skeleton.has_value())) {
         return invalid("a clip with a bone's track names its skeleton");
     }
     std::vector<std::tuple<base::Bits128, Channel>> bindings;
+    std::vector<PropertyBinding> properties;
     for (const Track& track : clip.tracks) {
-        if (track.bone == base::Bits128{}) {
-            return invalid("a track names its bone");
+        if (track.property.has_value()) {
+            if (track.bone != base::Bits128{} || !propertyChannel(track.channel) ||
+                track.property->component == base::Bits128{} || !machineName(track.property->field) ||
+                track.drift.has_value() || clip.additive.has_value()) {
+                return invalid("a property track names a component and a field, is float or discrete, and is in a "
+                               "clip of poses");
+            }
+            RAWFRAME_TRY(keysInForm(clip, track, limits));
+            properties.push_back(*track.property);
+            continue;
+        }
+        if (track.bone == base::Bits128{} || propertyChannel(track.channel)) {
+            return invalid("a bone track names its bone and a bone's channel");
         }
         RAWFRAME_TRY(keysInForm(clip, track, limits));
         if (track.drift.has_value()) {
@@ -200,8 +236,10 @@ result::Status validate(const Clip& clip, const ClipLimits& limits) {
         bindings.emplace_back(track.bone, track.channel);
     }
     std::ranges::sort(bindings);
-    if (std::ranges::adjacent_find(bindings) != bindings.end()) {
-        return invalid("a clip has one track for a bone's channel");
+    std::ranges::sort(properties);
+    if (std::ranges::adjacent_find(bindings) != bindings.end() ||
+        std::ranges::adjacent_find(properties) != properties.end()) {
+        return invalid("a clip has one track for a bone's channel, and one for a field");
     }
     return eventsInForm(clip);
 }
@@ -215,7 +253,12 @@ result::Result<std::string> writeClip(const Clip& clip, const ClipLimits& limits
             keys.push(keyOf(key, widthOf(track.channel)));
         }
         Value made = Value::object();
-        made.add("bone", Value::string(hexOf(track.bone)));
+        if (track.property.has_value()) {
+            made.add("component", Value::string(hexOf(track.property->component)));
+            made.add("field", Value::string(track.property->field));
+        } else {
+            made.add("bone", Value::string(hexOf(track.bone)));
+        }
         made.add("channel", Value::string(std::string{kChannels[static_cast<std::size_t>(track.channel)]}));
         made.add("keys", std::move(keys));
         if (track.drift.has_value()) {

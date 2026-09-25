@@ -77,7 +77,8 @@ public:
     /// not among `clips` or does not bind to the skeleton, a mask node
     /// whose mask is not among `masks` or is of another skeleton, or a
     /// stage naming a bone the skeleton lacks, or a two-bone tip without a
-    /// parent and a grandparent.
+    /// parent and a grandparent; and (`GraphInvalid`) a field its clips
+    /// animate as both `float` and `discrete`.
     [[nodiscard]] static result::Result<std::shared_ptr<const CompiledGraph>>
     compile(const Graph& graph,
             const Skeleton& skeleton,
@@ -184,6 +185,9 @@ public:
         std::optional<std::size_t> leader;
         /// A clip following a phase: the step whose sync it follows.
         std::optional<std::size_t> syncedBy;
+        /// A clip's property tracks: each track's place in the clip, and
+        /// its field's among the graph's properties.
+        std::vector<std::pair<std::size_t, std::size_t>> propertyTracks;
         /// A clip's root translation and rotation tracks, by their place
         /// in it, when the skeleton declares root motion.
         std::optional<std::size_t> rootTranslation;
@@ -212,6 +216,17 @@ public:
         return stages_;
     }
 
+    /// A field the graph's clips animate (D139), and how.
+    struct Property {
+        PropertyBinding binding;
+        Channel channel = Channel::Float;
+    };
+
+    /// Every field the graph's clips animate, in binding order, each once.
+    [[nodiscard]] std::span<const Property> properties() const noexcept {
+        return properties_;
+    }
+
     /// The step playing the node of id `node`; none for a node the output
     /// does not reach, or no node.
     [[nodiscard]] std::optional<std::size_t> step(std::uint64_t node) const noexcept;
@@ -228,6 +243,7 @@ private:
     std::vector<Parameter> parameters_;
     std::vector<Step> steps_;
     std::vector<Stage> stages_;
+    std::vector<Property> properties_;
     Pose bind_;
     Pose unchanged_;
     std::vector<std::optional<BoneIndex>> parents_;
@@ -359,6 +375,13 @@ public:
     /// and cost nothing.
     void evaluate(const GraphInstance& instance, Pose& pose, std::span<const std::uint8_t> only = {});
 
+    /// Each of the graph's properties as the instance plays it (D139), in
+    /// `properties()` order: a `float` field weighed among the clips that
+    /// animate it by how much each counts, a `discrete` one from the clip
+    /// counting most (the first of equals); none where no clip counting
+    /// anything animates it.
+    void evaluateProperties(const GraphInstance& instance, std::vector<std::optional<double>>& values);
+
     /// SPEC-0035's modifier stages on a local pose the instance evaluated,
     /// in their declared order: all of them, or with `simulationOnly` only
     /// those of `Simulation` relevance. Goals are in the entity's own frame.
@@ -367,6 +390,7 @@ public:
 private:
     std::vector<Pose> poses_;
     Pose model_;
+    std::vector<std::pair<double, double>> sums_;
 };
 
 /// Takes the root motion source's channels out of a local pose of the

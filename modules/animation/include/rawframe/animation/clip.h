@@ -59,6 +59,14 @@
 // carries the ground it covers to root motion while its keys stay one
 // period's.
 //
+// A property track (D139) animates a component's field rather than a bone:
+// `component` is the component's type identity (32 hex digits) and `field`
+// the field's machine name, with channel `float`, for an f32 or f64 field,
+// or `discrete`, for a whole-number field such as a flipbook's frame, whose
+// keys are all `step` and whole numbers from nought to 4294967295. Its
+// values are one number each. A clip of property tracks alone names no
+// skeleton.
+//
 // An additive clip (D137) declares `additive`, the basis its values are
 // differences from: `bind`, the skeleton's bind pose, or `first_frame`, its
 // source animation's first frame, as the import that made it took them. A
@@ -75,6 +83,7 @@
 #include "rawframe/result/result.h"
 
 #include <array>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -88,6 +97,20 @@ enum class Channel : std::uint8_t {
     Translation,
     Rotation,
     Scale,
+    /// A property track's kinds.
+    Float,
+    Discrete,
+};
+
+/// A component's field a property track animates (SPEC-0035's property
+/// binding).
+struct PropertyBinding {
+    /// The component's type identity.
+    base::Bits128 component;
+    /// The field's machine name.
+    std::string field;
+
+    friend auto operator<=>(const PropertyBinding&, const PropertyBinding&) = default;
 };
 
 enum class Interpolation : std::uint8_t {
@@ -110,12 +133,15 @@ struct Key {
 };
 
 struct Track {
+    /// A bone track's bone; nought for a property track.
     base::Bits128 bone;
     Channel channel = Channel::Translation;
     std::vector<Key> keys;
     /// What one period of a looping clip moves the track: a translation,
     /// or a unit rotation turned onto the first key. None is no drift.
     std::optional<std::array<double, 4>> drift;
+    /// A property track's field; none for a bone track.
+    std::optional<PropertyBinding> property;
 
     friend bool operator==(const Track&, const Track&) = default;
 };
@@ -176,7 +202,22 @@ struct ClipLimits {
 
 /// How many numbers a channel's values have.
 [[nodiscard]] constexpr std::size_t widthOf(Channel channel) noexcept {
-    return channel == Channel::Rotation ? 4 : 3;
+    switch (channel) {
+    case Channel::Rotation:
+        return 4;
+    case Channel::Float:
+    case Channel::Discrete:
+        return 1;
+    case Channel::Translation:
+    case Channel::Scale:
+        break;
+    }
+    return 3;
+}
+
+/// Whether a channel is a property track's.
+[[nodiscard]] constexpr bool propertyChannel(Channel channel) noexcept {
+    return channel == Channel::Float || channel == Channel::Discrete;
 }
 
 /// Refuses (`ClipInvalid`) a clip out of its rules.

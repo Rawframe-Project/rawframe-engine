@@ -224,6 +224,10 @@ folded(const Transform& placement, animation::Channel channel, const std::array<
         return multiply(placement.rotation, value);
     case animation::Channel::Scale:
         return {placement.scale[0] * value[0], placement.scale[0] * value[1], placement.scale[0] * value[2], 0.0};
+    case animation::Channel::Float:
+    case animation::Channel::Discrete:
+        // glTF animates no properties; nothing here makes one.
+        break;
     }
     return value;
 }
@@ -339,6 +343,9 @@ result::Status difference(animation::Track& track, const animation::Transform& b
     case animation::Channel::Scale:
         from = {bind.scale[0], bind.scale[1], bind.scale[2], 0.0};
         break;
+    case animation::Channel::Float:
+    case animation::Channel::Discrete:
+        return {};
     }
     if (basis == animation::AdditiveBasis::FirstFrame) {
         from = track.keys.front().value;
@@ -363,6 +370,9 @@ result::Status difference(animation::Track& track, const animation::Transform& b
                 key.in[each] /= from[each];
                 key.out[each] /= from[each];
             }
+            break;
+        case animation::Channel::Float:
+        case animation::Channel::Discrete:
             break;
         }
     }

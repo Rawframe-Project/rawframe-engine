@@ -10,6 +10,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <tuple>
 
 namespace rawframe::animation {
 
@@ -354,6 +355,40 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
     }
     if (made->steps_.back().delta) {
         return invalid("a graph's output is a pose, not differences");
+    }
+    // The fields the clips animate, each once, and each clip's tracks of
+    // them.
+    for (const Step& step : made->steps_) {
+        if (!step.clip.has_value()) {
+            continue;
+        }
+        for (const Track& track : step.clip->clip().tracks) {
+            if (track.property.has_value()) {
+                made->properties_.push_back(Property{.binding = *track.property, .channel = track.channel});
+            }
+        }
+    }
+    std::ranges::sort(made->properties_, {}, [](const Property& property) {
+        return std::tie(property.binding, property.channel);
+    });
+    const auto kRepeated = std::ranges::unique(made->properties_, [](const Property& a, const Property& b) {
+        return a.binding == b.binding && a.channel == b.channel;
+    });
+    made->properties_.erase(kRepeated.begin(), kRepeated.end());
+    if (std::ranges::adjacent_find(made->properties_, {}, &Property::binding) != made->properties_.end()) {
+        return invalid("a field is animated as float or as discrete, not both");
+    }
+    for (Step& step : made->steps_) {
+        for (std::size_t track = 0; step.clip.has_value() && track < step.clip->clip().tracks.size(); ++track) {
+            const std::optional<PropertyBinding>& property = step.clip->clip().tracks[track].property;
+            if (property.has_value()) {
+                step.propertyTracks.emplace_back(
+                    track,
+                    static_cast<std::size_t>(
+                        std::ranges::lower_bound(made->properties_, *property, {}, &Property::binding) -
+                        made->properties_.begin()));
+            }
+        }
     }
     const auto kNumber = [&kParameter, &kLiteral](const Scalar& scalar) {
         return Stage::Number{.literal = kLiteral(scalar), .parameter = kParameter(scalar)};
@@ -872,6 +907,43 @@ void removeRootMotion(const CompiledGraph& graph, Pose& local) {
         }
     }
     root.rotation = normalized(multiplied(inverted(twistOf(*source, root.rotation, bind.rotation)), root.rotation));
+}
+
+void PoseEvaluator::evaluateProperties(const GraphInstance& instance, std::vector<std::optional<double>>& values) {
+    const CompiledGraph& graph = instance.graph();
+    const std::span<const CompiledGraph::Property> kProperties = graph.properties();
+    values.assign(kProperties.size(), std::nullopt);
+    // Each float field's weighed sum and total weight; each discrete one's
+    // value and the weight it came with.
+    std::vector<std::pair<double, double>>& sums = sums_;
+    sums.assign(kProperties.size(), {0.0, 0.0});
+    const std::span<const CompiledGraph::Step> kSteps = graph.steps();
+    for (std::size_t at = 0; at < kSteps.size(); ++at) {
+        const double kWeight = instance.weights_[at];
+        if (!(kWeight > 0.0)) {
+            continue;
+        }
+        for (const auto& [kTrack, kProperty] : kSteps[at].propertyTracks) {
+            const Clip& clip = kSteps[at].clip->clip();
+            const double kValue = sampleTrack(clip, clip.tracks[kTrack], instance.playheads_[at])[0];
+            auto& [sum, total] = sums[kProperty];
+            if (kProperties[kProperty].channel == Channel::Discrete) {
+                if (kWeight > total) {
+                    sum = kValue;
+                    total = kWeight;
+                }
+                continue;
+            }
+            sum += kWeight * kValue;
+            total += kWeight;
+        }
+    }
+    for (std::size_t at = 0; at < kProperties.size(); ++at) {
+        const auto [kSum, kTotal] = sums[at];
+        if (kTotal > 0.0) {
+            values[at] = kProperties[at].channel == Channel::Discrete ? kSum : kSum / kTotal;
+        }
+    }
 }
 
 } // namespace rawframe::animation
