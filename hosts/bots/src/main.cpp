@@ -14,6 +14,7 @@
 #include "rawframe/network_quic/registrar.h"
 #include "rawframe/world_audio/registrar.h"
 #include "rawframe/world_kest/registrar.h"
+#include "rawframe/world_localization/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
 
@@ -21,7 +22,7 @@
 
 namespace {
 
-constexpr std::array<rawframe::composition::RegistrarEntry, 7> kRegistrars = {
+constexpr std::array<rawframe::composition::RegistrarEntry, 8> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -32,6 +33,9 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 7> kRegistrars = {
         "world_audio", &rawframe::world_audio::registerParticipants, rawframe::world_audio::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_kest", &rawframe::world_kest::registerParticipants, rawframe::world_kest::kScopes},
+    rawframe::composition::RegistrarEntry{"world_localization",
+                                          &rawframe::world_localization::registerParticipants,
+                                          rawframe::world_localization::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_replication", &rawframe::world_replication::registerParticipants, rawframe::world_replication::kScopes},
     rawframe::composition::RegistrarEntry{

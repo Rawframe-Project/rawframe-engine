@@ -46,6 +46,9 @@ public:
                     const std::filesystem::path& library);
 
     [[nodiscard]] content::ContentStore& store() noexcept override;
+    [[nodiscard]] bool held() const noexcept override {
+        return held_;
+    }
     [[nodiscard]] result::Status admit(std::span<const content::AdmittedRepresentation> representations) override;
 
     /// Reads the manifest again: true when it changed and was published as

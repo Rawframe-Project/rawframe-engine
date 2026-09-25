@@ -2,7 +2,7 @@
 # networked Kest game (Tool role).
 rawframe_host(NAME arena OUTPUT rawframe-arena
     SOURCES src/main.cpp
-    DEPS host game_content input_kest world_audio network_loopback physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
+    DEPS host game_content input_kest world_audio world_localization network_loopback physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
@@ -90,6 +90,15 @@ if(RAWFRAME_BUILD_TESTS)
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_with_package)
     set_tests_properties(runners_with_package PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+    # Runners' text read from its cooked content into one catalog, for a
+    # player asking for Turkish.
+    configure_file(tests/runners_text.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_text.conf @ONLY)
+    add_test(NAME runners_text
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/runners_text.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(runners_text PROPERTIES
+                         FIXTURES_REQUIRED runners_content
+                         PASS_REGULAR_EXPRESSION "\"text_catalog\".*\"tables\":1,\"translations\":1,\"keys\":3,\"stale\":0,\"locale\":\"tr-TR\",\"default\":\"en\"")
     # Eight bots play runners and the first one's World is heard: its shots
     # and the others' within range sound, and the recording is not silent.
     set(RECORD ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.wav)

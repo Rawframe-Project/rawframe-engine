@@ -14,6 +14,9 @@
 5. SPEC-0048 values live only in rawframe/execution/bounds.h: no other
    execution source spells one of its capacities or builds a duration from a
    literal count of seconds or milliseconds.
+6. The dedicated server's closure (ADR-0017, ADR-0038, ADR-0050): nothing
+   the `dedicated_server` line reaches, however far down, is a presentation
+   module: no audio and no localization (D147).
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -35,6 +38,8 @@ BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
 # Vendored providers stay behind their module (ADR-0005, ADR-0038): no public
 # header includes one.
 PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h|cgltf\.h)', re.MULTILINE)
+SERVER = "dedicated_server"
+PRESENTATION = {"audio", "world_audio", "localization", "world_localization"}
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 
 
@@ -68,6 +73,18 @@ def check_boundaries(files, allowed, findings):
         for included in INCLUDE.findall(path.read_text(errors="replace")):
             if included not in permitted:
                 findings.append(f"{relative}: includes rawframe/{included}/, not allowed for module '{module}'")
+
+
+def check_server_closure(allowed, findings):
+    reached, pending = set(), [SERVER]
+    while pending:
+        module = pending.pop()
+        for dependency in allowed.get(module, ()):
+            if dependency not in reached:
+                reached.add(dependency)
+                pending.append(dependency)
+    for module in sorted(reached & PRESENTATION):
+        findings.append(f"tools/modules.txt: the dedicated server's closure reaches presentation module '{module}'")
 
 
 def check_providers(files, findings):
@@ -137,7 +154,9 @@ def check_owner_rules(files, findings):
 def main():
     files = [path for path in tracked_files() if path.is_file()]
     findings, notes = [], []
-    check_boundaries(files, read_modules(), findings)
+    modules = read_modules()
+    check_boundaries(files, modules, findings)
+    check_server_closure(modules, findings)
     check_providers(files, findings)
     check_value_calls(files, findings)
     check_bounds_literals(files, findings)

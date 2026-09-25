@@ -1,0 +1,14 @@
+# Runners' HUD words read by a client from the game's cooked content, for a
+# player who asks for Turkish as a platform gives it: the catalog holds the
+# English table and its Turkish translation, none stale, and English is the
+# project's default.
+host.maximum_iterations = 60
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = games/runners/runners.game
+content.root = @CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 1
+bots.endpoint = arena
+localization.locale = tr_TR

@@ -23,6 +23,9 @@ public:
 
     /// The store every family reads verified bytes from, by identity.
     [[nodiscard]] virtual content::ContentStore& store() noexcept = 0;
+    /// Whether the process has cooked content at all (`content.root` or
+    /// `content.composition`); a family that can do without it asks first.
+    [[nodiscard]] virtual bool held() const noexcept = 0;
     /// Admits a family's representations: the catalog now holds the
     /// manifest's resources of those, and is published as the next
     /// generation. A family admits before it asks for anything. Refused
