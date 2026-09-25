@@ -3,8 +3,8 @@
 # undo. Toolchain only: no game runtime, dedicated server, or export
 # closure contains it (tools/check_repo.py holds the server's).
 rawframe_module(NAME authoring
-    SOURCES src/delta.cpp
+    SOURCES src/authored_scene.cpp src/delta.cpp
     DEPS scene schema document result base
 )
 
-rawframe_module_tests(NAME authoring SOURCES tests/delta_test.cpp)
+rawframe_module_tests(NAME authoring SOURCES tests/authored_scene_test.cpp tests/delta_test.cpp)
