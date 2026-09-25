@@ -63,6 +63,15 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_played PROPERTIES
                          FIXTURES_REQUIRED runners_content
                          PASS_REGULAR_EXPRESSION "\"backend\":\"Null\",\"rate\":[0-9]+,\"lost\":false,\"callbacks\":[1-9][0-9]+,.*\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+    # Runners heard while its sources are recooked: the running client
+    # publishes the changed manifest and the shot's new revision replaces
+    # the old one, and shots are still heard.
+    add_test(NAME runners_recooked
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_recooked.sh $<TARGET_FILE:rawframe_host_arena>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/runners_recooked)
+    set_tests_properties(runners_recooked PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
     # Four bots predict their runners: a thousand ticks confirmed, the
     # rollbacks only those of admission.
     add_test(NAME runners_prediction
