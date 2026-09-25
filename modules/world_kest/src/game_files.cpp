@@ -196,7 +196,7 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
         RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / name));
         game.documents_.push_back(Named{.name = std::move(name), .text = std::move(text)});
     }
-    for (const std::string& name : game.description_.scenes) {
+    for (const std::string& name : sceneNames(game.description_)) {
         RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / name));
         game.scenes_.push_back(Named{.name = name, .text = std::move(text)});
     }
@@ -257,7 +257,7 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
         }
         game.documents_.push_back(Named{.name = std::move(name), .text = kFile->text});
     }
-    for (const std::string& name : game.description_.scenes) {
+    for (const std::string& name : sceneNames(game.description_)) {
         const CookedGameScene* const kScene = kCooked.scene(name);
         if (kScene == nullptr) {
             return invalid("the cooked description does not name the resource of a scene it names", name);

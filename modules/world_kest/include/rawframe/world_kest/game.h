@@ -25,7 +25,9 @@
 // `scene <file>` line names a scene document (rawframe/scene/scene.h)
 // beside the description whose entities the World starts with too; its
 // components are the description's, each with the layout the scene was
-// authored against. For networked play, `replicate` lists the components that replicate, `player`
+// authored against. A `prefab <16 hex digits> <file>` line names a scene a
+// program may spawn, whole, while it runs, with `scene.spawn(<identity>)`
+// from `rawframe.scene`. For networked play, `replicate` lists the components that replicate, `player`
 // the components each connected player's entity starts with, and `input` the
 // one component a player's input is written into; `input <component>
 // perceived` also gives each player a `rawframe.replication.perception`
@@ -210,6 +212,14 @@ struct GameAudio {
     std::vector<GameSound> sounds;
 };
 
+/// A scene a program may spawn at run time with `Scene.spawn`, by the
+/// identity it is declared with (D98).
+struct GamePrefab {
+    std::uint64_t id = 0;
+    /// Its scene document, beside the description.
+    std::string path;
+};
+
 struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
@@ -218,6 +228,9 @@ struct GameDescription {
     /// Scene documents (rawframe/scene/scene.h) whose entities the World
     /// starts with, beside any `spawn` lines, from `scene <file>` lines.
     std::vector<std::string> scenes;
+    /// Scenes a program spawns at run time, from `prefab <16 hex digits>
+    /// <file>` lines.
+    std::vector<GamePrefab> prefabs;
     /// Networked play: what replicates, what a player starts with, and
     /// which component a player's input is written into.
     std::vector<std::string> replicated;
@@ -250,5 +263,9 @@ struct GameDescription {
 /// `program`, a column or spawn naming a component the text does not declare,
 /// and more than kMaximumGameLines lines.
 [[nodiscard]] result::Result<GameDescription> parseGame(std::string_view text);
+
+/// Every scene file the description names: its scene lines', then its
+/// prefabs', each once.
+[[nodiscard]] std::vector<std::string> sceneNames(const GameDescription& game);
 
 } // namespace rawframe::world_kest

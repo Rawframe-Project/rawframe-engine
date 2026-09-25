@@ -1,0 +1,17 @@
+module rawframe.scene
+
+// Scenes spawned while a game runs (D98): a prefab, a scene the game's
+// description declares with `prefab <identity> <file>`, made whole at the
+// next barrier, its entities naming each other as the scene has them.
+
+import rawframe.world
+
+extern fn Scene.spawn(prefab: u64) -> world.Entity
+
+// Records the spawn of the prefab of `prefab`'s identity. What comes back is
+// its first entity, which exists from the next barrier and until then names
+// it only inside the system run that spawned it: to insert components, as
+// `world.create`'s does.
+fn spawn(prefab: u64) -> world.Entity {
+    return Scene.spawn(prefab)
+}

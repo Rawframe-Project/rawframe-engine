@@ -70,13 +70,38 @@ struct KestSystemDeclaration {
     std::span<const std::string_view> randomStreams;
 };
 
+/// A scene a program spawns whole with `Scene.spawn(prefab: u64)` (D98):
+/// its entities, each as the values of its components, and where a value
+/// names another of the prefab's entities.
+struct KestPrefab {
+    struct Reference {
+        /// Where in the value an entity lies.
+        std::size_t offset = 0;
+        /// Which of the prefab's entities it names.
+        std::size_t target = 0;
+    };
+    struct Part {
+        schema::ComponentTypeId component;
+        std::vector<std::byte> value;
+        std::vector<Reference> references;
+    };
+    struct Entity {
+        std::vector<Part> parts;
+    };
+
+    std::uint64_t id = 0;
+    std::vector<Entity> entities;
+};
+
 struct KestSystemsSettings {
     std::shared_ptr<const kest::Program> program;
     /// Copied: the doors themselves must outlive the systems. `World.create`,
-    /// `World.destroy`, `Random.below`, `Random.unit`, and each component's
-    /// doors are added to it.
+    /// `World.destroy`, `Random.below`, `Random.unit`, `Scene.spawn`, and
+    /// each component's doors are added to it.
     kest::DoorTable doors;
     std::span<const KestComponent> components;
+    /// What `Scene.spawn` spawns, by identity; copied.
+    std::span<const KestPrefab> prefabs;
     /// One budget per system per tick, spent across its archetypes.
     kest::MachineLimits limits;
     std::span<const KestSystemDeclaration> systems;

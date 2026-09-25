@@ -231,6 +231,17 @@ RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
         refusedAt(std::string{kProgram} + "system s.x simulation f read a.b\n", WorldKestError::UnknownName, "2"));
     RAWFRAME_EXPECT(refusedAt(std::string{kProgram} + "spawn 0 a.b\n", WorldKestError::BadGameLine, "2"));
     RAWFRAME_EXPECT(refusedAt(std::string{kProgram} + "spawn 1 x=1\n", WorldKestError::BadGameLine, "2"));
+    RAWFRAME_EXPECT(refusedAt(std::string{kProgram} + "prefab 0 a.scene\n", WorldKestError::BadGameLine, "2"));
+    RAWFRAME_EXPECT(
+        refusedAt(std::string{kProgram} + "prefab 00000000000000a1 a.scene\nprefab 00000000000000a1 b.scene\n",
+                  WorldKestError::BadGameLine,
+                  "3"));
+    RAWFRAME_EXPECT(
+        refusedAt(std::string{kProgram} + "prefab 00000000000000a1 a.scene\nprefab 00000000000000a2 a.scene\n",
+                  WorldKestError::BadGameLine,
+                  "3"));
+    RAWFRAME_EXPECT(
+        refusedAt(std::string{kProgram} + "scene a.scene\nscene a.scene\n", WorldKestError::BadGameLine, "3"));
     RAWFRAME_EXPECT(refusedAt("# nothing\n", WorldKestError::BadGameLine, "1"));
 }
 

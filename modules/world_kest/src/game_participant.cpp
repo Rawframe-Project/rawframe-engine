@@ -165,6 +165,7 @@ public:
             layouts_.push_back(std::move(layout));
         }
         RAWFRAME_TRY(addScenes(files));
+        RAWFRAME_TRY(addPrefabs(files));
         RAWFRAME_TRY(planReplication(files.digest()));
         RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planInterest());
@@ -243,6 +244,7 @@ public:
                                 .program = program_,
                                 .doors = std::move(doors),
                                 .components = components_,
+                                .prefabs = prefabs_,
                                 .limits = {.heapBytes = static_cast<std::size_t>(kHeap), .fuelPerCall = kFuel},
                                 .systems = declarations}));
         return simulation_->addSystems(*systems_);
@@ -663,72 +665,120 @@ private:
     /// Each scene the description names, as the spawns of its entities, one
     /// each: its components must be the game's, laid out as the scene was
     /// authored against.
-    result::Status addScenes(const GameFiles& files) {
-        const auto kRefuse =
-            [](WorldKestError error, std::string_view why, std::string_view scene, std::string_view name) {
-                return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument, error, why)
-                                                          .error()
-                                                          .withContext("scene", scene)
-                                                          .withContext("name", name)};
-            };
-        for (const std::string& path : game_.scenes) {
-            RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.scene(path));
-            // Its instances resolved: what spawns is the scene's entities and
-            // every entity its instances bring.
-            auto read = scene::readScene(kText).and_then([&files](const scene::Scene& authored) {
-                return scene::resolveInstances(authored, [&files](base::Bits128 source) {
-                    return files.sceneById(source).and_then([](std::string_view text) {
-                        return scene::readScene(text);
-                    });
+    /// A scene's entities as spawns of one each, and the references among
+    /// them by their places in that list: the scene read with its instances
+    /// resolved, its components the game's and laid out as it was authored
+    /// against.
+    struct SceneSpawns {
+        std::vector<GameSpawn> spawns;
+        std::vector<SceneReference> references;
+    };
+
+    result::Result<SceneSpawns> sceneSpawns(const GameFiles& files, const std::string& path) const {
+        const auto kRefuse = [&path](WorldKestError error, std::string_view why, std::string_view name) {
+            return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument, error, why)
+                                                      .error()
+                                                      .withContext("scene", path)
+                                                      .withContext("name", name)};
+        };
+        RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.scene(path));
+        // Its instances resolved: what spawns is the scene's entities and
+        // every entity its instances bring.
+        auto read = scene::readScene(kText).and_then([&files](const scene::Scene& authored) {
+            return scene::resolveInstances(authored, [&files](base::Bits128 source) {
+                return files.sceneById(source).and_then([](std::string_view text) {
+                    return scene::readScene(text);
                 });
             });
-            if (!read.has_value()) {
-                return std::unexpected<result::Error>{std::move(read).error().withContext("scene", path)};
+        });
+        if (!read.has_value()) {
+            return std::unexpected<result::Error>{std::move(read).error().withContext("scene", path)};
+        }
+        for (const scene::SchemaMark& mark : read->schema) {
+            const auto kComponent = std::ranges::find(game_.components, mark.component, &GameComponent::name);
+            if (kComponent == game_.components.end()) {
+                return kRefuse(
+                    WorldKestError::UnknownName, "a scene names a component the game does not declare", mark.component);
             }
-            for (const scene::SchemaMark& mark : read->schema) {
-                const auto kComponent = std::ranges::find(game_.components, mark.component, &GameComponent::name);
-                if (kComponent == game_.components.end()) {
-                    return kRefuse(WorldKestError::UnknownName,
-                                   "a scene names a component the game does not declare",
-                                   path,
-                                   mark.component);
-                }
-                const std::size_t kIndex = static_cast<std::size_t>(kComponent - game_.components.begin());
-                if (layouts_[kIndex].mark != mark.mark) {
-                    return kRefuse(WorldKestError::BadGameLine,
-                                   "a scene was authored against another layout of a component",
-                                   path,
-                                   mark.component);
-                }
+            const std::size_t kIndex = static_cast<std::size_t>(kComponent - game_.components.begin());
+            if (layouts_[kIndex].mark != mark.mark) {
+                return kRefuse(WorldKestError::BadGameLine,
+                               "a scene was authored against another layout of a component",
+                               mark.component);
             }
-            // Where each of the scene's entities spawns, by its id.
-            std::vector<std::pair<base::Bits128, std::size_t>> spawnOf;
-            for (const scene::SceneEntity& entity : read->entities) {
-                spawnOf.emplace_back(entity.id, game_.spawns.size() + spawnOf.size());
-            }
-            for (const scene::SceneEntity& entity : read->entities) {
-                GameSpawn spawn{.count = 1, .components = {}};
-                for (const scene::SceneComponent& component : entity.components) {
-                    GameSpawnComponent part{.component = component.name, .fields = {}};
-                    for (const scene::SceneField& field : component.fields) {
-                        if (field.value.kind == scene::FieldValue::Kind::Entity) {
-                            RAWFRAME_TRY_ASSIGN(SceneReference reference,
-                                                referenceIn(component.name, field.name, path));
-                            reference.spawn = game_.spawns.size();
-                            reference.target =
-                                std::ranges::find(spawnOf, field.value.entity, &decltype(spawnOf)::value_type::first)
-                                    ->second;
-                            references_.push_back(std::move(reference));
-                            continue;
-                        }
-                        part.fields.push_back(GameFieldValue{.field = field.name,
-                                                             .value = field.value.kind == scene::FieldValue::Kind::True
-                                                                          ? std::string{"true"}
-                                                                          : field.value.number});
+        }
+        SceneSpawns made;
+        const auto kPlaceOf = [&read](base::Bits128 entity) {
+            return static_cast<std::size_t>(std::ranges::find(read->entities, entity, &scene::SceneEntity::id) -
+                                            read->entities.begin());
+        };
+        for (const scene::SceneEntity& entity : read->entities) {
+            GameSpawn spawn{.count = 1, .components = {}};
+            for (const scene::SceneComponent& component : entity.components) {
+                GameSpawnComponent part{.component = component.name, .fields = {}};
+                for (const scene::SceneField& field : component.fields) {
+                    if (field.value.kind == scene::FieldValue::Kind::Entity) {
+                        RAWFRAME_TRY_ASSIGN(SceneReference reference, referenceIn(component.name, field.name, path));
+                        reference.spawn = made.spawns.size();
+                        reference.target = kPlaceOf(field.value.entity);
+                        made.references.push_back(std::move(reference));
+                        continue;
                     }
-                    spawn.components.push_back(std::move(part));
+                    part.fields.push_back(GameFieldValue{.field = field.name,
+                                                         .value = field.value.kind == scene::FieldValue::Kind::True
+                                                                      ? std::string{"true"}
+                                                                      : field.value.number});
                 }
-                game_.spawns.push_back(std::move(spawn));
+                spawn.components.push_back(std::move(part));
+            }
+            made.spawns.push_back(std::move(spawn));
+        }
+        return made;
+    }
+
+    /// Each scene the description names, as the spawns of its entities.
+    result::Status addScenes(const GameFiles& files) {
+        for (const std::string& path : game_.scenes) {
+            RAWFRAME_TRY_ASSIGN(SceneSpawns scene, sceneSpawns(files, path));
+            const std::size_t kFirst = game_.spawns.size();
+            for (SceneReference& reference : scene.references) {
+                reference.spawn += kFirst;
+                reference.target += kFirst;
+                references_.push_back(reference);
+            }
+            std::ranges::move(scene.spawns, std::back_inserter(game_.spawns));
+        }
+        return {};
+    }
+
+    /// Each prefab the description names, as a program spawns it.
+    result::Status addPrefabs(const GameFiles& files) {
+        for (const GamePrefab& declared : game_.prefabs) {
+            RAWFRAME_TRY_ASSIGN(const SceneSpawns kScene, sceneSpawns(files, declared.path));
+            KestPrefab& prefab = prefabs_.emplace_back();
+            prefab.id = declared.id;
+            for (std::size_t index = 0; index < kScene.spawns.size(); ++index) {
+                RAWFRAME_TRY_ASSIGN(const SpawnValues kValues, spawnValues(kScene.spawns[index]));
+                KestPrefab::Entity& entity = prefab.entities.emplace_back();
+                for (const auto& [kComponent, kBytes] : kValues) {
+                    entity.parts.push_back(
+                        KestPrefab::Part{.component = kComponent, .value = kBytes, .references = {}});
+                }
+                for (const SceneReference& reference : kScene.references) {
+                    if (reference.spawn != index) {
+                        continue;
+                    }
+                    // A program's Entity is its slot and then its generation.
+                    if (reference.generation != reference.slot + sizeof(std::uint32_t)) {
+                        return refuse(result::ErrorClass::InvalidArgument,
+                                      WorldKestError::BadGameLine,
+                                      "a prefab's reference is an Entity laid out as rawframe.world's");
+                    }
+                    const auto kPart =
+                        std::ranges::find(entity.parts, reference.component, &KestPrefab::Part::component);
+                    kPart->references.push_back(
+                        KestPrefab::Reference{.offset = reference.slot, .target = reference.target});
+                }
             }
         }
         return {};
@@ -948,6 +998,7 @@ private:
     std::optional<physics3d::Physics3DSettings> predictedPhysics3d_;
     std::vector<SpawnValues> level_;
     std::vector<SceneReference> references_;
+    std::vector<KestPrefab> prefabs_;
     /// Each Kest component's entity fields, which its declaration views.
     std::vector<std::vector<std::size_t>> entityOffsets_;
     std::optional<world_replication::InterestSettings> interest_;

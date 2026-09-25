@@ -376,3 +376,108 @@ RAWFRAME_TEST(AProgramLinksEntitiesItCreatesInOneRun) {
     simulation = nullptr;
     std::filesystem::remove_all(kDirectory);
 }
+
+RAWFRAME_TEST(AProgramSpawnsAPrefabWhole) {
+    // A seed spawns a prefab of two links naming each other, once a tick
+    // for two ticks: two pairs, each pair's links naming each other.
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-prefab-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory);
+    writeText(kDirectory / "spawner.kest",
+              "module spawner\n\nimport rawframe.world\nimport rawframe.scene\n\nstruct Seed {\n    planted: i32\n}\n\n"
+              "struct Link {\n    next: world.Entity\n    hops: i32\n}\n\nconst PAIR: u64 = 0x5eed000000000001\n\n"
+              "fn plant(count: i32, seeds: [Seed]) {\n    let i = 0\n    while i < count {\n"
+              "        if seeds[i].planted < 2 {\n            let first = scene.spawn(PAIR)\n"
+              "            seeds[i].planted = seeds[i].planted + 1\n        }\n        i = i + 1\n    }\n}\n\n"
+              "fn hold(count: i32, links: [Link]) {\n}\n");
+    const std::string kGame =
+        "program spawner.kest\ncomponent 6d2e8f14-3b7a-4c95-a1e0-9f5c7b3d2a86 spawner.seed Seed\n"
+        "component 5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84 spawner.link Link\nentity spawner.link next\n"
+        "system spawner.plant simulation plant write spawner.seed\nspawn 1 spawner.seed\n";
+    writeText(kDirectory / "spawner.game", kGame + "prefab 5eed000000000001 pair.scene\n");
+    writeText(kDirectory / "pair.scene", kEmptyScene);
+    auto files = world_kest::GameFiles::fromDirectory(kDirectory / "spawner.game");
+    const auto kProgram = files.has_value() ? files->compile("spawner.kest") : std::unexpected{files.error().clone()};
+    RAWFRAME_EXPECT(kProgram.has_value());
+    if (!kProgram.has_value()) {
+        return;
+    }
+    const auto kLink = [](std::uint64_t to, std::string hops) {
+        return scene::SceneComponent{.name = "spawner.link",
+                                     .fields = {{.name = "hops", .value = {.number = std::move(hops)}},
+                                                {.name = "next",
+                                                 .value = {.kind = scene::FieldValue::Kind::Entity,
+                                                           .entity = base::Bits128{.high = 3, .low = to}}}}};
+    };
+    const scene::Scene kPair{.schema = {{.component = "spawner.link", .mark = (*kProgram)->layout("Link")->mark}},
+                             .entities = {{.id = base::Bits128{.high = 3, .low = 1}, .components = {kLink(2, "1")}},
+                                          {.id = base::Bits128{.high = 3, .low = 2}, .components = {kLink(1, "2")}}}};
+    writeText(kDirectory / "pair.scene", *scene::writeScene(kPair));
+
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const auto kConfiguration =
+        composition::Configuration::parse("kest.game = " + (kDirectory / "spawner.game").string() +
+                                          "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    const auto kStarted = composition.start();
+    RAWFRAME_EXPECT(kStarted.has_value());
+    if (!kStarted.has_value()) {
+        return;
+    }
+    clock.advance(execution::MonotonicDuration::fromMilliseconds(500));
+    composition.runHostPhase(composition::HostPhase::RunWorlds,
+                             composition::HostFrame{.iteration = 0, .now = clock.now()});
+    world::World& world = *simulation->world();
+    const auto kId = world.registry().find(schema::ComponentTypeId::fromText("5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84"));
+    const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
+    auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+    std::vector<std::tuple<world::EntityHandle, world::EntityHandle, std::int32_t>> links;
+    query->forEachChunk(world, [&links](const world::ColumnChunk& chunk) {
+        for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+            world::EntityHandle next;
+            std::int32_t hops = 0;
+            std::memcpy(&next, chunk.columns[0] + (row * 12), sizeof next);
+            std::memcpy(&hops, chunk.columns[0] + (row * 12) + 8, sizeof hops);
+            links.emplace_back(chunk.entities[row], next, hops);
+        }
+    });
+    RAWFRAME_EXPECT(links.size() == 4);
+    for (const auto& [kEntity, kNext, kHops] : links) {
+        // The one it names names it back, with the other count of hops.
+        const auto kOther = std::ranges::find(links, kNext, [](const auto& link) {
+            return std::get<0>(link);
+        });
+        RAWFRAME_EXPECT(kOther != links.end() && std::get<1>(*kOther) == kEntity && std::get<2>(*kOther) + kHops == 3);
+    }
+    composition.stop();
+    simulation = nullptr;
+
+    // A prefab of an identity the game does not declare stops the system.
+    writeText(kDirectory / "spawner.game", kGame + "prefab 5eed000000000002 pair.scene\n");
+    std::vector<composition::Problem> again;
+    auto unknown = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        again);
+    execution::ManualClock later;
+    execution::CancellationScope laterRoot{later};
+    composition::Composition refused{
+        *unknown, composition::HostServices{.clock = &later, .scope = &laterRoot, .configuration = &*kConfiguration}};
+    if (refused.start().has_value()) {
+        later.advance(execution::MonotonicDuration::fromMilliseconds(100));
+        refused.runHostPhase(composition::HostPhase::RunWorlds,
+                             composition::HostFrame{.iteration = 0, .now = later.now()});
+        world::World& unchanged = *simulation->world();
+        RAWFRAME_EXPECT(unchanged.entityCount() == 1);
+        refused.stop();
+    }
+    simulation = nullptr;
+    std::filesystem::remove_all(kDirectory);
+}

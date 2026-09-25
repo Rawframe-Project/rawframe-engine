@@ -55,9 +55,23 @@ struct KestSystems::Doorway {
         std::vector<std::size_t> entityFields;
     };
 
+    /// A prefab with its components' registry entries, found with the
+    /// components'.
+    struct Prefab {
+        KestPrefab prefab;
+        std::vector<std::vector<schema::ComponentRuntimeId>> runtimes;
+        std::vector<std::vector<const schema::ComponentDescriptor*>> descriptors;
+    };
+
     world::SystemContext* context = nullptr;
     std::uint32_t run = 0;
     std::vector<Component> components;
+    std::vector<Prefab> prefabs;
+    // Reused by every spawn, sized when the systems are declared, so a
+    // spawn allocates nothing.
+    std::vector<std::byte> prefabScratch;
+    std::vector<world::PendingEntity> prefabMade;
+    std::vector<std::size_t> prefabOffsets;
 
     /// The target an entity from the program names, or why it names none.
     [[nodiscard]] std::optional<world::CommandTarget> target(kest::DoorCall& call, std::size_t argument) const {
@@ -81,6 +95,7 @@ struct KestSystems::Doorway {
 namespace {
 
 constexpr std::array<kest::Parameter, 1> kEntityParameter = {kest::Parameter{kest::Slot::Value, kEntityType}};
+constexpr std::array<kest::Parameter, 1> kPrefabParameter = {kest::Parameter{kest::Slot::U64}};
 
 using Doorway = KestSystems::Doorway;
 
@@ -97,6 +112,59 @@ void createDoor(kest::DoorCall& call, void* context) noexcept {
     }
     const world::EntityHandle kEntity = encodePending(*pending, doorway.run);
     static_cast<void>(call.answerValue(std::as_bytes(std::span{&kEntity, 1})));
+}
+
+void spawnDoor(kest::DoorCall& call, void* context) noexcept {
+    Doorway& doorway = *static_cast<Doorway*>(context);
+    if (doorway.context == nullptr) {
+        call.fail("prefabs are spawned only while a system runs");
+        return;
+    }
+    const auto kId = static_cast<std::uint64_t>(call.integer(0));
+    const auto kPrefab = std::ranges::find(doorway.prefabs, kId, [](const Doorway::Prefab& each) {
+        return each.prefab.id;
+    });
+    if (kPrefab == doorway.prefabs.end()) {
+        call.fail("the game declares no prefab of that identity");
+        return;
+    }
+    world::CommandBuffer& commands = doorway.context->commands;
+    std::vector<world::PendingEntity>& made = doorway.prefabMade;
+    made.clear();
+    for (std::size_t count = 0; count < kPrefab->prefab.entities.size(); ++count) {
+        auto pending = commands.create();
+        if (!pending.has_value()) {
+            call.fail("the system's command buffer is full");
+            return;
+        }
+        made.push_back(*pending);
+    }
+    std::vector<std::size_t>& offsets = doorway.prefabOffsets;
+    for (std::size_t entity = 0; entity < made.size(); ++entity) {
+        const std::vector<KestPrefab::Part>& parts = kPrefab->prefab.entities[entity].parts;
+        for (std::size_t part = 0; part < parts.size(); ++part) {
+            doorway.prefabScratch.assign(parts[part].value.begin(), parts[part].value.end());
+            offsets.clear();
+            for (const KestPrefab::Reference& reference : parts[part].references) {
+                const world::EntityHandle kNamed = world::pendingReference(made[reference.target]);
+                std::memcpy(doorway.prefabScratch.data() + reference.offset, &kNamed, sizeof kNamed);
+                offsets.push_back(reference.offset);
+            }
+            if (!commands
+                     .insertBytes(made[entity],
+                                  kPrefab->runtimes[entity][part],
+                                  *kPrefab->descriptors[entity][part],
+                                  doorway.prefabScratch,
+                                  offsets)
+                     .has_value()) {
+                call.fail("the system's command buffer is full");
+                return;
+            }
+        }
+    }
+    // The prefab's first entity, as a program holds one this run creates.
+    const world::EntityHandle kFirst = made.empty() ? world::EntityHandle{} : encodePending(made.front(), doorway.run);
+    static_cast<void>(call.answerValue(std::as_bytes(std::span{&kFirst, 1})));
 }
 
 void destroyDoor(kest::DoorCall& call, void* context) noexcept {
@@ -495,11 +563,19 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         added.insertName = added.kestType + ".insert";
         added.removeName = added.kestType + ".remove";
     }
+    for (const KestPrefab& prefab : settings.prefabs) {
+        doorway->prefabs.push_back(Doorway::Prefab{.prefab = prefab, .runtimes = {}, .descriptors = {}});
+    }
     kest::DoorTable doors = std::move(settings.doors);
     RAWFRAME_TRY(doors.add(kest::Door{
         .name = "World.create", .function = &createDoor, .context = doorway.get(), .gives = kEntityParameter}));
     RAWFRAME_TRY(doors.add(kest::Door{
         .name = "World.destroy", .function = &destroyDoor, .context = doorway.get(), .takes = kEntityParameter}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Scene.spawn",
+                                      .function = &spawnDoor,
+                                      .context = doorway.get(),
+                                      .takes = kPrefabParameter,
+                                      .gives = kEntityParameter}));
     RAWFRAME_TRY(doors.add(kest::Door{.name = "Random.below",
                                       .function = &belowDoor,
                                       .context = doorway.get(),
@@ -584,6 +660,24 @@ result::Status KestSystems::declareSystems(const schema::SchemaRegistry& registr
         component.descriptor = &registry.descriptor(component.runtime);
         RAWFRAME_TRY(kShaped(*component.descriptor, component.kestType));
         component.scratch.resize(component.descriptor->size);
+    }
+    for (Doorway::Prefab& prefab : doorway_->prefabs) {
+        prefab.runtimes.clear();
+        prefab.descriptors.clear();
+        doorway_->prefabMade.reserve(std::max(doorway_->prefabMade.capacity(), prefab.prefab.entities.size()));
+        for (const KestPrefab::Entity& entity : prefab.prefab.entities) {
+            for (const KestPrefab::Part& part : entity.parts) {
+                doorway_->prefabScratch.reserve(std::max(doorway_->prefabScratch.capacity(), part.value.size()));
+                doorway_->prefabOffsets.reserve(std::max(doorway_->prefabOffsets.capacity(), part.references.size()));
+            }
+            std::vector<schema::ComponentRuntimeId>& runtimes = prefab.runtimes.emplace_back();
+            std::vector<const schema::ComponentDescriptor*>& descriptors = prefab.descriptors.emplace_back();
+            for (const KestPrefab::Part& part : entity.parts) {
+                RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kRuntime, registry.find(part.component));
+                runtimes.push_back(kRuntime);
+                descriptors.push_back(&registry.descriptor(kRuntime));
+            }
+        }
     }
     // A World that starts again gets systems of its own: queries serve one
     // World.

@@ -104,7 +104,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
     }
 
     // Each scene: the resource its sidecar names, cooked by rawframe.scene.
-    for (const std::string& path : kDescription.scenes) {
+    for (const std::string& path : world_kest::sceneNames(kDescription)) {
         auto sidecarBytes = reads.file(path + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
             return refuse("a scene the description names has a sidecar", path);

@@ -130,6 +130,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             controls.actions = kWords[1];
             actionsLine = number;
+        } else if (kKeyword == "prefab") {
+            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(number, WorldKestError::BadGameLine, "a prefab line is `prefab <16 hex digits> <file>`");
+            }
+            if (std::ranges::contains(game.prefabs, *kId, &GamePrefab::id) ||
+                std::ranges::contains(game.prefabs, kWords[2], &GamePrefab::path)) {
+                return badLine(number, WorldKestError::BadGameLine, "a prefab's identity and file are used once");
+            }
+            game.prefabs.push_back(GamePrefab{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "scene") {
             if (kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a scene line is `scene <file>`");
@@ -432,6 +442,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
         game.audio = std::move(audio);
     }
     return game;
+}
+
+std::vector<std::string> sceneNames(const GameDescription& game) {
+    std::vector<std::string> names = game.scenes;
+    for (const GamePrefab& prefab : game.prefabs) {
+        if (!std::ranges::contains(names, prefab.path)) {
+            names.push_back(prefab.path);
+        }
+    }
+    return names;
 }
 
 } // namespace rawframe::world_kest
