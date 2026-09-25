@@ -119,6 +119,8 @@ public:
     [[nodiscard]] PlaybackState state(Playback playback) const noexcept;
     [[nodiscard]] BusMeter meter(std::size_t bus) const noexcept;
     [[nodiscard]] const MixerStatistics& statistics() const noexcept;
+    /// The frames a second it renders.
+    [[nodiscard]] std::uint32_t rate() const noexcept;
 
     // The mix thread.
 

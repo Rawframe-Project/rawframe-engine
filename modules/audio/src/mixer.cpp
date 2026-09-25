@@ -636,6 +636,10 @@ const MixerStatistics& Mixer::statistics() const noexcept {
     return state_->statistics;
 }
 
+std::uint32_t Mixer::rate() const noexcept {
+    return state_->settings.rate;
+}
+
 void Mixer::render(std::span<float> output) noexcept {
     State& state = *state_;
     const std::size_t kFrames = output.size() / 2;

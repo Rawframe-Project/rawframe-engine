@@ -25,6 +25,8 @@ enum class AudioError : std::uint32_t {
     BadSound = 5,
     /// A full concurrency set turned a play away.
     Concurrency = 6,
+    /// No output device could be opened.
+    NoDevice = 7,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(AudioError error) noexcept {
