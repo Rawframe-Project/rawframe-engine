@@ -216,6 +216,39 @@ RAWFRAME_TEST(AServerPlaysOnlyWhatIsRelevant) {
     RAWFRAME_EXPECT(server.animator(kShown).events == 0 && server.animation->statistics().eventsFired == 1);
 }
 
+RAWFRAME_TEST(AServerPosesOnlyItsSubset) {
+    // A reach: the root a meter along x, the arm three out from it rather
+    // than its bind's one.
+    using namespace animation;
+    const auto kReach = std::make_shared<const Clip>(
+        Clip{.skeleton = kSkeletonId,
+             .duration = 1.0,
+             .loop = Loop::Loop,
+             .tracks = {Track{.bone = kRoot, .channel = Channel::Translation, .keys = {Key{.value = {1, 0, 0}}}},
+                        Track{.bone = kArm, .channel = Channel::Translation, .keys = {Key{.value = {3, 0, 0}}}}}});
+    const Graph kGraph{.parameters = {},
+                       .nodes = {GraphNode{.id = 1, .node = ClipNode{.clip = kWalkId}},
+                                 GraphNode{.id = 2, .node = OutputNode{.pose = {.node = 1}}}},
+                       .presentation = {}};
+    const std::vector<NamedClip> kClips{{kWalkId, kReach}};
+    const auto kReaching = *CompiledGraph::compile(kGraph, rig(), kSkeletonId, kClips);
+    // Where the arm is, played for a tick on a server or a client, with the
+    // root alone as the subset.
+    const auto kArmAt = [&kReaching](bool simulationOnly) {
+        Stage stage{
+            AnimationSettings{.animators = {AnimatorSettings{.id = kLocomotion, .graph = kReaching, .subset = {1, 0}}},
+                              .simulationOnly = simulationOnly}};
+        const world::EntityHandle kEntity = stage.walker(0.0F, 1);
+        stage.run(1);
+        const animation::Pose* pose = stage.animation->pose(kEntity);
+        RAWFRAME_EXPECT(pose != nullptr && pose->bones.size() == 2);
+        return pose != nullptr ? pose->bones[1].translation[0] : 0.0;
+    };
+    // The server leaves the arm at its bind; a client poses it whatever
+    // the subset says.
+    RAWFRAME_EXPECT(kArmAt(true) == 2.0 && kArmAt(false) == 4.0);
+}
+
 RAWFRAME_TEST(ParametersNotOfTheirTypeAreRefused) {
     Stage stage;
     const world::EntityHandle kWalker = stage.walker(1.0F);
@@ -319,7 +352,9 @@ RAWFRAME_TEST(SettingsOutOfTheirRulesAreRefused) {
     unbound.animators[0].parameters.reset();
     AnimationSettings graphless = settings();
     graphless.animators[0].graph = nullptr;
-    for (const AnimationSettings& kSettings : {twice, noLane, bound, unbound, graphless}) {
+    AnimationSettings uneven = settings(true);
+    uneven.animators[0].subset = {1};
+    for (const AnimationSettings& kSettings : {twice, noLane, bound, unbound, graphless, uneven}) {
         RAWFRAME_EXPECT(kRefused(WorldAnimation::create(kSettings)));
     }
     // A World without the parameter component, or too small for a field.

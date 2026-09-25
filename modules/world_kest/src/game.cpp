@@ -181,21 +181,35 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             game.meshes.push_back(GameMesh{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "animator") {
             // animator <16 hex digits> <graph file> [parameters <component>]
-            const bool kShaped = kWords.size() == 3 || (kWords.size() == 5 && kWords[3] == "parameters");
-            const auto kId = kShaped ? parseHex64(kWords[1]) : std::nullopt;
+            //     [subset <32 hex digits>]
+            constexpr std::string_view kShape = "an animator line is `animator <16 hex digits> <graph file> "
+                                                "[parameters <component>] [subset <32 hex digits>]`";
+            const auto kId = kWords.size() >= 3 && kWords.size() % 2 == 1 ? parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
-                return badLine(number,
-                               WorldKestError::BadGameLine,
-                               "an animator line is `animator <16 hex digits> <graph file> [parameters <component>]`");
+                return badLine(number, WorldKestError::BadGameLine, kShape);
             }
             if (std::ranges::contains(game.animators, *kId, &GameAnimator::id) ||
                 std::ranges::contains(game.animators, kWords[2], &GameAnimator::path)) {
                 return badLine(number, WorldKestError::BadGameLine, "an animator's identity and graph are used once");
             }
-            GameAnimator animator{.id = *kId, .path = std::string{kWords[2]}, .parameters = {}};
-            if (kWords.size() == 5) {
-                animator.parameters = kWords[4];
+            GameAnimator animator{.id = *kId, .path = std::string{kWords[2]}, .parameters = {}, .subset = {}};
+            // Each option once, in this order.
+            std::size_t at = 3;
+            if (at < kWords.size() && kWords[at] == "parameters") {
+                animator.parameters = kWords[at + 1];
                 uses.emplace_back(number, animator.parameters);
+                at += 2;
+            }
+            if (at < kWords.size() && kWords[at] == "subset") {
+                const base::Bits128Parse kSubset = base::parseBits128Hex(kWords[at + 1]);
+                if (!kSubset.parsed || kSubset.value == base::Bits128{}) {
+                    return badLine(number, WorldKestError::BadGameLine, kShape);
+                }
+                animator.subset = kSubset.value;
+                at += 2;
+            }
+            if (at != kWords.size()) {
+                return badLine(number, WorldKestError::BadGameLine, kShape);
             }
             game.animators.push_back(std::move(animator));
         } else if (kKeyword == "scene") {

@@ -100,9 +100,12 @@
 // once cooked. `parameters` names the component whose fields, one of the
 // same name for each of the graph's parameters, set them every step: a
 // `float` from an f32, an `int` from a u32, a `bool` from a bool, and a
-// `vec2` from `<name>.x` and `<name>.y`:
+// `vec2` from `<name>.x` and `<name>.y`. `subset` names a mask document
+// whose bones, with every bone above them, are all a dedicated server poses
+// (SPEC-0035), so its hitboxes cost only what they read:
 //
 //   animator 51f0c0de00000001 walker.rfanim parameters game.gait
+//   animator 51f0c0de00000002 archer.rfanim subset 5d0a7e3c91b24f68a0c3e7d1942b6f85
 //
 // An `entity` line names a component's fields that hold a
 // `rawframe.world.Entity`, which a checkpoint writes as a reference rather
@@ -110,6 +113,7 @@
 //
 //   entity game.target who
 
+#include "rawframe/base/bits128.h"
 #include "rawframe/physics/collision.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/stable_id.h"
@@ -265,6 +269,9 @@ struct GameAnimator {
     /// The game's component the graph's parameters are read from, a field
     /// for each by its name; none for a graph that plays on its defaults.
     std::string parameters;
+    /// The mask whose bones, and every bone above them, a dedicated server
+    /// poses (SPEC-0035); none for all of them.
+    std::optional<base::Bits128> subset;
 };
 
 /// A save document (ADR-0057): its name and the components it keeps of the
@@ -287,8 +294,8 @@ struct GameDescription {
     std::vector<GamePrefab> prefabs;
     /// From `mesh <16 hex digits> <file>` lines.
     std::vector<GameMesh> meshes;
-    /// From `animator <16 hex digits> <graph file> [parameters <component>]`
-    /// lines.
+    /// From `animator <16 hex digits> <graph file> [parameters <component>]
+    /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;
     /// Networked play: what replicates, what a player starts with, and
     /// which component a player's input is written into.

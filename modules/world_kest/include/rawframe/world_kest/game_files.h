@@ -43,16 +43,17 @@ public:
     /// is the resource its sidecar names, read from `content` (D112): the
     /// runtime decodes no source format, so a game with meshes needs its
     /// sources cooked. Each animator's graph is read beside it too, and the
-    /// clips it names and their skeletons by the sidecars under the
-    /// description's directory that name them.
+    /// clips and masks it names and their skeletons by the sidecars under
+    /// the description's directory that name them.
     [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path,
                                                                  game_content::GameContent* content = nullptr);
     /// The game whose cooked description is `description` in `content`
     /// (D88): its documents from the description's record, each scene from
     /// the scene resource it names (D95), each mesh from the mesh resource
     /// it names (D112), each animator's graph from the graph resource it
-    /// names, the clips and skeletons below it by their identities, and
-    /// each program's files from the Kest sources resource it names (D87).
+    /// names, the clips, masks, and skeletons below it by their
+    /// identities, and each program's files from the Kest sources resource
+    /// it names (D87).
     /// Admits their representations, and waits for each read. Refused when
     /// a read fails, a record does not read, or the description uses a
     /// name the record does not answer.
@@ -90,8 +91,8 @@ public:
     /// The graph of the animator whose line names `path`, its text;
     /// refused (`unreadable_file`) for a path no animator line names.
     [[nodiscard]] result::Result<std::string_view> animatorGraph(std::string_view path) const;
-    /// The clip or skeleton of resource identity `id` that the game's
-    /// graphs name, or their clips do, its text; refused
+    /// The clip, mask, or skeleton of resource identity `id` that the
+    /// game's graphs name, or their clips do, its text; refused
     /// (`unreadable_file`) for any other.
     [[nodiscard]] result::Result<std::string_view> animationDocument(base::Bits128 id) const;
     /// Compiles the program the description names `name`.
@@ -130,9 +131,9 @@ private:
     /// Reads and decodes the description's meshes, the resources
     /// `resources` names in the order of its lines, from `content`.
     result::Status readMeshes(game_content::GameContent* content, const std::vector<base::Bits128>& resources);
-    /// Reads every clip the animators' graphs name and every skeleton those
-    /// clips name, each once, with `read`, which is asked for a document
-    /// of a kind by its identity.
+    /// Reads every clip and mask the animators' graphs name, every skeleton
+    /// those clips name, and each animator's subset mask, each once, with
+    /// `read`, which is asked for a document of a kind by its identity.
     result::Status
     readAnimations(const std::function<result::Result<std::string>(base::Bits128, animation::DocumentKind)>& read);
     /// The digest of what has been read, set last.
@@ -151,7 +152,8 @@ private:
     std::vector<base::Sha256Digest> meshDigests_;
     /// Each animator's graph, in the order of its lines.
     std::vector<Named> graphs_;
-    /// Every clip and skeleton below them, by identity, in identity order.
+    /// Every clip, mask, and skeleton below them, by identity, in identity
+    /// order.
     std::vector<std::pair<base::Bits128, std::string>> animations_;
     /// Each set of Kest files a program compiles from: one read from a
     /// directory, or one for each Kest sources resource named.

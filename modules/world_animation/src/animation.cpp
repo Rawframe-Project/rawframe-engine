@@ -145,7 +145,11 @@ struct WorldAnimation::State {
             }
             animator->events = static_cast<std::uint32_t>(played->events.size());
             statistics.eventsFired += played->events.size();
-            evaluator.evaluate(played->instance, local);
+            evaluator.evaluate(played->instance,
+                               local,
+                               settings.simulationOnly
+                                   ? std::span<const std::uint8_t>{settings.animators[played->settings].subset}
+                                   : std::span<const std::uint8_t>{});
             animation::toModelSpace(played->instance.graph().parents(), local, played->pose);
             digested.update(std::as_bytes(std::span{&kEntity, 1}));
             for (const animation::Transform& bone : played->pose.bones) {
@@ -253,6 +257,9 @@ result::Result<std::unique_ptr<WorldAnimation>> WorldAnimation::create(Animation
         AnimatorSettings& animator = settings.animators[at];
         if (animator.graph == nullptr || (at > 0 && settings.animators[at - 1].id == animator.id)) {
             return invalid("animation settings: each animator once, with its graph");
+        }
+        if (!animator.subset.empty() && animator.subset.size() != animator.graph->bindPose().bones.size()) {
+            return invalid("animation settings: a subset has a byte for each bone");
         }
         std::ranges::sort(animator.fields, {}, [](const ParameterField& field) {
             return std::tuple{field.parameter, field.lane};

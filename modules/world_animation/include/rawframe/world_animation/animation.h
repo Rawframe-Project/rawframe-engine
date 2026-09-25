@@ -59,6 +59,10 @@ struct AnimatorSettings {
     /// that plays on its defaults.
     std::optional<schema::ComponentTypeId> parameters;
     std::vector<ParameterField> fields;
+    /// What a dedicated server poses: a byte for each bone of the graph's
+    /// skeleton, nonzero for a bone it poses (SPEC-0035), the rest left at
+    /// their bind; empty for every bone. A client poses them all.
+    std::vector<std::uint8_t> subset;
 };
 
 struct AnimationSettings {

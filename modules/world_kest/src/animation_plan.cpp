@@ -3,10 +3,12 @@
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
 #include "rawframe/animation/instance.h"
+#include "rawframe/animation/mask.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/world_kest/errors.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -82,12 +84,33 @@ animatorSettings(const GameFiles& files, std::span<const kest::TypeLayout> layou
     if (!skeleton.has_value()) {
         return within(std::move(skeleton).error(), animator.path);
     }
-    auto compiled = animation::CompiledGraph::compile(*graph, *skeleton, *skeletonId, clips);
+    std::vector<animation::NamedMask> masks;
+    for (const base::Bits128 kMask : animation::masksOf(*graph)) {
+        RAWFRAME_TRY_ASSIGN(const std::string_view kMaskText, files.animationDocument(kMask));
+        auto mask = animation::readMask(kMaskText);
+        if (!mask.has_value()) {
+            return within(std::move(mask).error(), animator.path);
+        }
+        masks.push_back(animation::NamedMask{.id = kMask, .mask = std::make_shared<const animation::Mask>(*mask)});
+    }
+    auto compiled = animation::CompiledGraph::compile(*graph, *skeleton, *skeletonId, clips, masks);
     if (!compiled.has_value()) {
         return within(std::move(compiled).error(), animator.path);
     }
 
     world_animation::AnimatorSettings settings{.id = animator.id, .graph = std::move(*compiled)};
+    if (animator.subset.has_value()) {
+        RAWFRAME_TRY_ASSIGN(const std::string_view kSubsetText, files.animationDocument(*animator.subset));
+        auto mask = animation::readMask(kSubsetText);
+        if (!mask.has_value()) {
+            return within(std::move(mask).error(), animator.path);
+        }
+        auto subset = animation::boneSubset(*mask, *skeleton, *skeletonId);
+        if (!subset.has_value()) {
+            return within(std::move(subset).error(), animator.path);
+        }
+        settings.subset = std::move(*subset);
+    }
     if (animator.parameters.empty()) {
         return settings;
     }

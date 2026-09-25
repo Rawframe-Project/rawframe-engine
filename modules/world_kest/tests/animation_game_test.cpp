@@ -9,6 +9,7 @@
 #include "game_harness.h"
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
+#include "rawframe/animation/mask.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
@@ -32,6 +33,7 @@ namespace {
 constexpr base::Bits128 kSkeletonId{0, 0xa1};
 constexpr base::Bits128 kSwingId{0, 0xa2};
 constexpr base::Bits128 kGraphId{0, 0xa3};
+constexpr base::Bits128 kHeldId{0, 0xa4};
 constexpr base::Bits128 kRoot{1, 1};
 constexpr std::uint64_t kTick = 0x6b1d2e3f40516273ULL;
 
@@ -45,7 +47,8 @@ std::string sidecar(base::Bits128 id) {
 /// A game in a directory of its own: a pendulum's swing, one second long,
 /// that reaches a meter along x at three quarters and ticks at its middle,
 /// played at the speed its entity's gait says (tests/game/swing.kest, its
-/// speed field declared as `speed`).
+/// speed field declared as `speed`), a dedicated server posing only the
+/// bones its `held` mask holds.
 std::filesystem::path writeGame(std::string_view name, std::string_view speed) {
     using namespace animation;
     const std::filesystem::path kDirectory =
@@ -69,6 +72,8 @@ std::filesystem::path writeGame(std::string_view name, std::string_view speed) {
     writeText(kDirectory / "rig" / "pendulum.rfanim.rfmeta", sidecar(kSkeletonId));
     writeText(kDirectory / "rig" / "swing.rfanim", *writeClip(kSwing));
     writeText(kDirectory / "rig" / "swing.rfanim.rfmeta", sidecar(kSwingId));
+    writeText(kDirectory / "rig" / "held.rfanim", *writeMask(Mask{.skeleton = kSkeletonId, .chains = {{kRoot}}}));
+    writeText(kDirectory / "rig" / "held.rfanim.rfmeta", sidecar(kHeldId));
     writeText(kDirectory / "swinging.rfanim", *writeGraph(kGraph));
     writeText(kDirectory / "swinging.rfanim.rfmeta", sidecar(kGraphId));
     std::string program = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "swing.kest");
@@ -78,7 +83,8 @@ std::filesystem::path writeGame(std::string_view name, std::string_view speed) {
               "program swing.kest\n"
               "component 1c0ffee0-0000-4000-8000-00000000a001 swing.gait Gait\n"
               "system swing.follow simulation follow write swing.gait entities after rawframe.animation.step\n"
-              "animator 5a0000000000a001 swinging.rfanim parameters swing.gait\n"
+              "animator 5a0000000000a001 swinging.rfanim parameters swing.gait subset "
+              "000000000000000000000000000000a4\n"
               "spawn 1 swing.gait speed=1 rawframe.animation.animator graph=swinging.rfanim relevance=1\n"
               "spawn 1 swing.gait speed=1 rawframe.animation.animator graph=swinging.rfanim relevance=0\n"
               "spawn 1 swing.gait speed=0 rawframe.animation.animator graph=swinging.rfanim relevance=1\n");
@@ -209,5 +215,35 @@ RAWFRAME_TEST(AnAnimatorsParametersAreItsComponentsFields) {
     const std::filesystem::path kGame = writeGame("unrigged", "speed: f32");
     std::filesystem::remove(kGame / "rig" / "swing.rfanim.rfmeta");
     RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::Client, 1).has_value());
+    std::filesystem::remove_all(kGame);
+}
+
+RAWFRAME_TEST(AnAnimatorsSubsetIsAMaskOfItsSkeleton) {
+    const std::filesystem::path kGame = writeGame("subset", "speed: f32");
+    const std::string kDescription = readText(kGame / "swing.game");
+    const std::string kLine = "parameters swing.gait subset 000000000000000000000000000000a4";
+    // Options out of their order, one twice, a subset of no identity, and
+    // a word past them: the game does not start.
+    for (const std::string_view kWritten : {"subset 000000000000000000000000000000a4 parameters swing.gait",
+                                            "parameters swing.gait subset 000000000000000000000000000000a4 subset "
+                                            "000000000000000000000000000000a4",
+                                            "parameters swing.gait subset 00000000000000000000000000000000",
+                                            "parameters swing.gait subset a4",
+                                            "parameters swing.gait subset 000000000000000000000000000000a4 held"}) {
+        std::string written = kDescription;
+        written.replace(written.find(kLine), kLine.size(), kWritten);
+        writeText(kGame / "swing.game", written);
+        RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::DedicatedServer, 1).has_value());
+    }
+    writeText(kGame / "swing.game", kDescription);
+    RAWFRAME_EXPECT(play(kGame, composition::TargetRole::DedicatedServer, 1).has_value());
+    // Nor with a mask of another skeleton, or none where it names.
+    const std::string kHeld = readText(kGame / "rig" / "held.rfanim");
+    writeText(kGame / "rig" / "held.rfanim",
+              *animation::writeMask(animation::Mask{.skeleton = kSwingId, .chains = {{kRoot}}}));
+    RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::DedicatedServer, 1).has_value());
+    writeText(kGame / "rig" / "held.rfanim", kHeld);
+    std::filesystem::remove(kGame / "rig" / "held.rfanim.rfmeta");
+    RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::DedicatedServer, 1).has_value());
     std::filesystem::remove_all(kGame);
 }

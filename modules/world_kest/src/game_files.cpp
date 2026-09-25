@@ -3,6 +3,7 @@
 #include "game_files_participant.h"
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
+#include "rawframe/animation/mask.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/content/sidecar.h"
@@ -264,6 +265,12 @@ result::Status GameFiles::readAnimations(
         if (!parsed.has_value()) {
             return std::unexpected<result::Error>{std::move(parsed).error().withContext("path", graph.name)};
         }
+        for (const base::Bits128 kMask : animation::masksOf(*parsed)) {
+            RAWFRAME_TRY_ASSIGN(const bool kNew, kReadOnce(kMask, animation::DocumentKind::Mask));
+            if (kNew) {
+                RAWFRAME_TRY(animation::readMask(found.back().second));
+            }
+        }
         for (const base::Bits128 kClip : animation::clipsOf(*parsed)) {
             RAWFRAME_TRY_ASSIGN(const bool kNew, kReadOnce(kClip, animation::DocumentKind::Clip));
             if (!kNew) {
@@ -273,6 +280,16 @@ result::Status GameFiles::readAnimations(
             if (kRead.skeleton.has_value()) {
                 RAWFRAME_TRY(kReadOnce(*kRead.skeleton, animation::DocumentKind::Skeleton));
             }
+        }
+    }
+    // Each animator's server subset, a mask its graph need not name.
+    for (const GameAnimator& animator : description_.animators) {
+        if (!animator.subset.has_value()) {
+            continue;
+        }
+        RAWFRAME_TRY_ASSIGN(const bool kNew, kReadOnce(*animator.subset, animation::DocumentKind::Mask));
+        if (kNew) {
+            RAWFRAME_TRY(animation::readMask(found.back().second));
         }
     }
     std::ranges::sort(found, {}, &std::pair<base::Bits128, std::string>::first);
@@ -392,7 +409,8 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
     const content::ResourceTypeId kGraphType{animation::kGraphType};
     const content::ResourceTypeId kClipType{animation::kClipType};
     const content::ResourceTypeId kSkeletonType{animation::kSkeletonType};
-    const std::array<content::AdmittedRepresentation, 6> kAdmitted = {
+    const content::ResourceTypeId kMaskType{animation::kMaskType};
+    const std::array<content::AdmittedRepresentation, 7> kAdmitted = {
         content::AdmittedRepresentation{.type = kGameType,
                                         .representation = *content::RepresentationId::parse(kCookedGameRepresentation)},
         content::AdmittedRepresentation{
@@ -406,7 +424,9 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
             .type = kClipType, .representation = *content::RepresentationId::parse(animation::kClipRepresentation)},
         content::AdmittedRepresentation{.type = kSkeletonType,
                                         .representation =
-                                            *content::RepresentationId::parse(animation::kSkeletonRepresentation)}};
+                                            *content::RepresentationId::parse(animation::kSkeletonRepresentation)},
+        content::AdmittedRepresentation{
+            .type = kMaskType, .representation = *content::RepresentationId::parse(animation::kMaskRepresentation)}};
     RAWFRAME_TRY(content.admit(kAdmitted));
     RAWFRAME_TRY_ASSIGN(const std::string kRecord,
                         readResource(content.store(), content::ResourceRef{.id = description, .type = kGameType}));
@@ -458,12 +478,12 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
                          content::ResourceRef{.id = content::ResourceId{kAnimator->graph}, .type = kGraphType}));
         game.graphs_.push_back(Named{.name = animator.path, .text = std::move(text), .identity = kAnimator->graph});
     }
-    RAWFRAME_TRY(
-        game.readAnimations([&content, &kClipType, &kSkeletonType](base::Bits128 id, animation::DocumentKind kind) {
-            return readResource(
-                content.store(),
-                content::ResourceRef{.id = content::ResourceId{id},
-                                     .type = kind == animation::DocumentKind::Clip ? kClipType : kSkeletonType});
+    RAWFRAME_TRY(game.readAnimations(
+        [&content, &kClipType, &kSkeletonType, &kMaskType](base::Bits128 id, animation::DocumentKind kind) {
+            const content::ResourceTypeId kType = kind == animation::DocumentKind::Clip   ? kClipType
+                                                  : kind == animation::DocumentKind::Mask ? kMaskType
+                                                                                          : kSkeletonType;
+            return readResource(content.store(), content::ResourceRef{.id = content::ResourceId{id}, .type = kType});
         }));
     // Each Kest sources resource once, however many programs it holds.
     std::vector<base::Bits128> read;
