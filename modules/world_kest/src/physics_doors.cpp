@@ -9,53 +9,51 @@ namespace rawframe::world_kest {
 
 namespace {
 
-constexpr std::array<kest::Parameter, 4> kRayTakes = {kest::Parameter{kest::Slot::F64},
-                                                      kest::Parameter{kest::Slot::F64},
-                                                      kest::Parameter{kest::Slot::F32},
-                                                      kest::Parameter{kest::Slot::F32}};
+constexpr kest::Parameter kReal{kest::Slot::F64};
+constexpr kest::Parameter kFloat{kest::Slot::F32};
+constexpr kest::Parameter kClass{kest::Slot::U64};
+constexpr kest::Parameter kSeen{kest::Slot::Value, "rawframe.replication.Perception"};
+
+constexpr std::array<kest::Parameter, 4> kRayTakes = {kReal, kReal, kFloat, kFloat};
+constexpr std::array<kest::Parameter, 5> kRayAtTakes = {kReal, kReal, kFloat, kFloat, kSeen};
+constexpr std::array<kest::Parameter, 5> kRayAmongTakes = {kClass, kReal, kReal, kFloat, kFloat};
+constexpr std::array<kest::Parameter, 6> kRayAtAmongTakes = {kClass, kReal, kReal, kFloat, kFloat, kSeen};
 constexpr std::array<kest::Parameter, 1> kRayGives = {
     kest::Parameter{kest::Slot::Value, "rawframe.physics2d.RayHit2D"}};
 
-constexpr std::array<kest::Parameter, 5> kRayAtTakes = {
-    kest::Parameter{kest::Slot::F64},
-    kest::Parameter{kest::Slot::F64},
-    kest::Parameter{kest::Slot::F32},
-    kest::Parameter{kest::Slot::F32},
-    kest::Parameter{kest::Slot::Value, "rawframe.replication.Perception"}};
-
-void castRayDoor(kest::DoorCall& call, void* context) noexcept {
+/// A ray door: `Among` doors take the class first; `At` doors take the
+/// moment seen last.
+template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context) noexcept {
     const physics2d::Physics2DQueries* const kQueries =
         *static_cast<const physics2d::Physics2DQueries* const*>(context);
     if (kQueries == nullptr) {
         call.fail("this World has no physics to ask");
         return;
     }
-    const physics2d::RayHit2D kHit = kQueries->castRay(
-        call.real(0), call.real(1), static_cast<float>(call.real(2)), static_cast<float>(call.real(3)));
-    if (!call.answerValue(std::as_bytes(std::span{&kHit, 1}))) {
-        call.fail("the program's RayHit2D is not the engine's");
+    constexpr std::size_t kFirst = Among ? 1 : 0;
+    const std::uint64_t kAmong = Among ? static_cast<std::uint64_t>(call.integer(0)) : physics2d::kEveryClass;
+    physics2d::RayHit2D hit;
+    if constexpr (At) {
+        world_replication::Perception seen;
+        if (!call.value(kFirst + 4, std::as_writable_bytes(std::span{&seen, 1}))) {
+            call.fail("the program's Perception is not the engine's");
+            return;
+        }
+        hit = kQueries->castRayAt(call.real(kFirst),
+                                  call.real(kFirst + 1),
+                                  static_cast<float>(call.real(kFirst + 2)),
+                                  static_cast<float>(call.real(kFirst + 3)),
+                                  seen.baseTick,
+                                  seen.fraction,
+                                  kAmong);
+    } else {
+        hit = kQueries->castRay(call.real(kFirst),
+                                call.real(kFirst + 1),
+                                static_cast<float>(call.real(kFirst + 2)),
+                                static_cast<float>(call.real(kFirst + 3)),
+                                kAmong);
     }
-}
-
-void castRayAtDoor(kest::DoorCall& call, void* context) noexcept {
-    const physics2d::Physics2DQueries* const kQueries =
-        *static_cast<const physics2d::Physics2DQueries* const*>(context);
-    if (kQueries == nullptr) {
-        call.fail("this World has no physics to ask");
-        return;
-    }
-    world_replication::Perception seen;
-    if (!call.value(4, std::as_writable_bytes(std::span{&seen, 1}))) {
-        call.fail("the program's Perception is not the engine's");
-        return;
-    }
-    const physics2d::RayHit2D kHit = kQueries->castRayAt(call.real(0),
-                                                         call.real(1),
-                                                         static_cast<float>(call.real(2)),
-                                                         static_cast<float>(call.real(3)),
-                                                         seen.baseTick,
-                                                         seen.fraction);
-    if (!call.answerValue(std::as_bytes(std::span{&kHit, 1}))) {
+    if (!call.answerValue(std::as_bytes(std::span{&hit, 1}))) {
         call.fail("the program's RayHit2D is not the engine's");
     }
 }
@@ -63,15 +61,26 @@ void castRayAtDoor(kest::DoorCall& call, void* context) noexcept {
 } // namespace
 
 result::Status addPhysicsDoors(kest::DoorTable& doors, const physics2d::Physics2DQueries* const* queries) {
+    auto* const kContext = const_cast<physics2d::Physics2DQueries**>(queries);
     RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRay",
-                                      .function = &castRayDoor,
-                                      .context = const_cast<physics2d::Physics2DQueries**>(queries),
+                                      .function = &rayDoor<false, false>,
+                                      .context = kContext,
                                       .takes = kRayTakes,
                                       .gives = kRayGives}));
-    return doors.add(kest::Door{.name = "Physics2D.castRayAt",
-                                .function = &castRayAtDoor,
-                                .context = const_cast<physics2d::Physics2DQueries**>(queries),
-                                .takes = kRayAtTakes,
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRayAt",
+                                      .function = &rayDoor<false, true>,
+                                      .context = kContext,
+                                      .takes = kRayAtTakes,
+                                      .gives = kRayGives}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRayAmong",
+                                      .function = &rayDoor<true, false>,
+                                      .context = kContext,
+                                      .takes = kRayAmongTakes,
+                                      .gives = kRayGives}));
+    return doors.add(kest::Door{.name = "Physics2D.castRayAtAmong",
+                                .function = &rayDoor<true, true>,
+                                .context = kContext,
+                                .takes = kRayAtAmongTakes,
                                 .gives = kRayGives});
 }
 

@@ -94,8 +94,10 @@ public:
                 return;
             }
             ++shots;
-            compensated += physics_->castRayAt(aim.x, 5, 0, -10, seen.baseTick, seen.fraction).entity == target_;
-            present += physics_->castRay(aim.x, 5, 0, -10).entity == target_;
+            compensated +=
+                physics_->castRayAt(aim.x, 5, 0, -10, seen.baseTick, seen.fraction, physics2d::kEveryClass).entity ==
+                target_;
+            present += physics_->castRay(aim.x, 5, 0, -10, physics2d::kEveryClass).entity == target_;
         });
         return {};
     }

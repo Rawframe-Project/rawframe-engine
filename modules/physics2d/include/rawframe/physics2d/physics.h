@@ -114,6 +114,9 @@ inline constexpr std::string_view kStepSystem = "rawframe.physics2d.step";
 /// Questions about where bodies are, answered from the last step: what
 /// gameplay sees between steps (SPEC-0037 queries against committed state).
 /// Only from the World's thread, between steps or from a system.
+/// A ray's `among` that meets bodies of every class, and of none.
+inline constexpr std::uint64_t kEveryClass = 0;
+
 class Physics2DQueries {
 public:
     Physics2DQueries() = default;
@@ -122,9 +125,11 @@ public:
     virtual ~Physics2DQueries() = default;
 
     /// The closest body along the ray from the origin to the origin plus
-    /// `toward`; sensors included.
+    /// `toward`, sensors included, of the collision class whose identity is
+    /// `among` (a class the settings do not declare meets nothing), or of any
+    /// for kEveryClass.
     [[nodiscard]] virtual RayHit2D
-    castRay(double originX, double originY, float towardX, float towardY) const noexcept = 0;
+    castRay(double originX, double originY, float towardX, float towardY, std::uint64_t among) const noexcept = 0;
     /// The same ray against every body where it was at an earlier moment
     /// (SPEC-0041 lag compensation): `fraction` 65536ths of the way from
     /// the pose committed at tick `base` to the next, as a client shows it
@@ -136,7 +141,8 @@ public:
                                              float towardX,
                                              float towardY,
                                              std::uint64_t base,
-                                             std::uint16_t fraction) const noexcept = 0;
+                                             std::uint16_t fraction,
+                                             std::uint64_t among) const noexcept = 0;
 };
 
 class Physics2D final : public world_runtime::SystemContributor, public Physics2DQueries {
@@ -161,13 +167,14 @@ public:
     [[nodiscard]] std::uint64_t digest() const noexcept;
 
     [[nodiscard]] RayHit2D
-    castRay(double originX, double originY, float towardX, float towardY) const noexcept override;
+    castRay(double originX, double originY, float towardX, float towardY, std::uint64_t among) const noexcept override;
     [[nodiscard]] RayHit2D castRayAt(double originX,
                                      double originY,
                                      float towardX,
                                      float towardY,
                                      std::uint64_t base,
-                                     std::uint16_t fraction) const noexcept override;
+                                     std::uint16_t fraction,
+                                     std::uint64_t among) const noexcept override;
 
     struct State;
     explicit Physics2D(std::unique_ptr<State> state) noexcept;

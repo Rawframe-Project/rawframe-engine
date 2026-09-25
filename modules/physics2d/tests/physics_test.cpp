@@ -267,17 +267,17 @@ RAWFRAME_TEST(ARayFindsTheClosestBody) {
     const world::EntityHandle kBallEntity = scene.body(kBall, {.x = 3, .y = 5});
     scene.run(1);
     // Straight down onto the ground's top, half a meter up.
-    const RayHit2D kDown = scene.physics->castRay(0, 5, 0, -10);
+    const RayHit2D kDown = scene.physics->castRay(0, 5, 0, -10, kEveryClass);
     RAWFRAME_EXPECT(kDown.hit && !kDown.inside && kDown.entity == kGroundEntity);
     RAWFRAME_EXPECT(std::abs(kDown.y - 0.5) < 0.001 && kDown.normalY > 0.99F &&
                     std::abs(kDown.fraction - 0.45F) < 0.001F);
     // Sideways into the ball, where it was after the last step.
-    const RayHit2D kAcross = scene.physics->castRay(0, scene.pose(kBallEntity).y, 10, 0);
+    const RayHit2D kAcross = scene.physics->castRay(0, scene.pose(kBallEntity).y, 10, 0, kEveryClass);
     RAWFRAME_EXPECT(kAcross.hit && kAcross.entity == kBallEntity && std::abs(kAcross.x - 2.75) < 0.001);
     // Starting inside the ground, and missing everything.
-    const RayHit2D kInside = scene.physics->castRay(0, 0, 0, -1);
+    const RayHit2D kInside = scene.physics->castRay(0, 0, 0, -1, kEveryClass);
     RAWFRAME_EXPECT(kInside.hit && kInside.inside && kInside.entity == kGroundEntity);
-    const RayHit2D kMiss = scene.physics->castRay(0, 5, 0, 10);
+    const RayHit2D kMiss = scene.physics->castRay(0, 5, 0, 10, kEveryClass);
     RAWFRAME_EXPECT(!kMiss.hit && kMiss.entity.isNull());
 }
 
@@ -355,23 +355,23 @@ RAWFRAME_TEST(ARayCastBackInTimeFindsWhereBodiesWere) {
     const double kThen = xAt[20];
     // Where it was at tick 20 it is no longer: a ray there now misses, and
     // cast back to tick 20 it hits, with the hit where the body was.
-    RAWFRAME_EXPECT(!scene.physics->castRay(kThen, 5, 0, -10).hit);
-    const RayHit2D kBack = scene.physics->castRayAt(kThen, 5, 0, -10, 20, 0);
+    RAWFRAME_EXPECT(!scene.physics->castRay(kThen, 5, 0, -10, kEveryClass).hit);
+    const RayHit2D kBack = scene.physics->castRayAt(kThen, 5, 0, -10, 20, 0, kEveryClass);
     RAWFRAME_EXPECT(kBack.hit && kBack.entity == kTarget && !kBack.discontinuous);
     RAWFRAME_EXPECT(std::abs(kBack.x - kThen) < 1e-9 && std::abs(kBack.y - 0.5) < 1e-6 && kBack.normalY > 0.99F);
     // Between two ticks, as a client shows it: half way from 20 to 21, a
     // ray just past the right edge at 20 hits, and at 20 itself misses.
     const double kEdge = ((xAt[20] + xAt[21]) / 2) + 0.49;
-    RAWFRAME_EXPECT(scene.physics->castRayAt(kEdge, 5, 0, -10, 20, 32768).hit);
-    RAWFRAME_EXPECT(!scene.physics->castRayAt(kEdge, 5, 0, -10, 20, 0).hit);
+    RAWFRAME_EXPECT(scene.physics->castRayAt(kEdge, 5, 0, -10, 20, 32768, kEveryClass).hit);
+    RAWFRAME_EXPECT(!scene.physics->castRayAt(kEdge, 5, 0, -10, 20, 0, kEveryClass).hit);
     // Older than the history keeps: clamped to its oldest tick, and counted.
-    const RayHit2D kOld = scene.physics->castRayAt(xAt[29 - 15], 5, 0, -10, 2, 0);
+    const RayHit2D kOld = scene.physics->castRayAt(xAt[29 - 15], 5, 0, -10, 2, 0, kEveryClass);
     RAWFRAME_EXPECT(kOld.hit && kOld.entity == kTarget);
     RAWFRAME_EXPECT(scene.physics->statistics().rewindsClamped == 1 && scene.physics->statistics().raysRewound == 4);
     // A body made since has no trail back: tried where it is, and marked.
     const world::EntityHandle kLate = scene.body(kBall, {.x = -5, .y = 0});
     scene.run(1);
-    const RayHit2D kNew = scene.physics->castRayAt(-5, 5, 0, -10, 20, 0);
+    const RayHit2D kNew = scene.physics->castRayAt(-5, 5, 0, -10, 20, 0, kEveryClass);
     RAWFRAME_EXPECT(kNew.hit && kNew.entity == kLate && kNew.discontinuous);
 }
 
@@ -414,7 +414,7 @@ RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
     RAWFRAME_EXPECT(std::abs(kAt.x - 2.2) < 0.02 && std::abs(kAt.y - 1.2) < 0.02);
     const Character2D& kOn = scene.character(kRunner);
     RAWFRAME_EXPECT(kOn.ground == static_cast<std::uint8_t>(Ground::Grounded));
-    RAWFRAME_EXPECT(scene.physics->castRay(kAt.x, kAt.y - 0.75, 0, -1).entity == kFloor);
+    RAWFRAME_EXPECT(scene.physics->castRay(kAt.x, kAt.y - 0.75, 0, -1, kEveryClass).entity == kFloor);
     RAWFRAME_EXPECT(kOn.groundNormalY > 0.99F);
     RAWFRAME_EXPECT(std::abs(scene.velocity(kRunner).x) < 0.05F && std::abs(scene.velocity(kRunner).y) < 0.05F);
     RAWFRAME_EXPECT(scene.physics->statistics().characterMoves == 120);
@@ -493,4 +493,34 @@ RAWFRAME_TEST(CharactersPassThroughEachOtherAndBlockNothingOfTheirOwn) {
     }
     RAWFRAME_EXPECT(scene.pose(kLeft).x > 2 && scene.pose(kRight).x < -2);
     RAWFRAME_EXPECT(scene.character(kRight).ground == static_cast<std::uint8_t>(Ground::Grounded));
+}
+
+RAWFRAME_TEST(ARayAmongOneClassSeesThroughTheRest) {
+    constexpr std::uint64_t kPlayer = 0x51;
+    constexpr std::uint64_t kUndeclared = 0x52;
+    Scene scene({.gravityY = 0, .historyTicks = 8, .collision = {.classes = {{kPlayer, "player"}}}});
+    // A wall of no class between the origin and a player moving up.
+    const world::EntityHandle kWall = scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                                                        .shape = static_cast<std::uint8_t>(Shape::Box),
+                                                        .width = 0.5F,
+                                                        .height = 2},
+                                                 {.x = 2});
+    const world::EntityHandle kTarget = scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
+                                                          .shape = static_cast<std::uint8_t>(Shape::Circle),
+                                                          .collisionClass = kPlayer,
+                                                          .width = 0.5F},
+                                                   {.x = 5},
+                                                   {.y = 3});
+    scene.run(10);
+    RAWFRAME_EXPECT(scene.physics->castRay(0, 0.5, 10, 0, kEveryClass).entity == kWall);
+    // Where the player is now, and not where it was.
+    const double kNowY = scene.pose(kTarget).y;
+    const RayHit2D kNow = scene.physics->castRay(0, kNowY, 10, 0, kPlayer);
+    RAWFRAME_EXPECT(kNow.entity == kTarget && std::abs(kNow.x - 4.5) < 0.001);
+    RAWFRAME_EXPECT(!scene.physics->castRay(0, -0.3, 10, 0, kPlayer).hit);
+    RAWFRAME_EXPECT(!scene.physics->castRay(0, kNowY, 10, 0, kUndeclared).hit);
+    // Back to tick 2, when it was about the origin.
+    RAWFRAME_EXPECT(scene.physics->castRayAt(0, -0.3, 10, 0, 2, 0, kPlayer).entity == kTarget);
+    RAWFRAME_EXPECT(scene.physics->castRayAt(0, -0.3, 10, 0, 2, 0, kEveryClass).entity == kWall);
+    RAWFRAME_EXPECT(!scene.physics->castRayAt(0, -0.3, 10, 0, 2, 0, kUndeclared).hit);
 }

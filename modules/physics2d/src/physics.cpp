@@ -712,11 +712,19 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
     return {};
 }
 
-RayHit2D Physics2D::castRay(double originX, double originY, float towardX, float towardY) const noexcept {
-    const m2RayCastResult kResult = m2World_CastRayClosest(state_->physics,
-                                                           m2Pos2{originX, originY},
-                                                           m2Vec2{towardX, towardY},
-                                                           m2QueryFilter{~std::uint64_t{0}, ~std::uint64_t{0}});
+RayHit2D
+Physics2D::castRay(double originX, double originY, float towardX, float towardY, std::uint64_t among) const noexcept {
+    // A class's solids and sensors, by its two bits.
+    m2QueryFilter filter{~std::uint64_t{0}, ~std::uint64_t{0}};
+    if (among != kEveryClass) {
+        const auto kClass = state_->classIndex(among);
+        if (!kClass.has_value()) {
+            return RayHit2D{};
+        }
+        filter.maskBits = (std::uint64_t{1} << *kClass) | (std::uint64_t{1} << (kSensorBits + *kClass));
+    }
+    const m2RayCastResult kResult =
+        m2World_CastRayClosest(state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, filter);
     if (!kResult.hit) {
         return RayHit2D{};
     }
@@ -767,11 +775,15 @@ RayHit2D Physics2D::castRayAt(double originX,
                               float towardX,
                               float towardY,
                               std::uint64_t base,
-                              std::uint16_t fraction) const noexcept {
+                              std::uint16_t fraction,
+                              std::uint64_t among) const noexcept {
     const State& state = *state_;
     const std::uint32_t kKept = state.settings.historyTicks;
     if (!state.stepped || kKept == 0) {
-        return castRay(originX, originY, towardX, towardY);
+        return castRay(originX, originY, towardX, towardY, among);
+    }
+    if (among != kEveryClass && !state.classIndex(among).has_value()) {
+        return RayHit2D{};
     }
     ++state.raysRewound;
     const std::uint64_t kOldest = state.lastTick + 1 >= kKept ? state.lastTick + 1 - kKept : 0;
@@ -785,7 +797,7 @@ RayHit2D Physics2D::castRayAt(double originX,
     RayHit2D closest;
     const m2Vec2 kToward{towardX, towardY};
     for (const auto& [entity, entry] : state.mapped) {
-        if (entry.refused) {
+        if (entry.refused || (among != kEveryClass && entry.made.collisionClass != among)) {
             continue;
         }
         const m2Transform kNow = m2Body_GetTransform(entry.body);
