@@ -4,6 +4,7 @@
 //
 //   rawframe-author describe
 //   rawframe-author apply <game description> <scene> <request> [--dry-run]
+//   rawframe-author migrate <game description> <scene>... [--dry-run]
 //
 // `describe` writes the discovery document. `apply` reads the scene,
 // builds its component catalog from the game (each component's layout from
@@ -13,8 +14,18 @@
 // deltas or the one error record. Between processes a document's
 // generation is its content digest, which a request's `expects` names. The
 // scene is replaced whole, by rename, only when something changed and not
-// with `--dry-run`. Exit status 0 when every slot succeeded, 1 otherwise,
-// and 2 for a usage error.
+// with `--dry-run`.
+//
+// `migrate` brings scenes authored against older layouts of the game's
+// components to the current ones (ADR-0067, D153): per scene, every
+// component whose recorded mark differs is remarked in one atomic
+// transaction, and the report gives each scene's verdict, `unchanged`,
+// `migrated`, `refused` (with the fields that do not carry over, or the
+// component the game no longer has), or `failed`. A refused scene is left
+// as it was; nothing is dropped.
+//
+// Exit status 0 when everything succeeded, 1 otherwise, and 2 for a usage
+// error.
 
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/operations.h"
@@ -30,6 +41,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -220,6 +233,95 @@ int apply(const char* game, const std::filesystem::path& scenePath, const char* 
     return failed ? 1 : 0;
 }
 
+int migrate(const char* game, std::span<char* const> scenes, bool dryRun) {
+    auto files = rawframe::world_kest::GameFiles::fromDirectory(game);
+    if (!files.has_value()) {
+        return refused(files.error());
+    }
+    auto catalog = catalogOf(*files);
+    if (!catalog.has_value()) {
+        return refused(catalog.error());
+    }
+    Value documents = Value::array();
+    bool clean = true;
+    for (const char* each : scenes) {
+        const std::filesystem::path kPath = each;
+        Value report = Value::object();
+        report.add("path", Value::string(kPath.string()));
+        const auto kText = readFile(kPath);
+        auto scene = kText.has_value() ? authoring::AuthoredScene::open(rawframe::base::Bits128{}, *kText)
+                                       : result::Result<std::unique_ptr<authoring::AuthoredScene>>{
+                                             result::fail(result::ErrorClass::NotFound,
+                                                          authoring::kAuthoringDomain,
+                                                          code(authoring::AuthoringError::TargetNotFound),
+                                                          "the scene is a file that reads")};
+        if (!scene.has_value()) {
+            report.add("verdict", Value::string("failed"));
+            report.add("error", authoring::errorRecord(scene.error()));
+            documents.push(std::move(report));
+            clean = false;
+            continue;
+        }
+        std::vector<authoring::Operation> remarks;
+        std::string unknown;
+        for (const rawframe::scene::SchemaMark& mark : (*scene)->scene().schema) {
+            const authoring::ComponentSchema* kNow = catalog->findNamed(mark.component);
+            if (kNow == nullptr) {
+                unknown += (unknown.empty() ? "" : " ") + mark.component;
+            } else if (kNow->mark != mark.mark) {
+                remarks.emplace_back(authoring::RemarkComponent{.component = kNow->id});
+            }
+        }
+        if (!unknown.empty()) {
+            report.add("verdict", Value::string("refused"));
+            report.add("error",
+                       authoring::errorRecord(result::fail(result::ErrorClass::InvalidArgument,
+                                                           authoring::kAuthoringDomain,
+                                                           code(authoring::AuthoringError::ValidationFailed),
+                                                           "every component a scene records is one the game has")
+                                                  .error()
+                                                  .withContext("unknown", unknown)));
+            documents.push(std::move(report));
+            clean = false;
+            continue;
+        }
+        if (remarks.empty()) {
+            report.add("verdict", Value::string("unchanged"));
+            documents.push(std::move(report));
+            continue;
+        }
+        const auto kOutcome = authoring::executeAtomic(**scene, 0, remarks, *catalog);
+        if (!kOutcome.has_value()) {
+            report.add("verdict", Value::string("refused"));
+            report.add("error", authoring::errorRecord(kOutcome.error()));
+            documents.push(std::move(report));
+            clean = false;
+            continue;
+        }
+        if (!dryRun) {
+            const std::filesystem::path kStaged = kPath.string() + ".authoring";
+            std::ofstream{kStaged, std::ios::binary | std::ios::trunc} << (*scene)->text();
+            std::error_code renamed;
+            std::filesystem::rename(kStaged, kPath, renamed);
+            if (renamed) {
+                report.add("verdict", Value::string("failed"));
+                documents.push(std::move(report));
+                clean = false;
+                continue;
+            }
+        }
+        report.add("verdict", Value::string("migrated"));
+        report.add("components", Value::integer(static_cast<std::int64_t>(remarks.size())));
+        documents.push(std::move(report));
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.migration"));
+    made.add("dryRun", Value::boolean(dryRun));
+    made.add("documents", std::move(documents));
+    std::fputs(rawframe::document::write(made).c_str(), stdout);
+    return clean ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -232,8 +334,16 @@ int main(int argc, char** argv) {
     if (kVerb == "apply" && (argc == 5 || kDryRun)) {
         return apply(argv[2], argv[3], argv[4], kDryRun);
     }
+    if (kVerb == "migrate" && argc >= 4) {
+        const bool kDry = std::string_view{argv[argc - 1]} == "--dry-run";
+        const std::span<char* const> kScenes{argv + 3, static_cast<std::size_t>(argc - 3 - (kDry ? 1 : 0))};
+        if (!kScenes.empty()) {
+            return migrate(argv[2], kScenes, kDry);
+        }
+    }
     std::fputs("usage: rawframe-author describe\n"
-               "       rawframe-author apply <game description> <scene> <request> [--dry-run]\n",
+               "       rawframe-author apply <game description> <scene> <request> [--dry-run]\n"
+               "       rawframe-author migrate <game description> <scene>... [--dry-run]\n",
                stderr);
     return 2;
 }

@@ -229,3 +229,44 @@ RAWFRAME_TEST(DiscoveryDeclaresEveryOperationWhole) {
         made.add(ComponentSchema{.id = kUnknown, .name = "game.new", .fields = {{.name = "a"}, {.name = "a"}}}),
         AuthoringError::ValidationFailed));
 }
+
+RAWFRAME_TEST(AComponentIsRemarkedOnlyWhenEveryFieldCarriesOver) {
+    // A scene authored against an older layout of game.position.
+    const scene::Scene kOld{
+        .schema = {{.component = "game.position", .mark = 0x11}},
+        .entities =
+            {{.id = kSpawn,
+              .name = {},
+              .components =
+                  {{.name = "game.position",
+                    .fields = {{.name = "count", .value = {.kind = scene::FieldValue::Kind::Number, .number = "3"}},
+                               {.name = "x", .value = {.kind = scene::FieldValue::Kind::Number, .number = "1.5"}}}}}}},
+        .instances = {}};
+    auto opened = AuthoredScene::open(base::Bits128{7, 7}, *scene::writeScene(kOld));
+    AuthoredScene& scene = **opened;
+    const ComponentCatalog kCatalog = catalog();
+    const Operation kRemark = RemarkComponent{.component = kPosition};
+    const auto kDone = execute(scene, 0, kRemark, kCatalog);
+    RAWFRAME_EXPECT(kDone.has_value() && kDone->deltas == 1 && scene.scene().schema[0].mark == 0xa1 &&
+                    scene.scene().entities == kOld.entities);
+    // Current already: nothing to do.
+    const auto kAgain = execute(scene, 1, kRemark, kCatalog);
+    RAWFRAME_EXPECT(kAgain.has_value() && kAgain->deltas == 0 && scene.generation() == 1);
+    RAWFRAME_EXPECT(scene.undo(1).has_value() && scene.scene() == kOld);
+    // x is now an integer, and count is gone: both are residual work.
+    ComponentCatalog changed;
+    RAWFRAME_EXPECT(changed.add(ComponentSchema{
+        .id = kPosition, .name = "game.position", .mark = 0xa2, .fields = {{.name = "x", .kind = FieldKind::Signed}}}));
+    const auto kRefused = execute(scene, 2, kRemark, changed);
+    RAWFRAME_EXPECT(refusedWith(kRefused, AuthoringError::ValidationFailed) && scene.scene() == kOld);
+    bool named = false;
+    for (const auto& field : kRefused.error().context()) {
+        named = named || (field.key == "residual" && field.value == "count x");
+    }
+    RAWFRAME_EXPECT(named);
+    // A component the scene never recorded, or the catalog does not know.
+    RAWFRAME_EXPECT(
+        refusedWith(execute(scene, 2, RemarkComponent{.component = kLink}, kCatalog), AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(refusedWith(execute(scene, 2, RemarkComponent{.component = kUnknown}, kCatalog),
+                                AuthoringError::TargetNotFound));
+}

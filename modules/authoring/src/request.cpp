@@ -123,10 +123,16 @@ result::Result<Operation> operationOf(const Value& value) {
     const auto kBad = [] {
         return malformed("an operation's inputs are of their declared types");
     };
+    const std::size_t kIndex = static_cast<std::size_t>(kDeclared - declarations().begin());
+    if (kIndex == 8) {
+        if (!kComponent.has_value()) {
+            return kBad();
+        }
+        return Operation{RemarkComponent{.component = {*kComponent}}};
+    }
     if (!kEntity.has_value()) {
         return kBad();
     }
-    const std::size_t kIndex = static_cast<std::size_t>(kDeclared - declarations().begin());
     switch (kIndex) {
     case 0: {
         const Value* place = value.find("place");
@@ -166,7 +172,7 @@ result::Result<Operation> operationOf(const Value& value) {
         }
         return Operation{SetField{.entity = *kEntity, .component = {*kComponent}, .field = *field, .value = *kValue}};
     }
-    default: {
+    case 7: {
         const Value& target = *value.find("target");
         const std::optional<base::Bits128> kTarget = target.isNull() ? std::nullopt : idOf(&target);
         if (!kComponent.has_value() || field == nullptr || (!target.isNull() && !kTarget.has_value())) {
@@ -175,6 +181,8 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{
             SetReference{.entity = *kEntity, .component = {*kComponent}, .field = *field, .target = kTarget}};
     }
+    default:
+        return kBad();
     }
 }
 

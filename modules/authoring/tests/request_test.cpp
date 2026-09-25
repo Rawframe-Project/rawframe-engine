@@ -66,6 +66,11 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
                     std::get<SetField>(kRead->operations[9]).value.whole == UINT64_MAX &&
                     std::get<SetField>(kRead->operations[11]).value.kind == FieldInput::Kind::Default);
     RAWFRAME_EXPECT(!std::get<SetReference>(kRead->operations[13]).target.has_value());
+    const auto kRemark =
+        readRequest(request(R"({"operation": "scene.remark_component", "component": ")" + std::string{kLink} + "\"}"));
+    RAWFRAME_EXPECT(kRemark.has_value() && std::holds_alternative<RemarkComponent>(kRemark->operations[0]));
+    RAWFRAME_EXPECT(
+        refusedWith(readRequest(request(onLink("scene.remark_component", ""))), AuthoringError::ValidationFailed));
     const auto kExpecting = readRequest(R"({"formatVersion": 1, "kind": "authoring.request", "batch": "atomic",
         "expects": "sha256:00", "operations": []})");
     RAWFRAME_EXPECT(kExpecting.has_value() && kExpecting->expects == "sha256:00");

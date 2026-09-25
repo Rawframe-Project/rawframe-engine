@@ -24,18 +24,19 @@ std::unexpected<result::Error> mismatch(std::string_view why) {
         result::ErrorClass::FailedPrecondition, kAuthoringDomain, code(AuthoringError::DeltaMismatch), why);
 }
 
-constexpr std::array<std::string_view, 8> kKindNames = {"create_node",
+constexpr std::array<std::string_view, 9> kKindNames = {"create_node",
                                                         "destroy_node",
                                                         "reorder",
                                                         "set_name",
                                                         "add_component",
                                                         "remove_component",
                                                         "set_field",
-                                                        "set_reference"};
+                                                        "set_reference",
+                                                        "set_mark"};
 
 bool componentKind(DeltaKind kind) {
     return kind == DeltaKind::AddComponent || kind == DeltaKind::RemoveComponent || kind == DeltaKind::SetField ||
-           kind == DeltaKind::SetReference;
+           kind == DeltaKind::SetReference || kind == DeltaKind::SetMark;
 }
 
 bool fieldKind(DeltaKind kind) {
@@ -48,7 +49,7 @@ bool holdsOnly(const SlotValue& slot, DeltaKind kind) {
     const bool kComponent = kind == DeltaKind::AddComponent || kind == DeltaKind::RemoveComponent;
     return (kNode || !slot.node.has_value()) && (kind == DeltaKind::Reorder || !slot.place.has_value()) &&
            (kind == DeltaKind::SetName || !slot.name.has_value()) && (kComponent || !slot.component.has_value()) &&
-           (fieldKind(kind) || !slot.field.has_value());
+           (fieldKind(kind) || !slot.field.has_value()) && (kind == DeltaKind::SetMark || !slot.mark.has_value());
 }
 
 bool fieldOfKind(const std::optional<scene::FieldValue>& value, bool reference) {
@@ -61,9 +62,9 @@ bool fieldOfKind(const std::optional<scene::FieldValue>& value, bool reference) 
 
 /// The delta holds its kind's shape.
 bool shaped(const Delta& delta) {
-    if (delta.entity == base::Bits128{} || !holdsOnly(delta.before, delta.kind) ||
-        !holdsOnly(delta.after, delta.kind) || componentKind(delta.kind) == delta.component.empty() ||
-        fieldKind(delta.kind) == delta.field.empty()) {
+    if ((delta.entity == base::Bits128{}) != (delta.kind == DeltaKind::SetMark) ||
+        !holdsOnly(delta.before, delta.kind) || !holdsOnly(delta.after, delta.kind) ||
+        componentKind(delta.kind) == delta.component.empty() || fieldKind(delta.kind) == delta.field.empty()) {
         return false;
     }
     const SlotValue& before = delta.before;
@@ -87,6 +88,8 @@ bool shaped(const Delta& delta) {
         const bool kReference = delta.kind == DeltaKind::SetReference;
         return fieldOfKind(before.field, kReference) && fieldOfKind(after.field, kReference);
     }
+    case DeltaKind::SetMark:
+        return before.mark.has_value() && after.mark.has_value();
     }
     return false;
 }
@@ -142,6 +145,14 @@ void dropUnusedMarks(scene::Scene& scene) {
 /// is not there to read (a field of an entity that is not).
 std::optional<SlotValue> slotOf(const scene::Scene& scene, const Delta& delta) {
     SlotValue slot;
+    if (delta.kind == DeltaKind::SetMark) {
+        const auto kFound = std::ranges::find(scene.schema, delta.component, &scene::SchemaMark::component);
+        if (kFound == scene.schema.end()) {
+            return std::nullopt;
+        }
+        slot.mark = kFound->mark;
+        return slot;
+    }
     const std::optional<std::size_t> kPlace = placeOf(scene, delta.entity);
     if (delta.kind == DeltaKind::CreateNode || delta.kind == DeltaKind::DestroyNode) {
         if (kPlace.has_value()) {
@@ -251,6 +262,9 @@ result::Status writeSlot(scene::Scene& scene, const Delta& delta, const SlotValu
         }
         return {};
     }
+    case DeltaKind::SetMark:
+        std::ranges::find(scene.schema, delta.component, &scene::SchemaMark::component)->mark = *to.mark;
+        return {};
     }
     return invalid("a delta's kind is one of the closed set");
 }
@@ -357,6 +371,9 @@ Value slotValue(const SlotValue& slot) {
     }
     if (slot.field.has_value()) {
         return fieldValue(*slot.field);
+    }
+    if (slot.mark.has_value()) {
+        return Value::string(markText(*slot.mark));
     }
     return {};
 }
@@ -470,6 +487,17 @@ std::optional<SlotValue> slotOf(const Value& value, DeltaKind kind) {
     case DeltaKind::SetReference:
         slot.field = fieldOf(value);
         return slot.field.has_value() ? std::optional{slot} : std::nullopt;
+    case DeltaKind::SetMark: {
+        const std::string* text = textOf(&value);
+        std::uint64_t mark = 0;
+        if (text == nullptr || text->size() != 16 ||
+            std::from_chars(text->data(), text->data() + text->size(), mark, 16).ptr != text->data() + 16 ||
+            markText(mark) != *text) {
+            return std::nullopt;
+        }
+        slot.mark = mark;
+        return slot;
+    }
     }
     return std::nullopt;
 }
@@ -488,7 +516,9 @@ result::Result<std::string> writeJournal(const Journal& journal) {
         if (componentKind(delta.kind)) {
             made.add("component", Value::string(delta.component));
         }
-        made.add("entity", Value::string(idText(delta.entity)));
+        if (delta.kind != DeltaKind::SetMark) {
+            made.add("entity", Value::string(idText(delta.entity)));
+        }
         if (fieldKind(delta.kind)) {
             made.add("field", Value::string(delta.field));
         }
@@ -528,10 +558,14 @@ result::Result<Journal> readJournal(std::string_view bytes) {
         Delta delta{.kind = static_cast<DeltaKind>(kKind - kKindNames.begin())};
         const bool kComponent = componentKind(delta.kind);
         const bool kField = fieldKind(delta.kind);
-        const bool kShape = kField       ? hasMembers(each, {"after", "before", "component", "entity", "field", "kind"})
+        const bool kMark = delta.kind == DeltaKind::SetMark;
+        const bool kShape = kMark        ? hasMembers(each, {"after", "before", "component", "kind"})
+                            : kField     ? hasMembers(each, {"after", "before", "component", "entity", "field", "kind"})
                             : kComponent ? hasMembers(each, {"after", "before", "component", "entity", "kind"})
                                          : hasMembers(each, {"after", "before", "entity", "kind"});
-        const std::optional<base::Bits128> kEntity = kShape ? idOf(each.find("entity")) : std::nullopt;
+        const std::optional<base::Bits128> kEntity = !kShape ? std::nullopt
+                                                     : kMark ? std::optional{base::Bits128{}}
+                                                             : idOf(each.find("entity"));
         if (!kEntity.has_value() || (kComponent && textOf(each.find("component")) == nullptr) ||
             (kField && textOf(each.find("field")) == nullptr)) {
             return invalid("a delta is its kind, entity, component and field as its kind has them, and slots");

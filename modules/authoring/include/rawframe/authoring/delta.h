@@ -17,6 +17,8 @@
 //   set_field         a number or truth field, from a value or its
 //                     default to another
 //   set_reference     an entity-valued field, likewise
+//   set_mark          the layout mark the scene's schema records for a
+//                     component, with no entity (document metadata, D153)
 //
 // Applying a delta forward requires the slot to hold its `before` and
 // leaves it holding its `after`; backward, the other way about. A slot
@@ -52,6 +54,7 @@ enum class DeltaKind : std::uint8_t {
     RemoveComponent,
     SetField,
     SetReference,
+    SetMark,
 };
 
 /// A component as a delta carries it: its layout mark and its fields.
@@ -76,23 +79,24 @@ struct NodeRecord {
 /// One slot's value. Which member holds it follows the kind: `node` for
 /// create_node and destroy_node, `place` for reorder, `name` for set_name,
 /// `component` for add_component and remove_component, `field` for
-/// set_field and set_reference. None of them is the slot empty: no entity,
-/// no component, or a field at its default.
+/// set_field and set_reference, `mark` for set_mark. None of them is the
+/// slot empty: no entity, no component, or a field at its default.
 struct SlotValue {
     std::optional<NodeRecord> node;
     std::optional<std::size_t> place;
     std::optional<std::string> name;
     std::optional<ComponentRecord> component;
     std::optional<scene::FieldValue> field;
+    std::optional<std::uint64_t> mark;
 
     friend bool operator==(const SlotValue&, const SlotValue&) = default;
 };
 
 struct Delta {
     DeltaKind kind = DeltaKind::CreateNode;
-    /// The entity, by its SourceEntityId.
+    /// The entity, by its SourceEntityId; none for set_mark.
     base::Bits128 entity{};
-    /// For component and field kinds.
+    /// For component, field, and mark kinds.
     std::string component;
     /// For field kinds.
     std::string field;

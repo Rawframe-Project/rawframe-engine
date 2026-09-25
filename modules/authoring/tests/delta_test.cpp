@@ -110,6 +110,10 @@ std::vector<Delta> everyKind() {
               .field = "target",
               .before = {.field = to(kSpawn)},
               .after = {.field = to(kDoor)}},
+        Delta{.kind = DeltaKind::SetMark,
+              .component = "game.position",
+              .before = {.mark = 0xa1},
+              .after = {.mark = 0xa9}},
     };
 }
 

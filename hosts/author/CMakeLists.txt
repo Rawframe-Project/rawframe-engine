@@ -16,4 +16,11 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_runners.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_runners)
     set_tests_properties(author_runners PROPERTIES PASS_REGULAR_EXPRESSION "authored runners")
+    # Runners' scenes migrated when its Age component grows a field, and
+    # refused, unchanged, when it loses one the hall gives a value.
+    add_test(NAME author_migrate
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_migrate.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_arena> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/author_migrate)
+    set_tests_properties(author_migrate PROPERTIES PASS_REGULAR_EXPRESSION "migrated runners")
 endif()

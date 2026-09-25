@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <set>
 
@@ -31,7 +32,9 @@ constexpr std::array<InputDeclaration, 4> kSetReferenceInputs = {{{"entity", Inp
                                                                   {"field", InputType::Field},
                                                                   {"target", InputType::OptionalEntity}}};
 
-constexpr std::array<OperationDeclaration, 8> kDeclarations = {{
+constexpr std::array<InputDeclaration, 1> kRemarkInputs = {{{"component", InputType::Component}}};
+
+constexpr std::array<OperationDeclaration, 9> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kDestroyInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -40,6 +43,7 @@ constexpr std::array<OperationDeclaration, 8> kDeclarations = {{
     {.name = "scene.remove_component", .targets = "rawframe.scene component", .inputs = kComponentInputs},
     {.name = "scene.set_field", .targets = "rawframe.scene field", .inputs = kSetFieldInputs},
     {.name = "scene.set_reference", .targets = "rawframe.scene field", .inputs = kSetReferenceInputs},
+    {.name = "scene.remark_component", .targets = "rawframe.scene schema", .inputs = kRemarkInputs},
 }};
 
 std::unexpected<result::Error>
@@ -174,6 +178,65 @@ result::Result<Target> targetOf(const scene::Scene& scene,
     return made;
 }
 
+/// Whether a recorded value is one a field of `kind` holds: numbers by
+/// their text, so an integer field takes no fraction and an unsigned one no
+/// sign; a truth for a truth; an entity for a reference.
+bool fits(const scene::FieldValue& value, FieldKind kind) {
+    switch (value.kind) {
+    case scene::FieldValue::Kind::True:
+    case scene::FieldValue::Kind::False:
+        return kind == FieldKind::Truth;
+    case scene::FieldValue::Kind::Entity:
+        return kind == FieldKind::Reference;
+    case scene::FieldValue::Kind::Number:
+        break;
+    }
+    const std::string& text = value.number;
+    if (kind == FieldKind::Real) {
+        return true;
+    }
+    if (kind == FieldKind::Signed) {
+        std::int64_t made = 0;
+        const auto kRead = std::from_chars(text.data(), text.data() + text.size(), made);
+        return kRead.ec == std::errc{} && kRead.ptr == text.data() + text.size();
+    }
+    if (kind == FieldKind::Unsigned) {
+        std::uint64_t made = 0;
+        const auto kRead = std::from_chars(text.data(), text.data() + text.size(), made);
+        return !text.starts_with('-') && kRead.ec == std::errc{} && kRead.ptr == text.data() + text.size();
+    }
+    return false;
+}
+
+/// The fields of `component` the scene gives values that do not carry over
+/// to its current schema, each once, in name order.
+std::vector<std::string> residualOf(const scene::Scene& scene, const ComponentSchema& component) {
+    std::set<std::string> residual;
+    const auto kCheck = [&residual, &component](const std::vector<scene::SceneField>& fields) {
+        for (const scene::SceneField& field : fields) {
+            const auto kNow = std::ranges::find(component.fields, field.name, &FieldSchema::name);
+            if (kNow == component.fields.end() || !fits(field.value, kNow->kind)) {
+                residual.insert(field.name);
+            }
+        }
+    };
+    for (const scene::SceneEntity& entity : scene.entities) {
+        for (const scene::SceneComponent& each : entity.components) {
+            if (each.name == component.name) {
+                kCheck(each.fields);
+            }
+        }
+    }
+    for (const scene::SceneInstance& instance : scene.instances) {
+        for (const scene::Override& each : instance.overrides) {
+            if (each.component == component.name) {
+                kCheck(each.fields);
+            }
+        }
+    }
+    return {residual.begin(), residual.end()};
+}
+
 /// Validates `operation` against `scene` and derives its deltas, touching
 /// nothing.
 result::Result<Journal> derive(const scene::Scene& scene, const Operation& operation, const ComponentCatalog& catalog) {
@@ -254,6 +317,33 @@ result::Result<Journal> derive(const scene::Scene& scene, const Operation& opera
                                 .entity = remove->entity,
                                 .component = kTarget.schema->name,
                                 .before = {.component = recordOf(scene, *kTarget.component)}});
+    } else if (const auto* remark = std::get_if<RemarkComponent>(&operation)) {
+        const ComponentSchema* schema = catalog.find(remark->component);
+        if (schema == nullptr) {
+            return notFound(operation, "the catalog has no such component");
+        }
+        const auto kRecorded = std::ranges::find(scene.schema, schema->name, &scene::SchemaMark::component);
+        if (kRecorded == scene.schema.end()) {
+            return notFound(operation, "the scene records no such component");
+        }
+        if (kRecorded->mark != schema->mark) {
+            const std::vector<std::string> kResidual = residualOf(scene, *schema);
+            if (!kResidual.empty()) {
+                std::string names;
+                for (const std::string& name : kResidual) {
+                    names += (names.empty() ? "" : " ") + name;
+                }
+                return std::unexpected<result::Error>{
+                    invalid(operation, "every field the scene gives a component carries over to its layout")
+                        .error()
+                        .withContext("component", schema->name)
+                        .withContext("residual", names)};
+            }
+            journal.push_back(Delta{.kind = DeltaKind::SetMark,
+                                    .component = schema->name,
+                                    .before = {.mark = kRecorded->mark},
+                                    .after = {.mark = schema->mark}});
+        }
     } else {
         const bool kReference = std::holds_alternative<SetReference>(operation);
         const base::Bits128 kEntity =
@@ -336,6 +426,11 @@ result::Status ComponentCatalog::add(ComponentSchema component) {
 
 const ComponentSchema* ComponentCatalog::find(schema::ComponentTypeId id) const noexcept {
     const auto kFound = std::ranges::find(components_, id, &ComponentSchema::id);
+    return kFound != components_.end() ? &*kFound : nullptr;
+}
+
+const ComponentSchema* ComponentCatalog::findNamed(std::string_view name) const noexcept {
+    const auto kFound = std::ranges::find(components_, name, &ComponentSchema::name);
     return kFound != components_.end() ? &*kFound : nullptr;
 }
 

@@ -68,6 +68,9 @@ public:
     /// already here, or whose fields repeat a name.
     [[nodiscard]] result::Status add(ComponentSchema component);
     [[nodiscard]] const ComponentSchema* find(schema::ComponentTypeId id) const noexcept;
+    /// By the name a scene records it by: for tools reading a document,
+    /// never for addressing an operation.
+    [[nodiscard]] const ComponentSchema* findNamed(std::string_view name) const noexcept;
 
 private:
     std::vector<ComponentSchema> components_;
@@ -130,6 +133,15 @@ struct SetReference {
     std::optional<base::Bits128> target;
 };
 
+/// Records the component's current layout mark in place of the one the
+/// scene was authored against (ADR-0067, D153), when every field the scene
+/// gives it still exists by name and each value fits the field's kind now.
+/// Otherwise refuses (`ValidationFailed`) naming the fields that do not
+/// carry over as `residual`: nothing is dropped or reinterpreted silently.
+struct RemarkComponent {
+    schema::ComponentTypeId component{};
+};
+
 using Operation = std::variant<CreateEntity,
                                DestroyEntity,
                                RenameEntity,
@@ -137,7 +149,8 @@ using Operation = std::variant<CreateEntity,
                                AddComponent,
                                RemoveComponent,
                                SetField,
-                               SetReference>;
+                               SetReference,
+                               RemarkComponent>;
 
 /// SPEC-0040's history classes; every operation here is `Undoable`.
 enum class HistoryClass : std::uint8_t {
