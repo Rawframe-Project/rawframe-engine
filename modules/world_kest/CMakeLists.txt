@@ -3,11 +3,11 @@
 # succeeds), and a participant that loads a game description. Separate from
 # rawframe.world and rawframe.kest because neither should know the other.
 rawframe_module(NAME world_kest
-    SOURCES src/game.cpp src/game_participant.cpp src/kest_systems.cpp src/physics_doors.cpp src/predictor.cpp src/replication.cpp
-    DEPS physics2d physics3d physics world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics result base
+    SOURCES src/cooked_game.cpp src/game.cpp src/game_participant.cpp src/kest_systems.cpp src/physics_doors.cpp src/predictor.cpp src/replication.cpp
+    DEPS kest_library physics2d physics3d physics world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics document result base
 )
 
-rawframe_module_tests(NAME world_kest SOURCES tests/game_test.cpp tests/kest_systems_test.cpp)
+rawframe_module_tests(NAME world_kest SOURCES tests/cooked_game_test.cpp tests/game_test.cpp tests/kest_systems_test.cpp)
 if(TARGET rawframe_world_kest_tests)
     target_compile_definitions(rawframe_world_kest_tests PRIVATE
         RAWFRAME_KEST_LIBRARY="${RAWFRAME_KEST_LIBRARY}"

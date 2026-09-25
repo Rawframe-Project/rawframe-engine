@@ -27,6 +27,8 @@ enum class WorldKestError : std::uint32_t {
     UnknownName = 6,
     /// A game file could not be read.
     UnreadableFile = 7,
+    /// A cooked game description that is not one.
+    CookedGameInvalid = 8,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(WorldKestError error) noexcept {
