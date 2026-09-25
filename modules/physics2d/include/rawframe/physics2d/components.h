@@ -3,7 +3,8 @@
 // The components 2D physics reads and writes (SPEC-0037). An entity with a
 // Body2D, a Pose2D, and a Velocity2D has a body in the physics world; gameplay
 // reads the committed pose and velocity, and changes the body by writing
-// them, which the next step takes as a teleport or a new velocity, or by
+// them, which the next step takes as a teleport (the body made again there)
+// or a new velocity, or by
 // writing an Impulse2D, which the next step applies once and clears. A body
 // whose entity also has a Contact2D is told after each step what it touches
 // and what overlaps it (SPEC-0037's per-body opt-in). Units are meters,

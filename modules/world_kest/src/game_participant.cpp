@@ -1,3 +1,4 @@
+#include "physics_doors.h"
 #include "predictor.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -238,11 +240,7 @@ public:
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
         if (game_.physics2d.has_value()) {
-            RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRay",
-                                              .function = &castRayDoor,
-                                              .context = this,
-                                              .takes = kRayTakes,
-                                              .gives = kRayGives}));
+            RAWFRAME_TRY(addPhysicsDoors(doors, &queries_));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap, configuration.unsignedInteger("kest.heap_bytes", 64U << 20U));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kFuel,
@@ -265,29 +263,11 @@ public:
         world::World& world = *simulation_->world();
         std::size_t spawned = 0;
         for (const GameSpawn& spawn : game_.spawns) {
+            RAWFRAME_TRY_ASSIGN(const SpawnValues kSpawned, spawnValues(spawn));
             std::vector<std::pair<schema::ComponentRuntimeId, std::vector<std::byte>>> values;
-            for (const GameSpawnComponent& part : spawn.components) {
-                const std::size_t kIndex =
-                    static_cast<std::size_t>(componentNamed(part.component) - game_.components.data());
-                const kest::TypeLayout& layout = layouts_[kIndex];
-                RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId,
-                                    world.registry().find(game_.components[kIndex].id));
-                std::vector<std::byte> bytes(layout.size);
-                for (const GameFieldValue& value : part.fields) {
-                    const kest::Field* field = nullptr;
-                    for (const kest::Field& candidate : layout.fields) {
-                        field = candidate.name == value.field ? &candidate : field;
-                    }
-                    if (field == nullptr || !writeField(field->kind, value.value, bytes.data() + field->offset)) {
-                        return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
-                                                                     WorldKestError::UnknownName,
-                                                                     "a spawn names a field its component lacks, or "
-                                                                     "gives a value that does not fit it")
-                                                                  .error()
-                                                                  .withContext("field", value.field)};
-                    }
-                }
-                values.emplace_back(kId, std::move(bytes));
+            for (const auto& [kComponent, kBytes] : kSpawned) {
+                RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, world.registry().find(kComponent));
+                values.emplace_back(kId, kBytes);
             }
             for (std::uint32_t made = 0; made < spawn.count; ++made) {
                 RAWFRAME_TRY_ASSIGN(const world::EntityHandle kEntity, world.create());
@@ -356,8 +336,12 @@ public:
         if (predicted_.empty()) {
             return refuse(result::ErrorClass::Unsupported, WorldKestError::UnknownName, "the game predicts nothing");
         }
-        return makePredictor(PredictorSettings{
-            .program = program_, .game = &game_, .descriptors = descriptors_, .limits = predictionLimits_});
+        return makePredictor(PredictorSettings{.program = program_,
+                                               .game = &game_,
+                                               .descriptors = descriptors_,
+                                               .limits = predictionLimits_,
+                                               .physics = predictedPhysics_,
+                                               .level = level_});
     }
 
     std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept override {
@@ -479,6 +463,26 @@ private:
                 }
             }
         }
+        // A predicting client steps its player's body among the level's
+        // static bodies; everything that moves besides it is the server's.
+        if (game_.physics2d.has_value()) {
+            predictedPhysics_ = physics2d::Physics2DSettings{.gravityX = game_.physics2d->gravityX,
+                                                             .gravityY = game_.physics2d->gravityY,
+                                                             .substeps = game_.physics2d->substeps};
+            for (const GameSpawn& spawn : game_.spawns) {
+                RAWFRAME_TRY_ASSIGN(SpawnValues values, spawnValues(spawn));
+                const auto kBody =
+                    std::ranges::find(values, physics2d::Body2D::kComponentTypeId, &SpawnValues::value_type::first);
+                if (kBody == values.end() ||
+                    static_cast<std::uint8_t>(kBody->second[offsetof(physics2d::Body2D, motion)]) !=
+                        static_cast<std::uint8_t>(physics2d::Motion::Static)) {
+                    continue;
+                }
+                for (std::uint32_t made = 0; made < spawn.count; ++made) {
+                    level_.push_back(values);
+                }
+            }
+        }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap,
                             configuration.unsignedInteger("kest.prediction_heap_bytes", 4U << 20U));
         predictionLimits_ = kest::MachineLimits{.heapBytes = static_cast<std::size_t>(kHeap), .fuelPerCall = 1'000'000};
@@ -517,25 +521,33 @@ private:
         return {};
     }
 
-    static constexpr std::array<kest::Parameter, 4> kRayTakes = {kest::Parameter{kest::Slot::F64},
-                                                                 kest::Parameter{kest::Slot::F64},
-                                                                 kest::Parameter{kest::Slot::F32},
-                                                                 kest::Parameter{kest::Slot::F32}};
-    static constexpr std::array<kest::Parameter, 1> kRayGives = {
-        kest::Parameter{kest::Slot::Value, "rawframe.physics2d.RayHit2D"}};
+    using SpawnValues = std::vector<std::pair<schema::ComponentTypeId, std::vector<std::byte>>>;
 
-    /// `Physics2D.castRay`: the physics made for this game answers.
-    static void castRayDoor(kest::DoorCall& call, void* context) noexcept {
-        const auto& self = *static_cast<const GameParticipant*>(context);
-        if (self.queries_ == nullptr) {
-            call.fail("this World has no physics to ask");
-            return;
+    /// The values one spawn line gives each of its components.
+    [[nodiscard]] result::Result<SpawnValues> spawnValues(const GameSpawn& spawn) const {
+        SpawnValues values;
+        for (const GameSpawnComponent& part : spawn.components) {
+            const std::size_t kIndex =
+                static_cast<std::size_t>(componentNamed(part.component) - game_.components.data());
+            const kest::TypeLayout& layout = layouts_[kIndex];
+            std::vector<std::byte> bytes(layout.size);
+            for (const GameFieldValue& value : part.fields) {
+                const kest::Field* field = nullptr;
+                for (const kest::Field& candidate : layout.fields) {
+                    field = candidate.name == value.field ? &candidate : field;
+                }
+                if (field == nullptr || !writeField(field->kind, value.value, bytes.data() + field->offset)) {
+                    return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                                 WorldKestError::UnknownName,
+                                                                 "a spawn names a field its component lacks, or "
+                                                                 "gives a value that does not fit it")
+                                                              .error()
+                                                              .withContext("field", value.field)};
+                }
+            }
+            values.emplace_back(game_.components[kIndex].id, std::move(bytes));
         }
-        const physics2d::RayHit2D kHit = self.queries_->castRay(
-            call.real(0), call.real(1), static_cast<float>(call.real(2)), static_cast<float>(call.real(3)));
-        if (!call.answerValue(std::as_bytes(std::span{&kHit, 1}))) {
-            call.fail("the program's RayHit2D is not the engine's");
-        }
+        return values;
     }
 
     /// A component's layout as the program has it. A program lays out only
@@ -736,6 +748,8 @@ private:
     network::Fingerprint fingerprint_;
     std::vector<schema::ComponentTypeId> predicted_;
     kest::MachineLimits predictionLimits_;
+    std::optional<physics2d::Physics2DSettings> predictedPhysics_;
+    std::vector<SpawnValues> level_;
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;
     std::optional<physics2d::Physics2DSettings> physics2d_;

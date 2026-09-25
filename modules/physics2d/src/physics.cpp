@@ -324,10 +324,10 @@ struct Physics2D::State {
             } else {
                 // 2. What gameplay wrote since the last step.
                 if (!same(entry.pose, *row.pose)) {
-                    if (std::isfinite(row.pose->x) && std::isfinite(row.pose->y) && finite(row.pose->c) &&
-                        finite(row.pose->s)) {
-                        m2Body_SetTransform(entry.body, m2Pos2{row.pose->x, row.pose->y}, rotationOf(*row.pose));
-                        ++statistics.teleports;
+                    remove(entry);
+                    ++statistics.teleports;
+                    if (!make(row, entry)) {
+                        continue;
                     }
                 }
                 if (!same(entry.velocity, *row.velocity)) {

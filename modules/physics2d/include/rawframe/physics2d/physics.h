@@ -8,8 +8,11 @@
 //      the three body components gets a body, one that lost them or is gone
 //      loses it, and a changed Body2D makes the body again;
 //   2. what gameplay wrote since the last step goes in: a Pose2D that is
-//      not what the last step wrote is a teleport, a Velocity2D likewise a
-//      new velocity, and an Impulse2D is applied and cleared;
+//      not what the last step wrote is a teleport, which makes the body
+//      again there (so a body put somewhere carries nothing of where it was,
+//      and steps as one made there would: what a predicting client relies
+//      on), a Velocity2D likewise a new velocity, and an Impulse2D is
+//      applied and cleared;
 //   3. the world steps once, with the settings' substeps;
 //   4. every Contact2D is written from the step's contact and overlap
 //      streams, and every body's pose and velocity are written back.

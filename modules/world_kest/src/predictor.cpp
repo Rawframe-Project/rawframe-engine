@@ -1,5 +1,6 @@
 #include "predictor.h"
 
+#include "physics_doors.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/errors.h"
@@ -44,7 +45,9 @@ public:
         // The predicted systems, with storage of their own for everything a
         // declaration views.
         for (const GameComponent& component : game.components) {
-            components_.push_back(KestComponent{.component = component.id, .kestType = component.kestType});
+            if (settings.program->layout(component.kestType).has_value()) {
+                components_.push_back(KestComponent{.component = component.id, .kestType = component.kestType});
+            }
         }
         for (const GameSystem& system : game.systems) {
             if (!system.predicted) {
@@ -79,6 +82,9 @@ public:
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
+        if (settings.physics.has_value()) {
+            RAWFRAME_TRY(addPhysicsDoors(doors, &queries_));
+        }
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{.program = settings.program,
                                                                     .doors = std::move(doors),
@@ -87,6 +93,19 @@ public:
                                                                     .systems = declarations}));
         std::vector<world::SystemDeclaration> scheduled;
         RAWFRAME_TRY(systems_->declareSystems(*registry_, scheduled));
+        if (settings.physics.has_value()) {
+            RAWFRAME_TRY_ASSIGN(physics_, physics2d::Physics2D::create(*settings.physics));
+            RAWFRAME_TRY(physics_->declareSystems(*registry_, scheduled));
+            queries_ = physics_.get();
+            for (const auto& entity : settings.level) {
+                RAWFRAME_TRY_ASSIGN(const world::EntityHandle kMade, world_->create());
+                for (const auto& [kComponent, kBytes] : entity) {
+                    RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kRuntime, registry_->find(kComponent));
+                    std::vector<std::byte> value = kBytes;
+                    RAWFRAME_TRY(world_->insertErased(kMade, kRuntime, value.data()));
+                }
+            }
+        }
         RAWFRAME_TRY_ASSIGN(world::Schedule schedule, world::Schedule::compile(scheduled, *registry_));
         schedule_.emplace(std::move(schedule));
         return {};
@@ -144,6 +163,8 @@ private:
     std::vector<KestComponent> components_;
     std::vector<Declared> declared_;
     std::unique_ptr<KestSystems> systems_;
+    std::unique_ptr<physics2d::Physics2D> physics_;
+    const physics2d::Physics2DQueries* queries_ = nullptr;
     std::optional<world::Schedule> schedule_;
     world::TickIndex tick_;
 };

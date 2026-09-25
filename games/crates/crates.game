@@ -1,13 +1,14 @@
 # The sample physics game: players are balls rolling along the ground among a
 # pile of crates, all of it Maul2D bodies stepped on the server. Each client
-# is sent what is within 40 meters of its ball and sees it between states.
+# is sent what is within 40 meters of its ball, sees it between states, and
+# predicts its own ball among the level's static bodies.
 program crates.kest
 physics2d gravity 0 -10 substeps 4
 
 component 03c81a21-9030-46d1-8e40-897f8af85e86 crates.steer Steer
 
 system crates.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose with crates.steer random spawn before rawframe.physics2d.step
-system crates.push simulation push read crates.steer write rawframe.physics2d.impulse read rawframe.physics2d.contact before rawframe.physics2d.step
+system crates.push simulation push read crates.steer write rawframe.physics2d.impulse read rawframe.physics2d.contact before rawframe.physics2d.step predicted
 
 # The ground, a hundred meters wide, and walls at its ends.
 spawn 1 rawframe.physics2d.body motion=0 shape=1 width=50 height=0.5 friction=0.8 rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.impulse
@@ -24,8 +25,9 @@ spawn 1 rawframe.physics2d.body motion=2 shape=1 width=0.5 height=0.5 density=1 
 spawn 1 rawframe.physics2d.body motion=2 shape=1 width=0.5 height=0.5 density=1 friction=0.6 rawframe.physics2d.pose x=20 y=1 rawframe.physics2d.velocity rawframe.physics2d.impulse
 spawn 1 rawframe.physics2d.body motion=2 shape=1 width=0.5 height=0.5 density=1 friction=0.6 rawframe.physics2d.pose x=20 y=2 rawframe.physics2d.velocity rawframe.physics2d.impulse
 
-replicate rawframe.physics2d.body rawframe.physics2d.pose crates.steer
+replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity crates.steer
 player crates.steer rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.impulse rawframe.physics2d.contact
 input crates.steer
 interest rawframe.physics2d.pose x y within 40
 interpolate rawframe.physics2d.pose
+predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity crates.steer

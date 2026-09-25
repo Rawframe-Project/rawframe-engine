@@ -225,10 +225,20 @@ public:
             bot.world = std::make_unique<world::World>(registry_);
             std::optional<PredictionSettings> prediction;
             if (kPredicting) {
-                RAWFRAME_TRY_ASSIGN(bot.predictor, plan_->predictor());
-                prediction = PredictionSettings{
-                    .predictor = bot.predictor.get(),
-                    .predicted = {plan_->predictedComponents().begin(), plan_->predictedComponents().end()}};
+                auto predictor = plan_->predictor();
+                if (!predictor.has_value() && predictor.error().errorClass() != result::ErrorClass::ResourceExhausted) {
+                    return std::unexpected<result::Error>{std::move(predictor).error()};
+                }
+                // A process holds only so many physics worlds; a bot past
+                // them plays as a client that does not predict would.
+                if (predictor.has_value()) {
+                    bot.predictor = std::move(*predictor);
+                    prediction = PredictionSettings{
+                        .predictor = bot.predictor.get(),
+                        .predicted = {plan_->predictedComponents().begin(), plan_->predictedComponents().end()}};
+                } else {
+                    ++unpredicted_;
+                }
             }
             RAWFRAME_TRY_ASSIGN(bot.client,
                                 ReplicationClient::create(*bot.sessions,
@@ -310,6 +320,7 @@ public:
                      "bots totals",
                      {diagnostics::field("bots", bots_.size()),
                       diagnostics::field("admitted", admitted),
+                      diagnostics::field("unpredicted", unpredicted_),
                       diagnostics::field("mirroredEntities", mirrored),
                       diagnostics::field("stateDatagrams", stateDatagrams),
                       diagnostics::field("predictedTicks", predicted.predictedTicks),
@@ -343,6 +354,8 @@ private:
     std::string endpoint_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     std::vector<Bot> bots_;
+    /// Bots that would predict but could not have a predictor.
+    std::uint64_t unpredicted_ = 0;
     diagnostics::Emitter emitter_;
 };
 
