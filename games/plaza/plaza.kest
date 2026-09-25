@@ -79,3 +79,68 @@ fn swing(count: i32, blades: [Blade], targets: [physics3d.Target3D], entities: [
         i = i + 1
     }
 }
+
+// A stroller: its pace (nought idles, 1.4 walks, four runs), where its head
+// looks (the plaza's middle, in its own frame), where it is on the plaza,
+// the ticks it has strolled, and how squarely its head faces the middle
+// (the head's forward along the look, which a server's head keeps above
+// nought).
+struct Stroller {
+    pace: f64
+    look_x: f64
+    look_y: f64
+    look_z: f64
+    x: f64
+    z: f64
+    clock: u32
+    gaze: f64
+}
+
+// Strollers walk by root motion (D134): each step's move, turned from the
+// stroller's own frame as it was by the facing the step turned from, is
+// where it goes. Four seconds each it idles, walks, and runs, and its head
+// is told where the plaza's middle is from where it now stands and faces.
+fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let m = motions[i]
+        // The facing before this step's turn: a turn about y, (0, s, 0, c).
+        let s = m.facingY * m.turnW - m.facingW * m.turnY
+        let c = m.facingW * m.turnW + m.facingY * m.turnY
+        let cos = c * c - s * s
+        let sin = 2.0 * s * c
+        strollers[i].x = strollers[i].x + cos * m.moveX + sin * m.moveZ
+        strollers[i].z = strollers[i].z - sin * m.moveX + cos * m.moveZ
+        let clock = strollers[i].clock + u32(1)
+        strollers[i].clock = clock
+        let phase = (clock / u32(240)) % u32(3)
+        let pace = f64(0.0)
+        if phase == u32(1) {
+            pace = 1.4
+        }
+        if phase == u32(2) {
+            pace = 4.0
+        }
+        strollers[i].pace = pace
+        // The middle at head height, turned into its frame by its facing now.
+        let fc = m.facingW * m.facingW - m.facingY * m.facingY
+        let fs = 2.0 * m.facingY * m.facingW
+        let wx = 0.0 - strollers[i].x
+        let wz = 0.0 - strollers[i].z
+        strollers[i].look_x = fc * wx - fs * wz
+        strollers[i].look_y = 1.9
+        strollers[i].look_z = fs * wx + fc * wz
+        // The head as the step posed it, turned toward last step's look.
+        let head = animation.bone(entities[i], u32(2))
+        if head.posed {
+            let qx = f64(head.qx)
+            let qy = f64(head.qy)
+            let qz = f64(head.qz)
+            let qw = f64(head.qw)
+            let forwardX = 2.0 * (qx * qz + qw * qy)
+            let forwardZ = 1.0 - 2.0 * (qx * qx + qy * qy)
+            strollers[i].gaze = forwardX * strollers[i].look_x + forwardZ * strollers[i].look_z
+        }
+        i = i + 1
+    }
+}

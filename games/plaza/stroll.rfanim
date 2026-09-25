@@ -1,0 +1,115 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.graph",
+  "interface": {
+    "parameters": {
+      "look_x": {
+        "parameter": "7a11000000000001",
+        "type": "float",
+        "default": 0,
+        "replication": "server_authoritative"
+      },
+      "look_y": {
+        "parameter": "7a11000000000002",
+        "type": "float",
+        "default": 0,
+        "replication": "server_authoritative"
+      },
+      "look_z": {
+        "parameter": "7a11000000000003",
+        "type": "float",
+        "default": 1,
+        "replication": "server_authoritative"
+      },
+      "pace": {
+        "parameter": "7a11000000000004",
+        "type": "float",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 4,
+        "replication": "server_authoritative"
+      }
+    }
+  },
+  "graph": {
+    "51a0000000000001": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "bc6976ef95e479d8f0201730461192da"
+      },
+      "inputs": {}
+    },
+    "51a0000000000002": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "b450b019c1fc323c5e4f407a4e4df2a2"
+      },
+      "inputs": {}
+    },
+    "51a0000000000003": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "edf1c8482e8ef47645b071f3a5d1ed19"
+      },
+      "inputs": {}
+    },
+    "51a0000000000004": {
+      "type": "rawframe/blend_space_1d@1",
+      "params": {
+        "phaseSync": "weight_leader",
+        "points": {
+          "idle": 0,
+          "run": 4,
+          "walk": 1.4
+        },
+        "position": {
+          "parameter": "7a11000000000004"
+        }
+      },
+      "inputs": {
+        "idle": {
+          "node": "51a0000000000001",
+          "output": "pose"
+        },
+        "run": {
+          "node": "51a0000000000003",
+          "output": "pose"
+        },
+        "walk": {
+          "node": "51a0000000000002",
+          "output": "pose"
+        }
+      }
+    },
+    "51a0000000000005": {
+      "type": "rawframe/output@1",
+      "params": {},
+      "inputs": {
+        "pose": {
+          "node": "51a0000000000004",
+          "output": "pose"
+        }
+      }
+    }
+  },
+  "modifiers": [
+    {
+      "type": "rawframe/look_at@1",
+      "params": {
+        "bone": "893c7d1f63779f19797447d898a7cfa7",
+        "goal": [
+          {
+            "parameter": "7a11000000000001"
+          },
+          {
+            "parameter": "7a11000000000002"
+          },
+          {
+            "parameter": "7a11000000000003"
+          }
+        ],
+        "relevance": "simulation"
+      }
+    }
+  ]
+}

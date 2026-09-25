@@ -140,13 +140,15 @@ if(RAWFRAME_BUILD_TESTS)
     # mound a cooked mesh among them, its gate's hinge, and one walker for
     # each player are made, and the walkers move as characters. The blade's
     # swing is played from its cooked graph, and its body carried to its
-    # bone by kinematic targets, never teleported.
+    # bone by kinematic targets, never teleported. Eight strollers walk by
+    # root motion through their blend space, their heads turned by a stage
+    # the server runs.
     add_test(NAME plaza_bots
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_bots PROPERTIES
                          FIXTURES_REQUIRED plaza_content
-                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":30,\"bodiesRemoved\":0,\"bodiesRefused\":0,\"teleports\":0,.*\"targets\":[1-9][0-9]*,\"characterMoves\":[1-9][0-9]*,\"jointsMade\":1,\"jointsRemoved\":0,\"jointsRefused\":0.*\"instancesMade\":1,\"instancesRemoved\":0,\"animatorsRefused\":0")
+                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":30,\"bodiesRemoved\":0,\"bodiesRefused\":0,\"teleports\":0,.*\"targets\":[1-9][0-9]*,\"characterMoves\":[1-9][0-9]*,\"jointsMade\":1,\"jointsRemoved\":0,\"jointsRefused\":0.*\"instancesMade\":9,\"instancesRemoved\":0,\"animatorsRefused\":0,.*\"rootMotions\":[1-9][0-9]*,\"stagesRun\":[1-9][0-9]*")
     # Four bots predict their walkers in 3D: a thousand ticks confirmed, the
     # rollbacks only those of admission.
     add_test(NAME plaza_prediction

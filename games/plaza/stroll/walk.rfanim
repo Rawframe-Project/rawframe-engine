@@ -1,0 +1,72 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.clip",
+  "skeleton": "c9c0c7f004c551eed80f36b2ac84e44a",
+  "duration": 1,
+  "loop": "loop",
+  "tracks": [
+    {
+      "bone": "1e895f353806509c756004284b9483ea",
+      "channel": "translation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "time": 0.5,
+          "value": [
+            0,
+            1.03,
+            0.7
+          ]
+        }
+      ],
+      "drift": [
+        0,
+        0,
+        1.4
+      ]
+    },
+    {
+      "bone": "1e895f353806509c756004284b9483ea",
+      "channel": "rotation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ],
+      "drift": [
+        0,
+        0.05233595624294383,
+        0,
+        0.9986295347545738
+      ]
+    }
+  ],
+  "events": [
+    {
+      "event": "5f3a0c2d9e81b746",
+      "name": "footstep",
+      "time": 0,
+      "relevance": "presentation"
+    },
+    {
+      "event": "5f3a0c2d9e81b746",
+      "name": "footstep",
+      "time": 0.5,
+      "relevance": "presentation"
+    }
+  ],
+  "syncMarkers": []
+}

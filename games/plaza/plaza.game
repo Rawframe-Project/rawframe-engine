@@ -15,13 +15,20 @@ mesh 6d3cbd2231e069f1 mound.gltf
 
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
 component 9b8e1f52-3c47-4d0a-a6e2-5f1d7c93b204 plaza.blade Blade
+component 2d6e0b91-7c35-4f48-9a1e-3b5c8d0f6a27 plaza.stroller Stroller
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
 animator 3a7d1f0c2b9e4d61 blade.rfanim
 
+# The strollers' locomotion under stroll/: idle, walk, and run on a blend
+# space by pace, synced by phase, moving them by root motion, their heads
+# turned by a look-at the server runs too.
+animator 5c7e2a91f04b3d68 stroll.rfanim parameters plaza.stroller
+
 system plaza.join simulation join write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.character with plaza.stick random spawn before rawframe.physics3d.step
 system plaza.swing simulation swing read plaza.blade write rawframe.physics3d.target entities after rawframe.animation.step before rawframe.physics3d.step
+system plaza.stroll simulation stroll write plaza.stroller read rawframe.animation.root_motion entities after rawframe.animation.step
 system plaza.walk simulation walk read plaza.stick read rawframe.physics3d.character write rawframe.physics3d.velocity before rawframe.physics3d.step predicted
 
 # The plaza, eighty meters square, and walls around it.
@@ -52,7 +59,17 @@ spawn 1 plaza.blade pivotX=30 pivotY=4 pivotZ=30 rawframe.animation.animator gra
 # The mound, ten meters across and 1.2 high, on the plaza's floor.
 spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-20 y=0.5 z=20 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=mound.gltf
 
-replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick
+# Eight strollers about the plaza, each starting its pace at another time.
+spawn 1 plaza.stroller x=-12 z=-4 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
+spawn 1 plaza.stroller x=-6 z=12 clock=30 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
+spawn 1 plaza.stroller x=4 z=-14 clock=60 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
+spawn 1 plaza.stroller x=12 z=6 clock=90 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
+spawn 1 plaza.stroller x=-18 z=8 clock=120 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
+spawn 1 plaza.stroller x=18 z=-8 clock=150 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
+spawn 1 plaza.stroller x=0 z=18 clock=180 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
+spawn 1 plaza.stroller x=-2 z=-20 clock=210 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
+
+replicate plaza.stroller rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
 input plaza.stick
 interest rawframe.physics3d.pose x z within 30
