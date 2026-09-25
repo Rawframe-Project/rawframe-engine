@@ -1,4 +1,5 @@
 #include "admission.h"
+#include "animation_doors.h"
 #include "animation_plan.h"
 #include "game_files_participant.h"
 #include "physics_doors.h"
@@ -246,6 +247,7 @@ public:
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
+        RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors_));
         if (game_.physics.has_value()) {
             RAWFRAME_TRY(addPhysicsDoors(doors, game_.physics->dimensions, &doorContext_));
         }
@@ -447,7 +449,7 @@ public:
         return animation_;
     }
     void attach(const world_animation::AnimationQueries* queries) noexcept override {
-        animationQueries_ = queries;
+        animationDoors_.queries = queries;
     }
 
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
@@ -1194,9 +1196,7 @@ private:
     std::optional<physics3d::Physics3DSettings> physics3d_;
     PhysicsDoorContext doorContext_;
     std::optional<world_animation::AnimationSettings> animation_;
-    /// Where scripts will ask about poses and events, while the World's
-    /// animation lives.
-    const world_animation::AnimationQueries* animationQueries_ = nullptr;
+    AnimationDoorContext animationDoors_;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.
     std::optional<GameEntityField> unwritable_;

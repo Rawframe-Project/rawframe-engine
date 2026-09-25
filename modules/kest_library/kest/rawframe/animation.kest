@@ -1,0 +1,66 @@
+module rawframe.animation
+
+// Animation as World data (ADR-0039, SPEC-0035, D124): an entity with an
+// Animator plays the graph of the game's `animator` line it names, its
+// parameters set every step from the fields of the component that line
+// names. The step, `rawframe.animation.step`, runs in the simulation phase:
+// systems that set parameters run before it, and those that read poses or
+// events after it.
+
+import rawframe.world
+
+// Animator.relevance: a PRESENTATION animator plays where poses are drawn;
+// a SIMULATION one on a dedicated server too, for gameplay that follows
+// its bones.
+const PRESENTATION: u8 = 0
+const SIMULATION: u8 = 1
+
+// The game's animator, by the identity its `animator` line gives it; the
+// entity plays that graph from its start whenever `graph` or `relevance`
+// changes. Every step writes `events`: how many events the graph fired in
+// it, which `event` reads one by one.
+struct Animator {
+    graph: u64
+    relevance: u8
+    events: u32
+}
+
+// A bone where the last step posed it, in the entity's own frame (model
+// space): its origin, and its rotation as a unit quaternion. Not `posed`
+// for an entity not played here, or past its skeleton's last bone.
+struct BonePose {
+    posed: bool
+    x: f64
+    y: f64
+    z: f64
+    qx: f32
+    qy: f32
+    qz: f32
+    qw: f32
+}
+
+extern fn Animation.bone(entity: world.Entity, index: u32) -> BonePose
+
+// Bone `index`, in its skeleton's order, of the entity's pose.
+fn bone(entity: world.Entity, index: u32) -> BonePose {
+    return Animation.bone(entity, index)
+}
+
+// An event the graph fired in the last step: its identity, whether it is of
+// SIMULATION relevance, whether it was crossed playing backward, and the
+// weight of the node that fired it. Not `found` past the last.
+struct AnimationEvent {
+    found: bool
+    simulation: bool
+    reverse: bool
+    event: u64
+    weight: f32
+}
+
+extern fn Animation.event(entity: world.Entity, index: u32) -> AnimationEvent
+
+// The event at `index`, in the order the graph fired them, of the entity's
+// last step; its Animator's `events` says how many there are.
+fn event(entity: world.Entity, index: u32) -> AnimationEvent {
+    return Animation.event(entity, index)
+}

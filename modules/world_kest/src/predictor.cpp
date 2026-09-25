@@ -1,5 +1,6 @@
 #include "predictor.h"
 
+#include "animation_doors.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "rawframe/world/schedule.h"
@@ -85,6 +86,8 @@ public:
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
+        // A predicting client plays no animation: its doors refuse.
+        RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors_));
         dimensions_ = settings.physics3d.has_value() ? 3 : settings.physics.has_value() ? 2 : 0;
         if (dimensions_ != 0) {
             RAWFRAME_TRY(addPhysicsDoors(doors, dimensions_, &doorContext_));
@@ -240,6 +243,8 @@ private:
     std::unique_ptr<physics3d::Physics3D> physics3d_;
     /// A client knows no one's interest but its own: nothing is gated.
     PhysicsDoorContext doorContext_;
+    /// Never set: prediction plays no animation.
+    AnimationDoorContext animationDoors_;
     std::optional<world::Schedule> schedule_;
     world::TickIndex tick_;
     world::TickRate rate_;

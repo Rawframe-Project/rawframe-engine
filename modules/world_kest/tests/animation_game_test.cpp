@@ -1,19 +1,23 @@
-// Games with animators (D124): an `animator` line's graph read beside the
+// Games with animators (D127): an `animator` line's graph read beside the
 // description, its clip and skeleton found by their sidecars, its parameter
 // bound to the game's component by name, and entities played by the
 // World's animation, all of them in a client's World and only the
-// simulation's on a dedicated server.
+// simulation's on a dedicated server. A program reads their bones and
+// events through rawframe.animation's doors, which answer nothing past the
+// bones and events there are.
 
 #include "game_harness.h"
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/test/test.h"
-#include "rawframe/world/query.h"
+#include "rawframe/world/column_query.h"
 #include "rawframe/world_animation/components.h"
 #include "rawframe/world_animation/registrar.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <string>
 #include <unistd.h>
@@ -39,9 +43,10 @@ std::string sidecar(base::Bits128 id) {
 }
 
 /// A game in a directory of its own: a pendulum's swing, one second long,
-/// that ticks at its middle, played at the speed its entity's gait says.
-/// `gait` is the program's parameter component.
-std::filesystem::path writeGame(std::string_view name, std::string_view gait) {
+/// that reaches a meter along x at three quarters and ticks at its middle,
+/// played at the speed its entity's gait says (tests/game/swing.kest, its
+/// speed field declared as `speed`).
+std::filesystem::path writeGame(std::string_view name, std::string_view speed) {
     using namespace animation;
     const std::filesystem::path kDirectory =
         std::filesystem::temp_directory_path() / ("rawframe-" + std::string{name} + "-" + std::to_string(::getpid()));
@@ -66,14 +71,13 @@ std::filesystem::path writeGame(std::string_view name, std::string_view gait) {
     writeText(kDirectory / "rig" / "swing.rfanim.rfmeta", sidecar(kSwingId));
     writeText(kDirectory / "swinging.rfanim", *writeGraph(kGraph));
     writeText(kDirectory / "swinging.rfanim.rfmeta", sidecar(kGraphId));
-    writeText(kDirectory / "swing.kest",
-              "module swing\n\nstruct Gait {\n" + std::string{gait} +
-                  "}\n\nfn hold(count: i32, gaits: [Gait]) {\n    let i = 0\n    while i < count {\n        i = i + 1\n"
-                  "    }\n}\n");
+    std::string program = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "swing.kest");
+    program.replace(program.find("speed: f32"), 10, speed);
+    writeText(kDirectory / "swing.kest", program);
     writeText(kDirectory / "swing.game",
               "program swing.kest\n"
               "component 1c0ffee0-0000-4000-8000-00000000a001 swing.gait Gait\n"
-              "system swing.hold simulation hold read swing.gait\n"
+              "system swing.follow simulation follow write swing.gait entities after rawframe.animation.step\n"
               "animator 5a0000000000a001 swinging.rfanim parameters swing.gait\n"
               "spawn 1 swing.gait speed=1 rawframe.animation.animator graph=swinging.rfanim relevance=1\n"
               "spawn 1 swing.gait speed=1 rawframe.animation.animator graph=swinging.rfanim relevance=0\n"
@@ -87,11 +91,24 @@ const std::array<composition::RegistrarEntry, 4> kAnimated = {
     composition::RegistrarEntry{"world_animation", &world_animation::registerParticipants, world_animation::kScopes},
     composition::RegistrarEntry{"test", &registerWatcher, world_runtime::kScopes}};
 
-/// How many events each animator fired, in entity order, summed over
-/// `ticks` ticks at 60 Hz, played in a composition for `role`; none when
-/// the game does not start.
-std::optional<std::vector<std::uint64_t>>
-play(const std::filesystem::path& game, composition::TargetRole role, int ticks) {
+/// swing.Gait as the program lays it out.
+struct Gait {
+    float speed = 0;
+    double reach = 0;
+    std::uint32_t ticks = 0;
+    std::uint32_t strays = 0;
+};
+
+/// One entity's animation after a run: the events its Animator said were
+/// fired, summed over the steps, and its gait.
+struct Played {
+    std::uint64_t events = 0;
+    Gait gait;
+};
+
+/// Each entity, in entity order, played for `ticks` ticks at 60 Hz in a
+/// composition for `role`; none when the game does not start.
+std::optional<std::vector<Played>> play(const std::filesystem::path& game, composition::TargetRole role, int ticks) {
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(
         composition::CompositionRequest{
@@ -110,53 +127,86 @@ play(const std::filesystem::path& game, composition::TargetRole role, int ticks)
         simulation = nullptr;
         return std::nullopt;
     }
-    std::vector<std::uint64_t> fired;
+    std::vector<Played> played;
     for (int tick = 0; tick < ticks; ++tick) {
         clock.advance(execution::MonotonicDuration{16'666'667});
         composition.runHostPhase(
             composition::HostPhase::RunWorlds,
             composition::HostFrame{.iteration = static_cast<std::uint64_t>(tick), .now = clock.now()});
         world::World& world = *simulation->world();
-        std::vector<std::pair<world::EntityHandle, std::uint32_t>> animators;
-        auto query = world::Query<world::Read<world_animation::Animator>>::resolve(world.registry());
-        query->forEach(world, [&animators](world::EntityHandle entity, const world_animation::Animator& animator) {
-            animators.emplace_back(entity, animator.events);
-        });
-        std::ranges::sort(animators);
-        fired.resize(animators.size());
-        for (std::size_t at = 0; at < animators.size(); ++at) {
-            fired[at] += animators[at].second;
+        const auto kGait =
+            world.registry().find(schema::ComponentTypeId::fromText("1c0ffee0-0000-4000-8000-00000000a001"));
+        const auto kAnimator = world.registry().find(world_animation::Animator::kComponentTypeId);
+        const std::array<world::ColumnTerm, 2> kTerms = {world::ColumnTerm{*kAnimator, world::Access::Read},
+                                                         world::ColumnTerm{*kGait, world::Access::Read}};
+        std::vector<std::pair<world::EntityHandle, Played>> now;
+        world::ColumnQuery::resolve(kTerms, world.registry())
+            ->forEachChunk(world, [&now](const world::ColumnChunk& chunk) {
+                for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                    Played each;
+                    world_animation::Animator animator;
+                    std::memcpy(&animator, chunk.columns[0] + (row * sizeof animator), sizeof animator);
+                    std::memcpy(&each.gait, chunk.columns[1] + (row * sizeof each.gait), sizeof each.gait);
+                    each.events = animator.events;
+                    now.emplace_back(chunk.entities[row], each);
+                }
+            });
+        std::ranges::sort(now, {}, &std::pair<world::EntityHandle, Played>::first);
+        played.resize(now.size());
+        for (std::size_t at = 0; at < now.size(); ++at) {
+            played[at] = Played{.events = played[at].events + now[at].second.events, .gait = now[at].second.gait};
         }
     }
     composition.stop();
     simulation = nullptr;
-    return fired;
+    return played;
 }
 
 } // namespace
 
 RAWFRAME_TEST(AGameAnimatesItsEntities) {
-    const std::filesystem::path kGame = writeGame("animated", "    speed: f32\n");
-    // Three seconds: the swing at full speed ticks at 0.5, 1.5, and 2.5;
-    // the one at rest never gets there.
+    const std::filesystem::path kGame = writeGame("animated", "speed: f32");
+    // Half a second: the swing at full speed is two thirds of the way to
+    // its reach and has not ticked; the one at rest is where it started.
+    const auto kHalf = play(kGame, composition::TargetRole::Client, 30);
+    RAWFRAME_EXPECT(kHalf.has_value() && kHalf->size() == 3);
+    if (kHalf.has_value() && kHalf->size() == 3) {
+        RAWFRAME_EXPECT(std::abs((*kHalf)[0].gait.reach - (2.0 / 3.0)) < 1e-9 && (*kHalf)[0].gait.ticks == 0);
+        RAWFRAME_EXPECT((*kHalf)[2].gait.reach == 0);
+    }
+    // Three seconds: the swing at full speed ticks at 0.5, 1.5, and 2.5,
+    // and the program saw each; the one at rest never gets there.
     const auto kClient = play(kGame, composition::TargetRole::Client, 180);
-    RAWFRAME_EXPECT(kClient.has_value() && *kClient == (std::vector<std::uint64_t>{3, 3, 0}));
-    // A dedicated server plays only the simulation's animators.
+    RAWFRAME_EXPECT(kClient.has_value() && kClient->size() == 3);
+    if (kClient.has_value() && kClient->size() == 3) {
+        for (const std::uint64_t kSeen : {0, 1, 2}) {
+            const Played& each = (*kClient)[kSeen];
+            RAWFRAME_EXPECT(each.events == (kSeen < 2 ? 3U : 0U) && each.gait.ticks == each.events);
+            RAWFRAME_EXPECT(each.gait.strays == 0);
+        }
+    }
+    // A dedicated server plays only the simulation's animators; the other
+    // has no pose to ask about.
     const auto kServer = play(kGame, composition::TargetRole::DedicatedServer, 180);
-    RAWFRAME_EXPECT(kServer.has_value() && *kServer == (std::vector<std::uint64_t>{3, 0, 0}));
+    RAWFRAME_EXPECT(kServer.has_value() && kServer->size() == 3);
+    if (kServer.has_value() && kServer->size() == 3) {
+        RAWFRAME_EXPECT((*kServer)[0].events == 3 && (*kServer)[1].events == 0 && (*kServer)[2].events == 0);
+        RAWFRAME_EXPECT((*kServer)[1].gait.reach == 0 && (*kServer)[1].gait.ticks == 0);
+        RAWFRAME_EXPECT((*kServer)[0].gait.strays == 0 && (*kServer)[1].gait.strays == 0);
+    }
     std::filesystem::remove_all(kGame);
 }
 
 RAWFRAME_TEST(AnAnimatorsParametersAreItsComponentsFields) {
     // A parameter with no field of its name, or one of another type, and the
     // game does not start.
-    for (const std::string_view kGait : {"    pace: f32\n", "    speed: i32\n"}) {
-        const std::filesystem::path kGame = writeGame("misanimated", kGait);
+    for (const std::string_view kSpeed : {"pace: f32", "speed: i32"}) {
+        const std::filesystem::path kGame = writeGame("misanimated", kSpeed);
         RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::Client, 1).has_value());
         std::filesystem::remove_all(kGame);
     }
     // Nor without its clip beside it.
-    const std::filesystem::path kGame = writeGame("unrigged", "    speed: f32\n");
+    const std::filesystem::path kGame = writeGame("unrigged", "speed: f32");
     std::filesystem::remove(kGame / "rig" / "swing.rfanim.rfmeta");
     RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::Client, 1).has_value());
     std::filesystem::remove_all(kGame);

@@ -1,0 +1,36 @@
+module swing
+
+// A pendulum's swing, played at the speed its gait says. After each
+// animation step: how far along x its one bone has reached, how many steps
+// fired an event, and how many answers the animation doors gave past the
+// bones and events there are, which must be none.
+
+import rawframe.animation
+import rawframe.world
+
+struct Gait {
+    speed: f32
+    reach: f64
+    ticks: u32
+    strays: u32
+}
+
+const FAR: u32 = 4294967295
+
+fn follow(count: i32, gaits: [Gait], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let entity = entities[i]
+        gaits[i].reach = animation.bone(entity, u32(0)).x
+        if animation.event(entity, u32(0)).found {
+            gaits[i].ticks = gaits[i].ticks + u32(1)
+        }
+        if animation.bone(entity, u32(1)).posed || animation.bone(entity, FAR).posed {
+            gaits[i].strays = gaits[i].strays + u32(1)
+        }
+        if animation.event(entity, u32(1)).found || animation.event(entity, FAR).found {
+            gaits[i].strays = gaits[i].strays + u32(1)
+        }
+        i = i + 1
+    }
+}
