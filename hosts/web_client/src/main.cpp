@@ -21,10 +21,13 @@
 #include "rawframe/execution/time.h"
 #include "rawframe/game_content/registrar.h"
 #include "rawframe/host/host.h"
+#include "rawframe/input_kest/registrar.h"
+#include "rawframe/network_web/registrar.h"
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/physics3d/registrar.h"
 #include "rawframe/world_animation/registrar.h"
 #include "rawframe/world_kest/registrar.h"
+#include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
 
 #include <array>
@@ -43,14 +46,18 @@ namespace {
 using namespace rawframe;
 
 // A client playing a game from its content or held sources: the World, a
-// Kest game, 2D and 3D physics, and the simulation's animation. Replication
-// joins once a web transport exists.
-constexpr std::array<composition::RegistrarEntry, 6> kRegistrars = {
+// Kest game, 2D and 3D physics, the simulation's animation, and replication
+// over the page's WebTransport with the game's input sources.
+constexpr std::array<composition::RegistrarEntry, 9> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
+    composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
+    composition::RegistrarEntry{"network_web", &network_web::registerParticipants, network_web::kScopes},
     composition::RegistrarEntry{"physics2d", &physics2d::registerParticipants, physics2d::kScopes},
     composition::RegistrarEntry{"physics3d", &physics3d::registerParticipants, physics3d::kScopes},
     composition::RegistrarEntry{"world_animation", &world_animation::registerParticipants, world_animation::kScopes},
     composition::RegistrarEntry{"world_kest", &world_kest::registerParticipants, world_kest::kScopes},
+    composition::RegistrarEntry{
+        "world_replication", &world_replication::registerParticipants, world_replication::kScopes},
     composition::RegistrarEntry{"world_runtime", &world_runtime::registerParticipants, world_runtime::kScopes},
 };
 
