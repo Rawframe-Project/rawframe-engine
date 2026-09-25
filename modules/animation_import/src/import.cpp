@@ -325,6 +325,50 @@ std::array<double, 4> element(const cgltf_accessor& accessor, cgltf_size index, 
     return made;
 }
 
+/// A track's keys as differences from its basis: the bone's bind, or the
+/// track's first key. An offset, the turn after the basis's, a factor.
+result::Status difference(animation::Track& track, const animation::Transform& bind, animation::AdditiveBasis basis) {
+    std::array<double, 4> from{};
+    switch (track.channel) {
+    case animation::Channel::Translation:
+        from = {bind.translation[0], bind.translation[1], bind.translation[2], 0.0};
+        break;
+    case animation::Channel::Rotation:
+        from = bind.rotation;
+        break;
+    case animation::Channel::Scale:
+        from = {bind.scale[0], bind.scale[1], bind.scale[2], 0.0};
+        break;
+    }
+    if (basis == animation::AdditiveBasis::FirstFrame) {
+        from = track.keys.front().value;
+    }
+    const Quaternion kBack{-from[0], -from[1], -from[2], from[3]};
+    for (animation::Key& key : track.keys) {
+        switch (track.channel) {
+        case animation::Channel::Translation:
+            for (std::size_t each = 0; each < 3; ++each) {
+                key.value[each] -= from[each];
+            }
+            break;
+        case animation::Channel::Rotation:
+            key.value = normalized(multiply(kBack, key.value));
+            break;
+        case animation::Channel::Scale:
+            for (std::size_t each = 0; each < 3; ++each) {
+                if (from[each] == 0.0) {
+                    return badSource("an additive scale from a basis of nought");
+                }
+                key.value[each] /= from[each];
+                key.in[each] /= from[each];
+                key.out[each] /= from[each];
+            }
+            break;
+        }
+    }
+    return {};
+}
+
 struct Counts {
     std::size_t skipped = 0;
     std::size_t flattened = 0;
@@ -335,6 +379,7 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
     animation::Clip clip{.skeleton = settings.skeleton,
                          .duration = 0.0,
                          .loop = settings.loop ? animation::Loop::Loop : animation::Loop::Clamp,
+                         .additive = settings.additive,
                          .tracks = {},
                          .events = {},
                          .syncMarkers = {}};
@@ -426,7 +471,7 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
                 return badSource("a looped animation channel with keys only at its end");
             }
             const animation::Key& first = track.keys.front();
-            if (kRoot && kEnd.time >= clip.duration && kEnd.value != first.value) {
+            if (kRoot && !settings.additive.has_value() && kEnd.time >= clip.duration && kEnd.value != first.value) {
                 if (channel == animation::Channel::Translation) {
                     track.drift = std::array<double, 4>{kEnd.value[0] - first.value[0],
                                                         kEnd.value[1] - first.value[1],
@@ -438,6 +483,9 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
                         multiply(kEnd.value, {-first.value[0], -first.value[1], -first.value[2], first.value[3]}));
                 }
             }
+        }
+        if (settings.additive.has_value()) {
+            RAWFRAME_TRY(difference(track, rig.skeleton.bones[kBone->second].bind, *settings.additive));
         }
         clip.tracks.push_back(std::move(track));
     }

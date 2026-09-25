@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -104,14 +105,15 @@ std::string arm(std::string_view skins = "", std::string_view required = "", flo
 })";
 }
 
-result::Result<ImportedAnimation> imported(const std::string& text, bool loop = false) {
+result::Result<ImportedAnimation>
+imported(const std::string& text, bool loop = false, std::optional<animation::AdditiveBasis> additive = std::nullopt) {
     const ReadFile kNothing = [](std::string_view) -> result::Result<std::span<const std::byte>> {
         return std::unexpected<result::Error>{
             result::fail(result::ErrorClass::NotFound, animation::kAnimationDomain, {}, "no file").error()};
     };
     return importGltf(std::as_bytes(std::span{text.data(), text.size()}),
                       kNothing,
-                      ImportSettings{.skeleton = base::Bits128{0, 0x5c}, .loop = loop});
+                      ImportSettings{.skeleton = base::Bits128{0, 0x5c}, .loop = loop, .additive = additive});
 }
 
 } // namespace
@@ -177,6 +179,27 @@ RAWFRAME_TEST(AnAnimationBecomesAClipInTheSkeletonsFrame) {
         RAWFRAME_EXPECT(!kWalked->clips[0].clip.tracks[1].drift.has_value());
         RAWFRAME_EXPECT(animation::writeClip(kWalked->clips[0].clip).has_value());
     }
+}
+
+RAWFRAME_TEST(AnAdditiveImportHoldsDifferences) {
+    // From the first frame: the shoulder starts at no difference and rises
+    // by what it rose, two up and two along -z, however the armature placed
+    // it; the elbow's first turn is none, so its turns stay.
+    const auto kFirst = imported(arm(), false, animation::AdditiveBasis::FirstFrame);
+    RAWFRAME_EXPECT(kFirst.has_value());
+    if (kFirst.has_value()) {
+        const animation::Clip& clip = kFirst->clips[0].clip;
+        RAWFRAME_EXPECT(clip.additive == animation::AdditiveBasis::FirstFrame);
+        RAWFRAME_EXPECT(clip.tracks[0].keys[0].value == (std::array<double, 4>{}));
+        RAWFRAME_EXPECT(near(clip.tracks[0].keys[1].value[1], 2.0) && near(clip.tracks[0].keys[1].value[2], -2.0));
+        RAWFRAME_EXPECT(near(clip.tracks[1].keys[1].value[2], std::sqrt(0.5)));
+        RAWFRAME_EXPECT(animation::writeClip(clip).has_value());
+    }
+    // From the bind, looped, a walk keeps no drift: differences carry no
+    // root motion.
+    const auto kBind = imported(arm("", "", 1.0F), true, animation::AdditiveBasis::Bind);
+    RAWFRAME_EXPECT(kBind.has_value() && kBind->clips[0].clip.additive == animation::AdditiveBasis::Bind &&
+                    !kBind->clips[0].clip.tracks[0].drift.has_value());
 }
 
 RAWFRAME_TEST(RigsASkeletonCannotHoldAreRefused) {

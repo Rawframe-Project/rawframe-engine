@@ -3,6 +3,7 @@
 // a server.
 //
 //   rawframe-animation from-gltf <source.gltf | source.glb> <directory> [loop]
+//                                [additive bind | additive first_frame]
 //
 // `from-gltf` writes the source's first skin as `skeleton.rfanim` and each
 // of its animations as `<name>.rfanim` in the directory, each beside a
@@ -11,7 +12,8 @@
 // importing again replaces the documents and nothing that names them breaks;
 // otherwise the identity is new. An animation's name is lowercased, and what
 // is not a letter, a digit, or `-` becomes `_`. With `loop`, every clip
-// repeats.
+// repeats. With `additive`, every clip holds differences from the basis
+// named (D137): the bind pose, or each channel's first key.
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/errors.h"
@@ -26,6 +28,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <random>
 #include <string>
 #include <string_view>
@@ -98,7 +101,10 @@ std::string fileNameOf(std::string_view name) {
     return made;
 }
 
-int fromGltf(const fs::path& source, const fs::path& directory, bool loop) {
+int fromGltf(const fs::path& source,
+             const fs::path& directory,
+             bool loop,
+             std::optional<animation::AdditiveBasis> additive) {
     bool read = false;
     const std::vector<std::byte> kSource = readBytes(source, read);
     if (!read) {
@@ -124,7 +130,9 @@ int fromGltf(const fs::path& source, const fs::path& directory, bool loop) {
     const fs::path kSkeletonPath = directory / "skeleton.rfanim";
     const rawframe::base::Bits128 kSkeletonId = identityFor(kSkeletonPath);
     auto imported = rawframe::animation_import::importGltf(
-        kSource, kRead, rawframe::animation_import::ImportSettings{.skeleton = kSkeletonId, .loop = loop});
+        kSource,
+        kRead,
+        rawframe::animation_import::ImportSettings{.skeleton = kSkeletonId, .loop = loop, .additive = additive});
     if (!imported.has_value()) {
         print(imported.error());
         return 1;
@@ -167,10 +175,25 @@ int fromGltf(const fs::path& source, const fs::path& directory, bool loop) {
 } // namespace
 
 int main(int argc, char** argv) {
-    const bool kLoop = argc == 5 && std::string_view{argv[4]} == "loop";
-    if ((argc == 4 || kLoop) && std::string_view{argv[1]} == "from-gltf") {
-        return fromGltf(argv[2], argv[3], kLoop);
+    const std::vector<std::string_view> kWords(argv, argv + argc);
+    // The options in their order, each once.
+    std::size_t at = 4;
+    const bool kLoop = at < kWords.size() && kWords[at] == "loop";
+    at += kLoop ? 1 : 0;
+    std::optional<animation::AdditiveBasis> additive;
+    if (at + 1 < kWords.size() && kWords[at] == "additive") {
+        if (kWords[at + 1] == "bind") {
+            additive = animation::AdditiveBasis::Bind;
+        } else if (kWords[at + 1] == "first_frame") {
+            additive = animation::AdditiveBasis::FirstFrame;
+        }
+        at += additive.has_value() ? 2 : 0;
     }
-    std::fputs("usage: rawframe-animation from-gltf <source.gltf | source.glb> <directory> [loop]\n", stderr);
+    if (kWords.size() >= 4 && at == kWords.size() && kWords[1] == "from-gltf") {
+        return fromGltf(argv[2], argv[3], kLoop, additive);
+    }
+    std::fputs("usage: rawframe-animation from-gltf <source.gltf | source.glb> <directory> [loop] "
+               "[additive bind | additive first_frame]\n",
+               stderr);
     return 2;
 }

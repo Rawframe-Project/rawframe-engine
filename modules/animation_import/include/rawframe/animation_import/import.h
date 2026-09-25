@@ -37,6 +37,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -53,6 +54,9 @@ struct ImportSettings {
     base::Bits128 skeleton;
     /// Clips repeat rather than hold their ends.
     bool loop = false;
+    /// Clips of differences from this basis rather than of poses (D137):
+    /// the bind pose, or each channel's first key.
+    std::optional<animation::AdditiveBasis> additive;
     /// The source, and each buffer it reads, at most.
     std::size_t maximumBytes = std::size_t{256} << 20U;
     animation::SkeletonLimits skeletonLimits;
