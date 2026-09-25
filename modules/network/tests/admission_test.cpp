@@ -105,6 +105,9 @@ RAWFRAME_TEST(AcceptsAndRejectsRoundTrip) {
     const auto kDecodedReject = decodeReject(kRejectBytes);
     RAWFRAME_EXPECT(kDecodedReject.has_value() && kDecodedReject->reason == RejectReason::SchemaMismatch &&
                     kDecodedReject->message == "schema differs");
+    const auto kUnavailable =
+        decodeReject(encoded(Reject{.reason = RejectReason::Unavailable, .message = {}}, &encodeReject));
+    RAWFRAME_EXPECT(kUnavailable.has_value() && kUnavailable->reason == RejectReason::Unavailable);
     std::vector<std::byte> unknown = kRejectBytes;
     unknown[0] = std::byte{0x3f};
     RAWFRAME_EXPECT(failedWith(decodeReject(unknown), NetworkError::Malformed));

@@ -77,6 +77,11 @@ public:
     std::uint64_t tickOrigin_ = 0;
     std::uint64_t dropped_ = 0;
     std::map<std::uint64_t, Connection> connections_;
+    /// Rejected connections, held open until the peer, having read its
+    /// rejection, closes, or until their deadline: a transport may drop what
+    /// is still queued when this side closes, and a rejection must arrive
+    /// (SPEC-0010). To the owner they have already ended.
+    std::map<std::uint64_t, execution::MonotonicInstant> rejected_;
     std::vector<Event> events_;
     std::vector<std::byte> scratch_;
 
@@ -115,7 +120,7 @@ public:
     }
 
     std::size_t sessions() const noexcept {
-        return connections_.size();
+        return connections_.size() + rejected_.size();
     }
 
     void end(ConnectionId connection, EndReason reason, std::vector<SessionEvent>& into) {
@@ -188,6 +193,7 @@ public:
             onDatagram(event, into);
             return;
         case EventKind::Closed:
+            rejected_.erase(event.connection.value);
             if (connections_.erase(event.connection.value) != 0) {
                 into.push_back(SessionEvent{.kind = SessionEventKind::Ended,
                                             .connection = event.connection,
@@ -305,8 +311,15 @@ public:
         std::vector<std::byte> answer(512);
         Writer writer{answer};
         if (refusal) {
-            if (encodeReject(writer, *refusal).has_value()) {
-                static_cast<void>(sendControl(connection, state, ControlFrame::ProtocolReject, writer.written()));
+            if (encodeReject(writer, *refusal).has_value() &&
+                sendControl(connection, state, ControlFrame::ProtocolReject, writer.written()).has_value()) {
+                // The peer closes once it has read the rejection; the
+                // connection is held until then, within the admission bound.
+                connections_.erase(connection.value);
+                rejected_[connection.value] = clock_->now() + profile_.admissionTimeout;
+                into.push_back(SessionEvent{
+                    .kind = SessionEventKind::Ended, .connection = connection, .reason = EndReason::Rejected});
+                return false;
             }
             end(connection, EndReason::Rejected, into);
             return false;
@@ -400,6 +413,14 @@ public:
         for (const std::uint64_t kId : late) {
             end(ConnectionId{kId}, EndReason::TimedOut, into);
         }
+        for (auto held = rejected_.begin(); held != rejected_.end();) {
+            if (kNow < held->second) {
+                ++held;
+            } else {
+                provider_->close(ConnectionId{held->first});
+                held = rejected_.erase(held);
+            }
+        }
     }
 };
 
@@ -408,6 +429,9 @@ Sessions::Sessions(std::unique_ptr<SessionCore> core) noexcept : core_(std::move
 
 Sessions::~Sessions() {
     for (const auto& [id, state] : core_->connections_) {
+        core_->provider_->close(ConnectionId{id});
+    }
+    for (const auto& [id, deadline] : core_->rejected_) {
         core_->provider_->close(ConnectionId{id});
     }
 }

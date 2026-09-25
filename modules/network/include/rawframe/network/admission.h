@@ -114,9 +114,11 @@ enum class RejectReason : std::uint64_t {
     TicketInvalid = 7,
     Capacity = 8,
     Malformed = 9,
+    /// The server is not admitting: not yet active, or draining (SPEC-0012).
+    Unavailable = 10,
 };
 
-inline constexpr std::uint64_t kLastRejectReason = static_cast<std::uint64_t>(RejectReason::Malformed);
+inline constexpr std::uint64_t kLastRejectReason = static_cast<std::uint64_t>(RejectReason::Unavailable);
 
 struct Reject {
     RejectReason reason = RejectReason::Malformed;
