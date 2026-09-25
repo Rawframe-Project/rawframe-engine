@@ -249,7 +249,8 @@ struct ReplicationClient::State {
             }
             staged.push_back(Staged{.net = kHead->entity.value,
                                     .entity = kMirror->second,
-                                    .component = kHead->component,
+                                    // Checked against the table as it was read.
+                                    .component = static_cast<std::size_t>(kHead->component),
                                     .offset = kOffset});
         }
         if (reader.remaining() != 0) {

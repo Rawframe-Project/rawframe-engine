@@ -42,8 +42,8 @@ bool isValidUtf8(std::string_view text) {
 
 } // namespace
 
-static_assert(sizeof(Error) == 16, "an Error is a class and one pointer");
-static_assert(alignof(Error) == 8);
+static_assert(sizeof(Error) == 2 * sizeof(void*), "an Error is a class and one pointer");
+static_assert(alignof(Error) == alignof(void*));
 static_assert(std::is_nothrow_move_constructible_v<Error> && std::is_nothrow_move_assignable_v<Error>);
 static_assert(!std::is_copy_constructible_v<Error> && !std::is_copy_assignable_v<Error>);
 

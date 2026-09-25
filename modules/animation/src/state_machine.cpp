@@ -142,10 +142,12 @@ result::Result<Transition> transitionOf(const Value& value) {
     const Value* interruption = value.find("interruption");
     const Value* reset = value.find("resetPhase");
     const Value* conditions = value.find("conditions");
-    const std::optional<std::int64_t> kPriority = priority != nullptr ? priority->integer() : std::optional{0L};
-    const std::optional<std::size_t> kCurve = curve != nullptr ? placeOf(kCurves, curve) : std::optional{0UL};
+    const std::optional<std::int64_t> kPriority =
+        priority != nullptr ? priority->integer() : std::optional<std::int64_t>{0};
+    const std::optional<std::size_t> kCurve =
+        curve != nullptr ? placeOf(kCurves, curve) : std::optional<std::size_t>{0};
     const std::optional<std::size_t> kInterruption =
-        interruption != nullptr ? placeOf(kInterruptions, interruption) : std::optional{0UL};
+        interruption != nullptr ? placeOf(kInterruptions, interruption) : std::optional<std::size_t>{0};
     const bool kRead = kText("from", from) && to != nullptr && to->kind() == Value::Kind::String &&
                        kNumber("duration", made.duration) && kNumber("cooldown", made.cooldown) &&
                        kPriority.has_value() && *kPriority >= std::numeric_limits<std::int32_t>::min() &&

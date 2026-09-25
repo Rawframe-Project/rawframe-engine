@@ -11,7 +11,7 @@
 namespace rawframe::kest {
 
 ReportFile::ReportFile() noexcept {
-#if defined(__unix__) || defined(__APPLE__)
+#if defined(__unix__) || defined(__APPLE__) || defined(__wasi__)
     file_ = ::open_memstream(&buffer_, &size_);
 #else
     file_ = std::tmpfile();
@@ -30,7 +30,7 @@ std::string ReportFile::text() {
         return {};
     }
     std::string text;
-#if defined(__unix__) || defined(__APPLE__)
+#if defined(__unix__) || defined(__APPLE__) || defined(__wasi__)
     std::fflush(file_);
     text.assign(buffer_ != nullptr ? buffer_ : "", size_);
 #else
