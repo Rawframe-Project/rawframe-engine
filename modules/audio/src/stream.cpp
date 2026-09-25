@@ -11,6 +11,15 @@
 
 namespace rawframe::audio {
 
+namespace {
+
+/// Frames decoded and dropped before a start inside a stream: 200 ms. RFC
+/// 7845's 80 ms left the first 10 ms 20 dB from the whole decode here;
+/// 200 ms leaves it 55 dB away.
+constexpr std::uint64_t kPreRoll = 9'600;
+
+} // namespace
+
 struct Stream::State {
     std::shared_ptr<const std::vector<std::byte>> bytes;
     CookedOpus cooked;
@@ -54,9 +63,23 @@ result::Result<std::shared_ptr<Stream>> Stream::open(std::shared_ptr<const std::
     auto state = std::make_unique<State>();
     RAWFRAME_TRY_ASSIGN(state->cooked, readCookedOpus(*cooked, limits));
     RAWFRAME_TRY_ASSIGN(state->decoder, makeOpusDecoder(state->cooked.channels));
+    if (settings.startFrame >= state->cooked.frames) {
+        return result::fail(
+            result::ErrorClass::InvalidArgument, kAudioDomain, code(AudioError::BadSound), "a start past the end");
+    }
     state->bytes = std::move(cooked);
     state->loop = settings.loop;
     state->skip = state->cooked.preSkip;
+    if (settings.startFrame > 0) {
+        // Decoding begins a pre-roll before the start, so the decoder has
+        // settled by the first frame kept.
+        const std::uint64_t kTarget = settings.startFrame + state->cooked.preSkip;
+        const std::uint64_t kBegin = kTarget - std::min<std::uint64_t>(kTarget, kPreRoll);
+        const auto kPacket = std::ranges::upper_bound(state->cooked.packets, kBegin, {}, &CookedPacket::start) - 1;
+        state->packet = static_cast<std::size_t>(kPacket - state->cooked.packets.begin());
+        state->skip = static_cast<std::uint32_t>(kTarget - kPacket->start);
+        state->emitted = settings.startFrame;
+    }
     state->scratch.assign(static_cast<std::size_t>(kLargestPacketFrames) * state->cooked.channels, 0.0F);
     state->capacity = std::bit_ceil(settings.bufferFrames);
     state->ring.assign(state->capacity * state->cooked.channels, 0.0F);
@@ -75,10 +98,11 @@ std::uint64_t Stream::frames() const noexcept {
     return state_->cooked.frames;
 }
 
-void Stream::decodeAhead() noexcept {
+void Stream::decodeAhead(std::size_t packets) noexcept {
     State& state = *state_;
     const std::uint32_t kChannels = state.cooked.channels;
-    while (!state.decodingEnded.load(std::memory_order_relaxed)) {
+    for (std::size_t decoded = 0; decoded < packets && !state.decodingEnded.load(std::memory_order_relaxed);
+         ++decoded) {
         const std::size_t kWritten = state.written.load(std::memory_order_relaxed);
         const std::size_t kRoom = state.capacity - (kWritten - state.read.load(std::memory_order_acquire));
         if (kRoom < static_cast<std::size_t>(kLargestPacketFrames)) {
@@ -199,6 +223,11 @@ void Streamer::update() {
     });
     for (const std::shared_ptr<Stream>& stream : streams_) {
         if (!stream->wantsDecoding() || !stream->claimDecoding()) {
+            continue;
+        }
+        if (executor_ == nullptr) {
+            stream->decodeAhead();
+            stream->releaseDecoding();
             continue;
         }
         const result::Status kSubmitted =

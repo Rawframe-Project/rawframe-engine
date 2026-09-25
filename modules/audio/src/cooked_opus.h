@@ -18,6 +18,9 @@ namespace rawframe::audio {
 struct CookedPacket {
     std::size_t offset = 0;
     std::size_t length = 0;
+    /// Where its first decoded frame falls, pre-skip included, as its
+    /// table of contents says (RFC 6716, section 3.1).
+    std::uint64_t start = 0;
 };
 
 struct CookedOpus {

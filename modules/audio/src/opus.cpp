@@ -46,6 +46,7 @@ result::Result<CookedOpus> readCookedOpus(std::span<const std::byte> bytes, cons
     }
     cooked.packets.reserve(kPackets);
     std::size_t at = kHeader;
+    std::uint64_t start = 0;
     for (std::uint32_t packet = 0; packet < kPackets; ++packet) {
         if (at + 2 > bytes.size()) {
             return bad("cooked Opus ends inside its packets");
@@ -55,11 +56,21 @@ result::Result<CookedOpus> readCookedOpus(std::span<const std::byte> bytes, cons
         if (kLength == 0 || kLength > kLargestOpusPacket || at + kLength > bytes.size()) {
             return bad("a packet's length is outside Opus's or the file's");
         }
-        cooked.packets.push_back(CookedPacket{.offset = at, .length = kLength});
+        const int kFrames = opus_packet_get_nb_samples(reinterpret_cast<const unsigned char*>(bytes.data() + at),
+                                                       static_cast<opus_int32>(kLength),
+                                                       static_cast<opus_int32>(kOpusRate));
+        if (kFrames <= 0) {
+            return bad("a packet whose length in frames cannot be read");
+        }
+        cooked.packets.push_back(CookedPacket{.offset = at, .length = kLength, .start = start});
+        start += static_cast<std::uint64_t>(kFrames);
         at += kLength;
     }
     if (at != bytes.size()) {
         return bad("cooked Opus has bytes after its packets");
+    }
+    if (start < static_cast<std::uint64_t>(cooked.preSkip) + cooked.frames) {
+        return bad("cooked Opus's packets do not hold what its header says");
     }
     return cooked;
 }

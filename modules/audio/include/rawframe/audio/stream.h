@@ -21,6 +21,9 @@ struct StreamSettings {
     std::size_t bufferFrames = 48'000;
     /// Plays the sound over and over from its start, never ending.
     bool loop = false;
+    /// Where to begin, in frames: a virtual sound comes back where it
+    /// would be.
+    std::uint64_t startFrame = 0;
 };
 
 struct StreamStatistics {
@@ -34,8 +37,8 @@ struct StreamStatistics {
 class Stream {
 public:
     /// Checks the container and finds every packet; decodes nothing yet.
-    /// Refuses (`BadSound`) as `decodeCookedOpus` does, and a ring smaller
-    /// than one packet's largest decode.
+    /// Refuses (`BadSound`) as `decodeCookedOpus` does, a ring smaller than
+    /// two packets' largest decode, and a start past the end.
     [[nodiscard]] static result::Result<std::shared_ptr<Stream>>
     open(std::shared_ptr<const std::vector<std::byte>> cooked,
          const StreamSettings& settings = {},
@@ -52,8 +55,9 @@ public:
 
     // The decoder: one thread at a time.
 
-    /// Decodes packets while the ring has room for one more.
-    void decodeAhead() noexcept;
+    /// Decodes packets while the ring has room for one more, at most
+    /// `packets` of them.
+    void decodeAhead(std::size_t packets = SIZE_MAX) noexcept;
 
     // Any thread.
 
@@ -92,11 +96,14 @@ private:
 
 /// Keeps streams decoded ahead: once a frame, on the owner's thread, it
 /// hands each stream that wants decoding to the executor as one task, never
-/// two at once for a stream, and forgets a stream no one else holds.
+/// two at once for a stream, and forgets a stream no one else holds. Without
+/// an executor it decodes them itself, for rendering that is not live.
 class Streamer {
 public:
     /// `owner` must be admitted to `executor` with room for a task a stream.
     Streamer(execution::Executor& executor, execution::OwnerId owner) noexcept;
+    /// Decodes on the owner's thread.
+    Streamer() noexcept = default;
 
     void add(std::shared_ptr<Stream> stream);
     void update();
@@ -107,7 +114,7 @@ public:
     }
 
 private:
-    execution::Executor* executor_;
+    execution::Executor* executor_ = nullptr;
     execution::OwnerId owner_;
     std::vector<std::shared_ptr<Stream>> streams_;
     std::uint64_t refused_ = 0;

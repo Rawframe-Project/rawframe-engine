@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iterator>
 #include <thread>
@@ -139,6 +141,34 @@ RAWFRAME_TEST(AnExecutorKeepsTheRingFilled) {
     RAWFRAME_EXPECT(kOut == wholeReference(80'000));
     RAWFRAME_EXPECT(stream->statistics().underrunFrames == 0 && streamer.refused() == 0);
     executor.stop();
+}
+
+RAWFRAME_TEST(AStreamBegunInsideSoundsAsTheWholeFromThere) {
+    // Begun 30,000 frames in, after its pre-roll it is the whole sound from
+    // there, within the decoder's settling.
+    const Clip kWhole = *decodeCookedOpus(*fixture());
+    auto stream = *Stream::open(fixture(), {.startFrame = 30'000});
+    stream->decodeAhead();
+    double signal = 0;
+    double error = 0;
+    std::size_t frames = 0;
+    while (stream->available() > 0 && frames < 40'000) {
+        for (std::uint32_t channel = 0; channel < 2; ++channel) {
+            const float kWant = kWhole.samples[((30'000 + frames) * 2) + channel];
+            const float kGot = stream->sample(0, channel);
+            signal += static_cast<double>(kWant) * kWant;
+            error += static_cast<double>(kGot - kWant) * (kGot - kWant);
+        }
+        stream->consume(1);
+        ++frames;
+        if (stream->available() == 0) {
+            stream->decodeAhead();
+        }
+    }
+    RAWFRAME_EXPECT(frames == 40'000);
+    std::printf("  begun inside: %.1f dB\n", 10.0 * std::log10(error / signal));
+    RAWFRAME_EXPECT(10.0 * std::log10(error / signal) < -50);
+    RAWFRAME_EXPECT(!Stream::open(fixture(), {.startFrame = 72'000}).has_value());
 }
 
 RAWFRAME_TEST(StreamsAreRefusedWhenTheyCannotPlay) {
