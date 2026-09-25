@@ -97,6 +97,8 @@ struct Peer {
     network::ConnectionId connection;
     network::Accept accept;
     world::EntityHandle player;
+    /// Who plays, if the connection asked for a session.
+    std::optional<world_runtime::PlayerIdentity> identity;
     /// Its name in Perception and InterestHistory.
     std::uint32_t viewer = 0;
     std::vector<Sent> retired;
@@ -896,12 +898,17 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             }
             // Input ticks start after the origin, so "consumed through the
             // origin" names nothing consumed yet.
+            const auto kIdentity = world_runtime::playerIdentity(event.requestedSession);
             state.peers[event.connection.value] = Peer{.connection = event.connection,
                                                        .accept = event.accept,
                                                        .player = *player,
+                                                       .identity = kIdentity,
                                                        .viewer = ++state.lastViewer,
                                                        .nextInputTick = event.accept.tickOrigin + 1,
                                                        .consumedInputTick = event.accept.tickOrigin};
+            if (kIdentity.has_value() && state.settings.presence != nullptr) {
+                state.settings.presence->joined(world, *player, *kIdentity);
+            }
             break;
         }
         case network::SessionEventKind::Frame:
@@ -916,6 +923,9 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             break;
         case network::SessionEventKind::Ended:
             if (kPeer != state.peers.end()) {
+                if (kPeer->second.identity.has_value() && state.settings.presence != nullptr) {
+                    state.settings.presence->leaving(world, kPeer->second.player, *kPeer->second.identity);
+                }
                 static_cast<void>(world.destroy(kPeer->second.player));
                 state.peers.erase(kPeer);
             }
@@ -953,6 +963,23 @@ ServerReplicationStatistics ReplicationServer::statistics() const noexcept {
 
 std::size_t ReplicationServer::connections() const noexcept {
     return state_->peers.size();
+}
+
+bool ReplicationServer::playing(world_runtime::PlayerIdentity identity) const noexcept {
+    return std::ranges::any_of(state_->peers, [identity](const auto& entry) {
+        return entry.second.identity == identity;
+    });
+}
+
+void ReplicationServer::leaveAll(world::World& world) noexcept {
+    if (state_->settings.presence == nullptr) {
+        return;
+    }
+    for (const auto& [id, peer] : state_->peers) {
+        if (peer.identity.has_value() && world.alive(peer.player)) {
+            state_->settings.presence->leaving(world, peer.player, *peer.identity);
+        }
+    }
 }
 
 void ReplicationServer::noticeStopping() noexcept {

@@ -14,6 +14,7 @@
 #include "rawframe/world_replication/codec.h"
 #include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/records.h"
+#include "rawframe/world_runtime/players.h"
 #include "rawframe/world_runtime/simulation.h"
 
 #include <cstddef>
@@ -83,6 +84,9 @@ struct ServerReplicationSettings {
     /// Ticks after which a value sent and not acknowledged is sent again,
     /// though it has not changed.
     std::uint64_t resendAfter = 6;
+    /// Told of each player with an identity (a session asked for) as their
+    /// entity is made and before it goes; none tells no one.
+    world_runtime::PlayerPresence* presence = nullptr;
 };
 
 /// What the server counted.
@@ -136,6 +140,11 @@ public:
     /// Tells every admitted connection the server is stopping (SPEC-0012's
     /// stopping notice): one `graceful_close` each. Play goes on.
     void noticeStopping() noexcept;
+    /// Whether a connection is playing as `identity` now.
+    [[nodiscard]] bool playing(world_runtime::PlayerIdentity identity) const noexcept;
+    /// The server is stopping: each player with an identity is told of as
+    /// leaving, their entity still there.
+    void leaveAll(world::World& world) noexcept;
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
 

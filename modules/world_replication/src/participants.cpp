@@ -11,12 +11,14 @@
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_replication/server.h"
+#include "rawframe/world_runtime/players.h"
 #include "rawframe/world_runtime/simulation.h"
 
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -32,8 +34,10 @@ constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
 constexpr EventIdentity kBotsAdmitted{"replication", "bots_admitted"};
 
 constexpr std::string_view kServerNeeds[] = {world_runtime::kSimulation.name};
-constexpr std::string_view kMaybe[] = {
-    network::kTransport.name, kReplicationPlan.name, game_content::kGameContent.name};
+constexpr std::string_view kMaybe[] = {network::kTransport.name,
+                                       kReplicationPlan.name,
+                                       game_content::kGameContent.name,
+                                       world_runtime::kPlayerPresence.name};
 constexpr std::string_view kBotsProvide[] = {kClientWorlds.name};
 constexpr std::string_view kBotsMaybe[] = {
     network::kTransport.name, kReplicationPlan.name, kInputSourcePlan.name, game_content::kGameContent.name};
@@ -95,6 +99,10 @@ public:
         if (!context.has(network::kTransport.name) || !context.has(kReplicationPlan.name)) {
             return missing("a replication server needs a transport and a game's replication plan");
         }
+        world_runtime::PlayerPresence* presence = nullptr;
+        if (context.has(world_runtime::kPlayerPresence.name)) {
+            RAWFRAME_TRY_ASSIGN(presence, context.capability(world_runtime::kPlayerPresence));
+        }
         RAWFRAME_TRY_ASSIGN(network::Transport * transport, context.capability(network::kTransport));
         RAWFRAME_TRY_ASSIGN(ReplicationPlan * plan, context.capability(kReplicationPlan));
         plan_ = plan;
@@ -126,16 +134,17 @@ public:
         if (kPerTick < 64) {
             return missing("replication.egress_bytes_per_second allows at least 64 bytes a tick, and at most 1 GiB/s");
         }
-        RAWFRAME_TRY_ASSIGN(server_,
-                            ReplicationServer::create(
-                                *sessions_,
-                                ServerReplicationSettings{.table = plan->table(),
-                                                          .playerComponents = {plan->playerComponents().begin(),
-                                                                               plan->playerComponents().end()},
-                                                          .input = plan->input(),
-                                                          .perception = plan->perceivedInput(),
-                                                          .interest = plan->interest(),
-                                                          .stateBytesPerTick = static_cast<std::size_t>(kPerTick)}));
+        RAWFRAME_TRY_ASSIGN(
+            server_,
+            ReplicationServer::create(*sessions_,
+                                      ServerReplicationSettings{.table = plan->table(),
+                                                                .playerComponents = {plan->playerComponents().begin(),
+                                                                                     plan->playerComponents().end()},
+                                                                .input = plan->input(),
+                                                                .perception = plan->perceivedInput(),
+                                                                .interest = plan->interest(),
+                                                                .stateBytesPerTick = static_cast<std::size_t>(kPerTick),
+                                                                .presence = presence}));
         return simulation_->addSystems(*server_);
     }
 
@@ -162,6 +171,7 @@ public:
             server_->forgetWorld();
         }
         server_->pump(*simulation_->world(), simulation_->tick());
+        admitting_.clear();
         // Host phases run once the Host is active, so admission closed here
         // means it drains: the players hear so once.
         if (!noticed_ && !context_->admitting()) {
@@ -174,6 +184,9 @@ public:
     void stop() noexcept override {
         if (server_ == nullptr) {
             return;
+        }
+        if (simulation_->world() != nullptr) {
+            server_->leaveAll(*simulation_->world());
         }
         plan_->attach(nullptr);
         const ServerReplicationStatistics kStatistics = server_->statistics();
@@ -205,13 +218,26 @@ private:
             return network::Reject{.reason = network::RejectReason::Unavailable,
                                    .message = "the server is not admitting players"};
         }
+        // One connection plays as one player at a time, so a player's save
+        // is theirs alone.
+        const auto kIdentity = world_runtime::playerIdentity(hello.requestedSession);
+        if (kIdentity.has_value() && (self->server_->playing(*kIdentity) || self->admitting_.contains(*kIdentity))) {
+            ++self->refused_;
+            return network::Reject{.reason = network::RejectReason::Unavailable,
+                                   .message = "this player is already playing"};
+        }
         auto refusal = self->plan_->admit(hello);
         self->refused_ += refusal.has_value() ? 1 : 0;
+        if (!refusal.has_value() && kIdentity.has_value()) {
+            // Admitted in this pump, and not yet playing until it ends.
+            self->admitting_.insert(*kIdentity);
+        }
         return refusal;
     }
 
     composition::ParticipantContext* context_ = nullptr;
     std::uint64_t refused_ = 0;
+    std::set<world_runtime::PlayerIdentity> admitting_;
     bool noticed_ = false;
     std::string endpoint_;
     ReplicationPlan* plan_ = nullptr;
@@ -285,6 +311,9 @@ public:
         for (const char kCharacter : configuration.text("bots.ticket").value_or("")) {
             ticket_.push_back(static_cast<std::byte>(kCharacter));
         }
+        // Bot n asks for the session `<bots.session>-n`, so it plays as the
+        // same player in every run; none by default.
+        sessionPrefix_ = std::string{configuration.text("bots.session").value_or("")};
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kSeed, configuration.unsignedInteger("bots.seed", 0));
         schema::RegistryBuilder builder;
         for (const schema::ComponentDescriptor& descriptor : plan_->components()) {
@@ -377,6 +406,7 @@ public:
                     bot.connecting = bot.client
                                          ->connect(network::Endpoint{endpoint_},
                                                    network::Hello{.compatibility = compatibility_,
+                                                                  .requestedSession = sessionOf(bot),
                                                                   .ticket = ticket_,
                                                                   .maximumDatagram = 1100,
                                                                   .maximumFrame = 4096})
@@ -469,6 +499,19 @@ public:
     }
 
 private:
+    /// The session `bot` asks for, from its place among the bots.
+    std::vector<std::byte> sessionOf(const Bot& bot) const {
+        std::vector<std::byte> session;
+        if (sessionPrefix_.empty()) {
+            return session;
+        }
+        const std::string kText = sessionPrefix_ + "-" + std::to_string(&bot - bots_.data());
+        for (const char kCharacter : kText) {
+            session.push_back(static_cast<std::byte>(kCharacter));
+        }
+        return session;
+    }
+
     /// A new random heading for every float of the input, every sixty ticks.
     void steer(Bot& bot, std::uint64_t tick) {
         if (bot.source != nullptr) {
@@ -494,6 +537,7 @@ private:
     network::Compatibility compatibility_;
     std::string endpoint_;
     std::vector<std::byte> ticket_;
+    std::string sessionPrefix_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     std::vector<Bot> bots_;
     /// Bots that would predict but could not have a predictor.
