@@ -80,6 +80,10 @@ public:
     [[nodiscard]] const Pose& bindPose() const noexcept {
         return bind_;
     }
+    /// Each bone's parent, in the skeleton's order; none for the root.
+    [[nodiscard]] std::span<const std::optional<BoneIndex>> parents() const noexcept {
+        return parents_;
+    }
 
     /// A transition's condition as it plays.
     struct Test {
@@ -142,6 +146,7 @@ private:
     std::vector<Parameter> parameters_;
     std::vector<Step> steps_;
     Pose bind_;
+    std::vector<std::optional<BoneIndex>> parents_;
     EvaluationLimits limits_;
 };
 

@@ -13,6 +13,8 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <optional>
+#include <span>
 #include <vector>
 
 namespace rawframe::animation {
@@ -27,6 +29,11 @@ struct Pose {
 
 /// The skeleton's bind pose.
 [[nodiscard]] Pose bindPose(const Skeleton& skeleton);
+
+/// A local pose in model space: each bone composed onto its parent's, in
+/// the skeleton's order, parents first (translation rotated and scaled by
+/// the parent, rotations multiplied, scales multiplied).
+void toModelSpace(std::span<const std::optional<BoneIndex>> parents, const Pose& local, Pose& model);
 
 /// A clip with each track's bone found in one skeleton.
 class BoundClip {

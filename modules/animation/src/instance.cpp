@@ -115,6 +115,9 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
     auto made = std::make_shared<CompiledGraph>();
     made->parameters_ = graph.parameters;
     made->bind_ = animation::bindPose(skeleton);
+    for (const Bone& bone : skeleton.bones) {
+        made->parents_.push_back(bone.parent);
+    }
     made->limits_ = limits;
     const auto kParameter = [&graph](const Scalar& scalar) -> std::optional<ParameterIndex> {
         const auto* kRef = std::get_if<ParameterRef>(&scalar);

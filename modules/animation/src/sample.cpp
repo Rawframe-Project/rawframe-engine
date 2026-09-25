@@ -73,6 +73,38 @@ Pose bindPose(const Skeleton& skeleton) {
     return pose;
 }
 
+void toModelSpace(std::span<const std::optional<BoneIndex>> parents, const Pose& local, Pose& model) {
+    RAWFRAME_CHECK(parents.size() == local.bones.size(), "a pose of the skeleton");
+    model.bones.resize(local.bones.size());
+    for (std::size_t at = 0; at < local.bones.size(); ++at) {
+        const Transform& bone = local.bones[at];
+        if (!parents[at].has_value()) {
+            model.bones[at] = bone;
+            continue;
+        }
+        const Transform& parent = model.bones[parents[at]->value];
+        const std::array<double, 4>& q = parent.rotation;
+        // v + 2w (q x v) + 2 q x (q x v), of the scaled translation.
+        const std::array<double, 3> kV{parent.scale[0] * bone.translation[0],
+                                       parent.scale[1] * bone.translation[1],
+                                       parent.scale[2] * bone.translation[2]};
+        const std::array<double, 3> kC{
+            (q[1] * kV[2]) - (q[2] * kV[1]), (q[2] * kV[0]) - (q[0] * kV[2]), (q[0] * kV[1]) - (q[1] * kV[0])};
+        const std::array<double, 3> kCc{
+            (q[1] * kC[2]) - (q[2] * kC[1]), (q[2] * kC[0]) - (q[0] * kC[2]), (q[0] * kC[1]) - (q[1] * kC[0])};
+        Transform& made = model.bones[at];
+        for (std::size_t each = 0; each < 3; ++each) {
+            made.translation[each] = parent.translation[each] + kV[each] + (2.0 * q[3] * kC[each]) + (2.0 * kCc[each]);
+            made.scale[each] = parent.scale[each] * bone.scale[each];
+        }
+        const std::array<double, 4>& r = bone.rotation;
+        made.rotation = {(q[3] * r[0]) + (q[0] * r[3]) + (q[1] * r[2]) - (q[2] * r[1]),
+                         (q[3] * r[1]) - (q[0] * r[2]) + (q[1] * r[3]) + (q[2] * r[0]),
+                         (q[3] * r[2]) + (q[0] * r[1]) - (q[1] * r[0]) + (q[2] * r[3]),
+                         (q[3] * r[3]) - (q[0] * r[0]) - (q[1] * r[1]) - (q[2] * r[2])};
+    }
+}
+
 result::Result<BoundClip>
 BoundClip::bind(std::shared_ptr<const Clip> clip, const Skeleton& skeleton, base::Bits128 skeletonId) {
     if (clip->skeleton.has_value() && *clip->skeleton != skeletonId) {
