@@ -1,5 +1,6 @@
 #include "rawframe/audio/layout.h"
 
+#include "fields.h"
 #include "rawframe/document/errors.h"
 #include "rawframe/document/json.h"
 #include "rawframe/document/record.h"
@@ -29,8 +30,6 @@ constexpr std::array<std::string_view, 3> kConcurrencyFields = {"name", "maximum
 
 /// The longest delay an effect may hold, in seconds.
 constexpr double kMaximumDelay = 2.0;
-/// The highest fader or level, in decibels; there is no lowest but silence.
-constexpr double kMaximumDecibels = 24.0;
 
 constexpr std::array<std::pair<std::string_view, Role>, 7> kRoles = {{
     {"none", Role::None},
@@ -49,62 +48,6 @@ constexpr std::array<std::pair<std::string_view, Resolution>, 5> kResolutions = 
     {"stop_quietest", Resolution::StopQuietest},
     {"stop_lowest_priority_then_oldest", Resolution::StopLowestPriorityThenOldest},
 }};
-
-/// The value of a closed word, where its default (the first) is omitted.
-template <typename Enum, std::size_t Count>
-result::Result<Enum> closedWord(const Record& record,
-                                std::string_view field,
-                                const std::array<std::pair<std::string_view, Enum>, Count>& words) {
-    RAWFRAME_TRY_ASSIGN(const std::optional<std::string_view> kWord, record.optionalText(field));
-    if (!kWord) {
-        return words[0].second;
-    }
-    if (*kWord == words[0].first) {
-        return document::notCanonical(record.pathOf(field), "a field at its default is omitted");
-    }
-    for (const auto& [kName, kValue] : words) {
-        if (kName == *kWord) {
-            return kValue;
-        }
-    }
-    return invalid(record.pathOf(field), "not one of the field's words");
-}
-
-bool machineName(std::string_view name, std::size_t limit) noexcept {
-    if (name.empty() || name.size() > limit || name.front() < 'a' || name.front() > 'z') {
-        return false;
-    }
-    return std::ranges::all_of(name, [](char each) {
-        return (each >= 'a' && each <= 'z') || (each >= '0' && each <= '9') || each == '_';
-    });
-}
-
-std::optional<std::uint64_t> parseIdentity(std::string_view text) noexcept {
-    if (text.size() != 16) {
-        return std::nullopt;
-    }
-    std::uint64_t value = 0;
-    for (const char kDigit : text) {
-        value <<= 4U;
-        if (kDigit >= '0' && kDigit <= '9') {
-            value |= static_cast<std::uint64_t>(kDigit - '0');
-        } else if (kDigit >= 'a' && kDigit <= 'f') {
-            value |= static_cast<std::uint64_t>(kDigit - 'a' + 10);
-        } else {
-            return std::nullopt;
-        }
-    }
-    return value;
-}
-
-/// A level in decibels, at most kMaximumDecibels.
-result::Result<float> decibels(const Record& record, std::string_view field) {
-    RAWFRAME_TRY_ASSIGN(const double kLevel, record.real(field, 0.0));
-    if (!(kLevel <= kMaximumDecibels) || !std::isfinite(kLevel)) {
-        return invalid(record.pathOf(field), "a level in decibels is finite and at most 24");
-    }
-    return static_cast<float>(kLevel);
-}
 
 result::Result<Effect> readEffect(const Value& value, const std::string& path) {
     const Value* named = value.find("type");
