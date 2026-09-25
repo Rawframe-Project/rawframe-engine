@@ -2,6 +2,7 @@
 
 #include "rawframe/composition/configuration.h"
 #include "rawframe/composition/errors.h"
+#include "rawframe/composition/held_files.h"
 #include "rawframe/composition/host_lifecycle.h"
 #include "rawframe/composition/participant.h"
 #include "rawframe/composition/plan.h"
@@ -34,6 +35,9 @@ struct HostServices {
     const Configuration* configuration = nullptr;
     /// The Host's lifecycle; without one, admission is open while running.
     const HostLifecycle* lifecycle = nullptr;
+    /// The files the Host holds, from which every path the configuration
+    /// names is read; null where paths name the file system.
+    const HeldFiles* files = nullptr;
 };
 
 /// The worst health a participant reported, and why.
@@ -87,6 +91,9 @@ public:
     [[nodiscard]] diagnostics::Emitter emitter() const noexcept;
     /// The Runtime's configuration snapshot, empty if the host gave none.
     [[nodiscard]] const Configuration& configuration() const noexcept;
+    /// The files the Host holds, or null: where there are some, a path the
+    /// configuration names is one of them, never a file on a disk.
+    [[nodiscard]] const HeldFiles* heldFiles() const noexcept;
 
     /// Whether gameplay admission is open: the Host is active (SPEC-0012).
     [[nodiscard]] bool admitting() const noexcept;

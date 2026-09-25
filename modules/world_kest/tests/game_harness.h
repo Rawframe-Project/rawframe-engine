@@ -2,9 +2,10 @@
 
 // What the game tests share: a composition of the game and the World
 // runtime, a participant that finds the simulation the game was loaded
-// into, and small file helpers.
+// into, the test games held as a host holds files, and small file helpers.
 
 #include "rawframe/composition/composition.h"
+#include "rawframe/test/files.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
@@ -12,7 +13,6 @@
 
 #include <array>
 #include <cstdio>
-#include <filesystem>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -65,16 +65,31 @@ inline std::vector<std::pair<float, float>> positions() {
     return found;
 }
 
-inline void writeText(const std::filesystem::path& path, std::string_view text) {
-    if (std::FILE* file = std::fopen(path.string().c_str(), "wb")) {
+/// The test games' files, held under `game/` as a host holds what it
+/// fetched (D167), so that a game is played where there are no files.
+inline const composition::HeldFiles& heldGames() {
+    static const composition::HeldFiles kHeld = [] {
+        std::vector<composition::HeldFiles::File> files;
+        for (const std::string& path : test::filesUnder(RAWFRAME_WORLD_KEST_GAMES, "")) {
+            const std::string kText = test::readFile(RAWFRAME_WORLD_KEST_GAMES + path);
+            const auto kBytes = std::as_bytes(std::span{kText.data(), kText.size()});
+            files.emplace_back("game/" + path, std::vector<std::byte>{kBytes.begin(), kBytes.end()});
+        }
+        return *composition::HeldFiles::of(std::move(files));
+    }();
+    return kHeld;
+}
+
+inline void writeText(const std::string& path, std::string_view text) {
+    if (std::FILE* file = std::fopen(path.c_str(), "wb")) {
         std::fwrite(text.data(), 1, text.size(), file);
         std::fclose(file);
     }
 }
 
-inline std::string readText(const std::filesystem::path& path) {
+inline std::string readText(const std::string& path) {
     std::string text;
-    if (std::FILE* file = std::fopen(path.string().c_str(), "rb")) {
+    if (std::FILE* file = std::fopen(path.c_str(), "rb")) {
         char chunk[4096];
         std::size_t got = 0;
         while ((got = std::fread(chunk, 1, sizeof chunk, file)) != 0) {

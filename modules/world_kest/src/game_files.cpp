@@ -699,18 +699,32 @@ result::Result<composition::ParticipantOwner> makeGameFiles(composition::Partici
                             "a game is named by kest.game or kest.game_resource, not both");
     }
     if (kPath) {
-#if RAWFRAME_FILE_SYSTEM
         game_content::GameContent* content = nullptr;
         if (context.has(game_content::kGameContent.name)) {
             RAWFRAME_TRY_ASSIGN(content, context.capability(game_content::kGameContent));
         }
-        RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromDirectory(std::string{*kPath}, content));
+        // From the files the host holds when it holds some (D167): the
+        // description's directory's files.
+        if (const composition::HeldFiles* held = context.heldFiles()) {
+            const std::size_t kSlash = kPath->rfind('/');
+            const std::string_view kDirectory = kSlash == std::string_view::npos ? "" : kPath->substr(0, kSlash);
+            std::vector<std::pair<std::string, std::string>> files;
+            for (auto& [path, bytes] : held->under(kDirectory)) {
+                files.emplace_back(std::move(path),
+                                   std::string{reinterpret_cast<const char*>(bytes.data()), bytes.size()});
+            }
+            const std::string_view kName = kSlash == std::string_view::npos ? *kPath : kPath->substr(kSlash + 1);
+            RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromHeld(kName, std::move(files), content));
+        } else {
+#if RAWFRAME_FILE_SYSTEM
+            RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromDirectory(std::string{*kPath}, content));
 #else
-        return result::fail(result::ErrorClass::FailedPrecondition,
-                            kWorldKestDomain,
-                            code(WorldKestError::UnreadableFile),
-                            "kest.game names a directory, and there are none here; name kest.game_resource");
+            return result::fail(result::ErrorClass::FailedPrecondition,
+                                kWorldKestDomain,
+                                code(WorldKestError::UnreadableFile),
+                                "kest.game names a file, and there are none here; name kest.game_resource or hold it");
 #endif
+        }
     } else if (kResource) {
         const base::Bits128Parse kId = base::parseBits128Hex(*kResource);
         if (!kId.parsed || kId.value == base::Bits128{} || !context.has(game_content::kGameContent.name)) {

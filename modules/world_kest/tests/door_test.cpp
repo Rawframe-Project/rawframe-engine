@@ -29,21 +29,23 @@ const std::array<composition::RegistrarEntry, 5> kWithPhysics = {
     composition::RegistrarEntry{"physics3d", &physics3d::registerParticipants, physics3d::kScopes},
     composition::RegistrarEntry{"test", &registerWatcher, world_runtime::kScopes}};
 
-/// Plays the game `name` beside the test's games for `ticks` ticks at 60 Hz
-/// and hands its World to `check` before it stops.
+/// Plays the test game `name`, held as a web client holds its files, for
+/// `ticks` ticks at 60 Hz and hands its World to `check` before it stops.
 template <typename Check> void play(std::string_view name, std::uint64_t ticks, const Check& check) {
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(
         composition::CompositionRequest{.registrars = kWithPhysics,
                                         .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
         problems);
-    const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + std::string{name} + "\n" +
-                              "world.tick_rate = 60\n" + "world.maximum_ticks_per_iteration = 1\n";
+    const std::string kText = "kest.game = game/" + std::string{name} + "\n" + "world.tick_rate = 60\n" +
+                              "world.maximum_ticks_per_iteration = 1\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
     composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        *plan,
+        composition::HostServices{
+            .clock = &clock, .scope = &root, .configuration = &*kConfiguration, .files = &heldGames()}};
     auto started = composition.start();
     if (!started.has_value()) {
         std::fprintf(stderr, "%s\n", std::string{started.error().description()}.c_str());

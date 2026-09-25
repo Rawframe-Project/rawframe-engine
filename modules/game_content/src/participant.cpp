@@ -34,6 +34,11 @@ public:
                                                                "cooked content is read on the blocking-I/O executor")
                                                       .error()};
         }
+        // A host that holds files names its Composition among them (D167),
+        // as a web client holds what it fetched.
+        if (const composition::HeldFiles* held = context.heldFiles()) {
+            return loadHeld(context, *held);
+        }
 #if !RAWFRAME_FILE_SYSTEM
         // Without files, content is held by the host that fetched it, not
         // named by a path.
@@ -42,7 +47,7 @@ public:
                 result::fail(result::ErrorClass::FailedPrecondition,
                              content::kContentDomain,
                              code(content::ContentError::SourceUnavailable),
-                             "content.root and content.composition name directories, and there are none here")
+                             "content.root and content.composition name files, and there are none here")
                     .error()};
         }
         RAWFRAME_TRY_ASSIGN(
@@ -83,6 +88,45 @@ public:
                 *context.blockingIoExecutor(), context.owner(), context.scope(), context.clock(), std::move(root)));
         return {};
 #endif
+    }
+
+    /// A Composition's record and library from the files the host holds;
+    /// a cook's output is a directory's, never held.
+    result::Status loadHeld(composition::ParticipantContext& context, const composition::HeldFiles& held) {
+        const composition::Configuration& configuration = context.configuration();
+        const auto kComposition = configuration.text("content.composition");
+        const auto kLibrary = configuration.text("content.library");
+        if (configuration.text("content.root")) {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                               content::kContentDomain,
+                                                               code(content::ContentError::SourceUnavailable),
+                                                               "a cook's output is not held; hold a Composition")
+                                                      .error()};
+        }
+        if (!kComposition) {
+            RAWFRAME_TRY_ASSIGN(
+                content_,
+                CookedContent::none(*context.blockingIoExecutor(), context.owner(), context.scope(), context.clock()));
+            return {};
+        }
+        const std::vector<std::byte>* record = held.find(*kComposition);
+        if (record == nullptr || !kLibrary) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             content::kContentDomain,
+                             code(content::ContentError::SourceUnavailable),
+                             "a held Composition is named by content.composition and read from content.library")
+                    .error()};
+        }
+        RAWFRAME_TRY_ASSIGN(content_,
+                            CookedContent::openComposition(
+                                *context.blockingIoExecutor(),
+                                context.owner(),
+                                context.scope(),
+                                context.clock(),
+                                std::string_view{reinterpret_cast<const char*>(record->data()), record->size()},
+                                held.under(*kLibrary)));
+        return {};
     }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {

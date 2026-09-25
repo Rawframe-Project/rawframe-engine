@@ -71,10 +71,11 @@ struct Run {
             problems);
         RAWFRAME_EXPECT(made.has_value());
         composed = std::move(*made);
-        configuration = *composition::Configuration::parse(std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
-                                                           std::string{game} + "\n");
+        configuration = *composition::Configuration::parse("kest.game = game/" + std::string{game} + "\n");
         composition.emplace(
-            *composed, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*configuration});
+            *composed,
+            composition::HostServices{
+                .clock = &clock, .scope = &root, .configuration = &*configuration, .files = &game_test::heldGames()});
         return composition->start();
     }
 };

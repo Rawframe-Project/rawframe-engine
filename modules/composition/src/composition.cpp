@@ -70,6 +70,10 @@ const Configuration& ParticipantContext::configuration() const noexcept {
     return configuration != nullptr ? *configuration : kEmpty;
 }
 
+const HeldFiles* ParticipantContext::heldFiles() const noexcept {
+    return composition_->services_.files;
+}
+
 bool ParticipantContext::admitting() const noexcept {
     const HostLifecycle* lifecycle = composition_->services_.lifecycle;
     return lifecycle != nullptr ? lifecycle->admitting() : composition_->running_;
