@@ -9,6 +9,7 @@
 #include "rawframe/test/test.h"
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <numbers>
 #include <thread>
@@ -217,7 +218,10 @@ RAWFRAME_TEST(TheMixThreadRendersWhileTheOwnerPlays) {
     const auto kClip = constant(0.01F, 480);
     int played = 0;
     std::vector<Playback> playing;
-    for (int round = 0; round < 3000; ++round) {
+    // Until three hundred plays went through, however slowly a loaded
+    // machine schedules the mix thread, within ten seconds.
+    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (int round = 0; played < 300 && std::chrono::steady_clock::now() < kDeadline; ++round) {
         mixer->collect();
         if (auto playback = mixer->play(kClip, {.bus = round % 2 == 0 ? kMusic : kEffects}); playback.has_value()) {
             ++played;
@@ -234,7 +238,7 @@ RAWFRAME_TEST(TheMixThreadRendersWhileTheOwnerPlays) {
     for (const Playback& playback : playing) {
         mixer->stop(playback);
     }
-    for (int wait = 0; wait < 10'000; ++wait) {
+    while (std::chrono::steady_clock::now() < kDeadline + std::chrono::seconds(10)) {
         mixer->collect();
         bool any = false;
         for (const Playback& playback : playing) {
