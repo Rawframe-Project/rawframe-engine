@@ -289,6 +289,36 @@ RAWFRAME_TEST(RootMotionMovesTheCharacterNotItsPose) {
     RAWFRAME_EXPECT(still.moveX == 0.0 && std::abs(still.travelX - 1.0) < 1e-9);
 }
 
+RAWFRAME_TEST(StagesTurnThePoseWhereItIsDrawn) {
+    // Standing still, the root turned so its x points along y: the arm a
+    // meter along y. A presentation stage, so a server leaves it be.
+    using namespace animation;
+    const auto kStill = std::make_shared<const Clip>(
+        Clip{.skeleton = kSkeletonId,
+             .duration = 1.0,
+             .loop = Loop::Loop,
+             .tracks = {Track{.bone = kRoot, .channel = Channel::Translation, .keys = {Key{.value = {}}}}}});
+    const Graph kGraph{
+        .parameters = {},
+        .nodes = {GraphNode{.id = 1, .node = ClipNode{.clip = kIdleId}},
+                  GraphNode{.id = 2, .node = OutputNode{.pose = {.node = 1}}}},
+        .modifiers = {Modifier{.stage = LookAt{.bone = kRoot, .goal = {0.0, 5.0, 0.0}, .axis = {1, 0, 0}}}},
+        .presentation = {}};
+    const std::vector<NamedClip> kClips{{kIdleId, kStill}};
+    const auto kArmAt = [&](bool simulationOnly) {
+        Stage stage{AnimationSettings{
+            .animators = {AnimatorSettings{.id = kLocomotion,
+                                           .graph = *CompiledGraph::compile(kGraph, rig(), kSkeletonId, kClips)}},
+            .simulationOnly = simulationOnly}};
+        const world::EntityHandle kEntity = stage.walker(0.0F, 1);
+        stage.run(1);
+        return stage.animation->pose(kEntity)->bones[1].translation;
+    };
+    const std::array<double, 3> kShown = kArmAt(false);
+    RAWFRAME_EXPECT(std::abs(kShown[0]) < 1e-12 && std::abs(kShown[1] - 1.0) < 1e-12);
+    RAWFRAME_EXPECT(kArmAt(true) == (std::array<double, 3>{1, 0, 0}));
+}
+
 RAWFRAME_TEST(ParametersNotOfTheirTypeAreRefused) {
     Stage stage;
     const world::EntityHandle kWalker = stage.walker(1.0F);

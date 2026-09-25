@@ -166,6 +166,9 @@ struct WorldAnimation::State {
                 commitMotion(played->instance.rootMotion(), *moved);
                 digested.update(std::as_bytes(std::span{moved, 1}));
             }
+            // The graph's stages, on the pose where the entity is; a server
+            // runs only the simulation's.
+            evaluator.modify(played->instance, local, settings.simulationOnly);
             animation::toModelSpace(played->instance.graph().parents(), local, played->pose);
             for (const animation::Transform& bone : played->pose.bones) {
                 digested.update(std::as_bytes(std::span{bone.translation}));
