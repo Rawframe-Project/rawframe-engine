@@ -51,6 +51,9 @@ struct PlayParameters {
     /// beginning and runs into the region.
     std::uint32_t loopStart = 0;
     std::uint32_t loopEnd = 0;
+    /// Where in the clip to begin, in frames: a sound brought back from
+    /// virtual goes on where it would be.
+    std::uint32_t startFrame = 0;
 };
 
 enum class PlaybackState : std::uint8_t {
@@ -106,6 +109,8 @@ public:
     void stop(Playback playback, float fade = 0);
     void setVolume(Playback playback, float decibels);
     void setPitch(Playback playback, float pitch);
+    /// From hard left (minus one) to hard right (one).
+    void setPan(Playback playback, float pan);
     void setBusVolume(std::size_t bus, float decibels);
     void setBusMuted(std::size_t bus, bool muted);
     /// Takes what the mix thread handed back: finished playbacks are

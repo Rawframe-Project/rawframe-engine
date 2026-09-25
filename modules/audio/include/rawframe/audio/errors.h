@@ -23,6 +23,8 @@ enum class AudioError : std::uint32_t {
     QueueFull = 4,
     /// Bytes that are not a sound of an admitted form.
     BadSound = 5,
+    /// A full concurrency set turned a play away.
+    Concurrency = 6,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(AudioError error) noexcept {

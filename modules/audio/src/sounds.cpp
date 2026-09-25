@@ -1,0 +1,435 @@
+#include "rawframe/audio/sounds.h"
+
+#include "rawframe/audio/errors.h"
+#include "rawframe/world/random.h"
+
+#include <algorithm>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <sstream>
+#include <utility>
+
+namespace rawframe::audio {
+
+namespace {
+
+std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AudioError error, std::string_view why) {
+    return std::unexpected<result::Error>{result::fail(errorClass, kAudioDomain, code(error), why).error()};
+}
+
+result::Result<std::vector<std::byte>> readBytes(const std::filesystem::path& path) {
+    std::ifstream file{path, std::ios::binary};
+    if (!file) {
+        return std::unexpected<result::Error>{
+            refuse(result::ErrorClass::NotFound, AudioError::BadSound, "a file cannot be read")
+                .error()
+                .withContext("path", path.string())};
+    }
+    std::vector<std::byte> bytes;
+    for (std::istreambuf_iterator<char> at{file}; at != std::istreambuf_iterator<char>{}; ++at) {
+        bytes.push_back(static_cast<std::byte>(*at));
+    }
+    return bytes;
+}
+
+float distanceBetween(Position from, Position to) noexcept {
+    return std::hypot(to.x - from.x, to.y - from.y, to.z - from.z);
+}
+
+/// One instance, as the owner keeps it.
+struct Live {
+    std::uint32_t generation = 0;
+    bool used = false;
+    InstanceState state = InstanceState::Finished;
+    std::size_t sound = 0;
+    std::size_t variant = 0;
+    std::optional<Position> at;
+    /// Its drawn volume as a gain, and its drawn pitch.
+    float gain = 1;
+    float pitch = 1;
+    /// The order instances started in: lower is older.
+    std::uint64_t started = 0;
+    std::optional<Playback> playback;
+    /// Where in its clip it is, in frames, kept by the owner so a virtual
+    /// instance comes back where it would be.
+    double frame = 0;
+    /// Its gain after distance, last update: what `stop_quietest` weighs.
+    float audible = 1;
+};
+
+} // namespace
+
+result::Result<LoadedSound> loadSound(const std::string& path, const Layout& layout, const DecodeLimits& limits) {
+    const std::filesystem::path kPath{path};
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kText, readBytes(kPath));
+    const std::string_view kView{reinterpret_cast<const char*>(kText.data()), kText.size()};
+    auto declaration = readSound(kView, layout);
+    if (!declaration.has_value()) {
+        return std::unexpected<result::Error>{std::move(declaration).error().withContext("path", path)};
+    }
+    LoadedSound loaded{.declaration = std::move(*declaration), .clips = {}};
+    for (const Variant& variant : loaded.declaration.variants) {
+        const std::filesystem::path kClip = kPath.parent_path() / variant.clip;
+        RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes, readBytes(kClip));
+        auto clip = decodeWav(kBytes, limits);
+        if (!clip.has_value()) {
+            return std::unexpected<result::Error>{std::move(clip).error().withContext("path", kClip.string())};
+        }
+        loaded.clips.push_back(std::make_shared<const Clip>(std::move(*clip)));
+    }
+    return loaded;
+}
+
+struct Sounds::State {
+    Mixer* mixer = nullptr;
+    Layout layout;
+    SoundsSettings settings;
+    SoundsStatistics statistics;
+    world::Pcg32 random = world::deriveStream(world::RootSeed{0}, "rawframe.audio", "sounds");
+    std::vector<LoadedSound> sounds;
+    /// Per sound: the next variant in sequence, and the last one picked.
+    std::vector<std::size_t> nextVariant;
+    std::vector<std::optional<std::size_t>> lastVariant;
+    std::vector<Live> instances;
+    std::uint64_t serial = 0;
+    std::optional<Listener> listener;
+
+    [[nodiscard]] Live* liveOf(Instance instance) noexcept {
+        if (instance.slot >= instances.size()) {
+            return nullptr;
+        }
+        Live& live = instances[instance.slot];
+        return live.used && live.generation == instance.generation ? &live : nullptr;
+    }
+
+    std::size_t pickVariant(std::size_t sound) {
+        const SoundDeclaration& declaration = sounds[sound].declaration;
+        const std::size_t kCount = declaration.variants.size();
+        std::size_t picked = 0;
+        if (declaration.selection == Selection::Sequential) {
+            picked = nextVariant[sound];
+            nextVariant[sound] = (picked + 1) % kCount;
+        } else {
+            const bool kAvoid = declaration.selection == Selection::RandomNoImmediateRepeat && kCount > 1 &&
+                                lastVariant[sound].has_value();
+            std::uint64_t total = 0;
+            for (std::size_t index = 0; index < kCount; ++index) {
+                total += kAvoid && index == *lastVariant[sound] ? 0 : declaration.variants[index].weight;
+            }
+            std::uint64_t draw = random.nextU64() % total;
+            for (std::size_t index = 0; index < kCount; ++index) {
+                const std::uint64_t kWeight =
+                    kAvoid && index == *lastVariant[sound] ? 0 : declaration.variants[index].weight;
+                if (draw < kWeight) {
+                    picked = index;
+                    break;
+                }
+                draw -= kWeight;
+            }
+        }
+        lastVariant[sound] = picked;
+        return picked;
+    }
+
+    float draw(float minimum, float maximum) noexcept {
+        return minimum + ((maximum - minimum) * random.nextFloat());
+    }
+
+    /// Distance gain and pan of a spatial instance now; none for a flat one.
+    [[nodiscard]] std::pair<float, float> placement(const Live& live) const noexcept {
+        const std::optional<Attenuation>& attenuation = sounds[live.sound].declaration.attenuation;
+        if (!attenuation) {
+            return {1.0F, 0.0F};
+        }
+        if (!listener || !live.at) {
+            return {attenuation->noListener == NoListener::FlatFallback ? 1.0F : 0.0F, 0.0F};
+        }
+        const Position kAt = *live.at;
+        const Position kFrom = listener->position;
+        const float kDistance = distanceBetween(kFrom, kAt);
+        const float kRight = listener->right.x * (kAt.x - kFrom.x) + listener->right.y * (kAt.y - kFrom.y) +
+                             listener->right.z * (kAt.z - kFrom.z);
+        const float kPan = kDistance > 0 ? std::clamp(kRight / kDistance, -1.0F, 1.0F) : 0.0F;
+        return {attenuate(*attenuation, kDistance), kPan};
+    }
+
+    [[nodiscard]] float distanceOf(const Live& live) const noexcept {
+        return listener && live.at ? distanceBetween(listener->position, *live.at) : 0.0F;
+    }
+
+    /// Starts a voice for a live instance at its frame; false if none is free.
+    bool voice(Live& live, float audible, float pan) {
+        const LoadedSound& sound = sounds[live.sound];
+        const SoundDeclaration& declaration = sound.declaration;
+        const Clip& clip = *sound.clips[live.variant];
+        PlayParameters parameters{.bus = declaration.bus,
+                                  .volume = 20.0F * std::log10(std::max(live.gain * audible, 1e-6F)),
+                                  .pitch = live.pitch,
+                                  .pan = pan,
+                                  .loop = declaration.loop};
+        if (declaration.loop && declaration.loopStart) {
+            parameters.loopStart = static_cast<std::uint32_t>(*declaration.loopStart * static_cast<float>(clip.rate));
+            parameters.loopEnd = static_cast<std::uint32_t>(*declaration.loopEnd * static_cast<float>(clip.rate));
+        }
+        parameters.startFrame = static_cast<std::uint32_t>(live.frame);
+        auto playback = mixer->play(sound.clips[live.variant], parameters);
+        if (!playback.has_value()) {
+            return false;
+        }
+        live.playback = *playback;
+        live.state = InstanceState::Playing;
+        return true;
+    }
+
+    void release(Live& live) noexcept {
+        live.used = false;
+        live.state = InstanceState::Finished;
+        live.playback.reset();
+    }
+
+    void virtualize(Live& live) {
+        if (live.playback) {
+            mixer->stop(*live.playback, 0.05F);
+            live.playback.reset();
+        }
+        if (sounds[live.sound].declaration.virtualization == Virtualization::Restart) {
+            live.frame = 0;
+        }
+        live.state = InstanceState::Virtual;
+        ++statistics.virtualized;
+    }
+
+    /// Advances an instance's own count of frames; false when a sound that
+    /// does not loop has run out.
+    bool advance(Live& live, float seconds) noexcept {
+        const LoadedSound& sound = sounds[live.sound];
+        const Clip& clip = *sound.clips[live.variant];
+        live.frame += static_cast<double>(seconds) * clip.rate * live.pitch;
+        const auto kLength = static_cast<double>(clip.frames());
+        if (!sound.declaration.loop) {
+            return live.frame < kLength;
+        }
+        const double kStart = sound.declaration.loopStart ? *sound.declaration.loopStart * clip.rate : 0.0;
+        const double kEnd = sound.declaration.loopEnd ? *sound.declaration.loopEnd * clip.rate : kLength;
+        if (live.frame >= kEnd) {
+            live.frame = kStart + std::fmod(live.frame - kStart, kEnd - kStart);
+        }
+        return true;
+    }
+
+    /// Makes room in a full concurrency set for a new play, by the set's
+    /// rule; false when the newcomer is the one that yields.
+    bool makeRoom(std::size_t set, std::size_t sound, std::optional<Position> at) {
+        const ConcurrencySet& rule = layout.concurrency[set];
+        std::vector<Live*> members;
+        for (Live& live : instances) {
+            if (live.used && live.state != InstanceState::Stopping &&
+                sounds[live.sound].declaration.concurrency == set) {
+                members.push_back(&live);
+            }
+        }
+        if (members.size() < rule.maximumInstances) {
+            return true;
+        }
+        // Who yields: a weight a member and the newcomer each have, the
+        // largest yielding, and the oldest among equals (the newcomer is the
+        // newest, so it yields only when strictly the largest).
+        Live newcomer{.sound = sound, .at = at, .started = serial + 1};
+        newcomer.audible = placement(newcomer).first;
+        const auto kWeight = [this, &rule](const Live& live) -> double {
+            switch (rule.resolution) {
+            case Resolution::StopFarthestThenOldest:
+                return distanceOf(live);
+            case Resolution::StopQuietest:
+                return -live.audible;
+            case Resolution::StopLowestPriorityThenOldest:
+                return -static_cast<double>(sounds[live.sound].declaration.priority);
+            case Resolution::StopOldest:
+            case Resolution::PreventNew:
+                return 0;
+            }
+            return 0;
+        };
+        if (rule.resolution == Resolution::PreventNew) {
+            return false;
+        }
+        Live* yielding = nullptr;
+        for (Live* member : members) {
+            if (yielding == nullptr || kWeight(*member) > kWeight(*yielding) ||
+                (kWeight(*member) == kWeight(*yielding) && member->started < yielding->started)) {
+                yielding = member;
+            }
+        }
+        if (kWeight(newcomer) > kWeight(*yielding)) {
+            return false;
+        }
+        if (yielding->playback) {
+            mixer->stop(*yielding->playback);
+        }
+        release(*yielding);
+        ++statistics.evicted;
+        return true;
+    }
+};
+
+Sounds::Sounds(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
+}
+
+Sounds::~Sounds() = default;
+
+result::Result<std::unique_ptr<Sounds>>
+Sounds::create(Mixer& mixer, const Layout& layout, const SoundsSettings& settings) {
+    if (settings.maximumInstances == 0) {
+        return refuse(result::ErrorClass::InvalidArgument, AudioError::BadSettings, "room for no instances");
+    }
+    auto state = std::make_unique<State>();
+    state->mixer = &mixer;
+    state->layout = layout;
+    state->settings = settings;
+    state->random = world::deriveStream(world::RootSeed{settings.seed}, "rawframe.audio", "sounds");
+    state->instances.resize(settings.maximumInstances);
+    return std::unique_ptr<Sounds>{new Sounds{std::move(state)}};
+}
+
+result::Result<std::size_t> Sounds::add(LoadedSound sound) {
+    const SoundDeclaration& declaration = sound.declaration;
+    if (sound.clips.size() != declaration.variants.size() || declaration.bus >= state_->layout.buses.size()) {
+        return refuse(result::ErrorClass::InvalidArgument, AudioError::BadPlay, "a sound needs a clip a variant");
+    }
+    for (const std::shared_ptr<const Clip>& clip : sound.clips) {
+        const double kLength =
+            clip == nullptr || clip->rate == 0 ? 0 : static_cast<double>(clip->frames()) / clip->rate;
+        if (kLength == 0 || (declaration.loopEnd && *declaration.loopEnd > kLength)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AudioError::BadPlay,
+                          "a loop ends past a variant's end, or a variant is empty");
+        }
+    }
+    state_->sounds.push_back(std::move(sound));
+    state_->nextVariant.push_back(0);
+    state_->lastVariant.emplace_back();
+    return state_->sounds.size() - 1;
+}
+
+result::Result<Instance> Sounds::play(std::size_t sound, std::optional<Position> at) {
+    State& state = *state_;
+    if (sound >= state.sounds.size()) {
+        return refuse(result::ErrorClass::NotFound, AudioError::BadPlay, "no such sound");
+    }
+    const SoundDeclaration& declaration = state.sounds[sound].declaration;
+    if (declaration.concurrency && !state.makeRoom(*declaration.concurrency, sound, at)) {
+        ++state.statistics.refusedByConcurrency;
+        return refuse(result::ErrorClass::ResourceExhausted,
+                      AudioError::Concurrency,
+                      "the sound's concurrency set is full and it yields");
+    }
+    const auto kFree = std::ranges::find(state.instances, false, &Live::used);
+    if (kFree == state.instances.end()) {
+        return refuse(result::ErrorClass::ResourceExhausted, AudioError::NoVoice, "every instance slot is in use");
+    }
+    Live& live = *kFree;
+    live = Live{.generation = live.generation + 1,
+                .used = true,
+                .state = InstanceState::Playing,
+                .sound = sound,
+                .variant = state.pickVariant(sound),
+                .at = at,
+                .gain = gainOf(state.draw(declaration.volumeMinimum, declaration.volumeMaximum)),
+                .pitch = state.draw(declaration.pitchMinimum, declaration.pitchMaximum),
+                .started = ++state.serial};
+    const auto [kAudible, kPan] = state.placement(live);
+    live.audible = kAudible;
+    const bool kInRange = !declaration.attenuation || kAudible > 0;
+    if (!kInRange || !state.voice(live, kAudible, kPan)) {
+        if (declaration.virtualization == Virtualization::Disabled) {
+            state.release(live);
+            return refuse(result::ErrorClass::ResourceExhausted,
+                          AudioError::NoVoice,
+                          kInRange ? "no voice is free and the sound may not go virtual"
+                                   : "the sound is out of range and may not go virtual");
+        }
+        state.virtualize(live);
+    }
+    return Instance{.slot = static_cast<std::uint32_t>(kFree - state.instances.begin()), .generation = live.generation};
+}
+
+void Sounds::stop(Instance instance, float fade) {
+    State& state = *state_;
+    Live* live = state.liveOf(instance);
+    if (live == nullptr) {
+        return;
+    }
+    if (live->playback) {
+        state.mixer->stop(*live->playback, fade);
+        live->state = InstanceState::Stopping;
+    } else {
+        state.release(*live);
+    }
+}
+
+void Sounds::move(Instance instance, Position at) {
+    if (Live* live = state_->liveOf(instance)) {
+        live->at = at;
+    }
+}
+
+void Sounds::setListener(std::optional<Listener> listener) {
+    state_->listener = listener;
+}
+
+void Sounds::update(float seconds) {
+    State& state = *state_;
+    state.mixer->collect();
+    for (Live& live : state.instances) {
+        if (!live.used) {
+            continue;
+        }
+        const SoundDeclaration& declaration = state.sounds[live.sound].declaration;
+        const bool kRunning = state.advance(live, seconds);
+        if (live.playback && state.mixer->state(*live.playback) == PlaybackState::Finished) {
+            state.release(live);
+            continue;
+        }
+        if (live.state == InstanceState::Stopping) {
+            continue;
+        }
+        if (live.state == InstanceState::Virtual && !kRunning) {
+            state.release(live);
+            continue;
+        }
+        const auto [kAudible, kPan] = state.placement(live);
+        live.audible = kAudible;
+        const bool kInRange = !declaration.attenuation || kAudible > 0;
+        if (live.state == InstanceState::Playing && !kInRange) {
+            if (declaration.virtualization == Virtualization::Disabled) {
+                state.mixer->stop(*live.playback);
+                live.state = InstanceState::Stopping;
+                ++state.statistics.culled;
+            } else {
+                state.virtualize(live);
+            }
+        } else if (live.state == InstanceState::Playing && live.playback) {
+            state.mixer->setVolume(*live.playback, 20.0F * std::log10(std::max(live.gain * kAudible, 1e-6F)));
+            state.mixer->setPan(*live.playback, kPan);
+        } else if (live.state == InstanceState::Virtual && kInRange && state.voice(live, kAudible, kPan)) {
+            ++state.statistics.revived;
+        }
+    }
+}
+
+InstanceState Sounds::state(Instance instance) const noexcept {
+    const State& state = *state_;
+    if (instance.slot >= state.instances.size() || state.instances[instance.slot].generation != instance.generation ||
+        !state.instances[instance.slot].used) {
+        return InstanceState::Finished;
+    }
+    return state.instances[instance.slot].state;
+}
+
+const SoundsStatistics& Sounds::statistics() const noexcept {
+    return state_->statistics;
+}
+
+} // namespace rawframe::audio

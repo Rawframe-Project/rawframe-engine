@@ -8,6 +8,7 @@
 #include <bit>
 #include <cmath>
 #include <numbers>
+#include <tuple>
 #include <utility>
 
 namespace rawframe::audio {
@@ -53,6 +54,7 @@ struct Command {
         Stop,
         Volume,
         Pitch,
+        Pan,
         BusVolume,
         BusMuted
     };
@@ -69,12 +71,23 @@ struct Command {
     bool loop = false;
     std::uint32_t loopStart = 0;
     std::uint32_t loopEnd = 0;
+    std::uint32_t startFrame = 0;
 };
 
 struct Finished {
     std::uint32_t voice = 0;
     std::uint32_t generation = 0;
 };
+
+/// A pan's gains, left and right: constant power for one channel, balance
+/// for two.
+std::pair<float, float> panGains(std::uint32_t channels, float pan) noexcept {
+    if (channels == 1) {
+        const float kAngle = (pan + 1.0F) * std::numbers::pi_v<float> / 4.0F;
+        return {std::cos(kAngle), std::sin(kAngle)};
+    }
+    return {std::min(1.0F, 1.0F - pan), std::min(1.0F, 1.0F + pan)};
+}
 
 /// The owner's view of one voice.
 struct Slot {
@@ -254,19 +267,17 @@ struct Mixer::State {
         switch (command.kind) {
         case Command::Kind::Play: {
             Voice& voice = voices[command.voice];
-            // Constant power for one channel, balance for two.
-            const float kAngle = (command.pan + 1.0F) * std::numbers::pi_v<float> / 4.0F;
-            const bool kMono = command.clip->channels == 1;
+            const auto [kLeft, kRight] = panGains(command.clip->channels, command.pan);
             voice = Voice{.active = true,
                           .generation = command.generation,
                           .clip = command.clip,
                           .bus = command.bus,
-                          .position = 0,
+                          .position = static_cast<double>(command.startFrame),
                           .pitch = command.pitch,
                           .gain = command.value,
                           .currentGain = command.value,
-                          .left = kMono ? std::cos(kAngle) : std::min(1.0F, 1.0F - command.pan),
-                          .right = kMono ? std::sin(kAngle) : std::min(1.0F, 1.0F + command.pan),
+                          .left = kLeft,
+                          .right = kRight,
                           .loop = command.loop,
                           .loopStart = command.loopStart,
                           .loopEnd = command.loopEnd == 0 ? static_cast<std::uint32_t>(command.clip->frames())
@@ -286,6 +297,13 @@ struct Mixer::State {
             Voice& voice = voices[command.voice];
             if (voice.active && voice.generation == command.generation) {
                 (command.kind == Command::Kind::Volume ? voice.gain : voice.pitch) = command.value;
+            }
+            break;
+        }
+        case Command::Kind::Pan: {
+            Voice& voice = voices[command.voice];
+            if (voice.active && voice.generation == command.generation) {
+                std::tie(voice.left, voice.right) = panGains(voice.clip->channels, command.pan);
             }
             break;
         }
@@ -484,7 +502,7 @@ result::Result<Playback> Mixer::play(std::shared_ptr<const Clip> clip, const Pla
     const std::size_t kLoopEnd = parameters.loopEnd == 0 ? kFrames : parameters.loopEnd;
     if (clip == nullptr || clip->channels == 0 || clip->channels > 2 || clip->rate == 0 || kFrames == 0 ||
         kFrames > 0xFFFF'FFFFU || parameters.bus >= state.layout.buses.size() || !(parameters.pitch > 0) ||
-        !std::isfinite(parameters.pitch) ||
+        !std::isfinite(parameters.pitch) || parameters.startFrame >= kFrames ||
         (parameters.loop && (parameters.loopStart >= kLoopEnd || kLoopEnd > kFrames))) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kAudioDomain,
@@ -510,7 +528,8 @@ result::Result<Playback> Mixer::play(std::shared_ptr<const Clip> clip, const Pla
                         .pan = std::clamp(parameters.pan, -1.0F, 1.0F),
                         .loop = parameters.loop,
                         .loopStart = parameters.loopStart,
-                        .loopEnd = parameters.loopEnd};
+                        .loopEnd = parameters.loopEnd,
+                        .startFrame = parameters.startFrame};
     if (!state.send(kPlay)) {
         return result::fail(result::ErrorClass::ResourceExhausted,
                             kAudioDomain,
@@ -551,6 +570,16 @@ void Mixer::setPitch(Playback playback, float pitch) {
     if (state.slotOf(playback) != nullptr && pitch > 0 && std::isfinite(pitch)) {
         static_cast<void>(state.send(Command{
             .kind = Command::Kind::Pitch, .voice = playback.voice, .generation = playback.generation, .value = pitch}));
+    }
+}
+
+void Mixer::setPan(Playback playback, float pan) {
+    State& state = *state_;
+    if (state.slotOf(playback) != nullptr && std::isfinite(pan)) {
+        static_cast<void>(state.send(Command{.kind = Command::Kind::Pan,
+                                             .voice = playback.voice,
+                                             .generation = playback.generation,
+                                             .pan = std::clamp(pan, -1.0F, 1.0F)}));
     }
 }
 
