@@ -5,8 +5,8 @@
 // arrays of numbers shown here on one line, where the form has one a line):
 //
 //   {
-//     "kind": "animation.clip",
 //     "formatVersion": 1,
+//     "kind": "animation.clip",
 //     "skeleton": "52771075251e7361deaecf4939c72e56",
 //     "duration": 1,
 //     "loop": "loop",

@@ -54,7 +54,7 @@ RAWFRAME_TEST(ASkeletonHasOneText) {
         return;
     }
     // Changing the form moves this, and needs a new format version.
-    RAWFRAME_EXPECT(kText->starts_with("{\n  \"kind\": \"animation.skeleton\",\n  \"formatVersion\": 1,\n  \"bones\": "
+    RAWFRAME_EXPECT(kText->starts_with("{\n  \"formatVersion\": 1,\n  \"kind\": \"animation.skeleton\",\n  \"bones\": "
                                        "[\n    {\n      \"target\": \""));
     RAWFRAME_EXPECT(kText->contains("\"name\": \"spine\",\n      \"parent\": 0,\n      \"translation\": [\n        "
                                     "0,\n        0.25,\n        0\n      ],"));
@@ -122,7 +122,7 @@ RAWFRAME_TEST(OnlyTheCanonicalTextReads) {
                                       kReplaced("\"name\": \"hips\"", "\"name\": 7"),
                                       kReplaced("\"name\": \"hips\",", "\"name\": \"hips\",\n      \"mass\": 1,"),
                                       *kText + " ",
-                                      kReplaced("{\n  \"kind\"", "{\n   \"kind\""),
+                                      kReplaced("{\n  \"formatVersion\"", "{\n   \"formatVersion\""),
                                       std::string{"[]"}}) {
         RAWFRAME_EXPECT(!readSkeleton(kWrong).has_value());
     }

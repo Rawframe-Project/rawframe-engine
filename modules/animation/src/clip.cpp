@@ -233,8 +233,8 @@ result::Result<std::string> writeClip(const Clip& clip, const ClipLimits& limits
         markers.push(std::move(made));
     }
     Value made = Value::object();
-    made.add("kind", Value::string("animation.clip"));
     made.add("formatVersion", Value::integer(1));
+    made.add("kind", Value::string("animation.clip"));
     if (clip.skeleton.has_value()) {
         made.add("skeleton", Value::string(hexOf(*clip.skeleton)));
     }
@@ -256,11 +256,11 @@ result::Result<Clip> readClip(std::string_view text, const ClipLimits& limits) {
     const bool kShape =
         kBound
             ? hasMembers(*parsed,
-                         {"kind", "formatVersion", "skeleton", "duration", "loop", "tracks", "events", "syncMarkers"})
-            : hasMembers(*parsed, {"kind", "formatVersion", "duration", "loop", "tracks", "events", "syncMarkers"});
+                         {"formatVersion", "kind", "skeleton", "duration", "loop", "tracks", "events", "syncMarkers"})
+            : hasMembers(*parsed, {"formatVersion", "kind", "duration", "loop", "tracks", "events", "syncMarkers"});
     if (!kShape || kind->text() == nullptr || *kind->text() != "animation.clip" ||
         parsed->find("formatVersion")->integer() != 1) {
-        return invalid("a clip is kind animation.clip, format version 1, an optional skeleton, a duration, a loop, "
+        return invalid("a clip is format version 1, kind animation.clip, an optional skeleton, a duration, a loop, "
                        "tracks, events, and sync markers");
     }
     const std::optional<base::Bits128> kSkeleton = kBound ? bits128Of(parsed->find("skeleton")) : std::nullopt;

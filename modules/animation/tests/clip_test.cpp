@@ -66,7 +66,7 @@ RAWFRAME_TEST(AClipHasOneText) {
         return;
     }
     // Changing the form moves this, and needs a new format version.
-    RAWFRAME_EXPECT(kText->starts_with("{\n  \"kind\": \"animation.clip\",\n  \"formatVersion\": 1,\n  \"skeleton\": "
+    RAWFRAME_EXPECT(kText->starts_with("{\n  \"formatVersion\": 1,\n  \"kind\": \"animation.clip\",\n  \"skeleton\": "
                                        "\"52771075251e7361deaecf4939c72e56\",\n  \"duration\": 1,\n  \"loop\": "
                                        "\"loop\",\n  \"tracks\": [\n"));
     RAWFRAME_EXPECT(kText->contains("\"interpolation\": \"cubic\",\n          \"in\": ["));

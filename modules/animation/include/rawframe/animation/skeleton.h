@@ -6,8 +6,8 @@
 // arrays of numbers shown here on one line, where the form has one a line):
 //
 //   {
-//     "kind": "animation.skeleton",
 //     "formatVersion": 1,
+//     "kind": "animation.skeleton",
 //     "bones": [
 //       {
 //         "target": "3c1f0a9e5b7d2468ace013579bdf2468",

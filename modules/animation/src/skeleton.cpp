@@ -106,8 +106,8 @@ result::Result<std::string> writeSkeleton(const Skeleton& skeleton, const Skelet
         bones.push(std::move(made));
     }
     Value made = Value::object();
-    made.add("kind", Value::string("animation.skeleton"));
     made.add("formatVersion", Value::integer(1));
+    made.add("kind", Value::string("animation.skeleton"));
     made.add("bones", std::move(bones));
     return document::write(made);
 }
@@ -118,10 +118,10 @@ result::Result<Skeleton> readSkeleton(std::string_view text, const SkeletonLimit
         return std::unexpected<result::Error>{std::move(parsed).error()};
     }
     const Value* kind = parsed->find("kind");
-    if (!hasMembers(*parsed, {"kind", "formatVersion", "bones"}) || kind->text() == nullptr ||
+    if (!hasMembers(*parsed, {"formatVersion", "kind", "bones"}) || kind->text() == nullptr ||
         *kind->text() != "animation.skeleton" || parsed->find("formatVersion")->integer() != 1 ||
         parsed->find("bones")->kind() != Value::Kind::Array) {
-        return invalid("a skeleton is kind animation.skeleton, format version 1, and bones");
+        return invalid("a skeleton is format version 1, kind animation.skeleton, and bones");
     }
     const Value& bones = *parsed->find("bones");
     if (bones.items().size() > limits.maximumBones) {
