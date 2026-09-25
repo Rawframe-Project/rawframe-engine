@@ -4,8 +4,9 @@
 // receipt is the only proof accepted, every artifact is checked against the
 // receipt and the manifest it names, each resource is chunked and stored
 // by digest, and the BuildManifest names the Build by the hash of its
-// identity section. Generation 1 of this packer stores every chunk raw and
-// signs nothing.
+// identity section. Generation 2 of this packer compresses each chunk worth
+// compressing (one Zstandard frame under pinned parameters) and signs
+// nothing.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/identity.h"

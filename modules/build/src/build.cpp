@@ -1,5 +1,6 @@
 #include "rawframe/build/build.h"
 
+#include "compress.h"
 #include "rawframe/build/chunking.h"
 #include "rawframe/build/errors.h"
 #include "rawframe/content/manifest.h"
@@ -280,28 +281,33 @@ result::Result<BuildReport> packBuild(const BuildRequest& request) {
         resource.add("size", Value::integer(static_cast<std::int64_t>(entry.byteLength)));
         resources.push(std::move(resource));
 
-        // Each chunk raw: its blob is its content, stored by digest.
+        // Each chunk compressed when that makes it smaller, raw otherwise,
+        // its blob stored by the blob's digest.
         Value list = Value::array();
         const std::span<const std::byte> kAll{*kBytes};
         std::size_t start = 0;
         for (const std::size_t kEnd : chunkEnds(kAll)) {
             const std::span<const std::byte> kChunk = kAll.subspan(start, kEnd - start);
-            const content::ContentDigest kDigest = content::ContentDigest::of(kChunk);
-            const std::filesystem::path kBlob = blobPath(request.output, kDigest);
+            const content::ContentDigest kContent = content::ContentDigest::of(kChunk);
+            const std::optional<std::vector<std::byte>> kCompressed = compressChunk(kChunk);
+            const std::span<const std::byte> kBlobBytes =
+                kCompressed.has_value() ? std::span<const std::byte>{*kCompressed} : kChunk;
+            const content::ContentDigest kBlobDigest = content::ContentDigest::of(kBlobBytes);
+            const std::filesystem::path kBlob = blobPath(request.output, kBlobDigest);
             const auto kExisting = readFile(kBlob);
-            if (kExisting.has_value() && content::sameDigest(content::ContentDigest::of(*kExisting), kDigest)) {
+            if (kExisting.has_value() && content::sameDigest(content::ContentDigest::of(*kExisting), kBlobDigest)) {
                 ++report.blobsReused;
-            } else if (writeAtomically(kBlob, kChunk)) {
+            } else if (writeAtomically(kBlob, kBlobBytes)) {
                 ++report.blobsWritten;
             } else {
                 return refuse(BuildError::WriteFailed, "a blob cannot be written", kBlob.string());
             }
             Value chunk = Value::object();
-            chunk.add("content", Value::string(kDigest.text()));
+            chunk.add("content", Value::string(kContent.text()));
             chunk.add("size", Value::integer(static_cast<std::int64_t>(kChunk.size())));
-            chunk.add("blob", Value::string(kDigest.text()));
-            chunk.add("blob_size", Value::integer(static_cast<std::int64_t>(kChunk.size())));
-            chunk.add("codec", Value::string("raw"));
+            chunk.add("blob", Value::string(kBlobDigest.text()));
+            chunk.add("blob_size", Value::integer(static_cast<std::int64_t>(kBlobBytes.size())));
+            chunk.add("codec", Value::string(kCompressed.has_value() ? "zstd" : "raw"));
             list.push(std::move(chunk));
             start = kEnd;
         }
@@ -339,7 +345,7 @@ result::Result<BuildReport> packBuild(const BuildRequest& request) {
     receipt.add("manifest_size", Value::integer(static_cast<std::int64_t>(kManifest.size())));
     receipt.add("root", Value::string(content::ContentDigest{.bytes = report.root}.text()));
     receipt.add("cook_receipt", Value::string(content::ContentDigest::of(*kCookReceipt).text()));
-    receipt.add("packer", Value::string("rawframe.build.1"));
+    receipt.add("packer", Value::string("rawframe.build.2"));
     RAWFRAME_TRY_ASSIGN(const std::string kReceipt, document::writeCanonicalRecord(receipt));
 
     // Blobs are in; the old receipt out, the manifest in, the receipt last.

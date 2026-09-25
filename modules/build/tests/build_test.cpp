@@ -7,6 +7,7 @@
 #include "rawframe/build/build.h"
 #include "rawframe/build/errors.h"
 #include "rawframe/content/manifest.h"
+#include "rawframe/content/store.h"
 #include "rawframe/document/json.h"
 #include "rawframe/test/test.h"
 
@@ -58,19 +59,25 @@ const BuildIdentity kIdentity{.subject = "rawframe/runners",
                               .configuration = "build.development",
                               .profile = "tool"};
 
-/// A cook's output of a small sound and a three-megabyte one, with its
-/// manifest and a receipt that proves it.
+/// A cook's output of a small sound, a three-megabyte one of noise, and a
+/// megabyte of a repeated phrase that compresses well, with its manifest and
+/// a receipt that proves it.
 struct Cooked {
     fs::path base = fs::temp_directory_path() / ("rawframe-build-" + std::to_string(::getpid()));
     fs::path cooked = base / "cooked";
     fs::path output = base / "build";
     std::vector<content::ManifestEntry> entries;
     std::string large = noise(std::size_t{3} * 1024 * 1024);
+    std::string repeated;
 
     Cooked() {
         fs::remove_all(base);
         add(1, "bang");
         add(2, large);
+        while (repeated.size() < std::size_t{1024} * 1024) {
+            repeated += "every shot sounds from where it was fired; ";
+        }
+        add(3, repeated);
         prove(0);
     }
     ~Cooked() {
@@ -138,7 +145,7 @@ RAWFRAME_TEST(ABuildIsPackedFromProvenArtifacts) {
     }
     // The large sound is several chunks, the small one one: every blob
     // written once, then reused by a second pack of the same bytes.
-    RAWFRAME_EXPECT(kFirst->resources == 2 && kFirst->blobsWritten >= 3 && kFirst->blobsReused == 0);
+    RAWFRAME_EXPECT(kFirst->resources == 3 && kFirst->blobsWritten >= 4 && kFirst->blobsReused == 0);
     const auto kSecond = kCooked.pack();
     RAWFRAME_EXPECT(kSecond.has_value() && kSecond->root == kFirst->root && kSecond->blobsWritten == 0 &&
                     kSecond->blobsReused == kFirst->blobsWritten);
@@ -237,4 +244,69 @@ RAWFRAME_TEST(IdentityFieldsKeepTheirGrammar) {
     for (const std::string_view kBad : {"1.2", "1.2.3.4", "1.2.3-01", "1.2.3-", "1.2.3+", "v1.2.3", "1.2.3-a..b"}) {
         RAWFRAME_EXPECT(!validVersion(kBad));
     }
+}
+
+RAWFRAME_TEST(ABuildReadsBackAsItsResources) {
+    const Cooked kCooked;
+    const auto kPacked = kCooked.pack();
+    RAWFRAME_EXPECT(kPacked.has_value());
+    if (!kPacked.has_value()) {
+        return;
+    }
+    // The repeated phrase is stored as Zstandard frames far smaller than
+    // it; the noise stays raw.
+    const auto kRecord = document::parseCanonicalRecord(readText(kCooked.output / "build.manifest"));
+    RAWFRAME_EXPECT(kRecord.has_value());
+    if (!kRecord.has_value()) {
+        return;
+    }
+    const auto kList = [&kRecord](std::uint64_t id) {
+        std::array<char, 32> hex{};
+        base::formatBits128Hex(base::Bits128{.high = 0, .low = id}, hex);
+        return kRecord->find("chunks")->find(std::string_view{hex.data(), hex.size()})->items();
+    };
+    std::int64_t stored = 0;
+    for (const document::Value& chunk : kList(3)) {
+        RAWFRAME_EXPECT(*chunk.find("codec")->text() == "zstd");
+        stored += *chunk.find("blob_size")->integer();
+    }
+    RAWFRAME_EXPECT(stored * 20 < static_cast<std::int64_t>(kCooked.repeated.size()));
+    RAWFRAME_EXPECT(*kList(2)[0].find("codec")->text() == "raw");
+
+    // Read back through the runtime's reader, every resource is itself.
+    auto opened = content::ContentSource::build(kCooked.output, kPacked->root);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    execution::ManualClock clock;
+    execution::CancellationScope scope{clock};
+    execution::Executor io{execution::ExecutorSettings{.kind = execution::ExecutorKind::BlockingIo, .workers = 1}};
+    RAWFRAME_EXPECT(io.admitOwner(execution::OwnerId{1}, {.maximumPendingTasks = 8}).has_value());
+    {
+        std::vector<content::ContentSource> sources;
+        sources.push_back(std::move(opened->source));
+        auto store =
+            std::move(*content::ContentStore::create(io, execution::OwnerId{1}, scope, clock, std::move(sources)));
+        const content::AdmittedRepresentation kWave{.type = kCooked.entries[0].type,
+                                                    .representation = kCooked.entries[0].representation};
+        const std::vector<content::BoundManifest> kManifests = {{.entries = opened->entries, .source = 0}};
+        store->publish(*content::ContentCatalog::build(kManifests, std::span{&kWave, 1}, 1, 1));
+        const auto kRead = [&store](std::uint64_t id) -> std::string {
+            auto read =
+                store->read(content::ResourceRef{.id = content::ResourceId{base::Bits128{.high = 0, .low = id}},
+                                                 .type = content::ResourceTypeId{base::Bits128{.high = 9, .low = 9}}});
+            if (!read.has_value()) {
+                return "";
+            }
+            auto outcome = read->wait();
+            if (!outcome.hasValue()) {
+                return "";
+            }
+            const std::span<const std::byte> kBytes = (*outcome).bytes();
+            return std::string{reinterpret_cast<const char*>(kBytes.data()), kBytes.size()};
+        };
+        RAWFRAME_EXPECT(kRead(1) == "bang" && kRead(2) == kCooked.large && kRead(3) == kCooked.repeated);
+    }
+    io.stop();
 }
