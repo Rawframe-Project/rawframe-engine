@@ -12,5 +12,6 @@ if(TARGET rawframe_world_kest_tests)
     target_compile_definitions(rawframe_world_kest_tests PRIVATE
         RAWFRAME_KEST_LIBRARY="${RAWFRAME_KEST_LIBRARY}"
         RAWFRAME_WORLD_KEST_GAMES="${CMAKE_CURRENT_SOURCE_DIR}/tests/game/"
+        RAWFRAME_SAMPLE_GAMES="${PROJECT_SOURCE_DIR}/games/"
         RAWFRAME_WORLD_KEST_MODULES="${CMAKE_CURRENT_SOURCE_DIR}/kest/")
 endif()

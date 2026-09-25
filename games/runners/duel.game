@@ -1,8 +1,7 @@
-# The sample platformer: players are characters running and jumping about a
-# level of platforms and slopes and shooting at each other, where the shooter
-# saw the others; a runner hit is told so and counts it. Everything a player does moves no dynamic body, so a client
-# predicts its own runner exactly; each client is sent what is within 30
-# meters and sees the others between states.
+# Runners without players, for tests: one runner firing to the right at
+# another ten meters off, each spawned standing on the ground, and the
+# shooter's moment fixed by hand (no connection claimed it, so nothing is
+# gated). Same program and level as runners.game.
 program runners.kest
 physics2d gravity 0 -10 substeps 4
 
@@ -16,6 +15,8 @@ system runners.join simulation join write rawframe.physics2d.body write rawframe
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity before rawframe.physics2d.step predicted
 system runners.shoot simulation shoot read runners.stick read rawframe.physics2d.pose read rawframe.replication.perception write runners.score before rawframe.physics2d.step
 system runners.hurt simulation hurt write runners.score read runners.hit entities
+
+input runners.stick perceived
 
 # The ground, eighty meters wide, and walls at its ends.
 spawn 1 rawframe.physics2d.body motion=0 shape=1 width=40 height=0.5 rawframe.physics2d.pose rawframe.physics2d.velocity
@@ -32,9 +33,6 @@ spawn 1 rawframe.physics2d.body motion=0 shape=1 width=4 height=0.5 rawframe.phy
 spawn 1 rawframe.physics2d.body motion=0 shape=1 width=4 height=0.5 rawframe.physics2d.pose x=28 y=1 c=0.9397 s=0.3420 rawframe.physics2d.velocity
 spawn 1 rawframe.physics2d.body motion=0 shape=1 width=2 height=0.5 rawframe.physics2d.pose x=34 y=1.5 c=0.5736 s=0.8192 rawframe.physics2d.velocity
 
-replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score
-player runners.stick runners.score rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
-input runners.stick perceived
-interest rawframe.physics2d.pose x y within 30
-interpolate rawframe.physics2d.pose
-predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick
+# The shooter and its mark.
+spawn 1 rawframe.physics2d.body motion=1 shape=2 fixedRotation=true collisionClass=runner width=0.3 height=0.4 rawframe.physics2d.pose x=-5 y=1.2 c=1 rawframe.physics2d.velocity rawframe.physics2d.character groundNormal=0.7 snap=0.2 runners.stick fire=1 aimX=1 runners.score rawframe.replication.perception baseTick=1
+spawn 1 rawframe.physics2d.body motion=1 shape=2 fixedRotation=true collisionClass=runner width=0.3 height=0.4 rawframe.physics2d.pose x=5 y=1.2 c=1 rawframe.physics2d.velocity rawframe.physics2d.character groundNormal=0.7 snap=0.2 runners.stick runners.score rawframe.replication.perception baseTick=1

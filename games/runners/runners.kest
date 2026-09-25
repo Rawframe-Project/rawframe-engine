@@ -6,6 +6,7 @@ module runners
 import rawframe.physics2d
 import rawframe.random
 import rawframe.replication
+import rawframe.world
 
 // The runners' collision class (runners.game): what a shot meets.
 const RUNNER: u64 = 0x2ebcd16c10c5f6a4
@@ -20,13 +21,22 @@ struct Stick {
     fire: f32
 }
 
-// Shots fired and shots that met another runner, and the ticks until the
-// next may be fired.
+// Shots fired, shots that met another runner, the ticks until the next may
+// be fired, and the ticks this runner was hit on.
 struct Score {
     shots: i32
     hits: i32
     cooldown: i32
+    taken: i32
 }
+
+// On a runner some shot met since the last `hurt`; however many did, once.
+struct Hit {
+    shots: i32
+}
+
+extern fn Hit.insert(entity: world.Entity, value: Hit)
+extern fn Hit.remove(entity: world.Entity)
 
 // A player's entity arrives with its components zeroed: here it becomes a
 // runner standing somewhere on the ground.
@@ -86,9 +96,20 @@ fn shoot(count: i32, sticks: [Stick], poses: [physics2d.Pose2D], seen: [replicat
             scores[i].shots = scores[i].shots + 1
             if hit.hit && !hit.inside {
                 scores[i].hits = scores[i].hits + 1
+                Hit.insert(hit.entity, Hit(1))
             }
             scores[i].cooldown = 20
         }
+        i = i + 1
+    }
+}
+
+// A runner that was hit counts it, and is ready to be hit again.
+fn hurt(count: i32, scores: [Score], hits: [Hit], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        scores[i].taken = scores[i].taken + 1
+        Hit.remove(entities[i])
         i = i + 1
     }
 }
