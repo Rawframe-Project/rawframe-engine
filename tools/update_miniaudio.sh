@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Replaces third_party/miniaudio with miniaudio.h, miniaudio.c, and LICENSE of
-# one exact miniaudio revision, taken from a checkout's object store, never
-# from its working tree.
+# Replaces third_party/miniaudio with miniaudio.h, miniaudio.c, LICENSE, and
+# extras/stb_vorbis.c of one exact miniaudio revision, taken from a
+# checkout's object store, never from its working tree.
 #
 #   tools/update_miniaudio.sh <checkout> <revision>
 set -euo pipefail
@@ -17,7 +17,7 @@ if [[ -f "$target/CMakeLists.txt" ]]; then
 fi
 rm -rf "$target"
 mkdir -p "$target"
-git -C "$checkout" archive "$revision" miniaudio.h miniaudio.c LICENSE | tar -x -C "$target"
+git -C "$checkout" archive "$revision" miniaudio.h miniaudio.c LICENSE extras/stb_vorbis.c | tar -x -C "$target"
 if [[ -s "$keep" ]]; then
     cp "$keep" "$target/CMakeLists.txt"
 fi
