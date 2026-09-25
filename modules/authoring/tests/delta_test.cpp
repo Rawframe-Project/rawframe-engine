@@ -26,6 +26,7 @@ const base::Bits128 kDoor{1, 2};
 const base::Bits128 kLamp{1, 3};
 const base::Bits128 kCrate{1, 4};
 const base::Bits128 kShelf{1, 5};
+const base::Bits128 kSconce{1, 6};
 
 scene::FieldValue number(std::string_view text) {
     return scene::FieldValue{.kind = scene::FieldValue::Kind::Number, .number = std::string{text}};
@@ -146,6 +147,26 @@ std::vector<Delta> everyKind() {
               .entity = kCrate,
               .component = "game.position",
               .before = {.patch = crateAt({{.name = "x", .value = number("0")}})}},
+        Delta{.kind = DeltaKind::CreateInstance,
+              .entity = kSconce,
+              .after = {.instance =
+                            InstanceRecord{
+                                .place = 1,
+                                .scene = base::Bits128{9, 2},
+                                .entities = {{.source = base::Bits128{7, 3}, .instance = kSconce}},
+                                .overrides = {{.entity = kSconce,
+                                               .component = "game.light",
+                                               .kind = scene::Override::Kind::Add,
+                                               .fields = {{.name = "on",
+                                                           .value = {.kind = scene::FieldValue::Kind::True}}}}},
+                                .marks = {{.component = "game.light", .mark = 0xc3}}}}},
+        Delta{.kind = DeltaKind::DestroyInstance,
+              .entity = kCrate,
+              .before = {.instance = InstanceRecord{.place = 0,
+                                                    .scene = base::Bits128{9, 1},
+                                                    .entities = kLevel.instances[0].entities,
+                                                    .overrides = kLevel.instances[0].overrides,
+                                                    .marks = {{.component = "game.position", .mark = 0xa1}}}}},
     };
 }
 
@@ -230,6 +251,18 @@ RAWFRAME_TEST(ADeltaLandsOnlyWhereItWasMade) {
     Delta nothing = everyKind()[13];
     nothing.before.patch.reset();
     RAWFRAME_EXPECT(refusedWith(apply(scene, nothing, true), AuthoringError::DeltaInvalid));
+    // An instance named by other than its first mapping's id, or whose
+    // marks are not its patch's, is out of shape; a mark the schema holds
+    // otherwise does not land.
+    Delta misnamed = everyKind()[15];
+    misnamed.entity = kShelf;
+    RAWFRAME_EXPECT(refusedWith(apply(scene, misnamed, true), AuthoringError::DeltaInvalid));
+    Delta unmarked = everyKind()[14];
+    unmarked.after.instance->marks.clear();
+    RAWFRAME_EXPECT(refusedWith(apply(scene, unmarked, true), AuthoringError::DeltaInvalid));
+    Delta remarked = everyKind()[14];
+    remarked.after.instance->marks[0].mark = 0xff;
+    RAWFRAME_EXPECT(refusedWith(apply(scene, remarked, true), AuthoringError::DeltaMismatch));
     // A journal is all or none.
     scene::Scene whole = level();
     const Journal kHalfGood = {everyKind()[6], stale};
@@ -240,7 +273,8 @@ RAWFRAME_TEST(ADeltaLandsOnlyWhereItWasMade) {
 RAWFRAME_TEST(AJournalRoundTripsAndAppliesBothWays) {
     // Every kind that can follow the one before it, in one journal.
     const std::vector<Delta> kAll = everyKind();
-    const Journal kJournal = {kAll[0], kAll[3], kAll[6], kAll[7], kAll[8], kAll[2], kAll[4], kAll[10], kAll[11]};
+    const Journal kJournal = {
+        kAll[0], kAll[3], kAll[6], kAll[7], kAll[8], kAll[2], kAll[4], kAll[10], kAll[11], kAll[14]};
     scene::Scene scene = level();
     RAWFRAME_EXPECT(apply(scene, kJournal, true).has_value());
     RAWFRAME_EXPECT(apply(scene, kJournal, false).has_value() && bytes(scene) == bytes(level()));

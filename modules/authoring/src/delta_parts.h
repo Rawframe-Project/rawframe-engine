@@ -11,7 +11,7 @@
 
 namespace rawframe::authoring {
 
-inline constexpr std::array<std::string_view, 10> kDeltaKindNames = {"create_node",
+inline constexpr std::array<std::string_view, 12> kDeltaKindNames = {"create_node",
                                                                      "destroy_node",
                                                                      "reorder",
                                                                      "set_name",
@@ -20,7 +20,9 @@ inline constexpr std::array<std::string_view, 10> kDeltaKindNames = {"create_nod
                                                                      "set_field",
                                                                      "set_reference",
                                                                      "set_mark",
-                                                                     "set_override"};
+                                                                     "set_override",
+                                                                     "create_instance",
+                                                                     "destroy_instance"};
 inline constexpr std::array<std::string_view, 3> kPatchKindNames = {"set", "add", "remove"};
 
 [[nodiscard]] std::unexpected<result::Error> deltaInvalid(std::string_view why);

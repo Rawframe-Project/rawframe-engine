@@ -22,6 +22,10 @@
 //   set_override      one entry of an instance's patch: what it does to
 //                     one component of one of the instance's entities, or,
 //                     with no component, the entity's removal (D154)
+//   create_instance   an instance, from none to its record (place, source
+//                     scene, mapping, patch, and the marks its patch uses),
+//                     named by the id its first mapping gives (D156)
+//   destroy_instance  the same, from its record to none
 //
 // Applying a delta forward requires the slot to hold its `before` and
 // leaves it holding its `after`; backward, the other way about. A slot
@@ -32,8 +36,7 @@
 // transaction's to check, once, after its journal.
 //
 // SPEC-0040's `reparent` waits for a document hierarchy: children are
-// attachments, components like any other (D120). Adding and removing a
-// whole instance waits for a tool that resolves source scenes.
+// attachments, components like any other (D120).
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
@@ -59,6 +62,8 @@ enum class DeltaKind : std::uint8_t {
     SetReference,
     SetMark,
     SetOverride,
+    CreateInstance,
+    DestroyInstance,
 };
 
 /// A component as a delta carries it: its layout mark and its fields.
@@ -90,12 +95,27 @@ struct PatchRecord {
     friend bool operator==(const PatchRecord&, const PatchRecord&) = default;
 };
 
+/// An instance as a delta carries it. Its mapping is never empty: an
+/// instance is named by the id its first mapping gives.
+struct InstanceRecord {
+    std::size_t place = 0;
+    base::Bits128 scene{};
+    std::vector<scene::IdentityMapping> entities;
+    std::vector<scene::Override> overrides;
+    /// The marks of the components its patch names, each once, in name
+    /// order.
+    std::vector<scene::SchemaMark> marks;
+
+    friend bool operator==(const InstanceRecord&, const InstanceRecord&) = default;
+};
+
 /// One slot's value. Which member holds it follows the kind: `node` for
 /// create_node and destroy_node, `place` for reorder, `name` for set_name,
 /// `component` for add_component and remove_component, `field` for
 /// set_field and set_reference, `mark` for set_mark, `patch` for
-/// set_override. None of them is the slot empty: no entity, no component,
-/// a field at its default, or no patch entry.
+/// set_override, `instance` for create_instance and destroy_instance. None
+/// of them is the slot empty: no entity, no component, a field at its
+/// default, no patch entry, or no instance.
 struct SlotValue {
     std::optional<NodeRecord> node;
     std::optional<std::size_t> place;
@@ -104,6 +124,7 @@ struct SlotValue {
     std::optional<scene::FieldValue> field;
     std::optional<std::uint64_t> mark;
     std::optional<PatchRecord> patch;
+    std::optional<InstanceRecord> instance;
 
     friend bool operator==(const SlotValue&, const SlotValue&) = default;
 };

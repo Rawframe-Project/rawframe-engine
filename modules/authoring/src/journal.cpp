@@ -62,6 +62,42 @@ Value componentValue(const ComponentRecord& component) {
     return made;
 }
 
+std::string sceneText(base::Bits128 id) {
+    std::array<char, base::kBits128HexDigits> digits{};
+    base::formatBits128Hex(id, digits);
+    return std::string{digits.data(), digits.size()};
+}
+
+Value instanceValue(const InstanceRecord& instance) {
+    Value entities = Value::array();
+    for (const scene::IdentityMapping& mapping : instance.entities) {
+        Value made = Value::object();
+        made.add("instance", Value::string(idText(mapping.instance)));
+        made.add("source", Value::string(idText(mapping.source)));
+        entities.push(std::move(made));
+    }
+    Value marks = Value::object();
+    for (const scene::SchemaMark& mark : instance.marks) {
+        marks.add(mark.component, Value::string(markText(mark.mark)));
+    }
+    Value overrides = Value::array();
+    for (const scene::Override& each : instance.overrides) {
+        Value made = Value::object();
+        made.add("component", Value::string(each.component));
+        made.add("entity", Value::string(idText(each.entity)));
+        made.add("fields", fieldsValue(each.fields));
+        made.add("kind", Value::string(std::string{kPatchKindNames[static_cast<std::size_t>(each.kind)]}));
+        overrides.push(std::move(made));
+    }
+    Value made = Value::object();
+    made.add("entities", std::move(entities));
+    made.add("marks", std::move(marks));
+    made.add("overrides", std::move(overrides));
+    made.add("place", Value::integer(static_cast<std::int64_t>(instance.place)));
+    made.add("scene", Value::string(sceneText(instance.scene)));
+    return made;
+}
+
 Value slotValue(const SlotValue& slot) {
     if (slot.node.has_value()) {
         Value components = Value::array();
@@ -97,6 +133,9 @@ Value slotValue(const SlotValue& slot) {
             made.add("mark", Value::string(markText(*slot.patch->mark)));
         }
         return made;
+    }
+    if (slot.instance.has_value()) {
+        return instanceValue(*slot.instance);
     }
     return {};
 }
@@ -185,6 +224,53 @@ std::optional<PatchRecord> patchOf(const Value& value) {
                        .fields = std::move(*fields)};
 }
 
+std::optional<InstanceRecord> instanceOf(const Value& value) {
+    const Value* entities = value.find("entities");
+    const Value* marks = value.find("marks");
+    const Value* overrides = value.find("overrides");
+    const std::optional<std::size_t> kPlace = placeValue(value.find("place"));
+    const std::string* scene = textOf(value.find("scene"));
+    const base::Bits128Parse kScene = scene != nullptr ? base::parseBits128Hex(*scene) : base::Bits128Parse{};
+    if (!hasMembers(value, {"entities", "marks", "overrides", "place", "scene"}) ||
+        entities->kind() != Value::Kind::Array || marks->kind() != Value::Kind::Object ||
+        overrides->kind() != Value::Kind::Array || !kPlace.has_value() || !kScene.parsed) {
+        return std::nullopt;
+    }
+    InstanceRecord made{.place = *kPlace, .scene = kScene.value, .entities = {}, .overrides = {}, .marks = {}};
+    for (const Value& each : entities->items()) {
+        const std::optional<base::Bits128> kInstance = idOf(each.find("instance"));
+        const std::optional<base::Bits128> kSource = idOf(each.find("source"));
+        if (!hasMembers(each, {"instance", "source"}) || !kInstance.has_value() || !kSource.has_value()) {
+            return std::nullopt;
+        }
+        made.entities.push_back(scene::IdentityMapping{.source = *kSource, .instance = *kInstance});
+    }
+    for (std::size_t at = 0; at < marks->names().size(); ++at) {
+        const std::optional<std::uint64_t> kMark = markOf(&marks->items()[at]);
+        if (!kMark.has_value()) {
+            return std::nullopt;
+        }
+        made.marks.push_back(scene::SchemaMark{.component = marks->names()[at], .mark = *kMark});
+    }
+    for (const Value& each : overrides->items()) {
+        const std::string* component = textOf(each.find("component"));
+        const std::optional<base::Bits128> kEntity = idOf(each.find("entity"));
+        const std::string* kind = textOf(each.find("kind"));
+        const auto kKind = kind != nullptr ? std::ranges::find(kPatchKindNames, *kind) : kPatchKindNames.end();
+        std::optional<std::vector<scene::SceneField>> fields = fieldsOf(each.find("fields"));
+        if (!hasMembers(each, {"component", "entity", "fields", "kind"}) || component == nullptr ||
+            !kEntity.has_value() || kKind == kPatchKindNames.end() || !fields.has_value()) {
+            return std::nullopt;
+        }
+        made.overrides.push_back(
+            scene::Override{.entity = *kEntity,
+                            .component = *component,
+                            .kind = static_cast<scene::Override::Kind>(kKind - kPatchKindNames.begin()),
+                            .fields = std::move(*fields)});
+    }
+    return made;
+}
+
 std::optional<ComponentRecord> componentOf(const Value& value) {
     const std::string* name = textOf(value.find("name"));
     const std::optional<std::uint64_t> kMark = markOf(value.find("mark"));
@@ -245,6 +331,10 @@ std::optional<SlotValue> slotOf(const Value& value, DeltaKind kind) {
     case DeltaKind::SetOverride:
         slot.patch = patchOf(value);
         return slot.patch.has_value() ? std::optional{slot} : std::nullopt;
+    case DeltaKind::CreateInstance:
+    case DeltaKind::DestroyInstance:
+        slot.instance = instanceOf(value);
+        return slot.instance.has_value() ? std::optional{slot} : std::nullopt;
     }
     return std::nullopt;
 }

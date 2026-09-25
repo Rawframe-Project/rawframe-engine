@@ -40,7 +40,24 @@ bool holdsOnly(const SlotValue& slot, DeltaKind kind) {
     return (kNode || !slot.node.has_value()) && (kind == DeltaKind::Reorder || !slot.place.has_value()) &&
            (kind == DeltaKind::SetName || !slot.name.has_value()) && (kComponent || !slot.component.has_value()) &&
            (fieldKind(kind) || !slot.field.has_value()) && (kind == DeltaKind::SetMark || !slot.mark.has_value()) &&
-           (kind == DeltaKind::SetOverride || !slot.patch.has_value());
+           (kind == DeltaKind::SetOverride || !slot.patch.has_value()) &&
+           (kind == DeltaKind::CreateInstance || kind == DeltaKind::DestroyInstance || !slot.instance.has_value());
+}
+
+/// An instance record named by the delta's entity, its marks exactly the
+/// components its patch names.
+bool instanceShaped(const InstanceRecord& instance, base::Bits128 entity) {
+    std::vector<std::string_view> named;
+    for (const scene::Override& each : instance.overrides) {
+        if (!each.component.empty()) {
+            named.push_back(each.component);
+        }
+    }
+    std::ranges::sort(named);
+    const auto kRepeated = std::ranges::unique(named);
+    named.erase(kRepeated.begin(), kRepeated.end());
+    return !instance.entities.empty() && instance.entities.front().instance == entity &&
+           std::ranges::equal(named, instance.marks, {}, {}, &scene::SchemaMark::component);
 }
 
 /// A patch entry in its kind's form for the slot: the entity's removal has
@@ -98,11 +115,26 @@ bool shaped(const Delta& delta) {
     case DeltaKind::SetOverride:
         return (before.patch.has_value() || after.patch.has_value()) &&
                patchShaped(before.patch, delta.component.empty()) && patchShaped(after.patch, delta.component.empty());
+    case DeltaKind::CreateInstance:
+        return !before.instance.has_value() && after.instance.has_value() &&
+               instanceShaped(*after.instance, delta.entity);
+    case DeltaKind::DestroyInstance:
+        return before.instance.has_value() && !after.instance.has_value() &&
+               instanceShaped(*before.instance, delta.entity);
     }
     return false;
 }
 
 namespace {
+
+/// Where the instance named by `entity`, its first mapping's id, stands.
+std::optional<std::size_t> namedInstance(const scene::Scene& scene, base::Bits128 entity) {
+    const auto kFound = std::ranges::find_if(scene.instances, [entity](const scene::SceneInstance& instance) {
+        return !instance.entities.empty() && instance.entities.front().instance == entity;
+    });
+    return kFound != scene.instances.end() ? std::optional{static_cast<std::size_t>(kFound - scene.instances.begin())}
+                                           : std::nullopt;
+}
 
 /// Where the instance that maps `entity` stands, if one does.
 std::optional<std::size_t> instanceOf(const scene::Scene& scene, base::Bits128 entity) {
@@ -170,6 +202,27 @@ std::optional<SlotValue> slotOf(const scene::Scene& scene, const Delta& delta) {
             return std::nullopt;
         }
         slot.mark = kFound->mark;
+        return slot;
+    }
+    if (delta.kind == DeltaKind::CreateInstance || delta.kind == DeltaKind::DestroyInstance) {
+        const std::optional<std::size_t> kNamed = namedInstance(scene, delta.entity);
+        if (kNamed.has_value()) {
+            const scene::SceneInstance& instance = scene.instances[*kNamed];
+            InstanceRecord record{.place = *kNamed,
+                                  .scene = instance.scene,
+                                  .entities = instance.entities,
+                                  .overrides = instance.overrides,
+                                  .marks = {}};
+            for (const scene::Override& each : instance.overrides) {
+                if (!each.component.empty() &&
+                    !std::ranges::contains(record.marks, each.component, &scene::SchemaMark::component)) {
+                    record.marks.push_back(scene::SchemaMark{.component = each.component,
+                                                             .mark = markOf(scene, each.component).value_or(0)});
+                }
+            }
+            std::ranges::sort(record.marks, {}, &scene::SchemaMark::component);
+            slot.instance = std::move(record);
+        }
         return slot;
     }
     if (delta.kind == DeltaKind::SetOverride) {
@@ -302,6 +355,29 @@ result::Status writeSlot(scene::Scene& scene, const Delta& delta, const SlotValu
     case DeltaKind::SetMark:
         std::ranges::find(scene.schema, delta.component, &scene::SchemaMark::component)->mark = *to.mark;
         return {};
+    case DeltaKind::CreateInstance:
+    case DeltaKind::DestroyInstance: {
+        const std::optional<std::size_t> kNamed = namedInstance(scene, delta.entity);
+        if (kNamed.has_value()) {
+            scene.instances.erase(scene.instances.begin() + static_cast<std::ptrdiff_t>(*kNamed));
+        }
+        if (to.instance.has_value()) {
+            if (to.instance->place > scene.instances.size()) {
+                return deltaMismatch("an instance is made at a place the scene has");
+            }
+            for (const scene::SchemaMark& mark : to.instance->marks) {
+                if (!useMark(scene, mark.component, mark.mark)) {
+                    return deltaMismatch("a component's mark is the one the scene's schema holds");
+                }
+            }
+            scene.instances.insert(scene.instances.begin() + static_cast<std::ptrdiff_t>(to.instance->place),
+                                   scene::SceneInstance{.scene = to.instance->scene,
+                                                        .entities = to.instance->entities,
+                                                        .overrides = to.instance->overrides});
+        }
+        dropUnusedMarks(scene);
+        return {};
+    }
     case DeltaKind::SetOverride: {
         std::vector<scene::Override>& overrides = scene.instances[*instanceOf(scene, delta.entity)].overrides;
         std::erase_if(overrides, [&delta](const scene::Override& each) {
