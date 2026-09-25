@@ -12,6 +12,7 @@
 #include "rawframe/network_loopback/registrar.h"
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/physics3d/registrar.h"
+#include "rawframe/world_animation/registrar.h"
 #include "rawframe/world_audio/registrar.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_replication/registrar.h"
@@ -21,7 +22,7 @@
 
 namespace {
 
-constexpr std::array<rawframe::composition::RegistrarEntry, 10> kRegistrars = {
+constexpr std::array<rawframe::composition::RegistrarEntry, 11> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -34,6 +35,8 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 10> kRegistrars = {
         "input_kest", &rawframe::input_kest::registerParticipants, rawframe::input_kest::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_audio", &rawframe::world_audio::registerParticipants, rawframe::world_audio::kScopes},
+    rawframe::composition::RegistrarEntry{
+        "world_animation", &rawframe::world_animation::registerParticipants, rawframe::world_animation::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_kest", &rawframe::world_kest::registerParticipants, rawframe::world_kest::kScopes},
     rawframe::composition::RegistrarEntry{

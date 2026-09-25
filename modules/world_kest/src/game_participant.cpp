@@ -1,4 +1,5 @@
 #include "admission.h"
+#include "animation_plan.h"
 #include "game_files_participant.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
@@ -43,7 +44,8 @@ constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.na
                                           world_runtime::kCheckpointPlan.name,
                                           world_runtime::kSavePlan.name,
                                           physics2d::kPhysics2DPlan.name,
-                                          physics3d::kPhysics3DPlan.name};
+                                          physics3d::kPhysics3DPlan.name,
+                                          world_animation::kAnimationPlan.name};
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
 constexpr diagnostics::EventIdentity kGameReloaded{"world_kest", "game_reloaded"};
@@ -130,7 +132,8 @@ class GameParticipant final : public composition::Participant,
                               public world_runtime::CheckpointPlan,
                               public world_runtime::SavePlan,
                               public physics2d::Physics2DPlan,
-                              public physics3d::Physics3DPlan {
+                              public physics3d::Physics3DPlan,
+                              public world_animation::AnimationPlan {
 public:
     GameParticipant() noexcept = default;
 
@@ -176,6 +179,9 @@ public:
         RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planInterest());
         RAWFRAME_TRY(planPhysics());
+        if (!planOnly_) {
+            RAWFRAME_TRY_ASSIGN(animation_, animationSettings(files, layouts_));
+        }
         for (const std::string& name : game_.interpolated) {
             if (std::ranges::find(game_.replicated, name) == game_.replicated.end()) {
                 return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
@@ -437,6 +443,12 @@ public:
     void attach(const world_replication::InterestHistory* history) noexcept override {
         doorContext_.interest = history;
     }
+    const std::optional<world_animation::AnimationSettings>& animation() const noexcept override {
+        return animation_;
+    }
+    void attach(const world_animation::AnimationQueries* queries) noexcept override {
+        animationQueries_ = queries;
+    }
 
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
         if (unwritable_.has_value()) {
@@ -480,6 +492,9 @@ public:
         }
         if (capability == physics3d::kPhysics3DPlan.name) {
             return composition::provideAs<physics3d::Physics3DPlan>(*this);
+        }
+        if (capability == world_animation::kAnimationPlan.name) {
+            return composition::provideAs<world_animation::AnimationPlan>(*this);
         }
         return {};
     }
@@ -1178,6 +1193,10 @@ private:
     std::optional<physics2d::Physics2DSettings> physics2d_;
     std::optional<physics3d::Physics3DSettings> physics3d_;
     PhysicsDoorContext doorContext_;
+    std::optional<world_animation::AnimationSettings> animation_;
+    /// Where scripts will ask about poses and events, while the World's
+    /// animation lives.
+    const world_animation::AnimationQueries* animationQueries_ = nullptr;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.
     std::optional<GameEntityField> unwritable_;

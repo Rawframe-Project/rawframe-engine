@@ -91,6 +91,19 @@
 //   collision rule player coin trigger
 //   collision default collide
 //
+// An `animator` line gives entities a graph to play (D124): the game gains
+// the engine's `rawframe.animation.animator` component (rawframe.animation's
+// Animator), whose `graph` names the animator by its identity, or in a spawn
+// line by its graph file. The graph is a document beside the description;
+// its clips and their skeleton are found by resource identity, beside the
+// description by their sidecars in development and in the game's content
+// once cooked. `parameters` names the component whose fields, one of the
+// same name for each of the graph's parameters, set them every step: a
+// `float` from an f32, an `int` from a u32, a `bool` from a bool, and a
+// `vec2` from `<name>.x` and `<name>.y`:
+//
+//   animator 51f0c0de00000001 walker.rfanim parameters game.gait
+//
 // An `entity` line names a component's fields that hold a
 // `rawframe.world.Entity`, which a checkpoint writes as a reference rather
 // than as numbers:
@@ -242,6 +255,18 @@ struct GameMesh {
     std::string path;
 };
 
+/// An animator (ADR-0039, D124): a graph an entity's
+/// `rawframe.animation.animator` plays by the identity its line gives it.
+struct GameAnimator {
+    std::uint64_t id = 0;
+    /// Its graph document, beside the description, which names its clips
+    /// and they their skeleton, each by resource identity.
+    std::string path;
+    /// The game's component the graph's parameters are read from, a field
+    /// for each by its name; none for a graph that plays on its defaults.
+    std::string parameters;
+};
+
 /// A save document (ADR-0057): its name and the components it keeps of the
 /// game's persistent entities.
 struct GameSave {
@@ -262,6 +287,9 @@ struct GameDescription {
     std::vector<GamePrefab> prefabs;
     /// From `mesh <16 hex digits> <file>` lines.
     std::vector<GameMesh> meshes;
+    /// From `animator <16 hex digits> <graph file> [parameters <component>]`
+    /// lines.
+    std::vector<GameAnimator> animators;
     /// Networked play: what replicates, what a player starts with, and
     /// which component a player's input is written into.
     std::vector<std::string> replicated;
@@ -309,8 +337,9 @@ struct GameDescription {
 [[nodiscard]] std::vector<std::string> sceneNames(const GameDescription& game);
 
 /// A spawn line's value with the game's names made identities: a collision
-/// class's name as a body's `collisionClass`, and a mesh's file as a
-/// `rawframe.physics3d.mesh`'s `mesh`. Anything else as written.
+/// class's name as a body's `collisionClass`, a mesh's file as a
+/// `rawframe.physics3d.mesh`'s `mesh`, and an animator's graph file as a
+/// `rawframe.animation.animator`'s `graph`. Anything else as written.
 [[nodiscard]] std::string
 spawnValue(const GameDescription& game, std::string_view component, const GameFieldValue& value);
 

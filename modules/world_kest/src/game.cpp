@@ -2,6 +2,7 @@
 
 #include "physics_facts.h"
 #include "rawframe/world/persistent.h"
+#include "rawframe/world_animation/components.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_replication/perception.h"
 
@@ -178,6 +179,25 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a mesh's identity and file are used once");
             }
             game.meshes.push_back(GameMesh{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "animator") {
+            // animator <16 hex digits> <graph file> [parameters <component>]
+            const bool kShaped = kWords.size() == 3 || (kWords.size() == 5 && kWords[3] == "parameters");
+            const auto kId = kShaped ? parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "an animator line is `animator <16 hex digits> <graph file> [parameters <component>]`");
+            }
+            if (std::ranges::contains(game.animators, *kId, &GameAnimator::id) ||
+                std::ranges::contains(game.animators, kWords[2], &GameAnimator::path)) {
+                return badLine(number, WorldKestError::BadGameLine, "an animator's identity and graph are used once");
+            }
+            GameAnimator animator{.id = *kId, .path = std::string{kWords[2]}, .parameters = {}};
+            if (kWords.size() == 5) {
+                animator.parameters = kWords[4];
+                uses.emplace_back(number, animator.parameters);
+            }
+            game.animators.push_back(std::move(animator));
         } else if (kKeyword == "scene") {
             if (kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a scene line is `scene <file>`");
@@ -457,6 +477,12 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     game.components.push_back(GameComponent{.id = world::Persistent::kComponentTypeId,
                                             .name = std::string{world::Persistent::kComponentName},
                                             .kestType = "Persistent"});
+    // Animators play on the engine's component, named by their identity.
+    if (!game.animators.empty()) {
+        const schema::ComponentLayout& animator = world_animation::componentLayouts().front();
+        game.components.push_back(GameComponent{
+            .id = animator.id, .name = std::string{animator.name}, .kestType = std::string{animator.scriptType}});
+    }
     for (const auto& [line, name] : uses) {
         if (!declared(game, name)) {
             return badLine(line, WorldKestError::UnknownName, "a line names a component the game does not declare");
@@ -527,6 +553,12 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
         const auto kMesh = std::ranges::find(game.meshes, value.value, &GameMesh::path);
         if (kMesh != game.meshes.end()) {
             return std::to_string(kMesh->id);
+        }
+    }
+    if (value.field == "graph" && component == world_animation::Animator::kComponentName) {
+        const auto kAnimator = std::ranges::find(game.animators, value.value, &GameAnimator::path);
+        if (kAnimator != game.animators.end()) {
+            return std::to_string(kAnimator->id);
         }
     }
     return value.value;

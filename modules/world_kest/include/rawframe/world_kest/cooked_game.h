@@ -2,20 +2,22 @@
 
 // A game description cooked (D88, D95): its text, the documents it names
 // beside it (actions, mixer, sounds), each Kest program it names as a file
-// of the game's Kest sources resource (D87), and each scene and mesh it
-// names as a resource, all in one record. A process reads the game from it and
-// opens no path: every name the text uses is answered from the record.
+// of the game's Kest sources resource (D87), and each scene, mesh, and
+// animator's graph it names as a resource, all in one record. A process
+// reads the game from it and opens no path: every name the text uses is
+// answered from the record.
 //
 // The record is canonical:
 //
-//   {"files": [{"path", "text"}], "formatVersion": 3, "kind": "game.description",
-//    "meshes": [{"mesh", "path"}], "programs": [{"entry", "path", "sources"}],
-//    "scenes": [{"path", "scene"}], "text"}
+//   {"animators": [{"graph", "path"}], "files": [{"path", "text"}],
+//    "formatVersion": 4, "kind": "game.description", "meshes": [{"mesh", "path"}],
+//    "programs": [{"entry", "path", "sources"}], "scenes": [{"path", "scene"}], "text"}
 //
 // `path` is as the description writes it; `sources` is the Kest sources
-// resource, `scene` the scene resource, and `mesh` the mesh resource, as 32
-// hex digits, and `entry` the program's path among its files. Files,
-// meshes, programs, and scenes are each in path order, each path once.
+// resource, `scene` the scene resource, `mesh` the mesh resource, and
+// `graph` the animation graph resource, as 32 hex digits, and `entry` the
+// program's path among its files. Animators, files, meshes, programs, and
+// scenes are each in path order, each path once.
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
@@ -31,7 +33,7 @@ namespace rawframe::world_kest {
 /// representation.
 inline constexpr base::Bits128 kCookedGameType = base::parseBits128Hex("94011cff710065644e0f466b35941608").value;
 inline constexpr std::string_view kCookedGameRepresentation = "rawframe.game.description";
-/// The most files, meshes, programs, or scenes one names.
+/// The most animators, files, meshes, programs, or scenes one names.
 inline constexpr std::size_t kMaximumCookedGameNames = 1024;
 
 /// A document the description names, by the name it uses.
@@ -60,12 +62,19 @@ struct CookedGameMesh {
     base::Bits128 mesh{};
 };
 
+/// An animator's graph, by the resource it is.
+struct CookedGameAnimator {
+    std::string path;
+    base::Bits128 graph{};
+};
+
 struct CookedGame {
     std::string text;
     std::vector<CookedGameFile> files;
     std::vector<CookedGameProgram> programs;
     std::vector<CookedGameScene> scenes;
     std::vector<CookedGameMesh> meshes;
+    std::vector<CookedGameAnimator> animators;
 
     /// The document the description names `path`, or none.
     [[nodiscard]] const CookedGameFile* file(std::string_view path) const noexcept;
@@ -75,12 +84,14 @@ struct CookedGame {
     [[nodiscard]] const CookedGameScene* scene(std::string_view path) const noexcept;
     /// The mesh it names `path`, or none.
     [[nodiscard]] const CookedGameMesh* mesh(std::string_view path) const noexcept;
+    /// The animator graph it names `path`, or none.
+    [[nodiscard]] const CookedGameAnimator* animator(std::string_view path) const noexcept;
 };
 
 /// The record's bytes, its lists each put in path order; refused
 /// (`cooked_game_invalid`) for a path empty or named twice, a program with
-/// no entry or no sources, a scene or mesh of no resource, or more than
-/// kMaximumCookedGameNames of any.
+/// no entry or no sources, a scene, mesh, or graph of no resource, or more
+/// than kMaximumCookedGameNames of any.
 [[nodiscard]] result::Result<std::string> writeCookedGame(const CookedGame& game);
 /// Refuses (`cooked_game_invalid`) anything `writeCookedGame` would not have
 /// written byte for byte.

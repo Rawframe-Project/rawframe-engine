@@ -38,7 +38,12 @@ template <typename Named> bool ordered(const std::vector<Named>& named) {
 }
 
 bool wellFormed(const CookedGame& game) {
-    return ordered(game.files) && ordered(game.meshes) && ordered(game.programs) && ordered(game.scenes) &&
+    return ordered(game.animators) && ordered(game.files) && ordered(game.meshes) && ordered(game.programs) &&
+           ordered(game.scenes) &&
+           std::ranges::all_of(game.animators,
+                               [](const CookedGameAnimator& animator) {
+                                   return animator.graph != base::Bits128{};
+                               }) &&
            std::ranges::all_of(game.programs,
                                [](const CookedGameProgram& program) {
                                    return !program.entry.empty() && program.sources != base::Bits128{};
@@ -92,12 +97,18 @@ const CookedGameMesh* CookedGame::mesh(std::string_view path) const noexcept {
     return kFound == meshes.end() ? nullptr : &*kFound;
 }
 
+const CookedGameAnimator* CookedGame::animator(std::string_view path) const noexcept {
+    const auto kFound = std::ranges::find(animators, path, &CookedGameAnimator::path);
+    return kFound == animators.end() ? nullptr : &*kFound;
+}
+
 result::Result<std::string> writeCookedGame(const CookedGame& game) {
     CookedGame sorted = game;
     std::ranges::sort(sorted.files, {}, &CookedGameFile::path);
     std::ranges::sort(sorted.programs, {}, &CookedGameProgram::path);
     std::ranges::sort(sorted.scenes, {}, &CookedGameScene::path);
     std::ranges::sort(sorted.meshes, {}, &CookedGameMesh::path);
+    std::ranges::sort(sorted.animators, {}, &CookedGameAnimator::path);
     if (!wellFormed(sorted)) {
         return std::unexpected<result::Error>{
             invalid("a cooked game names each path once, each program's sources and entry, and not too many")};
@@ -131,9 +142,17 @@ result::Result<std::string> writeCookedGame(const CookedGame& game) {
         each.add("path", Value::string(std::move(mesh.path)));
         meshes.push(std::move(each));
     }
+    Value animators = Value::array();
+    for (CookedGameAnimator& animator : sorted.animators) {
+        Value each = Value::object();
+        each.add("graph", Value::string(hexOf(animator.graph)));
+        each.add("path", Value::string(std::move(animator.path)));
+        animators.push(std::move(each));
+    }
     Value record = Value::object();
+    record.add("animators", std::move(animators));
     record.add("files", std::move(files));
-    record.add("formatVersion", Value::integer(3));
+    record.add("formatVersion", Value::integer(4));
     record.add("kind", Value::string("game.description"));
     record.add("meshes", std::move(meshes));
     record.add("programs", std::move(programs));
@@ -157,12 +176,14 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
     const Value* programs = parsed->find("programs");
     const Value* scenes = parsed->find("scenes");
     const Value* meshes = parsed->find("meshes");
-    const std::string* text = textOf(*parsed, 7, "text");
+    const Value* animators = parsed->find("animators");
+    const std::string* text = textOf(*parsed, 8, "text");
     if (kind == nullptr || kind->text() == nullptr || *kind->text() != "game.description" || version == nullptr ||
-        version->integer() != 3 || files == nullptr || files->kind() != Value::Kind::Array || programs == nullptr ||
+        version->integer() != 4 || files == nullptr || files->kind() != Value::Kind::Array || programs == nullptr ||
         programs->kind() != Value::Kind::Array || scenes == nullptr || scenes->kind() != Value::Kind::Array ||
-        meshes == nullptr || meshes->kind() != Value::Kind::Array || text == nullptr) {
-        return std::unexpected<result::Error>{invalid("a cooked game is game.description, format 3, and its parts")};
+        meshes == nullptr || meshes->kind() != Value::Kind::Array || animators == nullptr ||
+        animators->kind() != Value::Kind::Array || text == nullptr) {
+        return std::unexpected<result::Error>{invalid("a cooked game is game.description, format 4, and its parts")};
     }
     CookedGame game{.text = *text};
     for (const Value& each : files->items()) {
@@ -197,6 +218,14 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
             return std::unexpected<result::Error>{invalid("a cooked game's mesh is a path and a mesh")};
         }
         game.meshes.push_back(CookedGameMesh{.path = *path, .mesh = *kMesh});
+    }
+    for (const Value& each : animators->items()) {
+        const std::string* path = textOf(each, 2, "path");
+        const std::optional<base::Bits128> kGraph = identityOf(textOf(each, 2, "graph"));
+        if (path == nullptr || !kGraph.has_value()) {
+            return std::unexpected<result::Error>{invalid("a cooked game's animator is a path and a graph")};
+        }
+        game.animators.push_back(CookedGameAnimator{.path = *path, .graph = *kGraph});
     }
     if (!wellFormed(game)) {
         return std::unexpected<result::Error>{invalid("a cooked game names each path once, in order, fully")};

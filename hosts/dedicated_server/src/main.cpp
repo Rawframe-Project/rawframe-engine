@@ -10,6 +10,7 @@
 #include "rawframe/network_quic/registrar.h"
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/physics3d/registrar.h"
+#include "rawframe/world_animation/registrar.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
@@ -18,9 +19,9 @@
 
 namespace {
 
-// The server closure: QUIC, the World, a Kest game, 2D physics, and
-// replication, and the World's saves.
-constexpr std::array<rawframe::composition::RegistrarEntry, 8> kRegistrars = {
+// The server closure: QUIC, the World, a Kest game, 2D and 3D physics, the
+// simulation's animation, replication, and the World's saves.
+constexpr std::array<rawframe::composition::RegistrarEntry, 9> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -29,6 +30,8 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 8> kRegistrars = {
         "physics2d", &rawframe::physics2d::registerParticipants, rawframe::physics2d::kScopes},
     rawframe::composition::RegistrarEntry{
         "physics3d", &rawframe::physics3d::registerParticipants, rawframe::physics3d::kScopes},
+    rawframe::composition::RegistrarEntry{
+        "world_animation", &rawframe::world_animation::registerParticipants, rawframe::world_animation::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_kest", &rawframe::world_kest::registerParticipants, rawframe::world_kest::kScopes},
     rawframe::composition::RegistrarEntry{

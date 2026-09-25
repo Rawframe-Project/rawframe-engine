@@ -1,6 +1,9 @@
 #include "rawframe/world_kest/game_files.h"
 
 #include "game_files_participant.h"
+#include "rawframe/animation/clip.h"
+#include "rawframe/animation/graph.h"
+#include "rawframe/animation/skeleton.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/kest_library/library.h"
@@ -20,6 +23,8 @@ namespace {
 
 /// The largest description, document, or Kest file a game reads.
 constexpr std::uintmax_t kLargestFile = std::uintmax_t{1} << 20U;
+/// The most clips and skeletons a game's animators reach.
+constexpr std::size_t kMaximumAnimationDocuments = 4096;
 
 std::unexpected<result::Error> unreadable(std::string_view why, std::string_view where) {
     return std::unexpected<result::Error>{
@@ -40,6 +45,35 @@ result::Result<std::string> readText(const std::filesystem::path& path) {
         return unreadable("a game file cannot be read", path.string());
     }
     return text;
+}
+
+/// Sources by the identity their sidecars give them.
+using Sources = std::vector<std::pair<base::Bits128, std::filesystem::path>>;
+
+/// The source of each sidecar under `directory` that `importer` cooks, by
+/// the identity it gives it. A sidecar that does not read is no one's.
+result::Result<Sources> sourcesBySidecar(const std::filesystem::path& directory, std::string_view importer) {
+    Sources sources;
+    std::error_code error;
+    for (auto entry = std::filesystem::recursive_directory_iterator{directory, error};
+         !error && entry != std::filesystem::recursive_directory_iterator{};
+         entry.increment(error)) {
+        const std::string kName = entry->path().filename().string();
+        if (!entry->is_regular_file() || !kName.ends_with(content::kSidecarSuffix)) {
+            continue;
+        }
+        RAWFRAME_TRY_ASSIGN(const std::string kText, readText(entry->path()));
+        const auto kSidecar = content::readSidecar(kText);
+        if (kSidecar.has_value() && kSidecar->importer == importer) {
+            const std::string kSource = entry->path().string();
+            sources.emplace_back(kSidecar->id.value,
+                                 kSource.substr(0, kSource.size() - content::kSidecarSuffix.size()));
+        }
+    }
+    if (error) {
+        return unreadable("a game's directory cannot be listed", directory.string());
+    }
+    return sources;
 }
 
 /// Every `.kest` file under `directory`, by its path relative to it, in path
@@ -113,6 +147,12 @@ std::unexpected<result::Error> invalid(std::string_view why, std::string_view na
             .withContext("name", name)};
 }
 
+std::string hexOf(base::Bits128 id) {
+    std::array<char, base::kBits128HexDigits> digits{};
+    base::formatBits128Hex(id, digits);
+    return std::string{digits.data(), digits.size()};
+}
+
 /// One resource's verified bytes, read and waited for.
 result::Result<std::string> readResource(content::ContentStore& store, const content::ResourceRef& reference) {
     RAWFRAME_TRY_ASSIGN(execution::AsyncHandle<content::VerifiedContent> read, store.read(reference));
@@ -152,6 +192,14 @@ void GameFiles::seal() {
         field(digest, description_.meshes[at].path);
         digest.update(meshDigests_[at]);
     }
+    for (const Named& graph : graphs_) {
+        field(digest, graph.name);
+        field(digest, graph.text);
+    }
+    for (const auto& [kId, kText] : animations_) {
+        field(digest, hexOf(kId));
+        field(digest, kText);
+    }
     for (const std::vector<kest::SourceFile>& files : sources_) {
         for (const kest::SourceFile& file : files) {
             field(digest, file.path);
@@ -189,6 +237,46 @@ result::Status GameFiles::readMeshes(game_content::GameContent* content, const s
             physics3d::BodyMesh{.id = declared.id, .mesh = std::make_shared<const mesh::Mesh>(std::move(*decoded))});
         meshDigests_.push_back(base::sha256(kBytes));
     }
+    return {};
+}
+
+result::Status GameFiles::readAnimations(
+    const std::function<result::Result<std::string>(base::Bits128, animation::DocumentKind)>& read) {
+    std::vector<std::pair<base::Bits128, std::string>> found;
+    // Reads `id` as a document of `kind` unless it has been, and says
+    // whether it was new.
+    const auto kReadOnce = [&found, &read](base::Bits128 id, animation::DocumentKind kind) -> result::Result<bool> {
+        if (std::ranges::contains(found, id, &std::pair<base::Bits128, std::string>::first)) {
+            return false;
+        }
+        if (found.size() == kMaximumAnimationDocuments) {
+            return unreadable("a game's animators reach more than 4,096 clips and skeletons", "");
+        }
+        RAWFRAME_TRY_ASSIGN(std::string text, read(id, kind));
+        if (animation::documentKind(text) != kind) {
+            return unreadable("an animation document is not of the kind that names it expects", hexOf(id));
+        }
+        found.emplace_back(id, std::move(text));
+        return true;
+    };
+    for (const Named& graph : graphs_) {
+        auto parsed = animation::readGraph(graph.text);
+        if (!parsed.has_value()) {
+            return std::unexpected<result::Error>{std::move(parsed).error().withContext("path", graph.name)};
+        }
+        for (const base::Bits128 kClip : animation::clipsOf(*parsed)) {
+            RAWFRAME_TRY_ASSIGN(const bool kNew, kReadOnce(kClip, animation::DocumentKind::Clip));
+            if (!kNew) {
+                continue;
+            }
+            RAWFRAME_TRY_ASSIGN(const animation::Clip kRead, animation::readClip(found.back().second));
+            if (kRead.skeleton.has_value()) {
+                RAWFRAME_TRY(kReadOnce(*kRead.skeleton, animation::DocumentKind::Skeleton));
+            }
+        }
+    }
+    std::ranges::sort(found, {}, &std::pair<base::Bits128, std::string>::first);
+    animations_ = std::move(found);
     return {};
 }
 
@@ -246,25 +334,34 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
         }
         game.scenes_.push_back(Named{.name = name, .text = std::move(text), .identity = identity});
     }
-    // A scene an instance names, by the sidecar that names it.
-    RAWFRAME_TRY(game.readInstanced([&kDirectory](base::Bits128 scene) -> result::Result<std::string> {
-        std::error_code error;
-        for (auto entry = std::filesystem::recursive_directory_iterator{kDirectory, error};
-             !error && entry != std::filesystem::recursive_directory_iterator{};
-             entry.increment(error)) {
-            const std::string kName = entry->path().filename().string();
-            if (!entry->is_regular_file() || !kName.ends_with(content::kSidecarSuffix)) {
-                continue;
+    // A scene an instance names, and an animator's clip or skeleton, by the
+    // sidecar that names it; the directory is listed only for a game that
+    // asks.
+    const auto kBySidecar = [&kDirectory](std::string_view importer, std::string_view what) {
+        return [&kDirectory, importer, what, sources = std::optional<Sources>{}](
+                   base::Bits128 id) mutable -> result::Result<std::string> {
+            if (!sources.has_value()) {
+                RAWFRAME_TRY_ASSIGN(sources, sourcesBySidecar(kDirectory, importer));
             }
-            RAWFRAME_TRY_ASSIGN(const std::string kText, readText(entry->path()));
-            const auto kSidecar = content::readSidecar(kText);
-            if (kSidecar.has_value() && kSidecar->importer == "rawframe.scene" && kSidecar->id.value == scene) {
-                const std::string kSource = entry->path().string();
-                return readText(kSource.substr(0, kSource.size() - content::kSidecarSuffix.size()));
+            const auto kFound = std::ranges::find(*sources, id, &Sources::value_type::first);
+            if (kFound == sources->end()) {
+                return unreadable(what, hexOf(id));
             }
-        }
-        return unreadable("no scene beside the game has the identity an instance names", "");
-    }));
+            return readText(kFound->second);
+        };
+    };
+    RAWFRAME_TRY(game.readInstanced(
+        kBySidecar("rawframe.scene", "no scene beside the game has the identity an instance names")));
+    for (const GameAnimator& animator : game.description_.animators) {
+        RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / animator.path));
+        game.graphs_.push_back(Named{.name = animator.path, .text = std::move(text)});
+    }
+    RAWFRAME_TRY(game.readAnimations(
+        [animations = kBySidecar("rawframe.animation",
+                                 "no clip or skeleton beside the game has the identity an animator reaches")](
+            base::Bits128 id, animation::DocumentKind) mutable {
+            return animations(id);
+        }));
     // Each mesh, by the resource its sidecar names.
     std::vector<base::Bits128> meshes;
     for (const GameMesh& declared : game.description_.meshes) {
@@ -292,14 +389,24 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
     const content::ResourceTypeId kGameType{kCookedGameType};
     const content::ResourceTypeId kSourcesType{kest_library::kGameSourcesType};
     const content::ResourceTypeId kSceneType{scene::kSceneType};
-    const std::array<content::AdmittedRepresentation, 3> kAdmitted = {
+    const content::ResourceTypeId kGraphType{animation::kGraphType};
+    const content::ResourceTypeId kClipType{animation::kClipType};
+    const content::ResourceTypeId kSkeletonType{animation::kSkeletonType};
+    const std::array<content::AdmittedRepresentation, 6> kAdmitted = {
         content::AdmittedRepresentation{.type = kGameType,
                                         .representation = *content::RepresentationId::parse(kCookedGameRepresentation)},
         content::AdmittedRepresentation{
             .type = kSourcesType,
             .representation = *content::RepresentationId::parse(kest_library::kGameSourcesRepresentation)},
         content::AdmittedRepresentation{
-            .type = kSceneType, .representation = *content::RepresentationId::parse(scene::kSceneRepresentation)}};
+            .type = kSceneType, .representation = *content::RepresentationId::parse(scene::kSceneRepresentation)},
+        content::AdmittedRepresentation{
+            .type = kGraphType, .representation = *content::RepresentationId::parse(animation::kGraphRepresentation)},
+        content::AdmittedRepresentation{
+            .type = kClipType, .representation = *content::RepresentationId::parse(animation::kClipRepresentation)},
+        content::AdmittedRepresentation{.type = kSkeletonType,
+                                        .representation =
+                                            *content::RepresentationId::parse(animation::kSkeletonRepresentation)}};
     RAWFRAME_TRY(content.admit(kAdmitted));
     RAWFRAME_TRY_ASSIGN(const std::string kRecord,
                         readResource(content.store(), content::ResourceRef{.id = description, .type = kGameType}));
@@ -340,6 +447,24 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
         meshes.push_back(kMesh->mesh);
     }
     RAWFRAME_TRY(game.readMeshes(&content, meshes));
+    for (const GameAnimator& animator : game.description_.animators) {
+        const CookedGameAnimator* const kAnimator = kCooked.animator(animator.path);
+        if (kAnimator == nullptr) {
+            return invalid("the cooked description does not name the resource of a graph it names", animator.path);
+        }
+        RAWFRAME_TRY_ASSIGN(
+            std::string text,
+            readResource(content.store(),
+                         content::ResourceRef{.id = content::ResourceId{kAnimator->graph}, .type = kGraphType}));
+        game.graphs_.push_back(Named{.name = animator.path, .text = std::move(text), .identity = kAnimator->graph});
+    }
+    RAWFRAME_TRY(
+        game.readAnimations([&content, &kClipType, &kSkeletonType](base::Bits128 id, animation::DocumentKind kind) {
+            return readResource(
+                content.store(),
+                content::ResourceRef{.id = content::ResourceId{id},
+                                     .type = kind == animation::DocumentKind::Clip ? kClipType : kSkeletonType});
+        }));
     // Each Kest sources resource once, however many programs it holds.
     std::vector<base::Bits128> read;
     for (std::string& name : programNames(game.description_)) {
@@ -391,6 +516,22 @@ result::Result<std::string_view> GameFiles::sceneById(base::Bits128 scene) const
     const auto kFound = std::ranges::lower_bound(instanced_, scene, {}, &std::pair<base::Bits128, std::string>::first);
     if (kFound == instanced_.end() || kFound->first != scene) {
         return unreadable("no scene of the game's has that identity", "");
+    }
+    return std::string_view{kFound->second};
+}
+
+result::Result<std::string_view> GameFiles::animatorGraph(std::string_view path) const {
+    const auto kFound = std::ranges::find(graphs_, path, &Named::name);
+    if (kFound == graphs_.end()) {
+        return unreadable("no animator of the game's names that graph", path);
+    }
+    return std::string_view{kFound->text};
+}
+
+result::Result<std::string_view> GameFiles::animationDocument(base::Bits128 id) const {
+    const auto kFound = std::ranges::lower_bound(animations_, id, {}, &std::pair<base::Bits128, std::string>::first);
+    if (kFound == animations_.end() || kFound->first != id) {
+        return unreadable("no clip or skeleton the game's animators reach has that identity", "");
     }
     return std::string_view{kFound->second};
 }

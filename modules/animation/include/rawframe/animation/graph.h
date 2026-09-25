@@ -304,6 +304,10 @@ struct GraphLimits {
 /// Reads the canonical form only, as hostile input.
 [[nodiscard]] result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits = {});
 
+/// Every clip the graph's clip nodes name, each once, in identity order:
+/// the clips it must be compiled with.
+[[nodiscard]] std::vector<base::Bits128> clipsOf(const Graph& graph);
+
 /// SPEC-0028's semantic hash: a Merkle digest from the output down, blind
 /// to node ids, node order, nodes the output does not reach, and
 /// presentation. Refuses (`GraphInvalid`) a graph with a quarantined node.

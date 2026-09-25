@@ -3,6 +3,7 @@
 #include "physics_facts.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/world/persistent.h"
+#include "rawframe/world_animation/components.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_replication/perception.h"
 
@@ -39,8 +40,8 @@ kest::TypeLayout persistentLayout() {
     return made;
 }
 
-/// The engine's layout of a physics component.
-kest::TypeLayout physicsLayout(const schema::ComponentLayout& engine) {
+/// The engine's layout of one of its components.
+kest::TypeLayout engineLayout(const schema::ComponentLayout& engine) {
     constexpr std::array<kest::FieldKind, 6> kKinds = {kest::FieldKind::U8,
                                                        kest::FieldKind::U32,
                                                        kest::FieldKind::U64,
@@ -108,10 +109,12 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
         engine = perceptionLayout();
     } else if (component.id == world::Persistent::kComponentTypeId) {
         engine = persistentLayout();
+    } else if (component.id == world_animation::Animator::kComponentTypeId) {
+        engine = engineLayout(world_animation::componentLayouts().front());
     } else if (game.physics.has_value()) {
         for (const schema::ComponentLayout& owned : physicsFacts(game.physics->dimensions).components) {
             if (owned.id == component.id) {
-                engine = physicsLayout(owned);
+                engine = engineLayout(owned);
             }
         }
     }

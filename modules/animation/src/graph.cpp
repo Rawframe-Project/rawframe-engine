@@ -581,6 +581,19 @@ result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits
     return graph;
 }
 
+std::vector<base::Bits128> clipsOf(const Graph& graph) {
+    std::vector<base::Bits128> clips;
+    for (const GraphNode& node : graph.nodes) {
+        if (const auto* kClip = std::get_if<ClipNode>(&node.node)) {
+            clips.push_back(kClip->clip);
+        }
+    }
+    std::ranges::sort(clips);
+    const auto kRepeated = std::ranges::unique(clips);
+    clips.erase(kRepeated.begin(), kRepeated.end());
+    return clips;
+}
+
 result::Result<base::Sha256Digest> semanticHash(const Graph& graph) {
     RAWFRAME_TRY(validate(graph));
     if (std::ranges::any_of(graph.nodes, [](const GraphNode& node) {

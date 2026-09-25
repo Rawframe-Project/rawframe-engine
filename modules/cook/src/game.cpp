@@ -1,5 +1,6 @@
 #include "rawframe/cook/game.h"
 
+#include "rawframe/animation/resources.h"
 #include "rawframe/audio/layout.h"
 #include "rawframe/audio/sound.h"
 #include "rawframe/cook/errors.h"
@@ -127,6 +128,24 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
             return refuse("a mesh the description names is cooked by rawframe.mesh", mesh.path);
         }
         game.meshes.push_back(world_kest::CookedGameMesh{.path = mesh.path, .mesh = kSidecar.id.value});
+    }
+
+    // Each animator's graph: the resource its sidecar names, cooked by
+    // rawframe.animation from a graph document. Its clips and their
+    // skeleton are resources the graph names, cooked from their own
+    // sidecars.
+    for (const world_kest::GameAnimator& animator : kDescription.animators) {
+        auto sidecarBytes = reads.file(animator.path + std::string{content::kSidecarSuffix});
+        auto graphBytes = reads.file(animator.path);
+        if (!sidecarBytes.has_value() || !graphBytes.has_value()) {
+            return refuse("an animator's graph the description names has a sidecar", animator.path);
+        }
+        RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
+        if (kSidecar.importer != "rawframe.animation" ||
+            animation::documentKind(textOf(*graphBytes)) != animation::DocumentKind::Graph) {
+            return refuse("an animator's graph is a graph document cooked by rawframe.animation", animator.path);
+        }
+        game.animators.push_back(world_kest::CookedGameAnimator{.path = animator.path, .graph = kSidecar.id.value});
     }
 
     // Each document, read as its owner reads it.
