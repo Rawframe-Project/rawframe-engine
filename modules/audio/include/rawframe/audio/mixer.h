@@ -46,6 +46,11 @@ struct PlayParameters {
     /// From hard left (minus one) to hard right (one).
     float pan = 0;
     bool loop = false;
+    /// A loop's region in the clip's frames: from `loopStart` up to
+    /// `loopEnd`, nought for the clip's end. Playing starts at the clip's
+    /// beginning and runs into the region.
+    std::uint32_t loopStart = 0;
+    std::uint32_t loopEnd = 0;
 };
 
 enum class PlaybackState : std::uint8_t {

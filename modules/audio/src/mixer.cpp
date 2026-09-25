@@ -67,6 +67,8 @@ struct Command {
     float pitch = 1;
     float pan = 0;
     bool loop = false;
+    std::uint32_t loopStart = 0;
+    std::uint32_t loopEnd = 0;
 };
 
 struct Finished {
@@ -95,6 +97,9 @@ struct Voice {
     float left = 1;
     float right = 1;
     bool loop = false;
+    /// The loop's region, in frames.
+    std::uint32_t loopStart = 0;
+    std::uint32_t loopEnd = 0;
     bool stopping = false;
     /// While stopping: the fade's level and how much it falls a frame.
     float fade = 1;
@@ -262,7 +267,10 @@ struct Mixer::State {
                           .currentGain = command.value,
                           .left = kMono ? std::cos(kAngle) : std::min(1.0F, 1.0F - command.pan),
                           .right = kMono ? std::sin(kAngle) : std::min(1.0F, 1.0F + command.pan),
-                          .loop = command.loop};
+                          .loop = command.loop,
+                          .loopStart = command.loopStart,
+                          .loopEnd = command.loopEnd == 0 ? static_cast<std::uint32_t>(command.clip->frames())
+                                                          : command.loopEnd};
             break;
         }
         case Command::Kind::Stop: {
@@ -298,23 +306,24 @@ struct Mixer::State {
         float* const out = buses[voice.bus].buffer.data();
         const float kFrom = voice.currentGain;
         const float kRamp = (voice.gain - kFrom) / static_cast<float>(frames);
-        const auto kSample = [&clip, kLength, &voice](std::size_t frame, std::size_t channel) {
-            if (frame >= kLength) {
-                if (!voice.loop) {
-                    return 0.0F;
-                }
-                frame %= kLength;
+        const std::size_t kSpan = voice.loopEnd - voice.loopStart;
+        const auto kSample = [&clip, kLength, kSpan, &voice](std::size_t frame, std::size_t channel) {
+            if (voice.loop && frame >= voice.loopEnd) {
+                frame = voice.loopStart + ((frame - voice.loopStart) % kSpan);
+            } else if (frame >= kLength) {
+                return 0.0F;
             }
             return clip.samples[(frame * clip.channels) + std::min<std::size_t>(channel, clip.channels - 1)];
         };
         for (std::size_t frame = 0; frame < frames; ++frame) {
-            if (voice.position >= static_cast<double>(kLength)) {
-                if (!voice.loop || kLength == 0) {
-                    finish(voice);
-                    return;
-                }
-                voice.position -=
-                    static_cast<double>(kLength) * std::floor(voice.position / static_cast<double>(kLength));
+            if (voice.loop && voice.position >= static_cast<double>(voice.loopEnd)) {
+                const double kOver = voice.position - static_cast<double>(voice.loopStart);
+                voice.position =
+                    static_cast<double>(voice.loopStart) +
+                    (kOver - (static_cast<double>(kSpan) * std::floor(kOver / static_cast<double>(kSpan))));
+            } else if (voice.position >= static_cast<double>(kLength)) {
+                finish(voice);
+                return;
             }
             if (voice.stopping) {
                 voice.fade -= voice.fadeStep;
@@ -471,13 +480,17 @@ result::Result<std::unique_ptr<Mixer>> Mixer::create(const Layout& layout, const
 
 result::Result<Playback> Mixer::play(std::shared_ptr<const Clip> clip, const PlayParameters& parameters) {
     State& state = *state_;
-    if (clip == nullptr || clip->channels == 0 || clip->channels > 2 || clip->rate == 0 ||
-        parameters.bus >= state.layout.buses.size() || !(parameters.pitch > 0) || !std::isfinite(parameters.pitch)) {
-        return result::fail(
-            result::ErrorClass::InvalidArgument,
-            kAudioDomain,
-            code(AudioError::BadPlay),
-            "a play needs a clip of one or two channels, a bus of the layout, and a pitch above nought");
+    const std::size_t kFrames = clip == nullptr ? 0 : clip->frames();
+    const std::size_t kLoopEnd = parameters.loopEnd == 0 ? kFrames : parameters.loopEnd;
+    if (clip == nullptr || clip->channels == 0 || clip->channels > 2 || clip->rate == 0 || kFrames == 0 ||
+        kFrames > 0xFFFF'FFFFU || parameters.bus >= state.layout.buses.size() || !(parameters.pitch > 0) ||
+        !std::isfinite(parameters.pitch) ||
+        (parameters.loop && (parameters.loopStart >= kLoopEnd || kLoopEnd > kFrames))) {
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            kAudioDomain,
+                            code(AudioError::BadPlay),
+                            "a play needs a clip of one or two channels, a bus of the layout, a pitch above nought, "
+                            "and a loop inside the clip");
     }
     const auto kFree = std::ranges::find(state.slots, false, &Slot::used);
     if (kFree == state.slots.end()) {
@@ -495,7 +508,9 @@ result::Result<Playback> Mixer::play(std::shared_ptr<const Clip> clip, const Pla
                         .value = gainOf(parameters.volume),
                         .pitch = parameters.pitch,
                         .pan = std::clamp(parameters.pan, -1.0F, 1.0F),
-                        .loop = parameters.loop};
+                        .loop = parameters.loop,
+                        .loopStart = parameters.loopStart,
+                        .loopEnd = parameters.loopEnd};
     if (!state.send(kPlay)) {
         return result::fail(result::ErrorClass::ResourceExhausted,
                             kAudioDomain,

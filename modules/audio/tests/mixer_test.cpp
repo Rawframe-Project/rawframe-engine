@@ -133,6 +133,24 @@ RAWFRAME_TEST(PitchResamplesAndPlaybacksFinish) {
     RAWFRAME_EXPECT(mixer->state(kLoop) == PlaybackState::Playing);
 }
 
+RAWFRAME_TEST(ALoopRepeatsItsRegion) {
+    auto mixer = *Mixer::create(layout(), {});
+    auto counting = std::make_shared<Clip>();
+    for (int frame = 0; frame < 100; ++frame) {
+        counting->samples.push_back(static_cast<float>(frame) / 100.0F);
+    }
+    // Into the region from the start, then round frames 50 to 59.
+    const auto kPlay = *mixer->play(counting, {.bus = kMusic, .pan = -1, .loop = true, .loopStart = 50, .loopEnd = 60});
+    const auto kOut = render(*mixer, 1000);
+    RAWFRAME_EXPECT(near(kOut[2 * 45], 0.45F) && near(kOut[2 * 59], 0.59F) && near(kOut[2 * 60], 0.50F) &&
+                    near(kOut[2 * 75], 0.55F) && near(kOut[2 * 999], 0.59F));
+    mixer->collect();
+    RAWFRAME_EXPECT(mixer->state(kPlay) == PlaybackState::Playing);
+    // A region outside the clip is refused.
+    RAWFRAME_EXPECT(!mixer->play(counting, {.bus = kMusic, .loop = true, .loopStart = 50, .loopEnd = 101}).has_value());
+    RAWFRAME_EXPECT(!mixer->play(counting, {.bus = kMusic, .loop = true, .loopStart = 60, .loopEnd = 60}).has_value());
+}
+
 RAWFRAME_TEST(AStopFadesAndNeverClicks) {
     auto mixer = *Mixer::create(layout(), {});
     const auto kPlay = *mixer->play(constant(0.8F, 48'000), {.bus = kMusic});
