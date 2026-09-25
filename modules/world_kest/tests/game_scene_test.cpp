@@ -59,7 +59,12 @@ RAWFRAME_TEST(AGameStartsWithItsScenes) {
         }};
     const auto kRun =
         [&kDirectory](const scene::Scene& written) -> std::optional<std::vector<std::pair<float, float>>> {
-        writeText(kDirectory / "start.scene", *scene::writeScene(written));
+        const auto kText = scene::writeScene(written);
+        RAWFRAME_EXPECT(kText.has_value());
+        if (!kText.has_value()) {
+            return std::nullopt;
+        }
+        writeText(kDirectory / "start.scene", *kText);
         std::vector<composition::Problem> problems;
         auto plan = composition::compose(
             composition::CompositionRequest{.registrars = kWatched,
@@ -99,8 +104,9 @@ RAWFRAME_TEST(AGameStartsWithItsScenes) {
     stale.schema[0].mark ^= 1U;
     RAWFRAME_EXPECT(!kRun(stale).has_value());
     scene::Scene stranger = start;
-    stranger.schema.push_back({.component = "movers.spin", .mark = 1});
-    stranger.entities[0].components.push_back({.name = "movers.spin", .fields = {}});
+    stranger.schema.insert(stranger.schema.begin() + 1, {.component = "movers.spin", .mark = 1});
+    stranger.entities[0].components.insert(stranger.entities[0].components.begin() + 1,
+                                           {.name = "movers.spin", .fields = {}});
     RAWFRAME_EXPECT(!kRun(stranger).has_value());
     std::filesystem::remove_all(kDirectory);
 }
