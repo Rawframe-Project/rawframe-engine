@@ -9,6 +9,7 @@
 #include "rawframe/content/composition_record.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/manifest.h"
+#include "rawframe/content/product.h"
 #include "rawframe/document/json.h"
 #include "rawframe/game_content/cooked_content.h"
 #include "rawframe/game_content/registrar.h"
@@ -249,7 +250,7 @@ RAWFRAME_TEST(ACompositionRecordIsItsCanonicalRecord) {
     std::string added = *kText;
     added.insert(1, "\"extra\":1,");
     RAWFRAME_EXPECT(!content::readComposition(added).has_value());
-    // A record of mods opens nothing yet: mod policy does not exist.
+    // A record of mods whose Builds the library lacks opens nothing.
     content::CompositionRecord modded = record;
     modded.mods = {{.subject = "fan/hats", .version = "1.0.0", .build = root}};
     const auto kModded = content::writeComposition(modded);
@@ -272,76 +273,85 @@ std::string hexOf(base::Bits128 value) {
     return std::string{digits.data(), digits.size()};
 }
 
-/// A Game Build of `rawframe/test` 1.0.0 holding resource 1, "bang", in one
-/// raw chunk, signed with a fixed seed; its key set; and the Composition
-/// that names it: a library a web client could have fetched, never on
-/// disk.
+/// Adds to `library` a Build of `subject` 1.0.0 holding resource `id`,
+/// `text`, in one raw chunk, signed with a seed of `seed` and its
+/// publisher's key set; returns its root.
+base::Sha256Digest
+addBuild(HeldLibrary& library, std::string_view subject, std::uint64_t id, std::string_view text, unsigned char seed) {
+    const std::vector<std::byte> kBytes = bytesOf(text);
+    const std::string kDigest = content::ContentDigest::of(kBytes).text();
+    document::Value chunk = document::Value::object();
+    chunk.add("content", document::Value::string(kDigest));
+    chunk.add("size", document::Value::integer(static_cast<std::int64_t>(text.size())));
+    chunk.add("blob", document::Value::string(kDigest));
+    chunk.add("blob_size", document::Value::integer(static_cast<std::int64_t>(text.size())));
+    chunk.add("codec", document::Value::string("raw"));
+    document::Value list = document::Value::array();
+    list.push(std::move(chunk));
+    document::Value chunks = document::Value::object();
+    chunks.add(hexOf(idOf(id).value), std::move(list));
+    document::Value resource = document::Value::object();
+    resource.add("resource", document::Value::string(hexOf(idOf(id).value)));
+    resource.add("type", document::Value::string(hexOf(kSoundType.value)));
+    resource.add("representation", document::Value::string("test.wave"));
+    resource.add("digest", document::Value::string(kDigest));
+    resource.add("size", document::Value::integer(static_cast<std::int64_t>(text.size())));
+    document::Value resources = document::Value::array();
+    resources.push(std::move(resource));
+    document::Value identity = document::Value::object();
+    identity.add("subject", document::Value::string(std::string{subject}));
+    identity.add("version", document::Value::string("1.0.0"));
+    identity.add("resources", std::move(resources));
+    const base::Sha256Digest kRoot = base::sha256(*document::writeCanonicalRecord(identity));
+    document::Value manifest = document::Value::object();
+    manifest.add("schema", document::Value::integer(1));
+    manifest.add("identity", std::move(identity));
+    manifest.add("chunks", std::move(chunks));
+    const std::string kManifest = *document::writeCanonicalRecord(manifest);
+
+    std::array<unsigned char, 32> seedBytes{};
+    seedBytes.fill(seed);
+    EVP_PKEY* key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, seedBytes.data(), seedBytes.size());
+    signature::PublicKey publicKey{};
+    std::size_t length = publicKey.size();
+    EVP_PKEY_get_raw_public_key(key, reinterpret_cast<unsigned char*>(publicKey.data()), &length);
+    signature::Envelope envelope{.kid = "0000000000000001", .sig = {}};
+    length = envelope.sig.size();
+    EVP_MD_CTX* context = EVP_MD_CTX_new();
+    EVP_DigestSignInit(context, nullptr, nullptr, nullptr, key);
+    EVP_DigestSign(context,
+                   reinterpret_cast<unsigned char*>(envelope.sig.data()),
+                   &length,
+                   reinterpret_cast<const unsigned char*>(kManifest.data()),
+                   kManifest.size());
+    EVP_MD_CTX_free(context);
+    EVP_PKEY_free(key);
+    const std::string kPublisher{content::publisherOf(subject)};
+    const signature::PublisherKeySet kKeys{
+        .publisher = kPublisher,
+        .sequence = 1,
+        .updatedAt = 1,
+        .head = "sha256:" + std::string(64, '0'),
+        .keys = {signature::PublisherKey{
+            .kid = "0000000000000001", .publicKey = publicKey, .state = signature::KeyState::Active, .since = 1}}};
+
+    const std::string kBuild = "builds/" + content::ContentDigest{.bytes = kRoot}.text().substr(7) + "/";
+    library.emplace_back(kBuild + "build.manifest", bytesOf(kManifest));
+    library.emplace_back(kBuild + "build.manifest.sig", bytesOf(signature::writeEnvelope(envelope)));
+    library.emplace_back(kBuild + "sha256/" + kDigest.substr(7, 2) + "/" + kDigest.substr(9), kBytes);
+    library.emplace_back("keys/" + kPublisher + ".keys", bytesOf(*signature::writePublisherKeySet(kKeys)));
+    return kRoot;
+}
+
+/// A Game Build of `rawframe/test` 1.0.0 holding resource 1, "bang", and
+/// the Composition that names it: a library a web client could have
+/// fetched, never on disk.
 struct HeldGame {
     HeldLibrary library;
     std::string record;
 
     HeldGame() {
-        const std::vector<std::byte> kBang = bytesOf("bang");
-        const std::string kDigest = content::ContentDigest::of(kBang).text();
-        document::Value chunk = document::Value::object();
-        chunk.add("content", document::Value::string(kDigest));
-        chunk.add("size", document::Value::integer(4));
-        chunk.add("blob", document::Value::string(kDigest));
-        chunk.add("blob_size", document::Value::integer(4));
-        chunk.add("codec", document::Value::string("raw"));
-        document::Value list = document::Value::array();
-        list.push(std::move(chunk));
-        document::Value chunks = document::Value::object();
-        chunks.add(hexOf(idOf(1).value), std::move(list));
-        document::Value resource = document::Value::object();
-        resource.add("resource", document::Value::string(hexOf(idOf(1).value)));
-        resource.add("type", document::Value::string(hexOf(kSoundType.value)));
-        resource.add("representation", document::Value::string("test.wave"));
-        resource.add("digest", document::Value::string(kDigest));
-        resource.add("size", document::Value::integer(4));
-        document::Value resources = document::Value::array();
-        resources.push(std::move(resource));
-        document::Value identity = document::Value::object();
-        identity.add("subject", document::Value::string("rawframe/test"));
-        identity.add("version", document::Value::string("1.0.0"));
-        identity.add("resources", std::move(resources));
-        const base::Sha256Digest kRoot = base::sha256(*document::writeCanonicalRecord(identity));
-        document::Value manifest = document::Value::object();
-        manifest.add("schema", document::Value::integer(1));
-        manifest.add("identity", std::move(identity));
-        manifest.add("chunks", std::move(chunks));
-        const std::string kManifest = *document::writeCanonicalRecord(manifest);
-
-        std::array<unsigned char, 32> seed{};
-        seed.fill(0x42);
-        EVP_PKEY* key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, seed.data(), seed.size());
-        signature::PublicKey publicKey{};
-        std::size_t length = publicKey.size();
-        EVP_PKEY_get_raw_public_key(key, reinterpret_cast<unsigned char*>(publicKey.data()), &length);
-        signature::Envelope envelope{.kid = "0000000000000001", .sig = {}};
-        length = envelope.sig.size();
-        EVP_MD_CTX* context = EVP_MD_CTX_new();
-        EVP_DigestSignInit(context, nullptr, nullptr, nullptr, key);
-        EVP_DigestSign(context,
-                       reinterpret_cast<unsigned char*>(envelope.sig.data()),
-                       &length,
-                       reinterpret_cast<const unsigned char*>(kManifest.data()),
-                       kManifest.size());
-        EVP_MD_CTX_free(context);
-        EVP_PKEY_free(key);
-        const signature::PublisherKeySet kKeys{
-            .publisher = "rawframe",
-            .sequence = 1,
-            .updatedAt = 1,
-            .head = "sha256:" + std::string(64, '0'),
-            .keys = {signature::PublisherKey{
-                .kid = "0000000000000001", .publicKey = publicKey, .state = signature::KeyState::Active, .since = 1}}};
-
-        const std::string kBuild = "builds/" + content::ContentDigest{.bytes = kRoot}.text().substr(7) + "/";
-        library = {{kBuild + "build.manifest", bytesOf(kManifest)},
-                   {kBuild + "build.manifest.sig", bytesOf(signature::writeEnvelope(envelope))},
-                   {kBuild + "sha256/" + kDigest.substr(7, 2) + "/" + kDigest.substr(9), kBang},
-                   {"keys/rawframe.keys", bytesOf(*signature::writePublisherKeySet(kKeys))}};
+        const base::Sha256Digest kRoot = addBuild(library, "rawframe/test", 1, "bang", 0x42);
         record = *content::writeComposition(
             content::CompositionRecord{.game = {.subject = "rawframe/test", .version = "1.0.0", .build = kRoot},
                                        .mods = {},
@@ -380,6 +390,52 @@ RAWFRAME_TEST(ACompositionOpensFromALibraryHeldInMemory) {
         reader.io, execution::OwnerId{1}, reader.scope, reader.clock, kGame.record, std::move(changed));
     RAWFRAME_EXPECT(tampered.has_value() && (*tampered)->admit(kWaves).has_value() &&
                     readOf(**tampered, 1, kSoundType).empty());
+}
+
+RAWFRAME_TEST(ACompositionsModsAreReadAfterItsGame) {
+    Reader reader;
+    HeldLibrary library;
+    const base::Sha256Digest kGame = addBuild(library, "rawframe/test", 1, "bang", 0x42);
+    const base::Sha256Digest kHats = addBuild(library, "fan/hats", 2, "hats", 0x43);
+    const base::Sha256Digest kCapes = addBuild(library, "other/capes", 3, "capes", 0x44);
+    content::CompositionRecord modded{.game = {.subject = "rawframe/test", .version = "1.0.0", .build = kGame},
+                                      .mods = {{.subject = "fan/hats", .version = "1.0.0", .build = kHats},
+                                               {.subject = "other/capes", .version = "1.0.0", .build = kCapes}},
+                                      .packages = {},
+                                      .profile = "community",
+                                      .createdAt = 1'790'000'000};
+    auto opened = CookedContent::openComposition(reader.io,
+                                                 execution::OwnerId{1},
+                                                 reader.scope,
+                                                 reader.clock,
+                                                 content::writeComposition(modded).value_or(""),
+                                                 library);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    // The game and each mod as its record names it, with what it holds; the
+    // mods' resources are in the one catalog.
+    const ComposedBuild* game = (*opened)->composedGame();
+    const std::span<const ComposedBuild> kMods = (*opened)->composedMods();
+    RAWFRAME_EXPECT(game != nullptr && game->reference.subject == "rawframe/test" && game->entries.size() == 1);
+    RAWFRAME_EXPECT(kMods.size() == 2 && kMods[0].reference.subject == "fan/hats" && kMods[0].entries.size() == 1 &&
+                    kMods[0].entries[0].id == idOf(2) && kMods[1].reference.build == kCapes);
+    const content::AdmittedRepresentation kWaves[] = {kWave};
+    RAWFRAME_EXPECT((*opened)->admit(kWaves).has_value() && readOf(**opened, 2, kSoundType) == "hats" &&
+                    readOf(**opened, 1, kSoundType) == "bang");
+    // A mod whose Build is another subject's is refused, as a package is.
+    modded.mods[1].subject = "other/cloaks";
+    RAWFRAME_EXPECT(!CookedContent::openComposition(reader.io,
+                                                    execution::OwnerId{1},
+                                                    reader.scope,
+                                                    reader.clock,
+                                                    content::writeComposition(modded).value_or(""),
+                                                    library)
+                         .has_value());
+    // Content that is not a Composition has none.
+    auto none = CookedContent::none(reader.io, execution::OwnerId{1}, reader.scope, reader.clock);
+    RAWFRAME_EXPECT(none.has_value() && (*none)->composedGame() == nullptr && (*none)->composedMods().empty());
 }
 
 namespace {

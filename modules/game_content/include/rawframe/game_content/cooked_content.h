@@ -56,9 +56,10 @@ public:
     /// Game Build and Packages, each read from `library/builds/<root>/` (the
     /// root's 64 hexadecimal digits) and verified against its publisher's
     /// key set `library/keys/<publisher>.keys`, pinned there, and each the
-    /// subject and version the record names (`ManifestInvalid`). A resource
-    /// two of them hold is refused as a catalog refuses it. Mods are refused
-    /// until mod policy exists. Builds never change, so `refresh` finds
+    /// subject and version the record names (`ManifestInvalid`). Its Mods
+    /// are read the same way after its Packages; whether the game takes them
+    /// is the game's to decide (D179). A resource two of them hold is refused
+    /// as a catalog refuses it. Builds never change, so `refresh` finds
     /// nothing to publish.
     [[nodiscard]] static result::Result<std::unique_ptr<CookedContent>>
     openComposition(execution::Executor& blockingIo,
@@ -95,6 +96,8 @@ public:
     [[nodiscard]] std::uint64_t generation() const noexcept;
 
     [[nodiscard]] const std::optional<base::Sha256Digest>& compositionId() const noexcept override;
+    [[nodiscard]] const ComposedBuild* composedGame() const noexcept override;
+    [[nodiscard]] std::span<const ComposedBuild> composedMods() const noexcept override;
 
 private:
     /// A key set's text by its publisher, and a Build by its root.
@@ -126,6 +129,8 @@ private:
     /// Each source's manifest entries, by source index.
     std::vector<std::vector<content::ManifestEntry>> manifests_;
     std::optional<base::Sha256Digest> compositionId_;
+    std::optional<ComposedBuild> composedGame_;
+    std::vector<ComposedBuild> composedMods_;
     std::vector<content::AdmittedRepresentation> admitted_;
     std::uint64_t generation_ = 0;
 };

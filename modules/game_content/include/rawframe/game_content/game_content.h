@@ -6,13 +6,22 @@
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/content/catalog.h"
+#include "rawframe/content/composition_record.h"
 #include "rawframe/content/store.h"
 #include "rawframe/result/result.h"
 
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace rawframe::game_content {
+
+/// A Build of the Composition a process's content is: the reference its
+/// record gives, and every resource the Build holds, admitted or not.
+struct ComposedBuild {
+    content::BuildReference reference;
+    std::vector<content::ManifestEntry> entries;
+};
 
 class GameContent {
 public:
@@ -34,6 +43,11 @@ public:
     /// The CompositionId of the Composition this content is, if it is one
     /// (SPEC-0021): what peers must agree on before play (ADR-0023).
     [[nodiscard]] virtual const std::optional<base::Sha256Digest>& compositionId() const noexcept = 0;
+    /// The Composition's Game Build, if this content is one.
+    [[nodiscard]] virtual const ComposedBuild* composedGame() const noexcept = 0;
+    /// Its Mods, in the record's subject order; none if it is not one.
+    /// Whether the game takes them is the game's to decide (SPEC-0042, D179).
+    [[nodiscard]] virtual std::span<const ComposedBuild> composedMods() const noexcept = 0;
 };
 
 inline constexpr composition::Capability<GameContent> kGameContent{"rawframe.content.game"};

@@ -133,20 +133,19 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::compose(execution:
                                                                       const KeysOf& keysOf,
                                                                       const BuildOf& buildOf) {
     RAWFRAME_TRY_ASSIGN(const content::CompositionRecord kRecord, content::readComposition(record));
-    if (!kRecord.mods.empty()) {
-        return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
-                                                           content::kContentDomain,
-                                                           code(content::ContentError::ManifestInvalid),
-                                                           "a Composition with mods waits for mod policy")
-                                                  .error()};
-    }
+    // The game, its Packages, then its Mods: sources in that order.
     std::vector<const content::BuildReference*> builds = {&kRecord.game};
     for (const content::BuildReference& each : kRecord.packages) {
         builds.push_back(&each);
     }
+    for (const content::BuildReference& each : kRecord.mods) {
+        builds.push_back(&each);
+    }
     std::unique_ptr<CookedContent> made{new CookedContent};
     std::vector<content::ContentSource> sources;
-    for (const content::BuildReference* reference : builds) {
+    const std::size_t kFirstMod = 1 + kRecord.packages.size();
+    for (std::size_t at = 0; at < builds.size(); ++at) {
+        const content::BuildReference* reference = builds[at];
         const std::string kRoot = content::ContentDigest{.bytes = reference->build}.text().substr(7);
         const std::string kPublisher{content::publisherOf(reference->subject)};
         RAWFRAME_TRY_ASSIGN(const std::string kKeysText, keysOf(kPublisher));
@@ -167,6 +166,11 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::compose(execution:
                                                       .withContext("build", kRoot)};
         }
         sources.push_back(std::move(opened->source));
+        if (at == 0) {
+            made->composedGame_ = ComposedBuild{.reference = *reference, .entries = opened->entries};
+        } else if (at >= kFirstMod) {
+            made->composedMods_.push_back(ComposedBuild{.reference = *reference, .entries = opened->entries});
+        }
         made->manifests_.push_back(std::move(opened->entries));
     }
     RAWFRAME_TRY_ASSIGN(made->store_,
@@ -230,6 +234,14 @@ std::uint64_t CookedContent::generation() const noexcept {
 
 const std::optional<base::Sha256Digest>& CookedContent::compositionId() const noexcept {
     return compositionId_;
+}
+
+const ComposedBuild* CookedContent::composedGame() const noexcept {
+    return composedGame_.has_value() ? &*composedGame_ : nullptr;
+}
+
+std::span<const ComposedBuild> CookedContent::composedMods() const noexcept {
+    return composedMods_;
 }
 
 result::Status CookedContent::publish(const std::vector<std::vector<content::ManifestEntry>>& manifests) {
