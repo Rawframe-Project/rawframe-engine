@@ -74,6 +74,8 @@ public:
                       diagnostics::field("eventsOverflowed", kStatistics.eventsOverflowed),
                       diagnostics::field("requests", kStatistics.requests),
                       diagnostics::field("requestsDropped", kStatistics.requestsDropped),
+                      diagnostics::field("rootMotions", kStatistics.rootMotions),
+                      diagnostics::field("stagesRun", kStatistics.stagesRun),
                       diagnostics::field("digest", std::string_view{digest.data(), digest.size()})});
     }
 

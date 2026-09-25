@@ -99,6 +99,10 @@ struct AnimationStatistics {
     /// Transition requests made, and those that pushed an older one out.
     std::uint64_t requests = 0;
     std::uint64_t requestsDropped = 0;
+    /// Steps that moved an entity by root motion, and modifier stages that
+    /// turned bones.
+    std::uint64_t rootMotions = 0;
+    std::uint64_t stagesRun = 0;
 };
 
 inline constexpr std::string_view kStepSystem = "rawframe.animation.step";

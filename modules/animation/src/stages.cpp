@@ -89,7 +89,7 @@ Rotation localFor(const Pose& model,
 
 } // namespace
 
-void PoseEvaluator::modify(const GraphInstance& instance, Pose& local, bool simulationOnly) {
+std::size_t PoseEvaluator::modify(const GraphInstance& instance, Pose& local, bool simulationOnly) {
     const CompiledGraph& graph = instance.graph();
     RAWFRAME_CHECK(local.bones.size() == graph.bindPose().bones.size(), "a pose of the graph's skeleton");
     const auto kValue = [&instance](const CompiledGraph::Stage::Number& number) {
@@ -98,6 +98,7 @@ void PoseEvaluator::modify(const GraphInstance& instance, Pose& local, bool simu
     const auto kPlace = [&kValue](const std::array<CompiledGraph::Stage::Number, 3>& numbers) {
         return Vector{kValue(numbers[0]), kValue(numbers[1]), kValue(numbers[2])};
     };
+    std::size_t run = 0;
     for (const CompiledGraph::Stage& stage : graph.stages()) {
         const double kWeight = std::clamp(kValue(stage.weight), 0.0, 1.0);
         if ((simulationOnly && stage.relevance != Relevance::Simulation) || !(kWeight > 0.0)) {
@@ -119,6 +120,7 @@ void PoseEvaluator::modify(const GraphInstance& instance, Pose& local, bool simu
                 localFor(model_, graph.parents(), kBone, normalized(multiplied(kTurn, bone.rotation)));
             Rotation& turned = local.bones[kBone.value].rotation;
             turned = slerp(turned, kSolved, kWeight);
+            ++run;
             continue;
         }
         const auto [kTip, kMid, kRoot] = stage.bones;
@@ -160,7 +162,9 @@ void PoseEvaluator::modify(const GraphInstance& instance, Pose& local, bool simu
         root = slerp(root, localFor(model_, graph.parents(), kRoot, kRootTurned), kWeight);
         // The parent's local turn is under its grandparent as solved.
         mid = slerp(mid, normalized(multiplied(inverted(kRootTurned), kMidTurned)), kWeight);
+        ++run;
     }
+    return run;
 }
 
 } // namespace rawframe::animation

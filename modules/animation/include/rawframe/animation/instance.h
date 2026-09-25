@@ -385,7 +385,8 @@ public:
     /// SPEC-0035's modifier stages on a local pose the instance evaluated,
     /// in their declared order: all of them, or with `simulationOnly` only
     /// those of `Simulation` relevance. Goals are in the entity's own frame.
-    void modify(const GraphInstance& instance, Pose& local, bool simulationOnly = false);
+    /// Says how many stages turned something.
+    std::size_t modify(const GraphInstance& instance, Pose& local, bool simulationOnly = false);
 
 private:
     std::vector<Pose> poses_;

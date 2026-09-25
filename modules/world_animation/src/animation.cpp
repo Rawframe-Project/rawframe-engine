@@ -202,11 +202,12 @@ struct WorldAnimation::State {
             if (moved != nullptr) {
                 animation::removeRootMotion(played->instance.graph(), local);
                 commitMotion(played->instance.rootMotion(), *moved);
+                ++statistics.rootMotions;
                 digested.update(std::as_bytes(std::span{moved, 1}));
             }
             // The graph's stages, on the pose where the entity is; a server
             // runs only the simulation's.
-            evaluator.modify(played->instance, local, settings.simulationOnly);
+            statistics.stagesRun += evaluator.modify(played->instance, local, settings.simulationOnly);
             writeProperties(stepped, kEntity, *played);
             animation::toModelSpace(played->instance.graph().parents(), local, played->pose);
             for (const animation::Transform& bone : played->pose.bones) {
