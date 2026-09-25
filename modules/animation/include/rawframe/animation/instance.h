@@ -14,6 +14,7 @@
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
+#include "rawframe/animation/mask.h"
 #include "rawframe/animation/sample.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/base/bits128.h"
@@ -44,6 +45,12 @@ struct NamedClip {
     std::shared_ptr<const Clip> clip;
 };
 
+/// A mask a graph may use, by its resource identity.
+struct NamedMask {
+    base::Bits128 id;
+    std::shared_ptr<const Mask> mask;
+};
+
 /// SPEC-0035's named limit points for evaluation.
 struct EvaluationLimits {
     /// An event fires only from a node weighed past this.
@@ -61,12 +68,14 @@ class CompiledGraph {
 public:
     /// Refuses (`GraphInvalid`) a graph that does not validate or holds a
     /// quarantined node, and (`BindingInvalid`) a clip node whose clip is
-    /// not among `clips` or does not bind to the skeleton.
+    /// not among `clips` or does not bind to the skeleton, or a mask node
+    /// whose mask is not among `masks` or is of another skeleton.
     [[nodiscard]] static result::Result<std::shared_ptr<const CompiledGraph>>
     compile(const Graph& graph,
             const Skeleton& skeleton,
             base::Bits128 skeletonId,
             std::span<const NamedClip> clips,
+            std::span<const NamedMask> masks = {},
             const EvaluationLimits& limits = {});
 
     /// A parameter by its machine name, as a script names it.
@@ -136,6 +145,9 @@ public:
         std::vector<std::optional<ParameterIndex>> weightParameters;
         /// A state machine's own; none for a clip or a blend.
         std::optional<Machine> machine;
+        /// A mask's weight for each bone, its inputs inside then outside;
+        /// empty for any other step.
+        std::vector<double> mask;
     };
 
     /// The step playing the node of id `node`; none for a node the output

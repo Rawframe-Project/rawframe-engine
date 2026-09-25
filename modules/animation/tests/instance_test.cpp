@@ -186,7 +186,7 @@ RAWFRAME_TEST(EveryPlayheadMovesButOnlyWeighedNodesFire) {
     RAWFRAME_EXPECT(events.size() == 1 && events[0].reverse && instance.playhead(1) == 0.25);
     // Past the limit, the advance says so.
     const std::vector<NamedClip> kClips{{kIdleId, idle()}, {kWalkId, walk()}};
-    GraphInstance bounded{*CompiledGraph::compile(locomotion(), rig(), kSkeletonId, kClips, {.maximumEvents = 3})};
+    GraphInstance bounded{*CompiledGraph::compile(locomotion(), rig(), kSkeletonId, kClips, {}, {.maximumEvents = 3})};
     RAWFRAME_EXPECT(bounded.set(*bounded.graph().parameter("move"), {1.0, 0.0}).has_value());
     events.clear();
     RAWFRAME_EXPECT(!bounded.advance(10.0, events) && events.size() == 3);
@@ -212,4 +212,71 @@ RAWFRAME_TEST(TwoInstancesOfOneGraphAgree) {
         RAWFRAME_EXPECT(firstPose == secondPose);
     }
     RAWFRAME_EXPECT(firstEvents == secondEvents && firstEvents.size() == 4);
+}
+
+RAWFRAME_TEST(AMaskTakesItsBonesFromInsideAndTheRestFromOutside) {
+    constexpr base::Bits128 kArm{1, 2};
+    constexpr base::Bits128 kWaveId{2, 3};
+    constexpr base::Bits128 kStandId{2, 4};
+    constexpr base::Bits128 kUpperId{3, 1};
+    constexpr std::uint64_t kBreath = 0x5f00000000000001ULL;
+    const Skeleton kBody{
+        .bones = {Bone{.target = kRoot, .name = "root", .parent = std::nullopt, .bind = {}},
+                  Bone{.target = kArm, .name = "arm", .parent = BoneIndex{0}, .bind = {.translation = {1, 0, 0}}}}};
+    // Waving: the root five metres along, the arm raised. Standing: the
+    // root at rest, breathing at a quarter second.
+    const auto kWave = std::make_shared<const Clip>(
+        Clip{.skeleton = kSkeletonId,
+             .duration = 1.0,
+             .loop = Loop::Loop,
+             .tracks = {Track{.bone = kRoot, .channel = Channel::Translation, .keys = {Key{.value = {5, 0, 0}}}},
+                        Track{.bone = kArm, .channel = Channel::Translation, .keys = {Key{.value = {0, 1, 0}}}}}});
+    const auto kStand = std::make_shared<const Clip>(
+        Clip{.skeleton = kSkeletonId,
+             .duration = 1.0,
+             .loop = Loop::Loop,
+             .tracks = {Track{.bone = kRoot, .channel = Channel::Translation, .keys = {Key{.value = {}}}}},
+             .events = {ClipEvent{.event = kBreath, .name = "breath", .time = 0.25}}});
+    const auto kMaskOf = [](double weight) {
+        return std::make_shared<const Mask>(Mask{
+            .skeleton = kSkeletonId, .chains = {MaskChain{.root = {1, 2}, .descendants = true, .weight = weight}}});
+    };
+    const Graph kGraph{
+        .parameters = {},
+        .nodes = {GraphNode{.id = 1, .node = ClipNode{.clip = kWaveId}},
+                  GraphNode{.id = 2, .node = ClipNode{.clip = kStandId}},
+                  GraphNode{.id = 3, .node = MaskNode{.mask = kUpperId, .inside = {.node = 1}, .outside = {.node = 2}}},
+                  GraphNode{.id = 4, .node = OutputNode{.pose = {.node = 3}}}},
+        .presentation = {}};
+    RAWFRAME_EXPECT(masksOf(kGraph) == std::vector<base::Bits128>{kUpperId});
+    const auto kText = writeGraph(kGraph);
+    RAWFRAME_EXPECT(kText.has_value() && readGraph(*kText).has_value() && *readGraph(*kText) == kGraph);
+    const std::vector<NamedClip> kClips{{kWaveId, kWave}, {kStandId, kStand}};
+    const auto kPlay = [&](double weight, std::vector<GraphEvent>& events) {
+        const std::vector<NamedMask> kMasks{{kUpperId, kMaskOf(weight)}};
+        GraphInstance instance{*CompiledGraph::compile(kGraph, kBody, kSkeletonId, kClips, kMasks)};
+        RAWFRAME_EXPECT(instance.advance(0.5, events));
+        Pose pose;
+        PoseEvaluator{}.evaluate(instance, pose);
+        return pose;
+    };
+    // The arm waves; the root stands, and its breath is heard.
+    std::vector<GraphEvent> events;
+    const Pose kWhole = kPlay(1.0, events);
+    RAWFRAME_EXPECT(kWhole.bones[0].translation[0] == 0.0 && kWhole.bones[1].translation[1] == 1.0 &&
+                    kWhole.bones[1].translation[0] == 0.0);
+    RAWFRAME_EXPECT(events.size() == 1 && events[0].event == kBreath);
+    // At half, the arm halfway between its bind and its wave.
+    events.clear();
+    const Pose kHalf = kPlay(0.5, events);
+    RAWFRAME_EXPECT(near(kHalf.bones[1].translation[0], 0.5) && near(kHalf.bones[1].translation[1], 0.5) &&
+                    kHalf.bones[0].translation[0] == 0.0);
+    // Without its mask, or with another skeleton's, the graph does not
+    // compile.
+    RAWFRAME_EXPECT(
+        refusedWith(CompiledGraph::compile(kGraph, kBody, kSkeletonId, kClips), AnimationError::BindingInvalid));
+    const std::vector<NamedMask> kOther{
+        {kUpperId, std::make_shared<const Mask>(Mask{.skeleton = {7, 8}, .chains = {MaskChain{.root = kArm}}})}};
+    RAWFRAME_EXPECT(refusedWith(CompiledGraph::compile(kGraph, kBody, kSkeletonId, kClips, kOther),
+                                AnimationError::BindingInvalid));
 }

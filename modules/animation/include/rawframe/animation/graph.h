@@ -60,6 +60,9 @@
 //                        `loop` overrides it (`clamp` or `loop`)
 //   `rawframe/blend@1`   blends its inputs, each by its entry in
 //                        `weights` (default 1), normalized
+//   `rawframe/mask@1`    its input `inside` on the bones `mask` (a mask's
+//                        resource identity) weighs, blended by that weight
+//                        with its input `outside` on every other
 //   `rawframe/state_machine@1`
 //                        one of its inputs, each a state, at a time,
 //                        starting at `entry` and moving by `transitions`
@@ -168,6 +171,16 @@ struct BlendNode {
     friend bool operator==(const BlendNode&, const BlendNode&) = default;
 };
 
+/// SPEC-0035's mask node: `inside` where the mask weighs a bone, `outside`
+/// elsewhere, blended by the bone's weight.
+struct MaskNode {
+    base::Bits128 mask;
+    Connection inside;
+    Connection outside;
+
+    friend bool operator==(const MaskNode&, const MaskNode&) = default;
+};
+
 struct OutputNode {
     Connection pose;
 
@@ -269,7 +282,7 @@ struct QuarantinedNode {
 
 struct GraphNode {
     std::uint64_t id = 0;
-    std::variant<ClipNode, BlendNode, StateMachineNode, OutputNode, QuarantinedNode> node;
+    std::variant<ClipNode, BlendNode, StateMachineNode, OutputNode, MaskNode, QuarantinedNode> node;
 
     friend bool operator==(const GraphNode&, const GraphNode&) = default;
 };
@@ -307,6 +320,9 @@ struct GraphLimits {
 /// Every clip the graph's clip nodes name, each once, in identity order:
 /// the clips it must be compiled with.
 [[nodiscard]] std::vector<base::Bits128> clipsOf(const Graph& graph);
+
+/// Every mask the graph's mask nodes name, each once, in identity order.
+[[nodiscard]] std::vector<base::Bits128> masksOf(const Graph& graph);
 
 /// SPEC-0028's semantic hash: a Merkle digest from the output down, blind
 /// to node ids, node order, nodes the output does not reach, and

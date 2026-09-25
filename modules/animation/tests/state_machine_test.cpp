@@ -112,7 +112,7 @@ struct Player {
     std::vector<GraphEvent> events;
 
     explicit Player(const Graph& graph, const EvaluationLimits& limits = {})
-        : instance{*CompiledGraph::compile(graph, rig(), kSkeletonId, clips(), limits)} {
+        : instance{*CompiledGraph::compile(graph, rig(), kSkeletonId, clips(), {}, limits)} {
     }
 
     void set(std::string_view name, double value) {

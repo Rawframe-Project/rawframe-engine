@@ -51,6 +51,7 @@ constexpr std::string_view kClipType = "rawframe/clip@1";
 constexpr std::string_view kBlendType = "rawframe/blend@1";
 constexpr std::string_view kStateMachineType = "rawframe/state_machine@1";
 constexpr std::string_view kOutputType = "rawframe/output@1";
+constexpr std::string_view kMaskType = "rawframe/mask@1";
 
 constexpr std::array<std::string_view, 4> kTypes{"bool", "int", "float", "vec2"};
 constexpr std::array<std::string_view, 3> kReplications{"server_authoritative", "client_predicted", "local"};
@@ -122,6 +123,9 @@ std::vector<const Connection*> connectionsOf(const GraphNode& node) {
         }
     } else if (const auto* kOutput = std::get_if<OutputNode>(&node.node)) {
         made.push_back(&kOutput->pose);
+    } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
+        made.push_back(&kMask->inside);
+        made.push_back(&kMask->outside);
     }
     return made;
 }
@@ -322,6 +326,11 @@ Value nodeValue(const Graph& graph, const GraphNode& node) {
         type = kStateMachineType;
         params = stateMachineParams(graph, *kMachine);
         inputs = stateMachineInputs(*kMachine);
+    } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
+        type = kMaskType;
+        params.add("mask", Value::string(hexOf(kMask->mask)));
+        inputs.add("inside", connectionValue(kMask->inside));
+        inputs.add("outside", connectionValue(kMask->outside));
     } else {
         type = kOutputType;
         inputs.add("pose", connectionValue(std::get<OutputNode>(node.node).pose));
@@ -383,7 +392,8 @@ result::Result<GraphNode> nodeOf(std::uint64_t id, const Value& record) {
         return graphInvalid("a node's type is namespace/name@version");
     }
     const std::string_view kType = *type->text();
-    if (kType != kClipType && kType != kBlendType && kType != kStateMachineType && kType != kOutputType) {
+    if (kType != kClipType && kType != kBlendType && kType != kStateMachineType && kType != kOutputType &&
+        kType != kMaskType) {
         // Kept whole and never read further.
         return GraphNode{.id = id,
                          .node = QuarantinedNode{.type = std::string{kType}, .record = document::writeCompact(record)}};
@@ -405,6 +415,18 @@ result::Result<GraphNode> nodeOf(std::uint64_t id, const Value& record) {
     if (kType == kStateMachineType) {
         RAWFRAME_TRY_ASSIGN(StateMachineNode made, stateMachineOf(params, inputs));
         return GraphNode{.id = id, .node = std::move(made)};
+    }
+    if (kType == kMaskType) {
+        const std::optional<base::Bits128> kMask =
+            hasMembers(params, {"mask"}) ? bits128Of(params.find("mask")) : std::nullopt;
+        const std::optional<Connection> kInside =
+            hasMembers(inputs, {"inside", "outside"}) ? connectionOf(*inputs.find("inside")) : std::nullopt;
+        const std::optional<Connection> kOutside =
+            kInside.has_value() ? connectionOf(*inputs.find("outside")) : std::nullopt;
+        if (!kMask.has_value() || !kOutside.has_value()) {
+            return graphInvalid("a mask node's one param is its mask, and its inputs are inside and outside");
+        }
+        return GraphNode{.id = id, .node = MaskNode{.mask = *kMask, .inside = *kInside, .outside = *kOutside}};
     }
     const std::optional<Connection> kPose =
         hasMembers(inputs, {"pose"}) ? connectionOf(*inputs.find("pose")) : std::nullopt;
@@ -466,13 +488,17 @@ result::Status validate(const Graph& graph, const GraphLimits& limits) {
             }
         } else if (const auto* kMachine = std::get_if<StateMachineNode>(&node.node)) {
             RAWFRAME_TRY(stateMachineInForm(graph, *kMachine, limits));
+        } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
+            if (kMask->mask == base::Bits128{}) {
+                return graphInvalid("a mask node names its mask");
+            }
         } else if (const auto* kQuarantined = std::get_if<QuarantinedNode>(&node.node)) {
             const auto kRecord = document::parse(kQuarantined->record);
             const Value* type = kRecord.has_value() ? kRecord->find("type") : nullptr;
             if (type == nullptr || type->text() == nullptr || *type->text() != kQuarantined->type ||
                 !typeIdInForm(kQuarantined->type) || kQuarantined->type == kClipType ||
                 kQuarantined->type == kBlendType || kQuarantined->type == kStateMachineType ||
-                kQuarantined->type == kOutputType) {
+                kQuarantined->type == kOutputType || kQuarantined->type == kMaskType) {
                 return graphInvalid("a quarantined node is a record of a type this engine does not know");
             }
         } else {
@@ -592,6 +618,19 @@ std::vector<base::Bits128> clipsOf(const Graph& graph) {
     const auto kRepeated = std::ranges::unique(clips);
     clips.erase(kRepeated.begin(), kRepeated.end());
     return clips;
+}
+
+std::vector<base::Bits128> masksOf(const Graph& graph) {
+    std::vector<base::Bits128> masks;
+    for (const GraphNode& node : graph.nodes) {
+        if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
+            masks.push_back(kMask->mask);
+        }
+    }
+    std::ranges::sort(masks);
+    const auto kRepeated = std::ranges::unique(masks);
+    masks.erase(kRepeated.begin(), kRepeated.end());
+    return masks;
 }
 
 result::Result<base::Sha256Digest> semanticHash(const Graph& graph) {

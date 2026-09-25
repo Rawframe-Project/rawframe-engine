@@ -37,6 +37,9 @@ std::vector<std::uint64_t> inputsOf(const GraphNode& node) {
         for (const State& state : kMachine->states) {
             made.push_back(state.from.node);
         }
+    } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
+        made.push_back(kMask->inside.node);
+        made.push_back(kMask->outside.node);
     }
     return made;
 }
@@ -105,6 +108,7 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
                                                                             const Skeleton& skeleton,
                                                                             base::Bits128 skeletonId,
                                                                             std::span<const NamedClip> clips,
+                                                                            std::span<const NamedMask> masks,
                                                                             const EvaluationLimits& limits) {
     RAWFRAME_TRY(validate(graph));
     if (std::ranges::any_of(graph.nodes, [](const GraphNode& node) {
@@ -162,6 +166,14 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
                 step.weights.push_back(kLiteral(input.weight));
                 step.weightParameters.push_back(kParameter(input.weight));
             }
+        } else if (const auto* kMask = std::get_if<MaskNode>(&node->node)) {
+            const auto kNamed = std::ranges::find(masks, kMask->mask, &NamedMask::id);
+            if (kNamed == masks.end() || kNamed->mask == nullptr) {
+                return unbound("a mask node's mask is among those the graph is compiled with");
+            }
+            RAWFRAME_TRY_ASSIGN(step.mask, boneWeights(*kNamed->mask, skeleton, skeletonId));
+            step.inputs.push_back(steps.at(kMask->inside.node));
+            step.inputs.push_back(steps.at(kMask->outside.node));
         } else {
             const auto& machine = std::get<StateMachineNode>(node->node);
             const auto kStateOf = [&machine](std::string_view name) {
@@ -317,6 +329,9 @@ void GraphInstance::weigh() {
             } else {
                 shares[machine.current] = 1.0;
             }
+        } else if (!step.mask.empty()) {
+            // Both play in full: each owns its bones, and fires its events.
+            std::ranges::fill(shares, 1.0);
         } else {
             double total = 0.0;
             for (std::size_t input = 0; input < step.inputs.size(); ++input) {
@@ -520,9 +535,13 @@ void PoseEvaluator::evaluate(const GraphInstance& instance, Pose& pose) {
             continue;
         }
         // Weighted sums; each rotation first turned into the hemisphere of
-        // the first, as q and -q are one rotation, then made unit.
-        const std::vector<double>& shares = instance.shares_[at];
+        // the first, as q and -q are one rotation, then made unit. A mask
+        // shares each bone by its weight instead.
+        std::vector<double> shares = instance.shares_[at];
         for (std::size_t bone = 0; bone < made.bones.size(); ++bone) {
+            if (!step.mask.empty()) {
+                shares = {step.mask[bone], 1.0 - step.mask[bone]};
+            }
             Transform sum{.translation = {}, .rotation = {0.0, 0.0, 0.0, 0.0}, .scale = {0.0, 0.0, 0.0}};
             const std::array<double, 4>* first = nullptr;
             for (std::size_t input = 0; input < step.inputs.size(); ++input) {
