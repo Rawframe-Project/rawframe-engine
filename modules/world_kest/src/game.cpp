@@ -430,16 +430,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     if (!haveProgram) {
         return badLine(number, WorldKestError::BadGameLine, "a game names exactly one program");
     }
+    // Any entity may carry a persistent identity (SPEC-0006), from a scene,
+    // a spawn line, or `world.persist`.
+    game.components.push_back(GameComponent{.id = world::Persistent::kComponentTypeId,
+                                            .name = std::string{world::Persistent::kComponentName},
+                                            .kestType = "Persistent"});
     for (const auto& [line, name] : uses) {
         if (!declared(game, name)) {
             return badLine(line, WorldKestError::UnknownName, "a line names a component the game does not declare");
         }
     }
-    // Any entity may carry a persistent identity (SPEC-0006), from a scene
-    // or from `world.persist`.
-    game.components.push_back(GameComponent{.id = world::Persistent::kComponentTypeId,
-                                            .name = std::string{world::Persistent::kComponentName},
-                                            .kestType = "Persistent"});
     // Every player holds the moment its client saw.
     if (game.inputPerceived) {
         game.player.emplace_back(world_replication::Perception::kComponentName);
