@@ -2,7 +2,8 @@
 // playing flag, its cue plays one-shots counted from when it was first
 // seen, despawn policies do what they name, two active listeners hear
 // nothing, a game's audio loads from its files against its program, and its
-// sounds are read from cooked content by resource identity.
+// sounds are read from cooked content by resource identity, on-demand ones
+// when first wanted.
 
 #include "rawframe/assets/errors.h"
 #include "rawframe/audio/decode.h"
@@ -12,10 +13,12 @@
 #include "rawframe/world_audio/sound_loader.h"
 #include "rawframe/world_audio/world_audio.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <thread>
 #include <unistd.h>
 
@@ -376,4 +379,98 @@ RAWFRAME_TEST(SoundsAreReadByIdentityFromCookedContent) {
                             kReady.error().code() == code(assets::AssetError::DecodeFailed));
         }
     }
+}
+
+RAWFRAME_TEST(OnDemandSoundsAreReadWhenFirstWanted) {
+    Content content;
+    // Nothing on demand is asked for up front: not even a resource the
+    // content lacks.
+    auto loader = content.loader({{kHum, declared({1, 2}, audio::Loading::OnDemand)},
+                                  {kClick, declared({3}, audio::Loading::OnDemand)},
+                                  {0xa3, declared({9}, audio::Loading::OnDemand)},
+                                  {0xa4, declared({1}, audio::Loading::Preload)}});
+    RAWFRAME_EXPECT(loader.has_value());
+    if (!loader.has_value()) {
+        return;
+    }
+    SoundLoader& sounds = **loader;
+    const auto kReady = settle(sounds);
+    RAWFRAME_EXPECT(kReady.has_value() && *kReady);
+    const auto kMade = sounds.sounds(1);
+    RAWFRAME_EXPECT(kMade.has_value() && kMade->size() == 4 && (*kMade)[0].second.clips.size() == 2 &&
+                    (*kMade)[0].second.clips[0] == nullptr && (*kMade)[3].second.clips[0] != nullptr);
+    RAWFRAME_EXPECT(sounds.arrivals(1).arrived.empty());
+
+    // Wanted: both variants arrive, once; asking again asks for nothing.
+    RAWFRAME_EXPECT(sounds.demand(0).has_value() && sounds.demand(0).has_value());
+    RAWFRAME_EXPECT(sounds.demand(1).has_value());
+    std::vector<Arrival> arrived;
+    std::vector<std::size_t> failed;
+    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while ((arrived.size() < 2 || failed.empty()) && std::chrono::steady_clock::now() < kDeadline) {
+        static_cast<void>(sounds.update(2));
+        Arrivals each = sounds.arrivals(2);
+        std::ranges::move(each.arrived, std::back_inserter(arrived));
+        for (const auto& [kSound, kError] : each.failed) {
+            RAWFRAME_EXPECT(kError.code() == code(assets::AssetError::DecodeFailed));
+            failed.push_back(kSound);
+        }
+        std::this_thread::yield();
+    }
+    RAWFRAME_EXPECT(arrived.size() == 2 && arrived[0].sound == 0 && arrived[0].variant == 0 &&
+                    arrived[0].clip->frames() == 2 && arrived[1].variant == 1 && arrived[1].clip->frames() == 6);
+    // The sound that is no clip fails, once.
+    RAWFRAME_EXPECT(failed == std::vector<std::size_t>{1});
+    const Arrivals kLater = sounds.arrivals(3);
+    RAWFRAME_EXPECT(kLater.arrived.empty() && kLater.failed.empty());
+    // A resource the content lacks is refused when wanted; a sound that is
+    // not on demand is never asked for on demand.
+    RAWFRAME_EXPECT(!sounds.demand(2).has_value() && !sounds.demand(3).has_value() && !sounds.demand(4).has_value());
+}
+
+RAWFRAME_TEST(AMixerHearsAnOnDemandSoundOnceServed) {
+    Content content;
+    auto loader = content.loader(
+        {{kHum, declared({1, 2}, audio::Loading::OnDemand)}, {kClick, declared({3}, audio::Loading::OnDemand)}});
+    RAWFRAME_EXPECT(loader.has_value() && settle(**loader).has_value());
+    if (!loader.has_value()) {
+        return;
+    }
+    auto mixer = *audio::Mixer::create(layout(), {});
+    auto sounds = *audio::Sounds::create(*mixer, layout(), {});
+    auto made = (*loader)->sounds(1);
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    for (auto& [kId, sound] : *made) {
+        RAWFRAME_EXPECT(sounds->add(std::move(sound)).has_value());
+    }
+    // The first plays are missed; served frame by frame, the hum is heard
+    // and the click, which is no clip, is named unread once.
+    RAWFRAME_EXPECT(!sounds->play(0).has_value() && !sounds->play(1).has_value());
+    std::vector<std::size_t> unread;
+    bool heard = false;
+    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (std::uint64_t tick = 2; !heard && std::chrono::steady_clock::now() < kDeadline; ++tick) {
+        static_cast<void>((*loader)->update(tick));
+        for (const auto& [kSound, kError] : (*loader)->serve(*sounds, tick)) {
+            unread.push_back(kSound);
+        }
+        heard = sounds->play(0).has_value();
+        std::this_thread::yield();
+    }
+    std::vector<float> out(4);
+    mixer->render(out);
+    RAWFRAME_EXPECT(heard && out[0] > 0.3F);
+    // The click's failure may land after the hum is heard.
+    for (std::uint64_t tick = 0; unread.empty() && std::chrono::steady_clock::now() < kDeadline; ++tick) {
+        static_cast<void>((*loader)->update(100 + tick));
+        for (const auto& [kSound, kError] : (*loader)->serve(*sounds, 100 + tick)) {
+            unread.push_back(kSound);
+        }
+        std::this_thread::yield();
+    }
+    RAWFRAME_EXPECT(unread == std::vector<std::size_t>{1} && !sounds->play(1).has_value() &&
+                    (*loader)->serve(*sounds, 999).empty());
 }

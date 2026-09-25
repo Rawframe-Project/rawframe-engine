@@ -34,6 +34,7 @@ constexpr EventIdentity kRecording{"audio", "recording_summary"};
 constexpr EventIdentity kPlaying{"audio", "playing_summary"};
 constexpr EventIdentity kUnheard{"audio", "output_unavailable"};
 constexpr EventIdentity kUnread{"audio", "sounds_unavailable"};
+constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name};
 constexpr std::uint32_t kRecordingRate = 48'000;
 
@@ -144,32 +145,48 @@ struct Hearing {
         return {};
     }
 
-    /// Reads the sounds until they are all there; false before then, or
+    /// Reads the sounds until those not on demand are all there, then
+    /// reads on-demand ones as they are first played; false before then, or
     /// for good once they cannot be.
     bool ready() noexcept {
-        if (loaded || failed) {
-            return loaded;
+        if (failed) {
+            return false;
         }
         auto done = loader->update(tick);
         if (!done.has_value()) {
             return fail(done.error());
         }
-        if (!*done) {
-            return false;
-        }
-        auto made = loader->sounds(tick);
-        if (!made.has_value()) {
-            return fail(made.error());
-        }
-        for (auto& [kId, sound] : *made) {
-            auto index = sounds->add(std::move(sound));
-            if (!index.has_value()) {
-                return fail(index.error());
+        if (!loaded) {
+            if (!*done) {
+                return false;
             }
-            settings.sounds.emplace_back(kId, *index);
+            auto made = loader->sounds(tick);
+            if (!made.has_value()) {
+                return fail(made.error());
+            }
+            for (auto& [kId, sound] : *made) {
+                auto index = sounds->add(std::move(sound));
+                if (!index.has_value()) {
+                    return fail(index.error());
+                }
+                settings.sounds.emplace_back(kId, *index);
+            }
+            loaded = true;
         }
-        loaded = true;
+        demand();
         return true;
+    }
+
+    /// Asks for the on-demand sounds played since the last frame, and
+    /// supplies the variants that arrived.
+    void demand() noexcept {
+        for (const auto& [kSound, kError] : loader->serve(*sounds, tick)) {
+            emitter.log(diagnostics::Severity::Warning,
+                        kUnreadSound,
+                        "an on-demand sound could not be read: it goes unheard",
+                        {diagnostics::field("sound", settings.sounds[kSound].first),
+                         diagnostics::field("reason", std::string{kError.description()})});
+        }
     }
 
     bool fail(const result::Error& error) noexcept {
