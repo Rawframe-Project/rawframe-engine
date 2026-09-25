@@ -32,6 +32,7 @@ authoring: scene schema document result base
 network: composition execution diagnostics result base
 network_loopback: network composition execution diagnostics result base
 network_quic: network composition execution diagnostics result base
+network_web: network composition execution diagnostics result base
 world_snapshot: world schema execution diagnostics result base
 world_save: world schema execution diagnostics result base
 physics: world schema execution diagnostics result base

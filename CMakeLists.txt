@@ -51,7 +51,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
 endif()
 
 # Every module is listed here and in tools/modules.txt. A module is never
-# discovered from the directory tree.
+# discovered from the directory tree. network_web and the web_client host
+# are the web's alone, built above.
 add_subdirectory(third_party/cgltf)
 add_subdirectory(third_party/kest)
 add_subdirectory(third_party/maul2d)
