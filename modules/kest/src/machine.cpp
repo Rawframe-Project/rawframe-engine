@@ -49,6 +49,11 @@ std::uint8_t kindOf(Slot slot) noexcept {
     return KEST_L_NOTHING;
 }
 
+/// Whether a layout is one piece of `kind`.
+bool isOne(const KestLayout* layout, std::uint8_t kind) noexcept {
+    return layout != nullptr && layout->count == 1 && layout->pieces[0].kind == kind;
+}
+
 /// Whether what the program declared at one place of an extern is what the
 /// door says it is. A value must be the very type the door names: same
 /// program type, same shape mark, and made only of what crosses by value.
@@ -218,6 +223,36 @@ result::Result<Entry> Machine::entry(std::string_view name) {
                       "the program defines no one function of this name to call");
     }
     return Entry{.index = kIndex, .frameSlots = kest_frame_slots(state_->runtime, kIndex)};
+}
+
+result::Status Machine::checkArguments(Entry entry, std::span<const Argument> takes) {
+    // A number is its one kind; a lent array is a handle, one word.
+    bool same = entry.index >= 0 && kest_frame_takes(state_->runtime, entry.index) == takes.size();
+    for (std::uint32_t which = 0; same && which < takes.size(); ++which) {
+        same = takes[which].slot != Slot::Value &&
+               isOne(kest_frame_layout(state_->runtime, entry.index, which),
+                     takes[which].lent ? static_cast<std::uint8_t>(KEST_L_WORD) : kindOf(takes[which].slot));
+    }
+    static_cast<void>(takeReport());
+    if (!same) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      KestError::EntryShapeMismatch,
+                      "a function takes other than what the engine calls it with");
+    }
+    return {};
+}
+
+result::Status Machine::checkAnswer(Entry entry, std::optional<Slot> gives) {
+    const KestLayout* const kGives = entry.index >= 0 ? kest_frame_gives(state_->runtime, entry.index) : nullptr;
+    const bool kSame = entry.index >= 0 &&
+                       (gives.has_value() ? *gives != Slot::Value && isOne(kGives, kindOf(*gives)) : kGives == nullptr);
+    static_cast<void>(takeReport());
+    if (!kSame) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      KestError::EntryShapeMismatch,
+                      "a function answers other than what the engine reads from it");
+    }
+    return {};
 }
 
 execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame, Fuel fuel) {

@@ -438,6 +438,33 @@ RAWFRAME_TEST(EngineMemoryIsLentWithoutCopying) {
     RAWFRAME_EXPECT(refusedWith((*machine)->lend(movers.data(), 3, "Absent", 8), KestError::LendRefused));
 }
 
+RAWFRAME_TEST(AnEntrysArgumentsAndAnswerAreItsOwn) {
+    // What it takes and answers, not only how wide its frame is: two lent
+    // arrays are two words, as two numbers are two slots (D167).
+    auto machine = Machine::start(compile(kMovers), {}, Trust::Trusted, kLimits);
+    RAWFRAME_EXPECT(machine.has_value());
+    if (!machine.has_value()) {
+        return;
+    }
+    const auto kPush = (*machine)->entry("push");
+    RAWFRAME_EXPECT(kPush.has_value());
+    if (!kPush.has_value()) {
+        return;
+    }
+    const kest::Argument kLent{.slot = Slot::I32, .lent = true};
+    const kest::Argument kCount{.slot = Slot::I32};
+    const kest::Argument kPushed[] = {kCount, kLent, kLent};
+    RAWFRAME_EXPECT((*machine)->checkArguments(*kPush, kPushed).has_value());
+    RAWFRAME_EXPECT((*machine)->checkAnswer(*kPush, Slot::I32).has_value());
+    const kest::Argument kNumbers[] = {kCount, kCount, kCount};
+    const kest::Argument kShort[] = {kCount, kLent};
+    RAWFRAME_EXPECT(refusedWith((*machine)->checkArguments(*kPush, kNumbers), KestError::EntryShapeMismatch));
+    RAWFRAME_EXPECT(refusedWith((*machine)->checkArguments(*kPush, kShort), KestError::EntryShapeMismatch));
+    RAWFRAME_EXPECT(refusedWith((*machine)->checkAnswer(*kPush, Slot::U32), KestError::EntryShapeMismatch));
+    RAWFRAME_EXPECT(refusedWith((*machine)->checkAnswer(*kPush, std::nullopt), KestError::EntryShapeMismatch));
+    RAWFRAME_EXPECT(refusedWith((*machine)->checkArguments(kest::Entry{}, {}), KestError::EntryShapeMismatch));
+}
+
 RAWFRAME_TEST(ContinuedCallsShareOneBudget) {
     auto machine = start(kAdd);
     auto sum = machine->entry("sum");

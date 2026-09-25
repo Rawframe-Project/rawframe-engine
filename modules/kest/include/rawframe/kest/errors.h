@@ -43,6 +43,9 @@ enum class KestError : std::uint32_t {
     /// A lend was refused: an unknown element type, a size that disagrees,
     /// or a type holding more than numbers.
     LendRefused = 16,
+    /// A function takes or answers other than what the engine calls it
+    /// with.
+    EntryShapeMismatch = 17,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(KestError error) noexcept {

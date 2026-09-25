@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -47,6 +48,14 @@ struct Entry {
     std::uint32_t frameSlots = 0;
 };
 
+/// One argument the engine calls an entry with: a number or truth of a
+/// door's slot, or an array the engine lends, whose element Kest checks at
+/// each call.
+struct Argument {
+    Slot slot = Slot::I32;
+    bool lent = false;
+};
+
 /// One running program with its own stack and heap. Thread-affine: one thread
 /// calls it at a time, and only `cancel` may come from another (SPEC-0005).
 class Machine {
@@ -62,6 +71,14 @@ public:
     ~Machine();
 
     [[nodiscard]] result::Result<Entry> entry(std::string_view name);
+    /// Refuses (`EntryShapeMismatch`) an entry that does not take exactly
+    /// `takes`. The frame's width alone does not say this: a lent array's
+    /// handle in a number's slot is a number, and whether it fits the slot
+    /// depends on the target's pointers (D167).
+    [[nodiscard]] result::Status checkArguments(Entry entry, std::span<const Argument> takes);
+    /// Refuses (`EntryShapeMismatch`) an entry that does not answer `gives`,
+    /// or answers something when `gives` is absent.
+    [[nodiscard]] result::Status checkAnswer(Entry entry, std::optional<Slot> gives);
 
     /// Calls a function with `frame` holding its arguments and, afterwards,
     /// its answer. A cancellation already asked for answers `cancelled`
