@@ -12,6 +12,15 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 8 1 480
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_over_quic PROPERTIES PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8")
+    # Two bots processes, one bot each, asking for the same session:
+    # whichever is second is told that player is already playing.
+    add_test(NAME bots_same_session
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/play.sh
+                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 1 2 480
+                     games/arena/arena.game /dev/null ${CMAKE_CURRENT_SOURCE_DIR}/tests/same_session.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(bots_same_session PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,.*\"bots\":1,\"admitted\":0,\"unavailable\":1|\"bots\":1,\"admitted\":0,\"unavailable\":1,.*\"bots\":1,\"admitted\":1,")
     # A server asked to stop drains: it refuses new bots as unavailable and
     # stops once the bots it serves have left.
     add_test(NAME bots_drain

@@ -13,6 +13,11 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(arena_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":16,\"admitted\":16")
+    # Runners' players keep their scores from one arena run to the next.
+    add_test(NAME arena_players_saved
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/players_saved.sh $<TARGET_FILE:rawframe_host_arena>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(arena_players_saved PROPERTIES PASS_REGULAR_EXPRESSION "players kept across runs")
     # A server with room for two players tells a third it is full.
     add_test(NAME arena_full
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/arena_full.conf

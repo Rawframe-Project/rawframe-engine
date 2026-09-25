@@ -461,6 +461,9 @@ public:
         }
         return &save_;
     }
+    const world_save::SaveDeclaration* playerSaveDeclaration() const noexcept override {
+        return game_.playerSave.document.empty() ? nullptr : &playerSave_;
+    }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
         if (capability == world_replication::kReplicationPlan.name) {
@@ -981,12 +984,18 @@ private:
     /// for its layout and the slot offset of each entity field an `entity`
     /// line names, where a program's Entity starts.
     result::Status planSave() {
-        save_.document = game_.save.document;
-        for (const std::string& name : game_.save.components) {
+        declareSave(game_.save, save_);
+        declareSave(game_.playerSave, playerSave_);
+        return {};
+    }
+
+    void declareSave(const GameSave& line, world_save::SaveDeclaration& save) {
+        save.document = line.document;
+        for (const std::string& name : line.components) {
             const GameComponent& component = *componentNamed(name);
             const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(&component - game_.components.data())];
             world_save::SavedComponent& saved =
-                save_.components.emplace_back(world_save::SavedComponent{.id = component.id, .mark = layout.mark});
+                save.components.emplace_back(world_save::SavedComponent{.id = component.id, .mark = layout.mark});
             for (const GameEntityField& field : game_.entityFields) {
                 const auto kSlot = std::ranges::find(layout.fields, field.field + ".slot", &kest::Field::name);
                 if (field.component == component.name && kSlot != layout.fields.end()) {
@@ -994,7 +1003,6 @@ private:
                 }
             }
         }
-        return {};
     }
 
     result::Status planCheckpoints() {
@@ -1106,6 +1114,7 @@ private:
     kest::MachineLimits predictionLimits_;
     kest::MachineLimits admissionLimits_;
     world_save::SaveDeclaration save_;
+    world_save::SaveDeclaration playerSave_;
     std::unique_ptr<KestAdmission> admission_;
     std::optional<physics2d::Physics2DSettings> predictedPhysics_;
     std::optional<physics3d::Physics3DSettings> predictedPhysics3d_;

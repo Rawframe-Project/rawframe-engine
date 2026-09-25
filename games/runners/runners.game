@@ -29,6 +29,9 @@ scene level.scene
 # has been played. A server with `save.directory` keeps it between runs.
 scene hall.scene
 save hall runners.age
+# Each player keeps their score between visits, under the session they ask
+# for.
+save player runner runners.score
 
 replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter
 player runners.stick runners.score runners.emitter rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception

@@ -21,7 +21,7 @@
 
 namespace {
 
-constexpr std::array<rawframe::composition::RegistrarEntry, 9> kRegistrars = {
+constexpr std::array<rawframe::composition::RegistrarEntry, 10> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -40,6 +40,8 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 9> kRegistrars = {
         "world_replication", &rawframe::world_replication::registerParticipants, rawframe::world_replication::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_runtime", &rawframe::world_runtime::registerParticipants, rawframe::world_runtime::kScopes},
+    rawframe::composition::RegistrarEntry{
+        "world_runtime.saves", &rawframe::world_runtime::registerSaves, rawframe::world_runtime::kScopes},
 };
 
 } // namespace

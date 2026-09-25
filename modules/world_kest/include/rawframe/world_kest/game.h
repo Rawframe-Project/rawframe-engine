@@ -55,7 +55,10 @@
 // A `save <document> <component>...` line declares the game's save: the
 // components it keeps of every persistent entity (world/persistent.h), a
 // scene's entity carrying `rawframe.world.persistent` or one a program
-// persists. Where and when it is kept is the operator's (`save.*`).
+// persists. A `save player <document> <component>...` line declares what
+// each player keeps of their entity, among the components players start
+// with, under the identity of the session they ask for. Where and when saves
+// are kept is the operator's (`save.*`).
 //
 // An `admission <function>` line names the game's own admission rule, a
 // function of the program the server asks about each client it would admit
@@ -279,6 +282,9 @@ struct GameDescription {
     /// What a save keeps, from a `save <document> <component>...` line;
     /// no document, no save.
     GameSave save;
+    /// What each player's save keeps of their entity, from a `save player
+    /// <document> <component>...` line.
+    GameSave playerSave;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as

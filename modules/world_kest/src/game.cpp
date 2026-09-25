@@ -127,16 +127,22 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             game.program = kWords[1];
             haveProgram = true;
         } else if (kKeyword == "save") {
-            if (!game.save.document.empty() || kWords.size() < 3) {
-                return badLine(
-                    number, WorldKestError::BadGameLine, "a game declares one save, `save <document> <component>...`");
+            // `save <document> ...` for the World; `save player <document>
+            // ...` for each player.
+            const bool kPlayer = kWords.size() >= 2 && kWords[1] == "player";
+            const std::size_t kFirst = kPlayer ? 3 : 2;
+            GameSave& save = kPlayer ? game.playerSave : game.save;
+            if (!save.document.empty() || kWords.size() <= kFirst) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a game declares one save of each kind, `save [player] <document> <component>...`");
             }
-            game.save.document = kWords[1];
-            for (std::size_t index = 2; index < kWords.size(); ++index) {
-                if (std::ranges::contains(game.save.components, kWords[index])) {
+            save.document = kWords[kFirst - 1];
+            for (std::size_t index = kFirst; index < kWords.size(); ++index) {
+                if (std::ranges::contains(save.components, kWords[index])) {
                     return badLine(number, WorldKestError::BadGameLine, "a save keeps a component once");
                 }
-                game.save.components.emplace_back(kWords[index]);
+                save.components.emplace_back(kWords[index]);
                 uses.emplace_back(number, std::string{kWords[index]});
             }
         } else if (kKeyword == "admission") {
@@ -461,6 +467,14 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     }
     if (actionsLine != 0) {
         game.controls = std::move(controls);
+    }
+    if (!game.playerSave.document.empty()) {
+        for (const std::string& component : game.playerSave.components) {
+            if (!std::ranges::contains(game.player, component)) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a player's save keeps components players start with");
+            }
+        }
     }
     if (admissionLine != 0 && game.replicated.empty()) {
         return badLine(
