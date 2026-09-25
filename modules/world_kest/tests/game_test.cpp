@@ -1,6 +1,7 @@
 // Game descriptions: what parses, what is refused and where, and a whole
 // Kest-scripted game loaded through composition and ticked by the World.
 
+#include "game_harness.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/registrar.h"
@@ -32,6 +33,7 @@
 #include <vector>
 
 using namespace rawframe;
+using namespace rawframe::game_test;
 using world_kest::parseGame;
 using world_kest::WorldKestError;
 
@@ -232,75 +234,6 @@ RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
     RAWFRAME_EXPECT(refusedAt("# nothing\n", WorldKestError::BadGameLine, "1"));
 }
 
-namespace {
-
-const std::array<composition::RegistrarEntry, 2> kRegistrars = {
-    composition::RegistrarEntry{"world_kest", &world_kest::registerParticipants, world_kest::kScopes},
-    composition::RegistrarEntry{"world_runtime", &world_runtime::registerParticipants, world_runtime::kScopes},
-};
-
-/// The simulation the game was loaded into, found through a participant of
-/// the test's own.
-world_runtime::Simulation* simulation = nullptr;
-
-result::Result<composition::ParticipantOwner> makeWatcher(composition::ParticipantContext& context) noexcept {
-    RAWFRAME_TRY_ASSIGN(simulation, context.capability(world_runtime::kSimulation));
-    struct Watcher final : composition::Participant {};
-    return composition::ParticipantOwner{new Watcher{}};
-}
-
-constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
-
-void registerWatcher(composition::ParticipantRegistrar& registrar) noexcept {
-    registrar.submit(composition::ParticipantDeclaration{
-        .identity = "test.watcher",
-        .factory = &makeWatcher,
-        .scope = composition::LifetimeScope::World,
-        .requiredCapabilities = kNeeds,
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
-    });
-}
-
-const std::array<composition::RegistrarEntry, 3> kWatched = {
-    kRegistrars[0], kRegistrars[1], composition::RegistrarEntry{"test", &registerWatcher, world_runtime::kScopes}};
-
-std::vector<std::pair<float, float>> positions() {
-    world::World& world = *simulation->world();
-    const auto kId = world.registry().find(schema::ComponentTypeId::fromText("0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1"));
-    const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
-    auto query = world::ColumnQuery::resolve(kTerms, world.registry());
-    std::vector<std::pair<float, float>> found;
-    query->forEachChunk(world, [&found](const world::ColumnChunk& chunk) {
-        const auto* values = reinterpret_cast<const float*>(chunk.columns[0]);
-        for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-            found.emplace_back(values[row * 2], values[(row * 2) + 1]);
-        }
-    });
-    return found;
-}
-
-void writeText(const std::filesystem::path& path, std::string_view text) {
-    if (std::FILE* file = std::fopen(path.string().c_str(), "wb")) {
-        std::fwrite(text.data(), 1, text.size(), file);
-        std::fclose(file);
-    }
-}
-
-std::string readText(const std::filesystem::path& path) {
-    std::string text;
-    if (std::FILE* file = std::fopen(path.string().c_str(), "rb")) {
-        char chunk[4096];
-        std::size_t got = 0;
-        while ((got = std::fread(chunk, 1, sizeof chunk, file)) != 0) {
-            text.append(chunk, got);
-        }
-        std::fclose(file);
-    }
-    return text;
-}
-
-} // namespace
-
 RAWFRAME_TEST(AKestGameRunsInTheWorld) {
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(
@@ -343,203 +276,6 @@ RAWFRAME_TEST(AKestGameRunsInTheWorld) {
     RAWFRAME_EXPECT(bounced);
     composition.stop();
     simulation = nullptr;
-}
-
-RAWFRAME_TEST(AGameStartsWithItsScenes) {
-    // Movers with their starting entities in a scene, not spawn lines: two
-    // at rest where the scene puts them, one moving, and one spawn line.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-scene-" + std::to_string(::getpid()));
-    std::filesystem::create_directories(kDirectory);
-    writeText(kDirectory / "movers.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest"));
-    std::string game = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game");
-    game = game.substr(0, game.find("spawn 3"));
-    game += "spawn 1 movers.position x=1 y=1 movers.velocity\nscene start.scene\n";
-    writeText(kDirectory / "movers.game", game);
-
-    // The marks the scene is authored against: the program's layouts.
-    writeText(kDirectory / "start.scene", "");
-    auto files = world_kest::GameFiles::fromDirectory(kDirectory / "movers.game");
-    RAWFRAME_EXPECT(files.has_value());
-    const auto kProgram = files.has_value() ? files->compile("movers.kest") : std::unexpected{files.error().clone()};
-    RAWFRAME_EXPECT(kProgram.has_value());
-    if (!kProgram.has_value()) {
-        return;
-    }
-    const std::uint64_t kPosition = (*kProgram)->layout("Position")->mark;
-    const std::uint64_t kVelocity = (*kProgram)->layout("Velocity")->mark;
-    const auto kNumber = [](std::string text) {
-        return scene::FieldValue{.kind = scene::FieldValue::Kind::Number, .number = std::move(text)};
-    };
-    scene::Scene start{
-        .schema = {{.component = "movers.position", .mark = kPosition},
-                   {.component = "movers.velocity", .mark = kVelocity}},
-        .entities = {
-            {.id = base::Bits128{.high = 0, .low = 1},
-             .name = "resting",
-             .components = {{.name = "movers.position", .fields = {{.name = "x", .value = kNumber("-5")}}},
-                            {.name = "movers.velocity", .fields = {}}}},
-            {.id = base::Bits128{.high = 0, .low = 2},
-             .components = {{.name = "movers.position", .fields = {{.name = "y", .value = kNumber("7.5")}}},
-                            {.name = "movers.velocity", .fields = {{.name = "dx", .value = kNumber("2")}}}}},
-        }};
-    const auto kRun =
-        [&kDirectory](const scene::Scene& written) -> std::optional<std::vector<std::pair<float, float>>> {
-        writeText(kDirectory / "start.scene", *scene::writeScene(written));
-        std::vector<composition::Problem> problems;
-        auto plan = composition::compose(
-            composition::CompositionRequest{.registrars = kWatched,
-                                            .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
-            problems);
-        const auto kConfiguration =
-            composition::Configuration::parse("kest.game = " + (kDirectory / "movers.game").string() +
-                                              "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n");
-        execution::ManualClock clock;
-        execution::CancellationScope root{clock};
-        composition::Composition composition{
-            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
-        if (!composition.start().has_value()) {
-            simulation = nullptr;
-            return std::nullopt;
-        }
-        clock.advance(execution::MonotonicDuration::fromSeconds(1));
-        composition.runHostPhase(composition::HostPhase::RunWorlds,
-                                 composition::HostFrame{.iteration = 0, .now = clock.now()});
-        auto found = positions();
-        composition.stop();
-        simulation = nullptr;
-        std::ranges::sort(found);
-        return found;
-    };
-    const auto kFound = kRun(start);
-    RAWFRAME_EXPECT(kFound.has_value());
-    if (kFound.has_value()) {
-        // Ten ticks: the spawn line's and the resting one stay, the moving
-        // one goes twenty meters.
-        const std::vector<std::pair<float, float>> kExpected = {{-5.0F, 0.0F}, {1.0F, 1.0F}, {20.0F, 7.5F}};
-        RAWFRAME_EXPECT(*kFound == kExpected);
-    }
-    // Authored against another layout, or naming another component: the
-    // game does not start.
-    scene::Scene stale = start;
-    stale.schema[0].mark ^= 1U;
-    RAWFRAME_EXPECT(!kRun(stale).has_value());
-    scene::Scene stranger = start;
-    stranger.schema.push_back({.component = "movers.spin", .mark = 1});
-    stranger.entities[0].components.push_back({.name = "movers.spin", .fields = {}});
-    RAWFRAME_EXPECT(!kRun(stranger).has_value());
-    std::filesystem::remove_all(kDirectory);
-}
-
-RAWFRAME_TEST(AScenesEntitiesNameEachOther) {
-    // Two links naming each other and one naming none, by their ids in the
-    // scene; spawned, each holds the other's entity.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-links-" + std::to_string(::getpid()));
-    std::filesystem::create_directories(kDirectory);
-    writeText(kDirectory / "linked.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "linked.kest"));
-    const std::string kGame = "program linked.kest\ncomponent 5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84 linked.link Link\n";
-    writeText(kDirectory / "linked.game", kGame + "entity linked.link next\nscene links.scene\n");
-    writeText(kDirectory / "links.scene", "");
-    auto files = world_kest::GameFiles::fromDirectory(kDirectory / "linked.game");
-    const auto kProgram = files.has_value() ? files->compile("linked.kest") : std::unexpected{files.error().clone()};
-    RAWFRAME_EXPECT(kProgram.has_value());
-    if (!kProgram.has_value()) {
-        return;
-    }
-    const base::Bits128 kFirst{.high = 0, .low = 1};
-    const base::Bits128 kSecond{.high = 0, .low = 2};
-    const auto kLink = [](base::Bits128 to) {
-        return scene::SceneField{.name = "next", .value = {.kind = scene::FieldValue::Kind::Entity, .entity = to}};
-    };
-    const scene::Scene kLinks{
-        .schema = {{.component = "linked.link", .mark = (*kProgram)->layout("Link")->mark}},
-        .entities = {
-            {.id = kFirst,
-             .components = {{.name = "linked.link",
-                             .fields = {{.name = "hops", .value = {.number = "1"}}, kLink(kSecond)}}}},
-            {.id = kSecond,
-             .components = {{.name = "linked.link",
-                             .fields = {{.name = "hops", .value = {.number = "2"}}, kLink(kFirst)}}}},
-            {.id = base::Bits128{.high = 0, .low = 3},
-             .components = {{.name = "linked.link", .fields = {{.name = "hops", .value = {.number = "3"}}}}}},
-        }};
-    const auto kStart = [&kDirectory](const scene::Scene& authored, std::string_view game) {
-        writeText(kDirectory / "links.scene", *scene::writeScene(authored));
-        writeText(kDirectory / "linked.game", game);
-        std::vector<composition::Problem> problems;
-        auto plan = composition::compose(
-            composition::CompositionRequest{.registrars = kWatched,
-                                            .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
-            problems);
-        const auto kConfiguration =
-            composition::Configuration::parse("kest.game = " + (kDirectory / "linked.game").string() + "\n");
-        execution::ManualClock clock;
-        execution::CancellationScope root{clock};
-        composition::Composition composition{
-            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
-        // By hops: each link's entity and the entity it holds.
-        std::vector<std::tuple<std::int32_t, world::EntityHandle, world::EntityHandle>> links;
-        if (composition.start().has_value()) {
-            world::World& world = *simulation->world();
-            const auto kId =
-                world.registry().find(schema::ComponentTypeId::fromText("5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84"));
-            const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
-            auto query = world::ColumnQuery::resolve(kTerms, world.registry());
-            query->forEachChunk(world, [&links](const world::ColumnChunk& chunk) {
-                for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                    std::array<std::uint32_t, 3> link{};
-                    std::memcpy(link.data(), chunk.columns[0] + (row * 12), 12);
-                    links.emplace_back(static_cast<std::int32_t>(link[2]),
-                                       chunk.entities[row],
-                                       world::EntityHandle{.slot = link[0], .generation = link[1]});
-                }
-            });
-            composition.stop();
-        }
-        simulation = nullptr;
-        std::ranges::sort(links, {}, [](const auto& link) {
-            return std::get<0>(link);
-        });
-        return links;
-    };
-    const auto kLinked = kStart(kLinks, kGame + "entity linked.link next\nscene links.scene\n");
-    RAWFRAME_EXPECT(kLinked.size() == 3);
-    if (kLinked.size() == 3) {
-        RAWFRAME_EXPECT(std::get<2>(kLinked[0]) == std::get<1>(kLinked[1]) &&
-                        std::get<2>(kLinked[1]) == std::get<1>(kLinked[0]) && std::get<2>(kLinked[2]).isNull());
-    }
-    // A reference only through a field the description declares holds one.
-    RAWFRAME_EXPECT(kStart(kLinks, kGame + "scene links.scene\n").empty());
-    std::filesystem::remove_all(kDirectory);
-}
-
-RAWFRAME_TEST(SpawnLinesBecomeAScene) {
-    auto files = world_kest::GameFiles::fromDirectory(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game");
-    const auto kProgram = files.has_value() ? files->compile("movers.kest") : std::unexpected{files.error().clone()};
-    RAWFRAME_EXPECT(kProgram.has_value());
-    if (!kProgram.has_value()) {
-        return;
-    }
-    std::uint64_t next = 0;
-    const auto kScene = world_kest::spawnsAsScene(files->description(), **kProgram, [&next] {
-        return base::Bits128{.high = 0, .low = ++next};
-    });
-    RAWFRAME_EXPECT(kScene.has_value());
-    if (!kScene.has_value()) {
-        return;
-    }
-    // Four entities, one for each spawned; each component's mark the
-    // program's; a field at nought left out; the form holds.
-    const base::Bits128 kFourth{.high = 0, .low = 4};
-    RAWFRAME_EXPECT(kScene->entities.size() == 4 && kScene->entities[3].id == kFourth);
-    RAWFRAME_EXPECT(kScene->schema.size() == 2 && kScene->schema[0].mark == (*kProgram)->layout("Position")->mark &&
-                    kScene->schema[1].mark == (*kProgram)->layout("Velocity")->mark);
-    RAWFRAME_EXPECT(kScene->entities[0].components[0].fields.empty() &&
-                    kScene->entities[0].components[1].fields.size() == 2 &&
-                    kScene->entities[3].components[0].fields.size() == 1 &&
-                    kScene->entities[3].components[0].fields[0].value.number == "99.5");
-    RAWFRAME_EXPECT(scene::writeScene(*kScene).has_value());
 }
 
 RAWFRAME_TEST(WithoutAGameNothingLoads) {
