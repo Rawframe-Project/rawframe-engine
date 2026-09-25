@@ -47,6 +47,8 @@ struct Replica {
 struct Mapping {
     NetEntityId id;
     bool acknowledged = false;
+    /// The tick its first state record went out, for the victim gate.
+    std::optional<std::uint64_t> firstSent;
     /// By replication table index.
     std::vector<Replica> replicas;
 };
@@ -71,18 +73,43 @@ constexpr std::uint64_t kAckBits = 64;
 /// else can have waited.
 constexpr std::uint64_t kOwnedPriority = std::uint64_t{1} << 40U;
 
+/// An entity a connection was sent from one tick until another, before its
+/// mapping was retired.
+struct Sent {
+    world::EntityHandle entity;
+    std::uint64_t from = 0;
+    std::uint64_t until = 0;
+};
+
+/// Ticks of retired mappings the victim gate remembers: the most a physics
+/// history keeps.
+constexpr std::uint64_t kInterestKept = 1024;
+
+/// A command waiting for its tick, and the tick it arrived before.
+struct Waiting {
+    std::vector<std::byte> command;
+    std::uint64_t arrived = 0;
+};
+
 /// One admitted connection.
 struct Peer {
     network::ConnectionId connection;
     network::Accept accept;
     world::EntityHandle player;
+    /// Its name in Perception and InterestHistory.
+    std::uint32_t viewer = 0;
+    std::vector<Sent> retired;
+    /// Ticks its claimed moments lag their arrival, smoothed; none before
+    /// the first claim.
+    std::optional<double> lag;
+    Perception seen;
     std::uint32_t nextNetEntity = 1;
     std::map<world::EntityHandle, Mapping> mapped;
     std::map<std::uint32_t, world::EntityHandle> byNetEntity;
     /// The next input tick to consume, and commands waiting for theirs.
     std::uint64_t nextInputTick = 0;
     std::uint64_t consumedInputTick = 0;
-    std::map<std::uint64_t, std::vector<std::byte>> waitingInputs;
+    std::map<std::uint64_t, Waiting> waitingInputs;
     std::vector<std::byte> lastCommand;
     std::uint32_t held = 0;
     std::uint64_t stateSequence = 0;
@@ -102,6 +129,9 @@ struct ReplicationServer::State {
     ServerReplicationSettings settings;
     std::map<std::uint64_t, Peer> peers;
     ServerReplicationStatistics statistics;
+    /// The tick the last pump told, which input arriving then is before.
+    std::uint64_t pumpTick = 0;
+    std::uint32_t lastViewer = 0;
     std::vector<network::SessionEvent> events;
 
     // Resolved once the registry is frozen.
@@ -248,7 +278,8 @@ struct ReplicationServer::State {
                 ++statistics.inputsRefused;
                 continue;
             }
-            peer.waitingInputs.try_emplace(kTick, kCommand.begin(), kCommand.end());
+            peer.waitingInputs.try_emplace(kTick,
+                                           Waiting{.command = {kCommand.begin(), kCommand.end()}, .arrived = pumpTick});
         }
     }
 
@@ -265,7 +296,10 @@ struct ReplicationServer::State {
             std::vector<std::byte> command;
             const auto kWaiting = peer.waitingInputs.find(peer.nextInputTick);
             if (kWaiting != peer.waitingInputs.end()) {
-                command = std::move(kWaiting->second);
+                command = std::move(kWaiting->second.command);
+                if (perception) {
+                    peer.seen = perceived(peer, command, kWire, kWaiting->second.arrived);
+                }
                 peer.lastCommand = command;
                 peer.held = 0;
                 ++statistics.inputsConsumed;
@@ -276,15 +310,14 @@ struct ReplicationServer::State {
             } else {
                 command.assign(kWire, std::byte{0});
                 ++statistics.inputsNeutral;
+                // A neutral command saw nothing.
+                peer.seen = Perception{.viewer = peer.viewer};
             }
             if (perception) {
-                // Checked when it arrived; a neutral command saw nothing.
-                const auto kSeen = command.size() > kWire ? decodePerception(std::span{command}.subspan(kWire))
-                                                          : result::Result<PerceptionContext>{PerceptionContext{}};
+                // A held command keeps the moment of the one it repeats.
                 auto* const kInto = static_cast<Perception*>(world.getErased(peer.player, *perception));
-                if (kInto != nullptr && kSeen.has_value()) {
-                    kInto->baseTick = kSeen->baseTick;
-                    kInto->fraction = kSeen->fraction;
+                if (kInto != nullptr) {
+                    *kInto = peer.seen;
                 }
             }
             peer.waitingInputs.erase(peer.waitingInputs.begin(), peer.waitingInputs.upper_bound(peer.nextInputTick));
@@ -294,6 +327,19 @@ struct ReplicationServer::State {
             network::Reader reader{command};
             static_cast<void>(settings.input->decode(reader, kValue));
         }
+    }
+
+    /// A consumed command's moment, checked when it arrived, kept within the
+    /// skew of the lag its connection's claims have shown.
+    [[nodiscard]] Perception
+    perceived(Peer& peer, std::span<const std::byte> command, std::size_t wire, std::uint64_t arrived) {
+        const auto kSeen = decodePerception(command.subspan(wire));
+        if (!kSeen.has_value()) {
+            return Perception{.viewer = peer.viewer};
+        }
+        const KeptPerception kKept = keepPerception(*kSeen, arrived, settings.perceptionSkew, peer.lag);
+        statistics.perceptionsClamped += kKept.clamped ? 1 : 0;
+        return Perception{.baseTick = kKept.moment.baseTick, .fraction = kKept.moment.fraction, .viewer = peer.viewer};
     }
 
     void publish(world::World& world, world::TickIndex tick) {
@@ -411,6 +457,9 @@ struct ReplicationServer::State {
     }
 
     void publishTo(Peer& peer, world::TickIndex tick) {
+        std::erase_if(peer.retired, [&](const Sent& gone) {
+            return gone.until + kInterestKept < tick.value;
+        });
         if (settings.input && peer.heardInput && tick.value % settings.paceInterval == 0) {
             sendPace(peer);
         }
@@ -424,6 +473,10 @@ struct ReplicationServer::State {
                 continue;
             }
             statistics.interestLeft += kPresent ? 1 : 0;
+            if (mapping->second.firstSent.has_value()) {
+                peer.retired.push_back(
+                    Sent{.entity = mapping->first, .from = *mapping->second.firstSent, .until = tick.value});
+            }
             sendMapping(peer, network::ControlFrame::MappingRetire, mapping->second.id, false);
             peer.byNetEntity.erase(mapping->second.id.value);
             mapping = peer.mapped.erase(mapping);
@@ -568,6 +621,7 @@ struct ReplicationServer::State {
             }
             replica.sentAt = tick.value;
             replica.priority = 0;
+            candidate.mapping->firstSent = candidate.mapping->firstSent.value_or(tick.value);
             inDatagram.emplace_back(candidate.mapping->id.value, value.component);
             used = recordWriter.written().size();
             ++count;
@@ -742,6 +796,7 @@ void ReplicationServer::forgetWorld() noexcept {
 
 void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
     State& state = *state_;
+    state.pumpTick = tick.value;
     state.sessions->setTickOrigin(tick.value);
     state.events.clear();
     state.sessions->pump(state.events);
@@ -771,6 +826,7 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             state.peers[event.connection.value] = Peer{.connection = event.connection,
                                                        .accept = event.accept,
                                                        .player = *player,
+                                                       .viewer = ++state.lastViewer,
                                                        .nextInputTick = event.accept.tickOrigin + 1,
                                                        .consumedInputTick = event.accept.tickOrigin};
             break;
@@ -795,6 +851,27 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             break;
         }
     }
+}
+
+std::optional<std::uint64_t>
+ReplicationServer::sentSince(std::uint32_t viewer, world::EntityHandle entity, std::uint64_t tick) const noexcept {
+    for (const auto& [id, peer] : state_->peers) {
+        if (peer.viewer != viewer) {
+            continue;
+        }
+        if (entity == peer.player) {
+            return 0;
+        }
+        const auto kMapped = peer.mapped.find(entity);
+        if (kMapped != peer.mapped.end() && kMapped->second.firstSent.has_value()) {
+            return kMapped->second.firstSent;
+        }
+        const auto kThen = std::ranges::find_if(peer.retired, [&](const Sent& gone) {
+            return gone.entity == entity && gone.from <= tick && tick < gone.until;
+        });
+        return kThen != peer.retired.end() ? std::optional{kThen->from} : std::nullopt;
+    }
+    return std::nullopt;
 }
 
 ServerReplicationStatistics ReplicationServer::statistics() const noexcept {

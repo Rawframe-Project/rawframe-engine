@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -119,6 +120,24 @@ inline constexpr std::size_t kMaximumPerceptionBytes = 10;
 [[nodiscard]] result::Status encodePerception(network::Writer& writer, const PerceptionContext& perception);
 /// Everything in `bytes` must be the context.
 [[nodiscard]] result::Result<PerceptionContext> decodePerception(std::span<const std::byte> bytes);
+
+/// A claimed moment as the server keeps it (SPEC-0041's perception_skew_max),
+/// and whether it was moved.
+struct KeptPerception {
+    PerceptionContext moment;
+    bool clamped = false;
+};
+
+/// Keeps a moment claimed by a command that arrived before tick `arrived`
+/// within `skew` ticks of `lag`, how far a connection's claims have lagged
+/// their arrival, and folds it into `lag` a sixty-fourth at a time: a claim
+/// moves it by a sixty-fourth of the skew at most, so a connection lying the
+/// same way every tick drags it about six ticks a second at 60 Hz, and one
+/// cannot pick a different moment for each shot. The first
+/// claim is kept as it is and starts `lag`; a moment of tick nought saw
+/// nothing and is kept, touching nothing.
+[[nodiscard]] KeptPerception
+keepPerception(PerceptionContext claimed, std::uint64_t arrived, double skew, std::optional<double>& lag) noexcept;
 
 [[nodiscard]] result::Status encodeInputWindow(network::Writer& writer, const InputWindow& window);
 /// The decoded commands borrow from `payload`.

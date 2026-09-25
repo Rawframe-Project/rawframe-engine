@@ -241,7 +241,7 @@ public:
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
         if (game_.physics2d.has_value()) {
-            RAWFRAME_TRY(addPhysicsDoors(doors, &queries_));
+            RAWFRAME_TRY(addPhysicsDoors(doors, &doorContext_));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap, configuration.unsignedInteger("kest.heap_bytes", 64U << 20U));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kFuel,
@@ -362,7 +362,10 @@ public:
         return physics2d_;
     }
     void attach(const physics2d::Physics2DQueries* queries) noexcept override {
-        queries_ = queries;
+        doorContext_.queries = queries;
+    }
+    void attach(const world_replication::InterestHistory* history) noexcept override {
+        doorContext_.interest = history;
     }
 
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
@@ -639,8 +642,8 @@ private:
             .mark = 0,
             .fields = {
                 kest::Field{.name = "baseTick", .offset = offsetof(Perception, baseTick), .kind = kest::FieldKind::U64},
-                kest::Field{
-                    .name = "fraction", .offset = offsetof(Perception, fraction), .kind = kest::FieldKind::U16}}};
+                kest::Field{.name = "fraction", .offset = offsetof(Perception, fraction), .kind = kest::FieldKind::U16},
+                kest::Field{.name = "viewer", .offset = offsetof(Perception, viewer), .kind = kest::FieldKind::U32}}};
     }
 
     [[nodiscard]] static bool sameLayout(const kest::TypeLayout& left, const kest::TypeLayout& right) {
@@ -833,7 +836,7 @@ private:
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;
     std::optional<physics2d::Physics2DSettings> physics2d_;
-    const physics2d::Physics2DQueries* queries_ = nullptr;
+    PhysicsDoorContext doorContext_;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.
     std::optional<GameEntityField> unwritable_;

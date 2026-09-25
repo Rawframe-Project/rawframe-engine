@@ -85,7 +85,7 @@ public:
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
         if (settings.physics.has_value()) {
-            RAWFRAME_TRY(addPhysicsDoors(doors, &queries_));
+            RAWFRAME_TRY(addPhysicsDoors(doors, &doorContext_));
         }
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{.program = settings.program,
@@ -98,7 +98,7 @@ public:
         if (settings.physics.has_value()) {
             RAWFRAME_TRY_ASSIGN(physics_, physics2d::Physics2D::create(*settings.physics));
             RAWFRAME_TRY(physics_->declareSystems(*registry_, scheduled));
-            queries_ = physics_.get();
+            doorContext_.queries = physics_.get();
             for (const auto& entity : settings.level) {
                 RAWFRAME_TRY_ASSIGN(const world::EntityHandle kMade, world_->create());
                 for (const auto& [kComponent, kBytes] : entity) {
@@ -226,7 +226,8 @@ private:
     std::vector<Declared> declared_;
     std::unique_ptr<KestSystems> systems_;
     std::unique_ptr<physics2d::Physics2D> physics_;
-    const physics2d::Physics2DQueries* queries_ = nullptr;
+    /// A client knows no one's interest but its own: nothing is gated.
+    PhysicsDoorContext doorContext_;
     std::optional<world::Schedule> schedule_;
     world::TickIndex tick_;
     world::TickRate rate_;

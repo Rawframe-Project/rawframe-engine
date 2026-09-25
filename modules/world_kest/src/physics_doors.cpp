@@ -3,6 +3,7 @@
 #include "rawframe/world_replication/perception.h"
 
 #include <array>
+#include <optional>
 #include <span>
 
 namespace rawframe::world_kest {
@@ -23,9 +24,25 @@ constexpr std::array<kest::Parameter, 1> kRayGives = {
 
 /// A ray door: `Among` doors take the class first; `At` doors take the
 /// moment seen last.
+/// Takes back what one connection was sent, no further than it was sent.
+class SentGate final : public physics2d::RewindGate {
+public:
+    SentGate(const world_replication::InterestHistory& interest, std::uint32_t viewer, std::uint64_t tick) noexcept
+        : interest_(&interest), viewer_(viewer), tick_(tick) {
+    }
+    [[nodiscard]] std::optional<std::uint64_t> since(world::EntityHandle entity) const noexcept override {
+        return interest_->sentSince(viewer_, entity, tick_);
+    }
+
+private:
+    const world_replication::InterestHistory* interest_;
+    std::uint32_t viewer_;
+    std::uint64_t tick_;
+};
+
 template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context) noexcept {
-    const physics2d::Physics2DQueries* const kQueries =
-        *static_cast<const physics2d::Physics2DQueries* const*>(context);
+    const PhysicsDoorContext& doors = *static_cast<const PhysicsDoorContext*>(context);
+    const physics2d::Physics2DQueries* const kQueries = doors.queries;
     if (kQueries == nullptr) {
         call.fail("this World has no physics to ask");
         return;
@@ -39,12 +56,18 @@ template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context)
             call.fail("the program's Perception is not the engine's");
             return;
         }
+        // A moment a connection claimed rewinds only what it was sent.
+        std::optional<SentGate> gate;
+        if (doors.interest != nullptr && seen.viewer != 0) {
+            gate.emplace(*doors.interest, seen.viewer, seen.baseTick);
+        }
         hit = kQueries->castRayAt(call.real(kFirst),
                                   call.real(kFirst + 1),
                                   static_cast<float>(call.real(kFirst + 2)),
                                   static_cast<float>(call.real(kFirst + 3)),
-                                  seen.baseTick,
-                                  seen.fraction,
+                                  physics2d::Moment{.base = seen.baseTick,
+                                                    .fraction = seen.fraction,
+                                                    .gate = gate.has_value() ? &*gate : nullptr},
                                   kAmong);
     } else {
         hit = kQueries->castRay(call.real(kFirst),
@@ -60,8 +83,8 @@ template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context)
 
 } // namespace
 
-result::Status addPhysicsDoors(kest::DoorTable& doors, const physics2d::Physics2DQueries* const* queries) {
-    auto* const kContext = const_cast<physics2d::Physics2DQueries**>(queries);
+result::Status addPhysicsDoors(kest::DoorTable& doors, const PhysicsDoorContext* context) {
+    auto* const kContext = const_cast<PhysicsDoorContext*>(context);
     RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRay",
                                       .function = &rayDoor<false, false>,
                                       .context = kContext,

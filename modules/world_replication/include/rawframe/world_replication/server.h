@@ -12,6 +12,7 @@
 #include "rawframe/world/schedule.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_replication/codec.h"
+#include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/records.h"
 #include "rawframe/world_runtime/simulation.h"
 
@@ -56,6 +57,10 @@ struct ServerReplicationSettings {
     /// Each command carries the moment its client saw, which is written
     /// into the player's Perception (perception.h), a player component.
     bool perception = false;
+    /// SPEC-0041's perception_skew_max: ticks a claimed moment may lie from
+    /// the lag the server measures for its connection (the smoothed lag of
+    /// earlier claims behind their arrival) before it is clamped.
+    double perceptionSkew = 6;
     /// Every entity is in every connection's interest without one.
     std::optional<InterestSettings> interest;
     /// Entities one connection may have mapped at once.
@@ -97,9 +102,11 @@ struct ServerReplicationStatistics {
     std::uint64_t inputsHeld = 0;
     std::uint64_t inputsNeutral = 0;
     std::uint64_t inputsRefused = 0;
+    /// Claimed moments moved to within the skew.
+    std::uint64_t perceptionsClamped = 0;
 };
 
-class ReplicationServer final : public world_runtime::SystemContributor {
+class ReplicationServer final : public world_runtime::SystemContributor, public InterestHistory {
 public:
     /// `sessions` is a server's and must outlive this.
     [[nodiscard]] static result::Result<std::unique_ptr<ReplicationServer>> create(network::Sessions& sessions,
@@ -126,6 +133,9 @@ public:
     [[nodiscard]] ServerReplicationStatistics statistics() const noexcept;
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
+
+    [[nodiscard]] std::optional<std::uint64_t>
+    sentSince(std::uint32_t viewer, world::EntityHandle entity, std::uint64_t tick) const noexcept override;
 
     struct State;
     explicit ReplicationServer(std::unique_ptr<State> state) noexcept;

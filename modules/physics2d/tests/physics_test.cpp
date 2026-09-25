@@ -356,22 +356,22 @@ RAWFRAME_TEST(ARayCastBackInTimeFindsWhereBodiesWere) {
     // Where it was at tick 20 it is no longer: a ray there now misses, and
     // cast back to tick 20 it hits, with the hit where the body was.
     RAWFRAME_EXPECT(!scene.physics->castRay(kThen, 5, 0, -10, kEveryClass).hit);
-    const RayHit2D kBack = scene.physics->castRayAt(kThen, 5, 0, -10, 20, 0, kEveryClass);
+    const RayHit2D kBack = scene.physics->castRayAt(kThen, 5, 0, -10, {.base = 20, .fraction = 0}, kEveryClass);
     RAWFRAME_EXPECT(kBack.hit && kBack.entity == kTarget && !kBack.discontinuous);
     RAWFRAME_EXPECT(std::abs(kBack.x - kThen) < 1e-9 && std::abs(kBack.y - 0.5) < 1e-6 && kBack.normalY > 0.99F);
     // Between two ticks, as a client shows it: half way from 20 to 21, a
     // ray just past the right edge at 20 hits, and at 20 itself misses.
     const double kEdge = ((xAt[20] + xAt[21]) / 2) + 0.49;
-    RAWFRAME_EXPECT(scene.physics->castRayAt(kEdge, 5, 0, -10, 20, 32768, kEveryClass).hit);
-    RAWFRAME_EXPECT(!scene.physics->castRayAt(kEdge, 5, 0, -10, 20, 0, kEveryClass).hit);
+    RAWFRAME_EXPECT(scene.physics->castRayAt(kEdge, 5, 0, -10, {.base = 20, .fraction = 32768}, kEveryClass).hit);
+    RAWFRAME_EXPECT(!scene.physics->castRayAt(kEdge, 5, 0, -10, {.base = 20, .fraction = 0}, kEveryClass).hit);
     // Older than the history keeps: clamped to its oldest tick, and counted.
-    const RayHit2D kOld = scene.physics->castRayAt(xAt[29 - 15], 5, 0, -10, 2, 0, kEveryClass);
+    const RayHit2D kOld = scene.physics->castRayAt(xAt[29 - 15], 5, 0, -10, {.base = 2, .fraction = 0}, kEveryClass);
     RAWFRAME_EXPECT(kOld.hit && kOld.entity == kTarget);
     RAWFRAME_EXPECT(scene.physics->statistics().rewindsClamped == 1 && scene.physics->statistics().raysRewound == 4);
     // A body made since has no trail back: tried where it is, and marked.
     const world::EntityHandle kLate = scene.body(kBall, {.x = -5, .y = 0});
     scene.run(1);
-    const RayHit2D kNew = scene.physics->castRayAt(-5, 5, 0, -10, 20, 0, kEveryClass);
+    const RayHit2D kNew = scene.physics->castRayAt(-5, 5, 0, -10, {.base = 20, .fraction = 0}, kEveryClass);
     RAWFRAME_EXPECT(kNew.hit && kNew.entity == kLate && kNew.discontinuous);
 }
 
@@ -520,7 +520,7 @@ RAWFRAME_TEST(ARayAmongOneClassSeesThroughTheRest) {
     RAWFRAME_EXPECT(!scene.physics->castRay(0, -0.3, 10, 0, kPlayer).hit);
     RAWFRAME_EXPECT(!scene.physics->castRay(0, kNowY, 10, 0, kUndeclared).hit);
     // Back to tick 2, when it was about the origin.
-    RAWFRAME_EXPECT(scene.physics->castRayAt(0, -0.3, 10, 0, 2, 0, kPlayer).entity == kTarget);
-    RAWFRAME_EXPECT(scene.physics->castRayAt(0, -0.3, 10, 0, 2, 0, kEveryClass).entity == kWall);
-    RAWFRAME_EXPECT(!scene.physics->castRayAt(0, -0.3, 10, 0, 2, 0, kUndeclared).hit);
+    RAWFRAME_EXPECT(scene.physics->castRayAt(0, -0.3, 10, 0, {.base = 2, .fraction = 0}, kPlayer).entity == kTarget);
+    RAWFRAME_EXPECT(scene.physics->castRayAt(0, -0.3, 10, 0, {.base = 2, .fraction = 0}, kEveryClass).entity == kWall);
+    RAWFRAME_EXPECT(!scene.physics->castRayAt(0, -0.3, 10, 0, {.base = 2, .fraction = 0}, kUndeclared).hit);
 }

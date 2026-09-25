@@ -117,6 +117,30 @@ inline constexpr std::string_view kStepSystem = "rawframe.physics2d.step";
 /// A ray's `among` that meets bodies of every class, and of none.
 inline constexpr std::uint64_t kEveryClass = 0;
 
+/// Which bodies a query cast back in time takes back, and how far (SPEC-0041's
+/// victim gate): none are tried where they are now.
+class RewindGate {
+public:
+    RewindGate() = default;
+    RewindGate(const RewindGate&) = delete;
+    RewindGate& operator=(const RewindGate&) = delete;
+    virtual ~RewindGate() = default;
+
+    /// The earliest tick `entity`'s body may be taken back to: a moment
+    /// before it is taken back to that tick's pose exactly, which is what a
+    /// client shows of an entity before its first two states.
+    [[nodiscard]] virtual std::optional<std::uint64_t> since(world::EntityHandle entity) const noexcept = 0;
+};
+
+/// A moment to cast back to: `fraction` 65536ths of the way from the pose
+/// committed at tick `base` to the next, as a client shows it between
+/// states, and what is taken back to it (every body without a gate).
+struct Moment {
+    std::uint64_t base = 0;
+    std::uint16_t fraction = 0;
+    const RewindGate* gate = nullptr;
+};
+
 class Physics2DQueries {
 public:
     Physics2DQueries() = default;
@@ -131,17 +155,15 @@ public:
     [[nodiscard]] virtual RayHit2D
     castRay(double originX, double originY, float towardX, float towardY, std::uint64_t among) const noexcept = 0;
     /// The same ray against every body where it was at an earlier moment
-    /// (SPEC-0041 lag compensation): `fraction` 65536ths of the way from
-    /// the pose committed at tick `base` to the next, as a client shows it
-    /// between states. The moment is clamped into the kept history, and
-    /// never past the last step; a body without a trail back to it is tried
-    /// where it is and its hit marked discontinuous. Nothing moves.
+    /// (SPEC-0041 lag compensation). The moment is clamped into the kept
+    /// history, and never past the last step; a body without a trail back
+    /// to it is tried where it is and its hit marked discontinuous, and one
+    /// the moment's gate keeps is tried where it is. Nothing moves.
     [[nodiscard]] virtual RayHit2D castRayAt(double originX,
                                              double originY,
                                              float towardX,
                                              float towardY,
-                                             std::uint64_t base,
-                                             std::uint16_t fraction,
+                                             const Moment& moment,
                                              std::uint64_t among) const noexcept = 0;
 };
 
@@ -172,8 +194,7 @@ public:
                                      double originY,
                                      float towardX,
                                      float towardY,
-                                     std::uint64_t base,
-                                     std::uint16_t fraction,
+                                     const Moment& moment,
                                      std::uint64_t among) const noexcept override;
 
     struct State;

@@ -4,6 +4,7 @@
 #include "rawframe/network/admission.h"
 #include "rawframe/schema/component.h"
 #include "rawframe/world_replication/codec.h"
+#include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/prediction.h"
 #include "rawframe/world_replication/server.h"
 
@@ -46,6 +47,9 @@ public:
     /// Who is sent what: none for a game whose every entity every
     /// connection sees.
     [[nodiscard]] virtual const std::optional<InterestSettings>& interest() const noexcept = 0;
+    /// What the game's compensated queries gate by, from the server made
+    /// for it until that server goes (null).
+    virtual void attach(const InterestHistory* history) noexcept = 0;
 };
 
 inline constexpr composition::Capability<ReplicationPlan> kReplicationPlan{"rawframe.replication.plan"};

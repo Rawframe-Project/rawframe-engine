@@ -2,7 +2,9 @@
 
 #include "rawframe/world_replication/errors.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 
 namespace rawframe::world_replication {
@@ -181,6 +183,30 @@ result::Result<InputWindow> decodeInputWindow(std::span<const std::byte> payload
         return malformed("an input window has bytes past its last command");
     }
     return window;
+}
+
+KeptPerception
+keepPerception(PerceptionContext claimed, std::uint64_t arrived, double skew, std::optional<double>& lag) noexcept {
+    if (claimed.baseTick == 0) {
+        return KeptPerception{.moment = claimed};
+    }
+    const double kClaimed = static_cast<double>(claimed.baseTick) + (claimed.fraction / 65536.0);
+    const double kLag = static_cast<double>(arrived) - kClaimed;
+    if (!lag.has_value()) {
+        lag = kLag;
+        return KeptPerception{.moment = claimed};
+    }
+    const double kKept = std::clamp(kLag, *lag - skew, *lag + skew);
+    *lag += (kKept - *lag) / 64;
+    if (kKept == kLag) {
+        return KeptPerception{.moment = claimed};
+    }
+    const double kAt = std::max(static_cast<double>(arrived) - kKept, 0.0);
+    const double kBase = std::floor(kAt);
+    return KeptPerception{
+        .moment = PerceptionContext{.baseTick = static_cast<std::uint64_t>(kBase),
+                                    .fraction = static_cast<std::uint16_t>(std::min((kAt - kBase) * 65536.0, 65535.0))},
+        .clamped = true};
 }
 
 } // namespace rawframe::world_replication

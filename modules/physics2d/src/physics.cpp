@@ -774,8 +774,7 @@ RayHit2D Physics2D::castRayAt(double originX,
                               double originY,
                               float towardX,
                               float towardY,
-                              std::uint64_t base,
-                              std::uint16_t fraction,
+                              const Moment& moment,
                               std::uint64_t among) const noexcept {
     const State& state = *state_;
     const std::uint32_t kKept = state.settings.historyTicks;
@@ -787,11 +786,12 @@ RayHit2D Physics2D::castRayAt(double originX,
     }
     ++state.raysRewound;
     const std::uint64_t kOldest = state.lastTick + 1 >= kKept ? state.lastTick + 1 - kKept : 0;
-    if (base < kOldest || base > state.lastTick || (base == state.lastTick && fraction != 0)) {
+    if (moment.base < kOldest || moment.base > state.lastTick ||
+        (moment.base == state.lastTick && moment.fraction != 0)) {
         ++state.rewindsClamped;
     }
-    const std::uint64_t kBase = std::clamp(base, kOldest, state.lastTick);
-    const std::uint16_t kFraction = kBase == state.lastTick ? std::uint16_t{0} : fraction;
+    const std::uint64_t kBase = std::clamp(moment.base, kOldest, state.lastTick);
+    const std::uint16_t kFraction = kBase == state.lastTick ? std::uint16_t{0} : moment.fraction;
     const double kAlong = kFraction / 65536.0;
 
     RayHit2D closest;
@@ -801,14 +801,19 @@ RayHit2D Physics2D::castRayAt(double originX,
             continue;
         }
         const m2Transform kNow = m2Body_GetTransform(entry.body);
-        const bool kTrail = entry.since.has_value() && *entry.since <= kBase;
+        // The gate may hold it to a later tick, or keep it where it is.
+        const std::optional<std::uint64_t> kSince =
+            moment.gate == nullptr ? std::optional<std::uint64_t>{0} : moment.gate->since(entity);
+        const bool kRewound = kSince.has_value() && *kSince < state.lastTick;
+        const std::uint64_t kTick = kRewound ? std::max(kBase, *kSince) : kBase;
+        const bool kTrail = entry.since.has_value() && *entry.since <= kTick;
         m2Transform then = kNow;
-        if (kTrail) {
-            const Pose2D& from = entry.history[kBase % kKept];
+        if (kTrail && kRewound) {
+            const Pose2D& from = entry.history[kTick % kKept];
             Pose2D at = from;
-            if (kFraction != 0) {
+            if (kFraction != 0 && kTick == kBase) {
                 // The client's blend of two states (interpolation.cpp).
-                const Pose2D& to = entry.history[(kBase + 1) % kKept];
+                const Pose2D& to = entry.history[(kTick + 1) % kKept];
                 at.x = from.x + ((to.x - from.x) * kAlong);
                 at.y = from.y + ((to.y - from.y) * kAlong);
                 at.c = static_cast<float>(from.c + ((static_cast<double>(to.c) - from.c) * kAlong));
@@ -827,7 +832,7 @@ RayHit2D Physics2D::castRayAt(double originX,
         const m2Vec2 kNormal = turnToWorld(then, turnToLocal(kNow, kResult.normal));
         closest = RayHit2D{.hit = true,
                            .inside = kResult.normal.x == 0 && kResult.normal.y == 0,
-                           .discontinuous = !kTrail,
+                           .discontinuous = kRewound && !kTrail,
                            .entity = entity,
                            .x = kPoint.x,
                            .y = kPoint.y,

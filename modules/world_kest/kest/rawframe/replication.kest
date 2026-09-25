@@ -6,8 +6,12 @@ module rawframe.replication
 // tick of the older of the two states its client showed between, and
 // 65536ths of the way to the next. A player of a game whose input line says
 // `perceived` has one; a neutral command, when the player's did not arrive
-// in time, saw nothing (tick nought).
+// in time, saw nothing (tick nought). The server clamps a claimed moment to
+// near what the player's connection usually claims, and names the connection
+// in `viewer`: a ray cast back to it takes back only what that connection
+// was sent, and meets the rest where it is now.
 struct Perception {
     baseTick: u64
     fraction: u16
+    viewer: u32
 }

@@ -67,7 +67,8 @@ public:
             return missing("a replication server needs a transport and a game's replication plan");
         }
         RAWFRAME_TRY_ASSIGN(network::Transport * transport, context.capability(network::kTransport));
-        RAWFRAME_TRY_ASSIGN(const ReplicationPlan* plan, context.capability(kReplicationPlan));
+        RAWFRAME_TRY_ASSIGN(ReplicationPlan * plan, context.capability(kReplicationPlan));
+        plan_ = plan;
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kConnections,
                             context.configuration().unsignedInteger("replication.maximum_connections", 64));
         if (kConnections == 0 || kConnections > 4096) {
@@ -111,6 +112,7 @@ public:
             return {};
         }
         RAWFRAME_TRY(sessions_->listen(network::Endpoint{endpoint_}));
+        plan_->attach(server_.get());
         emitter_.log(diagnostics::Severity::Info,
                      kListening,
                      "replication is listening",
@@ -133,6 +135,7 @@ public:
         if (server_ == nullptr) {
             return;
         }
+        plan_->attach(nullptr);
         const ServerReplicationStatistics kStatistics = server_->statistics();
         emitter_.log(diagnostics::Severity::Info,
                      kServerSummary,
@@ -146,11 +149,13 @@ public:
                       diagnostics::field("inputsConsumed", kStatistics.inputsConsumed),
                       diagnostics::field("inputsHeld", kStatistics.inputsHeld),
                       diagnostics::field("inputsNeutral", kStatistics.inputsNeutral),
-                      diagnostics::field("inputsRefused", kStatistics.inputsRefused)});
+                      diagnostics::field("inputsRefused", kStatistics.inputsRefused),
+                      diagnostics::field("perceptionsClamped", kStatistics.perceptionsClamped)});
     }
 
 private:
     std::string endpoint_;
+    ReplicationPlan* plan_ = nullptr;
     world_runtime::Simulation* simulation_ = nullptr;
     std::uint64_t generation_ = 0;
     diagnostics::Emitter emitter_;

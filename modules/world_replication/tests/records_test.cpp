@@ -160,3 +160,34 @@ RAWFRAME_TEST(StateAcknowledgementsCarryABitmap) {
     network::Writer zeroWriter{zero};
     RAWFRAME_EXPECT(!encodeStateAck(zeroWriter, StateAck{}).has_value());
 }
+
+RAWFRAME_TEST(AClaimedMomentIsKeptNearWhatItsConnectionUsuallyClaims) {
+    std::optional<double> lag;
+    // The first claim is taken as it is and sets the lag: ten ticks.
+    const KeptPerception kFirst = keepPerception({.baseTick = 990, .fraction = 0}, 1000, 6, lag);
+    RAWFRAME_EXPECT(!kFirst.clamped && kFirst.moment.baseTick == 990 && lag == 10.0);
+    // Honest claims a little either side keep their exact moment.
+    const KeptPerception kNear = keepPerception({.baseTick = 1003, .fraction = 32768}, 1010, 6, lag);
+    RAWFRAME_EXPECT(!kNear.clamped && kNear.moment.baseTick == 1003 && kNear.moment.fraction == 32768);
+    lag = 10.0;
+    // Twenty ticks further back than usual: moved to six past the lag, and
+    // the lag moves a sixty-fourth of that.
+    const KeptPerception kBack = keepPerception({.baseTick = 1970, .fraction = 1234}, 2000, 6, lag);
+    RAWFRAME_EXPECT(kBack.clamped && kBack.moment.baseTick == 1984 && kBack.moment.fraction == 0);
+    RAWFRAME_EXPECT(lag == 10.09375);
+    // From the future: moved to six short of it.
+    lag = 10.0;
+    const KeptPerception kAhead = keepPerception({.baseTick = 2005, .fraction = 0}, 2000, 6, lag);
+    RAWFRAME_EXPECT(kAhead.clamped && kAhead.moment.baseTick == 1996);
+    // A liar claiming thirty ticks back every time drags the lag no faster
+    // than the skew allows: after a quarter of a second, a tenth of the way.
+    lag = 10.0;
+    for (std::uint64_t tick = 3000; tick < 3016; ++tick) {
+        static_cast<void>(keepPerception({.baseTick = tick - 30, .fraction = 0}, tick, 6, lag));
+    }
+    RAWFRAME_EXPECT(*lag <= 11.5);
+    // A moment of tick nought saw nothing, and changes nothing.
+    const double kBefore = *lag;
+    const KeptPerception kNothing = keepPerception({}, 4000, 6, lag);
+    RAWFRAME_EXPECT(!kNothing.clamped && kNothing.moment.baseTick == 0 && lag == kBefore);
+}
