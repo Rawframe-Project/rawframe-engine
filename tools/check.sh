@@ -6,8 +6,9 @@
 #                         the address and thread sanitizers, the web build
 #                         (wasm32 without threads, tests under Node), the web
 #                         page against the dedicated server over WebTransport,
-#                         and the tick budget (tools/bench.sh check) once all
-#                         pass
+#                         and the tick budget (tools/bench.sh check) and the
+#                         web client's download and start budget
+#                         (tools/web_budget.sh check) once all pass
 #
 # Build trees live under out/ and are reused, so a second run only rebuilds
 # what changed.
@@ -52,7 +53,7 @@ if [ "$tier" = "fast" ]; then
     build_and_test clang-development
 else
     # Independent build trees, so they build in parallel.
-    presets=(gcc-debug gcc-shipping clang-development clang-shipping clang-sanitize clang-thread wasm-development)
+    presets=(gcc-debug gcc-shipping clang-development clang-shipping clang-sanitize clang-thread wasm-development wasm-shipping)
     pids=()
     for preset in "${presets[@]}"; do
         ( build_and_test "$preset" ) >"out/$preset.check.log" 2>&1 &
@@ -79,6 +80,8 @@ else
     if [ "$failures" -eq 0 ]; then
         step "tick budget"
         tools/bench.sh check || fail "tick budget"
+        step "web budget"
+        tools/web_budget.sh check || fail "web budget"
     fi
 fi
 
