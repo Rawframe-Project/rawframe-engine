@@ -3,7 +3,7 @@
 // seen, despawn policies do what they name, two active listeners hear
 // nothing, a game's audio loads from its files against its program, and its
 // sounds are read from cooked content by resource identity, on-demand ones
-// when first wanted.
+// when first wanted, and new revisions replace old ones when content reloads.
 
 #include "rawframe/assets/errors.h"
 #include "rawframe/audio/decode.h"
@@ -293,7 +293,8 @@ audio::SoundDeclaration declared(std::vector<std::uint64_t> resources, audio::Lo
 }
 
 /// A content store over three cooked clips, as a client composes it from a
-/// game's cooked output: 1 and 2 decode, 3's bytes are no clip at all.
+/// game's cooked output: 1 and 2 decode, 3's bytes are no clip at all. File
+/// `d` holds a new revision for a later catalog to name.
 struct Content {
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
@@ -308,11 +309,19 @@ struct Content {
         const std::vector<std::byte> kLong = waveOf(6, 0.25F);
         const std::vector<std::byte> kNoClip(16, std::byte{7});
         std::vector<content::ContentSource> sources;
-        sources.push_back(std::move(*content::ContentSource::memory({{"a", kShort}, {"b", kLong}, {"c", kNoClip}})));
+        sources.push_back(std::move(
+            *content::ContentSource::memory({{"a", kShort}, {"b", kLong}, {"c", kNoClip}, {"d", waveOf(4, 0.125F)}})));
         store = std::move(*content::ContentStore::create(io, execution::OwnerId{1}, root, clock, std::move(sources)));
-        const std::vector<content::BoundManifest> kManifests = {
-            {.entries = {entryOf(1, "a", kShort), entryOf(2, "b", kLong), entryOf(3, "c", kNoClip)}, .source = 0}};
-        store->publish(*content::ContentCatalog::build(kManifests, soundRepresentations(), 1, 1));
+        entries = {entryOf(1, "a", kShort), entryOf(2, "b", kLong), entryOf(3, "c", kNoClip)};
+        publish(1);
+    }
+
+    /// What the catalog holds, as `publish` last built it.
+    std::vector<content::ManifestEntry> entries;
+
+    void publish(std::uint64_t generation) const {
+        const std::vector<content::BoundManifest> kManifests = {{.entries = entries, .source = 0}};
+        store->publish(*content::ContentCatalog::build(kManifests, soundRepresentations(), generation, generation));
     }
     ~Content() {
         store.reset();
@@ -454,7 +463,7 @@ RAWFRAME_TEST(AMixerHearsAnOnDemandSoundOnceServed) {
     const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     for (std::uint64_t tick = 2; !heard && std::chrono::steady_clock::now() < kDeadline; ++tick) {
         static_cast<void>((*loader)->update(tick));
-        for (const auto& [kSound, kError] : (*loader)->serve(*sounds, tick)) {
+        for (const auto& [kSound, kError] : (*loader)->serve(*sounds, tick).unread) {
             unread.push_back(kSound);
         }
         heard = sounds->play(0).has_value();
@@ -466,11 +475,64 @@ RAWFRAME_TEST(AMixerHearsAnOnDemandSoundOnceServed) {
     // The click's failure may land after the hum is heard.
     for (std::uint64_t tick = 0; unread.empty() && std::chrono::steady_clock::now() < kDeadline; ++tick) {
         static_cast<void>((*loader)->update(100 + tick));
-        for (const auto& [kSound, kError] : (*loader)->serve(*sounds, 100 + tick)) {
+        for (const auto& [kSound, kError] : (*loader)->serve(*sounds, 100 + tick).unread) {
             unread.push_back(kSound);
         }
         std::this_thread::yield();
     }
     RAWFRAME_EXPECT(unread == std::vector<std::size_t>{1} && !sounds->play(1).has_value() &&
-                    (*loader)->serve(*sounds, 999).empty());
+                    (*loader)->serve(*sounds, 999).unread.empty());
+}
+
+RAWFRAME_TEST(AReloadedSoundPlaysItsNewRevision) {
+    Content content;
+    auto loader = content.loader(
+        {{kHum, declared({1}, audio::Loading::Preload)}, {kClick, declared({2}, audio::Loading::Preload)}});
+    RAWFRAME_EXPECT(loader.has_value() && settle(**loader).has_value());
+    if (!loader.has_value()) {
+        return;
+    }
+    auto mixer = *audio::Mixer::create(layout(), {});
+    auto sounds = *audio::Sounds::create(*mixer, layout(), {});
+    auto made = (*loader)->sounds(1);
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    for (auto& [kId, sound] : *made) {
+        RAWFRAME_EXPECT(sounds->add(std::move(sound)).has_value());
+    }
+    const auto kFirst = [&mixer, &sounds](std::size_t sound) {
+        RAWFRAME_EXPECT(sounds->play(sound).has_value());
+        std::vector<float> out(4);
+        mixer->render(out);
+        return out[0];
+    };
+    const float kCentre = 1.0F / std::sqrt(2.0F);
+    RAWFRAME_EXPECT(std::abs(kFirst(0) - (0.5F * kCentre)) < 1e-5F);
+
+    // 1 now names file d; 2 names bytes that are no clip.
+    content.entries[0] = entryOf(1, "d", waveOf(4, 0.125F));
+    content.entries[1] = entryOf(2, "c", std::vector<std::byte>(16, std::byte{7}));
+    content.publish(2);
+    std::vector<std::size_t> reloaded;
+    std::vector<std::size_t> notReloaded;
+    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (std::uint64_t tick = 2; reloaded.empty() && std::chrono::steady_clock::now() < kDeadline; ++tick) {
+        static_cast<void>((*loader)->update(tick));
+        Served served = (*loader)->serve(*sounds, tick);
+        reloaded.insert(reloaded.end(), served.reloaded.begin(), served.reloaded.end());
+        for (const auto& [kSound, kError] : served.notReloaded) {
+            RAWFRAME_EXPECT(kError.code() == code(assets::AssetError::DecodeFailed));
+            notReloaded.push_back(kSound);
+        }
+        std::this_thread::yield();
+    }
+    RAWFRAME_EXPECT(reloaded == std::vector<std::size_t>{0} && notReloaded == std::vector<std::size_t>{1});
+    // The next play of 1 is its new revision; 2 plays on as it was.
+    std::vector<float> quiet(9'600);
+    mixer->render(quiet);
+    RAWFRAME_EXPECT(std::abs(kFirst(0) - (0.125F * kCentre)) < 1e-5F);
+    mixer->render(quiet);
+    RAWFRAME_EXPECT(std::abs(kFirst(1) - (0.25F * kCentre)) < 1e-5F);
 }

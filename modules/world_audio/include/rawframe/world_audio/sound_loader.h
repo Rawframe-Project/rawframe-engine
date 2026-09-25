@@ -36,6 +36,17 @@ struct Arrivals {
     std::vector<std::pair<std::size_t, result::Error>> failed;
 };
 
+/// What one frame's serving did, each sound by its place.
+struct Served {
+    /// On-demand sounds that cannot be read: they go unheard.
+    std::vector<std::pair<std::size_t, result::Error>> unread;
+    /// Sounds with a variant a reload replaced.
+    std::vector<std::size_t> reloaded;
+    /// Sounds with a variant a reload could not replace: the old one
+    /// plays on.
+    std::vector<std::pair<std::size_t, result::Error>> notReloaded;
+};
+
 /// The two representations a cooked sound clip may have, both admitted
 /// wherever sounds are read.
 [[nodiscard]] std::vector<content::AdmittedRepresentation> soundRepresentations();
@@ -75,9 +86,10 @@ public:
     [[nodiscard]] Arrivals arrivals(std::uint64_t tick);
     /// After `update`, once a frame, for the sounds `sounds(tick)` made,
     /// added to `into` in declaration order: asks for the on-demand sounds
-    /// it wanted since the last frame and supplies what arrived. The sounds
-    /// that cannot be read, by their place, with why; they go unheard.
-    [[nodiscard]] std::vector<std::pair<std::size_t, result::Error>> serve(audio::Sounds& into, std::uint64_t tick);
+    /// it wanted since the last frame, supplies what arrived, and, when the
+    /// store's catalog was replaced, supplies each variant's new revision
+    /// once it is published (SPEC-0027 reload).
+    [[nodiscard]] Served serve(audio::Sounds& into, std::uint64_t tick);
 
     struct State;
 

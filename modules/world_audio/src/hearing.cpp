@@ -35,6 +35,10 @@ constexpr EventIdentity kPlaying{"audio", "playing_summary"};
 constexpr EventIdentity kUnheard{"audio", "output_unavailable"};
 constexpr EventIdentity kUnread{"audio", "sounds_unavailable"};
 constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
+constexpr EventIdentity kSoundReloaded{"audio", "sound_reloaded"};
+constexpr EventIdentity kSoundNotReloaded{"audio", "sound_reload_failed"};
+constexpr EventIdentity kContentReloaded{"content", "content_reloaded"};
+constexpr EventIdentity kContentRefused{"content", "content_reload_refused"};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name};
 constexpr std::uint32_t kRecordingRate = 48'000;
 
@@ -66,6 +70,12 @@ struct Hearing {
     bool failed = false;
     std::uint64_t tick = 0;
     diagnostics::Emitter emitter;
+    /// Every this many Host iterations, the manifest is read again and a
+    /// changed one published as the next catalog; none when zero.
+    std::uint64_t reloadEvery = 0;
+    std::filesystem::path root;
+    std::string manifestRead;
+    std::uint64_t catalogGeneration = 1;
 
     /// Loads the game's audio for a mixer at `rate` and starts reading its
     /// sounds from the cooked content at `content.root`. `key` names the
@@ -116,24 +126,17 @@ struct Hearing {
 
         // The cooked content: its manifest is the catalog, its directory the
         // one source.
-        const std::filesystem::path kRoot{std::string{*kContent}};
-        std::ifstream manifestFile{kRoot / "content.manifest", std::ios::binary};
-        std::ostringstream manifestText;
-        manifestText << manifestFile.rdbuf();
-        auto manifest = content::readManifest(manifestText.str());
-        if (!manifest.has_value()) {
-            return std::unexpected<result::Error>{
-                std::move(manifest).error().withContext("path", (kRoot / "content.manifest").string())};
-        }
-        RAWFRAME_TRY_ASSIGN(content::ContentSource source, content::ContentSource::directory(kRoot));
+        root = std::filesystem::path{std::string{*kContent}};
+        RAWFRAME_TRY_ASSIGN(reloadEvery, configuration.unsignedInteger("content.reload_every", 0));
+        RAWFRAME_TRY_ASSIGN(content::ContentSource source, content::ContentSource::directory(root));
         std::vector<content::ContentSource> sources;
         sources.push_back(std::move(source));
         RAWFRAME_TRY_ASSIGN(
             store,
             content::ContentStore::create(
                 *context.blockingIoExecutor(), context.owner(), context.scope(), context.clock(), std::move(sources)));
-        const std::vector<content::BoundManifest> kManifests = {{.entries = std::move(*manifest), .source = 0}};
-        RAWFRAME_TRY_ASSIGN(auto catalog, content::ContentCatalog::build(kManifests, soundRepresentations(), 1, 1));
+        manifestRead = readManifestText();
+        RAWFRAME_TRY_ASSIGN(auto catalog, catalogOf(manifestRead, catalogGeneration));
         store->publish(std::move(catalog));
         RAWFRAME_TRY_ASSIGN(loader,
                             SoundLoader::create(*store,
@@ -143,6 +146,53 @@ struct Hearing {
                                                 context.clock(),
                                                 std::move(game.sounds)));
         return {};
+    }
+
+    [[nodiscard]] std::string readManifestText() const {
+        std::ifstream file{root / "content.manifest", std::ios::binary};
+        std::ostringstream text;
+        text << file.rdbuf();
+        return text.str();
+    }
+
+    [[nodiscard]] result::Result<std::shared_ptr<const content::ContentCatalog>>
+    catalogOf(std::string_view text, std::uint64_t generation) const {
+        auto manifest = content::readManifest(text);
+        if (!manifest.has_value()) {
+            return std::unexpected<result::Error>{
+                std::move(manifest).error().withContext("path", (root / "content.manifest").string())};
+        }
+        const std::vector<content::BoundManifest> kManifests = {{.entries = std::move(*manifest), .source = 0}};
+        return content::ContentCatalog::build(kManifests, soundRepresentations(), generation, generation);
+    }
+
+    /// Every `reloadEvery` Host iterations: a manifest that changed since
+    /// it was last read becomes the next catalog, and the asset sets
+    /// replace what changed; one that does not read is refused and the
+    /// running catalog stays.
+    void watch(std::uint64_t iteration) noexcept {
+        if (reloadEvery == 0 || iteration % reloadEvery != 0 || store == nullptr) {
+            return;
+        }
+        std::string text = readManifestText();
+        if (text == manifestRead) {
+            return;
+        }
+        manifestRead = std::move(text);
+        auto catalog = catalogOf(manifestRead, catalogGeneration + 1);
+        if (!catalog.has_value()) {
+            emitter.log(diagnostics::Severity::Warning,
+                        kContentRefused,
+                        "a changed manifest was not published; the running catalog stays",
+                        {diagnostics::field("reason", std::string{catalog.error().description()})});
+            return;
+        }
+        ++catalogGeneration;
+        store->publish(std::move(*catalog));
+        emitter.log(diagnostics::Severity::Info,
+                    kContentReloaded,
+                    "a changed manifest was published as the next catalog",
+                    {diagnostics::field("generation", catalogGeneration)});
     }
 
     /// Reads the sounds until those not on demand are all there, then
@@ -180,10 +230,24 @@ struct Hearing {
     /// Asks for the on-demand sounds played since the last frame, and
     /// supplies the variants that arrived.
     void demand() noexcept {
-        for (const auto& [kSound, kError] : loader->serve(*sounds, tick)) {
+        const Served kServed = loader->serve(*sounds, tick);
+        for (const auto& [kSound, kError] : kServed.unread) {
             emitter.log(diagnostics::Severity::Warning,
                         kUnreadSound,
                         "an on-demand sound could not be read: it goes unheard",
+                        {diagnostics::field("sound", settings.sounds[kSound].first),
+                         diagnostics::field("reason", std::string{kError.description()})});
+        }
+        for (const std::size_t kSound : kServed.reloaded) {
+            emitter.log(diagnostics::Severity::Info,
+                        kSoundReloaded,
+                        "a sound's variant was replaced by its new revision",
+                        {diagnostics::field("sound", settings.sounds[kSound].first)});
+        }
+        for (const auto& [kSound, kError] : kServed.notReloaded) {
+            emitter.log(diagnostics::Severity::Warning,
+                        kSoundNotReloaded,
+                        "a sound's new revision could not be used: the old one plays on",
                         {diagnostics::field("sound", settings.sounds[kSound].first),
                          diagnostics::field("reason", std::string{kError.description()})});
         }
@@ -202,6 +266,7 @@ struct Hearing {
     /// frame heard, or none before its World exists and its sounds are read.
     std::optional<double> hear(const composition::HostFrame& frame) noexcept {
         ++tick;
+        watch(frame.iteration);
         if (clients == nullptr || !ready()) {
             return std::nullopt;
         }

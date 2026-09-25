@@ -193,21 +193,69 @@ Arrivals SoundLoader::arrivals(std::uint64_t tick) {
     return made;
 }
 
-std::vector<std::pair<std::size_t, result::Error>> SoundLoader::serve(audio::Sounds& into, std::uint64_t tick) {
-    std::vector<std::pair<std::size_t, result::Error>> unread;
+Served SoundLoader::serve(audio::Sounds& into, std::uint64_t tick) {
+    State& state = *state_;
+    Served served;
     for (const std::size_t kSound : into.takeWanted()) {
         if (auto asked = demand(kSound); !asked.has_value()) {
-            unread.emplace_back(kSound, std::move(asked).error());
+            served.unread.emplace_back(kSound, std::move(asked).error());
         }
     }
     Arrivals made = arrivals(tick);
     for (Arrival& each : made.arrived) {
         if (auto supplied = into.supply(each.sound, each.variant, std::move(each.clip)); !supplied.has_value()) {
-            unread.emplace_back(each.sound, std::move(supplied).error());
+            served.unread.emplace_back(each.sound, std::move(supplied).error());
         }
     }
-    std::ranges::move(made.failed, std::back_inserter(unread));
-    return unread;
+    std::ranges::move(made.failed, std::back_inserter(served.unread));
+
+    // Reloads: every variant of a published resource takes its new form,
+    // which its requester now names; a failed one keeps its old form.
+    std::vector<assets::ReloadEvent> events = state.clips->takeReloadEvents();
+    std::ranges::move(state.cooked->takeReloadEvents(), std::back_inserter(events));
+    const auto kNamed = [&state](const Wanted& wanted, const content::ResourceId& id) {
+        return content::ResourceId{state.declared[wanted.sound].second.variants[wanted.variant].resource} == id;
+    };
+    for (const assets::ReloadEvent& event : events) {
+        for (const std::vector<Wanted>* list : {&state.wanted, &state.demanded}) {
+            for (const Wanted& wanted : *list) {
+                if (!kNamed(wanted, event.id)) {
+                    continue;
+                }
+                // An on-demand variant not yet supplied arrives as it is.
+                if (list == &state.demanded && !wanted.reported) {
+                    continue;
+                }
+                if (event.outcome == assets::ReloadOutcome::Failed) {
+                    served.notReloaded.emplace_back(wanted.sound, event.failure->clone());
+                    continue;
+                }
+                const assets::AssetSet& set = wanted.streamed ? *state.cooked : *state.clips;
+                const std::optional<assets::AssetHandle> kHandle = set.handle(wanted.requester);
+                if (!kHandle.has_value()) {
+                    continue;
+                }
+                result::Status supplied;
+                if (wanted.streamed) {
+                    auto bytes = assets::Assets<std::vector<std::byte>>{*state.cooked}.share(*kHandle, tick);
+                    supplied = bytes.has_value()
+                                   ? into.supplyCooked(wanted.sound, wanted.variant, std::move(*bytes))
+                                   : result::Status{std::unexpected<result::Error>{std::move(bytes).error()}};
+                } else {
+                    auto clip = assets::Assets<audio::Clip>{*state.clips}.share(*kHandle, tick);
+                    supplied = clip.has_value()
+                                   ? into.supply(wanted.sound, wanted.variant, std::move(*clip))
+                                   : result::Status{std::unexpected<result::Error>{std::move(clip).error()}};
+                }
+                if (supplied.has_value()) {
+                    served.reloaded.push_back(wanted.sound);
+                } else {
+                    served.notReloaded.emplace_back(wanted.sound, std::move(supplied).error());
+                }
+            }
+        }
+    }
+    return served;
 }
 
 } // namespace rawframe::world_audio
