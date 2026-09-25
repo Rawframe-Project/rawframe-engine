@@ -3,6 +3,9 @@
 # revision, taken from a checkout's object store, never from its working tree.
 #
 #   tools/update_kest.sh <kest checkout> <revision>
+#
+# Files are extracted with the time they are written, not their commit's,
+# so a build that already ran builds everything from them again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -14,7 +17,7 @@ keep="$(mktemp)"
 cp "$target/CMakeLists.txt" "$keep"
 rm -rf "$target"
 mkdir -p "$target"
-git -C "$checkout" archive "$revision" include src lib LICENSE | tar -x -C "$target"
+git -C "$checkout" archive "$revision" include src lib LICENSE | tar -x -m -C "$target"
 rm "$target/src/main.c"
 cp "$keep" "$target/CMakeLists.txt"
 rm "$keep"

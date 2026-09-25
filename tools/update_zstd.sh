@@ -5,6 +5,9 @@
 # working tree.
 #
 #   tools/update_zstd.sh <checkout> <revision>
+#
+# Files are extracted with the time they are written, not their commit's,
+# so a build that already ran builds everything from them again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,7 +22,7 @@ fi
 rm -rf "$target"
 mkdir -p "$target"
 git -C "$checkout" archive "$revision" LICENSE lib/common lib/compress lib/decompress lib/zstd.h lib/zstd_errors.h |
-    tar -x -C "$target"
+    tar -x -m -C "$target"
 if [[ -s "$keep" ]]; then
     cp "$keep" "$target/CMakeLists.txt"
 fi

@@ -5,6 +5,9 @@
 # ours and are kept.
 #
 #   tools/update_cgltf.sh <checkout> <revision>
+#
+# Files are extracted with the time they are written, not their commit's,
+# so a build that already ran builds everything from them again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,7 +23,7 @@ for ours in CMakeLists.txt cgltf.c; do
 done
 rm -rf "$target"
 mkdir -p "$target"
-git -C "$checkout" archive "$revision" LICENSE cgltf.h | tar -x -C "$target"
+git -C "$checkout" archive "$revision" LICENSE cgltf.h | tar -x -m -C "$target"
 cp "$keep"/* "$target/" 2>/dev/null || true
 rm -rf "$keep"
 echo "$target is now $revision; update the table in third_party/README.md"

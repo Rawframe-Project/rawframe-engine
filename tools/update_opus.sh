@@ -4,6 +4,9 @@
 # from a checkout's object store, never from its working tree.
 #
 #   tools/update_opus.sh <checkout> <revision>
+#
+# Files are extracted with the time they are written, not their commit's,
+# so a build that already ran builds everything from them again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -18,7 +21,7 @@ fi
 rm -rf "$target"
 mkdir -p "$target"
 git -C "$checkout" archive "$revision" COPYING include src celt silk \
-    opus_sources.mk celt_sources.mk silk_sources.mk | tar -x -C "$target"
+    opus_sources.mk celt_sources.mk silk_sources.mk | tar -x -m -C "$target"
 if [[ -s "$keep" ]]; then
     cp "$keep" "$target/CMakeLists.txt"
 fi

@@ -4,6 +4,9 @@
 # checkout's object store, never from its working tree.
 #
 #   tools/update_miniaudio.sh <checkout> <revision>
+#
+# Files are extracted with the time they are written, not their commit's,
+# so a build that already ran builds everything from them again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -17,7 +20,7 @@ if [[ -f "$target/CMakeLists.txt" ]]; then
 fi
 rm -rf "$target"
 mkdir -p "$target"
-git -C "$checkout" archive "$revision" miniaudio.h miniaudio.c LICENSE extras/stb_vorbis.c | tar -x -C "$target"
+git -C "$checkout" archive "$revision" miniaudio.h miniaudio.c LICENSE extras/stb_vorbis.c | tar -x -m -C "$target"
 if [[ -s "$keep" ]]; then
     cp "$keep" "$target/CMakeLists.txt"
 fi

@@ -4,6 +4,9 @@
 # working tree.
 #
 #   tools/update_maul.sh <maul2d|maul3d> <checkout> <revision>
+#
+# Files are extracted with the time they are written, not their commit's,
+# so a build that already ran builds everything from them again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -25,7 +28,7 @@ if [[ -f "$target/CMakeLists.txt" ]]; then
 fi
 rm -rf "$target"
 mkdir -p "$target"
-git -C "$checkout" archive "$revision" include src LICENSE | tar -x -C "$target"
+git -C "$checkout" archive "$revision" include src LICENSE | tar -x -m -C "$target"
 if [[ -s "$keep" ]]; then
     cp "$keep" "$target/CMakeLists.txt"
 fi
