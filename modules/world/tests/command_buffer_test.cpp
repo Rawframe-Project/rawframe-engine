@@ -6,6 +6,7 @@
 #include "rawframe/world/errors.h"
 
 #include <array>
+#include <cstring>
 #include <span>
 
 using namespace rawframe::world;
@@ -150,4 +151,65 @@ RAWFRAME_TEST(PlainDataIsBufferedFromBytes) {
     std::array<std::byte, sizeof(Tracked)> bytes{};
     RAWFRAME_EXPECT(!commands.insertBytes(kEntity, kKeys.tracked.id, kTracked, bytes).has_value());
     RAWFRAME_EXPECT(commands.empty());
+}
+
+RAWFRAME_TEST(AValueMayNameAnEntityTheBufferCreates) {
+    // A position's eight bytes stand in for a component holding an entity.
+    static_assert(sizeof(Position) == sizeof(EntityHandle));
+    World world{makeRegistry()};
+    const Keys kKeys = keysOf(world.registry());
+    const auto& kPosition = world.registry().descriptor(kKeys.position.id);
+    CommandBuffer commands;
+    const auto kFirst = commands.create();
+    const auto kSecond = commands.create();
+    const std::array<std::size_t, 1> kAtStart = {0};
+    const auto kHolding = [](EntityHandle entity) {
+        std::array<std::byte, sizeof(EntityHandle)> bytes{};
+        std::memcpy(bytes.data(), &entity, sizeof entity);
+        return bytes;
+    };
+    // Each names the other, pending both.
+    RAWFRAME_EXPECT(
+        commands.insertBytes(*kFirst, kKeys.position.id, kPosition, kHolding(pendingReference(*kSecond)), kAtStart)
+            .has_value());
+    RAWFRAME_EXPECT(
+        commands.insertBytes(*kSecond, kKeys.position.id, kPosition, kHolding(pendingReference(*kFirst)), kAtStart)
+            .has_value());
+    const auto kReport = world.apply(commands);
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->created.size() == 2);
+    if (!kReport.has_value() || kReport->created.size() != 2) {
+        return;
+    }
+    const auto kHeld = [&world, &kKeys](EntityHandle entity) {
+        EntityHandle held;
+        std::memcpy(&held, world.get(entity, kKeys.position), sizeof held);
+        return held;
+    };
+    RAWFRAME_EXPECT(kHeld(kReport->created[0]) == kReport->created[1] &&
+                    kHeld(kReport->created[1]) == kReport->created[0]);
+
+    // A live entity and the null entity are left as they are; without the
+    // offset, a pending reference is only bytes.
+    commands.clear();
+    const auto kThird = commands.create();
+    RAWFRAME_EXPECT(commands.insertBytes(*kThird, kKeys.position.id, kPosition, kHolding(kReport->created[0]), kAtStart)
+                        .has_value());
+    const auto kLive = world.apply(commands);
+    RAWFRAME_EXPECT(kLive.has_value() && kHeld(kLive->created[0]) == kReport->created[0]);
+    commands.clear();
+    const auto kFourth = commands.create();
+    RAWFRAME_EXPECT(
+        commands.insertBytes(*kFourth, kKeys.position.id, kPosition, kHolding(pendingReference(*kFourth))).has_value());
+    const auto kUnmarked = world.apply(commands);
+    RAWFRAME_EXPECT(kUnmarked.has_value() && kHeld(kUnmarked->created[0]) == pendingReference(PendingEntity{0}));
+
+    // A reference to an entity the buffer creates only later, or a field
+    // past the value's end, is refused.
+    commands.clear();
+    const auto kFifth = commands.create();
+    const auto kLater = commands.insertBytes(
+        *kFifth, kKeys.position.id, kPosition, kHolding(pendingReference(PendingEntity{1})), kAtStart);
+    RAWFRAME_EXPECT(!kLater.has_value() && kLater.error().code() == code(WorldError::InvalidValue));
+    const std::array<std::size_t, 1> kPastEnd = {4};
+    RAWFRAME_EXPECT(!commands.insertBytes(*kFifth, kKeys.position.id, kPosition, kHolding({}), kPastEnd).has_value());
 }

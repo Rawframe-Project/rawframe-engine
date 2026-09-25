@@ -3,6 +3,7 @@
 #include "rawframe/world/errors.h"
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 #include <variant>
 
@@ -230,6 +231,14 @@ result::Result<CommitReport> World::apply(CommandBuffer& buffer) {
             done = destroy(kTarget);
             break;
         case CommandBuffer::Kind::Insert: {
+            // Pending references become the entities created for them.
+            for (std::uint32_t at = 0; at < command.referenceCount; ++at) {
+                std::byte* const kField = static_cast<std::byte*>(command.value) + command.references[at];
+                EntityHandle held;
+                std::memcpy(&held, kField, sizeof held);
+                const EntityHandle kCreated = report.created[held.slot - 1U];
+                std::memcpy(kField, &kCreated, sizeof kCreated);
+            }
             // A tag carries no value; insert still needs somewhere to point.
             std::byte tag{};
             done = insertErased(kTarget, command.component, command.value != nullptr ? command.value : &tag);

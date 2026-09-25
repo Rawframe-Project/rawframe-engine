@@ -65,19 +65,54 @@ result::Result<PendingEntity> CommandBuffer::create() {
 result::Status CommandBuffer::insertBytes(CommandTarget target,
                                           schema::ComponentRuntimeId component,
                                           const schema::ComponentDescriptor& descriptor,
-                                          std::span<const std::byte> value) {
+                                          std::span<const std::byte> value,
+                                          std::span<const std::size_t> entities) {
+    const auto kInvalid = [](std::string_view why) {
+        return result::fail(result::ErrorClass::InvalidArgument, kWorldDomain, code(WorldError::InvalidValue), why);
+    };
     if (!descriptor.plainData || value.size() != descriptor.size || descriptor.alignment > alignof(std::max_align_t)) {
-        return result::fail(result::ErrorClass::InvalidArgument,
-                            kWorldDomain,
-                            code(WorldError::InvalidValue),
-                            "only plain data of the component's own size is inserted from bytes");
+        return kInvalid("only plain data of the component's own size is inserted from bytes");
+    }
+    // Which entity fields hold a pending reference, each to an entity
+    // created earlier in this buffer.
+    std::uint32_t references = 0;
+    for (const std::size_t kOffset : entities) {
+        if (kOffset > value.size() || value.size() - kOffset < sizeof(EntityHandle)) {
+            return kInvalid("an entity field lies outside the value");
+        }
+        EntityHandle held;
+        std::memcpy(&held, value.data() + kOffset, sizeof held);
+        if (held.generation == 0 && held.slot != 0) {
+            if (held.slot > pending_) {
+                return kInvalid("a value names an entity this buffer does not create before it");
+            }
+            ++references;
+        }
     }
     void* storage = nullptr;
     if (descriptor.size != 0) {
         RAWFRAME_TRY_ASSIGN(storage, reserveValue(descriptor.size, descriptor.alignment));
         std::memcpy(storage, value.data(), value.size());
     }
-    return record(Command{.kind = Kind::Insert, .target = target, .component = component, .value = storage});
+    std::uint32_t* offsets = nullptr;
+    if (references != 0) {
+        RAWFRAME_TRY_ASSIGN(void* reserved, reserveValue(references * sizeof(std::uint32_t), alignof(std::uint32_t)));
+        offsets = static_cast<std::uint32_t*>(reserved);
+        std::uint32_t at = 0;
+        for (const std::size_t kOffset : entities) {
+            EntityHandle held;
+            std::memcpy(&held, value.data() + kOffset, sizeof held);
+            if (held.generation == 0 && held.slot != 0) {
+                offsets[at++] = static_cast<std::uint32_t>(kOffset);
+            }
+        }
+    }
+    return record(Command{.kind = Kind::Insert,
+                          .target = target,
+                          .component = component,
+                          .value = storage,
+                          .references = offsets,
+                          .referenceCount = references});
 }
 
 result::Status CommandBuffer::destroy(EntityHandle entity) {
