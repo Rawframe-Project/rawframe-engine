@@ -327,19 +327,23 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
     if (!report.failures.empty()) {
         return report;
     }
+    // The receipt names the exact manifest it proves, by digest.
+    const std::string kManifest = content::writeManifest(entries);
+    const auto kManifestBytes = std::as_bytes(std::span{kManifest.data(), kManifest.size()});
     Value receipt = Value::object();
     receipt.add("kind", Value::string("cook.receipt"));
     receipt.add("formatVersion", Value::integer(1));
     receipt.add("toolchain", Value::string("sha256:" + hexOf(request.toolchain)));
     receipt.add("target", Value::string(request.target));
     receipt.add("determinism", Value::string("double_cook"));
+    receipt.add("manifest", Value::string(content::ContentDigest::of(kManifestBytes).text()));
     receipt.add("inputs", std::move(inputs));
     receipt.add("artifacts", std::move(artifacts));
     receipt.add("failures", Value::integer(0));
     // The old receipt out, the manifest in, the receipt last: a receipt is
     // only ever beside the manifest it proves.
     std::filesystem::remove(kOutput / "cook.receipt", error);
-    if (!writeText(kOutput / "content.manifest", content::writeManifest(entries)) ||
+    if (!writeText(kOutput / "content.manifest", kManifest) ||
         !writeText(kOutput / "cook.receipt", document::write(receipt))) {
         report.failures.push_back(failure(CookError::WriteFailed, "the manifest or receipt cannot be written", ""));
     }

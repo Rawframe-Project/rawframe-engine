@@ -119,6 +119,12 @@ RAWFRAME_TEST(SourcesCookIntoVerifiedArtifacts) {
     const std::string kReceipt = readText(kProject.output / "cook.receipt");
     RAWFRAME_EXPECT(kReceipt.find("\"failures\": 0") != std::string::npos &&
                     kReceipt.find("\"determinism\": \"double_cook\"") != std::string::npos);
+    // The receipt names the manifest beside it by digest.
+    const std::string kManifestRead = readText(kProject.output / "content.manifest");
+    const std::string kNamed =
+        "\"manifest\": \"" +
+        content::ContentDigest::of(std::as_bytes(std::span{kManifestRead.data(), kManifestRead.size()})).text() + "\"";
+    RAWFRAME_EXPECT(kReceipt.find(kNamed) != std::string::npos);
 
     // Again: everything from the cache, and the same manifest byte for byte.
     const std::string kManifestText = readText(kProject.output / "content.manifest");
