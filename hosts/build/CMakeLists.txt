@@ -2,7 +2,7 @@
 # rawframe.build. No runtime closure contains it.
 rawframe_host(NAME build_tool OUTPUT rawframe-build
     SOURCES src/main.cpp
-    DEPS build content document result base
+    DEPS build signature content document result base
 )
 target_compile_definitions(rawframe_host_build_tool PRIVATE RAWFRAME_ENGINE_VERSION="${PROJECT_VERSION}")
 

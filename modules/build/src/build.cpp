@@ -241,6 +241,10 @@ bool validSubject(std::string_view text) noexcept {
 
 result::Result<BuildReport> packBuild(const BuildRequest& request) {
     RAWFRAME_TRY(checkIdentity(request.identity));
+    if (request.signer != nullptr &&
+        request.identity.subject.substr(0, request.identity.subject.find('/')) != request.signer->publisher) {
+        return refuse(BuildError::BadKey, "a Build is signed by its own publisher's key");
+    }
     if (within(request.output, request.cooked) || within(request.cooked, request.output)) {
         return refuse(BuildError::BadRequest, "a Build and the cook's output are separate places");
     }
@@ -348,12 +352,22 @@ result::Result<BuildReport> packBuild(const BuildRequest& request) {
     receipt.add("packer", Value::string("rawframe.build.2"));
     RAWFRAME_TRY_ASSIGN(const std::string kReceipt, document::writeCanonicalRecord(receipt));
 
-    // Blobs are in; the old receipt out, the manifest in, the receipt last.
+    // Blobs are in; the old receipt and signature out, the manifest in, its
+    // signature, the receipt last.
     std::error_code error;
     std::filesystem::remove(request.output / "packaging.receipt", error);
-    if (!writeAtomically(request.output / "build.manifest", bytesOf(kManifest)) ||
-        !writeAtomically(request.output / "packaging.receipt", bytesOf(kReceipt))) {
-        return refuse(BuildError::WriteFailed, "the manifest or its receipt cannot be written");
+    std::filesystem::remove(request.output / "build.manifest.sig", error);
+    if (!writeAtomically(request.output / "build.manifest", bytesOf(kManifest))) {
+        return refuse(BuildError::WriteFailed, "the manifest cannot be written");
+    }
+    if (request.signer != nullptr) {
+        RAWFRAME_TRY_ASSIGN(const signature::Envelope kSigned, sign(*request.signer, bytesOf(kManifest)));
+        if (!writeAtomically(request.output / "build.manifest.sig", bytesOf(signature::writeEnvelope(kSigned)))) {
+            return refuse(BuildError::WriteFailed, "the manifest's signature cannot be written");
+        }
+    }
+    if (!writeAtomically(request.output / "packaging.receipt", bytesOf(kReceipt))) {
+        return refuse(BuildError::WriteFailed, "the packaging receipt cannot be written");
     }
     return report;
 }

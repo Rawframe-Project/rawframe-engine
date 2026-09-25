@@ -5,10 +5,12 @@
 // receipt and the manifest it names, each resource is chunked and stored
 // by digest, and the BuildManifest names the Build by the hash of its
 // identity section. Generation 2 of this packer compresses each chunk worth
-// compressing (one Zstandard frame under pinned parameters) and signs
-// nothing.
+// compressing (one Zstandard frame under pinned parameters) and signs the
+// manifest's exact bytes with the publisher's key into
+// `build.manifest.sig`.
 
 #include "rawframe/base/sha256.h"
+#include "rawframe/build/publisher_key.h"
 #include "rawframe/content/identity.h"
 #include "rawframe/result/result.h"
 
@@ -44,6 +46,10 @@ struct BuildRequest {
     /// blobs under `sha256/`.
     std::filesystem::path output;
     BuildIdentity identity;
+    /// The publisher's key, to sign the manifest with; its publisher must
+    /// be the subject's. Without one the Build is unsigned, and no reader
+    /// takes it.
+    const PublisherKey* signer = nullptr;
 };
 
 struct BuildReport {

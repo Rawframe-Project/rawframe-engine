@@ -22,6 +22,8 @@ enum class BuildError : std::uint32_t {
     /// artifact's bytes are not what both say.
     ArtifactMismatch = 4,
     WriteFailed = 5,
+    /// A publisher key that is not one, or a signing that failed.
+    BadKey = 6,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(BuildError error) noexcept {

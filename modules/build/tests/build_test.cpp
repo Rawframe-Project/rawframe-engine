@@ -125,8 +125,10 @@ struct Cooked {
         writeText(cooked / "cook.receipt", document::write(receipt));
     }
 
-    [[nodiscard]] result::Result<BuildReport> pack(BuildIdentity identity = kIdentity) const {
-        return packBuild(BuildRequest{.cooked = cooked, .output = output, .identity = std::move(identity)});
+    [[nodiscard]] result::Result<BuildReport> pack(BuildIdentity identity = kIdentity,
+                                                   const PublisherKey* signer = nullptr) const {
+        return packBuild(
+            BuildRequest{.cooked = cooked, .output = output, .identity = std::move(identity), .signer = signer});
     }
 };
 
@@ -248,7 +250,12 @@ RAWFRAME_TEST(IdentityFieldsKeepTheirGrammar) {
 
 RAWFRAME_TEST(ABuildReadsBackAsItsResources) {
     const Cooked kCooked;
-    const auto kPacked = kCooked.pack();
+    const auto kKey = generatePublisherKey("rawframe");
+    RAWFRAME_EXPECT(kKey.has_value());
+    if (!kKey.has_value()) {
+        return;
+    }
+    const auto kPacked = kCooked.pack(kIdentity, &*kKey);
     RAWFRAME_EXPECT(kPacked.has_value());
     if (!kPacked.has_value()) {
         return;
@@ -274,7 +281,10 @@ RAWFRAME_TEST(ABuildReadsBackAsItsResources) {
     RAWFRAME_EXPECT(*kList(2)[0].find("codec")->text() == "raw");
 
     // Read back through the runtime's reader, every resource is itself.
-    auto opened = content::ContentSource::build(kCooked.output, kPacked->root);
+    const auto kKeys = keySetOf(*kKey, 1'790'000'000);
+    RAWFRAME_EXPECT(kKeys.has_value());
+    auto opened =
+        content::ContentSource::build(kCooked.output, kPacked->root, kKeys.value_or(signature::PublisherKeySet{}));
     RAWFRAME_EXPECT(opened.has_value());
     if (!opened.has_value()) {
         return;
@@ -309,4 +319,40 @@ RAWFRAME_TEST(ABuildReadsBackAsItsResources) {
         RAWFRAME_EXPECT(kRead(1) == "bang" && kRead(2) == kCooked.large && kRead(3) == kCooked.repeated);
     }
     io.stop();
+}
+
+RAWFRAME_TEST(APublisherKeySignsItsOwnBuilds) {
+    const auto kKey = generatePublisherKey("rawframe");
+    RAWFRAME_EXPECT(kKey.has_value() && signature::validKeyId(kKey->kid));
+    if (!kKey.has_value()) {
+        return;
+    }
+    // Its file reads back as itself; a publisher outside its grammar is
+    // refused a key.
+    const auto kRead = readPublisherKey(writePublisherKey(*kKey));
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->kid == kKey->kid && kRead->seed == kKey->seed);
+    RAWFRAME_EXPECT(!generatePublisherKey("Rawframe").has_value() && !readPublisherKey("{}").has_value());
+    // Its key set lists it active and reads back through the verifier's
+    // reader.
+    const auto kKeys = keySetOf(*kKey, 1'790'000'000);
+    RAWFRAME_EXPECT(kKeys.has_value());
+    if (!kKeys.has_value()) {
+        return;
+    }
+    const auto kKeysText = signature::writePublisherKeySet(*kKeys);
+    RAWFRAME_EXPECT(kKeysText.has_value() && signature::readPublisherKeySet(*kKeysText).has_value());
+
+    // A signed Build verifies against it; another publisher's key signs
+    // nothing of this one's.
+    const Cooked kCooked;
+    const auto kPacked = kCooked.pack(kIdentity, &*kKey);
+    RAWFRAME_EXPECT(kPacked.has_value());
+    const std::string kManifest = readText(kCooked.output / "build.manifest");
+    const auto kEnvelope = signature::readEnvelope(readText(kCooked.output / "build.manifest.sig"));
+    RAWFRAME_EXPECT(kEnvelope.has_value() && kEnvelope->kid == kKey->kid &&
+                    signature::verifyPublished(*kKeys, bytesOf(kManifest), *kEnvelope).has_value());
+    const auto kOther = generatePublisherKey("someone");
+    RAWFRAME_EXPECT(kOther.has_value() && refusedAs(kCooked.pack(kIdentity, &*kOther), BuildError::BadKey));
+    // Packing again unsigned leaves no stale signature beside the manifest.
+    RAWFRAME_EXPECT(kCooked.pack().has_value() && !fs::exists(kCooked.output / "build.manifest.sig"));
 }
