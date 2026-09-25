@@ -153,11 +153,10 @@ public:
         if (files.directory()) {
             sourcesWritten_ = newestSource(*files.directory());
         }
-        std::string report;
-        auto program = files.compile(game_.program, {}, &report);
+        auto program = files.compile(game_.program, {});
         if (!program.has_value()) {
-            return std::unexpected<result::Error>{
-                std::move(program).error().withContext("program", game_.program).withContext("report", report)};
+            // The compiler's first diagnostic is on the error already.
+            return std::unexpected<result::Error>{std::move(program).error().withContext("program", game_.program)};
         }
         program_ = std::move(*program);
 

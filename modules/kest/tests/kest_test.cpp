@@ -153,6 +153,14 @@ RAWFRAME_TEST(WhatDoesNotCompileIsReported) {
     const auto kProgram = Program::compile(kFiles, {}, &report);
     RAWFRAME_EXPECT(refusedWith(kProgram, KestError::DoesNotCompile));
     RAWFRAME_EXPECT(report.find("broken.kest") != std::string::npos);
+    // The first diagnostic, on one line, rides on the error itself.
+    RAWFRAME_EXPECT(kest::firstDiagnostic(report) == "broken.kest:2:7: expected identifier, found `->` [K0201]");
+    const auto kContext = kProgram.has_value() ? std::span<const result::ContextField>{} : kProgram.error().context();
+    RAWFRAME_EXPECT(!kContext.empty() && kContext.front().key == "diagnostic" &&
+                    kContext.front().value == "broken.kest:2:7: expected identifier, found `->` [K0201]");
+    // Not in that shape, its first line; nothing, nothing.
+    RAWFRAME_EXPECT(kest::firstDiagnostic("the room ran out\nmore") == "the room ran out" &&
+                    kest::firstDiagnostic("").empty());
     RAWFRAME_EXPECT(refusedWith(Program::compile({}, {}), KestError::DoesNotCompile));
 }
 

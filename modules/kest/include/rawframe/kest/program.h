@@ -15,6 +15,12 @@
 
 namespace rawframe::kest {
 
+/// The first diagnostic of a compiler report on one line,
+/// `file:line:column: message [code]`, for where only a line fits (an
+/// error's context, a log field); the report's first line when it is not
+/// in that shape, and nothing for an empty report.
+[[nodiscard]] std::string firstDiagnostic(std::string_view report);
+
 /// One source file handed to the compiler: where a build would have found it,
 /// and its text. Nothing is read from a disk.
 struct SourceFile {

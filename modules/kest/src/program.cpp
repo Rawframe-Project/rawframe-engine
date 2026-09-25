@@ -3,6 +3,7 @@
 #include "rawframe/kest/errors.h"
 #include "state.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -95,10 +96,12 @@ result::Result<std::shared_ptr<const Program>> finish(KestBuild* build, ReportFi
         if (report != nullptr) {
             *report = errors.text();
         }
-        return result::fail(result::ErrorClass::InvalidArgument,
-                            kKestDomain,
-                            code(KestError::DoesNotCompile),
-                            "the Kest program does not compile");
+        return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                           kKestDomain,
+                                                           code(KestError::DoesNotCompile),
+                                                           "the Kest program does not compile")
+                                                  .error()
+                                                  .withContext("diagnostic", firstDiagnostic(errors.text()))};
     }
     auto state = std::make_unique<Program::State>();
     state->build = build;
@@ -106,6 +109,31 @@ result::Result<std::shared_ptr<const Program>> finish(KestBuild* build, ReportFi
 }
 
 } // namespace
+
+std::string firstDiagnostic(std::string_view report) {
+    const auto kLine = [&report](std::size_t from) {
+        const std::size_t kEnd = std::min(report.find('\n', from), report.size());
+        return report.substr(from, kEnd - from);
+    };
+    const std::string_view kFirst = kLine(0);
+    // `error[K0201]: message`, then ` --> file:line:column`.
+    const std::size_t kCodeOpen = kFirst.find('[');
+    const std::size_t kCodeClose = kFirst.find("]: ");
+    const std::size_t kNext = report.find('\n');
+    const std::string_view kSecond = kNext == std::string_view::npos ? std::string_view{} : kLine(kNext + 1);
+    const std::size_t kArrow = kSecond.find("--> ");
+    if (kCodeOpen == std::string_view::npos || kCodeClose == std::string_view::npos || kCodeClose < kCodeOpen ||
+        kArrow == std::string_view::npos) {
+        return std::string{kFirst};
+    }
+    std::string made{kSecond.substr(kArrow + 4)};
+    made += ": ";
+    made += kFirst.substr(kCodeClose + 3);
+    made += " [";
+    made += kFirst.substr(kCodeOpen + 1, kCodeClose - kCodeOpen - 1);
+    made += "]";
+    return made;
+}
 
 Program::Program(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
 }
