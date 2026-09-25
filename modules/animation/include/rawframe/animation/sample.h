@@ -48,6 +48,10 @@ public:
     [[nodiscard]] const Clip& clip() const noexcept {
         return *clip_;
     }
+    /// The bone the clip's track at `track` animates.
+    [[nodiscard]] BoneIndex bone(std::size_t track) const noexcept {
+        return bones_[track];
+    }
 
     /// Writes the channels the clip animates at `time` (wrapped when the
     /// clip loops, held at its ends when it does not) over `pose`, which

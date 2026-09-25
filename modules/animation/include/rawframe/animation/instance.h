@@ -11,6 +11,11 @@
 // instance and writes the pose, so instances pose in parallel. Both are
 // deterministic: the same graph, parameters, and deltas give the same
 // events and the same pose bits.
+//
+// Root motion (SPEC-0035, D134): when the skeleton declares a source, each
+// advance also says how its clips moved the character, blended as their
+// poses are, and `removeRootMotion` takes that motion out of the pose, so
+// the World moves the entity by the one and draws the other where it is.
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
@@ -95,6 +100,10 @@ public:
     [[nodiscard]] std::span<const std::optional<BoneIndex>> parents() const noexcept {
         return parents_;
     }
+    /// The skeleton's root motion source; none keeps the motion in the pose.
+    [[nodiscard]] const std::optional<RootMotionSource>& rootMotion() const noexcept {
+        return rootMotion_;
+    }
 
     /// A transition's condition as it plays.
     struct Test {
@@ -148,6 +157,10 @@ public:
         /// A mask's weight for each bone, its inputs inside then outside;
         /// empty for any other step.
         std::vector<double> mask;
+        /// A clip's root translation and rotation tracks, by their place
+        /// in it, when the skeleton declares root motion.
+        std::optional<std::size_t> rootTranslation;
+        std::optional<std::size_t> rootRotation;
     };
 
     /// The step playing the node of id `node`; none for a node the output
@@ -167,6 +180,7 @@ private:
     std::vector<Step> steps_;
     Pose bind_;
     std::vector<std::optional<BoneIndex>> parents_;
+    std::optional<RootMotionSource> rootMotion_;
     EvaluationLimits limits_;
 };
 
@@ -224,6 +238,12 @@ public:
     [[nodiscard]] double weight(std::size_t step) const noexcept {
         return weights_[step];
     }
+    /// SPEC-0035's per-tick root delta: how the last advance moved and
+    /// turned the character, in its own frame as it was before; the
+    /// identity when the skeleton declares no root motion.
+    [[nodiscard]] const Transform& rootMotion() const noexcept {
+        return rootMotion_;
+    }
 
 private:
     friend class PoseEvaluator;
@@ -240,6 +260,9 @@ private:
     };
 
     void weigh();
+    /// Each blend's and machine's root motion from its inputs', as the
+    /// last weigh shares them.
+    void blendRootMotion();
     void runMachine(std::size_t step, double delta, std::span<const std::pair<std::size_t, std::uint64_t>> heard);
     [[nodiscard]] bool holds(const CompiledGraph::Test& test,
                              const CompiledGraph::Machine& machine,
@@ -265,6 +288,9 @@ private:
     std::vector<MachineState> machines_;
     /// Transition requests for the next advance, oldest first.
     std::vector<std::uint64_t> requests_;
+    /// Each step's root motion in the last advance, and the output's.
+    std::vector<Transform> motions_;
+    Transform rootMotion_;
 };
 
 /// The pose phase's working memory, one per thread that poses.
@@ -279,5 +305,10 @@ public:
 private:
     std::vector<Pose> poses_;
 };
+
+/// Takes the root motion source's channels out of a local pose of the
+/// graph's skeleton: its taken translation axes back to the bind's, and its
+/// turn about the axis undone. Nothing without a source.
+void removeRootMotion(const CompiledGraph& graph, Pose& local);
 
 } // namespace rawframe::animation

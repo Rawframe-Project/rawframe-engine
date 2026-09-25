@@ -2,6 +2,7 @@
 
 #include "rawframe/animation/errors.h"
 #include "rawframe/base/assert.h"
+#include "root_motion.h"
 #include "rotation.h"
 
 #include <algorithm>
@@ -123,6 +124,7 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
     for (const Bone& bone : skeleton.bones) {
         made->parents_.push_back(bone.parent);
     }
+    made->rootMotion_ = skeleton.rootMotion;
     made->limits_ = limits;
     const auto kParameter = [&graph](const Scalar& scalar) -> std::optional<ParameterIndex> {
         const auto* kRef = std::get_if<ParameterRef>(&scalar);
@@ -157,6 +159,16 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
                 clip = std::move(looped);
             }
             RAWFRAME_TRY_ASSIGN(BoundClip bound, BoundClip::bind(clip, skeleton, skeletonId));
+            for (std::size_t track = 0; track < clip->tracks.size() && skeleton.rootMotion.has_value(); ++track) {
+                if (bound.bone(track).value != 0) {
+                    continue;
+                }
+                if (clip->tracks[track].channel == Channel::Translation) {
+                    step.rootTranslation = track;
+                } else if (clip->tracks[track].channel == Channel::Rotation) {
+                    step.rootRotation = track;
+                }
+            }
             step.clip = std::move(bound);
             step.loop = clip->loop;
             step.speed = kLiteral(kClip->speed);
@@ -251,7 +263,8 @@ std::optional<ParameterIndex> CompiledGraph::parameter(std::uint64_t id) const n
 
 GraphInstance::GraphInstance(std::shared_ptr<const CompiledGraph> graph)
     : graph_{std::move(graph)}, playheads_(graph_->steps().size(), 0.0), weights_(graph_->steps().size(), 0.0),
-      shares_(graph_->steps().size()), speeds_(graph_->steps().size(), 0.0), machines_(graph_->steps().size()) {
+      shares_(graph_->steps().size()), speeds_(graph_->steps().size(), 0.0), machines_(graph_->steps().size()),
+      motions_(graph_->rootMotion().has_value() ? graph_->steps().size() : 0) {
     for (std::size_t at = 0; at < graph_->parameterCount(); ++at) {
         values_.push_back(graph_->declaration(ParameterIndex{static_cast<std::uint32_t>(at)}).initial);
     }
@@ -391,6 +404,18 @@ bool GraphInstance::advance(double delta, std::vector<GraphEvent>& events) {
         const Clip& clip = step.clip->clip();
         speeds_[at] = valueOf(values_, step.speed, step.speedParameter);
         const Advance kMoved = animation::advance(clip, playheads_[at], delta * speeds_[at], crossed, kRoom);
+        if (!motions_.empty()) {
+            const RootTracks kTracks{
+                .translation = step.rootTranslation.has_value() ? &clip.tracks[*step.rootTranslation] : nullptr,
+                .rotation = step.rootRotation.has_value() ? &clip.tracks[*step.rootRotation] : nullptr};
+            motions_[at] = motionOver(clip,
+                                      kTracks,
+                                      *graph_->rootMotion(),
+                                      graph_->bindPose().bones.front(),
+                                      playheads_[at],
+                                      delta * speeds_[at],
+                                      kMoved.time);
+        }
         playheads_[at] = kMoved.time;
         if (!kFires) {
             continue;
@@ -412,7 +437,34 @@ bool GraphInstance::advance(double delta, std::vector<GraphEvent>& events) {
     }
     requests_.clear();
     weigh();
+    blendRootMotion();
     return whole;
+}
+
+void GraphInstance::blendRootMotion() {
+    if (motions_.empty()) {
+        return;
+    }
+    // Inputs first, as poses blend: a blend and a machine by their shares,
+    // a mask by the root's weight.
+    const std::span<const CompiledGraph::Step> kSteps = graph_->steps();
+    std::vector<const Transform*> moves;
+    std::vector<double> maskShares(2);
+    for (std::size_t at = 0; at < kSteps.size(); ++at) {
+        const CompiledGraph::Step& step = kSteps[at];
+        if (step.clip.has_value()) {
+            continue;
+        }
+        moves.clear();
+        for (const std::size_t kInput : step.inputs) {
+            moves.push_back(&motions_[kInput]);
+        }
+        if (!step.mask.empty()) {
+            maskShares = {step.mask.front(), 1.0 - step.mask.front()};
+        }
+        motions_[at] = blendedMotion(moves, step.mask.empty() ? std::span<const double>{shares_[at]} : maskShares);
+    }
+    rootMotion_ = motions_.back();
 }
 
 void GraphInstance::runMachine(std::size_t step,
@@ -574,6 +626,22 @@ void PoseEvaluator::evaluate(const GraphInstance& instance, Pose& pose, std::spa
         }
     }
     pose = poses_.back();
+}
+
+void removeRootMotion(const CompiledGraph& graph, Pose& local) {
+    const std::optional<RootMotionSource>& source = graph.rootMotion();
+    if (!source.has_value()) {
+        return;
+    }
+    RAWFRAME_CHECK(local.bones.size() == graph.bindPose().bones.size(), "a pose of the graph's skeleton");
+    const Transform& bind = graph.bindPose().bones.front();
+    Transform& root = local.bones.front();
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+        if (source->translation[axis]) {
+            root.translation[axis] = bind.translation[axis];
+        }
+    }
+    root.rotation = normalized(multiplied(inverted(twistOf(*source, root.rotation, bind.rotation)), root.rotation));
 }
 
 } // namespace rawframe::animation
