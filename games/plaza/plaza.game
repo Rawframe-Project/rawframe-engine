@@ -1,11 +1,16 @@
 # The sample 3D game: players are characters running and jumping about a
-# square plaza with a ramp, a raised terrace, and pillars, all of it Maul3D.
+# square plaza with a ramp, a raised terrace, pillars, and a grassy mound
+# modeled in an authoring tool, all of it Maul3D.
 # A client predicts its own character exactly, is sent what is within 30
 # meters on the ground plane, and sees the others between states.
 program plaza.kest
 physics3d gravity 0 -10 0
 
 collision class walker 5f23859a6c00ebba
+
+# The mound's triangles, cooked from glTF (the plaza is played with its
+# cooked content).
+mesh 6d3cbd2231e069f1 mound.gltf
 
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
 
@@ -26,6 +31,9 @@ spawn 1 rawframe.physics3d.body motion=0 shape=1 width=4 height=0.5 depth=3 rawf
 spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=-10 y=3.5 z=-10 rawframe.physics3d.velocity
 spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=10 y=3.5 z=-10 rawframe.physics3d.velocity
 spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=-10 y=3.5 z=10 rawframe.physics3d.velocity
+
+# The mound, ten meters across and 1.2 high, on the plaza's floor.
+spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-20 y=0.5 z=20 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=mound.gltf
 
 replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character

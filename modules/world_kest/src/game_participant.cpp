@@ -680,6 +680,7 @@ private:
                                             .gravityY = game_.physics->gravityY,
                                             .gravityZ = game_.physics->gravityZ,
                                             .substeps = game_.physics->substeps,
+                                            .meshes = files_->meshes(),
                                             .collision = collisionDocument()};
     }
 
@@ -886,13 +887,7 @@ private:
             const kest::TypeLayout& layout = layouts_[kIndex];
             std::vector<std::byte> bytes(layout.size);
             for (GameFieldValue value : part.fields) {
-                // A body's collision class, by name.
-                const auto kClass = std::ranges::find(game_.collision.classes, value.value, &GameCollisionClass::name);
-                if (game_.physics.has_value() &&
-                    game_.components[kIndex].id == physicsFacts(game_.physics->dimensions).body &&
-                    value.field == "collisionClass" && kClass != game_.collision.classes.end()) {
-                    value.value = std::to_string(kClass->id);
-                }
+                value.value = spawnValue(game_, part.component, value);
                 const kest::Field* field = nullptr;
                 for (const kest::Field& candidate : layout.fields) {
                     field = candidate.name == value.field ? &candidate : field;

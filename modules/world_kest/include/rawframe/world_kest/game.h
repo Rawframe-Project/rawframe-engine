@@ -233,6 +233,15 @@ struct GamePrefab {
     std::string path;
 };
 
+/// A mesh a body may be made of (D112), by the identity a
+/// `rawframe.physics3d.mesh` names it by.
+struct GameMesh {
+    std::uint64_t id = 0;
+    /// Its source beside the description, which the cook makes a mesh
+    /// resource (`rawframe.mesh`); a process reads the resource.
+    std::string path;
+};
+
 /// A save document (ADR-0057): its name and the components it keeps of the
 /// game's persistent entities.
 struct GameSave {
@@ -251,6 +260,8 @@ struct GameDescription {
     /// Scenes a program spawns at run time, from `prefab <16 hex digits>
     /// <file>` lines.
     std::vector<GamePrefab> prefabs;
+    /// From `mesh <16 hex digits> <file>` lines.
+    std::vector<GameMesh> meshes;
     /// Networked play: what replicates, what a player starts with, and
     /// which component a player's input is written into.
     std::vector<std::string> replicated;
@@ -296,5 +307,11 @@ struct GameDescription {
 /// Every scene file the description names: its scene lines', then its
 /// prefabs', each once.
 [[nodiscard]] std::vector<std::string> sceneNames(const GameDescription& game);
+
+/// A spawn line's value with the game's names made identities: a collision
+/// class's name as a body's `collisionClass`, and a mesh's file as a
+/// `rawframe.physics3d.mesh`'s `mesh`. Anything else as written.
+[[nodiscard]] std::string
+spawnValue(const GameDescription& game, std::string_view component, const GameFieldValue& value);
 
 } // namespace rawframe::world_kest

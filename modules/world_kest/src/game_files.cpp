@@ -4,6 +4,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/kest_library/library.h"
+#include "rawframe/mesh/mesh.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/errors.h"
@@ -147,6 +148,10 @@ void GameFiles::seal() {
         field(digest, std::string_view{digits.data(), digits.size()});
         field(digest, kText);
     }
+    for (std::size_t at = 0; at < meshes_.size(); ++at) {
+        field(digest, description_.meshes[at].path);
+        digest.update(meshDigests_[at]);
+    }
     for (const std::vector<kest::SourceFile>& files : sources_) {
         for (const kest::SourceFile& file : files) {
             field(digest, file.path);
@@ -154,6 +159,37 @@ void GameFiles::seal() {
         }
     }
     digest_ = digest.finish();
+}
+
+result::Status GameFiles::readMeshes(game_content::GameContent* content, const std::vector<base::Bits128>& resources) {
+    if (description_.meshes.empty()) {
+        return {};
+    }
+    if (content == nullptr) {
+        return unreadable("a game's meshes are read cooked, from the Runtime's content",
+                          description_.meshes.front().path);
+    }
+    const content::ResourceTypeId kMeshType{mesh::kMeshType};
+    const std::array<content::AdmittedRepresentation, 1> kAdmitted = {content::AdmittedRepresentation{
+        .type = kMeshType, .representation = *content::RepresentationId::parse(mesh::kMeshRepresentation)}};
+    RAWFRAME_TRY(content->admit(kAdmitted));
+    for (std::size_t at = 0; at < resources.size(); ++at) {
+        const GameMesh& declared = description_.meshes[at];
+        auto bytes = readResource(content->store(),
+                                  content::ResourceRef{.id = content::ResourceId{resources[at]}, .type = kMeshType});
+        if (!bytes.has_value()) {
+            return std::unexpected<result::Error>{std::move(bytes).error().withContext("name", declared.path)};
+        }
+        const std::span<const std::byte> kBytes = std::as_bytes(std::span{bytes->data(), bytes->size()});
+        auto decoded = mesh::decode(kBytes);
+        if (!decoded.has_value()) {
+            return std::unexpected<result::Error>{std::move(decoded).error().withContext("name", declared.path)};
+        }
+        meshes_.push_back(
+            physics3d::BodyMesh{.id = declared.id, .mesh = std::make_shared<const mesh::Mesh>(std::move(*decoded))});
+        meshDigests_.push_back(base::sha256(kBytes));
+    }
+    return {};
 }
 
 result::Status GameFiles::readInstanced(const std::function<result::Result<std::string>(base::Bits128)>& read) {
@@ -186,7 +222,8 @@ result::Status GameFiles::readInstanced(const std::function<result::Result<std::
     return {};
 }
 
-result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& path) {
+result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& path,
+                                                   game_content::GameContent* content) {
     GameFiles game;
     game.named_ = true;
     RAWFRAME_TRY_ASSIGN(game.text_, readText(path));
@@ -228,6 +265,19 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
         }
         return unreadable("no scene beside the game has the identity an instance names", "");
     }));
+    // Each mesh, by the resource its sidecar names.
+    std::vector<base::Bits128> meshes;
+    for (const GameMesh& declared : game.description_.meshes) {
+        const std::filesystem::path kSidecar = kDirectory / (declared.path + std::string{content::kSidecarSuffix});
+        const auto kSidecarText = readText(kSidecar);
+        const auto kSidecarRead =
+            kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
+        if (!kSidecarRead.has_value() || !kSidecarRead->has_value() || (*kSidecarRead)->importer != "rawframe.mesh") {
+            return unreadable("a mesh the game names has a sidecar naming rawframe.mesh", declared.path);
+        }
+        meshes.push_back((*kSidecarRead)->id.value);
+    }
+    RAWFRAME_TRY(game.readMeshes(content, meshes));
     RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesUnder(kDirectory));
     game.sources_.push_back(std::move(files));
     for (std::string& name : programNames(game.description_)) {
@@ -281,6 +331,15 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
         return readResource(content.store(),
                             content::ResourceRef{.id = content::ResourceId{scene}, .type = kSceneType});
     }));
+    std::vector<base::Bits128> meshes;
+    for (const GameMesh& declared : game.description_.meshes) {
+        const CookedGameMesh* const kMesh = kCooked.mesh(declared.path);
+        if (kMesh == nullptr) {
+            return invalid("the cooked description does not name the resource of a mesh it names", declared.path);
+        }
+        meshes.push_back(kMesh->mesh);
+    }
+    RAWFRAME_TRY(game.readMeshes(&content, meshes));
     // Each Kest sources resource once, however many programs it holds.
     std::vector<base::Bits128> read;
     for (std::string& name : programNames(game.description_)) {
@@ -377,7 +436,11 @@ result::Result<composition::ParticipantOwner> makeGameFiles(composition::Partici
                             "a game is named by kest.game or kest.game_resource, not both");
     }
     if (kPath) {
-        RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromDirectory(std::string{*kPath}));
+        game_content::GameContent* content = nullptr;
+        if (context.has(game_content::kGameContent.name)) {
+            RAWFRAME_TRY_ASSIGN(content, context.capability(game_content::kGameContent));
+        }
+        RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromDirectory(std::string{*kPath}, content));
     } else if (kResource) {
         const base::Bits128Parse kId = base::parseBits128Hex(*kResource);
         if (!kId.parsed || kId.value == base::Bits128{} || !context.has(game_content::kGameContent.name)) {

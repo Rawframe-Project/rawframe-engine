@@ -126,19 +126,32 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_prediction PROPERTIES
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
-    # Sixteen bots play the sample 3D game: ten bodies of the plaza and one
-    # walker for each player are made, and the walkers move as characters.
+    # The plaza's sources cooked into the build tree: its mound's mesh.
+    set(PLAZA_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/plaza_content)
+    add_test(NAME plaza_cooked
+             COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/plaza ${PLAZA_CONTENT}
+                     ${CMAKE_CURRENT_BINARY_DIR}/plaza_cook_cache)
+    set_tests_properties(plaza_cooked PROPERTIES
+                         FIXTURES_SETUP plaza_content
+                         PASS_REGULAR_EXPRESSION "failed 0")
+    configure_file(tests/plaza.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza.conf @ONLY)
+    configure_file(tests/plaza_prediction.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_prediction.conf @ONLY)
+    # Sixteen bots play the sample 3D game: eleven bodies of the plaza, its
+    # mound a cooked mesh among them, and one walker for each player are
+    # made, and the walkers move as characters.
     add_test(NAME plaza_bots
-             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/plaza.conf
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_bots PROPERTIES
-                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":26,\"bodiesRemoved\":0,\"bodiesRefused\":0,.*\"characterMoves\":[1-9]")
+                         FIXTURES_REQUIRED plaza_content
+                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":27,\"bodiesRemoved\":0,\"bodiesRefused\":0,.*\"characterMoves\":[1-9]")
     # Four bots predict their walkers in 3D: a thousand ticks confirmed, the
     # rollbacks only those of admission.
     add_test(NAME plaza_prediction
-             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/plaza_prediction.conf
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_prediction PROPERTIES
+                         FIXTURES_REQUIRED plaza_content
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
 endif()

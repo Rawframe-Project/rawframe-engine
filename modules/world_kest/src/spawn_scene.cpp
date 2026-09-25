@@ -48,13 +48,9 @@ spawnsAsScene(const GameDescription& game, const kest::Program& program, const s
             }
             scene::SceneComponent component{.name = part.component, .fields = {}};
             for (const GameFieldValue& field : part.fields) {
-                // A collision class, by name, is its identity in a scene.
-                std::string value = field.value;
-                const auto kClass = std::ranges::find(game.collision.classes, value, &GameCollisionClass::name);
-                if (field.field == "collisionClass" && kClass != game.collision.classes.end()) {
-                    value = std::to_string(kClass->id);
-                }
-                RAWFRAME_TRY_ASSIGN(const std::optional<scene::FieldValue> kValue, sceneValue(value));
+                // A name the game gives is its identity in a scene.
+                RAWFRAME_TRY_ASSIGN(const std::optional<scene::FieldValue> kValue,
+                                    sceneValue(spawnValue(game, part.component, field)));
                 if (kValue.has_value()) {
                     component.fields.push_back(scene::SceneField{.name = field.field, .value = *kValue});
                 }

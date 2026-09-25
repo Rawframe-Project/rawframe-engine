@@ -14,6 +14,7 @@
 #include "rawframe/content/identity.h"
 #include "rawframe/game_content/game_content.h"
 #include "rawframe/kest/program.h"
+#include "rawframe/physics3d/physics.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
 
@@ -37,13 +38,18 @@ public:
     /// names found by the sidecar under the description's directory that
     /// names it, and its Kest files every `.kest` file under that
     /// directory. Programs compile from the
-    /// files as they are when asked, so a changed file is seen.
-    [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path);
+    /// files as they are when asked, so a changed file is seen. Each mesh
+    /// is the resource its sidecar names, read from `content` (D112): the
+    /// runtime decodes no source format, so a game with meshes needs its
+    /// sources cooked.
+    [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path,
+                                                                 game_content::GameContent* content = nullptr);
     /// The game whose cooked description is `description` in `content`
     /// (D88): its documents from the description's record, each scene from
-    /// the scene resource it names (D95), and each program's files from the
-    /// Kest sources resource it names (D87). Admits the three
-    /// representations, and waits for each read. Refused when a read
+    /// the scene resource it names (D95), each mesh from the mesh resource
+    /// it names (D112), and each program's files from the Kest sources
+    /// resource it names (D87). Admits their representations, and waits
+    /// for each read. Refused when a read
     /// fails, a record does not read, or the description uses a name the
     /// record does not answer.
     [[nodiscard]] static result::Result<GameFiles> fromContent(game_content::GameContent& content,
@@ -72,12 +78,17 @@ public:
     /// down, all read when the files were. Refused (`unreadable_file`) for
     /// any other.
     [[nodiscard]] result::Result<std::string_view> sceneById(base::Bits128 scene) const;
+    /// Every mesh the description names, decoded, by the identity its line
+    /// gives it, in the order of its lines.
+    [[nodiscard]] const std::vector<physics3d::BodyMesh>& meshes() const noexcept {
+        return meshes_;
+    }
     /// Compiles the program the description names `name`.
     [[nodiscard]] result::Result<std::shared_ptr<const kest::Program>>
     compile(std::string_view name, const kest::CompileSettings& settings = {}, std::string* report = nullptr) const;
     /// Everything the game is, as one digest: the description, each
-    /// document, each scene, each scene instanced, and each Kest file, as
-    /// they were read.
+    /// document, each scene, each scene instanced, each mesh, and each Kest
+    /// file, as they were read.
     [[nodiscard]] const base::Sha256Digest& digest() const noexcept {
         return digest_;
     }
@@ -105,6 +116,9 @@ private:
     /// Reads every scene the game's scenes instance, however far down,
     /// with `read`.
     result::Status readInstanced(const std::function<result::Result<std::string>(base::Bits128)>& read);
+    /// Reads and decodes the description's meshes, the resources
+    /// `resources` names in the order of its lines, from `content`.
+    result::Status readMeshes(game_content::GameContent* content, const std::vector<base::Bits128>& resources);
     /// The digest of what has been read, set last.
     void seal();
 
@@ -116,6 +130,9 @@ private:
     /// Every scene an instance names, by identity, in identity order.
     std::vector<std::pair<base::Bits128, std::string>> instanced_;
     std::vector<Program> programs_;
+    std::vector<physics3d::BodyMesh> meshes_;
+    /// The digest of each mesh's cooked bytes, in the same order.
+    std::vector<base::Sha256Digest> meshDigests_;
     /// Each set of Kest files a program compiles from: one read from a
     /// directory, or one for each Kest sources resource named.
     std::vector<std::vector<kest::SourceFile>> sources_;

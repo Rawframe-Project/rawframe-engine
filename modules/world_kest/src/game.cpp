@@ -168,6 +168,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a prefab's identity and file are used once");
             }
             game.prefabs.push_back(GamePrefab{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "mesh") {
+            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(number, WorldKestError::BadGameLine, "a mesh line is `mesh <16 hex digits> <file>`");
+            }
+            if (std::ranges::contains(game.meshes, *kId, &GameMesh::id) ||
+                std::ranges::contains(game.meshes, kWords[2], &GameMesh::path)) {
+                return badLine(number, WorldKestError::BadGameLine, "a mesh's identity and file are used once");
+            }
+            game.meshes.push_back(GameMesh{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "scene") {
             if (kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a scene line is `scene <file>`");
@@ -497,6 +507,23 @@ std::vector<std::string> sceneNames(const GameDescription& game) {
         }
     }
     return names;
+}
+
+std::string spawnValue(const GameDescription& game, std::string_view component, const GameFieldValue& value) {
+    if (value.field == "collisionClass" &&
+        (component == physics2d::Body2D::kComponentName || component == physics3d::Body3D::kComponentName)) {
+        const auto kClass = std::ranges::find(game.collision.classes, value.value, &GameCollisionClass::name);
+        if (kClass != game.collision.classes.end()) {
+            return std::to_string(kClass->id);
+        }
+    }
+    if (value.field == "mesh" && component == physics3d::Mesh3D::kComponentName) {
+        const auto kMesh = std::ranges::find(game.meshes, value.value, &GameMesh::path);
+        if (kMesh != game.meshes.end()) {
+            return std::to_string(kMesh->id);
+        }
+    }
+    return value.value;
 }
 
 } // namespace rawframe::world_kest

@@ -191,6 +191,51 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(MeshesAreDeclaredByLineAndNamedByFile) {
+    const std::string kHead = "program p.kest\nphysics3d\n";
+    const auto kGame = parseGame(kHead + "mesh 00000000000000a1 hill.gltf\nmesh 00000000000000a2 cave.glb\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->meshes.size() == 2 && kGame->meshes[1].id == 0xA2 &&
+                    kGame->meshes[1].path == "cave.glb");
+    if (kGame.has_value()) {
+        // A spawn names a mesh by its file, and a class by its name.
+        RAWFRAME_EXPECT(world_kest::spawnValue(*kGame, "rawframe.physics3d.mesh", {"mesh", "cave.glb"}) == "162");
+        RAWFRAME_EXPECT(world_kest::spawnValue(*kGame, "rawframe.physics3d.mesh", {"mesh", "7"}) == "7");
+        RAWFRAME_EXPECT(world_kest::spawnValue(*kGame, "rawframe.physics3d.body", {"mesh", "cave.glb"}) == "cave.glb");
+    }
+    for (const std::string_view kLines : {"mesh 00000000000000a1\n",
+                                          "mesh 0000000000000000 hill.gltf\n",
+                                          "mesh a1 hill.gltf\n",
+                                          "mesh 00000000000000a1 hill.gltf\nmesh 00000000000000a1 cave.glb\n",
+                                          "mesh 00000000000000a1 hill.gltf\nmesh 00000000000000a2 hill.gltf\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "4"));
+    }
+}
+
+RAWFRAME_TEST(AGameReadsItsMeshesCooked) {
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-meshes-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory);
+    const auto kWrite = [&kDirectory](std::string_view name, std::string_view text) {
+        std::FILE* file = std::fopen((kDirectory / name).c_str(), "wb");
+        std::fwrite(text.data(), 1, text.size(), file);
+        std::fclose(file);
+    };
+    kWrite("g.game", "program p.kest\nmesh 00000000000000a1 hill.gltf\n");
+    kWrite("hill.gltf", "{}");
+    // Without a sidecar naming the mesh importer, the mesh has no resource.
+    RAWFRAME_EXPECT(!world_kest::GameFiles::fromDirectory(kDirectory / "g.game").has_value());
+    kWrite("hill.gltf.rfmeta",
+           "{\n  \"schema\": 1,\n  \"resourceId\": \"46837f0a03812629d3a7e3df63fa0905\",\n  \"importer\": "
+           "\"rawframe.mesh\"\n}\n");
+    // With one, it is read cooked: without content, not at all, since the
+    // runtime decodes no glTF.
+    const auto kUncooked = world_kest::GameFiles::fromDirectory(kDirectory / "g.game");
+    RAWFRAME_EXPECT(!kUncooked.has_value() && kUncooked.error().code() == code(WorldKestError::UnreadableFile));
+    std::filesystem::remove_all(kDirectory);
+}
+
 RAWFRAME_TEST(CollisionIsDeclaredByLine) {
     const std::string kPhysics = "program p.kest\nphysics2d\n";
     auto game = parseGame(kPhysics + "collision class ball 3f1c9a7e52d04b18\ncollision class wall 00000000000000a1\n"
