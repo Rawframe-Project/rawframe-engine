@@ -2,8 +2,9 @@
 # The one definition of "it passes".
 #
 #   tools/check.sh fast   repository rules, format, one incremental build, tests
-#   tools/check.sh        the above plus GCC and Clang in every configuration and
-#                         the address and thread sanitizers
+#   tools/check.sh        the above plus GCC and Clang in every configuration,
+#                         the address and thread sanitizers, and the tick
+#                         budget (tools/bench.sh check) once all of them pass
 #
 # Build trees live under out/ and are reused, so a second run only rebuilds
 # what changed.
@@ -59,6 +60,11 @@ else
         cat "out/${presets[$i]}.check.log"
         grep -q '^FAILED' "out/${presets[$i]}.check.log" && failures=$((failures + 1))
     done
+    # Measured last, alone, so the builds do not share the machine with it.
+    if [ "$failures" -eq 0 ]; then
+        step "tick budget"
+        tools/bench.sh check || fail "tick budget"
+    fi
 fi
 
 elapsed=$(( $(date +%s) - start ))
