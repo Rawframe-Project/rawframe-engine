@@ -1,0 +1,23 @@
+module sting
+
+// Runners' own shapes, field for field: the World holds runners' values, and
+// the engine checks that these are laid out the same.
+struct Score {
+    shots: i32
+    hits: i32
+    cooldown: i32
+    taken: i32
+}
+
+struct Hit {
+    shots: i32
+}
+
+// Each runner hit this tick counts it once more than runners does.
+fn sting(count: i32, hits: [Hit], scores: [Score]) {
+    let i = 0
+    while i < count {
+        scores[i].taken = scores[i].taken + 1
+        i = i + 1
+    }
+}

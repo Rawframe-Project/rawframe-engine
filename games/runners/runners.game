@@ -33,11 +33,14 @@ save hall runners.age
 # for.
 save player runner runners.score
 
-# Anyone may mod it (runners-timers is one): a mod adds timers, entities
-# holding runners.age that the age system counts up as it does the hall's.
+# Anyone may mod it. A mod adds timers, entities holding runners.age that the
+# age system counts up as it does the hall's (runners-timers is one), and
+# handles hits: right after hurt, over each runner hit, it may change the
+# runner's score (runners-sting is one).
 mods open
 modapi runners 1
 extension timers data runners.age multi
+extension hits event runners.hit after runners.hurt write runners.score multi
 
 replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter
 player runners.stick runners.score runners.emitter rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
