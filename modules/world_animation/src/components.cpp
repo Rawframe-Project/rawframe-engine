@@ -11,10 +11,11 @@ using schema::ComponentField;
 using schema::ComponentLayout;
 using schema::FieldType;
 
-constexpr std::array<ComponentField, 3> kAnimatorFields = {{
+constexpr std::array<ComponentField, 4> kAnimatorFields = {{
     {"graph", offsetof(Animator, graph), FieldType::U64},
     {"relevance", offsetof(Animator, relevance), FieldType::U8},
     {"events", offsetof(Animator, events), FieldType::U32},
+    {"request", offsetof(Animator, request), FieldType::U64},
 }};
 
 const std::array<ComponentLayout, 1> kLayouts = {ComponentLayout{.id = Animator::kComponentTypeId,

@@ -18,11 +18,16 @@ const SIMULATION: u8 = 1
 // The game's animator, by the identity its `animator` line gives it; the
 // entity plays that graph from its start whenever `graph` or `relevance`
 // changes. Every step writes `events`: how many events the graph fired in
-// it, which `event` reads one by one.
+// it, which `event` reads one by one. Setting `request` to an event's
+// identity asks the next step for the transitions whose conditions wait on
+// that event; the step clears it. A request is made only where it is
+// written: a transition every peer must take belongs on a replicated
+// parameter.
 struct Animator {
     graph: u64
     relevance: u8
     events: u32
+    request: u64
 }
 
 // A bone where the last step posed it, in the entity's own frame (model
@@ -63,4 +68,22 @@ extern fn Animation.event(entity: world.Entity, index: u32) -> AnimationEvent
 // last step; its Animator's `events` says how many there are.
 fn event(entity: world.Entity, index: u32) -> AnimationEvent {
     return Animation.event(entity, index)
+}
+
+// A state machine of the entity's graph as the last step left it, by the
+// machine's node id: the state it is in, by its place among the machine's
+// states, and whether a transition into it is under way and how far it has
+// come (0 to 1). Not `found` for an entity not played here, or a node that
+// is no state machine.
+struct MachineState {
+    found: bool
+    transitioning: bool
+    state: u32
+    progress: f32
+}
+
+extern fn Animation.state(entity: world.Entity, node: u64) -> MachineState
+
+fn state(entity: world.Entity, node: u64) -> MachineState {
+    return Animation.state(entity, node)
 }

@@ -10,6 +10,7 @@
 #include <map>
 #include <set>
 #include <tuple>
+#include <utility>
 
 namespace rawframe::world_animation {
 
@@ -128,9 +129,14 @@ struct WorldAnimation::State {
         base::Sha256 digested;
         for (const auto& [kEntity, animator] : rows) {
             animator->events = 0;
+            const std::uint64_t kRequest = std::exchange(animator->request, 0);
             Playing* played = play(kEntity, *animator);
             if (played == nullptr) {
                 continue;
+            }
+            if (kRequest != 0) {
+                ++statistics.requests;
+                statistics.requestsDropped += played->instance.request(kRequest) ? 0 : 1;
             }
             takeParameters(stepped, kEntity, *played);
             played->events.clear();
@@ -325,6 +331,24 @@ const animation::Pose* WorldAnimation::pose(world::EntityHandle entity) const no
 std::span<const animation::GraphEvent> WorldAnimation::events(world::EntityHandle entity) const noexcept {
     const auto kFound = state_->playing.find(entity);
     return kFound == state_->playing.end() ? std::span<const animation::GraphEvent>{} : kFound->second.events;
+}
+
+std::optional<MachineView> WorldAnimation::machine(world::EntityHandle entity, std::uint64_t node) const noexcept {
+    const auto kFound = state_->playing.find(entity);
+    if (kFound == state_->playing.end()) {
+        return std::nullopt;
+    }
+    const animation::GraphInstance& instance = kFound->second.instance;
+    const std::optional<std::size_t> kStep = instance.graph().step(node);
+    if (!kStep.has_value() || !instance.graph().steps()[*kStep].machine.has_value()) {
+        return std::nullopt;
+    }
+    MachineView view{.state = instance.state(*kStep), .progress = std::nullopt};
+    if (const auto kUnderWay = instance.transition(*kStep)) {
+        const double kDuration = instance.graph().steps()[*kStep].machine->moves[kUnderWay->first].duration;
+        view.progress = kDuration > 0.0 ? std::min(kUnderWay->second / kDuration, 1.0) : 1.0;
+    }
+    return view;
 }
 
 } // namespace rawframe::world_animation

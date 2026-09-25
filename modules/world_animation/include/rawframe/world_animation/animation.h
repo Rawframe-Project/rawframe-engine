@@ -8,7 +8,8 @@
 //      gets an instance of its animator's graph, one that lost it or is
 //      gone loses it, and one whose Animator names another animator, or
 //      another relevance, starts again;
-//   2. each instance takes its parameters from the fields of the game's
+//   2. each instance takes its Animator's transition request, if it has
+//      one, and its parameters from the fields of the game's
 //      component its animator binds them to, as the last barrier committed
 //      them (SPEC-0035's parameter write; a value not of the parameter's
 //      type is refused and counted, and the last one kept);
@@ -79,9 +80,20 @@ struct AnimationStatistics {
     std::uint64_t eventsFired = 0;
     /// Steps in which an instance crossed more events than it reports.
     std::uint64_t eventsOverflowed = 0;
+    /// Transition requests made, and those that pushed an older one out.
+    std::uint64_t requests = 0;
+    std::uint64_t requestsDropped = 0;
 };
 
 inline constexpr std::string_view kStepSystem = "rawframe.animation.step";
+
+/// A state machine of an entity's graph as the last step left it: its
+/// state, by its place among the machine's states, and how far the
+/// transition into it has come, if one is under way (0 to 1).
+struct MachineView {
+    std::size_t state = 0;
+    std::optional<double> progress;
+};
 
 /// What the last step left, for the game's queries. Only from the World's
 /// thread, between steps or from a system.
@@ -97,6 +109,11 @@ public:
     [[nodiscard]] virtual const animation::Pose* pose(world::EntityHandle entity) const noexcept = 0;
     /// The events the entity's graph fired in the last step, in order.
     [[nodiscard]] virtual std::span<const animation::GraphEvent> events(world::EntityHandle entity) const noexcept = 0;
+    /// The state machine that is the graph node of id `node`; none for an
+    /// entity not played here, or a node that is no state machine the
+    /// output reaches.
+    [[nodiscard]] virtual std::optional<MachineView> machine(world::EntityHandle entity,
+                                                             std::uint64_t node) const noexcept = 0;
 };
 
 class WorldAnimation final : public world_runtime::SystemContributor, public AnimationQueries {
@@ -120,6 +137,8 @@ public:
 
     [[nodiscard]] const animation::Pose* pose(world::EntityHandle entity) const noexcept override;
     [[nodiscard]] std::span<const animation::GraphEvent> events(world::EntityHandle entity) const noexcept override;
+    [[nodiscard]] std::optional<MachineView> machine(world::EntityHandle entity,
+                                                     std::uint64_t node) const noexcept override;
 
     struct State;
     explicit WorldAnimation(std::unique_ptr<State> state) noexcept;

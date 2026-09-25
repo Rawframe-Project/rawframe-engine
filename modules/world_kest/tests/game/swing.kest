@@ -3,7 +3,7 @@ module swing
 // A pendulum's swing, played at the speed its gait says. After each
 // animation step: how far along x its one bone has reached, how many steps
 // fired an event, and how many answers the animation doors gave past the
-// bones and events there are, which must be none.
+// bones, events, and state machines there are, which must be none.
 
 import rawframe.animation
 import rawframe.world
@@ -29,6 +29,10 @@ fn follow(count: i32, gaits: [Gait], entities: [world.Entity]) {
             gaits[i].strays = gaits[i].strays + u32(1)
         }
         if animation.event(entity, u32(1)).found || animation.event(entity, FAR).found {
+            gaits[i].strays = gaits[i].strays + u32(1)
+        }
+        // The graph's clip node is no state machine, and it has no node 0.
+        if animation.state(entity, u64(1)).found || animation.state(entity, u64(0)).found {
             gaits[i].strays = gaits[i].strays + u32(1)
         }
         i = i + 1

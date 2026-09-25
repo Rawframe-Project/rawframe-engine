@@ -227,6 +227,68 @@ RAWFRAME_TEST(ParametersNotOfTheirTypeAreRefused) {
     RAWFRAME_EXPECT(near(stage.animation->pose(kWalker)->bones[0].translation[0], 1.0));
 }
 
+RAWFRAME_TEST(AnAnimatorsRequestTakesATransitionForOneStep) {
+    using namespace animation;
+    constexpr std::uint64_t kDoor = 0x99;
+    constexpr std::uint64_t kMachine = 0x40;
+    constexpr std::uint64_t kOpen = 0x7e00000000000001ULL;
+    const auto kShut = std::make_shared<const Clip>(
+        Clip{.skeleton = kSkeletonId,
+             .duration = 1.0,
+             .loop = Loop::Loop,
+             .tracks = {Track{.bone = kRoot, .channel = Channel::Translation, .keys = {Key{.value = {}}}}}});
+    const auto kAjar = std::make_shared<const Clip>(
+        Clip{.skeleton = kSkeletonId,
+             .duration = 1.0,
+             .loop = Loop::Loop,
+             .tracks = {Track{.bone = kRoot, .channel = Channel::Translation, .keys = {Key{.value = {1, 0, 0}}}}}});
+    // A door that opens over half a second when asked. Its states are in
+    // name order: open, then shut.
+    const Graph kGraph{
+        .parameters = {},
+        .nodes = {GraphNode{.id = 0x11, .node = ClipNode{.clip = kIdleId}},
+                  GraphNode{.id = 0x12, .node = ClipNode{.clip = kWalkId}},
+                  GraphNode{.id = kMachine,
+                            .node =
+                                StateMachineNode{.states = {State{.name = "open", .from = {.node = 0x12}},
+                                                            State{.name = "shut", .from = {.node = 0x11}}},
+                                                 .entry = "shut",
+                                                 .transitions = {Transition{.from = "shut",
+                                                                            .to = "open",
+                                                                            .duration = 0.5,
+                                                                            .conditions = {EventCondition{kOpen}}}}}},
+                  GraphNode{.id = 0x50, .node = OutputNode{.pose = {.node = kMachine}}}},
+        .presentation = {}};
+    const std::vector<NamedClip> kClips{{kIdleId, kShut}, {kWalkId, kAjar}};
+    Stage stage{AnimationSettings{
+        .animators = {AnimatorSettings{.id = kDoor,
+                                       .graph = *CompiledGraph::compile(kGraph, rig(), kSkeletonId, kClips),
+                                       .parameters = std::nullopt,
+                                       .fields = {}}}}};
+    const world::EntityHandle kEntity = *stage.world.create();
+    RAWFRAME_EXPECT(stage.world.insert(kEntity, *stage.schema->key<Animator>(), Animator{.graph = kDoor}).has_value());
+    stage.run(2);
+    const auto kShutNow = stage.animation->machine(kEntity, kMachine);
+    RAWFRAME_EXPECT(kShutNow.has_value() && kShutNow->state == 1 && !kShutNow->progress.has_value());
+    // Asked once: the step takes it and clears the request, and the door
+    // starts to open; a step later it is a thirtieth of the way.
+    stage.animator(kEntity).request = kOpen;
+    stage.run(1);
+    const auto kTaken = stage.animation->machine(kEntity, kMachine);
+    RAWFRAME_EXPECT(stage.animator(kEntity).request == 0 && kTaken.has_value() && kTaken->state == 0 &&
+                    kTaken->progress == 0.0);
+    stage.run(1);
+    const auto kOpening = stage.animation->machine(kEntity, kMachine);
+    RAWFRAME_EXPECT(kOpening.has_value() && kOpening->progress.has_value() && near(*kOpening->progress, 1.0 / 30.0));
+    stage.run(30);
+    const auto kOpened = stage.animation->machine(kEntity, kMachine);
+    RAWFRAME_EXPECT(kOpened.has_value() && kOpened->state == 0 && !kOpened->progress.has_value());
+    // A clip node is no machine, and an entity not played has none.
+    RAWFRAME_EXPECT(!stage.animation->machine(kEntity, 0x11).has_value() &&
+                    !stage.animation->machine(*stage.world.create(), kMachine).has_value());
+    RAWFRAME_EXPECT(stage.animation->statistics().requests == 1 && stage.animation->statistics().requestsDropped == 0);
+}
+
 RAWFRAME_TEST(TwoWorldsPlayingAlikeAgree) {
     Stage first;
     Stage second;

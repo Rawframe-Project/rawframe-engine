@@ -29,6 +29,19 @@ struct AnimationEvent {
     float weight = 0;
 };
 
+/// rawframe.animation's MachineState.
+struct MachineState {
+    bool found = false;
+    bool transitioning = false;
+    std::uint32_t state = 0;
+    float progress = 0;
+};
+
+constexpr std::array<kest::Parameter, 2> kStateTakes = {kest::Parameter{kest::Slot::Value, "rawframe.world.Entity"},
+                                                        kest::Parameter{kest::Slot::U64}};
+constexpr std::array<kest::Parameter, 1> kStateGives = {
+    kest::Parameter{kest::Slot::Value, "rawframe.animation.MachineState"}};
+
 constexpr std::array<kest::Parameter, 2> kTakes = {kest::Parameter{kest::Slot::Value, "rawframe.world.Entity"},
                                                    kest::Parameter{kest::Slot::U32}};
 constexpr std::array<kest::Parameter, 1> kBoneGives = {
@@ -98,6 +111,24 @@ void eventDoor(kest::DoorCall& call, void* context) noexcept {
     }
 }
 
+void stateDoor(kest::DoorCall& call, void* context) noexcept {
+    world::EntityHandle entity;
+    const world_animation::AnimationQueries* const kQueries = asked(call, context, entity);
+    if (kQueries == nullptr) {
+        return;
+    }
+    MachineState answer;
+    if (const auto kView = kQueries->machine(entity, static_cast<std::uint64_t>(call.integer(1)))) {
+        answer = MachineState{.found = true,
+                              .transitioning = kView->progress.has_value(),
+                              .state = static_cast<std::uint32_t>(kView->state),
+                              .progress = static_cast<float>(kView->progress.value_or(0.0))};
+    }
+    if (!call.answerValue(std::as_bytes(std::span{&answer, 1}))) {
+        call.fail("the program's MachineState is not the engine's");
+    }
+}
+
 } // namespace
 
 result::Status addAnimationDoors(kest::DoorTable& doors, const AnimationDoorContext* context) {
@@ -108,11 +139,17 @@ result::Status addAnimationDoors(kest::DoorTable& doors, const AnimationDoorCont
                                       .takes = kTakes,
                                       .gives = kBoneGives,
                                       .safeForUntrusted = true}));
-    return doors.add(kest::Door{.name = "Animation.event",
-                                .function = &eventDoor,
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Animation.event",
+                                      .function = &eventDoor,
+                                      .context = kContext,
+                                      .takes = kTakes,
+                                      .gives = kEventGives,
+                                      .safeForUntrusted = true}));
+    return doors.add(kest::Door{.name = "Animation.state",
+                                .function = &stateDoor,
                                 .context = kContext,
-                                .takes = kTakes,
-                                .gives = kEventGives,
+                                .takes = kStateTakes,
+                                .gives = kStateGives,
                                 .safeForUntrusted = true});
 }
 
