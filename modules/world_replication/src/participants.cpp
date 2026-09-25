@@ -1,5 +1,6 @@
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
+#include "rawframe/game_content/game_content.h"
 #include "rawframe/network/transport.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/random.h"
@@ -29,9 +30,11 @@ constexpr EventIdentity kServerSummary{"replication", "server_summary"};
 constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
 
 constexpr std::string_view kServerNeeds[] = {world_runtime::kSimulation.name};
-constexpr std::string_view kMaybe[] = {network::kTransport.name, kReplicationPlan.name};
+constexpr std::string_view kMaybe[] = {
+    network::kTransport.name, kReplicationPlan.name, game_content::kGameContent.name};
 constexpr std::string_view kBotsProvide[] = {kClientWorlds.name};
-constexpr std::string_view kBotsMaybe[] = {network::kTransport.name, kReplicationPlan.name, kInputSourcePlan.name};
+constexpr std::string_view kBotsMaybe[] = {
+    network::kTransport.name, kReplicationPlan.name, kInputSourcePlan.name, game_content::kGameContent.name};
 
 /// The session bounds both sides use: a datagram fits one path MTU.
 network::SessionProfile sessionProfile(std::size_t sessions) {
@@ -52,9 +55,21 @@ network::ProviderProfile providerProfile(std::size_t connections) {
                                     .maximumQueuedBytes = std::size_t{8} << 20U};
 }
 
-network::Compatibility compatibilityOf(const ReplicationPlan& plan) {
-    return network::Compatibility{
+/// What peers must agree on: the protocol, the game, its replicated
+/// components, and the package revision, which is the CompositionId when
+/// the Runtime's content is a Composition (SPEC-0010's package fingerprint)
+/// and zero otherwise.
+result::Result<network::Compatibility> compatibilityOf(composition::ParticipantContext& context,
+                                                       const ReplicationPlan& plan) {
+    network::Compatibility compatibility{
         .protocol = network::protocolFingerprint(), .game = plan.game(), .schema = tableFingerprint(plan.table())};
+    if (context.has(game_content::kGameContent.name)) {
+        RAWFRAME_TRY_ASSIGN(const game_content::GameContent* content, context.capability(game_content::kGameContent));
+        if (const auto& kId = content->compositionId()) {
+            compatibility.package.bytes = *kId;
+        }
+    }
+    return compatibility;
 }
 
 std::unexpected<result::Error> missing(std::string_view why) {
@@ -79,13 +94,14 @@ public:
             return missing("replication.maximum_connections is 1 to 4096");
         }
         RAWFRAME_TRY_ASSIGN(provider_, transport->provider(providerProfile(static_cast<std::size_t>(kConnections))));
+        RAWFRAME_TRY_ASSIGN(const network::Compatibility kExpected, compatibilityOf(context, *plan));
         RAWFRAME_TRY_ASSIGN(
             sessions_,
             network::Sessions::server(
                 *provider_,
                 context.clock(),
                 network::ServerSettings{.profile = sessionProfile(static_cast<std::size_t>(kConnections)),
-                                        .expected = compatibilityOf(*plan),
+                                        .expected = kExpected,
                                         .tickRateTicks = simulation_->rate().ticks,
                                         .tickRateSeconds = simulation_->rate().seconds}));
         // SPEC-0013's steady egress objective by default; the budget is per
@@ -222,6 +238,7 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(network::Transport * transport, context.capability(network::kTransport));
         RAWFRAME_TRY_ASSIGN(plan_, context.capability(kReplicationPlan));
+        RAWFRAME_TRY_ASSIGN(compatibility_, compatibilityOf(context, *plan_));
         const composition::Configuration& configuration = context.configuration();
         endpoint_ = std::string{configuration.text("bots.endpoint").value_or("arena")};
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kSeed, configuration.unsignedInteger("bots.seed", 0));
@@ -314,7 +331,7 @@ public:
                 if (!bot.connecting) {
                     bot.connecting = bot.client
                                          ->connect(network::Endpoint{endpoint_},
-                                                   network::Hello{.compatibility = compatibilityOf(*plan_),
+                                                   network::Hello{.compatibility = compatibility_,
                                                                   .maximumDatagram = 1100,
                                                                   .maximumFrame = 4096})
                                          .has_value();
@@ -406,6 +423,7 @@ private:
     }
 
     const ReplicationPlan* plan_ = nullptr;
+    network::Compatibility compatibility_;
     std::string endpoint_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     std::vector<Bot> bots_;
