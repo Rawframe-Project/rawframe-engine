@@ -3,7 +3,8 @@
 // seen, despawn policies do what they name, two active listeners hear
 // nothing, a game's audio loads from its files against its program, and its
 // sounds are read from cooked content by resource identity, on-demand ones
-// when first wanted, and new revisions replace old ones when content reloads.
+// when first wanted and released when idle, and new revisions replace old
+// ones when content reloads.
 
 #include "rawframe/assets/errors.h"
 #include "rawframe/audio/decode.h"
@@ -535,4 +536,47 @@ RAWFRAME_TEST(AReloadedSoundPlaysItsNewRevision) {
     RAWFRAME_EXPECT(std::abs(kFirst(0) - (0.125F * kCentre)) < 1e-5F);
     mixer->render(quiet);
     RAWFRAME_EXPECT(std::abs(kFirst(1) - (0.25F * kCentre)) < 1e-5F);
+}
+
+RAWFRAME_TEST(AnIdleOnDemandSoundIsReleasedAndReadAgain) {
+    Content content;
+    auto loader = content.loader({{kHum, declared({1}, audio::Loading::OnDemand)}});
+    RAWFRAME_EXPECT(loader.has_value() && settle(**loader).has_value());
+    if (!loader.has_value()) {
+        return;
+    }
+    auto mixer = *audio::Mixer::create(layout(), {});
+    auto sounds = *audio::Sounds::create(*mixer, layout(), {.onDemandIdleSeconds = 0.5F});
+    auto made = (*loader)->sounds(1);
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(sounds->add(std::move((*made)[0].second)).has_value());
+    // Played until heard, served each frame.
+    std::vector<float> out(96);
+    const auto kPlayUntilHeard = [&](std::uint64_t first) {
+        const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        for (std::uint64_t tick = first; std::chrono::steady_clock::now() < kDeadline; ++tick) {
+            static_cast<void>((*loader)->update(tick));
+            static_cast<void>((*loader)->serve(*sounds, tick));
+            if (sounds->play(0).has_value()) {
+                return true;
+            }
+            std::this_thread::yield();
+        }
+        return false;
+    };
+    RAWFRAME_EXPECT(kPlayUntilHeard(2));
+    // A second of nothing: let go, and its form is evictable.
+    for (std::uint64_t tick = 100; tick < 200; ++tick) {
+        mixer->render(out);
+        sounds->update(0.01F);
+        static_cast<void>((*loader)->update(tick));
+        static_cast<void>((*loader)->serve(*sounds, tick));
+    }
+    RAWFRAME_EXPECT(sounds->statistics().idled == 1 && (*loader)->clipStatistics().evictable == 1 &&
+                    (*loader)->clipStatistics().resident == 0);
+    // Wanted again: asked for anew, and heard again.
+    RAWFRAME_EXPECT(!sounds->play(0).has_value() && kPlayUntilHeard(300));
 }

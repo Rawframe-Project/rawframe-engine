@@ -193,9 +193,31 @@ Arrivals SoundLoader::arrivals(std::uint64_t tick) {
     return made;
 }
 
+assets::AssetStatistics SoundLoader::clipStatistics() const noexcept {
+    return state_->clips->statistics();
+}
+
+void SoundLoader::release(std::size_t sound) noexcept {
+    State& state = *state_;
+    if (sound >= state.declared.size() || !state.askedFor[sound]) {
+        return;
+    }
+    state.askedFor[sound] = false;
+    std::erase_if(state.demanded, [&state, sound](const Wanted& wanted) {
+        if (wanted.sound != sound) {
+            return false;
+        }
+        state.clips->release(wanted.requester);
+        return true;
+    });
+}
+
 Served SoundLoader::serve(audio::Sounds& into, std::uint64_t tick) {
     State& state = *state_;
     Served served;
+    for (const std::size_t kSound : into.takeIdle()) {
+        release(kSound);
+    }
     for (const std::size_t kSound : into.takeWanted()) {
         if (auto asked = demand(kSound); !asked.has_value()) {
             served.unread.emplace_back(kSound, std::move(asked).error());

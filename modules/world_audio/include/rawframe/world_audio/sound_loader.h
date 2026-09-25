@@ -84,9 +84,16 @@ public:
     /// After `update`: the on-demand variants that became ready, and the
     /// sounds that failed, each reported once.
     [[nodiscard]] Arrivals arrivals(std::uint64_t tick);
+    /// Lets on-demand sound `sound`'s variants go: their forms become
+    /// evictable, and a later `demand` asks for them anew.
+    void release(std::size_t sound) noexcept;
+
+    /// The decoded clips' set: loads, residency, and reloads.
+    [[nodiscard]] assets::AssetStatistics clipStatistics() const noexcept;
     /// After `update`, once a frame, for the sounds `sounds(tick)` made,
     /// added to `into` in declaration order: asks for the on-demand sounds
-    /// it wanted since the last frame, supplies what arrived, and, when the
+    /// it wanted since the last frame, supplies what arrived, lets go the
+    /// ones it let go for playing nothing, and, when the
     /// store's catalog was replaced, supplies each variant's new revision
     /// once it is published (SPEC-0027 reload).
     [[nodiscard]] Served serve(audio::Sounds& into, std::uint64_t tick);
