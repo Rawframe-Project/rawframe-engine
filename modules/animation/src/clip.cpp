@@ -27,6 +27,7 @@ std::unexpected<result::Error> overLimit(std::string_view why) {
 constexpr std::array<std::string_view, 3> kChannels{"translation", "rotation", "scale"};
 constexpr std::array<std::string_view, 3> kInterpolations{"linear", "step", "cubic"};
 constexpr std::array<std::string_view, 2> kLoops{"clamp", "loop"};
+constexpr std::array<std::string_view, 2> kBases{"bind", "first_frame"};
 constexpr std::array<std::string_view, 2> kRelevances{"presentation", "simulation"};
 
 /// Within the clip: up to its duration, short of it when it loops.
@@ -191,9 +192,9 @@ result::Status validate(const Clip& clip, const ClipLimits& limits) {
         RAWFRAME_TRY(keysInForm(clip, track, limits));
         if (track.drift.has_value()) {
             const bool kUnused = track.channel == Channel::Rotation || (*track.drift)[3] == 0.0;
-            if (clip.loop != Loop::Loop || track.channel == Channel::Scale || !finite(*track.drift) || !kUnused ||
-                (track.channel == Channel::Rotation && !unit(*track.drift))) {
-                return invalid("a drift is a looping clip's, on a translation or a unit rotation");
+            if (clip.loop != Loop::Loop || clip.additive.has_value() || track.channel == Channel::Scale ||
+                !finite(*track.drift) || !kUnused || (track.channel == Channel::Rotation && !unit(*track.drift))) {
+                return invalid("a drift is a looping clip's of poses, on a translation or a unit rotation");
             }
         }
         bindings.emplace_back(track.bone, track.channel);
@@ -246,6 +247,9 @@ result::Result<std::string> writeClip(const Clip& clip, const ClipLimits& limits
     }
     made.add("duration", Value::real(clip.duration));
     made.add("loop", Value::string(std::string{kLoops[static_cast<std::size_t>(clip.loop)]}));
+    if (clip.additive.has_value()) {
+        made.add("additive", Value::string(std::string{kBases[static_cast<std::size_t>(*clip.additive)]}));
+    }
     made.add("tracks", std::move(tracks));
     made.add("events", std::move(events));
     made.add("syncMarkers", std::move(markers));
@@ -259,15 +263,24 @@ result::Result<Clip> readClip(std::string_view text, const ClipLimits& limits) {
     }
     const Value* kind = parsed->find("kind");
     const bool kBound = parsed->find("skeleton") != nullptr;
-    const bool kShape =
-        kBound
-            ? hasMembers(*parsed,
-                         {"formatVersion", "kind", "skeleton", "duration", "loop", "tracks", "events", "syncMarkers"})
-            : hasMembers(*parsed, {"formatVersion", "kind", "duration", "loop", "tracks", "events", "syncMarkers"});
+    const Value* additive = parsed->find("additive");
+    // Every member it must have, and those it may, each once.
+    const std::size_t kMembers = 7 + (kBound ? 1U : 0U) + (additive != nullptr ? 1U : 0U);
+    const bool kShape = parsed->kind() == Value::Kind::Object && parsed->names().size() == kMembers &&
+                        std::ranges::all_of(
+                            std::array<std::string_view, 7>{
+                                "formatVersion", "kind", "duration", "loop", "tracks", "events", "syncMarkers"},
+                            [&parsed](std::string_view name) {
+                                return parsed->find(name) != nullptr;
+                            });
     if (!kShape || kind->text() == nullptr || *kind->text() != "animation.clip" ||
         parsed->find("formatVersion")->integer() != 1) {
         return invalid("a clip is format version 1, kind animation.clip, an optional skeleton, a duration, a loop, "
-                       "tracks, events, and sync markers");
+                       "an optional additive basis, tracks, events, and sync markers");
+    }
+    const std::optional<std::size_t> kBasis = additive != nullptr ? placeOf(kBases, additive) : std::nullopt;
+    if (additive != nullptr && !kBasis.has_value()) {
+        return invalid("an additive clip's basis is bind or first_frame");
     }
     const std::optional<base::Bits128> kSkeleton = kBound ? bits128Of(parsed->find("skeleton")) : std::nullopt;
     const std::optional<double> kDuration = numberOf(parsed->find("duration"));
@@ -286,6 +299,9 @@ result::Result<Clip> readClip(std::string_view text, const ClipLimits& limits) {
         return overLimit("a clip has more tracks, or events and sync markers, than its limits");
     }
     Clip clip{.skeleton = kSkeleton, .duration = *kDuration, .loop = static_cast<Loop>(*kLoop)};
+    if (kBasis.has_value()) {
+        clip.additive = static_cast<AdditiveBasis>(*kBasis);
+    }
     for (const Value& each : tracks.items()) {
         RAWFRAME_TRY_ASSIGN(Track track, readTrack(each, limits));
         clip.tracks.push_back(std::move(track));

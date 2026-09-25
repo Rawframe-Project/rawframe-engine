@@ -57,7 +57,14 @@
 // added to a translation and turned onto a rotation, so the wrap runs from
 // the last key to the first key moved by it. That is how a walk cycle
 // carries the ground it covers to root motion while its keys stay one
-// period's. A bone's channel has one track. Events and markers are
+// period's.
+//
+// An additive clip (D137) declares `additive`, the basis its values are
+// differences from: `bind`, the skeleton's bind pose, or `first_frame`, its
+// source animation's first frame, as the import that made it took them. A
+// translation is an offset, a rotation the turn after the basis's, and a
+// scale a factor; a bone it has no track for differs by nothing. It plays
+// only as a layer of an additive node. A bone's channel has one track. Events and markers are
 // in time order; events of one time fire in the order written. An event's
 // `event` identifies its kind (16 lowercase hex digits) and `name` is its
 // machine name, one to each other within the clip; `relevance` is
@@ -118,6 +125,12 @@ enum class Loop : std::uint8_t {
     Loop,
 };
 
+/// What an additive clip's values are differences from.
+enum class AdditiveBasis : std::uint8_t {
+    Bind,
+    FirstFrame,
+};
+
 enum class Relevance : std::uint8_t {
     Presentation,
     Simulation,
@@ -144,6 +157,8 @@ struct Clip {
     std::optional<base::Bits128> skeleton;
     double duration = 0.0;
     Loop loop = Loop::Clamp;
+    /// None for a clip of poses.
+    std::optional<AdditiveBasis> additive;
     std::vector<Track> tracks;
     std::vector<ClipEvent> events;
     std::vector<SyncMarker> syncMarkers;

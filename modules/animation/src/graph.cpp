@@ -81,10 +81,11 @@ constexpr std::string_view kOutputType = "rawframe/output@1";
 constexpr std::string_view kMaskType = "rawframe/mask@1";
 constexpr std::string_view kLineSpaceType = "rawframe/blend_space_1d@1";
 constexpr std::string_view kPlaneSpaceType = "rawframe/blend_space_2d@1";
+constexpr std::string_view kAdditiveType = "rawframe/additive@1";
 
 /// Every type this engine knows; a node of any other is quarantined.
-constexpr std::array<std::string_view, 7> kKnownTypes{
-    kClipType, kBlendType, kStateMachineType, kOutputType, kMaskType, kLineSpaceType, kPlaneSpaceType};
+constexpr std::array<std::string_view, 8> kKnownTypes{
+    kClipType, kBlendType, kStateMachineType, kOutputType, kMaskType, kLineSpaceType, kPlaneSpaceType, kAdditiveType};
 
 constexpr std::array<std::string_view, 4> kTypes{"bool", "int", "float", "vec2"};
 constexpr std::array<std::string_view, 3> kReplications{"server_authoritative", "client_predicted", "local"};
@@ -151,6 +152,11 @@ std::vector<const Connection*> connectionsOf(const GraphNode& node) {
     } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
         made.push_back(&kMask->inside);
         made.push_back(&kMask->outside);
+    } else if (const auto* kAdditive = std::get_if<AdditiveNode>(&node.node)) {
+        made.push_back(&kAdditive->base);
+        for (const BlendInput& layer : kAdditive->layers) {
+            made.push_back(&layer.from);
+        }
     } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node.node)) {
         for (const BlendSpacePoint& point : kLine->points) {
             made.push_back(&point.from);
@@ -346,6 +352,27 @@ Value nodeValue(const Graph& graph, const GraphNode& node) {
         params.add("mask", Value::string(hexOf(kMask->mask)));
         inputs.add("inside", connectionValue(kMask->inside));
         inputs.add("outside", connectionValue(kMask->outside));
+    } else if (const auto* kAdditive = std::get_if<AdditiveNode>(&node.node)) {
+        type = kAdditiveType;
+        // The base among the layers, all in name order.
+        Value weights = Value::object();
+        bool based = false;
+        for (const BlendInput& layer : kAdditive->layers) {
+            if (!based && std::string_view{"base"} < layer.name) {
+                inputs.add("base", connectionValue(kAdditive->base));
+                based = true;
+            }
+            inputs.add(layer.name, connectionValue(layer.from));
+            if (layer.weight != Scalar{1.0}) {
+                weights.add(layer.name, scalarValue(layer.weight));
+            }
+        }
+        if (!based) {
+            inputs.add("base", connectionValue(kAdditive->base));
+        }
+        if (!weights.items().empty()) {
+            params.add("weights", std::move(weights));
+        }
     } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node.node)) {
         type = kLineSpaceType;
         params = blendSpaceParams(*kLine);
@@ -440,6 +467,18 @@ result::Result<GraphNode> nodeOf(std::uint64_t id, const Value& record) {
         RAWFRAME_TRY_ASSIGN(StateMachineNode made, stateMachineOf(params, inputs));
         return GraphNode{.id = id, .node = std::move(made)};
     }
+    if (kType == kAdditiveType) {
+        // Read as a blend of every input, then the base taken out.
+        RAWFRAME_TRY_ASSIGN(BlendNode read, blendNodeOf(params, inputs));
+        const auto kBase = std::ranges::find(read.inputs, "base", &BlendInput::name);
+        if (read.phaseSync.has_value() || kBase == read.inputs.end() || kBase->weight != Scalar{1.0}) {
+            return graphInvalid("an additive node's inputs are its base and its layers, which alone are weighed");
+        }
+        AdditiveNode made{.base = kBase->from, .layers = {}};
+        read.inputs.erase(kBase);
+        made.layers = std::move(read.inputs);
+        return GraphNode{.id = id, .node = std::move(made)};
+    }
     if (kType == kLineSpaceType) {
         RAWFRAME_TRY_ASSIGN(BlendSpace1DNode made, blendSpace1DOf(params, inputs));
         return GraphNode{.id = id, .node = std::move(made)};
@@ -528,6 +567,20 @@ result::Status validate(const Graph& graph, const GraphLimits& limits) {
         } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
             if (kMask->mask == base::Bits128{}) {
                 return graphInvalid("a mask node names its mask");
+            }
+        } else if (const auto* kAdditive = std::get_if<AdditiveNode>(&node.node)) {
+            if (kAdditive->layers.empty() || kAdditive->layers.size() >= limits.maximumInputs) {
+                return kAdditive->layers.empty() ? graphInvalid("an additive node has a layer")
+                                                 : graphOverLimit("an additive node has more inputs than its limit");
+            }
+            for (std::size_t layer = 0; layer < kAdditive->layers.size(); ++layer) {
+                const BlendInput& each = kAdditive->layers[layer];
+                if (!machineName(each.name) || each.name == "base" ||
+                    (layer > 0 && !(kAdditive->layers[layer - 1].name < each.name)) ||
+                    !scalarInForm(graph, each.weight, false)) {
+                    return graphInvalid("an additive node's layers are machine names other than base, in order, "
+                                        "weighed by a number of nought or more or by a float parameter");
+                }
             }
         } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node.node)) {
             RAWFRAME_TRY(blendSpaceInForm(graph, *kLine, limits));

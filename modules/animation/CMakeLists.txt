@@ -7,4 +7,4 @@ rawframe_module(NAME animation
     DEPS document result base
 )
 
-rawframe_module_tests(NAME animation SOURCES tests/blend_space_test.cpp tests/clip_test.cpp tests/graph_test.cpp tests/instance_test.cpp tests/mask_test.cpp tests/phase_sync_test.cpp tests/root_motion_test.cpp tests/sample_test.cpp tests/skeleton_test.cpp tests/state_machine_test.cpp)
+rawframe_module_tests(NAME animation SOURCES tests/additive_test.cpp tests/blend_space_test.cpp tests/clip_test.cpp tests/graph_test.cpp tests/instance_test.cpp tests/mask_test.cpp tests/phase_sync_test.cpp tests/root_motion_test.cpp tests/sample_test.cpp tests/skeleton_test.cpp tests/state_machine_test.cpp)

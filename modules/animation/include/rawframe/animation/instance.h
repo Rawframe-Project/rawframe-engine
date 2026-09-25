@@ -97,6 +97,11 @@ public:
     [[nodiscard]] const Pose& bindPose() const noexcept {
         return bind_;
     }
+    /// A difference of nothing for every bone: where an additive clip's
+    /// sampling starts.
+    [[nodiscard]] const Pose& unchangedPose() const noexcept {
+        return unchanged_;
+    }
     /// Each bone's parent, in the skeleton's order; none for the root.
     [[nodiscard]] std::span<const std::optional<BoneIndex>> parents() const noexcept {
         return parents_;
@@ -166,6 +171,11 @@ public:
         std::vector<std::array<std::size_t, 3>> triangles;
         std::array<double, 2> position{};
         std::optional<ParameterIndex> positionParameter;
+        /// Whether its pose is a difference (an additive clip, or nodes of
+        /// them) rather than a pose; an additive step, whose first input is
+        /// its base and the rest its layers.
+        bool delta = false;
+        bool additive = false;
         /// A blend's or blend space's phase sync, with a declared leader by
         /// its place among the inputs; a weighed one names none.
         bool phaseSync = false;
@@ -194,6 +204,7 @@ private:
     std::vector<Parameter> parameters_;
     std::vector<Step> steps_;
     Pose bind_;
+    Pose unchanged_;
     std::vector<std::optional<BoneIndex>> parents_;
     std::optional<RootMotionSource> rootMotion_;
     EvaluationLimits limits_;

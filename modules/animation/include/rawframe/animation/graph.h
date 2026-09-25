@@ -75,6 +75,11 @@
 //                        parameter; default `[0, 0]`) within the first
 //                        triangle holding it, or at the nearest point of
 //                        the nearest triangle when none does (D135)
+//   `rawframe/additive@1`
+//                        its input `base`, with each other input, a layer
+//                        of differences (an additive clip, or nodes of
+//                        them), added on in name order by its entry in
+//                        `weights` (default 1), not normalized (D137)
 //
 // A blend or a blend space may declare `phaseSync` (D136): its inputs that
 // are clip nodes play at one phase, a leader's, `weight_leader` taking the
@@ -223,6 +228,15 @@ struct MaskNode {
     friend bool operator==(const MaskNode&, const MaskNode&) = default;
 };
 
+/// SPEC-0035's `additive`: layers of differences added onto a base pose.
+struct AdditiveNode {
+    Connection base;
+    /// In name order, none named `base`; each weighed as a blend's input is.
+    std::vector<BlendInput> layers;
+
+    friend bool operator==(const AdditiveNode&, const AdditiveNode&) = default;
+};
+
 /// A blend space's input, placed at `at` (a line's uses the first number).
 struct BlendSpacePoint {
     std::string name;
@@ -363,6 +377,7 @@ struct GraphNode {
                  MaskNode,
                  BlendSpace1DNode,
                  BlendSpace2DNode,
+                 AdditiveNode,
                  QuarantinedNode>
         node;
 

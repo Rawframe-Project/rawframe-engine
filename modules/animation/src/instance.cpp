@@ -43,6 +43,11 @@ std::vector<std::uint64_t> inputsOf(const GraphNode& node) {
     } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
         made.push_back(kMask->inside.node);
         made.push_back(kMask->outside.node);
+    } else if (const auto* kAdditive = std::get_if<AdditiveNode>(&node.node)) {
+        made.push_back(kAdditive->base.node);
+        for (const BlendInput& layer : kAdditive->layers) {
+            made.push_back(layer.from.node);
+        }
     } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node.node)) {
         for (const BlendSpacePoint& point : kLine->points) {
             made.push_back(point.from.node);
@@ -108,6 +113,25 @@ void syncOf(const std::optional<PhaseSync>& sync, std::span<const BlendSpacePoin
     }
 }
 
+/// A layer of differences added onto `pose` by `weight`: each offset
+/// scaled, each turn slerped from none and turned on after the pose's own,
+/// each factor eased from one.
+void addLayer(const Pose& layer, double weight, Pose& pose, std::span<const std::uint8_t> only) {
+    constexpr std::array<double, 4> kNone{0.0, 0.0, 0.0, 1.0};
+    for (std::size_t bone = 0; bone < pose.bones.size(); ++bone) {
+        if (!only.empty() && only[bone] == 0) {
+            continue;
+        }
+        const Transform& difference = layer.bones[bone];
+        Transform& made = pose.bones[bone];
+        for (std::size_t each = 0; each < 3; ++each) {
+            made.translation[each] += weight * difference.translation[each];
+            made.scale[each] *= 1.0 + (weight * (difference.scale[each] - 1.0));
+        }
+        made.rotation = normalized(multiplied(made.rotation, slerp(kNone, difference.rotation, weight)));
+    }
+}
+
 bool compared(Comparison comparison, double value, double with) {
     switch (comparison) {
     case Comparison::Equal:
@@ -143,6 +167,7 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
     auto made = std::make_shared<CompiledGraph>();
     made->parameters_ = graph.parameters;
     made->bind_ = animation::bindPose(skeleton);
+    made->unchanged_.bones.assign(skeleton.bones.size(), Transform{});
     for (const Bone& bone : skeleton.bones) {
         made->parents_.push_back(bone.parent);
     }
@@ -193,6 +218,7 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
             }
             step.clip = std::move(bound);
             step.loop = clip->loop;
+            step.delta = clip->additive.has_value();
             step.speed = kLiteral(kClip->speed);
             step.speedParameter = kParameter(kClip->speed);
         } else if (const auto* kBlend = std::get_if<BlendNode>(&node->node)) {
@@ -208,6 +234,16 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
                         std::ranges::find(kBlend->inputs, kBlend->phaseSync->input, &BlendInput::name) -
                         kBlend->inputs.begin());
                 }
+            }
+        } else if (const auto* kAdditive = std::get_if<AdditiveNode>(&node->node)) {
+            step.additive = true;
+            step.inputs.push_back(steps.at(kAdditive->base.node));
+            step.weights.push_back(1.0);
+            step.weightParameters.emplace_back();
+            for (const BlendInput& layer : kAdditive->layers) {
+                step.inputs.push_back(steps.at(layer.from.node));
+                step.weights.push_back(kLiteral(layer.weight));
+                step.weightParameters.push_back(kParameter(layer.weight));
             }
         } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node->node)) {
             for (const BlendSpacePoint& point : kLine->points) {
@@ -299,9 +335,25 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
         if (step.leader.has_value() && !made->steps_[step.inputs[*step.leader]].clip.has_value()) {
             return invalid("a declared phase leader is a clip node");
         }
+        // Poses and differences never mix: an additive node adds
+        // differences onto a pose, and every other node takes one kind.
+        for (std::size_t input = 0; input < step.inputs.size(); ++input) {
+            const bool kDelta = made->steps_[step.inputs[input]].delta;
+            const bool kWanted = step.additive ? input > 0 : made->steps_[step.inputs.front()].delta;
+            if (kDelta != kWanted) {
+                return invalid(step.additive ? "an additive node adds differences onto a pose"
+                                             : "a node takes poses or differences, not both");
+            }
+        }
+        if (!step.clip.has_value() && !step.additive) {
+            step.delta = made->steps_[step.inputs.front()].delta;
+        }
         step.node = node->id;
         steps.emplace(node->id, made->steps_.size());
         made->steps_.push_back(std::move(step));
+    }
+    if (made->steps_.back().delta) {
+        return invalid("a graph's output is a pose, not differences");
     }
     // Each clip follows the first synced node that takes it, in evaluation
     // order.
@@ -421,6 +473,12 @@ void GraphInstance::weigh() {
         } else if (!step.mask.empty()) {
             // Both play in full: each owns its bones, and fires its events.
             std::ranges::fill(shares, 1.0);
+        } else if (step.additive) {
+            // The base whole, and each layer by its weight, not normalized.
+            shares[0] = 1.0;
+            for (std::size_t input = 1; input < step.inputs.size(); ++input) {
+                shares[input] = std::max(0.0, valueOf(values_, step.weights[input], step.weightParameters[input]));
+            }
         } else if (!step.points.empty()) {
             const std::array<double, 2> kPosition =
                 step.positionParameter.has_value() ? values_[step.positionParameter->value] : step.position;
@@ -499,7 +557,10 @@ bool GraphInstance::advance(double delta, std::vector<GraphEvent>& events) {
             speeds_[at] = valueOf(values_, leading.speed, leading.speedParameter) * clip.duration / kLength;
         }
         const Advance kMoved = animation::advance(clip, playheads_[at], delta * speeds_[at], crossed, kRoom);
-        if (!motions_.empty()) {
+        if (!motions_.empty() && step.delta) {
+            // Differences carry no root motion.
+            motions_[at] = {};
+        } else if (!motions_.empty()) {
             const RootTracks kTracks{
                 .translation = step.rootTranslation.has_value() ? &clip.tracks[*step.rootTranslation] : nullptr,
                 .rotation = step.rootRotation.has_value() ? &clip.tracks[*step.rootRotation] : nullptr};
@@ -577,6 +638,11 @@ void GraphInstance::blendRootMotion() {
         moves.clear();
         for (const std::size_t kInput : step.inputs) {
             moves.push_back(&motions_[kInput]);
+        }
+        if (step.additive) {
+            // Layers are differences: the base's motion is the node's.
+            motions_[at] = motions_[step.inputs.front()];
+            continue;
         }
         if (!step.mask.empty()) {
             maskShares = {step.mask.front(), 1.0 - step.mask.front()};
@@ -699,12 +765,22 @@ void PoseEvaluator::evaluate(const GraphInstance& instance, Pose& pose, std::spa
     for (std::size_t at = 0; at < kSteps.size(); ++at) {
         const CompiledGraph::Step& step = kSteps[at];
         Pose& made = poses_[at];
-        made = graph.bindPose();
+        made = step.delta ? graph.unchangedPose() : graph.bindPose();
         if (instance.weights_[at] == 0.0) {
             continue;
         }
         if (step.clip.has_value()) {
             step.clip->sample(instance.playheads_[at], made, only);
+            continue;
+        }
+        if (step.additive) {
+            made = poses_[step.inputs.front()];
+            for (std::size_t input = 1; input < step.inputs.size(); ++input) {
+                const double kWeight = instance.shares_[at][input];
+                if (kWeight > 0.0) {
+                    addLayer(poses_[step.inputs[input]], kWeight, made, only);
+                }
+            }
             continue;
         }
         // Weighted sums; each rotation first turned into the hemisphere of
