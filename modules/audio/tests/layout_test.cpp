@@ -6,6 +6,7 @@
 #include "rawframe/document/errors.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -93,8 +94,87 @@ constexpr std::string_view kLayout = R"({
 }
 )";
 
-std::string with(std::string_view from, std::string_view to) {
-    std::string text{kLayout};
+/// The three effects with parameters: an equalizer and a limiter on the
+/// master, music ducked under the voice, and a room's reverb.
+constexpr std::string_view kEffects = R"({
+  "kind": "audio.mixer",
+  "formatVersion": 1,
+  "master": {
+    "busId": "0000000000000001",
+    "name": "master",
+    "role": "master",
+    "effects": [
+      {
+        "type": "rawframe/parametric_eq@1",
+        "bands": [
+          {
+            "shape": "low_shelf",
+            "frequency": 120,
+            "gain": -6
+          },
+          {
+            "shape": "peak",
+            "frequency": 2500,
+            "gain": 3,
+            "q": 2
+          },
+          {
+            "shape": "notch",
+            "frequency": 60,
+            "q": 8
+          }
+        ]
+      },
+      {
+        "type": "rawframe/dynamics@1",
+        "processor": "limiter",
+        "threshold": -1,
+        "knee": 2
+      }
+    ],
+    "children": [
+      {
+        "busId": "0000000000000002",
+        "name": "music",
+        "role": "music",
+        "effects": [
+          {
+            "type": "rawframe/dynamics@1",
+            "processor": "compressor",
+            "threshold": -24,
+            "ratio": 3,
+            "attack": 0.005,
+            "release": 0.25,
+            "makeup": 4,
+            "key": "0000000000000003"
+          }
+        ]
+      },
+      {
+        "busId": "0000000000000003",
+        "name": "voice",
+        "role": "voice"
+      },
+      {
+        "busId": "0000000000000004",
+        "name": "room",
+        "effects": [
+          {
+            "type": "rawframe/reverb@1",
+            "decay": 2.5,
+            "preDelay": 0.03,
+            "damping": 0.25,
+            "mix": 1
+          }
+        ]
+      }
+    ]
+  }
+}
+)";
+
+std::string with(std::string_view from, std::string_view to, std::string_view base = kLayout) {
+    std::string text{base};
     const std::size_t kAt = text.find(from);
     RAWFRAME_EXPECT(kAt != std::string::npos);
     if (kAt != std::string::npos) {
@@ -103,8 +183,8 @@ std::string with(std::string_view from, std::string_view to) {
     return text;
 }
 
-std::pair<document::DocumentError, std::string> refusalOf(const std::string& text) {
-    const auto kRead = readLayout(text);
+std::pair<document::DocumentError, std::string> refusalOf(const std::string& text, const LayoutLimits& limits = {}) {
+    const auto kRead = readLayout(text, limits);
     if (kRead.has_value()) {
         return {document::DocumentError{}, ""};
     }
@@ -184,7 +264,6 @@ RAWFRAME_TEST(EveryLayoutRuleIsRefusedAtItsField) {
         {"\"volume\": -6", "\"volume\": 30", DocumentError::Invalid, "$.master.children[0].volume"},
         {"\"volume\": -6", "\"volume\": 0", DocumentError::NotCanonical, "$.master.children[0].volume"},
         {"\"rawframe/gain@1\"", "\"rawframe/chorus@1\"", DocumentError::Invalid, "$.master.effects[0].type"},
-        {"\"rawframe/gain@1\"", "\"rawframe/reverb@1\"", DocumentError::Invalid, "$.master.effects[0].type"},
         {"\"cutoff\": 80",
          "\"cutoff\": 5",
          DocumentError::Invalid,
@@ -234,4 +313,102 @@ RAWFRAME_TEST(EveryLayoutRuleIsRefusedAtItsField) {
                          kRefusal.second.c_str());
         }
     }
+}
+
+RAWFRAME_TEST(EqualizersDynamicsAndReverbsAreRead) {
+    const auto kRead = readLayout(kEffects);
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    const Layout& layout = *kRead;
+    const Effect& eq = layout.buses[0].effects[0];
+    RAWFRAME_EXPECT(eq.type == EffectType::ParametricEq && eq.bands.size() == 3);
+    RAWFRAME_EXPECT(eq.bands[0].shape == BandShape::LowShelf && eq.bands[0].frequency == 120 &&
+                    eq.bands[0].gain == -6 && std::abs(eq.bands[0].q - 0.7071F) < 1e-6F);
+    RAWFRAME_EXPECT(eq.bands[1].shape == BandShape::Peak && eq.bands[1].q == 2);
+    RAWFRAME_EXPECT(eq.bands[2].shape == BandShape::Notch && eq.bands[2].gain == 0 && eq.bands[2].q == 8);
+    const Dynamics& limiter = layout.buses[0].effects[1].dynamics;
+    RAWFRAME_EXPECT(limiter.processor == Processor::Limiter && limiter.threshold == -1 && limiter.knee == 2 &&
+                    !limiter.key.has_value());
+    const Dynamics& ducker = layout.buses[1].effects[0].dynamics;
+    RAWFRAME_EXPECT(ducker.processor == Processor::Compressor && ducker.threshold == -24 && ducker.ratio == 3 &&
+                    ducker.attack == 0.005F && ducker.release == 0.25F && ducker.makeup == 4 && ducker.key == 2U);
+    const Reverb& room = layout.buses[3].effects[0].reverb;
+    RAWFRAME_EXPECT(layout.buses[3].effects[0].type == EffectType::Reverb && room.decay == 2.5F &&
+                    room.preDelay == 0.03F && room.early == -6 && room.late == 0 && room.damping == 0.25F &&
+                    room.density == 1 && room.diffusion == 1 && room.mix == 1);
+    // The voice keys the music, so it is mixed first.
+    const std::vector<std::size_t> kOrder = layout.mixOrder();
+    RAWFRAME_EXPECT(kOrder.size() == 4 && kOrder.back() == 0 &&
+                    std::ranges::find(kOrder, 2U) < std::ranges::find(kOrder, 1U));
+}
+
+RAWFRAME_TEST(EveryEffectRuleIsRefusedAtItsField) {
+    using document::DocumentError;
+    struct Case {
+        std::string_view from;
+        std::string_view to;
+        DocumentError error;
+        std::string_view where;
+    };
+    const std::vector<Case> kCases = {
+        {"\"shape\": \"peak\"", "\"shape\": \"bell\"", DocumentError::Invalid, "$.master.effects[0].bands[1].shape"},
+        {"\"frequency\": 2500", "\"frequency\": 5", DocumentError::Invalid, "$.master.effects[0].bands[1].frequency"},
+        {"\"gain\": 3", "\"gain\": 30", DocumentError::Invalid, "$.master.effects[0].bands[1].gain"},
+        {"\"q\": 2", "\"q\": 0.7071", DocumentError::NotCanonical, "$.master.effects[0].bands[1].q"},
+        {"\"frequency\": 60,",
+         "\"frequency\": 60,\n            \"gain\": 3,",
+         DocumentError::Invalid,
+         "$.master.effects[0].bands[2].gain"},
+        {"\"processor\": \"limiter\"",
+         "\"processor\": \"ducker\"",
+         DocumentError::Invalid,
+         "$.master.effects[1].processor"},
+        {"\"threshold\": -1,",
+         "\"threshold\": -1,\n        \"ratio\": 8,",
+         DocumentError::Invalid,
+         "$.master.effects[1].ratio"},
+        {"\"threshold\": -1", "\"threshold\": 3", DocumentError::Invalid, "$.master.effects[1].threshold"},
+        {"\"knee\": 2", "\"knee\": 30", DocumentError::Invalid, "$.master.effects[1].knee"},
+        {"\"ratio\": 3", "\"ratio\": 4", DocumentError::NotCanonical, "$.master.children[0].effects[0].ratio"},
+        {"\"attack\": 0.005", "\"attack\": 2", DocumentError::Invalid, "$.master.children[0].effects[0].attack"},
+        {"\"key\": \"0000000000000003\"",
+         "\"key\": \"own_input\"",
+         DocumentError::NotCanonical,
+         "$.master.children[0].effects[0].key"},
+        {"\"key\": \"0000000000000003\"",
+         "\"key\": \"0000000000000009\"",
+         DocumentError::Invalid,
+         "$.master.children[0].effects[0].key"},
+        {"\"key\": \"0000000000000003\"",
+         "\"key\": \"0000000000000002\"",
+         DocumentError::Invalid,
+         "$.master.children[0].effects[0].key"},
+        // Keyed by its parent, which waits on it: a loop.
+        {"\"key\": \"0000000000000003\"", "\"key\": \"0000000000000001\"", DocumentError::Invalid, "$.master"},
+        {"\"decay\": 2.5", "\"decay\": 0.05", DocumentError::Invalid, "$.master.children[2].effects[0].decay"},
+        {"\"decay\": 2.5,\n            ", "", DocumentError::Invalid, "$.master.children[2].effects[0].decay"},
+        {"\"preDelay\": 0.03",
+         "\"preDelay\": 0.02",
+         DocumentError::NotCanonical,
+         "$.master.children[2].effects[0].preDelay"},
+        {"\"damping\": 0.25", "\"damping\": 1.5", DocumentError::Invalid, "$.master.children[2].effects[0].damping"},
+        {"\"mix\": 1", "\"mix\": 0.3", DocumentError::NotCanonical, "$.master.children[2].effects[0].mix"},
+    };
+    RAWFRAME_EXPECT(refusalOf(std::string{kEffects}) == std::pair(DocumentError{}, std::string{}));
+    for (const Case& each : kCases) {
+        const auto kRefusal = refusalOf(with(each.from, each.to, kEffects));
+        RAWFRAME_EXPECT(kRefusal.first == each.error && kRefusal.second == each.where);
+        if (kRefusal.first != each.error || kRefusal.second != each.where) {
+            std::fprintf(stderr,
+                         "  replacing %.*s: code %u at %s\n",
+                         static_cast<int>(each.from.size()),
+                         each.from.data(),
+                         static_cast<unsigned>(kRefusal.first),
+                         kRefusal.second.c_str());
+        }
+    }
+    const auto kTooMany = refusalOf(std::string{kEffects}, {.maximumEqBands = 2});
+    RAWFRAME_EXPECT(kTooMany.first == DocumentError::Invalid && kTooMany.second == "$.master.effects[0].bands");
 }

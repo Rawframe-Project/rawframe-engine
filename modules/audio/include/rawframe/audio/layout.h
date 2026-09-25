@@ -36,7 +36,69 @@ enum class FilterShape : std::uint8_t {
 enum class EffectType : std::uint8_t {
     Gain,
     Filter,
-    Delay
+    Delay,
+    ParametricEq,
+    Dynamics,
+    Reverb
+};
+
+enum class BandShape : std::uint8_t {
+    LowShelf,
+    HighShelf,
+    Peak,
+    Notch
+};
+
+/// One band of a parametric equalizer: its shape, centre or corner in hertz,
+/// gain in decibels (none for a notch), and Q.
+struct EqBand {
+    BandShape shape = BandShape::Peak;
+    float frequency = 1000;
+    float gain = 0;
+    float q = 0.70710678F;
+};
+
+/// SPEC-0036's closed set of dynamics processors.
+enum class Processor : std::uint8_t {
+    Compressor,
+    Limiter,
+    Expander,
+    Gate,
+    UpwardsCompressor
+};
+
+/// A dynamics processor's parameters. Levels in decibels, times in seconds.
+struct Dynamics {
+    Processor processor = Processor::Compressor;
+    float threshold = 0;
+    /// Compressors and the expander; the limiter and the gate have none.
+    float ratio = 4;
+    float attack = 0.01F;
+    float release = 0.1F;
+    float makeup = 0;
+    /// The knee's width, centred on the threshold.
+    float knee = 0;
+    /// The bus whose output the level is read from, by index; none for the
+    /// bus's own signal.
+    std::optional<std::size_t> key;
+};
+
+/// A reverb's parameters (SPEC-0036's bounded set).
+struct Reverb {
+    /// Seconds for the tail to fall by 60 decibels.
+    float decay = 1.5F;
+    float preDelay = 0.02F;
+    /// Early reflections' and the tail's levels, in decibels.
+    float early = -6;
+    float late = 0;
+    /// How much faster high frequencies die, nought to one.
+    float damping = 0.5F;
+    /// How close the tail's echoes lie, nought (sparse) to one.
+    float density = 1;
+    /// How much the echoes smear, nought to one.
+    float diffusion = 1;
+    /// The wet share, nought dry to one wet.
+    float mix = 0.3F;
 };
 
 /// One effect of a bus's chain, with the parameters of its type.
@@ -57,6 +119,10 @@ struct Effect {
     float feedback = 0;
     float mix = 0.5F;
     float offset = 0;
+    /// parametric_eq: its bands, in order.
+    std::vector<EqBand> bands;
+    Dynamics dynamics;
+    Reverb reverb;
 };
 
 enum class SendPosition : std::uint8_t {
@@ -107,7 +173,8 @@ struct Layout {
     [[nodiscard]] std::optional<std::size_t> busWithId(std::uint64_t id) const noexcept;
     [[nodiscard]] std::optional<std::size_t> busWithRole(Role role) const noexcept;
     /// An order to mix the buses in: every bus after each bus that feeds
-    /// it, through its children or their sends.
+    /// it, through its children or their sends, and after each bus a
+    /// dynamics effect of it reads its level from.
     [[nodiscard]] std::vector<std::size_t> mixOrder() const;
 };
 
@@ -117,6 +184,7 @@ struct LayoutLimits {
     std::size_t maximumBuses = 64;
     std::size_t maximumDepth = 16;
     std::size_t maximumEffectsPerBus = 8;
+    std::size_t maximumEqBands = 8;
     std::size_t maximumSendsPerBus = 8;
     std::size_t maximumConcurrencySets = 64;
     std::size_t maximumNameLength = 64;

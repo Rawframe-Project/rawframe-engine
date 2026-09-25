@@ -1,5 +1,6 @@
 #include "rawframe/audio/mixer.h"
 
+#include "effects.h"
 #include "rawframe/audio/errors.h"
 
 #include <algorithm>
@@ -119,69 +120,6 @@ struct Voice {
     float fadeStep = 0;
 };
 
-/// One second-order section, transposed direct form II, per channel.
-struct Biquad {
-    float b0 = 1;
-    float b1 = 0;
-    float b2 = 0;
-    float a1 = 0;
-    float a2 = 0;
-    std::array<float, 2> z1{};
-    std::array<float, 2> z2{};
-
-    float step(float x, std::size_t channel) noexcept {
-        const float kY = (b0 * x) + z1[channel];
-        z1[channel] = (b1 * x) - (a1 * kY) + z2[channel];
-        z2[channel] = (b2 * x) - (a2 * kY);
-        return kY;
-    }
-};
-
-Biquad designFilter(const Effect& effect, std::uint32_t rate) noexcept {
-    const float kCutoff = std::min(effect.cutoff, 0.45F * static_cast<float>(rate));
-    const float kW0 = 2.0F * std::numbers::pi_v<float> * kCutoff / static_cast<float>(rate);
-    const float kCos = std::cos(kW0);
-    const float kAlpha = std::sin(kW0) / (2.0F * effect.resonance);
-    Biquad made;
-    float a0 = 1 + kAlpha;
-    switch (effect.shape) {
-    case FilterShape::LowPass:
-        made.b0 = (1 - kCos) / 2;
-        made.b1 = 1 - kCos;
-        made.b2 = (1 - kCos) / 2;
-        break;
-    case FilterShape::HighPass:
-        made.b0 = (1 + kCos) / 2;
-        made.b1 = -(1 + kCos);
-        made.b2 = (1 + kCos) / 2;
-        break;
-    case FilterShape::BandPass:
-        made.b0 = kAlpha;
-        made.b1 = 0;
-        made.b2 = -kAlpha;
-        break;
-    }
-    made.a1 = -2 * kCos;
-    made.a2 = 1 - kAlpha;
-    made.b0 /= a0;
-    made.b1 /= a0;
-    made.b2 /= a0;
-    made.a1 /= a0;
-    made.a2 /= a0;
-    return made;
-}
-
-/// An effect as the mix thread runs it: its parameters, and its state.
-struct EffectRuntime {
-    Effect effect;
-    /// A filter's sections: one for 12 dB an octave, two for 24.
-    std::array<Biquad, 2> sections;
-    /// A delay's lines, one a channel, and where the next sample goes.
-    std::array<std::vector<float>, 2> lines;
-    std::size_t written = 0;
-    std::array<std::size_t, 2> delayFrames{};
-};
-
 struct BusRuntime {
     std::vector<float> buffer;
     std::vector<EffectRuntime> effects;
@@ -227,19 +165,7 @@ struct Mixer::State {
             runtime.currentFader = runtime.fader;
             runtime.muted = bus.muted;
             for (const Effect& effect : bus.effects) {
-                EffectRuntime runtimeEffect{.effect = effect};
-                if (effect.type == EffectType::Filter) {
-                    runtimeEffect.sections = {designFilter(effect, settings.rate), designFilter(effect, settings.rate)};
-                } else if (effect.type == EffectType::Delay) {
-                    const auto kFrames = [this](float seconds) {
-                        return static_cast<std::size_t>(std::lround(seconds * static_cast<float>(settings.rate)));
-                    };
-                    runtimeEffect.delayFrames = {kFrames(effect.time), kFrames(effect.time + effect.offset)};
-                    for (std::vector<float>& line : runtimeEffect.lines) {
-                        line.assign(kFrames(effect.time + effect.offset) + 1, 0.0F);
-                    }
-                }
-                runtime.effects.push_back(std::move(runtimeEffect));
+                runtime.effects.emplace_back(effect, settings.rate, settings.shortestFade);
             }
             buses.push_back(std::move(runtime));
         }
@@ -372,50 +298,6 @@ struct Mixer::State {
             Finished{.voice = static_cast<std::uint32_t>(&voice - voices.data()), .generation = voice.generation}));
     }
 
-    void runEffect(EffectRuntime& runtime, float* buffer, std::size_t frames) noexcept {
-        const Effect& effect = runtime.effect;
-        if (effect.bypass) {
-            return;
-        }
-        switch (effect.type) {
-        case EffectType::Gain: {
-            const float kGain = gainOf(effect.level);
-            for (std::size_t index = 0; index < frames * 2; ++index) {
-                buffer[index] *= kGain;
-            }
-            break;
-        }
-        case EffectType::Filter: {
-            const std::size_t kSections = effect.slope == 24 ? 2 : 1;
-            for (std::size_t frame = 0; frame < frames; ++frame) {
-                for (std::size_t channel = 0; channel < 2; ++channel) {
-                    float value = buffer[(frame * 2) + channel];
-                    for (std::size_t section = 0; section < kSections; ++section) {
-                        value = runtime.sections[section].step(value, channel);
-                    }
-                    buffer[(frame * 2) + channel] = value;
-                }
-            }
-            break;
-        }
-        case EffectType::Delay: {
-            const std::size_t kLength = runtime.lines[0].size();
-            for (std::size_t frame = 0; frame < frames; ++frame) {
-                for (std::size_t channel = 0; channel < 2; ++channel) {
-                    std::vector<float>& line = runtime.lines[channel];
-                    const std::size_t kRead = (runtime.written + kLength - runtime.delayFrames[channel]) % kLength;
-                    const float kDelayed = line[kRead];
-                    const float kDry = buffer[(frame * 2) + channel];
-                    line[runtime.written] = kDry + (kDelayed * effect.feedback);
-                    buffer[(frame * 2) + channel] = (kDry * (1 - effect.mix)) + (kDelayed * effect.mix);
-                }
-                runtime.written = (runtime.written + 1) % kLength;
-            }
-            break;
-        }
-        }
-    }
-
     void addInto(std::vector<float>& target, const float* from, std::size_t frames, float gain) noexcept {
         for (std::size_t index = 0; index < frames * 2; ++index) {
             target[index] += from[index] * gain;
@@ -439,7 +321,9 @@ struct Mixer::State {
             BusRuntime& bus = buses[kIndex];
             float* const buffer = bus.buffer.data();
             for (EffectRuntime& effect : bus.effects) {
-                runEffect(effect, buffer, frames);
+                // A key is mixed before the bus it keys (Layout::mixOrder).
+                const std::optional<std::size_t> kKey = effect.key();
+                effect.run(buffer, kKey ? buses[*kKey].buffer.data() : nullptr, frames);
             }
             for (std::size_t send = 0; send < bus.sends.size(); ++send) {
                 if (bus.sends[send].position == SendPosition::PreFader) {

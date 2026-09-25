@@ -26,6 +26,12 @@ constexpr std::array<std::string_view, 3> kSendFields = {"target", "level", "pos
 constexpr std::array<std::string_view, 3> kGainFields = {"type", "bypass", "level"};
 constexpr std::array<std::string_view, 6> kFilterFields = {"type", "bypass", "shape", "cutoff", "resonance", "slope"};
 constexpr std::array<std::string_view, 6> kDelayFields = {"type", "bypass", "time", "feedback", "mix", "offset"};
+constexpr std::array<std::string_view, 3> kEqFields = {"type", "bypass", "bands"};
+constexpr std::array<std::string_view, 4> kBandFields = {"shape", "frequency", "gain", "q"};
+constexpr std::array<std::string_view, 10> kDynamicsFields = {
+    "type", "bypass", "processor", "threshold", "ratio", "attack", "release", "makeup", "knee", "key"};
+constexpr std::array<std::string_view, 10> kReverbFields = {
+    "type", "bypass", "decay", "preDelay", "early", "late", "damping", "density", "diffusion", "mix"};
 constexpr std::array<std::string_view, 3> kConcurrencyFields = {"name", "maximumInstances", "resolution"};
 
 /// The longest delay an effect may hold, in seconds.
@@ -49,7 +55,140 @@ constexpr std::array<std::pair<std::string_view, Resolution>, 5> kResolutions = 
     {"stop_lowest_priority_then_oldest", Resolution::StopLowestPriorityThenOldest},
 }};
 
-result::Result<Effect> readEffect(const Value& value, const std::string& path) {
+constexpr std::array<std::pair<std::string_view, BandShape>, 4> kBandShapes = {{
+    {"low_shelf", BandShape::LowShelf},
+    {"high_shelf", BandShape::HighShelf},
+    {"peak", BandShape::Peak},
+    {"notch", BandShape::Notch},
+}};
+
+constexpr std::array<std::pair<std::string_view, Processor>, 5> kProcessors = {{
+    {"compressor", Processor::Compressor},
+    {"limiter", Processor::Limiter},
+    {"expander", Processor::Expander},
+    {"gate", Processor::Gate},
+    {"upwards_compressor", Processor::UpwardsCompressor},
+}};
+
+/// A required word from a closed set, which has no default.
+template <typename Enum, std::size_t Count>
+result::Result<Enum> requiredWord(const Record& record,
+                                  std::string_view field,
+                                  const std::array<std::pair<std::string_view, Enum>, Count>& words,
+                                  std::string_view why) {
+    RAWFRAME_TRY_ASSIGN(const std::string_view kWord, record.text(field));
+    for (const auto& [kName, kValue] : words) {
+        if (kName == kWord) {
+            return kValue;
+        }
+    }
+    return invalid(record.pathOf(field), why);
+}
+
+/// A number within bounds; with no fallback, a required one.
+result::Result<float> within(const Record& record,
+                             std::string_view field,
+                             std::optional<double> fallback,
+                             double lowest,
+                             double highest,
+                             std::string_view why) {
+    double number = 0;
+    if (fallback.has_value()) {
+        RAWFRAME_TRY_ASSIGN(number, record.real(field, *fallback));
+    } else {
+        RAWFRAME_TRY_ASSIGN(const Value* value, record.required(field, Value::Kind::Number));
+        number = *value->real();
+    }
+    if (!(number >= lowest && number <= highest)) {
+        return invalid(record.pathOf(field), why);
+    }
+    return static_cast<float>(number);
+}
+
+result::Result<Effect> readEq(const Record& record, const LayoutLimits& limits) {
+    Effect effect;
+    effect.type = EffectType::ParametricEq;
+    RAWFRAME_TRY_ASSIGN(effect.bypass, record.truth("bypass", false));
+    RAWFRAME_TRY_ASSIGN(const Value* bands, record.required("bands", Value::Kind::Array));
+    if (bands->items().empty() || bands->items().size() > limits.maximumEqBands) {
+        return invalid(record.pathOf("bands"), "an equalizer has one band or more, up to the limit");
+    }
+    for (std::size_t index = 0; index < bands->items().size(); ++index) {
+        const std::string kPath = record.pathOf("bands") + "[" + std::to_string(index) + "]";
+        RAWFRAME_TRY_ASSIGN(const Record kBand, Record::of(bands->items()[index], kBandFields, kPath));
+        EqBand band;
+        RAWFRAME_TRY_ASSIGN(
+            band.shape, requiredWord(kBand, "shape", kBandShapes, "a band is low_shelf, high_shelf, peak, or notch"));
+        RAWFRAME_TRY_ASSIGN(band.frequency,
+                            within(kBand, "frequency", std::nullopt, 10, 24000, "a frequency is 10 to 24000 hertz"));
+        RAWFRAME_TRY_ASSIGN(band.gain, within(kBand, "gain", 0.0, -24, 24, "a band's gain is -24 to 24 decibels"));
+        if (band.shape == BandShape::Notch && band.gain != 0) {
+            return invalid(kBand.pathOf("gain"), "a notch has no gain");
+        }
+        RAWFRAME_TRY_ASSIGN(band.q, within(kBand, "q", 0.7071, 0.1, 20, "a Q is 0.1 to 20"));
+        effect.bands.push_back(band);
+    }
+    return effect;
+}
+
+result::Result<Effect> readDynamics(const Record& record, std::optional<std::uint64_t>& key) {
+    Effect effect;
+    effect.type = EffectType::Dynamics;
+    Dynamics& dynamics = effect.dynamics;
+    RAWFRAME_TRY_ASSIGN(effect.bypass, record.truth("bypass", false));
+    RAWFRAME_TRY_ASSIGN(dynamics.processor,
+                        requiredWord(record,
+                                     "processor",
+                                     kProcessors,
+                                     "a processor is compressor, limiter, expander, gate, or upwards_compressor"));
+    RAWFRAME_TRY_ASSIGN(dynamics.threshold,
+                        within(record, "threshold", std::nullopt, -80, 0, "a threshold is -80 to 0 decibels"));
+    const bool kRatioless = dynamics.processor == Processor::Limiter || dynamics.processor == Processor::Gate;
+    RAWFRAME_TRY_ASSIGN(const Value* ratio, record.optional("ratio", Value::Kind::Number));
+    if (kRatioless && ratio != nullptr) {
+        return invalid(record.pathOf("ratio"), "a limiter and a gate have no ratio");
+    }
+    RAWFRAME_TRY_ASSIGN(dynamics.ratio, within(record, "ratio", 4.0, 1, 50, "a ratio is 1 to 50"));
+    RAWFRAME_TRY_ASSIGN(dynamics.attack,
+                        within(record, "attack", 0.01, 0.0001, 1, "an attack is a tenth of a millisecond to a second"));
+    RAWFRAME_TRY_ASSIGN(dynamics.release,
+                        within(record, "release", 0.1, 0.001, 5, "a release is a millisecond to five seconds"));
+    RAWFRAME_TRY_ASSIGN(dynamics.makeup, within(record, "makeup", 0.0, -24, 24, "makeup is -24 to 24 decibels"));
+    RAWFRAME_TRY_ASSIGN(dynamics.knee, within(record, "knee", 0.0, 0, 24, "a knee is 0 to 24 decibels wide"));
+    RAWFRAME_TRY_ASSIGN(const std::optional<std::string_view> kKey, record.optionalText("key"));
+    if (kKey == "own_input") {
+        return document::notCanonical(record.pathOf("key"), "a field at its default is omitted");
+    }
+    if (kKey.has_value()) {
+        key = parseIdentity(*kKey);
+        if (!key.has_value()) {
+            return invalid(record.pathOf("key"), "a key is own_input or a bus identity");
+        }
+    }
+    return effect;
+}
+
+result::Result<Effect> readReverb(const Record& record) {
+    Effect effect;
+    effect.type = EffectType::Reverb;
+    Reverb& reverb = effect.reverb;
+    RAWFRAME_TRY_ASSIGN(effect.bypass, record.truth("bypass", false));
+    RAWFRAME_TRY_ASSIGN(reverb.decay, within(record, "decay", std::nullopt, 0.1, 20, "a decay is 0.1 to 20 seconds"));
+    RAWFRAME_TRY_ASSIGN(reverb.preDelay,
+                        within(record, "preDelay", 0.02, 0, 0.5, "a pre-delay is nought to half a second"));
+    RAWFRAME_TRY_ASSIGN(reverb.early, within(record, "early", -6.0, -96, 24, "a level is -96 to 24 decibels"));
+    RAWFRAME_TRY_ASSIGN(reverb.late, within(record, "late", 0.0, -96, 24, "a level is -96 to 24 decibels"));
+    RAWFRAME_TRY_ASSIGN(reverb.damping, within(record, "damping", 0.5, 0, 1, "damping is nought to one"));
+    RAWFRAME_TRY_ASSIGN(reverb.density, within(record, "density", 1.0, 0, 1, "density is nought to one"));
+    RAWFRAME_TRY_ASSIGN(reverb.diffusion, within(record, "diffusion", 1.0, 0, 1, "diffusion is nought to one"));
+    RAWFRAME_TRY_ASSIGN(reverb.mix, within(record, "mix", 0.3, 0, 1, "a mix is nought to one"));
+    return effect;
+}
+
+/// Reads one effect; a dynamics effect keyed by another bus leaves that
+/// bus's identity in `key`, to resolve once every bus is read.
+result::Result<Effect>
+readEffect(const Value& value, const std::string& path, const LayoutLimits& limits, std::optional<std::uint64_t>& key) {
     const Value* named = value.find("type");
     if (named == nullptr || named->kind() != Value::Kind::String) {
         return invalid(path + ".type", "an effect names its type");
@@ -116,8 +255,17 @@ result::Result<Effect> readEffect(const Value& value, const std::string& path) {
         effect.offset = static_cast<float>(kOffset);
         return effect;
     }
-    if (kType == "rawframe/parametric_eq@1" || kType == "rawframe/dynamics@1" || kType == "rawframe/reverb@1") {
-        return invalid(path + ".type", "this effect is not rendered yet");
+    if (kType == "rawframe/parametric_eq@1") {
+        RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kEqFields, path));
+        return readEq(kRecord, limits);
+    }
+    if (kType == "rawframe/dynamics@1") {
+        RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kDynamicsFields, path));
+        return readDynamics(kRecord, key);
+    }
+    if (kType == "rawframe/reverb@1") {
+        RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kReverbFields, path));
+        return readReverb(kRecord);
     }
     return invalid(path + ".type", "no effect of that type");
 }
@@ -127,6 +275,14 @@ struct PendingSend {
     std::size_t bus = 0;
     std::uint64_t target = 0;
     Send send;
+    std::string path;
+};
+
+/// A dynamics effect's key as read, still an identity.
+struct PendingKey {
+    std::size_t bus = 0;
+    std::size_t effect = 0;
+    std::uint64_t key = 0;
     std::string path;
 };
 
@@ -181,10 +337,14 @@ public:
                 return invalid(kRecord.pathOf("effects"), "more effects than allowed");
             }
             for (std::size_t index = 0; index < effects->items().size(); ++index) {
-                RAWFRAME_TRY_ASSIGN(
-                    Effect effect,
-                    readEffect(effects->items()[index], kRecord.pathOf("effects") + "[" + std::to_string(index) + "]"));
-                made.effects.push_back(effect);
+                const std::string kPath = kRecord.pathOf("effects") + "[" + std::to_string(index) + "]";
+                std::optional<std::uint64_t> key;
+                RAWFRAME_TRY_ASSIGN(Effect effect, readEffect(effects->items()[index], kPath, limits_, key));
+                if (key.has_value()) {
+                    keys_.push_back(
+                        PendingKey{.bus = layout.buses.size(), .effect = index, .key = *key, .path = kPath + ".key"});
+                }
+                made.effects.push_back(std::move(effect));
             }
         }
         const std::size_t kIndex = layout.buses.size();
@@ -247,8 +407,18 @@ public:
             pending.send.target = *kTarget;
             layout.buses[pending.bus].sends.push_back(pending.send);
         }
+        for (const PendingKey& pending : keys_) {
+            const auto kKey = layout.busWithId(pending.key);
+            if (!kKey) {
+                return invalid(pending.path, "no bus has that identity");
+            }
+            if (*kKey == pending.bus) {
+                return invalid(pending.path, "a bus's own signal is own_input");
+            }
+            layout.buses[pending.bus].effects[pending.effect].dynamics.key = *kKey;
+        }
         if (layout.mixOrder().size() != layout.buses.size()) {
-            return invalid("$.master", "sends make a loop: a bus would feed itself");
+            return invalid("$.master", "sends or keys make a loop: a bus would wait on itself");
         }
         return {};
     }
@@ -258,6 +428,7 @@ public:
 private:
     LayoutLimits limits_;
     std::vector<PendingSend> pending_;
+    std::vector<PendingKey> keys_;
 };
 
 } // namespace
@@ -273,15 +444,23 @@ std::optional<std::size_t> Layout::busWithRole(Role role) const noexcept {
 }
 
 std::vector<std::size_t> Layout::mixOrder() const {
-    // Feeds: a child feeds its parent, a sender its target. Kahn's order,
-    // lowest index first among the ready, so the order is always the same.
+    // Feeds: a child feeds its parent, a sender its target, a key the bus
+    // it keys. Kahn's order, lowest index first among the ready, so the
+    // order is always the same.
     std::vector<std::size_t> waiting(buses.size(), 0);
+    std::vector<std::vector<std::size_t>> keyed(buses.size());
     for (std::size_t index = 0; index < buses.size(); ++index) {
         if (buses[index].parent != index) {
             ++waiting[buses[index].parent];
         }
         for (const Send& send : buses[index].sends) {
             ++waiting[send.target];
+        }
+        for (const Effect& effect : buses[index].effects) {
+            if (effect.type == EffectType::Dynamics && effect.dynamics.key.has_value()) {
+                ++waiting[index];
+                keyed[*effect.dynamics.key].push_back(index);
+            }
         }
     }
     std::set<std::size_t> ready;
@@ -305,6 +484,9 @@ std::vector<std::size_t> Layout::mixOrder() const {
         }
         for (const Send& send : buses[kBus].sends) {
             kFed(send.target);
+        }
+        for (const std::size_t kKeyed : keyed[kBus]) {
+            kFed(kKeyed);
         }
     }
     return order;
