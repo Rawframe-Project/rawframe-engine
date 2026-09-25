@@ -1,6 +1,7 @@
 // Kest systems over World columns: run per archetype, journaled writes that
 // land only when every call succeeds, and shapes checked before anything runs.
 
+#include "rawframe/kest/errors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
 #include "rawframe/world_kest/errors.h"
@@ -493,4 +494,46 @@ RAWFRAME_TEST(AProgramReloadsAtomicallyKeepingTheWorld) {
     RAWFRAME_EXPECT(!kest->reload(programFrom(renamed)).has_value());
     kTickOnce();
     RAWFRAME_EXPECT(world.get(kMovers.plain[0], kPosition)->x == 0);
+}
+
+RAWFRAME_TEST(AnUntrustedProgramWritesItsColumnsAndOpensNoWorldDoor) {
+    // A mod's handlers (D181): its columns lent and written as a game's are.
+    const auto kRegistry = registry();
+    world::World world{kRegistry};
+    const Movers kMovers = spawn(world);
+    const std::array<KestSystemDeclaration, 1> kDeclarations = {
+        KestSystemDeclaration{.identity = "mod.integrate", .entry = "integrate", .columns = kMotion}};
+    auto kest = KestSystems::create(
+        {.program = program(), .limits = kLimits, .trust = kest::Trust::Untrusted, .systems = kDeclarations});
+    RAWFRAME_EXPECT(kest.has_value());
+    if (!kest.has_value()) {
+        return;
+    }
+    world::Schedule ticks = schedule(**kest, *kRegistry);
+    world::TickIndex tick;
+    RAWFRAME_EXPECT(ticks.runTick(world, tick, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(world.get(kMovers.plain[0], *world.registry().key<Position>())->x == 1);
+
+    // A program that makes entities needs World.create, which is not for
+    // untrusted code: it does not start.
+    const std::array<kest::SourceFile, 2> kFiles = {
+        kest::SourceFile{.path = "keeper.kest", .text = std::string{kKeeper}},
+        kest::SourceFile{.path = "rawframe/world.kest",
+                         .text = readText(std::string{RAWFRAME_WORLD_KEST_MODULES} + "rawframe/world.kest")}};
+    auto keeper = kest::Program::compile(kFiles, {});
+    RAWFRAME_EXPECT(keeper.has_value());
+    if (!keeper.has_value()) {
+        return;
+    }
+    constexpr std::array<KestColumn, 1> kLinks = {
+        KestColumn{.component = schema::ComponentTypeId::fromText("e4b7c1d9-2a36-4f58-9b0e-5c71d3a8f262"),
+                   .element = "Link",
+                   .access = world::Access::Write}};
+    const std::array<KestSystemDeclaration, 1> kMake = {
+        KestSystemDeclaration{.identity = "mod.make", .entry = "make", .columns = kLinks}};
+    const auto kRefused =
+        KestSystems::create({.program = *keeper, .limits = kLimits, .trust = kest::Trust::Untrusted, .systems = kMake});
+    RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().domain() == kest::kKestDomain &&
+                    kRefused.error().code() == code(kest::KestError::DoorNotForUntrusted));
+    RAWFRAME_EXPECT(KestSystems::create({.program = *keeper, .limits = kLimits, .systems = kMake}).has_value());
 }

@@ -21,6 +21,7 @@
 #include "rawframe/physics3d/physics.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/mod.h"
 
 #include <functional>
 #include <memory>
@@ -49,6 +50,16 @@ struct GameModScene {
     std::string point;
     std::string text;
     base::Bits128 identity{};
+};
+
+/// The program a taken mod's handlers are in (D181): the mod's subject, the
+/// entry among its own Kest sources, those sources, and the event points it
+/// handles with which functions.
+struct GameModProgram {
+    std::string mod;
+    std::string entry;
+    std::vector<kest::SourceFile> files;
+    std::vector<ModHandler> handlers;
 };
 
 class GameFiles {
@@ -142,6 +153,15 @@ public:
     [[nodiscard]] const std::vector<GameModScene>& modScenes() const noexcept {
         return modScenes_;
     }
+    /// The programs of the taken mods that handle events, in the record's
+    /// mod order.
+    [[nodiscard]] const std::vector<GameModProgram>& modPrograms() const noexcept {
+        return modPrograms_;
+    }
+    /// Compiles a mod's program with the engine's library, as untrusted code
+    /// is compiled: from its own sources alone, never the game's.
+    [[nodiscard]] static result::Result<std::shared_ptr<const kest::Program>> compileMod(
+        const GameModProgram& program, const kest::CompileSettings& settings = {}, std::string* report = nullptr);
     /// Compiles the program the description names `name`.
     [[nodiscard]] result::Result<std::shared_ptr<const kest::Program>>
     compile(std::string_view name, const kest::CompileSettings& settings = {}, std::string* report = nullptr) const;
@@ -209,6 +229,7 @@ private:
     std::vector<physics3d::BodyMesh> meshes_;
     std::vector<GameText> texts_;
     std::vector<GameModScene> modScenes_;
+    std::vector<GameModProgram> modPrograms_;
     /// The digest of each mesh's cooked bytes, in the same order.
     std::vector<base::Sha256Digest> meshDigests_;
     /// Each animator's graph, in the order of its lines.

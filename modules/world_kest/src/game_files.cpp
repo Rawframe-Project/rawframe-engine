@@ -240,6 +240,18 @@ void GameFiles::seal() {
         field(digest, scene.point);
         field(digest, scene.text);
     }
+    for (const GameModProgram& program : modPrograms_) {
+        field(digest, program.mod);
+        field(digest, program.entry);
+        for (const kest::SourceFile& file : program.files) {
+            field(digest, file.path);
+            field(digest, file.text);
+        }
+        for (const ModHandler& handler : program.handlers) {
+            field(digest, handler.point);
+            field(digest, handler.function);
+        }
+    }
     digest_ = digest.finish();
 }
 
@@ -329,8 +341,31 @@ result::Status GameFiles::readMods(game_content::GameContent* content) {
                                               .text = std::move(text),
                                               .identity = kScene->scene});
         }
+        // Its handlers' program, from the mod's own sources.
+        if (mods[at].description.handlers.empty()) {
+            continue;
+        }
+        if (cooked[at].programs.size() != 1 || cooked[at].programs[0].path != mods[at].description.program) {
+            return modRefused("a cooked mod does not name the sources of the program its handlers are in",
+                              mods[at].subject);
+        }
+        const content::ResourceTypeId kSourcesType{kest_library::kGameSourcesType};
+        RAWFRAME_TRY_ASSIGN(const std::string kSources,
+                            readResource(content->store(),
+                                         content::ResourceRef{.id = content::ResourceId{cooked[at].programs[0].sources},
+                                                              .type = kSourcesType}));
+        RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kest_library::readGameSources(kSources));
+        modPrograms_.push_back(GameModProgram{.mod = mods[at].subject,
+                                              .entry = cooked[at].programs[0].entry,
+                                              .files = std::move(files),
+                                              .handlers = mods[at].description.handlers});
     }
     return {};
+}
+
+result::Result<std::shared_ptr<const kest::Program>>
+GameFiles::compileMod(const GameModProgram& program, const kest::CompileSettings& settings, std::string* report) {
+    return kest_library::compile(program.entry, program.files, settings, report);
 }
 
 result::Status GameFiles::readMeshes(game_content::GameContent* content, const std::vector<base::Bits128>& resources) {

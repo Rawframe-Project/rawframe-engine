@@ -498,10 +498,11 @@ KestSystems::KestSystems(std::shared_ptr<const kest::Program> program,
                          std::unique_ptr<Doorway> doorway,
                          kest::DoorTable doors,
                          kest::MachineLimits limits,
+                         kest::Trust trust,
                          std::unique_ptr<kest::Machine> machine,
                          std::vector<Declared> declared) noexcept
-    : program_(std::move(program)), doors_(std::move(doors)), limits_(limits), doorway_(std::move(doorway)),
-      machine_(std::move(machine)), declared_(std::move(declared)) {
+    : program_(std::move(program)), doors_(std::move(doors)), limits_(limits), trust_(trust),
+      doorway_(std::move(doorway)), machine_(std::move(machine)), declared_(std::move(declared)) {
 }
 
 result::Status KestSystems::reload(std::shared_ptr<const kest::Program> program) {
@@ -534,8 +535,7 @@ result::Status KestSystems::reload(std::shared_ptr<const kest::Program> program)
             }
         }
     }
-    RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine,
-                        kest::Machine::start(program, doors_, kest::Trust::Trusted, limits_));
+    RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine, kest::Machine::start(program, doors_, trust_, limits_));
     std::vector<kest::Entry> entries;
     for (const Declared& declared : declared_) {
         RAWFRAME_TRY_ASSIGN(const kest::Entry kEntry, machine->entry(declared.entryName));
@@ -626,7 +626,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
     }
 
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine,
-                        kest::Machine::start(settings.program, doors, kest::Trust::Trusted, settings.limits));
+                        kest::Machine::start(settings.program, doors, settings.trust, settings.limits));
     std::vector<Declared> declared;
     declared.reserve(settings.systems.size());
     for (const KestSystemDeclaration& system : settings.systems) {
@@ -671,6 +671,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                                          std::move(doorway),
                                          std::move(doors),
                                          settings.limits,
+                                         settings.trust,
                                          std::move(machine),
                                          std::move(declared));
 }

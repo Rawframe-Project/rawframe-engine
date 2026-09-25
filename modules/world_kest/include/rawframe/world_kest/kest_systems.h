@@ -104,6 +104,9 @@ struct KestSystemsSettings {
     std::span<const KestPrefab> prefabs;
     /// One budget per system per tick, spent across its archetypes.
     kest::MachineLimits limits;
+    /// Untrusted for a mod's program (D181): only doors marked safe for it
+    /// bind, under Kest's untrusted profile.
+    kest::Trust trust = kest::Trust::Trusted;
     std::span<const KestSystemDeclaration> systems;
 };
 
@@ -145,6 +148,7 @@ public:
                 std::unique_ptr<Doorway> doorway,
                 kest::DoorTable doors,
                 kest::MachineLimits limits,
+                kest::Trust trust,
                 std::unique_ptr<kest::Machine> machine,
                 std::vector<Declared> declared) noexcept;
 
@@ -152,6 +156,7 @@ private:
     std::shared_ptr<const kest::Program> program_;
     kest::DoorTable doors_;
     kest::MachineLimits limits_;
+    kest::Trust trust_ = kest::Trust::Trusted;
     // Before the machine: its doors point into it, so it goes last.
     std::unique_ptr<Doorway> doorway_;
     std::unique_ptr<kest::Machine> machine_;

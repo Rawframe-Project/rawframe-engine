@@ -2,6 +2,7 @@
 #include "animation_doors.h"
 #include "animation_plan.h"
 #include "game_files_participant.h"
+#include "mod_handlers.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "predictor.h"
@@ -279,6 +280,23 @@ public:
                                                    .fuelPerCall = kAdmissionFuel};
             RAWFRAME_TRY_ASSIGN(admission_, KestAdmission::create(program_, game_.admission, admissionLimits_));
         }
+        // Each taken mod's handlers on a machine of its own (D181).
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kModHeap,
+                            configuration.unsignedInteger("kest.mod_heap_bytes", 4U << 20U));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kModFuel,
+                            configuration.unsignedInteger("kest.mod_fuel_per_handler", 1'000'000));
+        RAWFRAME_TRY_ASSIGN(
+            modHandlers_,
+            modHandlers(game_,
+                        layouts_,
+                        files,
+                        kest::MachineLimits{.heapBytes = static_cast<std::size_t>(kModHeap), .fuelPerCall = kModFuel}));
+        for (const std::unique_ptr<KestSystems>& handlers : modHandlers_) {
+            RAWFRAME_TRY(simulation_->addSystems(*handlers));
+        }
+        for (const GameModProgram& modProgram : files.modPrograms()) {
+            modHandlerCount_ += modProgram.handlers.size();
+        }
         return simulation_->addSystems(*systems_);
     }
 
@@ -328,6 +346,7 @@ public:
                               "a Kest game was loaded into the World",
                               {diagnostics::field("components", game_.components.size()),
                                diagnostics::field("systems", game_.systems.size()),
+                               diagnostics::field("modHandlers", modHandlerCount_),
                                diagnostics::field("entities", spawned)});
         return {};
     }
@@ -1255,6 +1274,9 @@ private:
     std::vector<std::vector<std::string_view>> before_;
     std::vector<std::vector<std::string_view>> streams_;
     std::unique_ptr<KestSystems> systems_;
+    /// Each taken mod's handlers, on its own machine.
+    std::vector<std::unique_ptr<KestSystems>> modHandlers_;
+    std::size_t modHandlerCount_ = 0;
 };
 
 result::Result<composition::ParticipantOwner> makeGame(composition::ParticipantContext& context) noexcept {
