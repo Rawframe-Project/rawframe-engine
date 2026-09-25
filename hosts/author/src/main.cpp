@@ -16,7 +16,9 @@
 // deltas or the one error record. Between processes a document's
 // generation is its content digest, which a request's `expects` names. The
 // scene is replaced whole, by rename, only when something changed and not
-// with `--dry-run`.
+// with `--dry-run`. The scenes an instance may name are those beside the
+// game description, by the identity their sidecars give them, and the
+// scene's own sidecar gives the document's.
 //
 // `read` answers a query document (D155) against the scene: the document's
 // generation read, and per query its answer or the one error record, each
@@ -38,6 +40,7 @@
 #include "rawframe/authoring/queries.h"
 #include "rawframe/authoring/request.h"
 #include "rawframe/base/sha256.h"
+#include "rawframe/content/sidecar.h"
 #include "rawframe/document/json.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/game_files.h"
@@ -149,6 +152,40 @@ Value slotValue(const result::Result<authoring::Committed>& outcome) {
     return made;
 }
 
+/// The importer a scene's sidecar names.
+constexpr std::string_view kSceneImporter = "rawframe.scene";
+
+/// The identity a scene's sidecar gives it, if it has one that reads.
+std::optional<rawframe::base::Bits128> sidecarIdentity(const std::filesystem::path& source) {
+    const auto kText = readFile(source.string() + std::string{rawframe::content::kSidecarSuffix});
+    if (!kText.has_value()) {
+        return std::nullopt;
+    }
+    const auto kSidecar = rawframe::content::readSidecar(*kText);
+    if (!kSidecar.has_value() || kSidecar->importer != kSceneImporter) {
+        return std::nullopt;
+    }
+    return kSidecar->id.value;
+}
+
+/// Every scene under the game description's directory, by the identity its
+/// sidecar gives it.
+std::vector<std::pair<rawframe::base::Bits128, std::filesystem::path>> scenesBeside(const std::filesystem::path& game) {
+    std::vector<std::pair<rawframe::base::Bits128, std::filesystem::path>> made;
+    std::error_code error;
+    for (auto entry = std::filesystem::recursive_directory_iterator{game.parent_path(), error};
+         !error && entry != std::filesystem::recursive_directory_iterator{};
+         entry.increment(error)) {
+        if (entry->is_regular_file() && entry->path().extension() == ".scene") {
+            const auto kIdentity = sidecarIdentity(entry->path());
+            if (kIdentity.has_value()) {
+                made.emplace_back(*kIdentity, entry->path());
+            }
+        }
+    }
+    return made;
+}
+
 /// The outcome of a request that could not be run at all.
 int refused(const result::Error& error) {
     Value made = Value::object();
@@ -190,16 +227,31 @@ int apply(const char* game, const std::filesystem::path& scenePath, const char* 
     if (!catalog.has_value()) {
         return refused(catalog.error());
     }
-    auto scene = authoring::AuthoredScene::open(rawframe::base::Bits128{}, *kSceneText);
+    auto scene =
+        authoring::AuthoredScene::open(sidecarIdentity(scenePath).value_or(rawframe::base::Bits128{}), *kSceneText);
     if (!scene.has_value()) {
         return refused(scene.error());
     }
     authoring::AuthoredScene& document = **scene;
+    const auto kBeside = scenesBeside(game);
+    const rawframe::scene::SceneSource kSources =
+        [&kBeside](rawframe::base::Bits128 id) -> result::Result<rawframe::scene::Scene> {
+        const auto kFound =
+            std::ranges::find(kBeside, id, &std::pair<rawframe::base::Bits128, std::filesystem::path>::first);
+        const auto kText = kFound != kBeside.end() ? readFile(kFound->second) : std::nullopt;
+        if (!kText.has_value()) {
+            return result::fail(result::ErrorClass::NotFound,
+                                authoring::kAuthoringDomain,
+                                code(authoring::AuthoringError::TargetNotFound),
+                                "no scene beside the game has that identity");
+        }
+        return rawframe::scene::readScene(*kText);
+    };
     Value results = Value::array();
     bool failed = false;
     std::size_t skipped = 0;
     if (request->batch == authoring::Batch::Atomic) {
-        const auto kOutcome = authoring::executeAtomic(document, 0, request->operations, *catalog);
+        const auto kOutcome = authoring::executeAtomic(document, 0, request->operations, *catalog, &kSources);
         failed = !kOutcome.has_value();
         results.push(slotValue(kOutcome));
     } else {
@@ -209,7 +261,8 @@ int apply(const char* game, const std::filesystem::path& scenePath, const char* 
             request->operations,
             *catalog,
             request->batch == authoring::Batch::HaltRemaining ? authoring::OnFailure::HaltRemaining
-                                                              : authoring::OnFailure::ContinuePerItem);
+                                                              : authoring::OnFailure::ContinuePerItem,
+            &kSources);
         for (const auto& each : kOutcomes.outcomes) {
             failed = failed || !each.has_value();
             results.push(slotValue(each));

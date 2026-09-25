@@ -2,7 +2,7 @@
 # command line. Tooling only; no client or server closure contains it.
 rawframe_host(NAME author OUTPUT rawframe-author
     SOURCES src/main.cpp
-    DEPS authoring world_kest kest scene schema document result base
+    DEPS authoring world_kest kest content scene schema document result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
