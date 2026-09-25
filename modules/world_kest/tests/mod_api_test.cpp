@@ -5,6 +5,7 @@
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/mod.h"
 
 #include <string>
 
@@ -65,4 +66,35 @@ RAWFRAME_TEST(AModApiDeclaredWrongIsRefused) {
     RAWFRAME_EXPECT(refused("modapi raid 1\nextension enemies data raid.enemy some\n"));
     RAWFRAME_EXPECT(refused("modapi raid 1\nextension Enemies data raid.enemy multi\n"));
     RAWFRAME_EXPECT(refused("modapi raid 1\nextension enemies data raid.enemy multi optional\n"));
+}
+
+RAWFRAME_TEST(AModDescribesItsTargetRangeAndContributions) {
+    const auto kMod = world_kest::parseMod("# More enemies.\ntarget acme/raid\nmodapi >=2 <4\n"
+                                           "contribute enemies enemies.scene\ncontribute enemies bosses.scene\n");
+    RAWFRAME_EXPECT(kMod.has_value());
+    if (!kMod.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(kMod->target == "acme/raid" && kMod->modApi.size() == 2 && kMod->contributions.size() == 2 &&
+                    kMod->contributions[1].scene == "bosses.scene");
+    RAWFRAME_EXPECT(!world_kest::accepts(kMod->modApi, 1) && world_kest::accepts(kMod->modApi, 2) &&
+                    world_kest::accepts(kMod->modApi, 3) && !world_kest::accepts(kMod->modApi, 4));
+    const auto kPinned = world_kest::parseMod("target acme/raid\nmodapi 3\n");
+    RAWFRAME_EXPECT(kPinned.has_value() && world_kest::accepts(kPinned->modApi, 3) &&
+                    !world_kest::accepts(kPinned->modApi, 2));
+    // Refused: no target or range, twice, outside the grammar, a range
+    // nothing satisfies, a contribution twice, an unknown line.
+    for (const std::string_view kText :
+         {"modapi 1\n",
+          "target acme/raid\n",
+          "target acme/raid\ntarget acme/raid\nmodapi 1\n",
+          "target acme\nmodapi 1\n",
+          "target acme/raid\nmodapi ~1\n",
+          "target acme/raid\nmodapi 0\n",
+          "target acme/raid\nmodapi >3 <3\n",
+          "target acme/raid\nmodapi >=1 <5 <6\n",
+          "target acme/raid\nmodapi 1\ncontribute enemies a.scene\ncontribute enemies a.scene\n",
+          "target acme/raid\nmodapi 1\nreplace rules\n"}) {
+        RAWFRAME_EXPECT(!world_kest::parseMod(kText).has_value());
+    }
 }
