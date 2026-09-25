@@ -434,9 +434,18 @@ struct ReplicationServer::State {
         if (!peer.mapped.contains(peer.player) && isPresent(peer.player) && peer.nextNetEntity != 0) {
             kDeclare(peer.player);
         }
+        // Both in entity order: one walk along the mappings, which a
+        // declaration never moves behind.
+        auto known = peer.mapped.begin();
         for (std::size_t index = 0; index < present.size(); ++index) {
             const world::EntityHandle kEntity = present[index].entity;
-            if ((index != 0 && present[index - 1].entity == kEntity) || peer.mapped.contains(kEntity) ||
+            if (index != 0 && present[index - 1].entity == kEntity) {
+                continue;
+            }
+            while (known != peer.mapped.end() && known->first < kEntity) {
+                ++known;
+            }
+            if ((known != peer.mapped.end() && known->first == kEntity) ||
                 peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0 ||
                 !relevant(peer, kViewer, kEntity, false)) {
                 continue;
@@ -490,11 +499,16 @@ struct ReplicationServer::State {
         // that its acknowledgement may still be on the way.
         candidates.clear();
         Mapping* mapping = nullptr;
+        known = peer.mapped.begin();
         for (std::size_t index = 0; index < present.size(); ++index) {
             const PresentValue& value = present[index];
             if (index == 0 || present[index - 1].entity != value.entity) {
-                const auto kMapping = peer.mapped.find(value.entity);
-                mapping = kMapping == peer.mapped.end() || !kMapping->second.acknowledged ? nullptr : &kMapping->second;
+                while (known != peer.mapped.end() && known->first < value.entity) {
+                    ++known;
+                }
+                mapping = known == peer.mapped.end() || known->first != value.entity || !known->second.acknowledged
+                              ? nullptr
+                              : &known->second;
                 if (mapping != nullptr) {
                     mapping->replicas.resize(settings.table.components.size());
                 }
