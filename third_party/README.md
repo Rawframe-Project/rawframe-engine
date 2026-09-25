@@ -14,6 +14,7 @@ apply to vendored files; the code is upstream's, not ours.
 | MsQuic 2.6.1 | `microsoft/msquic` | `a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83` | MIT | build files, `src/` without tests, tools, or Windows PGO data, notices |
 | Opus 1.5.2 | `xiph/opus` | `ddbe48383984d56acd9e1ab6a090c54ca6b735a6` | BSD-3-Clause | `include/`, `src/`, `celt/`, `silk/`, the three source lists, `COPYING` |
 | Zstandard 1.5.7 | `facebook/zstd` | `f8745da6ff1ad1e7bab384bd1f9d742439278e99` | BSD-3-Clause (dual-licensed; the BSD license is the one taken) | `lib/common`, `lib/compress`, `lib/decompress`, `lib/zstd.h`, `lib/zstd_errors.h`, `LICENSE` |
+| cgltf 1.15 | `jkuhlmann/cgltf` | `360db1a95480fe102ae9c69b27c5d101167ff5ba` | MIT | `cgltf.h`, `LICENSE`; the implementation unit `cgltf.c` is ours |
 | OpenSSL 3.5 | `openssl/openssl` | `453eaaa9e6bb1304730abacfbb73d51868cb6ab9` | Apache-2.0 | everything but `test/`, `demos/`, the programs' sample keys, and the documentation and fuzzers other than their `build.info` files |
 
 To move the Kest pin, run `tools/update_kest.sh <kest checkout> <revision>`,
@@ -24,6 +25,10 @@ To move a Maul pin, run `tools/update_maul.sh <maul2d|maul3d> <checkout> <revisi
 bring the source list in `third_party/<engine>/CMakeLists.txt` in line with
 upstream's, and proceed as for Kest. Maul snapshots and journals refuse
 another build, so both sides of anything that exchanges them need the same pin.
+
+To move the cgltf pin, run `tools/update_cgltf.sh <checkout> <revision>` and
+proceed as for Kest. Only the cook links it: glTF is decoded in import tooling,
+never in a runtime (ADR-0058).
 
 To move the miniaudio pin, run `tools/update_miniaudio.sh <checkout> <revision>`
 and proceed as for Kest. The runtime builds only its device layer
