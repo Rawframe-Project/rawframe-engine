@@ -413,7 +413,8 @@ RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
     const Pose2D& kAt = scene.pose(kRunner);
     RAWFRAME_EXPECT(std::abs(kAt.x - 2.2) < 0.02 && std::abs(kAt.y - 1.2) < 0.02);
     const Character2D& kOn = scene.character(kRunner);
-    RAWFRAME_EXPECT(kOn.ground == static_cast<std::uint8_t>(Ground::Grounded) && kOn.groundEntity == kFloor);
+    RAWFRAME_EXPECT(kOn.ground == static_cast<std::uint8_t>(Ground::Grounded));
+    RAWFRAME_EXPECT(scene.physics->castRay(kAt.x, kAt.y - 0.75, 0, -1).entity == kFloor);
     RAWFRAME_EXPECT(kOn.groundNormalY > 0.99F);
     RAWFRAME_EXPECT(std::abs(scene.velocity(kRunner).x) < 0.05F && std::abs(scene.velocity(kRunner).y) < 0.05F);
     RAWFRAME_EXPECT(scene.physics->statistics().characterMoves == 120);

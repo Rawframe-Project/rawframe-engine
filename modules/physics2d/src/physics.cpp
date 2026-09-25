@@ -468,7 +468,6 @@ struct Physics2D::State {
         Character2D& controlled = *row.character;
         const bool kWasGrounded = controlled.ground == static_cast<std::uint8_t>(Ground::Grounded);
         controlled.ground = static_cast<std::uint8_t>(Ground::Airborne);
-        controlled.groundEntity = {};
         controlled.groundNormalX = 0;
         controlled.groundNormalY = 0;
         const Body2D& body = entry.made;
@@ -491,7 +490,6 @@ struct Physics2D::State {
         m2Body_SetLinearVelocity(entry.body, m2Vec2{kMove.translation.x / seconds, kMove.translation.y / seconds});
         m2Body_SetAngularVelocity(entry.body, 0);
         controlled.ground = static_cast<std::uint8_t>(kMove.ground);
-        controlled.groundEntity = kMove.ground == Ground::Airborne ? world::EntityHandle{} : ownerOf(kMove.surface);
         controlled.groundNormalX = kMove.normal.x;
         controlled.groundNormalY = kMove.normal.y;
         ++statistics.characterMoves;

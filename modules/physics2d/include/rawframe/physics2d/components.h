@@ -161,7 +161,8 @@ enum class Ground : std::uint8_t {
 /// collision class; other characters never do, and it pushes dynamic bodies
 /// as a kinematic body does. Nothing about it is random or timed, so a
 /// predicting client moves its own character exactly as the server does
-/// wherever the same things are in its way.
+/// wherever the same things are in its way. Its layout has padding after
+/// `ground`.
 struct Character2D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
         schema::ComponentTypeId::fromText("edfb6a6b-7640-4204-9ff7-d1e07b4fcac8");
@@ -174,10 +175,11 @@ struct Character2D {
     /// ground within this far below it, so walking down slopes and stairs
     /// keeps it on them; nought never.
     float snap = 0;
-    /// Written by every step: the Ground it is on, what it stands on or
-    /// slides along (the null entity in the air), and that surface's normal.
+    /// Written by every step: the Ground it is on, and the normal of what it
+    /// stands on or slides along (nought in the air). Numbers only, so the
+    /// component replicates and a client predicts it; a ray down finds the
+    /// entity underfoot.
     std::uint8_t ground = 0;
-    world::EntityHandle groundEntity;
     float groundNormalX = 0;
     float groundNormalY = 0;
 };

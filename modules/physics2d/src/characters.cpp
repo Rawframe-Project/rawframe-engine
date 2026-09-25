@@ -91,7 +91,6 @@ CharacterMove moveCharacter(m2WorldId world,
             const m2MoverPlane& plane = planes[static_cast<std::size_t>(index)];
             if (plane.separation <= kTouching && plane.normal.y > kSlope &&
                 (found.ground == Ground::Airborne || plane.normal.y > found.normal.y)) {
-                found.surface = plane.shapeId;
                 found.normal = plane.normal;
                 found.ground = plane.normal.y >= character.groundNormal ? Ground::Grounded : Ground::Sliding;
             }
@@ -113,7 +112,6 @@ CharacterMove moveCharacter(m2WorldId world,
         }
     }
     move.ground = on.ground;
-    move.surface = on.surface;
     move.normal = on.normal;
     return move;
 }

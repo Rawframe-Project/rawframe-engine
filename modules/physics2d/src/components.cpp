@@ -77,14 +77,10 @@ const ComponentLayout kRayHitLayout{.id = {},
                                     .alignment = alignof(RayHit2D),
                                     .fields = kRayHitFields};
 
-constexpr std::array<ComponentField, 7> kCharacterFields = {{
+constexpr std::array<ComponentField, 5> kCharacterFields = {{
     {"groundNormal", offsetof(Character2D, groundNormal), FieldType::F32},
     {"snap", offsetof(Character2D, snap), FieldType::F32},
     {"ground", offsetof(Character2D, ground), FieldType::U8},
-    {"groundEntity.slot", offsetof(Character2D, groundEntity) + offsetof(world::EntityHandle, slot), FieldType::U32},
-    {"groundEntity.generation",
-     offsetof(Character2D, groundEntity) + offsetof(world::EntityHandle, generation),
-     FieldType::U32},
     {"groundNormalX", offsetof(Character2D, groundNormalX), FieldType::F32},
     {"groundNormalY", offsetof(Character2D, groundNormalY), FieldType::F32},
 }};

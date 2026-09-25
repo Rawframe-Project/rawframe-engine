@@ -13,8 +13,6 @@ namespace rawframe::physics2d {
 struct CharacterMove {
     m2Vec2 translation{0, 0};
     Ground ground = Ground::Airborne;
-    /// The surface of `ground`, when it is not Airborne.
-    m2ShapeId surface{};
     m2Vec2 normal{0, 0};
 };
 

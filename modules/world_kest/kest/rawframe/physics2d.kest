@@ -97,13 +97,12 @@ const SLIDING: u8 = 2
 // it moved with. Other characters never stop it. A surface whose normal's y
 // is at least `groundNormal` is ground (0.7 stands on slopes to about 45
 // degrees); one walked off is stepped down to if within `snap` below. The
-// step writes the rest: `ground`, the entity it stands on or slides along
-// (the null one in the air), and that surface's normal.
+// step writes the rest: `ground`, and the normal of the surface it stands on
+// or slides along (nought in the air). A ray down finds what that is.
 struct Character2D {
     groundNormal: f32
     snap: f32
     ground: u8
-    groundEntity: world.Entity
     groundNormalX: f32
     groundNormalY: f32
 }
