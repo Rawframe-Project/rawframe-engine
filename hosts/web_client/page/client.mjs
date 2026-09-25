@@ -6,17 +6,19 @@ import { browserWasi } from './wasi.mjs';
 
 export class WebClient {
     /**
-     * Instantiates the client from its module's bytes, with `transport`'s
-     * imports; `log` receives each line the client writes.
+     * Instantiates the client from its module's bytes, or from the module
+     * already compiled (as `WebAssembly.compileStreaming` gives it while it
+     * downloads), with `transport`'s imports; `log` receives each line the
+     * client writes.
      */
-    static async load(moduleBytes, { transport, log }) {
+    static async load(module, { transport, log }) {
         let instance;
         const memory = () => instance.exports.memory;
-        const { instance: made } = await WebAssembly.instantiate(moduleBytes, {
+        const made = await WebAssembly.instantiate(module, {
             wasi_snapshot_preview1: browserWasi(memory, log),
             rawframe_web_transport: transport.importsFor(memory),
         });
-        instance = made;
+        instance = made instanceof WebAssembly.Instance ? made : made.instance;
         instance.exports._initialize();
         return new WebClient(instance.exports);
     }

@@ -35,6 +35,12 @@
       "toolchainFile": "${sourceDir}/cmake/wasm32-wasi.cmake"
     },
     {
+      "name": "wasm-shipping",
+      "inherits": ["base", "shipping"],
+      "toolchainFile": "${sourceDir}/cmake/wasm32-wasi.cmake",
+      "cacheVariables": { "RAWFRAME_BUILD_TESTS": "OFF" }
+    },
+    {
       "name": "clang-thread",
       "inherits": ["clang", "development"],
       "cacheVariables": { "RAWFRAME_SANITIZE": "thread" }
