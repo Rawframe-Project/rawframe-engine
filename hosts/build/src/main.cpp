@@ -8,14 +8,15 @@
 //                  <architecture> <side> <configuration> <profile> [<key>]
 //   rawframe-build key <publisher> <directory>
 //   rawframe-build install <build> <library>
-//   rawframe-build compose <library> <game root> <profile> <record> [<package root>...]
+//   rawframe-build compose <library> <game root> <profile> <record> [<package root> | --mod <mod root>]...
 //
 // `key` writes `<kid>.key`, the secret, readable by its owner only, and
 // `<publisher>.keys`, the publisher key set that readers pin. `install`
 // copies a Build into a library as `builds/<root>/`; `compose` writes the
 // CompositionRecord of the library's Build of that root as the Game, with
-// the library's Builds of any package roots as its Packages, and prints its
-// CompositionId.
+// the library's Builds of any package roots as its Packages and of any mod
+// roots as its Mods, and prints its CompositionId. Whether the game takes
+// those mods is decided when the Composition is opened (D179).
 
 #include "rawframe/build/build.h"
 #include "rawframe/content/composition_record.h"
@@ -142,26 +143,29 @@ int compose(const std::filesystem::path& library,
             std::string_view root,
             std::string_view profile,
             const std::filesystem::path& record,
-            std::span<char* const> packageRoots) {
+            std::span<char* const> roots) {
     const auto kGame = referenceTo(library, root);
     std::vector<rawframe::content::BuildReference> packages;
-    for (const char* const kPackage : packageRoots) {
-        auto reference = referenceTo(library, kPackage);
+    std::vector<rawframe::content::BuildReference> mods;
+    for (std::size_t at = 0; at < roots.size(); ++at) {
+        const bool kMod = std::string_view{roots[at]} == "--mod" && at + 1 < roots.size();
+        auto reference = referenceTo(library, roots[kMod ? ++at : at]);
         if (!reference.has_value()) {
             std::fputs("rawframe-build: compose: the library has no such Build\n", stderr);
             return 1;
         }
-        packages.push_back(std::move(*reference));
+        (kMod ? mods : packages).push_back(std::move(*reference));
     }
     if (!kGame.has_value()) {
         std::fputs("rawframe-build: compose: the library has no such Build\n", stderr);
         return 1;
     }
-    // A record lists its Packages in subject order (SPEC-0021).
+    // A record lists its Packages and Mods in subject order (SPEC-0021).
     std::ranges::sort(packages, {}, &rawframe::content::BuildReference::subject);
+    std::ranges::sort(mods, {}, &rawframe::content::BuildReference::subject);
     const auto kText =
         rawframe::content::writeComposition(rawframe::content::CompositionRecord{.game = *kGame,
-                                                                                 .mods = {},
+                                                                                 .mods = std::move(mods),
                                                                                  .packages = std::move(packages),
                                                                                  .profile = std::string{profile},
                                                                                  .createdAt = unixNow()});
@@ -192,7 +196,8 @@ int main(int argc, char** argv) {
                    "<configuration> <profile> [<key>]\n"
                    "       rawframe-build key <publisher> <directory>\n"
                    "       rawframe-build install <build> <library>\n"
-                   "       rawframe-build compose <library> <game root> <profile> <record> [<package root>...]\n",
+                   "       rawframe-build compose <library> <game root> <profile> <record> "
+                   "[<package root> | --mod <mod root>]...\n",
                    stderr);
         return 2;
     }
