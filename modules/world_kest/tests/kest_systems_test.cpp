@@ -537,3 +537,105 @@ RAWFRAME_TEST(AnUntrustedProgramWritesItsColumnsAndOpensNoWorldDoor) {
                     kRefused.error().code() == code(kest::KestError::DoorNotForUntrusted));
     RAWFRAME_EXPECT(KestSystems::create({.program = *keeper, .limits = kLimits, .systems = kMake}).has_value());
 }
+
+namespace {
+
+/// A mod's handlers as a hostile author writes them (D183): each writes
+/// first, then never ends, reads past its array, or grows without bound.
+constexpr std::string_view kHostileHandlers = "module mod\n"
+                                              "\n"
+                                              "struct Position {\n"
+                                              "    x: f32\n"
+                                              "    y: f32\n"
+                                              "}\n"
+                                              "\n"
+                                              "fn spin(count: i32, positions: [Position]) {\n"
+                                              "    positions[0].x = 99.0\n"
+                                              "    let i = 0\n"
+                                              "    while true {\n"
+                                              "        i = i + 1\n"
+                                              "    }\n"
+                                              "}\n"
+                                              "\n"
+                                              "fn stray(count: i32, positions: [Position]) {\n"
+                                              "    positions[0].x = 99.0\n"
+                                              "    positions[count + 5].x = 1.0\n"
+                                              "}\n"
+                                              "\n"
+                                              "fn hoard(count: i32, positions: [Position]) {\n"
+                                              "    positions[0].x = 99.0\n"
+                                              "    let xs = array(0, 0)\n"
+                                              "    while true {\n"
+                                              "        push(xs, 1)\n"
+                                              "    }\n"
+                                              "}\n"
+                                              "\n"
+                                              "fn nudge(count: i32, positions: [Position]) {\n"
+                                              "    let i = 0\n"
+                                              "    while i < count {\n"
+                                              "        positions[i].y = positions[i].y + 1.0\n"
+                                              "        i = i + 1\n"
+                                              "    }\n"
+                                              "}\n";
+
+/// And one that calls itself without end, which Kest cannot bound.
+constexpr std::string_view kBottomless = "module mod\n"
+                                         "\n"
+                                         "struct Position {\n"
+                                         "    x: f32\n"
+                                         "    y: f32\n"
+                                         "}\n"
+                                         "\n"
+                                         "fn dive(count: i32, positions: [Position]) {\n"
+                                         "    positions[0].x = 99.0\n"
+                                         "    dive(count, positions)\n"
+                                         "}\n";
+
+std::shared_ptr<const kest::Program> compiledMod(std::string_view text) {
+    const std::array<kest::SourceFile, 1> kFiles = {kest::SourceFile{.path = "mod.kest", .text = std::string{text}}};
+    auto compiled = kest::Program::compile(kFiles, {});
+    RAWFRAME_EXPECT(compiled.has_value());
+    return compiled.has_value() ? *compiled : nullptr;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AHostileHandlerFailsAloneAndChangesNothing) {
+    const auto kRegistry = registry();
+    world::World world{kRegistry};
+    const Movers kMovers = spawn(world);
+    const std::array<KestSystemDeclaration, 4> kDeclarations = {
+        KestSystemDeclaration{.identity = "mod.spin", .entry = "spin", .columns = kFragile},
+        KestSystemDeclaration{.identity = "mod.stray", .entry = "stray", .columns = kFragile},
+        KestSystemDeclaration{.identity = "mod.hoard", .entry = "hoard", .columns = kFragile},
+        KestSystemDeclaration{.identity = "mod.nudge", .entry = "nudge", .columns = kFragile}};
+    auto kest = KestSystems::create({.program = compiledMod(kHostileHandlers),
+                                     .limits = kLimits,
+                                     .trust = kest::Trust::Untrusted,
+                                     .systems = kDeclarations});
+    RAWFRAME_EXPECT(kest.has_value());
+    if (!kest.has_value()) {
+        return;
+    }
+    world::Schedule ticks = schedule(**kest, *kRegistry);
+    world::TickIndex tick;
+    const auto kPosition = *world.registry().key<Position>();
+    // Tick after tick, each hostile handler fails on its own, what it wrote
+    // before failing never lands, and the one well-behaved handler runs.
+    for (int round = 1; round <= 3; ++round) {
+        auto report = ticks.runTick(world, tick, *world::TickRate::of(60));
+        RAWFRAME_EXPECT(report.has_value() && report->failures.size() == 3);
+        for (const world::EntityHandle kEntity : kMovers.plain) {
+            RAWFRAME_EXPECT(world.get(kEntity, kPosition)->x != 99 &&
+                            world.get(kEntity, kPosition)->y == static_cast<float>(round));
+        }
+    }
+    // A handler that calls itself without end never starts.
+    const std::array<KestSystemDeclaration, 1> kDive = {
+        KestSystemDeclaration{.identity = "mod.dive", .entry = "dive", .columns = kFragile}};
+    RAWFRAME_EXPECT(!KestSystems::create({.program = compiledMod(kBottomless),
+                                          .limits = kLimits,
+                                          .trust = kest::Trust::Untrusted,
+                                          .systems = kDive})
+                         .has_value());
+}
