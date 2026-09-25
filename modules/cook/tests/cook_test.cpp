@@ -296,8 +296,8 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     fs::copy(fs::path{RAWFRAME_SAMPLE_GAMES} / "runners", kGame, fs::copy_options::recursive);
     const std::string kSourcesId = "f9f0181057571ecd398d86d2c34a641f";
     writeText(kGame / "runners.game.rfmeta", sidecar("000000000000000000000000000000a5", "", "rawframe.game"));
-    static const std::array<Importer, 4> kImporters = {
-        audioImporter(), gameImporter(), kestImporter(), sceneImporter()};
+    static const std::array<Importer, 5> kImporters = {
+        audioImporter(), gameImporter(), kestImporter(), sceneImporter(), textImporter()};
     const auto kCook = [&kProject] {
         auto report = cookSources(CookRequest{
             .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
@@ -305,7 +305,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
         return report.has_value() ? std::move(*report) : CookReport{};
     };
     const CookReport kFirst = kCook();
-    RAWFRAME_EXPECT(kFirst.cooked == 8 && kFirst.failures.empty());
+    RAWFRAME_EXPECT(kFirst.cooked == 10 && kFirst.failures.empty());
     const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
         const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
         if (!kManifest.has_value()) {
@@ -335,6 +335,9 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
                         base::parseBits128Hex("52771075251e7361deaecf4939c72e56").value &&
                     kGameRead->file("runners.mixer") != nullptr && kGameRead->file("shot.sound") != nullptr &&
                     kGameRead->file("shot.sound")->text == readText(kGame / "shot.sound"));
+    RAWFRAME_EXPECT(kGameRead->texts.size() == 2 && kGameRead->textDocument("hud.strings") != nullptr &&
+                    kGameRead->textDocument("hud.strings")->document ==
+                        base::parseBits128Hex("aefdab1e47c086ddf189f56bbb92c4f0").value);
     const base::Bits128 kSources = base::parseBits128Hex(kSourcesId).value;
     RAWFRAME_EXPECT(kGameRead->programs.size() == 2 && kGameRead->program("runners.kest") != nullptr &&
                     kGameRead->program("runners.kest")->sources == kSources &&
@@ -368,6 +371,16 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     fs::rename(kGame / "kest.project.rfmeta", kProject.base / "aside");
     RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
     fs::rename(kProject.base / "aside", kGame / "kest.project.rfmeta");
+    RAWFRAME_EXPECT(kCook().failures.empty());
+
+    // Its text documents must make a catalog: a translated key the table
+    // lacks fails the game, and its own document still cooks.
+    const std::string kTurkish = readText(kGame / "hud.tr.translations");
+    std::string orphan = kTurkish;
+    orphan.replace(orphan.find("\"menu.play\""), 11, "\"menu.quit\"");
+    writeText(kGame / "hud.tr.translations", orphan);
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    writeText(kGame / "hud.tr.translations", kTurkish);
     RAWFRAME_EXPECT(kCook().failures.empty());
 
     // A scene it names is named by its resource; one without a sidecar is

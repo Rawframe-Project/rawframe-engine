@@ -29,6 +29,13 @@
 
 namespace rawframe::world_kest {
 
+/// A string table or translation a `text` line names, by the resource it
+/// is (D147).
+struct GameText {
+    std::string path;
+    base::Bits128 document{};
+};
+
 class GameFiles {
 public:
     /// No game: `named()` is false and nothing else is asked.
@@ -83,6 +90,14 @@ public:
     /// down, all read when the files were. Refused (`unreadable_file`) for
     /// any other.
     [[nodiscard]] result::Result<std::string_view> sceneById(base::Bits128 scene) const;
+    /// Every text document the description names, by its resource, in the
+    /// order of its lines: in development the identity its sidecar gives,
+    /// which must name `rawframe.text`, and from content the one the record
+    /// names. Only the identities are read here; a client reads the
+    /// resources, and a dedicated server never does.
+    [[nodiscard]] const std::vector<GameText>& texts() const noexcept {
+        return texts_;
+    }
     /// Every mesh the description names, decoded, by the identity its line
     /// gives it, in the order of its lines.
     [[nodiscard]] const std::vector<physics3d::BodyMesh>& meshes() const noexcept {
@@ -100,7 +115,8 @@ public:
     compile(std::string_view name, const kest::CompileSettings& settings = {}, std::string* report = nullptr) const;
     /// Everything the game is, as one digest: the description, each
     /// document, each scene, each scene instanced, each mesh, each
-    /// animation document, and each Kest file, as they were read.
+    /// animation document, each text document's identity, and each Kest
+    /// file, as they were read.
     [[nodiscard]] const base::Sha256Digest& digest() const noexcept {
         return digest_;
     }
@@ -148,6 +164,7 @@ private:
     std::vector<std::pair<base::Bits128, std::string>> instanced_;
     std::vector<Program> programs_;
     std::vector<physics3d::BodyMesh> meshes_;
+    std::vector<GameText> texts_;
     /// The digest of each mesh's cooked bytes, in the same order.
     std::vector<base::Sha256Digest> meshDigests_;
     /// Each animator's graph, in the order of its lines.

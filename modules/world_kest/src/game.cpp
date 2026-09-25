@@ -220,6 +220,19 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a scene is named once");
             }
             game.scenes.emplace_back(kWords[1]);
+        } else if (kKeyword == "text") {
+            if (kWords.size() != 2) {
+                return badLine(number, WorldKestError::BadGameLine, "a text line is `text <file>`");
+            }
+            if (std::ranges::contains(game.texts, kWords[1])) {
+                return badLine(number, WorldKestError::BadGameLine, "a text document is named once");
+            }
+            game.texts.emplace_back(kWords[1]);
+        } else if (kKeyword == "locale") {
+            if (!game.locale.empty() || kWords.size() != 2) {
+                return badLine(number, WorldKestError::BadGameLine, "a game names one default locale, `locale <tag>`");
+            }
+            game.locale = kWords[1];
         } else if (kKeyword == "mixer") {
             if (mixerLine != 0 || kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names one mixer layout, `mixer <file>`");

@@ -193,6 +193,10 @@ void GameFiles::seal() {
         field(digest, description_.meshes[at].path);
         digest.update(meshDigests_[at]);
     }
+    for (const GameText& text : texts_) {
+        field(digest, text.path);
+        field(digest, hexOf(text.document));
+    }
     for (const Named& graph : graphs_) {
         field(digest, graph.name);
         field(digest, graph.text);
@@ -392,6 +396,16 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
         meshes.push_back((*kSidecarRead)->id.value);
     }
     RAWFRAME_TRY(game.readMeshes(content, meshes));
+    // Each text document, by the resource its sidecar names.
+    for (const std::string& text : game.description_.texts) {
+        const auto kSidecarText = readText(kDirectory / (text + std::string{content::kSidecarSuffix}));
+        const auto kSidecarRead =
+            kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
+        if (!kSidecarRead.has_value() || !kSidecarRead->has_value() || (*kSidecarRead)->importer != "rawframe.text") {
+            return unreadable("a text document the game names has a sidecar naming rawframe.text", text);
+        }
+        game.texts_.push_back(GameText{.path = text, .document = (*kSidecarRead)->id.value});
+    }
     RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesUnder(kDirectory));
     game.sources_.push_back(std::move(files));
     for (std::string& name : programNames(game.description_)) {
@@ -467,6 +481,13 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
         meshes.push_back(kMesh->mesh);
     }
     RAWFRAME_TRY(game.readMeshes(&content, meshes));
+    for (const std::string& path : game.description_.texts) {
+        const CookedGameText* const kText = kCooked.textDocument(path);
+        if (kText == nullptr) {
+            return invalid("the cooked description does not name the resource of a text document it names", path);
+        }
+        game.texts_.push_back(GameText{.path = path, .document = kText->document});
+    }
     for (const GameAnimator& animator : game.description_.animators) {
         const CookedGameAnimator* const kAnimator = kCooked.animator(animator.path);
         if (kAnimator == nullptr) {

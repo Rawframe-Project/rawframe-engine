@@ -295,6 +295,42 @@ RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
     RAWFRAME_EXPECT(refusedAt("# nothing\n", WorldKestError::BadGameLine, "1"));
 }
 
+RAWFRAME_TEST(TextLinesNameDocumentsByTheirSidecars) {
+    auto game = parseGame("program p.kest\ntext hud.strings\ntext hud.tr.translations\nlocale en-GB\n");
+    RAWFRAME_EXPECT(game.has_value() && game->texts.size() == 2 && game->texts[1] == "hud.tr.translations" &&
+                    game->locale == "en-GB");
+    RAWFRAME_EXPECT(refusedAt("program p.kest\ntext\n", WorldKestError::BadGameLine, "2"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\ntext a b\n", WorldKestError::BadGameLine, "2"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\ntext a\ntext a\n", WorldKestError::BadGameLine, "3"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nlocale en\nlocale tr\n", WorldKestError::BadGameLine, "3"));
+
+    // In development, each by the identity its sidecar gives, which must
+    // name rawframe.text; its bytes are not read here.
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-texts-" + std::to_string(::getpid()));
+    std::filesystem::remove_all(kDirectory);
+    std::filesystem::create_directories(kDirectory);
+    const auto kWrite = [&kDirectory](std::string_view name, std::string_view text) {
+        std::FILE* file = std::fopen((kDirectory / name).c_str(), "wb");
+        std::fwrite(text.data(), 1, text.size(), file);
+        std::fclose(file);
+    };
+    const auto kSidecar = [](std::string_view id, std::string_view importer) {
+        return "{\n  \"schema\": 1,\n  \"resourceId\": \"" + std::string{id} + "\",\n  \"importer\": \"" +
+               std::string{importer} + "\"\n}\n";
+    };
+    kWrite("hud.game", "program p.kest\ntext hud.strings\n");
+    kWrite("hud.strings.rfmeta", kSidecar("749e2ba7d0067a4db2348b183fc4d55f", "rawframe.text"));
+    const auto kFiles = world_kest::GameFiles::fromDirectory(kDirectory / "hud.game");
+    RAWFRAME_EXPECT(kFiles.has_value() && kFiles->texts().size() == 1 && kFiles->texts()[0].path == "hud.strings" &&
+                    kFiles->texts()[0].document == base::parseBits128Hex("749e2ba7d0067a4db2348b183fc4d55f").value);
+    kWrite("hud.strings.rfmeta", kSidecar("749e2ba7d0067a4db2348b183fc4d55f", "rawframe.scene"));
+    RAWFRAME_EXPECT(!world_kest::GameFiles::fromDirectory(kDirectory / "hud.game").has_value());
+    std::filesystem::remove(kDirectory / "hud.strings.rfmeta");
+    RAWFRAME_EXPECT(!world_kest::GameFiles::fromDirectory(kDirectory / "hud.game").has_value());
+    std::filesystem::remove_all(kDirectory);
+}
+
 RAWFRAME_TEST(AKestGameRunsInTheWorld) {
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(

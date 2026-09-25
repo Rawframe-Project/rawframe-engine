@@ -48,3 +48,10 @@ predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.veloc
 # clients hear them, a server carries only the counts.
 mixer runners.mixer
 sound 950e09337d03de69 shot.sound
+
+# What a client shows: the HUD's words in English and Turkish (hud.strings,
+# hud.tr.translations), English unless the player asks otherwise. A server
+# never reads them.
+text hud.strings
+text hud.tr.translations
+locale en

@@ -322,6 +322,14 @@ struct GameDescription {
     /// From a `mixer <file>` line and `sound <16 hex digits> <file>` lines,
     /// which need it.
     std::optional<GameAudio> audio;
+    /// String tables and translations (SPEC-0033) a client's text comes
+    /// from, from `text <file>` lines, each a document the cook makes a
+    /// resource of (`rawframe.text`); a process reads the resources by
+    /// identity, and a dedicated server not at all (D147).
+    std::vector<std::string> texts;
+    /// The project's default locale, from a `locale <tag>` line; empty for
+    /// each table's source locale. A client checks the tag.
+    std::string locale;
     /// The program's admission rule, from an `admission <function>` line;
     /// empty admits every client the engine does.
     std::string admission;

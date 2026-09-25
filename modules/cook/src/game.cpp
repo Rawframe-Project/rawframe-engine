@@ -6,6 +6,7 @@
 #include "rawframe/cook/errors.h"
 #include "rawframe/input/actions.h"
 #include "rawframe/kest_library/library.h"
+#include "rawframe/localization/catalog.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/game.h"
 
@@ -146,6 +147,53 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
             return refuse("an animator's graph is a graph document cooked by rawframe.animation", animator.path);
         }
         game.animators.push_back(world_kest::CookedGameAnimator{.path = animator.path, .graph = kSidecar.id.value});
+    }
+
+    // Each text document: the resource its sidecar names, cooked by
+    // rawframe.text. Together they must make a catalog (D147), so an
+    // orphaned key or a translation reading an argument its source does not
+    // fails here rather than on a client.
+    std::vector<localization::TableDocument> tables;
+    std::vector<localization::Translations> translations;
+    for (const std::string& path : kDescription.texts) {
+        auto sidecarBytes = reads.file(path + std::string{content::kSidecarSuffix});
+        auto textBytes = reads.file(path);
+        if (!sidecarBytes.has_value() || !textBytes.has_value()) {
+            return refuse("a text document the description names has a sidecar", path);
+        }
+        RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
+        if (kSidecar.importer != "rawframe.text") {
+            return refuse("a text document the description names is cooked by rawframe.text", path);
+        }
+        // A table is read as one; anything else must read as a translation.
+        auto table = localization::readStrings(textOf(*textBytes));
+        if (table.has_value()) {
+            tables.push_back(localization::TableDocument{.id = kSidecar.id.value, .table = std::move(*table)});
+        } else {
+            auto translated = localization::readTranslations(textOf(*textBytes));
+            if (!translated.has_value()) {
+                return refuse("a text document reads as a string table or a translation", path);
+            }
+            translations.push_back(std::move(*translated));
+        }
+        game.texts.push_back(world_kest::CookedGameText{.path = path, .document = kSidecar.id.value});
+    }
+    if (!kDescription.texts.empty()) {
+        auto catalog = localization::Catalog::build(tables, translations);
+        if (!catalog.has_value()) {
+            return std::unexpected<result::Error>{
+                std::move(catalog).error().mappedTo(result::ErrorClass::InvalidArgument,
+                                                    kCookDomain,
+                                                    code(CookError::BadReference),
+                                                    "the text documents a game names make a catalog")};
+        }
+    }
+    if (!kDescription.locale.empty()) {
+        const auto kLocale = localization::parseLocale(kDescription.locale);
+        if (!kLocale.has_value() || !localization::intake(kDescription.locale).has_value() ||
+            *localization::intake(kDescription.locale) != *kLocale) {
+            return refuse("a game's default locale is a canonical tag CLDR knows", kDescription.locale);
+        }
     }
 
     // Each document, read as its owner reads it.
