@@ -436,10 +436,13 @@ void writeString(std::string& out, std::string_view text) {
     out.push_back('"');
 }
 
-void writeValue(std::string& out, const Value& value, std::size_t indent) {
-    const auto kNewLine = [&out](std::size_t depth) {
-        out.push_back('\n');
-        out.append(depth * 2, ' ');
+/// Pretty as the profile lays it out, or compact: no whitespace at all.
+void writeValue(std::string& out, const Value& value, std::size_t indent, bool compact) {
+    const auto kNewLine = [&out, compact](std::size_t depth) {
+        if (!compact) {
+            out.push_back('\n');
+            out.append(depth * 2, ' ');
+        }
     };
     switch (value.kind()) {
     case Value::Kind::Null:
@@ -468,9 +471,9 @@ void writeValue(std::string& out, const Value& value, std::size_t indent) {
             kNewLine(indent + 1);
             if (kObject) {
                 writeString(out, value.names()[index]);
-                out += ": ";
+                out += compact ? ":" : ": ";
             }
-            writeValue(out, value.items()[index], indent + 1);
+            writeValue(out, value.items()[index], indent + 1, compact);
             if (index + 1 < value.items().size()) {
                 out.push_back(',');
             }
@@ -579,8 +582,14 @@ result::Result<Value> parse(std::string_view text, const ReadLimits& limits) {
 
 std::string write(const Value& value) {
     std::string out;
-    writeValue(out, value, 0);
+    writeValue(out, value, 0, false);
     out.push_back('\n');
+    return out;
+}
+
+std::string writeCompact(const Value& value) {
+    std::string out;
+    writeValue(out, value, 0, true);
     return out;
 }
 

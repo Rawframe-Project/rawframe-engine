@@ -191,6 +191,10 @@ RAWFRAME_TEST(MadeValuesWriteCanonically) {
                     "  \"whole\": 2,\n  \"nan\": null,\n  \"list\": [\n    false,\n    \"x\\ty\"\n  ]\n}\n");
     const auto kRead = parseCanonical(kWritten);
     RAWFRAME_EXPECT(kRead.has_value() && *kRead->find("third")->real() == 1.0 / 3.0);
+    // The hash-input form: the same members and numbers, no whitespace.
+    root.add("empty", Value::object());
+    RAWFRAME_EXPECT(writeCompact(root) == "{\"integer\":-42,\"real\":0.1,\"third\":0.3333333333333333,\"whole\":2,"
+                                          "\"nan\":null,\"list\":[false,\"x\\ty\"],\"empty\":{}}");
 }
 
 RAWFRAME_TEST(HostileBytesNeverWriteDifferentlyThanTheyRead) {

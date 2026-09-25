@@ -101,6 +101,11 @@ struct ReadLimits {
 /// and one line feed at the end.
 [[nodiscard]] std::string write(const Value& value);
 
+/// The same value with no whitespace and no final line feed, members and
+/// numbers as `write` has them: SPEC-0028's hash-input form, for digests of
+/// an authored document's parts.
+[[nodiscard]] std::string writeCompact(const Value& value);
+
 /// `parse`, refusing (`NotCanonical`, at the first line that differs) text
 /// that `write` would not have produced byte for byte.
 [[nodiscard]] result::Result<Value> parseCanonical(std::string_view text, const ReadLimits& limits = {});
