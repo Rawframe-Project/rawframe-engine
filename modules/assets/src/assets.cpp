@@ -315,6 +315,11 @@ result::Result<const void*> AssetSet::get(AssetHandle handle, std::uint64_t tick
     return entry.form.value.get();
 }
 
+result::Result<std::shared_ptr<const void>> AssetSet::share(AssetHandle handle, std::uint64_t tick) const {
+    RAWFRAME_TRY(get(handle, tick));
+    return state_->entries[handle.slot].form.value;
+}
+
 void AssetSet::update(std::uint64_t tick) {
     State& state = *state_;
     if (state.closed) {

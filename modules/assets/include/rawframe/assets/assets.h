@@ -137,8 +137,12 @@ public:
     void cancel(RequesterId requester) noexcept;
 
     /// The decoded form, or why its handle is stale (`Evicted`,
-    /// `RevisionRetired`, `ScopeClosed`).
+    /// `RevisionRetired`, `ScopeClosed`). Valid until the next update.
     [[nodiscard]] result::Result<const void*> get(AssetHandle handle, std::uint64_t tick) const;
+    /// The decoded form shared, for a consumer that keeps it across updates
+    /// (a mixer playing a clip). Hold it only while holding interest in it:
+    /// a form shared past its eviction outlives its budget charge.
+    [[nodiscard]] result::Result<std::shared_ptr<const void>> share(AssetHandle handle, std::uint64_t tick) const;
 
     /// At a schedule point on the owner's thread: takes finished reads to
     /// decoding and finished decodes to residency, fails requests past their
@@ -168,6 +172,10 @@ public:
     [[nodiscard]] result::Result<const T*> get(AssetHandle handle, std::uint64_t tick) const {
         RAWFRAME_TRY_ASSIGN(const void* value, set_->get(handle, tick));
         return static_cast<const T*>(value);
+    }
+    [[nodiscard]] result::Result<std::shared_ptr<const T>> share(AssetHandle handle, std::uint64_t tick) const {
+        RAWFRAME_TRY_ASSIGN(std::shared_ptr<const void> value, set_->share(handle, tick));
+        return std::static_pointer_cast<const T>(std::move(value));
     }
     [[nodiscard]] AssetSet& set() const noexcept {
         return *set_;

@@ -1,9 +1,9 @@
 // Decoded assets against SPEC-0027: requests that coalesce into one load
 // with their own readiness, forms evicted in a deterministic order when the
 // budget needs room and never while wanted, handles that fail typed once
-// stale, sticky failures, deadlines that fail only their own requester, a
-// load abandoned by everyone discarded, and a closed scope that names what
-// was still wanted.
+// stale while forms shared before stay whole, sticky failures, deadlines
+// that fail only their own requester, a load abandoned by everyone
+// discarded, and a closed scope that names what was still wanted.
 
 #include "rawframe/assets/assets.h"
 #include "rawframe/assets/errors.h"
@@ -161,6 +161,9 @@ RAWFRAME_TEST(TheBudgetEvictsTheLeastRecentlyUsedFirst) {
     RAWFRAME_EXPECT(fixture.settle(kA, 1) == Readiness::Ready && fixture.settle(kB, 1) == Readiness::Ready);
     const AssetHandle kHandleA = *fixture.set->handle(kA);
     const AssetHandle kHandleB = *fixture.set->handle(kB);
+    // A kept shared across updates, as a mixer keeps a clip.
+    const auto kShared = Assets<std::string>{*fixture.set}.share(kHandleA, 5);
+    RAWFRAME_EXPECT(kShared.has_value() && **kShared == "abcd");
     // B used later than A; both then unwanted.
     static_cast<void>(fixture.textOf(kA, 5));
     static_cast<void>(fixture.textOf(kB, 9));
@@ -171,6 +174,10 @@ RAWFRAME_TEST(TheBudgetEvictsTheLeastRecentlyUsedFirst) {
     // A went, B stayed: A's handle is stale, typed.
     const auto kStale = Assets<std::string>{*fixture.set}.get(kHandleA, 10);
     RAWFRAME_EXPECT(!kStale.has_value() && kStale.error().code() == code(AssetError::Evicted));
+    const auto kStaleShare = Assets<std::string>{*fixture.set}.share(kHandleA, 10);
+    RAWFRAME_EXPECT(!kStaleShare.has_value() && kStaleShare.error().code() == code(AssetError::Evicted));
+    // What was shared before is still whole.
+    RAWFRAME_EXPECT(kShared.has_value() && **kShared == "abcd");
     RAWFRAME_EXPECT(Assets<std::string>{*fixture.set}.get(kHandleB, 10).has_value());
     RAWFRAME_EXPECT(fixture.set->statistics().evictions == 1 && fixture.set->statistics().residentBytes == 8);
     // A form that is wanted is never evicted: with C and a new B wanted,
