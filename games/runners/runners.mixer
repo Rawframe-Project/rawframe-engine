@@ -5,12 +5,37 @@
     "busId": "b64c164e5d653e5c",
     "name": "master",
     "role": "master",
+    "effects": [
+      {
+        "type": "rawframe/dynamics@1",
+        "processor": "limiter",
+        "threshold": -1,
+        "attack": 0.001
+      }
+    ],
     "children": [
       {
         "busId": "691c5abeb88d55ee",
         "name": "effects",
         "role": "sfx",
-        "volume": -6
+        "volume": -6,
+        "sends": [
+          {
+            "target": "f9b4b46dabadb452",
+            "level": -12
+          }
+        ]
+      },
+      {
+        "busId": "f9b4b46dabadb452",
+        "name": "room",
+        "effects": [
+          {
+            "type": "rawframe/reverb@1",
+            "decay": 1.2,
+            "mix": 1
+          }
+        ]
       }
     ]
   },
