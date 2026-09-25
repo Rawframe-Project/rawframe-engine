@@ -6,12 +6,13 @@ namespace rawframe::physics2d {
 
 namespace {
 
-constexpr std::array<ComponentField, 12> kBodyFields = {{
+constexpr std::array<ComponentField, 13> kBodyFields = {{
     {"motion", offsetof(Body2D, motion), FieldType::U8},
     {"shape", offsetof(Body2D, shape), FieldType::U8},
     {"fixedRotation", offsetof(Body2D, fixedRotation), FieldType::Bool},
     {"bullet", offsetof(Body2D, bullet), FieldType::Bool},
     {"sensor", offsetof(Body2D, sensor), FieldType::Bool},
+    {"collisionClass", offsetof(Body2D, collisionClass), FieldType::U64},
     {"width", offsetof(Body2D, width), FieldType::F32},
     {"height", offsetof(Body2D, height), FieldType::F32},
     {"density", offsetof(Body2D, density), FieldType::F32},

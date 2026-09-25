@@ -1,9 +1,14 @@
 # The sample physics game: players are balls rolling along the ground among a
-# pile of crates, all of it Maul2D bodies stepped on the server. Each client
+# pile of crates, all of it Maul2D bodies stepped on the server; balls pass
+# through each other. Each client
 # is sent what is within 40 meters of its ball, sees it between states, and
 # predicts its own ball among the level's static bodies.
 program crates.kest
 physics2d gravity 0 -10 substeps 4
+
+# Balls pass through each other and meet everything else.
+collision class ball 3f1c9a7e52d04b18
+collision rule ball ball ignore
 
 component 03c81a21-9030-46d1-8e40-897f8af85e86 crates.steer Steer
 

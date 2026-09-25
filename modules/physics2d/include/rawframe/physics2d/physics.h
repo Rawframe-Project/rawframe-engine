@@ -31,10 +31,45 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace rawframe::physics2d {
+
+/// What happens where two collision classes meet (SPEC-0037's closed rule
+/// vocabulary): they push each other, overlap and are told, or pass through
+/// unaware.
+enum class CollisionRule : std::uint8_t {
+    Collide,
+    Trigger,
+    Ignore,
+};
+
+/// A collision class: a durable identity (never nought) and its name.
+struct CollisionClass {
+    std::uint64_t id = 0;
+    std::string name;
+};
+
+struct CollisionPair {
+    std::uint64_t first = 0;
+    std::uint64_t second = 0;
+    CollisionRule rule = CollisionRule::Collide;
+};
+
+/// SPEC-0037's collision document: the classes, the rules between pairs of
+/// them (either order), and the rule for every pair not listed, bodies of
+/// no class among them. A body whose Body2D names a class not here is not
+/// made. A body that is a sensor overlaps what its class does not ignore.
+struct CollisionDocument {
+    std::vector<CollisionClass> classes;
+    std::vector<CollisionPair> rules;
+    CollisionRule fallback = CollisionRule::Collide;
+};
+
+/// Classes a document may declare.
+inline constexpr std::size_t kMaximumCollisionClasses = 31;
 
 struct Physics2DSettings {
     /// Meters a second squared.
@@ -46,6 +81,7 @@ struct Physics2DSettings {
     std::uint32_t shapeCapacity = 4096;
     std::uint32_t jointCapacity = 1024;
     bool sleeping = true;
+    CollisionDocument collision;
 };
 
 struct Physics2DStatistics {
@@ -83,7 +119,10 @@ public:
 
 class Physics2D final : public world_runtime::SystemContributor, public Physics2DQueries {
 public:
-    /// Refuses settings out of range (`invalid_settings`), a processor that
+    /// Refuses settings out of range or a collision document that is not
+    /// well formed (`invalid_settings`: a class of identity nought, a name
+    /// or identity twice, more than kMaximumCollisionClasses classes, a
+    /// rule naming a class not declared, a pair ruled twice), a processor that
     /// cannot run the build's kernels (`unsupported`), and a process with
     /// no room for another physics world (`capacity`).
     [[nodiscard]] static result::Result<std::unique_ptr<Physics2D>> create(const Physics2DSettings& settings);

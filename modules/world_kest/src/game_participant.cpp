@@ -466,9 +466,7 @@ private:
         // A predicting client steps its player's body among the level's
         // static bodies; everything that moves besides it is the server's.
         if (game_.physics2d.has_value()) {
-            predictedPhysics_ = physics2d::Physics2DSettings{.gravityX = game_.physics2d->gravityX,
-                                                             .gravityY = game_.physics2d->gravityY,
-                                                             .substeps = game_.physics2d->substeps};
+            predictedPhysics_ = physicsSettings();
             for (const GameSpawn& spawn : game_.spawns) {
                 RAWFRAME_TRY_ASSIGN(SpawnValues values, spawnValues(spawn));
                 const auto kBody =
@@ -521,6 +519,25 @@ private:
         return {};
     }
 
+    /// The physics the game describes: its world and its collision document.
+    [[nodiscard]] physics2d::Physics2DSettings physicsSettings() const {
+        physics2d::Physics2DSettings settings{.gravityX = game_.physics2d->gravityX,
+                                              .gravityY = game_.physics2d->gravityY,
+                                              .substeps = game_.physics2d->substeps};
+        const auto kId = [this](const std::string& name) {
+            return std::ranges::find(game_.collision.classes, name, &GameCollisionClass::name)->id;
+        };
+        for (const GameCollisionClass& declared : game_.collision.classes) {
+            settings.collision.classes.push_back({.id = declared.id, .name = declared.name});
+        }
+        for (const GameCollisionRule& rule : game_.collision.rules) {
+            settings.collision.rules.push_back(
+                {.first = kId(rule.first), .second = kId(rule.second), .rule = rule.rule});
+        }
+        settings.collision.fallback = game_.collision.fallback;
+        return settings;
+    }
+
     using SpawnValues = std::vector<std::pair<schema::ComponentTypeId, std::vector<std::byte>>>;
 
     /// The values one spawn line gives each of its components.
@@ -531,7 +548,13 @@ private:
                 static_cast<std::size_t>(componentNamed(part.component) - game_.components.data());
             const kest::TypeLayout& layout = layouts_[kIndex];
             std::vector<std::byte> bytes(layout.size);
-            for (const GameFieldValue& value : part.fields) {
+            for (GameFieldValue value : part.fields) {
+                // A body's collision class, by name.
+                const auto kClass = std::ranges::find(game_.collision.classes, value.value, &GameCollisionClass::name);
+                if (game_.components[kIndex].id == physics2d::Body2D::kComponentTypeId &&
+                    value.field == "collisionClass" && kClass != game_.collision.classes.end()) {
+                    value.value = std::to_string(kClass->id);
+                }
                 const kest::Field* field = nullptr;
                 for (const kest::Field& candidate : layout.fields) {
                     field = candidate.name == value.field ? &candidate : field;
@@ -564,8 +587,9 @@ private:
             }
             kest::TypeLayout made{.size = engine.size, .alignment = engine.alignment, .mark = 0, .fields = {}};
             for (const physics2d::ComponentField& field : engine.fields) {
-                constexpr std::array<kest::FieldKind, 5> kKinds = {kest::FieldKind::U8,
+                constexpr std::array<kest::FieldKind, 6> kKinds = {kest::FieldKind::U8,
                                                                    kest::FieldKind::U32,
+                                                                   kest::FieldKind::U64,
                                                                    kest::FieldKind::Bool,
                                                                    kest::FieldKind::F32,
                                                                    kest::FieldKind::F64};
@@ -591,6 +615,8 @@ private:
                 return physics2d::FieldType::U8;
             case kest::FieldKind::U32:
                 return physics2d::FieldType::U32;
+            case kest::FieldKind::U64:
+                return physics2d::FieldType::U64;
             case kest::FieldKind::Bool:
                 return physics2d::FieldType::Bool;
             case kest::FieldKind::F32:
@@ -630,9 +656,7 @@ private:
             }
         }
         if (!planOnly_) {
-            physics2d_ = physics2d::Physics2DSettings{.gravityX = game_.physics2d->gravityX,
-                                                      .gravityY = game_.physics2d->gravityY,
-                                                      .substeps = game_.physics2d->substeps};
+            physics2d_ = physicsSettings();
         }
         return {};
     }

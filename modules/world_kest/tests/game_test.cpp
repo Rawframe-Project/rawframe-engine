@@ -137,6 +137,35 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(CollisionIsDeclaredByLine) {
+    const std::string kPhysics = "program p.kest\nphysics2d\n";
+    auto game = parseGame(kPhysics + "collision class ball 3f1c9a7e52d04b18\ncollision class wall 00000000000000a1\n"
+                                     "collision rule ball wall trigger\ncollision default ignore\n");
+    RAWFRAME_EXPECT(game.has_value());
+    if (!game.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(game->collision.classes.size() == 2 && game->collision.classes[0].id == 0x3f1c9a7e52d04b18 &&
+                    game->collision.classes[1].name == "wall" && game->collision.classes[1].id == 0xa1);
+    RAWFRAME_EXPECT(game->collision.rules.size() == 1 &&
+                    game->collision.rules[0].rule == physics2d::CollisionRule::Trigger &&
+                    game->collision.fallback == physics2d::CollisionRule::Ignore);
+    // A short identity, nought, no hex, an unknown rule, a second default,
+    // a class not declared, and collision without physics.
+    for (const std::string_view kLine : {"collision class ball 3f1c9a7e52d04b1\n",
+                                         "collision class ball 0000000000000000\n",
+                                         "collision class ball 3f1c9a7e52d04b1z\n",
+                                         "collision class ball 3f1c9a7e52d04b18\ncollision rule ball ball bounce\n",
+                                         "collision default ignore\ncollision default collide\n"}) {
+        const std::string kText = kPhysics + std::string{kLine};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "4"));
+    }
+    RAWFRAME_EXPECT(refusedAt(kPhysics + "collision rule ball wall ignore\n", WorldKestError::UnknownName, "3"));
+    RAWFRAME_EXPECT(
+        refusedAt("program p.kest\ncollision class ball 3f1c9a7e52d04b18\n", WorldKestError::BadGameLine, "2"));
+}
+
 RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
     constexpr std::string_view kProgram = "program p.kest\n";
     RAWFRAME_EXPECT(refusedAt("program p.kest\nbuild x\n", WorldKestError::BadGameLine, "2"));

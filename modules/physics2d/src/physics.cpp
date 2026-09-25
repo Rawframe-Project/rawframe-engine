@@ -6,11 +6,14 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <map>
 #include <maul2d/maul2d.h>
 #include <mutex>
+#include <optional>
+#include <string_view>
 #include <tuple>
 #include <utility>
 
@@ -29,8 +32,25 @@ std::mutex& worldTableLock() noexcept {
     return lock;
 }
 
+/// Bit for bit, so a value written back is told from any other, NaNs and
+/// signed noughts included. Only for the components without padding:
+/// Pose2D, Velocity2D, and Impulse2D.
 template <typename T> [[nodiscard]] bool same(const T& left, const T& right) noexcept {
     return std::memcmp(&left, &right, sizeof(T)) == 0;
+}
+
+/// Field by field: a Body2D has padding, which holds whatever it holds.
+[[nodiscard]] bool same(const Body2D& left, const Body2D& right) noexcept {
+    const auto kBits = [](float value) {
+        return std::bit_cast<std::uint32_t>(value);
+    };
+    return left.motion == right.motion && left.shape == right.shape && left.fixedRotation == right.fixedRotation &&
+           left.bullet == right.bullet && left.sensor == right.sensor && left.collisionClass == right.collisionClass &&
+           kBits(left.width) == kBits(right.width) && kBits(left.height) == kBits(right.height) &&
+           kBits(left.density) == kBits(right.density) && kBits(left.friction) == kBits(right.friction) &&
+           kBits(left.restitution) == kBits(right.restitution) &&
+           kBits(left.linearDamping) == kBits(right.linearDamping) &&
+           kBits(left.angularDamping) == kBits(right.angularDamping);
 }
 
 [[nodiscard]] bool finite(float value) noexcept {
@@ -63,11 +83,28 @@ template <typename T> [[nodiscard]] bool same(const T& left, const T& right) noe
 struct Mapped {
     m2BodyId body{};
     m2ShapeId shape{};
+    /// The sensor twin of a body whose class triggers with another.
+    m2ShapeId trigger{};
     bool refused = false;
     Body2D made;
     Pose2D pose;
     Velocity2D velocity;
 };
+
+/// How one collision class filters, as Maul2D category and mask bits: bit
+/// `i` is class `i`'s solid shapes (class nought is bodies of none) and bit
+/// `32 + i` its sensors. A solid meets another class's solid where the
+/// rule is collide, and its sensors where the rule is not ignore; a sensor
+/// twin, made for a class that triggers with another, meets the solids of
+/// the classes it triggers with; a body that is a sensor meets every solid
+/// its class does not ignore.
+struct ClassFilter {
+    std::uint64_t solidMask = 0;
+    std::uint64_t triggerMask = 0;
+    std::uint64_t sensorMask = 0;
+};
+
+constexpr std::uint64_t kSensorBits = 32;
 
 struct Row {
     world::EntityHandle entity;
@@ -80,6 +117,15 @@ struct Row {
 
 struct Physics2D::State {
     Physics2DSettings settings;
+    /// By class index, nought for bodies of no class.
+    std::vector<ClassFilter> filters;
+    /// Class identities and their indices, by identity.
+    std::vector<std::pair<std::uint64_t, std::size_t>> classes;
+    /// Entity pairs whose overlap was told this step, so a pair meeting
+    /// through two sensors is told once.
+    std::vector<std::pair<world::EntityHandle, world::EntityHandle>> toldEntered;
+    std::vector<std::pair<world::EntityHandle, world::EntityHandle>> toldExited;
+    std::vector<std::pair<world::EntityHandle, world::EntityHandle>> toldInside;
     m2WorldId physics{};
     Physics2DStatistics statistics;
     std::map<world::EntityHandle, Mapped> mapped;
@@ -98,6 +144,65 @@ struct Physics2D::State {
     std::unique_ptr<world::System> system;
     std::vector<Row> rows;
 
+    /// Checks the collision document (SPEC-0037 §15, 2 and 3) and works out
+    /// every class's filter.
+    result::Status plan(const CollisionDocument& document) {
+        const auto kBad = [](std::string_view why) {
+            return refuse(result::ErrorClass::InvalidArgument, Physics2DError::InvalidSettings, why);
+        };
+        if (document.classes.size() > kMaximumCollisionClasses) {
+            return kBad("a collision document declares more classes than it may");
+        }
+        std::vector<std::string_view> names;
+        for (std::size_t index = 0; index < document.classes.size(); ++index) {
+            const CollisionClass& declared = document.classes[index];
+            if (declared.id == 0 || declared.name.empty()) {
+                return kBad("a collision class has identity nought or no name");
+            }
+            classes.emplace_back(declared.id, index + 1);
+            names.push_back(declared.name);
+        }
+        std::ranges::sort(classes);
+        std::ranges::sort(names);
+        if (std::ranges::adjacent_find(classes, {}, &std::pair<std::uint64_t, std::size_t>::first) != classes.end() ||
+            std::ranges::adjacent_find(names) != names.end()) {
+            return kBad("a collision class's identity or name is declared twice");
+        }
+        const std::size_t kCount = document.classes.size() + 1;
+        std::vector<std::optional<CollisionRule>> rules(kCount * kCount);
+        for (const CollisionPair& pair : document.rules) {
+            const auto kFirst = classIndex(pair.first);
+            const auto kSecond = classIndex(pair.second);
+            if (pair.first == 0 || pair.second == 0 || !kFirst.has_value() || !kSecond.has_value()) {
+                return kBad("a collision rule names a class the document does not declare");
+            }
+            auto& forward = rules[(*kFirst * kCount) + *kSecond];
+            if (forward.has_value()) {
+                return kBad("a pair of collision classes is ruled twice");
+            }
+            forward = pair.rule;
+            rules[(*kSecond * kCount) + *kFirst] = pair.rule;
+        }
+        filters.assign(kCount, ClassFilter{});
+        for (std::size_t one = 0; one < kCount; ++one) {
+            for (std::size_t other = 0; other < kCount; ++other) {
+                const CollisionRule kRule = rules[(one * kCount) + other].value_or(document.fallback);
+                ClassFilter& filter = filters[one];
+                if (kRule == CollisionRule::Collide) {
+                    filter.solidMask |= std::uint64_t{1} << other;
+                }
+                if (kRule != CollisionRule::Ignore) {
+                    filter.solidMask |= std::uint64_t{1} << (kSensorBits + other);
+                    filter.sensorMask |= std::uint64_t{1} << other;
+                }
+                if (kRule == CollisionRule::Trigger) {
+                    filter.triggerMask |= std::uint64_t{1} << other;
+                }
+            }
+        }
+        return {};
+    }
+
     ~State() {
         if (m2World_IsValid(physics)) {
             const std::scoped_lock kLock{worldTableLock()};
@@ -111,7 +216,10 @@ struct Physics2D::State {
         into.pose = *row.pose;
         into.velocity = *row.velocity;
         into.body = {};
-        into.refused = !makeable(body, *row.pose, *row.velocity);
+        into.shape = {};
+        into.trigger = {};
+        const auto kClass = classIndex(body.collisionClass);
+        into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value();
         if (into.refused) {
             ++statistics.bodiesRefused;
             return false;
@@ -138,27 +246,69 @@ struct Physics2D::State {
         shape.friction = body.friction;
         shape.restitution = body.restitution;
         shape.isSensor = body.sensor;
-        m2ShapeId made{};
-        if (body.shape == static_cast<std::uint8_t>(Shape::Circle)) {
-            const m2Circle kCircle{.center = {0, 0}, .radius = body.width};
-            made = m2CreateCircleShape(kBody, &shape, &kCircle);
-        } else if (body.shape == static_cast<std::uint8_t>(Shape::Box)) {
-            const m2Polygon kBox = m2MakeBox(body.width, body.height);
-            made = m2CreatePolygonShape(kBody, &shape, &kBox);
-        } else {
+        const ClassFilter& filter = filters[*kClass];
+        shape.categoryBits = std::uint64_t{1} << (body.sensor ? kSensorBits + *kClass : *kClass);
+        shape.maskBits = body.sensor ? filter.sensorMask : filter.solidMask;
+        const auto kShape = [&](const m2ShapeDef& definitionOf) {
+            if (body.shape == static_cast<std::uint8_t>(Shape::Circle)) {
+                const m2Circle kCircle{.center = {0, 0}, .radius = body.width};
+                return m2CreateCircleShape(kBody, &definitionOf, &kCircle);
+            }
+            if (body.shape == static_cast<std::uint8_t>(Shape::Box)) {
+                const m2Polygon kBox = m2MakeBox(body.width, body.height);
+                return m2CreatePolygonShape(kBody, &definitionOf, &kBox);
+            }
             const m2Capsule kCapsule{.point1 = {0, -body.height}, .point2 = {0, body.height}, .radius = body.width};
-            made = m2CreateCapsuleShape(kBody, &shape, &kCapsule);
+            return m2CreateCapsuleShape(kBody, &definitionOf, &kCapsule);
+        };
+        const m2ShapeId kMade = kShape(shape);
+        m2ShapeId twin{};
+        if (kMade.index1 != 0 && !body.sensor && filter.triggerMask != 0) {
+            m2ShapeDef sensor = shape;
+            sensor.isSensor = true;
+            sensor.density = 0;
+            sensor.categoryBits = std::uint64_t{1} << (kSensorBits + *kClass);
+            sensor.maskBits = filter.triggerMask;
+            twin = kShape(sensor);
         }
-        if (made.index1 == 0) {
+        if (kMade.index1 == 0 || (!body.sensor && filter.triggerMask != 0 && twin.index1 == 0)) {
             m2DestroyBody(kBody);
             into.refused = true;
             ++statistics.bodiesRefused;
             return false;
         }
         into.body = kBody;
-        into.shape = made;
-        owners[made.index1] = {made.generation, row.entity};
+        into.shape = kMade;
+        into.trigger = twin;
+        owners[kMade.index1] = {kMade.generation, row.entity};
+        if (twin.index1 != 0) {
+            owners[twin.index1] = {twin.generation, row.entity};
+        }
         ++statistics.bodiesMade;
+        return true;
+    }
+
+    [[nodiscard]] std::optional<std::size_t> classIndex(std::uint64_t id) const noexcept {
+        if (id == 0) {
+            return 0;
+        }
+        const auto kFound =
+            std::lower_bound(classes.begin(), classes.end(), id, [](const auto& entry, std::uint64_t key) {
+                return entry.first < key;
+            });
+        return kFound != classes.end() && kFound->first == id ? std::optional{kFound->second} : std::nullopt;
+    }
+
+    /// Whether this step has not told this pair of entities yet, and now has.
+    [[nodiscard]] static bool firstTelling(std::vector<std::pair<world::EntityHandle, world::EntityHandle>>& told,
+                                           world::EntityHandle one,
+                                           world::EntityHandle other) {
+        const auto kPair = one < other ? std::pair{one, other} : std::pair{other, one};
+        const auto kAt = std::lower_bound(told.begin(), told.end(), kPair);
+        if (kAt != told.end() && *kAt == kPair) {
+            return false;
+        }
+        told.insert(kAt, kPair);
         return true;
     }
 
@@ -178,6 +328,9 @@ struct Physics2D::State {
     /// touches and overlaps now, all in Maul2D's canonical order.
     void report(world::World& world) {
         sensors.clear();
+        toldEntered.clear();
+        toldExited.clear();
+        toldInside.clear();
         for (const Row& row : rows) {
             Contact2D* const kContact = contactOf(world, row.entity);
             if (kContact != nullptr) {
@@ -186,6 +339,9 @@ struct Physics2D::State {
             const Mapped& entry = mapped.find(row.entity)->second;
             if (!entry.refused && entry.made.sensor) {
                 sensors.push_back(entry.shape);
+            }
+            if (!entry.refused && entry.trigger.index1 != 0) {
+                sensors.push_back(entry.trigger);
             }
         }
         const m2ContactEvents kContacts = m2World_GetContactEvents(physics);
@@ -219,6 +375,9 @@ struct Physics2D::State {
         for (std::int32_t index = 0; index < kOverlaps.beginCount; ++index) {
             const world::EntityHandle kA = ownerOf(kOverlaps.beginEvents[index].shapeIdA);
             const world::EntityHandle kB = ownerOf(kOverlaps.beginEvents[index].shapeIdB);
+            if (!firstTelling(toldEntered, kA, kB)) {
+                continue;
+            }
             ++statistics.overlapsBegun;
             for (const auto& [kSelf, kOther] : {std::pair{kA, kB}, std::pair{kB, kA}}) {
                 if (Contact2D* const kContact = contactOf(world, kSelf)) {
@@ -228,6 +387,11 @@ struct Physics2D::State {
             }
         }
         for (std::int32_t index = 0; index < kOverlaps.endCount; ++index) {
+            if (!firstTelling(toldExited,
+                              ownerOf(kOverlaps.endEvents[index].shapeIdA),
+                              ownerOf(kOverlaps.endEvents[index].shapeIdB))) {
+                continue;
+            }
             for (const m2ShapeId kShape : {kOverlaps.endEvents[index].shapeIdA, kOverlaps.endEvents[index].shapeIdB}) {
                 if (Contact2D* const kContact = contactOf(world, ownerOf(kShape))) {
                     ++kContact->exited;
@@ -258,12 +422,17 @@ struct Physics2D::State {
                 overlaps.resize(static_cast<std::size_t>(inside));
                 inside = m2Shape_GetSensorOverlaps(kSensor, overlaps.data(), inside);
             }
-            Contact2D* const kSensorContact = contactOf(world, ownerOf(kSensor));
+            const world::EntityHandle kSensorEntity = ownerOf(kSensor);
+            Contact2D* const kSensorContact = contactOf(world, kSensorEntity);
             for (std::int32_t index = 0; index < inside; ++index) {
+                const world::EntityHandle kInside = ownerOf(overlaps[static_cast<std::size_t>(index)]);
+                if (!firstTelling(toldInside, kSensorEntity, kInside)) {
+                    continue;
+                }
                 if (kSensorContact != nullptr) {
                     ++kSensorContact->overlapping;
                 }
-                if (Contact2D* const kContact = contactOf(world, ownerOf(overlaps[static_cast<std::size_t>(index)]))) {
+                if (Contact2D* const kContact = contactOf(world, kInside)) {
                     ++kContact->overlapping;
                 }
             }
@@ -273,6 +442,7 @@ struct Physics2D::State {
     void remove(Mapped& entry) {
         if (!entry.refused) {
             owners.erase(entry.shape.index1);
+            owners.erase(entry.trigger.index1);
             m2DestroyBody(entry.body);
             ++statistics.bodiesRemoved;
         }
@@ -414,6 +584,7 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
     }
     auto state = std::make_unique<State>();
     state->settings = settings;
+    RAWFRAME_TRY(state->plan(settings.collision));
     m2WorldDef definition = m2DefaultWorldDef();
     definition.gravity = m2Vec2{settings.gravityX, settings.gravityY};
     definition.bodyCapacity = static_cast<std::int32_t>(settings.bodyCapacity);
@@ -462,8 +633,10 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
 }
 
 RayHit2D Physics2D::castRay(double originX, double originY, float towardX, float towardY) const noexcept {
-    const m2RayCastResult kResult = m2World_CastRayClosest(
-        state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, m2DefaultQueryFilter());
+    const m2RayCastResult kResult = m2World_CastRayClosest(state_->physics,
+                                                           m2Pos2{originX, originY},
+                                                           m2Vec2{towardX, towardY},
+                                                           m2QueryFilter{~std::uint64_t{0}, ~std::uint64_t{0}});
     if (!kResult.hit) {
         return RayHit2D{};
     }

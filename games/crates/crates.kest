@@ -7,6 +7,9 @@ module crates
 import rawframe.physics2d
 import rawframe.random
 
+// The balls' collision class (crates.game): balls roll through each other.
+const BALL: u64 = 0x3f1c9a7e52d04b18
+
 // What a player asks for: -1 to 1 along each axis.
 struct Steer {
     dx: f32
@@ -19,8 +22,8 @@ fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D]) {
     let i = 0
     while i < count {
         if bodies[i].width == 0.0 {
-            bodies[i] = physics2d.Body2D(physics2d.DYNAMIC, physics2d.CIRCLE, false, false, false, 0.4, 0.0, 1.0,
-                                         0.8, 0.1, 0.2, 0.5)
+            bodies[i] = physics2d.Body2D(physics2d.DYNAMIC, physics2d.CIRCLE, false, false, false, BALL, 0.4,
+                                         0.0, 1.0, 0.8, 0.1, 0.2, 0.5)
             poses[i] = physics2d.Pose2D(random.unit(0) * 30.0 - 15.0, 3.0, 1.0, 0.0)
         }
         i = i + 1

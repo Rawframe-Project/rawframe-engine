@@ -3,6 +3,7 @@
 #include "rawframe/physics2d/components.h"
 #include "rawframe/world_kest/errors.h"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -80,6 +81,8 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     // Names are checked once every component line has been read, so a
     // description may list components after the systems that use them.
     std::vector<std::pair<std::size_t, std::string>> uses;
+    std::vector<std::pair<std::size_t, std::string>> collisionUses;
+    bool haveDefault = false;
     while (!text.empty()) {
         const std::size_t kEnd = text.find('\n');
         std::string_view line = text.substr(0, kEnd);
@@ -224,6 +227,42 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     .component = std::string{physics2d::Contact2D::kComponentName}, .field = std::string{kField}});
             }
             game.physics2d = physics;
+        } else if (kKeyword == "collision") {
+            const auto kRule = [](std::string_view word) -> std::optional<physics2d::CollisionRule> {
+                if (word == "collide") {
+                    return physics2d::CollisionRule::Collide;
+                }
+                if (word == "trigger") {
+                    return physics2d::CollisionRule::Trigger;
+                }
+                if (word == "ignore") {
+                    return physics2d::CollisionRule::Ignore;
+                }
+                return std::nullopt;
+            };
+            const std::string_view kWhat = kWords.size() >= 2 ? kWords[1] : std::string_view{};
+            std::uint64_t id = 0;
+            const auto kHex = [&](std::string_view word) {
+                const auto kRead = std::from_chars(word.data(), word.data() + word.size(), id, 16);
+                return word.size() == 16 && kRead.ec == std::errc{} && kRead.ptr == word.data() + word.size() &&
+                       id != 0;
+            };
+            if (kWhat == "class" && kWords.size() == 4 && kHex(kWords[3])) {
+                game.collision.classes.push_back(GameCollisionClass{.name = std::string{kWords[2]}, .id = id});
+            } else if (kWhat == "rule" && kWords.size() == 5 && kRule(kWords[4]).has_value()) {
+                game.collision.rules.push_back(GameCollisionRule{
+                    .first = std::string{kWords[2]}, .second = std::string{kWords[3]}, .rule = *kRule(kWords[4])});
+                collisionUses.emplace_back(number, std::string{kWords[2]});
+                collisionUses.emplace_back(number, std::string{kWords[3]});
+            } else if (kWhat == "default" && kWords.size() == 3 && kRule(kWords[2]).has_value() && !haveDefault) {
+                game.collision.fallback = *kRule(kWords[2]);
+                haveDefault = true;
+            } else {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a collision line is `collision class <name> <16 hex digits>`, `collision rule <class> "
+                               "<class> collide|trigger|ignore`, or one `collision default <rule>`");
+            }
         } else if (kKeyword == "interest") {
             // interest <component> <field>... within <radius>
             double radius = 0;
@@ -290,6 +329,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
         if (!declared(game, name)) {
             return badLine(line, WorldKestError::UnknownName, "a line names a component the game does not declare");
         }
+    }
+    for (const auto& [line, name] : collisionUses) {
+        if (std::ranges::find(game.collision.classes, name, &GameCollisionClass::name) ==
+            game.collision.classes.end()) {
+            return badLine(
+                line, WorldKestError::UnknownName, "a collision rule names a class the game does not declare");
+        }
+    }
+    if ((!game.collision.classes.empty() || haveDefault) && !game.physics2d.has_value()) {
+        return badLine(number, WorldKestError::BadGameLine, "collision lines need a physics2d line");
     }
     return game;
 }

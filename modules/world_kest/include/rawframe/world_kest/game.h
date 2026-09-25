@@ -47,12 +47,24 @@
 //
 //   physics2d gravity 0 -10 substeps 4
 //
+// `collision` lines are SPEC-0037's collision document: classes, each a name
+// and a durable identity of sixteen hex digits; rules between two classes,
+// `collide`, `trigger`, or `ignore`; and the rule for every pair not ruled
+// (`collide` unless said). A Body2D's `collisionClass` in a spawn line may be
+// written as the class's name:
+//
+//   collision class player 7a31c0de00000001
+//   collision class coin 7a31c0de00000002
+//   collision rule player coin trigger
+//   collision default collide
+//
 // An `entity` line names a component's fields that hold a
 // `rawframe.world.Entity`, which a checkpoint writes as a reference rather
 // than as numbers:
 //
 //   entity game.target who
 
+#include "rawframe/physics2d/physics.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/column_query.h"
@@ -113,11 +125,30 @@ struct GameSpawn {
     std::vector<GameSpawnComponent> components;
 };
 
+/// A collision class: a name for lines and spawns, and its durable identity.
+struct GameCollisionClass {
+    std::string name;
+    std::uint64_t id = 0;
+};
+
+struct GameCollisionRule {
+    std::string first;
+    std::string second;
+    physics2d::CollisionRule rule = physics2d::CollisionRule::Collide;
+};
+
 /// 2D physics, and how the world is set up.
 struct GamePhysics2D {
     float gravityX = 0;
     float gravityY = -10;
     std::uint32_t substeps = 4;
+};
+
+/// SPEC-0037's collision document, by line.
+struct GameCollision {
+    std::vector<GameCollisionClass> classes;
+    std::vector<GameCollisionRule> rules;
+    physics2d::CollisionRule fallback = physics2d::CollisionRule::Collide;
 };
 
 /// Spatial interest: the position component, its coordinate fields, and the
@@ -151,6 +182,7 @@ struct GameDescription {
     std::vector<GameEntityField> entityFields;
     std::optional<GameInterest> interest;
     std::optional<GamePhysics2D> physics2d;
+    GameCollision collision;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as

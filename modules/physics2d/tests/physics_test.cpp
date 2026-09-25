@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstring>
 #include <optional>
+#include <string>
 #include <vector>
 
 using namespace rawframe;
@@ -252,6 +253,69 @@ RAWFRAME_TEST(ARayFindsTheClosestBody) {
     RAWFRAME_EXPECT(kInside.hit && kInside.inside && kInside.entity == kGroundEntity);
     const RayHit2D kMiss = scene.physics->castRay(0, 5, 0, 10);
     RAWFRAME_EXPECT(!kMiss.hit && kMiss.entity.isNull());
+}
+
+RAWFRAME_TEST(CollisionClassesDecideWhatMeets) {
+    constexpr std::uint64_t kPlayer = 0x7a31c0de00000001;
+    constexpr std::uint64_t kGhost = 0x7a31c0de00000002;
+    constexpr std::uint64_t kCoin = 0x7a31c0de00000003;
+    constexpr std::uint64_t kWall = 0x7a31c0de00000004;
+    Scene scene{{.gravityY = 0,
+                 .collision = {.classes = {{kPlayer, "player"}, {kGhost, "ghost"}, {kCoin, "coin"}, {kWall, "wall"}},
+                               .rules = {{kPlayer, kGhost, CollisionRule::Ignore},
+                                         {kCoin, kPlayer, CollisionRule::Trigger},
+                                         {kCoin, kCoin, CollisionRule::Trigger}},
+                               .fallback = CollisionRule::Collide}}};
+    const auto kOf = [](Body2D body, std::uint64_t collisionClass) {
+        body.collisionClass = collisionClass;
+        return body;
+    };
+    Body2D still = kCrate;
+    still.motion = static_cast<std::uint8_t>(Motion::Static);
+    const world::EntityHandle kRunner = scene.body(kOf(kBall, kPlayer), {.x = 0, .y = 0}, {.x = 4});
+    const world::EntityHandle kGhostEntity = scene.body(kOf(still, kGhost), {.x = 2, .y = 0});
+    const world::EntityHandle kCoinEntity = scene.body(kOf(still, kCoin), {.x = 4, .y = 0});
+    const world::EntityHandle kWallEntity = scene.body(kOf(still, kWall), {.x = 7, .y = 0});
+    Body2D unknown = kBall;
+    unknown.collisionClass = 0x7a31c0de000000ff;
+    scene.body(unknown, {.x = 0, .y = 10});
+    std::uint32_t ghostTouches = 0;
+    std::uint32_t coinEntered = 0;
+    std::uint32_t runnerEntered = 0;
+    world::EntityHandle wallHit;
+    for (int tick = 0; tick < 120; ++tick) {
+        scene.run(1);
+        ghostTouches += scene.contact(kGhostEntity).began + scene.contact(kGhostEntity).entered;
+        coinEntered += scene.contact(kCoinEntity).entered;
+        runnerEntered += scene.contact(kRunner).entered;
+        wallHit = scene.contact(kWallEntity).hit.isNull() ? wallHit : scene.contact(kWallEntity).hit;
+    }
+    // Through the ghost unaware, through the coin and told of it once on
+    // each side, and stopped by the wall.
+    RAWFRAME_EXPECT(ghostTouches == 0);
+    RAWFRAME_EXPECT(coinEntered == 1 && runnerEntered == 1);
+    RAWFRAME_EXPECT(wallHit == kRunner && scene.pose(kRunner).x < 6.5);
+    // A body of a class the document does not declare is not made.
+    RAWFRAME_EXPECT(scene.physics->statistics().bodiesRefused == 1 && scene.physics->statistics().bodiesMade == 4);
+
+    // Documents that are not well formed.
+    const std::vector<CollisionDocument> kBad = {
+        {.classes = {{0, "none"}}},
+        {.classes = {{kPlayer, "player"}, {kPlayer, "again"}}},
+        {.classes = {{kPlayer, "player"}, {kGhost, "player"}}},
+        {.classes = {{kPlayer, "player"}}, .rules = {{kPlayer, kGhost, CollisionRule::Ignore}}},
+        {.classes = {{kPlayer, "player"}, {kGhost, "ghost"}},
+         .rules = {{kPlayer, kGhost, CollisionRule::Ignore}, {kGhost, kPlayer, CollisionRule::Trigger}}},
+    };
+    for (const CollisionDocument& kDocument : kBad) {
+        const auto kMade = Physics2D::create({.collision = kDocument});
+        RAWFRAME_EXPECT(!kMade.has_value() && kMade.error().code() == code(Physics2DError::InvalidSettings));
+    }
+    CollisionDocument crowded;
+    for (std::uint64_t index = 1; index <= kMaximumCollisionClasses + 1; ++index) {
+        crowded.classes.push_back({index, "class" + std::to_string(index)});
+    }
+    RAWFRAME_EXPECT(!Physics2D::create({.collision = crowded}).has_value());
 }
 
 RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {

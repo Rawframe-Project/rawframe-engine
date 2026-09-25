@@ -54,6 +54,8 @@ struct Body2D {
     bool bullet = false;
     /// Detects what overlaps it and pushes nothing (a trigger zone).
     bool sensor = false;
+    /// Its collision class's durable identity (physics.h); nought is none.
+    std::uint64_t collisionClass = 0;
     float width = 0;
     float height = 0;
     float density = 0;
@@ -141,6 +143,7 @@ struct RayHit2D {
 enum class FieldType : std::uint8_t {
     U8,
     U32,
+    U64,
     Bool,
     F32,
     F64,
