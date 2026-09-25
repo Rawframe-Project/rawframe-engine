@@ -3,12 +3,14 @@
 // dynamics processor's static curve with its knee, makeup, and a key from
 // another bus, and a reverb's pre-delay, early taps, and decay time.
 
+#include "rawframe/audio/errors.h"
 #include "rawframe/audio/mixer.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <numbers>
 #include <vector>
 
@@ -228,4 +230,74 @@ RAWFRAME_TEST(AReverbWaitsReflectsAndDecays) {
 
     // Dry only, it is not there.
     RAWFRAME_EXPECT(near(change({reverb({.decay = 3, .mix = 0})}, 440), 0, 0.001F));
+}
+
+RAWFRAME_TEST(ParametersWrittenWhilePlayingTakeEffect) {
+    // A low pass opened while a 2 kHz tone plays through it.
+    const Effect kLowPass{.type = EffectType::Filter, .cutoff = 200};
+    auto mixer = *Mixer::create(master({kLowPass, eq({{.shape = BandShape::Peak, .frequency = 2000, .q = 1}})}), {});
+    static_cast<void>(mixer->play(sine(2000, 0.5F, 2.0F), {.bus = 0}));
+    const float kShut = peakAtEnd(render(*mixer, 0.2F), 0.1F);
+    RAWFRAME_EXPECT(mixer->setEffectParameter(0, 0, EffectParameter::Cutoff, 20000).has_value());
+    const float kOpen = peakAtEnd(render(*mixer, 0.2F), 0.1F);
+    RAWFRAME_EXPECT(kShut < decibels(0.5F) - 20 && near(kOpen, decibels(0.5F), 1));
+    // The equalizer's band raised by 12 dB.
+    RAWFRAME_EXPECT(mixer->setEffectParameter(0, 1, EffectParameter::BandGain, 12, 0).has_value());
+    RAWFRAME_EXPECT(near(peakAtEnd(render(*mixer, 0.2F), 0.1F) - kOpen, 12, 1));
+
+    // A compressor's threshold lowered under a 0 dB tone.
+    auto compressed = *Mixer::create(master({dynamics({.processor = Processor::Compressor, .ratio = 4})}), {});
+    static_cast<void>(compressed->play(sine(1000, 1.0F, 2.0F), {.bus = 0}));
+    RAWFRAME_EXPECT(near(peakAtEnd(render(*compressed, 0.3F), 0.1F), 0, 0.5F));
+    RAWFRAME_EXPECT(compressed->setEffectParameter(0, 0, EffectParameter::Threshold, -20).has_value());
+    RAWFRAME_EXPECT(near(peakAtEnd(render(*compressed, 0.5F), 0.1F), -15, 1));
+
+    // A reverb turned dry.
+    auto room = *Mixer::create(master({reverb({.decay = 2, .mix = 1})}), {});
+    static_cast<void>(room->play(sine(440, 0.5F, 2.0F), {.bus = 0}));
+    static_cast<void>(render(*room, 0.3F));
+    RAWFRAME_EXPECT(room->setEffectParameter(0, 0, EffectParameter::Mix, 0).has_value());
+    RAWFRAME_EXPECT(near(peakAtEnd(render(*room, 0.2F), 0.1F), decibels(0.5F), 0.1F));
+
+    // A gain's level moves across one block, never in one step.
+    auto gain = *Mixer::create(master({Effect{.type = EffectType::Gain}}), {});
+    auto level = std::make_shared<Clip>();
+    level->samples.assign(48'000, 0.5F);
+    static_cast<void>(gain->play(level, {.bus = 0}));
+    const std::vector<float> kBefore = render(*gain, 0.01F);
+    RAWFRAME_EXPECT(gain->setEffectParameter(0, 0, EffectParameter::Level, -20).has_value());
+    const std::vector<float> kRamp = render(*gain, 0.02F);
+    float largestStep = std::abs(kRamp[0] - kBefore[kBefore.size() - 2]);
+    for (std::size_t index = 2; index < kRamp.size(); index += 2) {
+        largestStep = std::max(largestStep, std::abs(kRamp[index] - kRamp[index - 2]));
+    }
+    RAWFRAME_EXPECT(largestStep < 0.01F && near(kRamp.back(), 0.5F * 0.1F * std::numbers::sqrt2_v<float> / 2, 1e-3F));
+}
+
+RAWFRAME_TEST(ParameterWritesAreRefusedOutsideWhatAnEffectHas) {
+    Layout layout = master({Effect{.type = EffectType::Filter, .cutoff = 200},
+                            eq({{.shape = BandShape::Notch, .frequency = 50}}),
+                            dynamics({.processor = Processor::Limiter}),
+                            reverb({})});
+    auto mixer = *Mixer::create(layout, {});
+    const auto kRefused =
+        [&](std::size_t bus, std::size_t effect, EffectParameter parameter, float value, std::size_t band = 0) {
+            const result::Status kWritten = mixer->setEffectParameter(bus, effect, parameter, value, band);
+            return !kWritten.has_value() && kWritten.error().code() == code(AudioError::BadParameter);
+        };
+    RAWFRAME_EXPECT(kRefused(1, 0, EffectParameter::Cutoff, 1000));
+    RAWFRAME_EXPECT(kRefused(0, 4, EffectParameter::Bypass, 1));
+    RAWFRAME_EXPECT(kRefused(0, 0, EffectParameter::Decay, 1));
+    RAWFRAME_EXPECT(kRefused(0, 0, EffectParameter::Cutoff, 5));
+    RAWFRAME_EXPECT(kRefused(0, 0, EffectParameter::Cutoff, std::numeric_limits<float>::quiet_NaN()));
+    RAWFRAME_EXPECT(kRefused(0, 1, EffectParameter::BandGain, 3));
+    RAWFRAME_EXPECT(kRefused(0, 1, EffectParameter::BandQ, 2, 1));
+    RAWFRAME_EXPECT(kRefused(0, 2, EffectParameter::Ratio, 4));
+    RAWFRAME_EXPECT(kRefused(0, 3, EffectParameter::Mix, 1.5F));
+    RAWFRAME_EXPECT(mixer->setEffectParameter(0, 1, EffectParameter::BandQ, 2).has_value());
+    RAWFRAME_EXPECT(mixer->setEffectParameter(0, 3, EffectParameter::Decay, 4).has_value());
+    RAWFRAME_EXPECT(mixer->setEffectParameter(0, 2, EffectParameter::Bypass, 1).has_value());
+    // The ranges are the documents': a delay's feedback stops short of one.
+    RAWFRAME_EXPECT(rangeOf(EffectType::Delay, EffectParameter::Feedback)->highest < 1);
+    RAWFRAME_EXPECT(!rangeOf(EffectType::Reverb, EffectParameter::Cutoff).has_value());
 }

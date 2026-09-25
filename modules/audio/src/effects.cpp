@@ -166,7 +166,8 @@ std::size_t framesOf(float seconds, std::uint32_t rate) noexcept {
 
 } // namespace
 
-EffectRuntime::EffectRuntime(const Effect& effect, std::uint32_t rate, float shortestFade) : effect_(effect) {
+EffectRuntime::EffectRuntime(const Effect& effect, std::uint32_t rate, float shortestFade)
+    : effect_(effect), rate_(rate), appliedGain_(gainOf(effect.level)) {
     switch (effect.type) {
     case EffectType::Gain:
         break;
@@ -215,18 +216,117 @@ EffectRuntime::EffectRuntime(const Effect& effect, std::uint32_t rate, float sho
             }
             for (std::size_t tap = 0; tap < kTapTimes[channel].size(); ++tap) {
                 tapFrames_[channel][tap] = framesOf(kTapTimes[channel][tap] / 1000.0F, rate);
-                tapGains_[channel][tap] = kTapGains[channel][tap] * gainOf(reverb.early);
                 longestTap = std::max(longestTap, tapFrames_[channel][tap]);
             }
         }
+        tune();
         preDelayFrames_ = framesOf(reverb.preDelay, rate);
         preDelay_.assign(preDelayFrames_ + longestTap + 1, 0.0F);
-        damping_ = kMostDamping * reverb.damping;
-        diffusion_ = kMostDiffusion * reverb.diffusion;
-        lateGain_ = kTailOutput * gainOf(reverb.late);
         break;
     }
     }
+}
+
+void EffectRuntime::tune() noexcept {
+    const Reverb& reverb = effect_.reverb;
+    for (std::array<Comb, 8>& channel : combs_) {
+        for (Comb& comb : channel) {
+            // Each comb falls 60 dB in the decay time, whatever its length.
+            comb.feedback = std::pow(
+                10.0F, -3.0F * static_cast<float>(comb.line.size()) / (static_cast<float>(rate_) * reverb.decay));
+        }
+    }
+    for (std::size_t channel = 0; channel < 2; ++channel) {
+        for (std::size_t tap = 0; tap < kTapGains[channel].size(); ++tap) {
+            tapGains_[channel][tap] = kTapGains[channel][tap] * gainOf(reverb.early);
+        }
+    }
+    damping_ = kMostDamping * reverb.damping;
+    diffusion_ = kMostDiffusion * reverb.diffusion;
+    lateGain_ = kTailOutput * gainOf(reverb.late);
+}
+
+void EffectRuntime::set(EffectParameter parameter, std::size_t band, float value) noexcept {
+    using enum EffectParameter;
+    Effect& effect = effect_;
+    switch (parameter) {
+    case Bypass:
+        effect.bypass = value != 0;
+        return;
+    case Level:
+        effect.level = value;
+        return;
+    case Cutoff:
+    case Resonance: {
+        (parameter == Cutoff ? effect.cutoff : effect.resonance) = value;
+        // New coefficients; each section keeps what it holds.
+        const Biquad kDesigned = designFilter(effect, rate_);
+        for (Biquad& section : sections_) {
+            section.b0 = kDesigned.b0;
+            section.b1 = kDesigned.b1;
+            section.b2 = kDesigned.b2;
+            section.a1 = kDesigned.a1;
+            section.a2 = kDesigned.a2;
+        }
+        return;
+    }
+    case Feedback:
+        effect.feedback = value;
+        return;
+    case Mix:
+        (effect.type == EffectType::Reverb ? effect.reverb.mix : effect.mix) = value;
+        return;
+    case BandFrequency:
+    case BandGain:
+    case BandQ: {
+        EqBand& written = effect.bands[band];
+        (parameter == BandFrequency ? written.frequency : parameter == BandGain ? written.gain : written.q) = value;
+        const Biquad kDesigned = designBand(written, rate_);
+        Biquad& section = sections_[band];
+        section.b0 = kDesigned.b0;
+        section.b1 = kDesigned.b1;
+        section.b2 = kDesigned.b2;
+        section.a1 = kDesigned.a1;
+        section.a2 = kDesigned.a2;
+        return;
+    }
+    case Threshold:
+        effect.dynamics.threshold = value;
+        return;
+    case Ratio:
+        effect.dynamics.ratio = value;
+        return;
+    case Attack:
+        effect.dynamics.attack = value;
+        attack_ = coefficient(value, rate_);
+        return;
+    case Release:
+        effect.dynamics.release = value;
+        release_ = coefficient(value, rate_);
+        return;
+    case Makeup:
+        effect.dynamics.makeup = value;
+        return;
+    case Knee:
+        effect.dynamics.knee = value;
+        return;
+    case Decay:
+        effect.reverb.decay = value;
+        break;
+    case Early:
+        effect.reverb.early = value;
+        break;
+    case Late:
+        effect.reverb.late = value;
+        break;
+    case Damping:
+        effect.reverb.damping = value;
+        break;
+    case Diffusion:
+        effect.reverb.diffusion = value;
+        break;
+    }
+    tune();
 }
 
 void EffectRuntime::run(float* buffer, const float* key, std::size_t frames) noexcept {
@@ -236,10 +336,16 @@ void EffectRuntime::run(float* buffer, const float* key, std::size_t frames) noe
     }
     switch (effect.type) {
     case EffectType::Gain: {
-        const float kGain = gainOf(effect.level);
-        for (std::size_t index = 0; index < frames * 2; ++index) {
-            buffer[index] *= kGain;
+        // A level written while playing moves across the block, never in
+        // one step.
+        const float kTarget = gainOf(effect.level);
+        const float kStep = (kTarget - appliedGain_) / static_cast<float>(frames);
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            const float kGain = appliedGain_ + (kStep * static_cast<float>(frame));
+            buffer[frame * 2] *= kGain;
+            buffer[(frame * 2) + 1] *= kGain;
         }
+        appliedGain_ = kTarget;
         break;
     }
     case EffectType::Filter:

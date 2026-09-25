@@ -57,7 +57,8 @@ struct Command {
         Pitch,
         Pan,
         BusVolume,
-        BusMuted
+        BusMuted,
+        EffectParameter
     };
     Kind kind = Kind::Play;
     std::uint32_t voice = 0;
@@ -73,6 +74,10 @@ struct Command {
     std::uint32_t loopStart = 0;
     std::uint32_t loopEnd = 0;
     std::uint32_t startFrame = 0;
+    /// EffectParameter: which effect of the bus, which band, and what.
+    std::uint32_t effect = 0;
+    std::uint32_t band = 0;
+    audio::EffectParameter parameter = audio::EffectParameter::Bypass;
 };
 
 struct Finished {
@@ -238,6 +243,9 @@ struct Mixer::State {
             break;
         case Command::Kind::BusMuted:
             buses[command.bus].muted = command.value != 0;
+            break;
+        case Command::Kind::EffectParameter:
+            buses[command.bus].effects[command.effect].set(command.parameter, command.band, command.value);
             break;
         }
     }
@@ -481,6 +489,49 @@ void Mixer::setBusMuted(std::size_t bus, bool muted) {
         static_cast<void>(state.send(Command{
             .kind = Command::Kind::BusMuted, .bus = static_cast<std::uint32_t>(bus), .value = muted ? 1.0F : 0.0F}));
     }
+}
+
+result::Status Mixer::setEffectParameter(
+    std::size_t bus, std::size_t effect, EffectParameter parameter, float value, std::size_t band) {
+    State& state = *state_;
+    const auto kRefuse = [](std::string_view why) {
+        return result::fail(result::ErrorClass::InvalidArgument, kAudioDomain, code(AudioError::BadParameter), why);
+    };
+    if (bus >= state.layout.buses.size() || effect >= state.layout.buses[bus].effects.size()) {
+        return kRefuse("no such bus or effect");
+    }
+    const Effect& written = state.layout.buses[bus].effects[effect];
+    const std::optional<ParameterRange> kRange = rangeOf(written.type, parameter);
+    if (!kRange.has_value()) {
+        return kRefuse("the effect has no such parameter, or it is fixed while it plays");
+    }
+    if (!std::isfinite(value) || value < kRange->lowest || value > kRange->highest) {
+        return kRefuse("the value is outside the parameter's range");
+    }
+    const bool kBand = parameter == EffectParameter::BandFrequency || parameter == EffectParameter::BandGain ||
+                       parameter == EffectParameter::BandQ;
+    if (kBand && band >= written.bands.size()) {
+        return kRefuse("the equalizer has no such band");
+    }
+    if (parameter == EffectParameter::BandGain && written.bands[band].shape == BandShape::Notch) {
+        return kRefuse("a notch has no gain");
+    }
+    if (parameter == EffectParameter::Ratio &&
+        (written.dynamics.processor == Processor::Limiter || written.dynamics.processor == Processor::Gate)) {
+        return kRefuse("a limiter and a gate have no ratio");
+    }
+    if (!state.send(Command{.kind = Command::Kind::EffectParameter,
+                            .bus = static_cast<std::uint32_t>(bus),
+                            .value = value,
+                            .effect = static_cast<std::uint32_t>(effect),
+                            .band = static_cast<std::uint32_t>(kBand ? band : 0),
+                            .parameter = parameter})) {
+        return result::fail(result::ErrorClass::ResourceExhausted,
+                            kAudioDomain,
+                            code(AudioError::QueueFull),
+                            "the mix thread's command queue is full");
+    }
+    return {};
 }
 
 void Mixer::collect() {

@@ -27,6 +27,9 @@ enum class AudioError : std::uint32_t {
     Concurrency = 6,
     /// No output device could be opened.
     NoDevice = 7,
+    /// An effect parameter write to no such bus, effect, band, or
+    /// parameter, or outside its range.
+    BadParameter = 8,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(AudioError error) noexcept {

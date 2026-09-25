@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <set>
 #include <utility>
 
@@ -85,12 +86,33 @@ result::Result<Enum> requiredWord(const Record& record,
     return invalid(record.pathOf(field), why);
 }
 
-/// A number within bounds; with no fallback, a required one.
+bool inRange(EffectType type, EffectParameter parameter, double number) noexcept {
+    const ParameterRange kRange = *rangeOf(type, parameter);
+    const auto kNumber = static_cast<float>(number);
+    return std::isfinite(number) && kNumber >= kRange.lowest && kNumber <= kRange.highest;
+}
+
+/// A number within bounds, for what is fixed when a mixer is made; with no
+/// fallback, a required one.
+result::Result<float> fixed(const Record& record,
+                            std::string_view field,
+                            double fallback,
+                            double lowest,
+                            double highest,
+                            std::string_view why) {
+    RAWFRAME_TRY_ASSIGN(const double kNumber, record.real(field, fallback));
+    if (!(kNumber >= lowest && kNumber <= highest)) {
+        return invalid(record.pathOf(field), why);
+    }
+    return static_cast<float>(kNumber);
+}
+
+/// A number within a parameter's range; with no fallback, a required one.
 result::Result<float> within(const Record& record,
                              std::string_view field,
                              std::optional<double> fallback,
-                             double lowest,
-                             double highest,
+                             EffectType type,
+                             EffectParameter parameter,
                              std::string_view why) {
     double number = 0;
     if (fallback.has_value()) {
@@ -99,10 +121,11 @@ result::Result<float> within(const Record& record,
         RAWFRAME_TRY_ASSIGN(const Value* value, record.required(field, Value::Kind::Number));
         number = *value->real();
     }
-    if (!(number >= lowest && number <= highest)) {
+    if (!inRange(type, parameter, number)) {
         return invalid(record.pathOf(field), why);
     }
-    return static_cast<float>(number);
+    const auto kNumber = static_cast<float>(number);
+    return kNumber;
 }
 
 result::Result<Effect> readEq(const Record& record, const LayoutLimits& limits) {
@@ -120,12 +143,24 @@ result::Result<Effect> readEq(const Record& record, const LayoutLimits& limits) 
         RAWFRAME_TRY_ASSIGN(
             band.shape, requiredWord(kBand, "shape", kBandShapes, "a band is low_shelf, high_shelf, peak, or notch"));
         RAWFRAME_TRY_ASSIGN(band.frequency,
-                            within(kBand, "frequency", std::nullopt, 10, 24000, "a frequency is 10 to 24000 hertz"));
-        RAWFRAME_TRY_ASSIGN(band.gain, within(kBand, "gain", 0.0, -24, 24, "a band's gain is -24 to 24 decibels"));
+                            within(kBand,
+                                   "frequency",
+                                   std::nullopt,
+                                   EffectType::ParametricEq,
+                                   EffectParameter::BandFrequency,
+                                   "a frequency is 10 to 24000 hertz"));
+        RAWFRAME_TRY_ASSIGN(band.gain,
+                            within(kBand,
+                                   "gain",
+                                   0.0,
+                                   EffectType::ParametricEq,
+                                   EffectParameter::BandGain,
+                                   "a band's gain is -24 to 24 decibels"));
         if (band.shape == BandShape::Notch && band.gain != 0) {
             return invalid(kBand.pathOf("gain"), "a notch has no gain");
         }
-        RAWFRAME_TRY_ASSIGN(band.q, within(kBand, "q", 0.7071, 0.1, 20, "a Q is 0.1 to 20"));
+        RAWFRAME_TRY_ASSIGN(
+            band.q, within(kBand, "q", 0.7071, EffectType::ParametricEq, EffectParameter::BandQ, "a Q is 0.1 to 20"));
         effect.bands.push_back(band);
     }
     return effect;
@@ -142,19 +177,40 @@ result::Result<Effect> readDynamics(const Record& record, std::optional<std::uin
                                      kProcessors,
                                      "a processor is compressor, limiter, expander, gate, or upwards_compressor"));
     RAWFRAME_TRY_ASSIGN(dynamics.threshold,
-                        within(record, "threshold", std::nullopt, -80, 0, "a threshold is -80 to 0 decibels"));
+                        within(record,
+                               "threshold",
+                               std::nullopt,
+                               EffectType::Dynamics,
+                               EffectParameter::Threshold,
+                               "a threshold is -80 to 0 decibels"));
     const bool kRatioless = dynamics.processor == Processor::Limiter || dynamics.processor == Processor::Gate;
     RAWFRAME_TRY_ASSIGN(const Value* ratio, record.optional("ratio", Value::Kind::Number));
     if (kRatioless && ratio != nullptr) {
         return invalid(record.pathOf("ratio"), "a limiter and a gate have no ratio");
     }
-    RAWFRAME_TRY_ASSIGN(dynamics.ratio, within(record, "ratio", 4.0, 1, 50, "a ratio is 1 to 50"));
+    RAWFRAME_TRY_ASSIGN(
+        dynamics.ratio,
+        within(record, "ratio", 4.0, EffectType::Dynamics, EffectParameter::Ratio, "a ratio is 1 to 50"));
     RAWFRAME_TRY_ASSIGN(dynamics.attack,
-                        within(record, "attack", 0.01, 0.0001, 1, "an attack is a tenth of a millisecond to a second"));
+                        within(record,
+                               "attack",
+                               0.01,
+                               EffectType::Dynamics,
+                               EffectParameter::Attack,
+                               "an attack is a tenth of a millisecond to a second"));
     RAWFRAME_TRY_ASSIGN(dynamics.release,
-                        within(record, "release", 0.1, 0.001, 5, "a release is a millisecond to five seconds"));
-    RAWFRAME_TRY_ASSIGN(dynamics.makeup, within(record, "makeup", 0.0, -24, 24, "makeup is -24 to 24 decibels"));
-    RAWFRAME_TRY_ASSIGN(dynamics.knee, within(record, "knee", 0.0, 0, 24, "a knee is 0 to 24 decibels wide"));
+                        within(record,
+                               "release",
+                               0.1,
+                               EffectType::Dynamics,
+                               EffectParameter::Release,
+                               "a release is a millisecond to five seconds"));
+    RAWFRAME_TRY_ASSIGN(
+        dynamics.makeup,
+        within(record, "makeup", 0.0, EffectType::Dynamics, EffectParameter::Makeup, "makeup is -24 to 24 decibels"));
+    RAWFRAME_TRY_ASSIGN(
+        dynamics.knee,
+        within(record, "knee", 0.0, EffectType::Dynamics, EffectParameter::Knee, "a knee is 0 to 24 decibels wide"));
     RAWFRAME_TRY_ASSIGN(const std::optional<std::string_view> kKey, record.optionalText("key"));
     if (kKey == "own_input") {
         return document::notCanonical(record.pathOf("key"), "a field at its default is omitted");
@@ -173,15 +229,27 @@ result::Result<Effect> readReverb(const Record& record) {
     effect.type = EffectType::Reverb;
     Reverb& reverb = effect.reverb;
     RAWFRAME_TRY_ASSIGN(effect.bypass, record.truth("bypass", false));
-    RAWFRAME_TRY_ASSIGN(reverb.decay, within(record, "decay", std::nullopt, 0.1, 20, "a decay is 0.1 to 20 seconds"));
+    RAWFRAME_TRY_ASSIGN(
+        reverb.decay,
+        within(
+            record, "decay", std::nullopt, EffectType::Reverb, EffectParameter::Decay, "a decay is 0.1 to 20 seconds"));
     RAWFRAME_TRY_ASSIGN(reverb.preDelay,
-                        within(record, "preDelay", 0.02, 0, 0.5, "a pre-delay is nought to half a second"));
-    RAWFRAME_TRY_ASSIGN(reverb.early, within(record, "early", -6.0, -96, 24, "a level is -96 to 24 decibels"));
-    RAWFRAME_TRY_ASSIGN(reverb.late, within(record, "late", 0.0, -96, 24, "a level is -96 to 24 decibels"));
-    RAWFRAME_TRY_ASSIGN(reverb.damping, within(record, "damping", 0.5, 0, 1, "damping is nought to one"));
-    RAWFRAME_TRY_ASSIGN(reverb.density, within(record, "density", 1.0, 0, 1, "density is nought to one"));
-    RAWFRAME_TRY_ASSIGN(reverb.diffusion, within(record, "diffusion", 1.0, 0, 1, "diffusion is nought to one"));
-    RAWFRAME_TRY_ASSIGN(reverb.mix, within(record, "mix", 0.3, 0, 1, "a mix is nought to one"));
+                        fixed(record, "preDelay", 0.02, 0, 0.5, "a pre-delay is nought to half a second"));
+    RAWFRAME_TRY_ASSIGN(
+        reverb.early,
+        within(record, "early", -6.0, EffectType::Reverb, EffectParameter::Early, "a level is -96 to 24 decibels"));
+    RAWFRAME_TRY_ASSIGN(
+        reverb.late,
+        within(record, "late", 0.0, EffectType::Reverb, EffectParameter::Late, "a level is -96 to 24 decibels"));
+    RAWFRAME_TRY_ASSIGN(
+        reverb.damping,
+        within(record, "damping", 0.5, EffectType::Reverb, EffectParameter::Damping, "damping is nought to one"));
+    RAWFRAME_TRY_ASSIGN(reverb.density, fixed(record, "density", 1.0, 0, 1, "density is nought to one"));
+    RAWFRAME_TRY_ASSIGN(
+        reverb.diffusion,
+        within(record, "diffusion", 1.0, EffectType::Reverb, EffectParameter::Diffusion, "diffusion is nought to one"));
+    RAWFRAME_TRY_ASSIGN(reverb.mix,
+                        within(record, "mix", 0.3, EffectType::Reverb, EffectParameter::Mix, "a mix is nought to one"));
     return effect;
 }
 
@@ -216,17 +284,20 @@ readEffect(const Value& value, const std::string& path, const LayoutLimits& limi
         } else {
             return invalid(kRecord.pathOf("shape"), "a filter is low_pass, high_pass, or band_pass");
         }
-        RAWFRAME_TRY_ASSIGN(const Value* cutoff, kRecord.required("cutoff", Value::Kind::Number));
-        const double kCutoff = *cutoff->real();
-        if (!(kCutoff >= 10 && kCutoff <= 24000)) {
-            return invalid(kRecord.pathOf("cutoff"), "a cutoff is 10 to 24000 hertz");
-        }
-        effect.cutoff = static_cast<float>(kCutoff);
-        RAWFRAME_TRY_ASSIGN(const double kResonance, kRecord.real("resonance", 0.7071));
-        if (!(kResonance >= 0.1 && kResonance <= 20)) {
-            return invalid(kRecord.pathOf("resonance"), "a resonance is a Q of 0.1 to 20");
-        }
-        effect.resonance = static_cast<float>(kResonance);
+        RAWFRAME_TRY_ASSIGN(effect.cutoff,
+                            within(kRecord,
+                                   "cutoff",
+                                   std::nullopt,
+                                   EffectType::Filter,
+                                   EffectParameter::Cutoff,
+                                   "a cutoff is 10 to 24000 hertz"));
+        RAWFRAME_TRY_ASSIGN(effect.resonance,
+                            within(kRecord,
+                                   "resonance",
+                                   0.7071,
+                                   EffectType::Filter,
+                                   EffectParameter::Resonance,
+                                   "a resonance is a Q of 0.1 to 20"));
         RAWFRAME_TRY_ASSIGN(const std::int64_t kSlope, kRecord.integer("slope", 12));
         if (kSlope != 12 && kSlope != 24) {
             return invalid(kRecord.pathOf("slope"), "a slope is 12 or 24 decibels an octave");
@@ -246,7 +317,8 @@ readEffect(const Value& value, const std::string& path, const LayoutLimits& limi
         if (!(kTime > 0 && kOffset >= 0 && kTime + kOffset <= kMaximumDelay)) {
             return invalid(path, "a delay's time is above nought and, with its offset, at most two seconds");
         }
-        if (!(kFeedback >= 0 && kFeedback < 1) || !(kMix >= 0 && kMix <= 1)) {
+        if (!inRange(EffectType::Delay, EffectParameter::Feedback, kFeedback) ||
+            !inRange(EffectType::Delay, EffectParameter::Mix, kMix)) {
             return invalid(path, "a delay's feedback is below one and its mix within nought and one");
         }
         effect.time = static_cast<float>(kTime);
@@ -539,6 +611,66 @@ result::Result<Layout> readLayout(std::string_view text, const LayoutLimits& lim
         }
     }
     return std::move(reader.layout);
+}
+
+std::optional<ParameterRange> rangeOf(EffectType type, EffectParameter parameter) noexcept {
+    using enum EffectParameter;
+    // Just below one: a feedback of one would ring forever.
+    constexpr float kBelowOne = 0.99999994F;
+    if (parameter == Bypass) {
+        return ParameterRange{0, 1};
+    }
+    switch (type) {
+    case EffectType::Gain:
+        return parameter == Level ? std::optional{ParameterRange{-std::numeric_limits<float>::max(),
+                                                                 static_cast<float>(kMaximumDecibels)}}
+                                  : std::nullopt;
+    case EffectType::Filter:
+        return parameter == Cutoff      ? std::optional{ParameterRange{10, 24000}}
+               : parameter == Resonance ? std::optional{ParameterRange{0.1F, 20}}
+                                        : std::nullopt;
+    case EffectType::Delay:
+        return parameter == Feedback ? std::optional{ParameterRange{0, kBelowOne}}
+               : parameter == Mix    ? std::optional{ParameterRange{0, 1}}
+                                     : std::nullopt;
+    case EffectType::ParametricEq:
+        return parameter == BandFrequency ? std::optional{ParameterRange{10, 24000}}
+               : parameter == BandGain    ? std::optional{ParameterRange{-24, 24}}
+               : parameter == BandQ       ? std::optional{ParameterRange{0.1F, 20}}
+                                          : std::nullopt;
+    case EffectType::Dynamics:
+        switch (parameter) {
+        case Threshold:
+            return ParameterRange{-80, 0};
+        case Ratio:
+            return ParameterRange{1, 50};
+        case Attack:
+            return ParameterRange{0.0001F, 1};
+        case Release:
+            return ParameterRange{0.001F, 5};
+        case Makeup:
+            return ParameterRange{-24, 24};
+        case Knee:
+            return ParameterRange{0, 24};
+        default:
+            return std::nullopt;
+        }
+    case EffectType::Reverb:
+        switch (parameter) {
+        case Decay:
+            return ParameterRange{0.1F, 20};
+        case Early:
+        case Late:
+            return ParameterRange{-96, 24};
+        case Damping:
+        case Diffusion:
+        case Mix:
+            return ParameterRange{0, 1};
+        default:
+            return std::nullopt;
+        }
+    }
+    return std::nullopt;
 }
 
 float gainOf(float decibels) noexcept {

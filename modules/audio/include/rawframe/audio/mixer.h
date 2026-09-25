@@ -113,6 +113,13 @@ public:
     void setPan(Playback playback, float pan);
     void setBusVolume(std::size_t bus, float decibels);
     void setBusMuted(std::size_t bus, bool muted);
+    /// Writes a parameter of effect `effect` of bus `bus` (of its band
+    /// `band`, for an equalizer), from the next block on; a gain effect's
+    /// level moves across that block. Refuses (`BadParameter`) what the
+    /// effect lacks or `rangeOf` does not admit, a notch's gain, and a
+    /// limiter's or gate's ratio; a full queue as `play` does.
+    [[nodiscard]] result::Status setEffectParameter(
+        std::size_t bus, std::size_t effect, EffectParameter parameter, float value, std::size_t band = 0);
     /// Takes what the mix thread handed back: finished playbacks are
     /// released and their voices reusable.
     void collect();

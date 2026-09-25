@@ -55,6 +55,10 @@ public:
     /// the keying bus's output for a dynamics effect keyed by one.
     void run(float* buffer, const float* key, std::size_t frames) noexcept;
 
+    /// Writes a parameter the owner checked, recomputing what depends on
+    /// it; allocates nothing.
+    void set(EffectParameter parameter, std::size_t band, float value) noexcept;
+
     /// The bus a dynamics effect reads its level from, if not its own.
     [[nodiscard]] std::optional<std::size_t> key() const noexcept {
         return effect_.type == EffectType::Dynamics ? effect_.dynamics.key : std::nullopt;
@@ -63,8 +67,14 @@ public:
 private:
     void runDynamics(float* buffer, const float* key, std::size_t frames) noexcept;
     void runReverb(float* buffer, std::size_t frames) noexcept;
+    /// A reverb's feedbacks, tap gains, damping, diffusion, and tail level
+    /// from its parameters.
+    void tune() noexcept;
 
     Effect effect_;
+    std::uint32_t rate_ = 0;
+    /// A gain effect's gain as last applied, which moves to its level.
+    float appliedGain_ = 1;
     /// A filter's sections, one for 12 dB an octave and two for 24; an
     /// equalizer's, one a band.
     std::vector<Biquad> sections_;

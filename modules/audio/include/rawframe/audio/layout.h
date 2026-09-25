@@ -125,6 +125,51 @@ struct Effect {
     Reverb reverb;
 };
 
+/// The parameters of an effect that may be written while it plays
+/// (SPEC-0036's runtime bus-parameter writes). What sizes an effect's
+/// buffers or chooses its kind (a delay's times, a reverb's pre-delay and
+/// density, a filter's shape and slope, a band's shape, a processor, a key)
+/// is fixed when the mixer is made.
+enum class EffectParameter : std::uint8_t {
+    /// Nought or one.
+    Bypass,
+    /// gain.
+    Level,
+    /// filter.
+    Cutoff,
+    Resonance,
+    /// delay; Mix is also a reverb's.
+    Feedback,
+    Mix,
+    /// parametric_eq, of one band.
+    BandFrequency,
+    BandGain,
+    BandQ,
+    /// dynamics.
+    Threshold,
+    Ratio,
+    Attack,
+    Release,
+    Makeup,
+    Knee,
+    /// reverb.
+    Decay,
+    Early,
+    Late,
+    Damping,
+    Diffusion,
+};
+
+struct ParameterRange {
+    float lowest = 0;
+    float highest = 0;
+};
+
+/// The values `parameter` takes on an effect of `type`, whether a document
+/// writes it or a mixer is told it; none where that type has no such
+/// parameter that may change while it plays.
+[[nodiscard]] std::optional<ParameterRange> rangeOf(EffectType type, EffectParameter parameter) noexcept;
+
 enum class SendPosition : std::uint8_t {
     PostFader,
     PreFader
