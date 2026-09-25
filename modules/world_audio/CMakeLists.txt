@@ -2,7 +2,7 @@
 # components played through the audio module. Client only: the dedicated
 # server carries the components as plain values and links none of this.
 rawframe_module(NAME world_audio
-    SOURCES src/recorder.cpp src/world_audio.cpp
+    SOURCES src/hearing.cpp src/world_audio.cpp
     DEPS audio physics2d physics3d world_replication world_kest kest world composition schema execution diagnostics document result base
 )
 

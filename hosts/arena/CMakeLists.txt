@@ -44,6 +44,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(runners_heard PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"written\":true,\"frames\":[0-9]+,\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+    # Four bots play runners and the first one's World is played on a null
+    # device: its thread renders the mixer, and shots reach the master bus.
+    add_test(NAME runners_played
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_played.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(runners_played PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"backend\":\"Null\",\"rate\":[0-9]+,\"lost\":false,\"callbacks\":[1-9][0-9]+,.*\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
     # Four bots predict their runners: a thousand ticks confirmed, the
     # rollbacks only those of admission.
     add_test(NAME runners_prediction
