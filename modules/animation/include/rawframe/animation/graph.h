@@ -63,6 +63,18 @@
 //   `rawframe/mask@1`    its input `inside` on the bones `mask` (a mask's
 //                        resource identity) weighs, blended by that weight
 //                        with its input `outside` on every other
+//   `rawframe/blend_space_1d@1`
+//                        its inputs placed on a line by `points`, a number
+//                        each, blended by where `position` (default 0) is
+//                        among them: the two either side of it by nearness,
+//                        or the end one past the ends
+//   `rawframe/blend_space_2d@1`
+//                        its inputs placed on a plane by `points`, `[x, y]`
+//                        each, and `triangles` over them, three names each;
+//                        blended by `position` (a `[x, y]`, or a `vec2`
+//                        parameter; default `[0, 0]`) within the first
+//                        triangle holding it, or at the nearest point of
+//                        the nearest triangle when none does (D135)
 //   `rawframe/state_machine@1`
 //                        one of its inputs, each a state, at a time,
 //                        starting at `entry` and moving by `transitions`
@@ -80,6 +92,9 @@
 // `greater_or_equal`; `{"phase": p}`, the source state's phase reached;
 // `{"finished": true}`, its clip played out; or `{"event": id}`, fired in
 // it. Members at the defaults in parentheses are left out.
+//
+// A 2D blend space's triangles each name three of its points in name order,
+// are in order, and have area; no two overlap, and every point is in one.
 //
 // A node of any other type is quarantined: kept byte for byte and written
 // back, while a graph holding one cannot be hashed or played. An optional
@@ -132,7 +147,8 @@ struct Parameter {
     friend bool operator==(const Parameter&, const Parameter&) = default;
 };
 
-/// A `float` parameter, by its identity.
+/// A parameter, by its identity: a `float` one where a node takes a number,
+/// a `vec2` one where it takes a point.
 struct ParameterRef {
     std::uint64_t parameter = 0;
 
@@ -141,6 +157,9 @@ struct ParameterRef {
 
 /// A number a node takes: a literal, or a parameter's value.
 using Scalar = std::variant<double, ParameterRef>;
+
+/// A point a node takes: a literal, or a `vec2` parameter's value.
+using Point = std::variant<std::array<double, 2>, ParameterRef>;
 
 struct Connection {
     std::uint64_t node = 0;
@@ -179,6 +198,36 @@ struct MaskNode {
     Connection outside;
 
     friend bool operator==(const MaskNode&, const MaskNode&) = default;
+};
+
+/// A blend space's input, placed at `at` (a line's uses the first number).
+struct BlendSpacePoint {
+    std::string name;
+    Connection from;
+    std::array<double, 2> at{};
+
+    friend bool operator==(const BlendSpacePoint&, const BlendSpacePoint&) = default;
+};
+
+/// SPEC-0035's `blend_space_1d`: inputs on a line, weighed by `position`.
+struct BlendSpace1DNode {
+    Scalar position = 0.0;
+    /// In name order.
+    std::vector<BlendSpacePoint> points;
+
+    friend bool operator==(const BlendSpace1DNode&, const BlendSpace1DNode&) = default;
+};
+
+/// SPEC-0035's `blend_space_2d`: inputs on a plane with a declared
+/// triangulation, weighed by `position`.
+struct BlendSpace2DNode {
+    Point position = std::array<double, 2>{};
+    /// In name order.
+    std::vector<BlendSpacePoint> points;
+    /// Each three points by name, in name order; the triangles in order.
+    std::vector<std::array<std::string, 3>> triangles;
+
+    friend bool operator==(const BlendSpace2DNode&, const BlendSpace2DNode&) = default;
 };
 
 struct OutputNode {
@@ -282,7 +331,15 @@ struct QuarantinedNode {
 
 struct GraphNode {
     std::uint64_t id = 0;
-    std::variant<ClipNode, BlendNode, StateMachineNode, OutputNode, MaskNode, QuarantinedNode> node;
+    std::variant<ClipNode,
+                 BlendNode,
+                 StateMachineNode,
+                 OutputNode,
+                 MaskNode,
+                 BlendSpace1DNode,
+                 BlendSpace2DNode,
+                 QuarantinedNode>
+        node;
 
     friend bool operator==(const GraphNode&, const GraphNode&) = default;
 };
@@ -300,8 +357,11 @@ struct Graph {
 /// `OverLimit`.
 struct GraphLimits {
     std::size_t maximumNodes = 1024;
-    /// A blend's inputs, and a state machine's states.
+    /// A blend's inputs, a blend space's points, and a state machine's
+    /// states.
     std::size_t maximumInputs = 64;
+    /// A 2D blend space's triangles.
+    std::size_t maximumTriangles = 128;
     std::size_t maximumParameters = 256;
     std::size_t maximumTransitions = 256;
     std::size_t maximumConditions = 16;

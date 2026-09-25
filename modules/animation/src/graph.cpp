@@ -45,6 +45,33 @@ std::optional<Connection> connectionOf(const Value& value) {
     return Connection{.node = *kNode, .output = *value.find("output")->text()};
 }
 
+bool scalarInForm(const Graph& graph, const Scalar& scalar, bool negative) {
+    if (const auto* kLiteral = std::get_if<double>(&scalar)) {
+        return std::isfinite(*kLiteral) && (negative || *kLiteral >= 0.0);
+    }
+    const Parameter* kParameter = parameterOf(graph, std::get<ParameterRef>(scalar).parameter);
+    return kParameter != nullptr && kParameter->type == ParameterType::Float;
+}
+
+Value scalarValue(const Scalar& scalar) {
+    if (const auto* kLiteral = std::get_if<double>(&scalar)) {
+        return Value::real(*kLiteral);
+    }
+    Value made = Value::object();
+    made.add("parameter", hexValue(std::get<ParameterRef>(scalar).parameter));
+    return made;
+}
+
+std::optional<Scalar> scalarOf(const Value& value) {
+    if (value.kind() == Value::Kind::Number) {
+        const std::optional<double> kNumber = numberOf(&value);
+        return kNumber.has_value() ? std::optional<Scalar>{*kNumber} : std::nullopt;
+    }
+    const std::optional<std::uint64_t> kId =
+        hasMembers(value, {"parameter"}) ? bits64Of(value.find("parameter")) : std::nullopt;
+    return kId.has_value() ? std::optional<Scalar>{ParameterRef{*kId}} : std::nullopt;
+}
+
 namespace {
 
 constexpr std::string_view kClipType = "rawframe/clip@1";
@@ -52,6 +79,12 @@ constexpr std::string_view kBlendType = "rawframe/blend@1";
 constexpr std::string_view kStateMachineType = "rawframe/state_machine@1";
 constexpr std::string_view kOutputType = "rawframe/output@1";
 constexpr std::string_view kMaskType = "rawframe/mask@1";
+constexpr std::string_view kLineSpaceType = "rawframe/blend_space_1d@1";
+constexpr std::string_view kPlaneSpaceType = "rawframe/blend_space_2d@1";
+
+/// Every type this engine knows; a node of any other is quarantined.
+constexpr std::array<std::string_view, 7> kKnownTypes{
+    kClipType, kBlendType, kStateMachineType, kOutputType, kMaskType, kLineSpaceType, kPlaneSpaceType};
 
 constexpr std::array<std::string_view, 4> kTypes{"bool", "int", "float", "vec2"};
 constexpr std::array<std::string_view, 3> kReplications{"server_authoritative", "client_predicted", "local"};
@@ -87,14 +120,6 @@ bool typeIdInForm(std::string_view type) {
     return (segments == 2 || segments == 3) && kVersioned;
 }
 
-bool scalarInForm(const Graph& graph, const Scalar& scalar, bool negative) {
-    if (const auto* kLiteral = std::get_if<double>(&scalar)) {
-        return std::isfinite(*kLiteral) && (negative || *kLiteral >= 0.0);
-    }
-    const Parameter* kParameter = parameterOf(graph, std::get<ParameterRef>(scalar).parameter);
-    return kParameter != nullptr && kParameter->type == ParameterType::Float;
-}
-
 const GraphNode* nodeOf(const Graph& graph, std::uint64_t id) {
     const auto kFound = std::ranges::lower_bound(graph.nodes, id, {}, &GraphNode::id);
     return kFound == graph.nodes.end() || kFound->id != id ? nullptr : &*kFound;
@@ -126,6 +151,14 @@ std::vector<const Connection*> connectionsOf(const GraphNode& node) {
     } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
         made.push_back(&kMask->inside);
         made.push_back(&kMask->outside);
+    } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node.node)) {
+        for (const BlendSpacePoint& point : kLine->points) {
+            made.push_back(&point.from);
+        }
+    } else if (const auto* kPlane = std::get_if<BlendSpace2DNode>(&node.node)) {
+        for (const BlendSpacePoint& point : kPlane->points) {
+            made.push_back(&point.from);
+        }
     }
     return made;
 }
@@ -201,25 +234,6 @@ result::Status acyclic(const Graph& graph) {
         }
     }
     return {};
-}
-
-Value scalarValue(const Scalar& scalar) {
-    if (const auto* kLiteral = std::get_if<double>(&scalar)) {
-        return Value::real(*kLiteral);
-    }
-    Value made = Value::object();
-    made.add("parameter", hexValue(std::get<ParameterRef>(scalar).parameter));
-    return made;
-}
-
-std::optional<Scalar> scalarOf(const Value& value) {
-    if (value.kind() == Value::Kind::Number) {
-        const std::optional<double> kNumber = numberOf(&value);
-        return kNumber.has_value() ? std::optional<Scalar>{*kNumber} : std::nullopt;
-    }
-    const std::optional<std::uint64_t> kId =
-        hasMembers(value, {"parameter"}) ? bits64Of(value.find("parameter")) : std::nullopt;
-    return kId.has_value() ? std::optional<Scalar>{ParameterRef{*kId}} : std::nullopt;
 }
 
 Value parameterValue(const Parameter& parameter) {
@@ -331,6 +345,14 @@ Value nodeValue(const Graph& graph, const GraphNode& node) {
         params.add("mask", Value::string(hexOf(kMask->mask)));
         inputs.add("inside", connectionValue(kMask->inside));
         inputs.add("outside", connectionValue(kMask->outside));
+    } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node.node)) {
+        type = kLineSpaceType;
+        params = blendSpaceParams(*kLine);
+        inputs = blendSpaceInputs(kLine->points);
+    } else if (const auto* kPlane = std::get_if<BlendSpace2DNode>(&node.node)) {
+        type = kPlaneSpaceType;
+        params = blendSpaceParams(*kPlane);
+        inputs = blendSpaceInputs(kPlane->points);
     } else {
         type = kOutputType;
         inputs.add("pose", connectionValue(std::get<OutputNode>(node.node).pose));
@@ -392,8 +414,7 @@ result::Result<GraphNode> nodeOf(std::uint64_t id, const Value& record) {
         return graphInvalid("a node's type is namespace/name@version");
     }
     const std::string_view kType = *type->text();
-    if (kType != kClipType && kType != kBlendType && kType != kStateMachineType && kType != kOutputType &&
-        kType != kMaskType) {
+    if (!std::ranges::contains(kKnownTypes, kType)) {
         // Kept whole and never read further.
         return GraphNode{.id = id,
                          .node = QuarantinedNode{.type = std::string{kType}, .record = document::writeCompact(record)}};
@@ -414,6 +435,14 @@ result::Result<GraphNode> nodeOf(std::uint64_t id, const Value& record) {
     }
     if (kType == kStateMachineType) {
         RAWFRAME_TRY_ASSIGN(StateMachineNode made, stateMachineOf(params, inputs));
+        return GraphNode{.id = id, .node = std::move(made)};
+    }
+    if (kType == kLineSpaceType) {
+        RAWFRAME_TRY_ASSIGN(BlendSpace1DNode made, blendSpace1DOf(params, inputs));
+        return GraphNode{.id = id, .node = std::move(made)};
+    }
+    if (kType == kPlaneSpaceType) {
+        RAWFRAME_TRY_ASSIGN(BlendSpace2DNode made, blendSpace2DOf(params, inputs));
         return GraphNode{.id = id, .node = std::move(made)};
     }
     if (kType == kMaskType) {
@@ -492,13 +521,15 @@ result::Status validate(const Graph& graph, const GraphLimits& limits) {
             if (kMask->mask == base::Bits128{}) {
                 return graphInvalid("a mask node names its mask");
             }
+        } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node.node)) {
+            RAWFRAME_TRY(blendSpaceInForm(graph, *kLine, limits));
+        } else if (const auto* kPlane = std::get_if<BlendSpace2DNode>(&node.node)) {
+            RAWFRAME_TRY(blendSpaceInForm(graph, *kPlane, limits));
         } else if (const auto* kQuarantined = std::get_if<QuarantinedNode>(&node.node)) {
             const auto kRecord = document::parse(kQuarantined->record);
             const Value* type = kRecord.has_value() ? kRecord->find("type") : nullptr;
             if (type == nullptr || type->text() == nullptr || *type->text() != kQuarantined->type ||
-                !typeIdInForm(kQuarantined->type) || kQuarantined->type == kClipType ||
-                kQuarantined->type == kBlendType || kQuarantined->type == kStateMachineType ||
-                kQuarantined->type == kOutputType || kQuarantined->type == kMaskType) {
+                !typeIdInForm(kQuarantined->type) || std::ranges::contains(kKnownTypes, kQuarantined->type)) {
                 return graphInvalid("a quarantined node is a record of a type this engine does not know");
             }
         } else {

@@ -1,5 +1,6 @@
 #include "rawframe/animation/instance.h"
 
+#include "blend_space.h"
 #include "rawframe/animation/errors.h"
 #include "rawframe/base/assert.h"
 #include "root_motion.h"
@@ -42,6 +43,14 @@ std::vector<std::uint64_t> inputsOf(const GraphNode& node) {
     } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {
         made.push_back(kMask->inside.node);
         made.push_back(kMask->outside.node);
+    } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node.node)) {
+        for (const BlendSpacePoint& point : kLine->points) {
+            made.push_back(point.from.node);
+        }
+    } else if (const auto* kPlane = std::get_if<BlendSpace2DNode>(&node.node)) {
+        for (const BlendSpacePoint& point : kPlane->points) {
+            made.push_back(point.from.node);
+        }
     }
     return made;
 }
@@ -178,6 +187,32 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
                 step.inputs.push_back(steps.at(input.from.node));
                 step.weights.push_back(kLiteral(input.weight));
                 step.weightParameters.push_back(kParameter(input.weight));
+            }
+        } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node->node)) {
+            for (const BlendSpacePoint& point : kLine->points) {
+                step.inputs.push_back(steps.at(point.from.node));
+                step.points.push_back(point.at);
+            }
+            step.position = {kLiteral(kLine->position), 0.0};
+            step.positionParameter = kParameter(kLine->position);
+        } else if (const auto* kPlane = std::get_if<BlendSpace2DNode>(&node->node)) {
+            for (const BlendSpacePoint& point : kPlane->points) {
+                step.inputs.push_back(steps.at(point.from.node));
+                step.points.push_back(point.at);
+            }
+            for (const std::array<std::string, 3>& triangle : kPlane->triangles) {
+                std::array<std::size_t, 3> places{};
+                for (std::size_t corner = 0; corner < 3; ++corner) {
+                    places[corner] = static_cast<std::size_t>(
+                        std::ranges::find(kPlane->points, triangle[corner], &BlendSpacePoint::name) -
+                        kPlane->points.begin());
+                }
+                step.triangles.push_back(places);
+            }
+            if (const auto* kAt = std::get_if<std::array<double, 2>>(&kPlane->position)) {
+                step.position = *kAt;
+            } else {
+                step.positionParameter = kParameter(std::get<ParameterRef>(kPlane->position));
             }
         } else if (const auto* kMask = std::get_if<MaskNode>(&node->node)) {
             const auto kNamed = std::ranges::find(masks, kMask->mask, &NamedMask::id);
@@ -346,6 +381,14 @@ void GraphInstance::weigh() {
         } else if (!step.mask.empty()) {
             // Both play in full: each owns its bones, and fires its events.
             std::ranges::fill(shares, 1.0);
+        } else if (!step.points.empty()) {
+            const std::array<double, 2> kPosition =
+                step.positionParameter.has_value() ? values_[step.positionParameter->value] : step.position;
+            if (step.triangles.empty()) {
+                lineShares(step.points, kPosition[0], shares);
+            } else {
+                planeShares(step.points, step.triangles, kPosition, shares);
+            }
         } else {
             double total = 0.0;
             for (std::size_t input = 0; input < step.inputs.size(); ++input) {

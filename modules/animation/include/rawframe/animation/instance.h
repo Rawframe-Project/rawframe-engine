@@ -25,6 +25,7 @@
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -157,6 +158,14 @@ public:
         /// A mask's weight for each bone, its inputs inside then outside;
         /// empty for any other step.
         std::vector<double> mask;
+        /// A blend space's place for each input (a line's uses the first
+        /// number), empty for any other step; a plane's triangles, by
+        /// their points' places; and its position, `positionParameter`'s
+        /// value when it names one, else this literal.
+        std::vector<std::array<double, 2>> points;
+        std::vector<std::array<std::size_t, 3>> triangles;
+        std::array<double, 2> position{};
+        std::optional<ParameterIndex> positionParameter;
         /// A clip's root translation and rotation tracks, by their place
         /// in it, when the skeleton declares root motion.
         std::optional<std::size_t> rootTranslation;
