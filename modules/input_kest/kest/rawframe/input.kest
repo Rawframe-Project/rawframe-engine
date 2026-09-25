@@ -1,0 +1,37 @@
+module rawframe.input
+
+// A player's actions as its client committed them for the tick being sampled
+// (SPEC-0029), named by each action's identity in the game's action set.
+// Only a game's sample program reads them, and only on a client: the server
+// has no actions, only the input they became.
+
+extern fn Input.on(action: u64) -> bool
+extern fn Input.pressed(action: u64) -> bool
+extern fn Input.released(action: u64) -> bool
+extern fn Input.x(action: u64) -> f32
+extern fn Input.y(action: u64) -> f32
+
+// Whether the action is on, by its thresholds.
+fn on(action: u64) -> bool {
+    return Input.on(action)
+}
+
+// Whether it turned on during the tick, even if it turned off again.
+fn pressed(action: u64) -> bool {
+    return Input.pressed(action)
+}
+
+// Whether it turned off during the tick.
+fn released(action: u64) -> bool {
+    return Input.released(action)
+}
+
+// Its first axis: a bool's is one when on.
+fn x(action: u64) -> f32 {
+    return Input.x(action)
+}
+
+// Its second axis, for a two-axis action.
+fn y(action: u64) -> f32 {
+    return Input.y(action)
+}

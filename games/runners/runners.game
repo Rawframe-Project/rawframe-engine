@@ -35,6 +35,10 @@ spawn 1 rawframe.physics2d.body motion=0 shape=1 width=2 height=0.5 rawframe.phy
 replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score
 player runners.stick runners.score rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
 input runners.stick perceived
+# A client makes its stick from its player's actions (runners.actions) with
+# sample.kest; bots press the same keys and buttons.
+actions runners.actions
+sample sample.kest sample
 interest rawframe.physics2d.pose x y within 30
 interpolate rawframe.physics2d.pose
 predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick

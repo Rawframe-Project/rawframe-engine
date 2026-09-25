@@ -1,0 +1,14 @@
+module controls
+
+// What a runner's player asks of it each tick, apart from the game so that
+// the game and a client's sample program (sample.kest) share the one type.
+
+// What a player asks for, each -1 to 1: to run left or right, to jump (above
+// a half), where to aim, and to fire (above a half).
+struct Stick {
+    run: f32
+    jump: f32
+    aimX: f32
+    aimY: f32
+    fire: f32
+}

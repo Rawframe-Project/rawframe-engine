@@ -1,0 +1,97 @@
+{
+  "kind": "input.actions",
+  "formatVersion": 1,
+  "actions": [
+    {
+      "actionId": "9182d0b16cbd7c9c",
+      "name": "run",
+      "valueType": "axis1d",
+      "displayName": "Run",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "pair": {
+            "negative": "key_a",
+            "positive": "key_d"
+          }
+        },
+        {
+          "device": "gamepad",
+          "pair": {
+            "negative": "dpad_left",
+            "positive": "dpad_right"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "2cb70c262f28ab66",
+      "name": "jump",
+      "valueType": "bool",
+      "displayName": "Jump",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "space"
+        },
+        {
+          "device": "gamepad",
+          "control": "face_south"
+        }
+      ]
+    },
+    {
+      "actionId": "302f813f89c1849d",
+      "name": "aim",
+      "valueType": "axis2d",
+      "displayName": "Aim",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "quad": {
+            "up": "arrow_up",
+            "down": "arrow_down",
+            "left": "arrow_left",
+            "right": "arrow_right"
+          }
+        },
+        {
+          "device": "gamepad",
+          "control": "stick_right"
+        }
+      ]
+    },
+    {
+      "actionId": "d1e5c72fda17a16f",
+      "name": "fire",
+      "valueType": "bool",
+      "displayName": "Fire",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "key_f"
+        },
+        {
+          "device": "mouse",
+          "control": "left"
+        },
+        {
+          "device": "gamepad",
+          "control": "trigger_right"
+        }
+      ]
+    }
+  ],
+  "contexts": [
+    {
+      "contextId": "a9b081ffcca09e02",
+      "name": "running",
+      "actions": [
+        "run",
+        "jump",
+        "aim",
+        "fire"
+      ]
+    }
+  ]
+}

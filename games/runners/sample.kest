@@ -1,0 +1,28 @@
+module sample
+
+// A client's input for a runner (runners.game's `sample` line): the stick,
+// made each tick from its player's actions (runners.actions).
+
+import controls
+import rawframe.input
+
+const RUN: u64 = 0x9182d0b16cbd7c9c
+const JUMP: u64 = 0x2cb70c262f28ab66
+const AIM: u64 = 0x302f813f89c1849d
+const FIRE: u64 = 0xd1e5c72fda17a16f
+
+// One for on, nought for off: the stick's half-way rule reads it back.
+fn level(on: bool) -> f32 {
+    if on {
+        return 1.0
+    }
+    return 0.0
+}
+
+fn sample(into: [controls.Stick]) {
+    into[0].run = input.x(RUN)
+    into[0].jump = level(input.on(JUMP))
+    into[0].aimX = input.x(AIM)
+    into[0].aimY = input.y(AIM)
+    into[0].fire = level(input.on(FIRE))
+}

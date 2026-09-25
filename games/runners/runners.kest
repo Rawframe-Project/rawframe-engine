@@ -3,6 +3,7 @@ module runners
 // The sample platformer: players are characters (rawframe.physics2d's
 // Character2D) that run, jump, and shoot along the level.
 
+import controls
 import rawframe.physics2d
 import rawframe.random
 import rawframe.replication
@@ -10,16 +11,6 @@ import rawframe.world
 
 // The runners' collision class (runners.game): what a shot meets.
 const RUNNER: u64 = 0x2ebcd16c10c5f6a4
-
-// What a player asks for, each -1 to 1: to run left or right, to jump (above
-// a half), where to aim, and to fire (above a half).
-struct Stick {
-    run: f32
-    jump: f32
-    aimX: f32
-    aimY: f32
-    fire: f32
-}
 
 // Shots fired, shots that met another runner, the ticks until the next may
 // be fired, and the ticks this runner was hit on.
@@ -55,7 +46,7 @@ fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], chara
 
 // Six meters a second either way; on ground, a jump when asked, and in the
 // air, a fall that quickens to twenty meters a second.
-fn run(count: i32, sticks: [Stick], characters: [physics2d.Character2D], velocities: [physics2d.Velocity2D]) {
+fn run(count: i32, sticks: [controls.Stick], characters: [physics2d.Character2D], velocities: [physics2d.Velocity2D]) {
     let i = 0
     while i < count {
         velocities[i].x = sticks[i].run * 6.0
@@ -77,7 +68,7 @@ fn run(count: i32, sticks: [Stick], characters: [physics2d.Character2D], velocit
 
 // A shot every third of a second while firing: from the runner's side it
 // faces, thirty meters out, at the other runners where its player saw them.
-fn shoot(count: i32, sticks: [Stick], poses: [physics2d.Pose2D], seen: [replication.Perception], scores: [Score]) {
+fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: [replication.Perception], scores: [Score]) {
     let i = 0
     while i < count {
         let ready = scores[i].cooldown == 0
