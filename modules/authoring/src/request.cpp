@@ -1,5 +1,6 @@
 #include "rawframe/authoring/request.h"
 
+#include "operation_parts.h"
 #include "rawframe/schema/stable_id.h"
 
 #include <algorithm>
@@ -92,8 +93,9 @@ std::optional<FieldInput> fieldInputOf(const Value& value) {
     return std::nullopt;
 }
 
-/// The operation `value` names, its inputs exactly the declaration's.
-result::Result<Operation> operationOf(const Value& value) {
+/// Where the operation `value` names stands among the declarations, its
+/// inputs exactly the declaration's.
+result::Result<std::size_t> declaredOf(const Value& value) {
     const std::string* name = textOf(value.find("operation"));
     if (value.kind() != Value::Kind::Object || name == nullptr) {
         return malformed("an operation is an object naming its operation");
@@ -116,6 +118,33 @@ result::Result<Operation> operationOf(const Value& value) {
             return malformed("an operation holds every input its declaration lists");
         }
     }
+    return static_cast<std::size_t>(kDeclared - declarations().begin());
+}
+
+constexpr std::size_t kChanging = std::variant_size_v<Operation>;
+
+/// The query `value` names.
+result::Result<Query> queryOf(const Value& value) {
+    RAWFRAME_TRY_ASSIGN(const std::size_t kIndex, declaredOf(value));
+    if (kIndex < kChanging) {
+        return malformed("a query document reads the scene; a request changes it");
+    }
+    if (kIndex == kChanging) {
+        return Query{ListEntities{}};
+    }
+    const auto kEntity = idOf(value.find("entity"));
+    if (!kEntity.has_value()) {
+        return malformed("an operation's inputs are of their declared types");
+    }
+    return Query{ReadEntity{.entity = *kEntity}};
+}
+
+/// The operation `value` names.
+result::Result<Operation> operationOf(const Value& value) {
+    RAWFRAME_TRY_ASSIGN(const std::size_t kIndex, declaredOf(value));
+    if (kIndex >= kChanging) {
+        return malformed("a request changes the scene; a query document reads it");
+    }
     const auto kEntity = idOf(value.find("entity"));
     const auto kComponent = idOf(value.find("component"));
     const std::string* text = textOf(value.find("name"));
@@ -123,7 +152,6 @@ result::Result<Operation> operationOf(const Value& value) {
     const auto kBad = [] {
         return malformed("an operation's inputs are of their declared types");
     };
-    const std::size_t kIndex = static_cast<std::size_t>(kDeclared - declarations().begin());
     if (kIndex == 8) {
         if (!kComponent.has_value()) {
             return kBad();
@@ -198,7 +226,146 @@ result::Result<Operation> operationOf(const Value& value) {
     }
 }
 
+constexpr std::array<std::string_view, 5> kFieldKindNames = {"signed", "unsigned", "real", "truth", "reference"};
+constexpr std::array<std::string_view, 3> kPatchNames = {"set", "add", "remove"};
+
+std::string idText(base::Bits128 id) {
+    const auto kText = schema::formatStableIdText(id);
+    return std::string{kText.data(), kText.size()};
+}
+
+std::string hexText(base::Bits128 id) {
+    std::array<char, base::kBits128HexDigits> digits{};
+    base::formatBits128Hex(id, digits);
+    return std::string{digits.data(), digits.size()};
+}
+
+std::string markText(std::uint64_t mark) {
+    std::array<char, 16> digits{};
+    const char* const kEnd = std::to_chars(digits.data(), digits.data() + digits.size(), mark, 16).ptr;
+    std::string text(digits.size() - static_cast<std::size_t>(kEnd - digits.data()), '0');
+    text.append(std::string_view{digits.data(), kEnd});
+    return text;
+}
+
+Value singleMember(std::string_view name, Value value) {
+    Value made = Value::object();
+    made.add(std::string{name}, std::move(value));
+    return made;
+}
+
+/// A field's value in the form a request sets it with, or as the scene
+/// records it when the catalog cannot type it.
+Value readingValue(const FieldReading& field) {
+    const scene::FieldValue& value = field.value;
+    if (field.kind.has_value() && fits(value, *field.kind)) {
+        switch (*field.kind) {
+        case FieldKind::Signed:
+            return singleMember("signed", Value::string(value.number));
+        case FieldKind::Unsigned:
+            return singleMember("unsigned", Value::string(value.number));
+        case FieldKind::Real: {
+            auto parsed = document::parse(value.number);
+            if (parsed.has_value() && parsed->kind() == Value::Kind::Number) {
+                return singleMember("real", std::move(*parsed));
+            }
+            break;
+        }
+        case FieldKind::Truth:
+            return singleMember("truth", Value::boolean(value.kind == scene::FieldValue::Kind::True));
+        case FieldKind::Reference:
+            return singleMember("entity", Value::string(idText(value.entity)));
+        }
+    }
+    switch (value.kind) {
+    case scene::FieldValue::Kind::Number:
+        return singleMember("recorded", singleMember("number", Value::string(value.number)));
+    case scene::FieldValue::Kind::True:
+    case scene::FieldValue::Kind::False:
+        return singleMember("recorded", Value::boolean(value.kind == scene::FieldValue::Kind::True));
+    case scene::FieldValue::Kind::Entity:
+        return singleMember("recorded", singleMember("entity", Value::string(idText(value.entity))));
+    }
+    return {};
+}
+
+Value entryValue(const EntityEntry& entry) {
+    Value made = Value::object();
+    made.add("id", Value::string(idText(entry.id)));
+    if (entry.place.has_value()) {
+        made.add("name", Value::string(entry.name));
+        made.add("place", Value::integer(static_cast<std::int64_t>(*entry.place)));
+    }
+    if (entry.brought.has_value()) {
+        Value brought = Value::object();
+        brought.add("instance", Value::integer(static_cast<std::int64_t>(entry.brought->instance)));
+        brought.add("scene", Value::string(hexText(entry.brought->scene)));
+        brought.add("source", Value::string(idText(entry.brought->source)));
+        made.add("brought", std::move(brought));
+        made.add("removed", Value::boolean(entry.removed));
+    }
+    return made;
+}
+
 } // namespace
+
+result::Result<std::vector<Query>> readQueries(std::string_view text) {
+    auto parsed = document::parse(text);
+    if (!parsed.has_value()) {
+        return malformed("a query document is strict JSON");
+    }
+    const Value* kind = parsed->find("kind");
+    const Value* version = parsed->find("formatVersion");
+    const Value* queries = parsed->find("queries");
+    if (parsed->kind() != Value::Kind::Object || parsed->names().size() != 3 || textOf(kind) == nullptr ||
+        *kind->text() != "authoring.query" || version == nullptr || version->integer() != 1 || queries == nullptr ||
+        queries->kind() != Value::Kind::Array) {
+        return malformed("a query document is authoring.query, format 1, and its queries");
+    }
+    std::vector<Query> made;
+    for (std::size_t at = 0; at < queries->items().size(); ++at) {
+        auto query = queryOf(queries->items()[at]);
+        if (!query.has_value()) {
+            return std::unexpected<result::Error>{std::move(query).error().withContext("index", std::to_string(at))};
+        }
+        made.push_back(*query);
+    }
+    return made;
+}
+
+document::Value answerValue(const Answer& answer) {
+    if (const auto* list = std::get_if<EntityList>(&answer)) {
+        Value entities = Value::array();
+        for (const EntityEntry& entry : list->entities) {
+            entities.push(entryValue(entry));
+        }
+        return singleMember("entities", std::move(entities));
+    }
+    const EntityReading& reading = std::get<EntityReading>(answer);
+    Value components = Value::array();
+    for (const ComponentReading& component : reading.components) {
+        Value fields = Value::array();
+        for (const FieldReading& field : component.fields) {
+            Value made = Value::object();
+            made.add("name", Value::string(field.name));
+            made.add("value", readingValue(field));
+            fields.push(std::move(made));
+        }
+        Value made = Value::object();
+        made.add("component",
+                 component.component.has_value() ? Value::string(idText(component.component->value)) : Value{});
+        made.add("name", Value::string(component.name));
+        if (component.patch.has_value()) {
+            made.add("patch", Value::string(std::string{kPatchNames[static_cast<std::size_t>(*component.patch)]}));
+        }
+        made.add("fields", std::move(fields));
+        components.push(std::move(made));
+    }
+    Value made = Value::object();
+    made.add("entity", entryValue(reading.entity));
+    made.add("components", std::move(components));
+    return made;
+}
 
 result::Result<Request> readRequest(std::string_view text) {
     auto parsed = document::parse(text);
@@ -242,7 +409,7 @@ result::Result<Request> readRequest(std::string_view text) {
     return request;
 }
 
-std::string writeDiscovery() {
+std::string writeDiscovery(const ComponentCatalog* catalog) {
     Value operations = Value::array();
     for (const OperationDeclaration& each : declarations()) {
         Value inputs = Value::array();
@@ -270,6 +437,25 @@ std::string writeDiscovery() {
     made.add("surfaceGeneration", Value::integer(kSurfaceGeneration));
     made.add("operations", std::move(operations));
     made.add("errors", std::move(errors));
+    if (catalog != nullptr) {
+        Value components = Value::array();
+        for (const ComponentSchema& component : catalog->components()) {
+            Value fields = Value::array();
+            for (const FieldSchema& field : component.fields) {
+                Value each = Value::object();
+                each.add("name", Value::string(field.name));
+                each.add("kind", Value::string(std::string{kFieldKindNames[static_cast<std::size_t>(field.kind)]}));
+                fields.push(std::move(each));
+            }
+            Value each = Value::object();
+            each.add("id", Value::string(idText(component.id.value)));
+            each.add("name", Value::string(component.name));
+            each.add("mark", Value::string(markText(component.mark)));
+            each.add("fields", std::move(fields));
+            components.push(std::move(each));
+        }
+        made.add("components", std::move(components));
+    }
     return document::write(made);
 }
 

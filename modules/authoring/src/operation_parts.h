@@ -34,6 +34,11 @@ sameLayout(const scene::Scene& scene, const Operation& operation, const Componen
 /// an instance brings and does not remove.
 [[nodiscard]] bool present(const scene::Scene& scene, base::Bits128 entity);
 
+/// Whether a recorded value is one a field of `kind` holds: numbers by
+/// their text, so an integer field takes no fraction and an unsigned one no
+/// sign; a truth for a truth; an entity for a reference.
+[[nodiscard]] bool fits(const scene::FieldValue& value, FieldKind kind);
+
 /// The value a field input writes; none for the field's default.
 [[nodiscard]] result::Result<std::optional<scene::FieldValue>>
 valueOf(const Operation& operation, const FieldInput& input, FieldKind kind);

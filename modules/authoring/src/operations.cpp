@@ -37,7 +37,7 @@ constexpr std::array<InputDeclaration, 1> kRemarkInputs = {{{"component", InputT
 constexpr std::array<InputDeclaration, 3> kRevertFieldInputs = {
     {{"entity", InputType::Entity}, {"component", InputType::Component}, {"field", InputType::Field}}};
 
-constexpr std::array<OperationDeclaration, 12> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 14> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -50,7 +50,13 @@ constexpr std::array<OperationDeclaration, 12> kDeclarations = {{
     {.name = "scene.revert_field", .targets = "rawframe.scene field", .inputs = kRevertFieldInputs},
     {.name = "scene.revert_component", .targets = "rawframe.scene component", .inputs = kComponentInputs},
     {.name = "scene.restore_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
+    {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
+    {.name = "scene.read_entity",
+     .history = HistoryClass::ReadOnly,
+     .targets = "rawframe.scene entity",
+     .inputs = kEntityInputs},
 }};
+static_assert(kDeclarations.size() == std::variant_size_v<Operation> + std::variant_size_v<Query>);
 
 std::unexpected<result::Error>
 refuse(const Operation& operation, result::ErrorClass errorClass, AuthoringError error, std::string_view why) {
@@ -109,36 +115,6 @@ result::Result<Target> targetOf(const scene::Scene& scene,
         return notFound(operation, "the entity has no such component");
     }
     return made;
-}
-
-/// Whether a recorded value is one a field of `kind` holds: numbers by
-/// their text, so an integer field takes no fraction and an unsigned one no
-/// sign; a truth for a truth; an entity for a reference.
-bool fits(const scene::FieldValue& value, FieldKind kind) {
-    switch (value.kind) {
-    case scene::FieldValue::Kind::True:
-    case scene::FieldValue::Kind::False:
-        return kind == FieldKind::Truth;
-    case scene::FieldValue::Kind::Entity:
-        return kind == FieldKind::Reference;
-    case scene::FieldValue::Kind::Number:
-        break;
-    }
-    const std::string& text = value.number;
-    if (kind == FieldKind::Real) {
-        return true;
-    }
-    if (kind == FieldKind::Signed) {
-        std::int64_t made = 0;
-        const auto kRead = std::from_chars(text.data(), text.data() + text.size(), made);
-        return kRead.ec == std::errc{} && kRead.ptr == text.data() + text.size();
-    }
-    if (kind == FieldKind::Unsigned) {
-        std::uint64_t made = 0;
-        const auto kRead = std::from_chars(text.data(), text.data() + text.size(), made);
-        return !text.starts_with('-') && kRead.ec == std::errc{} && kRead.ptr == text.data() + text.size();
-    }
-    return false;
 }
 
 /// The fields of `component` the scene gives values that do not carry over
@@ -376,6 +352,33 @@ result::Status sameLayout(const scene::Scene& scene, const Operation& operation,
     return {};
 }
 
+bool fits(const scene::FieldValue& value, FieldKind kind) {
+    switch (value.kind) {
+    case scene::FieldValue::Kind::True:
+    case scene::FieldValue::Kind::False:
+        return kind == FieldKind::Truth;
+    case scene::FieldValue::Kind::Entity:
+        return kind == FieldKind::Reference;
+    case scene::FieldValue::Kind::Number:
+        break;
+    }
+    const std::string& text = value.number;
+    if (kind == FieldKind::Real) {
+        return true;
+    }
+    if (kind == FieldKind::Signed) {
+        std::int64_t made = 0;
+        const auto kRead = std::from_chars(text.data(), text.data() + text.size(), made);
+        return kRead.ec == std::errc{} && kRead.ptr == text.data() + text.size();
+    }
+    if (kind == FieldKind::Unsigned) {
+        std::uint64_t made = 0;
+        const auto kRead = std::from_chars(text.data(), text.data() + text.size(), made);
+        return !text.starts_with('-') && kRead.ec == std::errc{} && kRead.ptr == text.data() + text.size();
+    }
+    return false;
+}
+
 bool referenced(const scene::Scene& scene, base::Bits128 entity) {
     const auto kNames = [entity](const std::vector<scene::SceneField>& fields) {
         return std::ranges::any_of(fields, [entity](const scene::SceneField& field) {
@@ -486,6 +489,10 @@ std::span<const OperationDeclaration> declarations() noexcept {
 
 const OperationDeclaration& declarationOf(const Operation& operation) noexcept {
     return kDeclarations[operation.index()];
+}
+
+const OperationDeclaration& declarationOf(const Query& query) noexcept {
+    return kDeclarations[std::variant_size_v<Operation> + query.index()];
 }
 
 result::Result<Committed> execute(AuthoredScene& scene,

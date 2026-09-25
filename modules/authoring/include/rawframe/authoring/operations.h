@@ -79,6 +79,10 @@ public:
     /// By the name a scene records it by: for tools reading a document,
     /// never for addressing an operation.
     [[nodiscard]] const ComponentSchema* findNamed(std::string_view name) const noexcept;
+    /// In the order they were added.
+    [[nodiscard]] std::span<const ComponentSchema> components() const noexcept {
+        return components_;
+    }
 
 private:
     std::vector<ComponentSchema> components_;
@@ -180,7 +184,17 @@ using Operation = std::variant<CreateEntity,
                                RevertComponent,
                                RestoreEntity>;
 
-/// SPEC-0040's history classes; every operation here is `Undoable`.
+/// SPEC-0040's read operations (queries.h answers them): every entity the
+/// scene holds, and one entity whole.
+struct ListEntities {};
+struct ReadEntity {
+    base::Bits128 entity{};
+};
+
+using Query = std::variant<ListEntities, ReadEntity>;
+
+/// SPEC-0040's history classes: every operation that changes a scene is
+/// `Undoable`, and every query `ReadOnly`.
 enum class HistoryClass : std::uint8_t {
     Undoable,
     NonDirtying,
@@ -215,9 +229,11 @@ struct OperationDeclaration {
     std::span<const InputDeclaration> inputs;
 };
 
-/// Every operation, in the order of `Operation`'s alternatives.
+/// Every operation, in the order of `Operation`'s alternatives, then every
+/// query in the order of `Query`'s.
 [[nodiscard]] std::span<const OperationDeclaration> declarations() noexcept;
 [[nodiscard]] const OperationDeclaration& declarationOf(const Operation& operation) noexcept;
+[[nodiscard]] const OperationDeclaration& declarationOf(const Query& query) noexcept;
 
 enum class Mode : std::uint8_t {
     Execute,

@@ -212,11 +212,15 @@ RAWFRAME_TEST(BatchesAreAtomicOrIndependentAsDeclared) {
 }
 
 RAWFRAME_TEST(DiscoveryDeclaresEveryOperationWhole) {
-    RAWFRAME_EXPECT(declarations().size() == std::variant_size_v<Operation>);
-    for (const OperationDeclaration& each : declarations()) {
-        RAWFRAME_EXPECT(!each.name.empty() && !each.inputs.empty() && !each.targets.empty() &&
-                        each.history == HistoryClass::Undoable && each.since == kSurfaceGeneration);
+    RAWFRAME_EXPECT(declarations().size() == std::variant_size_v<Operation> + std::variant_size_v<Query>);
+    for (std::size_t at = 0; at < declarations().size(); ++at) {
+        const OperationDeclaration& each = declarations()[at];
+        const bool kChanges = at < std::variant_size_v<Operation>;
+        RAWFRAME_EXPECT(!each.name.empty() && (!kChanges || !each.inputs.empty()) && !each.targets.empty() &&
+                        each.history == (kChanges ? HistoryClass::Undoable : HistoryClass::ReadOnly) &&
+                        each.since == kSurfaceGeneration);
     }
+    RAWFRAME_EXPECT(declarationOf(ReadEntity{}).name == "scene.read_entity");
     RAWFRAME_EXPECT(declarationOf(SetReference{}).name == "scene.set_reference");
     // A catalog refuses a component twice, by id or by name, and a field
     // named twice.

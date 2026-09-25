@@ -121,7 +121,9 @@ RAWFRAME_TEST(DiscoveryIsCompleteAndErrorsHaveOneShape) {
     const document::Value& operations = *kDiscovery->find("operations");
     RAWFRAME_EXPECT(operations.items().size() == declarations().size());
     for (const document::Value& each : operations.items()) {
-        RAWFRAME_EXPECT(!each.find("inputs")->items().empty() && *each.find("history")->text() == "undoable");
+        const bool kReads = *each.find("history")->text() == "read_only";
+        RAWFRAME_EXPECT(kReads ||
+                        (!each.find("inputs")->items().empty() && *each.find("history")->text() == "undoable"));
     }
     RAWFRAME_EXPECT(kDiscovery->find("errors")->items().size() == 10);
     // An authoring error and another domain's, in the one record.
