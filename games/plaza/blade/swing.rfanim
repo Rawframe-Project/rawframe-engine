@@ -1,0 +1,35 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.clip",
+  "skeleton": "045d11b9d62aa3c2abe9b639a7f428d2",
+  "duration": 2,
+  "loop": "loop",
+  "tracks": [
+    {
+      "bone": "ee3bf6f6e5d23f68705c98ecb7321ee6",
+      "channel": "rotation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0,
+            0,
+            -0.3826834323650898,
+            0.9238795325112867
+          ]
+        },
+        {
+          "time": 1,
+          "value": [
+            0,
+            0,
+            0.3826834323650898,
+            0.9238795325112867
+          ]
+        }
+      ]
+    }
+  ],
+  "events": [],
+  "syncMarkers": []
+}

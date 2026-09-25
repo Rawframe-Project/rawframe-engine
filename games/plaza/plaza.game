@@ -1,6 +1,7 @@
 # The sample 3D game: players are characters running and jumping about a
 # square plaza with a ramp, a raised terrace, pillars, a grassy mound
-# modeled in an authoring tool, and a gate on a hinge, all of it Maul3D.
+# modeled in an authoring tool, a gate on a hinge, and a swinging blade,
+# all of it Maul3D.
 # A client predicts its own character exactly, is sent what is within 30
 # meters on the ground plane, and sees the others between states.
 program plaza.kest
@@ -13,8 +14,14 @@ collision class walker 5f23859a6c00ebba
 mesh 6d3cbd2231e069f1 mound.gltf
 
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
+component 9b8e1f52-3c47-4d0a-a6e2-5f1d7c93b204 plaza.blade Blade
+
+# The blade's swing: its skeleton and clip under blade/, played on the
+# server too, since the blade's body follows its bone.
+animator 3a7d1f0c2b9e4d61 blade.rfanim
 
 system plaza.join simulation join write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.character with plaza.stick random spawn before rawframe.physics3d.step
+system plaza.swing simulation swing read plaza.blade write rawframe.physics3d.target entities after rawframe.animation.step before rawframe.physics3d.step
 system plaza.walk simulation walk read plaza.stick read rawframe.physics3d.character write rawframe.physics3d.velocity before rawframe.physics3d.step predicted
 
 # The plaza, eighty meters square, and walls around it.
@@ -35,6 +42,12 @@ spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physi
 # A gate in the far corner, hung on its post by a hinge that turns about
 # the post.
 scene gate.scene
+
+# A blade hung from a pivot four meters up in the corner opposite the
+# gate, swinging a quarter turn and back every two seconds at a
+# walker's height: a kinematic box carried to the animated bone's pose
+# each step, so it pushes what it meets.
+spawn 1 plaza.blade pivotX=30 pivotY=4 pivotZ=30 rawframe.animation.animator graph=blade.rfanim relevance=1 rawframe.physics3d.body motion=1 shape=1 width=0.1 height=0.5 depth=0.8 rawframe.physics3d.pose x=30 y=1 z=30 rawframe.physics3d.velocity rawframe.physics3d.target
 
 # The mound, ten meters across and 1.2 high, on the plaza's floor.
 spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-20 y=0.5 z=20 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=mound.gltf

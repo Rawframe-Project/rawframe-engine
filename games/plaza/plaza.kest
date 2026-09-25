@@ -3,8 +3,10 @@ module plaza
 // The sample 3D game: players are characters (rawframe.physics3d's
 // Character3D) that run and jump about the plaza.
 
+import rawframe.animation
 import rawframe.physics3d
 import rawframe.random
+import rawframe.world
 
 // The walkers' collision class (plaza.game).
 const WALKER: u64 = 0x5f23859a6c00ebba
@@ -52,6 +54,28 @@ fn walk(count: i32, sticks: [Stick], characters: [physics3d.Character3D], veloci
             fall = -20.0
         }
         velocities[i].y = fall
+        i = i + 1
+    }
+}
+
+// A blade's pivot, where its swing hangs from.
+struct Blade {
+    pivotX: f64
+    pivotY: f64
+    pivotZ: f64
+}
+
+// The blade's bone, where the swing has just posed it, is where its body
+// is carried to by the next step: the pivot plus the bone's place, turned
+// as the bone is.
+fn swing(count: i32, blades: [Blade], targets: [physics3d.Target3D], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let bone = animation.bone(entities[i], u32(1))
+        if bone.posed {
+            targets[i] = physics3d.Target3D(blades[i].pivotX + bone.x, blades[i].pivotY + bone.y,
+                                            blades[i].pivotZ + bone.z, bone.qx, bone.qy, bone.qz, bone.qw, true)
+        }
         i = i + 1
     }
 }
