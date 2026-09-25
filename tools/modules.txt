@@ -15,7 +15,8 @@ assets: content execution result base
 game_content: signature content composition document execution diagnostics result base
 audio: world schema execution diagnostics document result base
 audio_import: audio result base
-cook: scene world_kest input kest_library kest audio_import audio content document execution result base
+mesh: result base
+cook: mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
 build: signature content document result base
 input: document result base
 schema: result base
@@ -41,6 +42,6 @@ dedicated_server: host game_content network_quic physics2d physics3d world_repli
 arena: host game_content input_kest world_audio audio network_loopback physics2d physics3d world_replication world_kest world_runtime composition diagnostics result base
 bots: host game_content input_kest world_audio audio network_quic world_replication world_kest world_runtime composition diagnostics result base
 import: audio_import audio result base
-cook_tool: cook scene world_kest input kest_library kest audio_import audio content document execution result base
+cook_tool: cook mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
 build_tool: build signature content document result base
 scene_tool: world_kest scene kest result base
