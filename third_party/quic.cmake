@@ -52,3 +52,13 @@ set_target_properties(msquic::msquic PROPERTIES
     IMPORTED_LOCATION "${RAWFRAME_QUIC_PREFIX}/lib/libmsquic.a"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/msquic/src/inc;${RAWFRAME_QUIC_PREFIX}/include"
     INTERFACE_LINK_LIBRARIES "Threads::Threads;${CMAKE_DL_LIBS}")
+
+# OpenSSL's libcrypto alone, from the same build, for Ed25519 signatures
+# (SPEC-0019: engine-side verification through OpenSSL's EVP one-shot
+# interface). libmsquic.a carries the same objects, and a binary may link
+# both: the linker takes each symbol once.
+add_library(openssl::crypto STATIC IMPORTED GLOBAL)
+set_target_properties(openssl::crypto PROPERTIES
+    IMPORTED_LOCATION "${RAWFRAME_QUIC_PREFIX}/lib/libcrypto.a"
+    INTERFACE_INCLUDE_DIRECTORIES "${RAWFRAME_QUIC_PREFIX}/include"
+    INTERFACE_LINK_LIBRARIES "Threads::Threads;${CMAKE_DL_LIBS}")
