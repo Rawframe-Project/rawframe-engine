@@ -119,6 +119,13 @@ KestToken *kest_lex_range(KestArena *arena, const KestSource *source,
                           KestDiags *diags, uint32_t start, uint32_t end,
                           uint32_t *count);
 
+// Tokenises one region of the source the way the file around it is read: a
+// piece of a program read a second time, rather than the inside of a hole.
+// See D1264.
+KestToken *kest_lex_again(KestArena *arena, const KestSource *source,
+                          KestDiags *diags, uint32_t start, uint32_t end,
+                          uint32_t *count);
+
 // What a string literal holds: the characters between its quotes with the
 // escapes read. The span is the content, without them.
 // Whether a run of bytes is UTF-8 throughout, and the offset of the first byte

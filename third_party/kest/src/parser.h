@@ -10,6 +10,16 @@
 bool kest_parse(KestArena *arena, const KestSource *source, KestDiags *diags,
                 KestUnit *unit);
 
+// The block written at `span`, parsed again into a tree of its own: the same
+// source read a second time. A walk over a struct's fields is checked once a
+// field, each time with its names standing for another type, and a tree is
+// where the checker writes what each thing was found to be -- so each field
+// is given a tree of its own, and the source is the copy there already is.
+// False when there was no room, or when what is there is not a block. See
+// D1264.
+bool kest_parse_block_again(KestArena *arena, const KestSource *source,
+                            KestDiags *diags, KestSpan span, KestBlock *into);
+
 // How tightly a binary operator holds its operands, higher holding tighter,
 // and nought for what is not one. The formatter asks this rather than keeping
 // a list of its own, because a formatter that thinks `|` holds tighter than

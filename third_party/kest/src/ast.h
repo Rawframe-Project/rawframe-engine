@@ -257,6 +257,11 @@ typedef struct {
     // to a field of the name is not assigning to the name. See D866.
     bool name_written;
     bool index_written;
+    // `for name, value in fields(x)`: a walk written out while compiling,
+    // once a field of the struct `x`. The checker gives each field a tree of
+    // its own and puts them where the body was, a block each, in the order
+    // the fields are declared. See D1264.
+    bool fields;
 } KestEach;
 
 struct KestStmt {

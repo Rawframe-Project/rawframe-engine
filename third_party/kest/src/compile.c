@@ -4543,6 +4543,89 @@ static void compile_stmt(Compiler *compiler, const KestStmt *stmt) {
     hold_empty(compiler, stmt, before);
 }
 
+// Where the struct a walk over fields walks is in the frame: a name, or a field
+// of one, which is the name's slot and the offsets on the way down. False for
+// a name the frame does not hold as itself.
+static bool walked_place(Compiler *compiler, const KestExpr *expr,
+                         uint16_t *slot) {
+    if (expr->kind == KEST_EXPR_NAME) {
+        Local *local = find_local(compiler, expr->span);
+        if (local == NULL || local->folded != NULL || local->is_address) {
+            return false;
+        }
+        *slot = local->slot;
+        return true;
+    }
+    if (expr->kind != KEST_EXPR_FIELD ||
+        !walked_place(compiler, expr->field.object, slot)) {
+        return false;
+    }
+    const KestMember *member =
+        find_member(expr->field.object->type,
+                    span_text(compiler, expr->field.name),
+                    expr->field.name.length);
+    if (member == NULL) {
+        return false;
+    }
+    *slot = (uint16_t)(*slot + member->offset);
+    return true;
+}
+
+// `for name, value in fields(x)`, written out once a field: in each copy the
+// value is that field of `x` where it stands, so writing it writes `x`, and
+// the name is the field's name as text. `continue` goes on to the next field
+// and `break` leaves the walk. See D1264.
+static void compile_fields_walk(Compiler *compiler, const KestStmt *stmt) {
+    const KestEach *each = stmt->each;
+    const KestType *held = each->sequence->type;
+    uint16_t base = 0;
+    if (held == NULL || held->tag != KEST_T_STRUCT ||
+        each->body.count != held->member_count ||
+        !walked_place(compiler, each->sequence->call.args[0], &base)) {
+        fault(compiler, stmt->span,
+              "this walks the fields of something the frame does not hold");
+        return;
+    }
+    Loop *loop = open_loop(compiler, stmt->span);
+    if (loop == NULL) {
+        return;
+    }
+    for (uint32_t m = 0; m < held->member_count; m++) {
+        const KestMember *member = &held->members[m];
+        uint16_t names = compiler->local_count;
+        uint16_t slots = compiler->next_slot;
+        uint32_t depth = compiler->depth++;
+        if (each->index.length > 0) {
+            const KestType *text = kest_find_type(compiler->program, "text", 4);
+            uint16_t width = value_slots(text);
+            emit_text_constant(compiler, member->name, strlen(member->name),
+                               text, stmt->span);
+            uint16_t at = reserve_slot(compiler, width);
+            stack_pop(compiler, width);
+            store_slots(compiler, at, width, text, stmt->span);
+            bind_local(compiler, each->index, at, width);
+            if (compiler->local_count > names) {
+                compiler->locals[compiler->local_count - 1].type = text;
+            }
+        }
+        bind_local(compiler, each->name, (uint16_t)(base + member->offset),
+                   value_slots(member->type));
+        if (compiler->local_count > 0) {
+            compiler->locals[compiler->local_count - 1].type = member->type;
+        }
+        loop->continue_count = 0;
+        compile_block(compiler, &each->body.items[m]->block);
+        land_continues(compiler, loop);
+        compiler->depth = depth;
+        compiler->local_count = names;
+        compiler->next_slot = slots;
+    }
+    for (uint32_t i = 0; i < loop->break_count; i++) {
+        ir_lands(compiler, loop->breaks[i]);
+    }
+    compiler->loop_count--;
+}
+
 static void compile_stmt_kind(Compiler *compiler, const KestStmt *stmt) {
     switch (stmt->kind) {
     case KEST_STMT_LET: {
@@ -4796,6 +4879,10 @@ static void compile_stmt_kind(Compiler *compiler, const KestStmt *stmt) {
     }
 
     case KEST_STMT_FOR: {
+        if (stmt->each->fields) {
+            compile_fields_walk(compiler, stmt);
+            break;
+        }
         // `for x in a` is a walk written here rather than in the parser, so
         // the counter and the thing being walked sit in slots nobody can name
         // or assign to.

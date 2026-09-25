@@ -14,7 +14,7 @@
 #define KEST_VERSION_MAJOR 0
 #define KEST_VERSION_MINOR 0
 #define KEST_VERSION_PATCH 1
-#define KEST_VERSION_STRING "0.0.1"
+#define KEST_VERSION_STRING "0.0.2"
 
 // What shape the JSON every command writes is in, which is a different thing
 // from the version above: a compiler that has moved on in ways no tool can see

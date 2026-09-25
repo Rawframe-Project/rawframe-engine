@@ -19,7 +19,7 @@ bool kest_resumes_spans(const KestSource *source, const KestDecl *decl,
     kest_diags_init(&quiet, arena);
     uint32_t count = 0;
     KestToken *tokens =
-        kest_lex_range(arena, source, &quiet, decl->function.resumes - 1,
+        kest_lex_again(arena, source, &quiet, decl->function.resumes - 1,
                        (uint32_t)source->length, &count);
     KestSpan names[2] = {{0, 0}, {0, 0}};
     uint32_t found = 0;

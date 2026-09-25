@@ -5294,6 +5294,132 @@ static void check_wait(Checker *checker, KestStmt *stmt) {
     stmt->wait.ordinal = ++checker->waits;
 }
 
+// `for ... in fields(x)`, which is the language's walk over a struct's fields
+// unless the file can reach a `fields` of its own. See D1264.
+static bool is_fields_walk(Checker *checker, const KestStmt *stmt) {
+    const KestExpr *sequence = stmt->each->sequence;
+    if (stmt->each->until != NULL || sequence == NULL ||
+        sequence->kind != KEST_EXPR_CALL || sequence->call.arg_count != 1 ||
+        sequence->call.method || sequence->call.callee == NULL ||
+        sequence->call.callee->kind != KEST_EXPR_NAME ||
+        !kest_word_same("fields", span_text(checker, sequence->call.callee->span),
+                        sequence->call.callee->span.length)) {
+        return false;
+    }
+    return find_local(checker, "fields", 6) == NULL &&
+           kest_lookup_global(checker->program, "fields", 6) == NULL;
+}
+
+// The name a walk over fields reaches its struct through: a name, or a field
+// of something that is one. Writing a field is writing that name's struct, so
+// it has to be somewhere a write can go.
+static bool names_a_place(const KestExpr *expr) {
+    while (expr != NULL && expr->kind == KEST_EXPR_FIELD) {
+        expr = expr->field.object;
+    }
+    return expr != NULL && expr->kind == KEST_EXPR_NAME;
+}
+
+// The walk written out: the body read again from the source once a field,
+// each copy checked with `value` standing for that field and `name` for its
+// name, and the copies put where the body was. See D1264.
+static void check_fields_walk(Checker *checker, KestStmt *stmt) {
+    KestEach *each = stmt->each;
+    KestExpr *walked = each->sequence->call.args[0];
+    KestType *held = check_expr(checker, walked, NULL);
+    each->fields = true;
+    each->sequence->type = held;
+    if (is_error(held)) {
+        each->body.count = 0;
+        return;
+    }
+    if (held->tag != KEST_T_STRUCT) {
+        report(checker, walked->span, "K0369",
+               "`fields` walks a struct, and this is `%s`",
+               type_name(checker, held));
+        each->body.count = 0;
+        return;
+    }
+    if (!names_a_place(walked)) {
+        report(checker, walked->span, "K0369",
+               "`fields` walks a struct a name holds, because a field written "
+               "in the walk is written there");
+        kest_diags_suggest(checker->program->diags,
+                           "give it a name first: `let held = ...`");
+        each->body.count = 0;
+        return;
+    }
+    // What a field written in the walk writes into is the name's own, so the
+    // name is one the body writes into and not a value the chunk can hold.
+    const KestExpr *root = walked;
+    while (root->kind == KEST_EXPR_FIELD) {
+        root = root->field.object;
+    }
+    Local *rooted = find_local(checker, span_text(checker, root->span),
+                               root->span.length);
+    if (rooted != NULL) {
+        rooted->written_into = true;
+        rooted->read = true;
+    }
+    // Where the body is: from the first brace after what is walked to the end
+    // of the statement, which is a block and nothing else.
+    const char *text = span_text(checker, stmt->span);
+    uint32_t from = each->sequence->span.offset + each->sequence->span.length -
+                    stmt->span.offset;
+    while (from < stmt->span.length && text[from] != '{') {
+        from++;
+    }
+    KestSpan written = {stmt->span.offset + from, stmt->span.length - from};
+    KestStmt **copies =
+        held->member_count == 0
+            ? NULL
+            : KEST_ARENA_ARRAY(checker->program->arena, KestStmt *,
+                               held->member_count);
+    if (held->member_count > 0 && copies == NULL) {
+        checker->out_of_memory = true;
+        return;
+    }
+    for (uint32_t m = 0; m < held->member_count; m++) {
+        KestStmt *copy = KEST_ARENA_NEW(checker->program->arena, KestStmt);
+        if (copy == NULL ||
+            !kest_parse_block_again(checker->program->arena,
+                                    checker->program->source,
+                                    checker->program->diags, written,
+                                    &copy->block)) {
+            checker->out_of_memory = true;
+            return;
+        }
+        copy->kind = KEST_STMT_BLOCK;
+        copy->span = written;
+        copies[m] = copy;
+        uint32_t mark = checker->local_count;
+        checker->depth++;
+        if (each->index.length > 0) {
+            declare_local(checker, each->index, builtin(checker, "text"));
+        }
+        declare_local(checker, each->name, held->members[m].type);
+        uint32_t said = checker->program->diags->count;
+        checker->loop_depth++;
+        check_block(checker, &copy->block);
+        checker->loop_depth--;
+        // Said about the copy, which the body alone does not say: the same
+        // line reads the same for every field, and which field it was is what
+        // tells them apart.
+        for (uint32_t d = said; d < checker->program->diags->count; d++) {
+            kest_diags_note_at(checker->program->diags, d, NULL, each->name,
+                               "in the walk's copy for `%s`, which is `%s`",
+                               held->members[m].name,
+                               type_name(checker, held->members[m].type));
+        }
+        checker->depth--;
+        drop_locals(checker, mark);
+    }
+    each->body.items = copies;
+    each->body.count = held->member_count;
+    each->name_written = true;
+    each->index_written = true;
+}
+
 static void check_stmt(Checker *checker, KestStmt *stmt) {
     kest_diags_work(checker->program->diags, 1);
     switch (stmt->kind) {
@@ -5535,6 +5661,10 @@ static void check_stmt(Checker *checker, KestStmt *stmt) {
     }
 
     case KEST_STMT_FOR: {
+        if (is_fields_walk(checker, stmt)) {
+            check_fields_walk(checker, stmt);
+            break;
+        }
         // `for i in from..to` counts rather than walks. Both ends are one
         // type, and the name is that type, so a walk of an array's positions
         // reads the same as an index into it.

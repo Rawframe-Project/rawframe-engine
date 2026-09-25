@@ -3724,6 +3724,25 @@ static bool measure_held(KestProgram *program, KestType *type,
         type->byte_size = (uint16_t)(bytes * type->count);
         return true;
     }
+    // And an optional, for the same reason: `Piece?` as a field is composed
+    // before `Piece` is measured, and was a tag beside nothing -- one slot and
+    // a byte -- for as long as the program was compiled, so reading the field
+    // read one slot where the type said three. Found by a game brought over
+    // from Lua, whose falling piece is exactly that. See D1268.
+    if (type->tag == KEST_T_OPTIONAL) {
+        if (!measure_held(program, type->element, whole)) {
+            return false;
+        }
+        const KestType *element = type->element;
+        if (element != NULL) {
+            type->slots = (uint16_t)(element->slots + 1);
+            type->byte_align = element->byte_align;
+            uint16_t used = (uint16_t)(element->byte_size + 1);
+            uint16_t align = type->byte_align == 0 ? 1 : type->byte_align;
+            type->byte_size = (uint16_t)((used + align - 1) / align * align);
+        }
+        return true;
+    }
     if (type->tag != KEST_T_STRUCT && type->tag != KEST_T_ENUM) {
         return true;
     }

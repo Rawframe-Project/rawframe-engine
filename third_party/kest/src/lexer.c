@@ -1141,6 +1141,15 @@ KestToken *kest_lex_range(KestArena *arena, const KestSource *source,
     return lex_from(arena, &lexer, end, count);
 }
 
+KestToken *kest_lex_again(KestArena *arena, const KestSource *source,
+                          KestDiags *diags, uint32_t start, uint32_t end,
+                          uint32_t *count) {
+    KestLexer lexer;
+    kest_lexer_init(&lexer, source, diags);
+    lexer.offset = start;
+    return lex_from(arena, &lexer, end, count);
+}
+
 KestToken *kest_lex_all(KestArena *arena, const KestSource *source,
                         KestDiags *diags, uint32_t *count) {
     check_text(source, diags);

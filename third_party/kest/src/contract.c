@@ -464,7 +464,11 @@ static void walk_stmt(Graph *graph, Function *function, const KestStmt *stmt) {
         walk_block(graph, function, &stmt->loop.body);
         break;
     case KEST_STMT_FOR:
-        walk_expr(graph, function, stmt->each->sequence);
+        // A walk over fields calls nothing: `fields` is the walk, and what is
+        // walked is the one thing in it that is worked out. See D1264.
+        walk_expr(graph, function,
+                  stmt->each->fields ? stmt->each->sequence->call.args[0]
+                                     : stmt->each->sequence);
         walk_expr(graph, function, stmt->each->until);
         walk_block(graph, function, &stmt->each->body);
         break;

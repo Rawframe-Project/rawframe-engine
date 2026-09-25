@@ -2502,6 +2502,29 @@ static KestDecl *parse_declaration(Parser *parser) {
     return NULL;
 }
 
+bool kest_parse_block_again(KestArena *arena, const KestSource *source,
+                            KestDiags *diags, KestSpan span, KestBlock *into) {
+    Parser parser = {0};
+    parser.arena = arena;
+    parser.source = source;
+    parser.diags = diags;
+    KestArena *reading = kest_arena_new();
+    if (reading == NULL) {
+        return false;
+    }
+    // Under the same ceiling and counted against it, the way a file's tokens
+    // are. See D843.
+    kest_arena_cap(reading, kest_arena_ceiling_left(arena));
+    parser.tokens = kest_lex_again(reading, source, diags, span.offset,
+                                   span.offset + span.length, &parser.count);
+    bool read = parser.tokens != NULL && check(&parser, KEST_TOK_LBRACE) &&
+                parse_block(&parser, into) && !parser.out_of_memory;
+    kest_arena_charge(arena, kest_arena_used(reading));
+    kest_arena_returned(arena, kest_arena_used(reading));
+    kest_arena_free(reading);
+    return read;
+}
+
 bool kest_parse(KestArena *arena, const KestSource *source, KestDiags *diags,
                 KestUnit *unit) {
     Parser parser = {0};
