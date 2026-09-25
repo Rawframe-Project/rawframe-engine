@@ -9,6 +9,7 @@ diagnostics: result base
 execution: diagnostics result base
 composition: execution diagnostics result base
 document: result base
+audio: document result base
 input: document result base
 schema: result base
 world: schema execution diagnostics result base

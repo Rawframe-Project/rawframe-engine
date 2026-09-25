@@ -1,0 +1,8 @@
+# Audio (ADR-0038, SPEC-0036): the mixer layout, and the mixer rendering
+# into buffers. Client only: the dedicated server links none of it.
+rawframe_module(NAME audio
+    SOURCES src/layout.cpp
+    DEPS document result base
+)
+
+rawframe_module_tests(NAME audio SOURCES tests/layout_test.cpp)
