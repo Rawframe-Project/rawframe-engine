@@ -58,8 +58,9 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::openBuild(executio
                                                                         execution::CancellationScope& parent,
                                                                         const execution::MonotonicSource& clock,
                                                                         const std::filesystem::path& build,
-                                                                        const base::Sha256Digest& root) {
-    RAWFRAME_TRY_ASSIGN(content::BuildContent opened, content::ContentSource::build(build, root));
+                                                                        const base::Sha256Digest& root,
+                                                                        const signature::PublisherKeySet& publisher) {
+    RAWFRAME_TRY_ASSIGN(content::BuildContent opened, content::ContentSource::build(build, root, publisher));
     std::unique_ptr<CookedContent> made{new CookedContent};
     std::vector<content::ContentSource> sources;
     sources.push_back(std::move(opened.source));

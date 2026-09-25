@@ -3,7 +3,7 @@
 # asset family, and a changed manifest published as the next catalog.
 rawframe_module(NAME game_content
     SOURCES src/cooked_content.cpp src/participant.cpp
-    DEPS content composition document execution diagnostics result base
+    DEPS signature content composition document execution diagnostics result base
 )
 
 rawframe_module_tests(NAME game_content SOURCES tests/cooked_content_test.cpp)

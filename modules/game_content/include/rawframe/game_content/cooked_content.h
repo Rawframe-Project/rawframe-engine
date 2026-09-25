@@ -29,16 +29,17 @@ public:
                                                                              const execution::MonotonicSource& clock,
                                                                              std::optional<std::filesystem::path> root);
 
-    /// The Build at `build` whose root hash is `root`; refused as
-    /// `ContentSource::build` refuses. A Build never changes, so `refresh`
-    /// finds nothing to publish.
+    /// The Build at `build` whose root hash is `root`, signed by a key of
+    /// `publisher`; refused as `ContentSource::build` refuses. A Build never
+    /// changes, so `refresh` finds nothing to publish.
     [[nodiscard]] static result::Result<std::unique_ptr<CookedContent>>
     openBuild(execution::Executor& blockingIo,
               execution::OwnerId owner,
               execution::CancellationScope& parent,
               const execution::MonotonicSource& clock,
               const std::filesystem::path& build,
-              const base::Sha256Digest& root);
+              const base::Sha256Digest& root,
+              const signature::PublisherKeySet& publisher);
 
     [[nodiscard]] content::ContentStore& store() noexcept override;
     [[nodiscard]] result::Status admit(std::span<const content::AdmittedRepresentation> representations) override;

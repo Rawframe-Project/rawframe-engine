@@ -4,6 +4,7 @@
 #include "rawframe/content/errors.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/document/json.h"
+#include "rawframe/signature/errors.h"
 
 #include <cerrno>
 #include <fcntl.h>
@@ -292,7 +293,8 @@ result::Result<ContentSource> ContentSource::directory(const std::filesystem::pa
 }
 
 result::Result<BuildContent> ContentSource::build(const std::filesystem::path& root,
-                                                  const base::Sha256Digest& expectedRoot) {
+                                                  const base::Sha256Digest& expectedRoot,
+                                                  const signature::PublisherKeySet& publisher) {
     Descriptor directory{::open(root.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC)};
     struct stat status{};
     if (directory.get() < 0 || ::fstat(directory.get(), &status) != 0) {
@@ -309,6 +311,19 @@ result::Result<BuildContent> ContentSource::build(const std::filesystem::path& r
     }
     RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes,
                         files.read("build.manifest", static_cast<std::uint64_t>(manifestStatus.st_size)));
+    // SPEC-0021's first step: the exact bytes, signed by the publisher,
+    // before a byte of them is parsed.
+    struct stat signatureStatus{};
+    if (::stat((root / "build.manifest.sig").c_str(), &signatureStatus) != 0 || !S_ISREG(signatureStatus.st_mode) ||
+        signatureStatus.st_size > 1024) {
+        return refuse(ContentError::SourceUnavailable, result::ErrorClass::Unavailable, "the Build is not signed");
+    }
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kSigned,
+                        files.read("build.manifest.sig", static_cast<std::uint64_t>(signatureStatus.st_size)));
+    RAWFRAME_TRY_ASSIGN(
+        const signature::Envelope kEnvelope,
+        signature::readEnvelope(std::string_view{reinterpret_cast<const char*>(kSigned.data()), kSigned.size()}));
+    RAWFRAME_TRY(signature::verifyPublished(publisher, kBytes, kEnvelope));
     auto parsed =
         document::parseCanonicalRecord(std::string_view{reinterpret_cast<const char*>(kBytes.data()), kBytes.size()},
                                        document::ReadLimits{.maximumBytes = kMaximumBuildManifest});
@@ -342,6 +357,14 @@ result::Result<BuildContent> ContentSource::build(const std::filesystem::path& r
         resources->kind() != document::Value::Kind::Array || resources->items().size() > kMaximumBuildResources ||
         resources->items().size() != chunks->items().size()) {
         return invalidBuild("a Build identity names its subject, version, and resources, each with its chunks");
+    }
+    // Signed by this publisher's key, so a Build of this publisher's only.
+    if (subject->substr(0, subject->find('/')) != publisher.publisher) {
+        return std::unexpected<result::Error>{result::fail(result::ErrorClass::PermissionDenied,
+                                                           signature::kSignatureDomain,
+                                                           code(signature::SignatureError::UnknownKey),
+                                                           "the Build is another publisher's")
+                                                  .error()};
     }
     opened.subject = *subject;
     opened.version = *version;

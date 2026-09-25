@@ -18,6 +18,9 @@ namespace rawframe::game_content {
 ///   content.build          a Build instead (SPEC-0021): its directory
 ///   content.build_root     the Build's root hash, `sha256:` and 64 hex;
 ///                          a Build of any other identity is refused
+///   content.build_keys     its publisher's key set (SPEC-0023), pinned:
+///                          an unsigned Build, or one signed by a key it
+///                          does not list or lists revoked, is refused
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::Runtime);

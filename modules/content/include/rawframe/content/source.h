@@ -10,6 +10,7 @@
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/result/result.h"
+#include "rawframe/signature/signature.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -38,16 +39,21 @@ public:
     /// (`PathEscape`), and lists nothing: only what a catalog names is read.
     [[nodiscard]] static result::Result<ContentSource> directory(const std::filesystem::path& root);
 
-    /// The Build at `root` (its `build.manifest` and blobs under `sha256/`),
-    /// which must be the one whose identity section hashes to `expectedRoot`
-    /// (`DigestMismatch`); a manifest that is not a canonical SPEC-0021
+    /// The Build at `root` (its `build.manifest`, `build.manifest.sig`, and
+    /// blobs under `sha256/`). Its manifest's exact bytes must be signed by
+    /// a key `publisher` lists that is not revoked, before anything else is
+    /// read of them (the signature module's typed refusals), and its
+    /// subject must be that publisher's (`UnknownKey`). It must be the Build
+    /// whose identity section hashes to `expectedRoot` (`DigestMismatch`); a
+    /// manifest that is not a canonical SPEC-0021
     /// record, lists a resource twice, or whose chunk lists do not cover
     /// their resources exactly is refused (`ManifestInvalid`,
     /// `DuplicateResource`). Its entries are located by their resource's
     /// 32-hex identity. A read verifies each blob before using it, each
     /// chunk's content, and the whole; the store verifies the whole again.
     [[nodiscard]] static result::Result<BuildContent> build(const std::filesystem::path& root,
-                                                            const base::Sha256Digest& expectedRoot);
+                                                            const base::Sha256Digest& expectedRoot,
+                                                            const signature::PublisherKeySet& publisher);
 
     struct Implementation;
 

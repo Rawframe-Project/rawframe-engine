@@ -7,10 +7,13 @@
 #include "rawframe/content/errors.h"
 #include "rawframe/content/store.h"
 #include "rawframe/document/json.h"
+#include "rawframe/signature/errors.h"
 #include "rawframe/test/test.h"
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <openssl/evp.h>
 #include <string>
 #include <tuple>
 #include <unistd.h>
@@ -234,11 +237,55 @@ RAWFRAME_TEST(CancellationAndDeadlinesStopPublication) {
 
 namespace {
 
+/// The test publisher's key: a fixed seed, and the key set that lists it.
+struct TestPublisher {
+    EVP_PKEY* key = nullptr;
+    signature::PublisherKeySet keys;
+
+    TestPublisher() {
+        std::array<unsigned char, 32> seed{};
+        seed.fill(0x42);
+        key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, seed.data(), seed.size());
+        signature::PublicKey publicKey{};
+        std::size_t length = publicKey.size();
+        EVP_PKEY_get_raw_public_key(key, reinterpret_cast<unsigned char*>(publicKey.data()), &length);
+        keys = signature::PublisherKeySet{
+            .publisher = "rawframe",
+            .sequence = 1,
+            .updatedAt = 1,
+            .head = "sha256:" + std::string(64, '0'),
+            .keys = {signature::PublisherKey{
+                .kid = "0000000000000001", .publicKey = publicKey, .state = signature::KeyState::Active, .since = 1}}};
+    }
+    ~TestPublisher() {
+        EVP_PKEY_free(key);
+    }
+    TestPublisher(const TestPublisher&) = delete;
+    TestPublisher& operator=(const TestPublisher&) = delete;
+
+    /// Writes `manifest` and its signature envelope into `root`.
+    void publish(const std::filesystem::path& root, std::string_view manifest) const {
+        std::ofstream{root / "build.manifest", std::ios::binary} << manifest;
+        signature::Envelope envelope{.kid = "0000000000000001", .sig = {}};
+        std::size_t length = envelope.sig.size();
+        EVP_MD_CTX* context = EVP_MD_CTX_new();
+        EVP_DigestSignInit(context, nullptr, nullptr, nullptr, key);
+        EVP_DigestSign(context,
+                       reinterpret_cast<unsigned char*>(envelope.sig.data()),
+                       &length,
+                       reinterpret_cast<const unsigned char*>(manifest.data()),
+                       manifest.size());
+        EVP_MD_CTX_free(context);
+        std::ofstream{root / "build.manifest.sig", std::ios::binary} << signature::writeEnvelope(envelope);
+    }
+};
+
 /// A Build on disk as SPEC-0021 lays it out: resource 1 "bang" in one raw
 /// chunk, resource 2 "abcdefgh" in two ("abcd", "efgh"). `chunksOf2`
 /// overrides resource 2's chunk texts in the manifest, `codec` every
 /// chunk's codec.
 struct BuildOnDisk {
+    TestPublisher publisher;
     std::filesystem::path root =
         std::filesystem::temp_directory_path() / ("rawframe-content-build-" + std::to_string(::getpid()));
     base::Sha256Digest rootHash{};
@@ -289,7 +336,7 @@ struct BuildOnDisk {
         manifest.add("schema", document::Value::integer(1));
         manifest.add("identity", std::move(identity));
         manifest.add("chunks", std::move(chunks));
-        std::ofstream{root / "build.manifest", std::ios::binary} << *document::writeCanonicalRecord(manifest);
+        publisher.publish(root, *document::writeCanonicalRecord(manifest));
     }
     ~BuildOnDisk() {
         std::filesystem::remove_all(root);
@@ -308,7 +355,7 @@ struct BuildOnDisk {
 };
 
 std::pair<std::uint32_t, std::string> readOfBuild(const BuildOnDisk& build, std::uint64_t id) {
-    auto opened = ContentSource::build(build.root, build.rootHash);
+    auto opened = ContentSource::build(build.root, build.rootHash, build.publisher.keys);
     if (!opened.has_value()) {
         return {opened.error().code().value, "refused"};
     }
@@ -325,7 +372,7 @@ std::pair<std::uint32_t, std::string> readOfBuild(const BuildOnDisk& build, std:
 RAWFRAME_TEST(ABuildIsReadInItsVerificationOrder) {
     {
         const BuildOnDisk kBuild;
-        const auto kOpened = ContentSource::build(kBuild.root, kBuild.rootHash);
+        const auto kOpened = ContentSource::build(kBuild.root, kBuild.rootHash, kBuild.publisher.keys);
         RAWFRAME_EXPECT(kOpened.has_value() && kOpened->subject == "rawframe/test" && kOpened->version == "1.0.0" &&
                         kOpened->entries.size() == 2 && kOpened->root == kBuild.rootHash);
         // Whole resources from their chunks, verified.
@@ -333,7 +380,7 @@ RAWFRAME_TEST(ABuildIsReadInItsVerificationOrder) {
         // Not the Build that was named.
         base::Sha256Digest other = kBuild.rootHash;
         other[0] ^= std::byte{1};
-        const auto kOther = ContentSource::build(kBuild.root, other);
+        const auto kOther = ContentSource::build(kBuild.root, other, kBuild.publisher.keys);
         RAWFRAME_EXPECT(!kOther.has_value() && kOther.error().code() == code(ContentError::DigestMismatch));
         // A blob changed on disk: refused before its bytes are used.
         std::ofstream{kBuild.blobOf("abcd"), std::ios::binary} << "abce";
@@ -357,9 +404,11 @@ RAWFRAME_TEST(ABuildIsReadInItsVerificationOrder) {
         RAWFRAME_EXPECT(readOfBuild(kZstd, 1).first == code(ContentError::ManifestInvalid).value);
     }
     {
-        // A manifest that is not a canonical record.
+        // A manifest that is not a canonical record, though signed.
         const BuildOnDisk kBuild;
-        std::ofstream{kBuild.root / "build.manifest", std::ios::app} << "\n";
+        std::ifstream file{kBuild.root / "build.manifest", std::ios::binary};
+        const std::string kText{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+        kBuild.publisher.publish(kBuild.root, kText + "\n");
         RAWFRAME_EXPECT(readOfBuild(kBuild, 1).first == code(ContentError::ManifestInvalid).value);
     }
 }
@@ -369,6 +418,7 @@ namespace {
 /// A Build of one resource, 3, of `text`, in one chunk whose blob is
 /// `blob` with codec zstd.
 struct ZstdBuild {
+    TestPublisher publisher;
     std::filesystem::path root =
         std::filesystem::temp_directory_path() / ("rawframe-content-zstd-" + std::to_string(::getpid()));
     base::Sha256Digest rootHash{};
@@ -412,7 +462,7 @@ struct ZstdBuild {
         manifest.add("schema", document::Value::integer(1));
         manifest.add("identity", std::move(identity));
         manifest.add("chunks", std::move(chunks));
-        std::ofstream{root / "build.manifest", std::ios::binary} << *document::writeCanonicalRecord(manifest);
+        publisher.publish(root, *document::writeCanonicalRecord(manifest));
     }
     ~ZstdBuild() {
         std::filesystem::remove_all(root);
@@ -421,7 +471,7 @@ struct ZstdBuild {
     ZstdBuild& operator=(const ZstdBuild&) = delete;
 
     [[nodiscard]] std::pair<std::uint32_t, std::string> read() const {
-        auto opened = ContentSource::build(root, rootHash);
+        auto opened = ContentSource::build(root, rootHash, publisher.keys);
         if (!opened.has_value()) {
             return {opened.error().code().value, "refused"};
         }
@@ -482,4 +532,36 @@ RAWFRAME_TEST(ZstandardChunksAreBoundedAsSpecified) {
     RAWFRAME_EXPECT(ZstdBuild(text, skippable).read().first == kInvalid);
     // Not a frame at all.
     RAWFRAME_EXPECT(ZstdBuild(text, std::vector<std::byte>(64, std::byte{7})).read().first == kInvalid);
+}
+
+RAWFRAME_TEST(OnlyAPublishersSignedBuildIsRead) {
+    const auto kRefusedAs = [](const result::Result<BuildContent>& opened, signature::SignatureError error) {
+        return !opened.has_value() && opened.error().domain() == signature::kSignatureDomain &&
+               opened.error().code() == code(error);
+    };
+    BuildOnDisk build;
+    // A byte of the manifest changed after signing.
+    {
+        std::ifstream file{build.root / "build.manifest", std::ios::binary};
+        std::string text{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+        const std::string kSigned = text;
+        text[text.find("1.0.0")] = '2';
+        std::ofstream{build.root / "build.manifest", std::ios::binary} << text;
+        RAWFRAME_EXPECT(kRefusedAs(ContentSource::build(build.root, build.rootHash, build.publisher.keys),
+                                   signature::SignatureError::BadSignature));
+        build.publisher.publish(build.root, kSigned);
+    }
+    RAWFRAME_EXPECT(ContentSource::build(build.root, build.rootHash, build.publisher.keys).has_value());
+    // The key revoked, the key set another publisher's, and no signature.
+    signature::PublisherKeySet revoked = build.publisher.keys;
+    revoked.keys[0].state = signature::KeyState::Revoked;
+    RAWFRAME_EXPECT(
+        kRefusedAs(ContentSource::build(build.root, build.rootHash, revoked), signature::SignatureError::KeyRevoked));
+    signature::PublisherKeySet other = build.publisher.keys;
+    other.publisher = "someone";
+    RAWFRAME_EXPECT(
+        kRefusedAs(ContentSource::build(build.root, build.rootHash, other), signature::SignatureError::UnknownKey));
+    std::filesystem::remove(build.root / "build.manifest.sig");
+    const auto kUnsigned = ContentSource::build(build.root, build.rootHash, build.publisher.keys);
+    RAWFRAME_EXPECT(!kUnsigned.has_value() && kUnsigned.error().code() == code(ContentError::SourceUnavailable));
 }

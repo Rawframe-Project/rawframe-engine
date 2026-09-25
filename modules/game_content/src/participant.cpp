@@ -4,6 +4,8 @@
 #include "rawframe/game_content/cooked_content.h"
 #include "rawframe/game_content/registrar.h"
 
+#include <fstream>
+#include <iterator>
 #include <string>
 
 namespace rawframe::game_content {
@@ -35,23 +37,30 @@ public:
         // A Build, named by its root hash, or a cook's output, or nothing.
         if (const auto kBuild = configuration.text("content.build")) {
             const auto kRoot = configuration.text("content.build_root");
+            const auto kKeys = configuration.text("content.build_keys");
             const auto kDigest = kRoot.has_value() ? content::ContentDigest::parse(*kRoot) : std::nullopt;
-            if (root.has_value() || !kDigest.has_value()) {
+            if (root.has_value() || !kDigest.has_value() || !kKeys.has_value()) {
                 return std::unexpected<result::Error>{
                     result::fail(result::ErrorClass::InvalidArgument,
                                  content::kContentDomain,
                                  code(content::ContentError::SourceUnavailable),
-                                 "a Build is named by content.build and its root hash content.build_root, without "
-                                 "content.root")
+                                 "a Build is named by content.build, its root hash content.build_root, and its "
+                                 "publisher's key set content.build_keys, without content.root")
                         .error()};
             }
+            // The publisher's key set, pinned by this configuration as a
+            // standalone export pins its key material (SPEC-0023).
+            std::ifstream file{std::string{*kKeys}, std::ios::binary};
+            const std::string kKeysText{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+            RAWFRAME_TRY_ASSIGN(const signature::PublisherKeySet kPublisher, signature::readPublisherKeySet(kKeysText));
             RAWFRAME_TRY_ASSIGN(content_,
                                 CookedContent::openBuild(*context.blockingIoExecutor(),
                                                          context.owner(),
                                                          context.scope(),
                                                          context.clock(),
                                                          std::filesystem::path{std::string{*kBuild}},
-                                                         kDigest->bytes));
+                                                         kDigest->bytes,
+                                                         kPublisher));
             return {};
         }
         RAWFRAME_TRY_ASSIGN(
