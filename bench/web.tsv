@@ -1,0 +1,2 @@
+date	commit	machine	stripped	gzip	brotli	compile_ms	instantiate_ms	start_ms	tick_p50_ms	tick_p99_ms
+2026-09-25T22:23:54Z	0db17c134b71	turan-uxplima-dev	5386866	1852297	1426255	3.912	1.224	1.060	0.193	0.549
