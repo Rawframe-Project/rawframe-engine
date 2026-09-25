@@ -33,7 +33,7 @@ namespace rawframe::world_kest {
 /// array of the program's type `element`, which must have the component's
 /// size and alignment; With and Without only filter and name no element.
 /// The Kest type of an entity, declared by the engine's own Kest module
-/// (`modules/world_kest/kest/rawframe/world.kest`).
+/// (`modules/kest_library/kest/rawframe/world.kest`).
 inline constexpr std::string_view kEntityType = "rawframe.world.Entity";
 
 struct KestColumn {
