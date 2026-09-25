@@ -35,6 +35,7 @@ physics: world schema execution diagnostics result base
 world_runtime: world_save world_snapshot world composition schema execution diagnostics result base
 physics2d: physics world_runtime world composition schema execution diagnostics result base
 physics3d: mesh physics world_runtime world composition schema execution diagnostics result base
+world_animation: animation world_runtime world composition schema execution diagnostics result base
 world_kest: mesh scene game_content content kest_library physics2d physics3d physics world_replication world_runtime world_save world_snapshot kest network world composition schema execution diagnostics document result base
 world_replication: game_content world_runtime network world composition schema execution diagnostics result base
 input_kest: input document world_kest world_replication kest world composition execution diagnostics result base
