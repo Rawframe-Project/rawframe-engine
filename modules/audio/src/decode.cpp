@@ -2,7 +2,9 @@
 
 #include "rawframe/audio/errors.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <optional>
@@ -123,6 +125,39 @@ result::Result<Clip> decodeWav(std::span<const std::byte> bytes, const DecodeLim
         clip.samples.push_back(static_cast<float>(kSigned) / static_cast<float>(1U << ((8 * kWidth) - 1)));
     }
     return clip;
+}
+
+std::vector<std::byte> encodeWav(const Clip& clip) {
+    const auto kData = static_cast<std::uint32_t>(clip.samples.size() * 2);
+    std::vector<std::byte> out;
+    out.reserve(44 + kData);
+    const auto kTag = [&out](std::string_view tag) {
+        for (const char kChar : tag) {
+            out.push_back(static_cast<std::byte>(kChar));
+        }
+    };
+    const auto kPut = [&out](std::uint32_t value, std::size_t width) {
+        for (std::size_t index = 0; index < width; ++index) {
+            out.push_back(static_cast<std::byte>((value >> (8 * index)) & 0xFFU));
+        }
+    };
+    kTag("RIFF");
+    kPut(36 + kData, 4);
+    kTag("WAVEfmt ");
+    kPut(16, 4);
+    kPut(1, 2);
+    kPut(clip.channels, 2);
+    kPut(clip.rate, 4);
+    kPut(clip.rate * clip.channels * 2, 4);
+    kPut(clip.channels * 2, 2);
+    kPut(16, 2);
+    kTag("data");
+    kPut(kData, 4);
+    for (const float kSample : clip.samples) {
+        const float kClipped = std::isnan(kSample) ? 0.0F : std::clamp(kSample, -1.0F, 32767.0F / 32768.0F);
+        kPut(static_cast<std::uint32_t>(static_cast<std::int16_t>(std::lround(kClipped * 32768.0F))), 2);
+    }
+    return out;
 }
 
 } // namespace rawframe::audio

@@ -4,6 +4,7 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/random.h"
 #include "rawframe/world_replication/client.h"
+#include "rawframe/world_replication/client_worlds.h"
 #include "rawframe/world_replication/errors.h"
 #include "rawframe/world_replication/input_source.h"
 #include "rawframe/world_replication/plan.h"
@@ -29,6 +30,7 @@ constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
 
 constexpr std::string_view kServerNeeds[] = {world_runtime::kSimulation.name};
 constexpr std::string_view kMaybe[] = {network::kTransport.name, kReplicationPlan.name};
+constexpr std::string_view kBotsProvide[] = {kClientWorlds.name};
 constexpr std::string_view kBotsMaybe[] = {network::kTransport.name, kReplicationPlan.name, kInputSourcePlan.name};
 
 /// The session bounds both sides use: a datagram fits one path MTU.
@@ -194,8 +196,26 @@ struct Bot {
     std::uint64_t submitted = 0;
 };
 
-class BotsParticipant final : public composition::Participant {
+class BotsParticipant final : public composition::Participant, public ClientWorlds {
 public:
+    composition::CapabilityObject provide(std::string_view capability) noexcept override {
+        if (capability == kClientWorlds.name) {
+            return composition::provideAs<ClientWorlds>(*this);
+        }
+        return {};
+    }
+
+    [[nodiscard]] std::size_t clientCount() const noexcept override {
+        return bots_.size();
+    }
+
+    [[nodiscard]] ClientView client(std::size_t index) const noexcept override {
+        if (index >= bots_.size()) {
+            return {};
+        }
+        return ClientView{.world = bots_[index].world.get(), .owned = bots_[index].client->owned()};
+    }
+
     result::Status load(composition::ParticipantContext& context, std::uint64_t count) {
         if (!context.has(network::kTransport.name) || !context.has(kReplicationPlan.name)) {
             return missing("bots need a transport and a game's replication plan");
@@ -451,6 +471,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .identity = "rawframe.replication.bots",
         .factory = &makeBots,
         .scope = composition::LifetimeScope::World,
+        .providedCapabilities = kBotsProvide,
         .optionalCapabilities = kBotsMaybe,
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "replication.bots",

@@ -2,7 +2,7 @@
 # networked Kest game (Tool role).
 rawframe_host(NAME arena OUTPUT rawframe-arena
     SOURCES src/main.cpp
-    DEPS host input_kest network_loopback physics2d physics3d world_replication world_kest world_runtime composition diagnostics result base
+    DEPS host input_kest world_audio network_loopback physics2d physics3d world_replication world_kest world_runtime composition diagnostics result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
@@ -35,6 +35,15 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(runners_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":25,\"bodiesRemoved\":0,\"bodiesRefused\":0,.*\"characterMoves\":[1-9]")
+    # Eight bots play runners and the first one's World is heard: its shots
+    # and the others' within range sound, and the recording is not silent.
+    set(RECORD ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.wav)
+    configure_file(tests/runners_heard.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.conf @ONLY)
+    add_test(NAME runners_heard
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(runners_heard PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"written\":true,\"frames\":[0-9]+,\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
     # Four bots predict their runners: a thousand ticks confirmed, the
     # rollbacks only those of admission.
     add_test(NAME runners_prediction

@@ -7,10 +7,14 @@ import controls
 import rawframe.physics2d
 import rawframe.random
 import rawframe.replication
+import rawframe.sound
 import rawframe.world
 
 // The runners' collision class (runners.game): what a shot meets.
 const RUNNER: u64 = 0x2ebcd16c10c5f6a4
+
+// The shot's sound (runners.game's `sound` line).
+const SHOT: u64 = 0x950e09337d03de69
 
 // Shots fired, shots that met another runner, the ticks until the next may
 // be fired, and the ticks this runner was hit on.
@@ -67,8 +71,10 @@ fn run(count: i32, sticks: [controls.Stick], characters: [physics2d.Character2D]
 }
 
 // A shot every third of a second while firing: from the runner's side it
-// faces, thirty meters out, at the other runners where its player saw them.
-fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: [replication.Perception], scores: [Score]) {
+// faces, thirty meters out, at the other runners where its player saw them;
+// each one cues the runner's shot sound.
+fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: [replication.Perception], scores: [Score],
+         emitters: [sound.Emitter]) {
     let i = 0
     while i < count {
         let ready = scores[i].cooldown == 0
@@ -85,6 +91,8 @@ fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: 
             let hit = physics2d.castRayAtAmong(RUNNER, poses[i].x + side, poses[i].y + 0.2, reach,
                                                sticks[i].aimY * 15.0, seen[i])
             scores[i].shots = scores[i].shots + 1
+            emitters[i].sound = SHOT
+            emitters[i].cue = emitters[i].cue + 1
             if hit.hit && !hit.inside {
                 scores[i].hits = scores[i].hits + 1
                 Hit.insert(hit.entity, Hit(1))

@@ -1,0 +1,23 @@
+{
+  "kind": "audio.mixer",
+  "formatVersion": 1,
+  "master": {
+    "busId": "b64c164e5d653e5c",
+    "name": "master",
+    "role": "master",
+    "children": [
+      {
+        "busId": "691c5abeb88d55ee",
+        "name": "effects",
+        "role": "sfx",
+        "volume": -6
+      }
+    ]
+  },
+  "concurrency": [
+    {
+      "name": "shots",
+      "maximumInstances": 8
+    }
+  ]
+}

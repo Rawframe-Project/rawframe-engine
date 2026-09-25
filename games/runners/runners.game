@@ -11,10 +11,11 @@ collision class runner 2ebcd16c10c5f6a4
 component 6b05cdb4-0683-437a-aaac-7ad990b2ddb4 runners.stick Stick
 component f6453556-fcdd-46e8-9208-866fade389cf runners.score Score
 component 4a1a3d29-28e9-46fe-aae0-6bb3576ca9b3 runners.hit Hit
+component 5f3691c6-292c-4054-b868-142fe8a4448f runners.emitter Emitter
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity before rawframe.physics2d.step predicted
-system runners.shoot simulation shoot read runners.stick read rawframe.physics2d.pose read rawframe.replication.perception write runners.score before rawframe.physics2d.step
+system runners.shoot simulation shoot read runners.stick read rawframe.physics2d.pose read rawframe.replication.perception write runners.score write runners.emitter before rawframe.physics2d.step
 system runners.hurt simulation hurt write runners.score read runners.hit entities
 
 # The ground, eighty meters wide, and walls at its ends.
@@ -32,8 +33,8 @@ spawn 1 rawframe.physics2d.body motion=0 shape=1 width=4 height=0.5 rawframe.phy
 spawn 1 rawframe.physics2d.body motion=0 shape=1 width=4 height=0.5 rawframe.physics2d.pose x=28 y=1 c=0.9397 s=0.3420 rawframe.physics2d.velocity
 spawn 1 rawframe.physics2d.body motion=0 shape=1 width=2 height=0.5 rawframe.physics2d.pose x=34 y=1.5 c=0.5736 s=0.8192 rawframe.physics2d.velocity
 
-replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score
-player runners.stick runners.score rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
+replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter
+player runners.stick runners.score runners.emitter rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
 input runners.stick perceived
 # A client makes its stick from its player's actions (runners.actions) with
 # sample.kest; bots press the same keys and buttons.
@@ -42,3 +43,8 @@ sample sample.kest sample
 interest rawframe.physics2d.pose x y within 30
 interpolate rawframe.physics2d.pose
 predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick
+
+# Each shot sounds from the runner that fired it (runners.mixer, shot.sound);
+# clients hear them, a server carries only the counts.
+mixer runners.mixer
+sound 950e09337d03de69 shot.sound

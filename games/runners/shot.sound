@@ -1,0 +1,20 @@
+{
+  "kind": "audio.sound",
+  "formatVersion": 1,
+  "variants": [
+    {
+      "clip": "shot.wav"
+    }
+  ],
+  "pitch": {
+    "minimum": 0.875,
+    "maximum": 1.125
+  },
+  "bus": "691c5abeb88d55ee",
+  "concurrency": "shots",
+  "attenuation": {
+    "minimumDistance": 2,
+    "maximumDistance": 30,
+    "falloff": "linear"
+  }
+}

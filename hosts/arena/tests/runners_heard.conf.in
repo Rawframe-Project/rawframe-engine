@@ -1,0 +1,13 @@
+# Eight bots play the sample platformer for four seconds while the first
+# one's mirrored World is heard as its player would hear it and written to a
+# WAVE file in the build tree: shots sound, from where they were fired.
+host.maximum_iterations = 480
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = games/runners/runners.game
+kest.library = third_party/kest/lib/
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 8
+bots.endpoint = arena
+audio.record = @RECORD@

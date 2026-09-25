@@ -6,6 +6,7 @@
 #include "rawframe/audio/errors.h"
 #include "rawframe/test/test.h"
 
+#include <cmath>
 #include <cstdint>
 #include <string_view>
 #include <vector>
@@ -160,4 +161,16 @@ RAWFRAME_TEST(HostileBytesAreRefusedOrDecodedWithinBounds) {
         RAWFRAME_EXPECT(kClip->samples.size() == kClip->frames() * kClip->channels);
     }
     RAWFRAME_EXPECT(decoded > 100);
+}
+
+RAWFRAME_TEST(WrittenWavesReadBack) {
+    Clip clip;
+    clip.channels = 2;
+    clip.rate = 44'100;
+    clip.samples = {0.0F, 0.5F, -1.0F, 2.0F, -0.25F, std::nanf("")};
+    const auto kRead = decodeWav(encodeWav(clip));
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->channels == 2 && kRead->rate == 44'100 && kRead->frames() == 3);
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->samples[1] == 0.5F && kRead->samples[2] == -1.0F &&
+                    kRead->samples[3] == 32767.0F / 32768.0F && kRead->samples[4] == -0.25F &&
+                    kRead->samples[5] == 0.0F);
 }

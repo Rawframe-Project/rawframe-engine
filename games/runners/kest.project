@@ -2,3 +2,4 @@ project runners
 source .
 source ../../modules/world_kest/kest
 source ../../modules/input_kest/kest
+source ../../modules/world_audio/kest

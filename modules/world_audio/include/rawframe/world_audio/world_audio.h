@@ -46,9 +46,10 @@ inline constexpr std::uint8_t kDetachToCompletion = 2;
 inline constexpr std::uint32_t kMaximumCuesPerUpdate = 4;
 
 struct WorldAudioSettings {
-    /// The game's components of the two types.
+    /// The game's components of the two types; a game whose clients bind
+    /// their listener to their player may have no listener component.
     schema::ComponentTypeId emitter;
-    schema::ComponentTypeId listener;
+    std::optional<schema::ComponentTypeId> listener;
     /// Each declared sound's identity and its index in the Sounds.
     std::vector<std::pair<std::uint64_t, std::size_t>> sounds;
 };
@@ -98,11 +99,12 @@ struct GameAudio {
     audio::Layout layout;
     std::vector<std::pair<std::uint64_t, audio::LoadedSound>> sounds;
     schema::ComponentTypeId emitter;
-    schema::ComponentTypeId listener;
+    std::optional<schema::ComponentTypeId> listener;
 };
 
 /// Reads the game description at `game` and what its `mixer` and `sound`
-/// lines name, and finds its components of `rawframe.sound`'s two types,
+/// lines name, and finds its components of `rawframe.sound`'s types (an
+/// emitter, and a listener if it has one),
 /// whose layouts in `program` must be what this module reads. Refuses
 /// (`NotFound`) a game with no mixer line.
 [[nodiscard]] result::Result<GameAudio> loadGameAudio(const std::string& game, const kest::Program& program);
