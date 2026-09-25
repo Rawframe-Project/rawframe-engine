@@ -34,6 +34,8 @@ enum class ContentError : std::uint32_t {
     DigestMismatch = 18,
     Cancelled = 19,
     DeadlineExceeded = 20,
+    /// A source's sidecar that is not one.
+    SidecarInvalid = 21,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(ContentError error) noexcept {

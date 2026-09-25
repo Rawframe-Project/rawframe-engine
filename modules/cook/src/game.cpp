@@ -55,11 +55,11 @@ struct Project {
 };
 
 result::Result<Project> projectBeside(Reads& reads, std::string_view program) {
-    auto sidecarBytes = reads.file(std::string{"kest.project"} + std::string{kSidecarSuffix});
+    auto sidecarBytes = reads.file(std::string{"kest.project"} + std::string{content::kSidecarSuffix});
     if (!sidecarBytes.has_value()) {
         return refuse("a program's kest.project is beside the description, with a sidecar", program);
     }
-    RAWFRAME_TRY_ASSIGN(const Sidecar kSidecar, readSidecar(textOf(*sidecarBytes)));
+    RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
     if (kSidecar.importer != "rawframe.kest") {
         return refuse("the project beside the description is cooked by rawframe.kest", program);
     }
@@ -105,11 +105,11 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
 
     // Each scene: the resource its sidecar names, cooked by rawframe.scene.
     for (const std::string& path : kDescription.scenes) {
-        auto sidecarBytes = reads.file(path + std::string{kSidecarSuffix});
+        auto sidecarBytes = reads.file(path + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
             return refuse("a scene the description names has a sidecar", path);
         }
-        RAWFRAME_TRY_ASSIGN(const Sidecar kSidecar, readSidecar(textOf(*sidecarBytes)));
+        RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
         if (kSidecar.importer != "rawframe.scene") {
             return refuse("a scene the description names is cooked by rawframe.scene", path);
         }

@@ -15,10 +15,8 @@ namespace rawframe::cook {
 
 namespace {
 
-using document::Record;
 using document::Value;
 
-constexpr std::array<std::string_view, 4> kSidecarFields = {"schema", "resourceId", "importer", "settings"};
 /// The largest source a cook reads, and the largest artifact it keeps.
 constexpr std::uintmax_t kLargestFile = std::uintmax_t{1} << 30U;
 
@@ -232,25 +230,6 @@ void toCache(const std::filesystem::path& cache,
 
 } // namespace
 
-result::Result<Sidecar> readSidecar(std::string_view text) {
-    RAWFRAME_TRY_ASSIGN(const Value kParsed, document::parseCanonical(text));
-    const Value* schema = kParsed.find("schema");
-    if (schema == nullptr || schema->integer() != 1) {
-        return std::unexpected<result::Error>{failure(CookError::BadSidecar, "a sidecar's schema is 1", "")};
-    }
-    RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(kParsed, kSidecarFields, "$"));
-    const auto kId = kRecord.text("resourceId");
-    const base::Bits128Parse kParsedId = kId.has_value() ? base::parseBits128Hex(*kId) : base::Bits128Parse{};
-    if (!kParsedId.parsed || kParsedId.value == base::Bits128{}) {
-        return std::unexpected<result::Error>{failure(CookError::BadSidecar, "a resource identity, not nought", "")};
-    }
-    RAWFRAME_TRY_ASSIGN(const std::string_view kImporter, kRecord.text("importer"));
-    RAWFRAME_TRY_ASSIGN(const Value* kSettings, kRecord.optional("settings", Value::Kind::Object));
-    return Sidecar{.id = content::ResourceId{kParsedId.value},
-                   .importer = std::string{kImporter},
-                   .settings = kSettings != nullptr ? std::optional<Value>{*kSettings} : std::nullopt};
-}
-
 result::Result<base::Sha256Digest> digestOfFile(const std::filesystem::path& path) {
     const auto kBytes = readFile(path);
     if (!kBytes.has_value()) {
@@ -363,7 +342,8 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
          !error && entry != std::filesystem::recursive_directory_iterator{};
          entry.increment(error)) {
         const std::string kName = entry->path().filename().string();
-        if (entry->is_regular_file() && kName.ends_with(kSidecarSuffix) && kName.size() > kSidecarSuffix.size()) {
+        if (entry->is_regular_file() && kName.ends_with(content::kSidecarSuffix) &&
+            kName.size() > content::kSidecarSuffix.size()) {
             sidecars.push_back(entry->path().lexically_relative(kSources).generic_string());
         }
     }
@@ -381,13 +361,13 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
             report.failures.push_back(failure(CookError::BadSidecar, "the sidecar cannot be read", sidecar));
             continue;
         }
-        auto read = readSidecar(std::string_view{reinterpret_cast<const char*>(kText->data()), kText->size()});
+        auto read = content::readSidecar(std::string_view{reinterpret_cast<const char*>(kText->data()), kText->size()});
         if (!read.has_value()) {
-            report.failures.push_back(std::move(read).error().withContext("path", sidecar));
+            report.failures.push_back(failure(CookError::BadSidecar, read.error().description(), sidecar));
             continue;
         }
         Planned planned;
-        planned.source = sidecar.substr(0, sidecar.size() - kSidecarSuffix.size());
+        planned.source = sidecar.substr(0, sidecar.size() - content::kSidecarSuffix.size());
         planned.id = read->id;
         const auto kFound = std::ranges::find(request.importers, read->importer, &Importer::identity);
         if (kFound == request.importers.end()) {
