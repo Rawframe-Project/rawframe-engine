@@ -44,6 +44,8 @@ struct Counts {
     /// what lets it go.
     int holdWorkerAt = -1;
     std::atomic<bool> release{false};
+    /// How long the participant's stop takes.
+    int stopMilliseconds = 0;
     /// Every status the Host published.
     std::vector<host::HostStatus> statuses;
 };
@@ -59,6 +61,9 @@ public:
     }
     void stop() noexcept override {
         ++counts.stopped;
+#if RAWFRAME_THREADS
+        std::this_thread::sleep_for(std::chrono::milliseconds(counts.stopMilliseconds));
+#endif
     }
     void runHostPhase(HostPhase phase, const composition::HostFrame&) noexcept override {
         if (phase == HostPhase::RunWorlds) {
@@ -144,6 +149,7 @@ void reset() {
     counts.stop = nullptr;
     counts.holdWorkerAt = -1;
     counts.release = false;
+    counts.stopMilliseconds = 0;
     counts.statuses.clear();
     requireMissing = false;
 }
@@ -320,6 +326,22 @@ RAWFRAME_TEST(AStopRequestEndsAnUnboundedRun) {
     requester.join();
     RAWFRAME_EXPECT(kExit == host::HostExit::Stopped);
     RAWFRAME_EXPECT(counts.runWorlds > 0 && counts.stopped == 1);
+}
+
+RAWFRAME_TEST(AStopPastItsBudgetEndsTheRunAsATimeout) {
+    // A participant that takes 60 ms to stop, under a 20 ms shutdown budget:
+    // the run ends in order, and says the stop outlived it (D185).
+    reset();
+    std::string log;
+    counts.stopMilliseconds = 60;
+    RAWFRAME_EXPECT(run("host.maximum_iterations = 2\nhost.shutdown_budget_ms = 20", log) ==
+                    host::HostExit::ShutdownTimeout);
+    RAWFRAME_EXPECT(counts.stopped == 1 && mentions(log, "\"exit\":\"shutdown_timeout\",\"exitCode\":75"));
+    // Within its budget, the same run is clean.
+    reset();
+    log.clear();
+    counts.stopMilliseconds = 5;
+    RAWFRAME_EXPECT(run("host.maximum_iterations = 2\nhost.shutdown_budget_ms = 500", log) == host::HostExit::Stopped);
 }
 
 RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {

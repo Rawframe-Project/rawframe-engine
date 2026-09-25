@@ -486,6 +486,11 @@ struct Host::State {
                      diagnostics::field("drainMs", (clock.now() - drainStart).nanoseconds / 1'000'000),
                      diagnostics::field("connections", kConnections)});
         composition->stop();
+        // A run that was otherwise clean says it outlived its budget; a
+        // failure already said says more.
+        if (composition->overran() && exit == HostExit::Stopped) {
+            exit = HostExit::ShutdownTimeout;
+        }
         shutDown();
         enter(composition::HostState::Stopped, "stopped");
         emitter.log(Severity::Info,
@@ -549,6 +554,8 @@ std::string_view describe(HostExit exit) noexcept {
         return "startup_failure";
     case HostExit::RuntimeFailure:
         return "runtime_failure";
+    case HostExit::ShutdownTimeout:
+        return "shutdown_timeout";
     }
     return "startup_failure";
 }
@@ -569,6 +576,8 @@ int exitCode(HostExit exit) noexcept {
     case HostExit::StartupFailure:
     case HostExit::RuntimeFailure:
         return 70;
+    case HostExit::ShutdownTimeout:
+        return 75;
     }
     return 70;
 }

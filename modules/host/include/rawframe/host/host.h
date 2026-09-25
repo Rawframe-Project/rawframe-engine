@@ -44,13 +44,15 @@ enum class HostExit : std::uint8_t {
     StartupFailure,
     /// A participant reported the Host unhealthy: it drained and stopped in
     /// order, and a supervisor should not count the run a success.
-    RuntimeFailure,
+    RuntimeFailure, /// The run ended in order, but its composition took longer to stop than
+    /// its shutdown budget: a supervisor's retry may help.
+    ShutdownTimeout,
 };
 
 /// The reason's SPEC-0012 name, such as `invalid_launch_descriptor`.
 [[nodiscard]] std::string_view describe(HostExit exit) noexcept;
 /// The reason's portable OS category: 0 success, 64 invocation, 65 data,
-/// 69 unavailable, 70 software, 78 configuration.
+/// 69 unavailable, 70 software, 75 temporary, 78 configuration.
 [[nodiscard]] int exitCode(HostExit exit) noexcept;
 /// The reason a start refused with `errorClass` ended for.
 [[nodiscard]] HostExit startupExit(result::ErrorClass errorClass) noexcept;
