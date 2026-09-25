@@ -7,6 +7,7 @@
 // never executed.
 
 #include "rawframe/audio/layout.h"
+#include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
 
 #include <cstddef>
@@ -61,8 +62,9 @@ enum class Despawn : std::uint8_t {
 };
 
 struct Variant {
-    /// The clip, by its path beside the declaration.
-    std::string clip;
+    /// The cooked sound clip it plays, by its resource identity (ADR-0013):
+    /// never a path.
+    base::Bits128 resource;
     std::uint32_t weight = 1;
 };
 

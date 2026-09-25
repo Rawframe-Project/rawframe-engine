@@ -30,10 +30,10 @@ constexpr std::string_view kSound = R"({
   "formatVersion": 1,
   "variants": [
     {
-      "clip": "steps/grass_1.wav"
+      "resource": "000000000000000000000000000000c1"
     },
     {
-      "clip": "steps/grass_2.wav",
+      "resource": "000000000000000000000000000000c2",
       "weight": 3
     }
   ],
@@ -98,7 +98,7 @@ RAWFRAME_TEST(ASoundDeclarationReads) {
     }
     const SoundDeclaration& sound = *kRead;
     RAWFRAME_EXPECT(sound.variants.size() == 2 && sound.variants[0].weight == 1 && sound.variants[1].weight == 3 &&
-                    sound.variants[1].clip == "steps/grass_2.wav");
+                    sound.variants[1].resource.low == 0xc2);
     RAWFRAME_EXPECT(sound.selection == Selection::RandomNoImmediateRepeat && sound.volumeMinimum == -3 &&
                     sound.volumeMaximum == 0 && sound.pitchMinimum == 0.9375F && sound.pitchMaximum == 1.0625F);
     RAWFRAME_EXPECT(sound.loop && sound.loopStart == 0.5F && sound.loopEnd == 1.25F);
@@ -110,19 +110,20 @@ RAWFRAME_TEST(ASoundDeclarationReads) {
 
     // The least a sound says: one variant and a bus; flat, not looping,
     // sequential, at unity.
-    const auto kLeast =
-        readSound("{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      \"clip\": "
-                  "\"click.wav\"\n    }\n  ],\n  \"bus\": \"0000000000000001\"\n}\n",
-                  layout());
+    const auto kLeast = readSound(
+        "{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      \"resource\": "
+        "\"000000000000000000000000000000c3\"\n    }\n  ],\n  \"bus\": \"0000000000000001\"\n}\n",
+        layout());
     RAWFRAME_EXPECT(kLeast.has_value() && !kLeast->loop && !kLeast->attenuation && kLeast->pitchMinimum == 1 &&
                     kLeast->selection == Selection::Sequential && kLeast->bus == 0 && !kLeast->concurrency &&
                     kLeast->loading == Loading::Preload);
     // Music streamed, looping whole.
-    const auto kMusic =
-        readSound("{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      \"clip\": "
-                  "\"theme.rfopus\"\n    }\n  ],\n  \"loop\": {},\n  \"bus\": \"0000000000000001\",\n  \"loading\": "
-                  "\"stream\"\n}\n",
-                  layout());
+    const auto kMusic = readSound(
+        "{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      \"resource\": "
+        "\"000000000000000000000000000000c4\"\n    }\n  ],\n  \"loop\": {},\n  \"bus\": \"0000000000000001\",\n  "
+        "\"loading\": "
+        "\"stream\"\n}\n",
+        layout());
     RAWFRAME_EXPECT(kMusic.has_value() && kMusic->loop && !kMusic->loopStart && kMusic->loading == Loading::Stream);
 }
 
@@ -136,8 +137,11 @@ RAWFRAME_TEST(EverySoundRuleIsRefusedAtItsField) {
     };
     const std::vector<Case> kCases = {
         {"\"audio.sound\"", "\"audio.mixer\"", DocumentError::Invalid, "$.kind"},
-        {"\"steps/grass_1.wav\"", "\"../grass.wav\"", DocumentError::Invalid, "$.variants[0].clip"},
-        {"\"steps/grass_1.wav\"", "\"/grass.wav\"", DocumentError::Invalid, "$.variants[0].clip"},
+        {"\"000000000000000000000000000000c1\"", "\"grass.wav\"", DocumentError::Invalid, "$.variants[0].resource"},
+        {"\"000000000000000000000000000000c1\"",
+         "\"00000000000000000000000000000000\"",
+         DocumentError::Invalid,
+         "$.variants[0].resource"},
         {"\"weight\": 3", "\"weight\": 1", DocumentError::NotCanonical, "$.variants[1].weight"},
         {"\"weight\": 3", "\"weight\": 0", DocumentError::Invalid, "$.variants[1].weight"},
         {"\"random_no_immediate_repeat\"", "\"shuffle\"", DocumentError::Invalid, "$.selection"},

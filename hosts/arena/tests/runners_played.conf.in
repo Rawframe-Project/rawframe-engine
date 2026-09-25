@@ -1,11 +1,14 @@
 # Four bots play the sample platformer for three seconds while the first
 # one's mirrored World is played on an output device that plays nothing:
 # the device's own thread renders the mixer, and the shots are heard there.
+# Its sounds are read by identity from the game's content cooked into the
+# build tree.
 host.maximum_iterations = 360
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = games/runners/runners.game
 kest.library = third_party/kest/lib/
+content.root = @CONTENT@
 network.loopback.latency_ms = 10
 replication.endpoint = arena
 bots.count = 4

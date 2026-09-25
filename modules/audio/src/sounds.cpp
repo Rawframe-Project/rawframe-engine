@@ -5,10 +5,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
-#include <sstream>
 #include <utility>
 
 namespace rawframe::audio {
@@ -17,21 +13,6 @@ namespace {
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AudioError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kAudioDomain, code(error), why).error()};
-}
-
-result::Result<std::vector<std::byte>> readBytes(const std::filesystem::path& path) {
-    std::ifstream file{path, std::ios::binary};
-    if (!file) {
-        return std::unexpected<result::Error>{
-            refuse(result::ErrorClass::NotFound, AudioError::BadSound, "a file cannot be read")
-                .error()
-                .withContext("path", path.string())};
-    }
-    std::vector<std::byte> bytes;
-    for (std::istreambuf_iterator<char> at{file}; at != std::istreambuf_iterator<char>{}; ++at) {
-        bytes.push_back(static_cast<std::byte>(*at));
-    }
-    return bytes;
 }
 
 float distanceBetween(Position from, Position to) noexcept {
@@ -63,37 +44,6 @@ struct Live {
 };
 
 } // namespace
-
-result::Result<LoadedSound> loadSound(const std::string& path, const Layout& layout, const DecodeLimits& limits) {
-    const std::filesystem::path kPath{path};
-    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kText, readBytes(kPath));
-    const std::string_view kView{reinterpret_cast<const char*>(kText.data()), kText.size()};
-    auto declaration = readSound(kView, layout);
-    if (!declaration.has_value()) {
-        return std::unexpected<result::Error>{std::move(declaration).error().withContext("path", path)};
-    }
-    LoadedSound loaded{.declaration = std::move(*declaration), .clips = {}, .cooked = {}};
-    for (const Variant& variant : loaded.declaration.variants) {
-        const std::filesystem::path kClip = kPath.parent_path() / variant.clip;
-        RAWFRAME_TRY_ASSIGN(std::vector<std::byte> bytes, readBytes(kClip));
-        if (loaded.declaration.loading == Loading::Stream) {
-            auto cooked = std::make_shared<const std::vector<std::byte>>(std::move(bytes));
-            auto checked = Stream::open(cooked, {}, limits);
-            if (!checked.has_value()) {
-                return std::unexpected<result::Error>{std::move(checked).error().withContext("path", kClip.string())};
-            }
-            loaded.cooked.push_back(std::move(cooked));
-            continue;
-        }
-        const std::vector<std::byte> kBytes = std::move(bytes);
-        auto clip = decodeCooked(kBytes, limits);
-        if (!clip.has_value()) {
-            return std::unexpected<result::Error>{std::move(clip).error().withContext("path", kClip.string())};
-        }
-        loaded.clips.push_back(std::make_shared<const Clip>(std::move(*clip)));
-    }
-    return loaded;
-}
 
 struct Sounds::State {
     Mixer* mixer = nullptr;

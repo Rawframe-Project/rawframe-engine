@@ -1,16 +1,22 @@
 // A World heard: an emitter's continuous sound follows its pose and its
 // playing flag, its cue plays one-shots counted from when it was first
 // seen, despawn policies do what they name, two active listeners hear
-// nothing, and a game's audio loads from its files against its program.
+// nothing, a game's audio loads from its files against its program, and its
+// sounds are read from cooked content by resource identity.
 
+#include "rawframe/assets/errors.h"
+#include "rawframe/audio/decode.h"
 #include "rawframe/audio/mixer.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/test/test.h"
+#include "rawframe/world_audio/sound_loader.h"
 #include "rawframe/world_audio/world_audio.h"
 
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 #include <unistd.h>
 
 using namespace rawframe;
@@ -22,6 +28,7 @@ constexpr auto kEmitterId = schema::ComponentTypeId::fromText("3c1f0a8e-5b2d-4e7
 constexpr auto kListenerId = schema::ComponentTypeId::fromText("9e4b7c21-6d0a-4f38-b5e2-7a1c3d9f8b06");
 constexpr std::uint64_t kHum = 0xa1;
 constexpr std::uint64_t kClick = 0xa2;
+constexpr base::Bits128 kClickClip{.high = 0, .low = 0xc1};
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
@@ -49,7 +56,7 @@ audio::LoadedSound constant(float value, bool loop) {
     auto clip = std::make_shared<audio::Clip>();
     clip->samples.assign(4800, value);
     audio::LoadedSound sound{.declaration = {}, .clips = {clip}};
-    sound.declaration.variants.push_back(audio::Variant{.clip = "x.wav"});
+    sound.declaration.variants.push_back(audio::Variant{.resource = base::Bits128{.high = 0, .low = 1}});
     sound.declaration.loop = loop;
     sound.declaration.attenuation =
         audio::Attenuation{.minimumDistance = 1, .maximumDistance = 21, .falloff = audio::Falloff::Linear};
@@ -234,13 +241,8 @@ RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
            "{\n  \"kind\": \"audio.mixer\",\n  \"formatVersion\": 1,\n  \"master\": {\n    \"busId\": "
            "\"0000000000000001\",\n    \"name\": \"master\",\n    \"role\": \"master\"\n  }\n}\n");
     kWrite("click.sound",
-           "{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      \"clip\": "
-           "\"click.wav\"\n    }\n  ],\n  \"bus\": \"0000000000000001\"\n}\n");
-    const std::string kWave{
-        "RIFF\x28\0\0\0WAVEfmt \x10\0\0\0\x01\0\x01\0\x80\xBB\0\0\0\x77\x01\0\x02\0\x10\0data\x04\0\0\0"
-        "\0\x40\0\x40",
-        48};
-    kWrite("click.wav", kWave);
+           "{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      "
+           "\"resource\": \"000000000000000000000000000000c1\"\n    }\n  ],\n  \"bus\": \"0000000000000001\"\n}\n");
     kest::CompileSettings compile;
     compile.library = RAWFRAME_KEST_LIBRARY;
     std::string report;
@@ -250,9 +252,128 @@ RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
         const auto kAudio = loadGameAudio((kDirectory / "heard.game").string(), **kProgram);
         RAWFRAME_EXPECT(kAudio.has_value() && kAudio->emitter == kEmitterId && kAudio->listener == kListenerId &&
                         kAudio->sounds.size() == 1 && kAudio->sounds[0].first == kClick &&
-                        kAudio->sounds[0].second.clips[0]->frames() == 2 && kAudio->layout.buses.size() == 1);
+                        kAudio->sounds[0].second.variants.size() == 1 &&
+                        kAudio->sounds[0].second.variants[0].resource == kClickClip &&
+                        kAudio->layout.buses.size() == 1);
     } else {
         std::fprintf(stderr, "%s\n", report.c_str());
     }
     std::filesystem::remove_all(kDirectory);
+}
+
+namespace {
+
+std::vector<std::byte> waveOf(std::size_t frames, float value) {
+    audio::Clip clip;
+    clip.channels = 1;
+    clip.rate = 48'000;
+    clip.samples.assign(frames, value);
+    return audio::encodeWav(clip);
+}
+
+content::ManifestEntry entryOf(std::uint64_t id, const std::string& locator, const std::vector<std::byte>& bytes) {
+    return content::ManifestEntry{.id = content::ResourceId{base::Bits128{.high = 0, .low = id}},
+                                  .type = content::ResourceTypeId{audio::kSoundClipType},
+                                  .representation = *content::RepresentationId::parse("rawframe.audio.wave"),
+                                  .byteLength = bytes.size(),
+                                  .digest = content::ContentDigest::of(bytes),
+                                  .locator = locator};
+}
+
+audio::SoundDeclaration declared(std::vector<std::uint64_t> resources, audio::Loading loading) {
+    audio::SoundDeclaration declaration;
+    for (const std::uint64_t kResource : resources) {
+        declaration.variants.push_back(audio::Variant{.resource = base::Bits128{.high = 0, .low = kResource}});
+    }
+    declaration.loading = loading;
+    return declaration;
+}
+
+/// A content store over three cooked clips, as a client composes it from a
+/// game's cooked output: 1 and 2 decode, 3's bytes are no clip at all.
+struct Content {
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    execution::Executor io{execution::ExecutorSettings{.kind = execution::ExecutorKind::BlockingIo, .workers = 1}};
+    execution::Executor cpu{execution::ExecutorSettings{.kind = execution::ExecutorKind::Cpu, .workers = 1}};
+    std::unique_ptr<content::ContentStore> store;
+
+    Content() {
+        RAWFRAME_EXPECT(io.admitOwner(execution::OwnerId{1}, {.maximumPendingTasks = 16}).has_value());
+        RAWFRAME_EXPECT(cpu.admitOwner(execution::OwnerId{1}, {.maximumPendingTasks = 16}).has_value());
+        const std::vector<std::byte> kShort = waveOf(2, 0.5F);
+        const std::vector<std::byte> kLong = waveOf(6, 0.25F);
+        const std::vector<std::byte> kNoClip(16, std::byte{7});
+        std::vector<content::ContentSource> sources;
+        sources.push_back(std::move(*content::ContentSource::memory({{"a", kShort}, {"b", kLong}, {"c", kNoClip}})));
+        store = std::move(*content::ContentStore::create(io, execution::OwnerId{1}, root, clock, std::move(sources)));
+        const std::vector<content::BoundManifest> kManifests = {
+            {.entries = {entryOf(1, "a", kShort), entryOf(2, "b", kLong), entryOf(3, "c", kNoClip)}, .source = 0}};
+        store->publish(*content::ContentCatalog::build(kManifests, soundRepresentations(), 1, 1));
+    }
+    ~Content() {
+        store.reset();
+        cpu.stop();
+        io.stop();
+    }
+    Content(const Content&) = delete;
+    Content& operator=(const Content&) = delete;
+
+    result::Result<std::unique_ptr<SoundLoader>>
+    loader(std::vector<std::pair<std::uint64_t, audio::SoundDeclaration>> sounds) {
+        return SoundLoader::create(*store, cpu, execution::OwnerId{1}, root, clock, std::move(sounds));
+    }
+};
+
+/// Updates `loader` until it is ready or fails, within ten seconds.
+result::Result<bool> settle(SoundLoader& loader) {
+    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (;;) {
+        auto done = loader.update(1);
+        if (!done.has_value() || *done || std::chrono::steady_clock::now() >= kDeadline) {
+            return done;
+        }
+        std::this_thread::yield();
+    }
+}
+
+} // namespace
+
+RAWFRAME_TEST(SoundsAreReadByIdentityFromCookedContent) {
+    Content content;
+    {
+        // A preloaded sound of two variants decodes each; a streamed one
+        // keeps its cooked bytes as they are.
+        auto loader = content.loader(
+            {{kHum, declared({1, 2}, audio::Loading::Preload)}, {kClick, declared({2}, audio::Loading::Stream)}});
+        RAWFRAME_EXPECT(loader.has_value());
+        if (!loader.has_value()) {
+            return;
+        }
+        const auto kReady = settle(**loader);
+        RAWFRAME_EXPECT(kReady.has_value() && *kReady);
+        const auto kSounds = (*loader)->sounds(1);
+        RAWFRAME_EXPECT(kSounds.has_value() && kSounds->size() == 2);
+        if (kSounds.has_value() && kSounds->size() == 2) {
+            const audio::LoadedSound& hum = (*kSounds)[0].second;
+            const audio::LoadedSound& click = (*kSounds)[1].second;
+            RAWFRAME_EXPECT((*kSounds)[0].first == kHum && hum.clips.size() == 2 && hum.cooked.empty() &&
+                            hum.clips[0]->frames() == 2 && hum.clips[1]->frames() == 6 &&
+                            std::abs(hum.clips[1]->samples[0] - 0.25F) < 1e-3F);
+            RAWFRAME_EXPECT((*kSounds)[1].first == kClick && click.clips.empty() && click.cooked.size() == 1 &&
+                            click.cooked[0]->size() == waveOf(6, 0.25F).size());
+        }
+    }
+    // A variant the content does not hold is refused when asked for.
+    RAWFRAME_EXPECT(!content.loader({{kHum, declared({9}, audio::Loading::Preload)}}).has_value());
+    {
+        // A variant that is no clip fails the whole loader, typed.
+        auto loader = content.loader({{kHum, declared({1, 3}, audio::Loading::Preload)}});
+        RAWFRAME_EXPECT(loader.has_value());
+        if (loader.has_value()) {
+            const auto kReady = settle(**loader);
+            RAWFRAME_EXPECT(!kReady.has_value() && kReady.error().domain() == assets::kAssetsDomain &&
+                            kReady.error().code() == code(assets::AssetError::DecodeFailed));
+        }
+    }
 }

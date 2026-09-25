@@ -1,7 +1,7 @@
 // Declared sounds playing: variants picked as declared, concurrency sets
 // resolved by their rule, distance and pan from the listener, virtual
-// instances that come back where they would be, sounds loaded from their
-// files, and streamed sounds playing as their preloaded selves.
+// instances that come back where they would be, and streamed sounds playing
+// as their preloaded selves.
 
 #include "rawframe/audio/errors.h"
 #include "rawframe/audio/sounds.h"
@@ -14,7 +14,6 @@
 #include <fstream>
 #include <iterator>
 #include <span>
-#include <unistd.h>
 #include <vector>
 
 using namespace rawframe;
@@ -42,7 +41,7 @@ std::shared_ptr<const Clip> clipOf(float value, std::size_t frames = 48'000) {
 LoadedSound declared(std::vector<float> values, SoundDeclaration declaration) {
     LoadedSound sound{.declaration = std::move(declaration), .clips = {}, .cooked = {}};
     for (const float kValue : values) {
-        sound.declaration.variants.push_back(Variant{.clip = "x.wav"});
+        sound.declaration.variants.push_back(Variant{.resource = base::Bits128{.high = 0, .low = 1}});
         sound.clips.push_back(clipOf(kValue));
     }
     return sound;
@@ -208,30 +207,6 @@ RAWFRAME_TEST(AnInstanceWithoutAVoiceWaitsVirtual) {
     RAWFRAME_EXPECT(sounds->state(kSecond) == InstanceState::Finished);
 }
 
-RAWFRAME_TEST(ASoundLoadsFromItsFiles) {
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-sound-" + std::to_string(::getpid()));
-    std::filesystem::create_directories(kDirectory);
-    {
-        // A 16-bit mono WAVE of four samples.
-        std::ofstream wave{kDirectory / "blip.wav", std::ios::binary};
-        const std::uint8_t kBytes[] = {'R', 'I', 'F', 'F',  44, 0, 0,    0, 'W',  'A', 'V',  'E',  'f',
-                                       'm', 't', ' ', 16,   0,  0, 0,    1, 0,    1,   0,    0x80, 0xBB,
-                                       0,   0,   0,   0x77, 1,  0, 2,    0, 16,   0,   'd',  'a',  't',
-                                       'a', 8,   0,   0,    0,  0, 0x40, 0, 0x40, 0,   0x40, 0,    0x40};
-        wave.write(reinterpret_cast<const char*>(kBytes), sizeof kBytes);
-        std::ofstream declaration{kDirectory / "blip.sound"};
-        declaration << "{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      "
-                       "\"clip\": \"blip.wav\"\n    }\n  ],\n  \"bus\": \"0000000000000002\"\n}\n";
-    }
-    const auto kLoaded = loadSound((kDirectory / "blip.sound").string(), layout());
-    RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->clips.size() == 1 && kLoaded->clips[0]->frames() == 4 &&
-                    kLoaded->clips[0]->samples[0] == 0.5F && kLoaded->declaration.bus == kSfx);
-    const auto kMissing = loadSound((kDirectory / "none.sound").string(), layout());
-    RAWFRAME_EXPECT(!kMissing.has_value());
-    std::filesystem::remove_all(kDirectory);
-}
-
 namespace {
 
 std::shared_ptr<const std::vector<std::byte>> cookedFixture() {
@@ -251,7 +226,7 @@ std::vector<float> playedAs(Loading loading, SoundDeclaration declaration, std::
     auto mixer = *Mixer::create(layout(), {});
     auto sounds = *Sounds::create(*mixer, layout(), {.streamer = &streamer});
     declaration.loading = loading;
-    declaration.variants = {Variant{.clip = "tones.rfopus"}};
+    declaration.variants = {Variant{.resource = base::Bits128{.high = 0, .low = 2}}};
     LoadedSound sound{.declaration = declaration, .clips = {}, .cooked = {}};
     if (loading == Loading::Stream) {
         sound.cooked.push_back(cookedFixture());
@@ -282,7 +257,7 @@ RAWFRAME_TEST(AStreamedSoundPlaysAsItsPreloadedSelf) {
     LoadedSound streamed{.declaration = SoundDeclaration{.bus = kSfx, .loading = Loading::Stream},
                          .clips = {},
                          .cooked = {cookedFixture()}};
-    streamed.declaration.variants = {Variant{.clip = "tones.rfopus"}};
+    streamed.declaration.variants = {Variant{.resource = base::Bits128{.high = 0, .low = 2}}};
     RAWFRAME_EXPECT(!unstreamed->add(streamed).has_value());
     Streamer streamer;
     auto withStreamer = *Sounds::create(*mixer, layout(), {.streamer = &streamer});
@@ -303,7 +278,7 @@ std::vector<float> revivedAs(Loading loading) {
                                  .loading = loading,
                                  .attenuation = Attenuation{.minimumDistance = 1, .maximumDistance = 10},
                                  .virtualization = Virtualization::TrackPosition};
-    declaration.variants = {Variant{.clip = "tones.rfopus"}};
+    declaration.variants = {Variant{.resource = base::Bits128{.high = 0, .low = 2}}};
     LoadedSound sound{.declaration = declaration, .clips = {}, .cooked = {}};
     if (loading == Loading::Stream) {
         sound.cooked.push_back(cookedFixture());

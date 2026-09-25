@@ -93,20 +93,21 @@ private:
     std::unique_ptr<State> state_;
 };
 
-/// A game's sound, loaded: its mixer layout, its sounds with their
-/// identities, and its emitter and listener components.
+/// A game's sound, declared: its mixer layout, its sounds' declarations
+/// with their identities, and its emitter and listener components. The
+/// sounds' variants are resources, read through a `SoundLoader`.
 struct GameAudio {
     audio::Layout layout;
-    std::vector<std::pair<std::uint64_t, audio::LoadedSound>> sounds;
+    std::vector<std::pair<std::uint64_t, audio::SoundDeclaration>> sounds;
     schema::ComponentTypeId emitter;
     std::optional<schema::ComponentTypeId> listener;
 };
 
-/// Reads the game description at `game` and what its `mixer` and `sound`
-/// lines name, and finds its components of `rawframe.sound`'s types (an
-/// emitter, and a listener if it has one),
-/// whose layouts in `program` must be what this module reads. Refuses
-/// (`NotFound`) a game with no mixer line.
+/// Reads the game description at `game` and the mixer layout and sound
+/// declarations its `mixer` and `sound` lines name, and finds its
+/// components of `rawframe.sound`'s types (an emitter, and a listener if it
+/// has one), whose layouts in `program` must be what this module reads.
+/// Refuses (`NotFound`) a game with no mixer line.
 [[nodiscard]] result::Result<GameAudio> loadGameAudio(const std::string& game, const kest::Program& program);
 
 } // namespace rawframe::world_audio

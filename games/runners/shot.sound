@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "variants": [
     {
-      "clip": "shot.wav"
+      "resource": "0ef1a81f70a113a696a0f55dabdfc157"
     }
   ],
   "pitch": {

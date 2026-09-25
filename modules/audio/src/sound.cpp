@@ -29,7 +29,7 @@ constexpr std::array<std::string_view, 14> kDocumentFields = {"kind",
                                                               "attenuation",
                                                               "virtualization",
                                                               "despawn"};
-constexpr std::array<std::string_view, 2> kVariantFields = {"clip", "weight"};
+constexpr std::array<std::string_view, 2> kVariantFields = {"resource", "weight"};
 constexpr std::array<std::string_view, 2> kRangeFields = {"minimum", "maximum"};
 constexpr std::array<std::string_view, 2> kLoopFields = {"start", "end"};
 constexpr std::array<std::string_view, 4> kAttenuationFields = {
@@ -110,13 +110,13 @@ result::Result<SoundDeclaration> readSound(std::string_view text, const Layout& 
         const std::string kPath = kRecord.pathOf("variants") + "[" + std::to_string(index) + "]";
         RAWFRAME_TRY_ASSIGN(const Record kVariant, Record::of(variants->items()[index], kVariantFields, kPath));
         Variant variant;
-        RAWFRAME_TRY_ASSIGN(const std::string_view kClip, kVariant.text("clip"));
-        // A path beside the declaration, going nowhere above it.
-        if (kClip.empty() || kClip.front() == '/' || kClip.find("..") != std::string_view::npos ||
-            kClip.find('\\') != std::string_view::npos) {
-            return invalid(kVariant.pathOf("clip"), "a clip is a relative path beside the declaration");
+        RAWFRAME_TRY_ASSIGN(const std::string_view kResource, kVariant.text("resource"));
+        const base::Bits128Parse kParsed = base::parseBits128Hex(kResource);
+        if (!kParsed.parsed || kParsed.value == base::Bits128{}) {
+            return invalid(kVariant.pathOf("resource"),
+                           "a variant is a resource identity of 32 lowercase hexadecimal digits, not nought");
         }
-        variant.clip = std::string{kClip};
+        variant.resource = kParsed.value;
         RAWFRAME_TRY_ASSIGN(const std::int64_t kWeight, kVariant.integer("weight", 1));
         if (kWeight < 1 || kWeight > 1'000'000) {
             return invalid(kVariant.pathOf("weight"), "a weight is 1 to 1000000");

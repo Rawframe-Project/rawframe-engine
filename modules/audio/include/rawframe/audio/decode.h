@@ -6,6 +6,7 @@
 // understand.
 
 #include "rawframe/audio/mixer.h"
+#include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
 
 #include <array>
@@ -15,6 +16,10 @@
 #include <vector>
 
 namespace rawframe::audio {
+
+/// The resource type of every cooked sound clip, in either cooked form: the
+/// identity content catalogs and cooks name it by.
+inline constexpr base::Bits128 kSoundClipType = base::parseBits128Hex("684215ae3a2a3f665361a5a7b3b260c6").value;
 
 struct DecodeLimits {
     std::size_t maximumBytes = std::size_t{256} * 1024 * 1024;

@@ -338,8 +338,13 @@ result::Result<GameAudio> loadGameAudio(const std::string& game, const kest::Pro
     }
     loaded.layout = std::move(*layout);
     for (const world_kest::GameSound& sound : kDescription.audio->sounds) {
-        RAWFRAME_TRY_ASSIGN(audio::LoadedSound made, audio::loadSound((kBeside / sound.path).string(), loaded.layout));
-        loaded.sounds.emplace_back(sound.id, std::move(made));
+        const std::filesystem::path kPath = kBeside / sound.path;
+        RAWFRAME_TRY_ASSIGN(const std::string kDeclared, readText(kPath));
+        auto declaration = audio::readSound(kDeclared, loaded.layout);
+        if (!declaration.has_value()) {
+            return std::unexpected<result::Error>{std::move(declaration).error().withContext("path", kPath.string())};
+        }
+        loaded.sounds.emplace_back(sound.id, std::move(*declaration));
     }
     return loaded;
 }

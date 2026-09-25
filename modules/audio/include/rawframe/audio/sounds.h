@@ -50,18 +50,13 @@ enum class InstanceState : std::uint8_t {
 };
 
 /// A declaration with its variants, in their order: decoded clips for a
-/// preloaded sound, cooked Opus for a streamed one.
+/// preloaded sound, cooked Opus for a streamed one, as whoever read its
+/// resources made them.
 struct LoadedSound {
     SoundDeclaration declaration;
     std::vector<std::shared_ptr<const Clip>> clips;
     std::vector<std::shared_ptr<const std::vector<std::byte>>> cooked;
 };
-
-/// Reads the declaration at `path` against `layout` and its variants,
-/// beside it: decoded for a preloaded sound, checked and kept cooked for a
-/// streamed one.
-[[nodiscard]] result::Result<LoadedSound>
-loadSound(const std::string& path, const Layout& layout, const DecodeLimits& limits = {});
 
 struct SoundsSettings {
     /// Where variant choices and drawn volumes and pitches come from.
