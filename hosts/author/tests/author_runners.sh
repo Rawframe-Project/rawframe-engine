@@ -18,7 +18,8 @@ body=d0ae39a2-4803-4ee0-9d45-1980875324d0
 pose=fdf0050d-881c-4451-b541-754c67d1bbf8
 crate=6a1f5c2e-0b7d-4e3a-9c41-5d2e8f7a1b30
 
-"$author" describe | grep -q '"scene.set_reference"'
+"$author" describe >"$work/describe.out"
+grep -q '"scene.set_reference"' "$work/describe.out"
 
 cat >"$work/crate.json" <<JSON
 {"formatVersion": 1, "kind": "authoring.request", "batch": "atomic", "operations": [
