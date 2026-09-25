@@ -4,7 +4,8 @@
 1. Module boundaries: a module's or host's sources include only its own
    headers and the headers of modules on its line in tools/modules.txt.
 2. File size (STD-0001): handwritten source fails at 1,500 lines and is
-   reported from 1,000.
+   reported from 1,000. Tables a tool writes under a `generated` directory
+   are not handwritten and are not measured.
 3. Owner rules: no em dash in any tracked text file, and no AI attribution
    trailer in any commit message.
 4. No `.value()` call in engine source: on a Result it throws on failure, and
@@ -100,7 +101,7 @@ def check_bounds_literals(files, findings):
 
 def check_sizes(files, findings, notes):
     for path in files:
-        if path.suffix not in SOURCE_SUFFIXES or "third_party" in path.parts:
+        if path.suffix not in SOURCE_SUFFIXES or "third_party" in path.parts or "generated" in path.parts:
             continue
         lines = path.read_text(errors="replace").count("\n")
         relative = path.relative_to(ROOT)

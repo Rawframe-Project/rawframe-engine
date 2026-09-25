@@ -17,6 +17,7 @@ audio: world schema execution diagnostics document result base
 audio_import: audio result base
 animation: document result base
 animation_import: animation result base
+localization: result base
 mesh: result base
 mesh_import: mesh result base
 cook: animation mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
