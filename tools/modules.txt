@@ -10,6 +10,7 @@ execution: diagnostics result base
 composition: execution diagnostics result base
 document: result base
 content: document execution result base
+assets: content execution result base
 audio: world schema execution diagnostics document result base
 audio_import: audio result base
 cook: audio_import audio content document execution result base
