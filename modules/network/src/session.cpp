@@ -123,6 +123,14 @@ public:
         return connections_.size() + rejected_.size();
     }
 
+    std::size_t admitted() const noexcept {
+        std::size_t count = 0;
+        for (const auto& [id, state] : connections_) {
+            count += state.phase == Phase::Active ? 1 : 0;
+        }
+        return count;
+    }
+
     void end(ConnectionId connection, EndReason reason, std::vector<SessionEvent>& into) {
         if (connections_.erase(connection.value) != 0) {
             provider_->close(connection);
@@ -305,6 +313,8 @@ public:
             refusal = Reject{.reason = RejectReason::Malformed, .message = "the hello does not decode"};
         } else if (const auto kReason = compare(*hello, serverSettings_.expected, serverSettings_.features)) {
             refusal = Reject{.reason = *kReason, .message = {}};
+        } else if (serverSettings_.maximumAdmitted != 0 && admitted() >= serverSettings_.maximumAdmitted) {
+            refusal = Reject{.reason = RejectReason::Capacity, .message = "the server is full"};
         } else if (serverSettings_.admit != nullptr) {
             refusal = serverSettings_.admit(*hello, serverSettings_.admitContext);
         }

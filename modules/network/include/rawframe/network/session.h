@@ -91,6 +91,11 @@ struct ServerSettings {
     std::uint64_t features = 0;
     AdmitFunction admit = nullptr;
     void* admitContext = nullptr;
+    /// Connections admitted at once; a hello past it is refused as
+    /// `capacity`, before the admission rule. Zero admits up to
+    /// `maximumSessions`. Keep it below that, so a full server still has
+    /// room to say why.
+    std::size_t maximumAdmitted = 0;
     std::uint64_t tickRateTicks = 60;
     std::uint64_t tickRateSeconds = 1;
     /// Seeds epochs and nonces, for tests and runs that must repeat. Without

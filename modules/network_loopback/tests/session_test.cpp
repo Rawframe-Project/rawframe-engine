@@ -67,12 +67,13 @@ struct World {
     std::vector<SessionEvent> serverEvents;
     std::vector<SessionEvent> clientEvents;
 
-    World() {
+    explicit World(std::size_t maximumAdmitted = 0) {
         server = *network::Sessions::server(*serverTransport,
                                             clock,
                                             network::ServerSettings{.profile = kSessions,
                                                                     .expected = compatibility(),
                                                                     .admit = &ticketCheck,
+                                                                    .maximumAdmitted = maximumAdmitted,
                                                                     .tickRateTicks = 30,
                                                                     .seed = 11});
         client = *network::Sessions::client(*clientTransport, clock, {.profile = kSessions, .seed = 12});
@@ -188,6 +189,36 @@ RAWFRAME_TEST(IncompatibleClientsAreRejectedWithTheReason) {
     RAWFRAME_EXPECT(kReasonFor([](network::Hello& h) {
                         h.ticket.clear();
                     }) == network::RejectReason::TicketInvalid);
+}
+
+RAWFRAME_TEST(AFullServerSaysSoAndMakesRoomWhenAPlayerLeaves) {
+    World world{1};
+    const auto kFirst = world.client->connect({"game"}, hello());
+    world.run(20);
+    const auto kSecond = world.client->connect({"game"}, hello());
+    world.run(20);
+    RAWFRAME_EXPECT(kFirst.has_value() && kSecond.has_value());
+    if (!kFirst.has_value() || !kSecond.has_value()) {
+        return;
+    }
+    const auto kVerdict = [&world](network::ConnectionId connection, SessionEventKind kind) {
+        for (const SessionEvent& event : world.clientEvents) {
+            if (event.connection == connection && event.kind == kind) {
+                return &event;
+            }
+        }
+        return static_cast<const SessionEvent*>(nullptr);
+    };
+    RAWFRAME_EXPECT(kVerdict(*kFirst, SessionEventKind::Admitted) != nullptr);
+    const SessionEvent* full = kVerdict(*kSecond, SessionEventKind::Rejected);
+    RAWFRAME_EXPECT(full != nullptr && full->reject.reason == network::RejectReason::Capacity);
+
+    // The first leaves; the next is admitted.
+    world.client->close(*kFirst);
+    world.run(5);
+    const auto kThird = world.client->connect({"game"}, hello());
+    world.run(20);
+    RAWFRAME_EXPECT(kThird.has_value() && kVerdict(*kThird, SessionEventKind::Admitted) != nullptr);
 }
 
 RAWFRAME_TEST(ASilentPeerTimesOut) {
