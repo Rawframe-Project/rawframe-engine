@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <numbers>
 #include <optional>
 #include <vector>
 
