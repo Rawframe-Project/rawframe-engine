@@ -271,6 +271,16 @@ RAWFRAME_TEST(AMaskTakesItsBonesFromInsideAndTheRestFromOutside) {
     const Pose kHalf = kPlay(0.5, events);
     RAWFRAME_EXPECT(near(kHalf.bones[1].translation[0], 0.5) && near(kHalf.bones[1].translation[1], 0.5) &&
                     kHalf.bones[0].translation[0] == 0.0);
+    // Posing the root alone, the arm keeps its bind pose.
+    {
+        const std::vector<NamedMask> kMasks{{kUpperId, kMaskOf(1.0)}};
+        GraphInstance instance{*CompiledGraph::compile(kGraph, kBody, kSkeletonId, kClips, kMasks)};
+        RAWFRAME_EXPECT(instance.advance(0.5, events));
+        Pose pose;
+        const std::vector<std::uint8_t> kRootOnly{1, 0};
+        PoseEvaluator{}.evaluate(instance, pose, kRootOnly);
+        RAWFRAME_EXPECT(pose.bones[1].translation[0] == 1.0 && pose.bones[1].translation[1] == 0.0);
+    }
     // Without its mask, or with another skeleton's, the graph does not
     // compile.
     RAWFRAME_EXPECT(

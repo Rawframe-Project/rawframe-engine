@@ -27,6 +27,7 @@
 #include "rawframe/result/result.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -66,5 +67,11 @@ struct MaskLimits {
 /// a mask of another skeleton, or naming a bone the skeleton lacks.
 [[nodiscard]] result::Result<std::vector<double>>
 boneWeights(const Mask& mask, const Skeleton& skeleton, base::Bits128 skeletonId);
+
+/// SPEC-0035's server bone subset: for each bone, in the skeleton's order,
+/// 1 when the mask weighs it or a bone below it, since a bone is placed by
+/// every bone above it, and 0 otherwise. Refused as `boneWeights` is.
+[[nodiscard]] result::Result<std::vector<std::uint8_t>>
+boneSubset(const Mask& mask, const Skeleton& skeleton, base::Bits128 skeletonId);
 
 } // namespace rawframe::animation

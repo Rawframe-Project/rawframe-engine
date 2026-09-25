@@ -126,4 +126,21 @@ result::Result<std::vector<double>> boneWeights(const Mask& mask, const Skeleton
     return weights;
 }
 
+result::Result<std::vector<std::uint8_t>>
+boneSubset(const Mask& mask, const Skeleton& skeleton, base::Bits128 skeletonId) {
+    RAWFRAME_TRY_ASSIGN(const std::vector<double> kWeights, boneWeights(mask, skeleton, skeletonId));
+    std::vector<std::uint8_t> subset(skeleton.bones.size(), 0);
+    // Children come after parents, so walking back marks each bone's
+    // parent once the bone itself is known.
+    for (std::size_t bone = skeleton.bones.size(); bone-- > 0;) {
+        if (kWeights[bone] > 0.0) {
+            subset[bone] = 1;
+        }
+        if (subset[bone] != 0 && skeleton.bones[bone].parent.has_value()) {
+            subset[skeleton.bones[bone].parent->value] = 1;
+        }
+    }
+    return subset;
+}
+
 } // namespace rawframe::animation

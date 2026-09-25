@@ -12,6 +12,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
@@ -49,8 +50,9 @@ public:
 
     /// Writes the channels the clip animates at `time` (wrapped when the
     /// clip loops, held at its ends when it does not) over `pose`, which
-    /// has the skeleton's bones; the others keep what `pose` had.
-    void sample(double time, Pose& pose) const;
+    /// has the skeleton's bones; the others keep what `pose` had. Given
+    /// `only` (a byte for each bone), bones whose byte is 0 are left alone.
+    void sample(double time, Pose& pose, std::span<const std::uint8_t> only = {}) const;
 
 private:
     std::shared_ptr<const Clip> clip_;

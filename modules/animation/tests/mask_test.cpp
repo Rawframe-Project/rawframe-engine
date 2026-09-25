@@ -71,3 +71,11 @@ RAWFRAME_TEST(BonesWeighAsTheNearestChainThatReachesThem) {
     stray.chains[0].root = {9, 9};
     RAWFRAME_EXPECT(refusedWith(boneWeights(stray, body(), kSkeletonId), AnimationError::BindingInvalid));
 }
+
+RAWFRAME_TEST(ASubsetHoldsWhatItWeighsAndEveryBoneAbove) {
+    // The hand alone: the bones that place it come with it; the leg does
+    // not.
+    const Mask kHandOnly{.skeleton = kSkeletonId, .chains = {MaskChain{.root = kHand, .descendants = false}}};
+    const auto kSubset = boneSubset(kHandOnly, body(), kSkeletonId);
+    RAWFRAME_EXPECT(kSubset.has_value() && *kSubset == (std::vector<std::uint8_t>{1, 1, 1, 1, 0}));
+}

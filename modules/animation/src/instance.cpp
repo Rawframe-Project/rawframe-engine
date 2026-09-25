@@ -1,6 +1,7 @@
 #include "rawframe/animation/instance.h"
 
 #include "rawframe/animation/errors.h"
+#include "rawframe/base/assert.h"
 #include "rotation.h"
 
 #include <algorithm>
@@ -519,8 +520,9 @@ bool GraphInstance::holds(const CompiledGraph::Test& test,
            (speeds_[kLeader] >= 0.0 ? playheads_[kLeader] >= clip.duration : playheads_[kLeader] <= 0.0);
 }
 
-void PoseEvaluator::evaluate(const GraphInstance& instance, Pose& pose) {
+void PoseEvaluator::evaluate(const GraphInstance& instance, Pose& pose, std::span<const std::uint8_t> only) {
     const CompiledGraph& graph = instance.graph();
+    RAWFRAME_CHECK(only.empty() || only.size() == graph.bindPose().bones.size(), "a subset of the graph's skeleton");
     const std::span<const CompiledGraph::Step> kSteps = graph.steps();
     poses_.resize(kSteps.size());
     for (std::size_t at = 0; at < kSteps.size(); ++at) {
@@ -531,7 +533,7 @@ void PoseEvaluator::evaluate(const GraphInstance& instance, Pose& pose) {
             continue;
         }
         if (step.clip.has_value()) {
-            step.clip->sample(instance.playheads_[at], made);
+            step.clip->sample(instance.playheads_[at], made, only);
             continue;
         }
         // Weighted sums; each rotation first turned into the hemisphere of
@@ -539,6 +541,9 @@ void PoseEvaluator::evaluate(const GraphInstance& instance, Pose& pose) {
         // shares each bone by its weight instead.
         std::vector<double> shares = instance.shares_[at];
         for (std::size_t bone = 0; bone < made.bones.size(); ++bone) {
+            if (!only.empty() && only[bone] == 0) {
+                continue;
+            }
             if (!step.mask.empty()) {
                 shares = {step.mask[bone], 1.0 - step.mask[bone]};
             }

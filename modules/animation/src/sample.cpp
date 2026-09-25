@@ -130,9 +130,13 @@ BoundClip::bind(std::shared_ptr<const Clip> clip, const Skeleton& skeleton, base
     return made;
 }
 
-void BoundClip::sample(double time, Pose& pose) const {
+void BoundClip::sample(double time, Pose& pose, std::span<const std::uint8_t> only) const {
     RAWFRAME_CHECK(pose.bones.size() == boneCount_, "a pose of the clip's skeleton");
+    RAWFRAME_CHECK(only.empty() || only.size() == boneCount_, "a subset of the clip's skeleton");
     for (std::size_t at = 0; at < bones_.size(); ++at) {
+        if (!only.empty() && only[bones_[at].value] == 0) {
+            continue;
+        }
         const Track& track = clip_->tracks[at];
         const std::array<double, 4> kValue = sampleTrack(*clip_, track, time);
         Transform& bone = pose.bones[bones_[at].value];

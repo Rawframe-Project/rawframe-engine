@@ -271,8 +271,10 @@ private:
 class PoseEvaluator {
 public:
     /// Writes the instance's pose: the bind pose where nothing weighs, and
-    /// before its first advance.
-    void evaluate(const GraphInstance& instance, Pose& pose);
+    /// before its first advance. Given `only` (a byte for each bone, as
+    /// `boneSubset` makes it), bones whose byte is 0 keep their bind pose
+    /// and cost nothing.
+    void evaluate(const GraphInstance& instance, Pose& pose, std::span<const std::uint8_t> only = {});
 
 private:
     std::vector<Pose> poses_;
