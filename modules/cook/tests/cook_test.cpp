@@ -9,9 +9,11 @@
 #include "rawframe/cook/audio.h"
 #include "rawframe/cook/cook.h"
 #include "rawframe/cook/errors.h"
+#include "rawframe/cook/game.h"
 #include "rawframe/cook/kest.h"
 #include "rawframe/kest_library/library.h"
 #include "rawframe/test/test.h"
+#include "rawframe/world_kest/cooked_game.h"
 
 #include <algorithm>
 #include <atomic>
@@ -274,6 +276,81 @@ RAWFRAME_TEST(AKestProjectCooksIntoItsFiles) {
     writeText(kGame / "kest.project.rfmeta",
               sidecar("000000000000000000000000000000a4", "\"entry\": \"shots.kest\"", "rawframe.kest"));
     RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadSidecar));
+}
+
+RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
+    const Project kProject;
+    const fs::path kGame = kProject.sources / "runners";
+    fs::copy(fs::path{RAWFRAME_SAMPLE_GAMES} / "runners", kGame, fs::copy_options::recursive);
+    const std::string kSourcesId = "f9f0181057571ecd398d86d2c34a641f";
+    writeText(kGame / "runners.game.rfmeta", sidecar("000000000000000000000000000000a5", "", "rawframe.game"));
+    static const std::array<Importer, 3> kImporters = {audioImporter(), gameImporter(), kestImporter()};
+    const auto kCook = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+        RAWFRAME_EXPECT(report.has_value());
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    const CookReport kFirst = kCook();
+    RAWFRAME_EXPECT(kFirst.cooked == 5 && kFirst.failures.empty());
+    const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
+        const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+        if (!kManifest.has_value()) {
+            return std::nullopt;
+        }
+        const auto kEntry = std::ranges::find(
+            *kManifest, content::ResourceTypeId{world_kest::kCookedGameType}, &content::ManifestEntry::type);
+        if (kEntry == kManifest->end()) {
+            return std::nullopt;
+        }
+        auto read = world_kest::readCookedGame(readText(kProject.output / kEntry->locator));
+        return read.has_value() ? std::optional{std::move(*read)} : std::nullopt;
+    };
+    const auto kGameRead = kCooked();
+    RAWFRAME_EXPECT(kGameRead.has_value());
+    if (!kGameRead.has_value()) {
+        return;
+    }
+    // The text as written; the three documents it names; both programs as
+    // entries of the project's sources.
+    RAWFRAME_EXPECT(kGameRead->text == readText(kGame / "runners.game"));
+    RAWFRAME_EXPECT(kGameRead->files.size() == 3 && kGameRead->file("runners.actions") != nullptr &&
+                    kGameRead->file("runners.mixer") != nullptr && kGameRead->file("shot.sound") != nullptr &&
+                    kGameRead->file("shot.sound")->text == readText(kGame / "shot.sound"));
+    const base::Bits128 kSources = base::parseBits128Hex(kSourcesId).value;
+    RAWFRAME_EXPECT(kGameRead->programs.size() == 2 && kGameRead->program("runners.kest") != nullptr &&
+                    kGameRead->program("runners.kest")->sources == kSources &&
+                    kGameRead->program("sample.kest") != nullptr &&
+                    kGameRead->program("sample.kest")->entry == "sample.kest");
+
+    // A document it names changed: the description again, and the change
+    // is in it.
+    std::string sound = readText(kGame / "shot.sound");
+    sound.replace(sound.find("\"maximumDistance\": 30"), 21, "\"maximumDistance\": 40");
+    writeText(kGame / "shot.sound", sound);
+    RAWFRAME_EXPECT(kCook().cooked == 1);
+    RAWFRAME_EXPECT(kCooked().has_value() && kCooked()->file("shot.sound")->text == sound);
+
+    // What it names must do: a program that compiles, a mixer that reads.
+    const std::string kProgram = readText(kGame / "runners.kest");
+    writeText(kGame / "runners.kest", kProgram + "\nfn broken( {\n");
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    writeText(kGame / "runners.kest", kProgram);
+    const std::string kMixer = readText(kGame / "runners.mixer");
+    writeText(kGame / "runners.mixer", "{}\n");
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    writeText(kGame / "runners.mixer", kMixer);
+    // A sound on a bus the mixer does not have.
+    std::string elsewhere = sound;
+    elsewhere.replace(elsewhere.find("691c5abeb88d55ee"), 16, "0000000000000bad");
+    writeText(kGame / "shot.sound", elsewhere);
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    writeText(kGame / "shot.sound", sound);
+    // A project without its sidecar names no sources.
+    fs::rename(kGame / "kest.project.rfmeta", kProject.base / "aside");
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    fs::rename(kProject.base / "aside", kGame / "kest.project.rfmeta");
+    RAWFRAME_EXPECT(kCook().failures.empty());
 }
 
 RAWFRAME_TEST(NothingIsPublishedUnlessNothingFailed) {

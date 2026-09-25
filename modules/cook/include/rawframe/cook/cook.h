@@ -24,6 +24,23 @@
 
 namespace rawframe::cook {
 
+/// The suffix of a source's sidecar: `<source file>.rfmeta`.
+inline constexpr std::string_view kSidecarSuffix = ".rfmeta";
+
+/// A sidecar as written: the resource its source becomes, the importer that
+/// makes it, and the settings it gives, if any.
+struct Sidecar {
+    content::ResourceId id;
+    std::string importer;
+    std::optional<document::Value> settings;
+};
+
+/// Reads a sidecar: canonical JSON `{schema: 1, resourceId, importer,
+/// settings?}` with a resource identity other than nought. Refused
+/// (`BadSidecar`, or the document's own error) otherwise. An importer that
+/// resolves a name to a resource reads the name's sidecar with this.
+[[nodiscard]] result::Result<Sidecar> readSidecar(std::string_view text);
+
 /// What an importer makes of one source.
 struct Artifact {
     content::ResourceTypeId type;

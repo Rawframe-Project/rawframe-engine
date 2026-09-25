@@ -19,7 +19,6 @@ using document::Record;
 using document::Value;
 
 constexpr std::array<std::string_view, 4> kSidecarFields = {"schema", "resourceId", "importer", "settings"};
-constexpr std::string_view kSidecarSuffix = ".rfmeta";
 /// The largest source a cook reads, and the largest artifact it keeps.
 constexpr std::uintmax_t kLargestFile = std::uintmax_t{1} << 30U;
 
@@ -233,6 +232,25 @@ void toCache(const std::filesystem::path& cache,
 
 } // namespace
 
+result::Result<Sidecar> readSidecar(std::string_view text) {
+    RAWFRAME_TRY_ASSIGN(const Value kParsed, document::parseCanonical(text));
+    const Value* schema = kParsed.find("schema");
+    if (schema == nullptr || schema->integer() != 1) {
+        return std::unexpected<result::Error>{failure(CookError::BadSidecar, "a sidecar's schema is 1", "")};
+    }
+    RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(kParsed, kSidecarFields, "$"));
+    const auto kId = kRecord.text("resourceId");
+    const base::Bits128Parse kParsedId = kId.has_value() ? base::parseBits128Hex(*kId) : base::Bits128Parse{};
+    if (!kParsedId.parsed || kParsedId.value == base::Bits128{}) {
+        return std::unexpected<result::Error>{failure(CookError::BadSidecar, "a resource identity, not nought", "")};
+    }
+    RAWFRAME_TRY_ASSIGN(const std::string_view kImporter, kRecord.text("importer"));
+    RAWFRAME_TRY_ASSIGN(const Value* kSettings, kRecord.optional("settings", Value::Kind::Object));
+    return Sidecar{.id = content::ResourceId{kParsedId.value},
+                   .importer = std::string{kImporter},
+                   .settings = kSettings != nullptr ? std::optional<Value>{*kSettings} : std::nullopt};
+}
+
 result::Result<base::Sha256Digest> digestOfFile(const std::filesystem::path& path) {
     const auto kBytes = readFile(path);
     if (!kBytes.has_value()) {
@@ -363,46 +381,22 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
             report.failures.push_back(failure(CookError::BadSidecar, "the sidecar cannot be read", sidecar));
             continue;
         }
-        auto parsed =
-            document::parseCanonical(std::string_view{reinterpret_cast<const char*>(kText->data()), kText->size()});
-        if (!parsed.has_value()) {
-            report.failures.push_back(std::move(parsed).error().withContext("path", sidecar));
-            continue;
-        }
-        const Value* schema = parsed->find("schema");
-        if (schema == nullptr || schema->integer() != 1) {
-            report.failures.push_back(failure(CookError::BadSidecar, "a sidecar's schema is 1", sidecar));
-            continue;
-        }
-        auto record = Record::of(*parsed, kSidecarFields, "$");
-        if (!record.has_value()) {
-            report.failures.push_back(std::move(record).error().withContext("path", sidecar));
+        auto read = readSidecar(std::string_view{reinterpret_cast<const char*>(kText->data()), kText->size()});
+        if (!read.has_value()) {
+            report.failures.push_back(std::move(read).error().withContext("path", sidecar));
             continue;
         }
         Planned planned;
         planned.source = sidecar.substr(0, sidecar.size() - kSidecarSuffix.size());
-        const auto kId = record->text("resourceId");
-        const base::Bits128Parse kParsed = kId.has_value() ? base::parseBits128Hex(*kId) : base::Bits128Parse{};
-        if (!kParsed.parsed || kParsed.value == base::Bits128{}) {
-            report.failures.push_back(failure(CookError::BadSidecar, "a resource identity, not nought", sidecar));
-            continue;
-        }
-        planned.id = content::ResourceId{kParsed.value};
-        const auto kImporter = record->text("importer");
-        const auto kFound = kImporter.has_value()
-                                ? std::ranges::find(request.importers, *kImporter, &Importer::identity)
-                                : request.importers.end();
+        planned.id = read->id;
+        const auto kFound = std::ranges::find(request.importers, read->importer, &Importer::identity);
         if (kFound == request.importers.end()) {
             report.failures.push_back(failure(CookError::UnknownImporter, "no importer of that identity", sidecar));
             continue;
         }
         planned.importer = &*kFound;
-        auto settingsValue = record->optional("settings", Value::Kind::Object);
-        if (!settingsValue.has_value()) {
-            report.failures.push_back(std::move(settingsValue).error().withContext("path", sidecar));
-            continue;
-        }
-        auto settings = planned.importer->normalize(*settingsValue);
+        const Value* settingsValue = read->settings ? &*read->settings : nullptr;
+        auto settings = planned.importer->normalize(settingsValue);
         if (!settings.has_value()) {
             report.failures.push_back(std::move(settings).error().withContext("path", sidecar));
             continue;

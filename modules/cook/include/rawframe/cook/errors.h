@@ -28,6 +28,9 @@ enum class CookError : std::uint32_t {
     WriteFailed = 7,
     /// An importer's read: outside the sources, or of what cannot be read.
     BadRead = 8,
+    /// A name a source uses that resolves to nothing, or to what does not
+    /// do: a program that does not compile, a document that does not read.
+    BadReference = 9,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(CookError error) noexcept {
