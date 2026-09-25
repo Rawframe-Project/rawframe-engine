@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <string_view>
+#include <utility>
 
 namespace rawframe::world_animation {
 
@@ -21,14 +22,16 @@ constexpr std::string_view kMaybe[] = {kAnimationPlan.name};
 
 class WorldParticipant final : public composition::Participant {
 public:
-    result::Status load(composition::ParticipantContext& context) {
+    result::Status load(composition::ParticipantContext& context, bool simulationOnly) {
         RAWFRAME_TRY_ASSIGN(world_runtime::Simulation * simulation, context.capability(world_runtime::kSimulation));
         RAWFRAME_TRY_ASSIGN(plan_, context.capability(kAnimationPlan));
         if (!plan_->animation().has_value()) {
             plan_ = nullptr;
             return {};
         }
-        RAWFRAME_TRY_ASSIGN(animation_, WorldAnimation::create(*plan_->animation()));
+        AnimationSettings settings = *plan_->animation();
+        settings.simulationOnly = settings.simulationOnly || simulationOnly;
+        RAWFRAME_TRY_ASSIGN(animation_, WorldAnimation::create(std::move(settings)));
         RAWFRAME_TRY(simulation->addSystems(*animation_));
         plan_->attach(animation_.get());
         return {};
@@ -78,23 +81,48 @@ private:
     diagnostics::Emitter emitter_;
 };
 
-result::Result<composition::ParticipantOwner> makeWorld(composition::ParticipantContext& context) noexcept {
+result::Result<composition::ParticipantOwner> make(composition::ParticipantContext& context,
+                                                   bool simulationOnly) noexcept {
     auto participant = std::make_unique<WorldParticipant>();
     if (context.has(kAnimationPlan.name)) {
-        RAWFRAME_TRY(participant->load(context));
+        RAWFRAME_TRY(participant->load(context, simulationOnly));
     }
     return composition::ParticipantOwner{participant.release()};
 }
 
+result::Result<composition::ParticipantOwner> makeWorld(composition::ParticipantContext& context) noexcept {
+    return make(context, false);
+}
+
+result::Result<composition::ParticipantOwner> makeServerWorld(composition::ParticipantContext& context) noexcept {
+    return make(context, true);
+}
+
+constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
+
 } // namespace
 
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
+    // One or the other, by the role the composition is for: a dedicated
+    // server plays only the simulation's animators.
     registrar.submit(composition::ParticipantDeclaration{
         .identity = "rawframe.animation.world",
         .factory = &makeWorld,
         .scope = composition::LifetimeScope::World,
         .requiredCapabilities = kNeeds,
         .optionalCapabilities = kMaybe,
+        .eligibility = {.roles = ~kServer},
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
+        .observabilityIdentity = "animation.world",
+        .budgetOwner = "world",
+    });
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = "rawframe.animation.server_world",
+        .factory = &makeServerWorld,
+        .scope = composition::LifetimeScope::World,
+        .requiredCapabilities = kNeeds,
+        .optionalCapabilities = kMaybe,
+        .eligibility = {.roles = kServer},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "animation.world",
         .budgetOwner = "world",

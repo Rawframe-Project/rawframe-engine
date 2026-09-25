@@ -9,7 +9,9 @@ namespace rawframe::world_animation {
 /// Contributes `rawframe.animation.world`, a World-scoped participant that
 /// adds animation (animation.h) to the World runtime's Simulation when the
 /// loaded game's animation plan asks for it, and does nothing otherwise. It
-/// logs its totals when it stops.
+/// logs its totals when it stops. A dedicated server's composition has
+/// `rawframe.animation.server_world` in its place, which plays only
+/// animators of `Simulation` relevance whatever the plan says.
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);
