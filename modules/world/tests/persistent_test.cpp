@@ -65,3 +65,20 @@ RAWFRAME_TEST(DuplicateIdentitiesAreFound) {
     World without{*empty.freeze()};
     RAWFRAME_EXPECT(persistentDuplicates(without).empty());
 }
+
+RAWFRAME_TEST(InsertingNoughtNamesTheEntity) {
+    const auto kRegistry = persistentRegistry();
+    World world{kRegistry, WorldSettings{.rootSeed = RootSeed{7}}};
+    World twin{kRegistry, WorldSettings{.rootSeed = RootSeed{7}}};
+    const auto kKey = *kRegistry->key<Persistent>();
+    const auto kEntity = *world.create();
+    RAWFRAME_EXPECT(world.insert(kEntity, kKey, Persistent{}).has_value());
+    const Persistent kNamed = *world.get(kEntity, kKey);
+    // Named from the stream, as a twin World draws it.
+    RAWFRAME_EXPECT(kNamed.named() && kNamed.id() == newPersistentId(twin));
+    // Nought again keeps the name; a named value replaces it, as any value.
+    RAWFRAME_EXPECT(world.insert(kEntity, kKey, Persistent{}).has_value() &&
+                    world.get(kEntity, kKey)->id() == kNamed.id());
+    RAWFRAME_EXPECT(world.insert(kEntity, kKey, Persistent{.high = 1, .low = 2}).has_value() &&
+                    world.get(kEntity, kKey)->high == 1);
+}

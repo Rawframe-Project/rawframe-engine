@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -85,7 +86,9 @@ public:
     }
 
     // The type-erased forms, for command buffers and generated bindings.
-    // `value` is moved from; its owner still destroys it.
+    // `value` is moved from; its owner still destroys it. Inserting a
+    // persistent identity of nought (persistent.h) names the entity: it
+    // keeps the identity it has, or draws a fresh one.
     [[nodiscard]] result::Status insertErased(EntityHandle entity, schema::ComponentRuntimeId component, void* value);
     [[nodiscard]] result::Status removeErased(EntityHandle entity, schema::ComponentRuntimeId component);
     [[nodiscard]] void* getErased(EntityHandle entity, schema::ComponentRuntimeId component) noexcept;
@@ -162,6 +165,8 @@ private:
     std::map<std::vector<schema::ComponentRuntimeId>, std::uint32_t> archetypeIndex_;
     bool structureLocked_ = false;
     std::map<std::pair<std::string, std::string>, Pcg32, std::less<>> randomStreams_;
+    /// The persistent identity component, if the registry has it.
+    std::optional<schema::ComponentRuntimeId> persistent_;
 };
 
 } // namespace rawframe::world

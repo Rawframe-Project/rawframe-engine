@@ -1,6 +1,7 @@
 #include "rawframe/world/world.h"
 
 #include "rawframe/world/errors.h"
+#include "rawframe/world/persistent.h"
 
 #include <algorithm>
 #include <cstring>
@@ -23,6 +24,9 @@ World::World(std::shared_ptr<const schema::SchemaRegistry> registry, WorldSettin
     RAWFRAME_CHECK(settings_.firstGeneration != 0, "generation 0 is the null handle");
     // Archetype 0 is the empty set, where every entity starts.
     static_cast<void>(findOrCreateArchetype({}));
+    if (auto persistent = registry_->find(Persistent::kComponentTypeId)) {
+        persistent_ = *persistent;
+    }
 }
 
 World::~World() = default;
@@ -157,6 +161,13 @@ result::Status World::insertErased(EntityHandle entity, schema::ComponentRuntime
     const EntityRecord& record = records_[entity.slot];
     detail::Archetype& current = *archetypes_[record.archetype];
     const schema::ComponentDescriptor& descriptor = registry_->descriptor(component);
+    if (component == persistent_ && !static_cast<const Persistent*>(value)->named()) {
+        if (current.has(component)) {
+            return {};
+        }
+        const PersistentEntityId kFresh = newPersistentId(*this);
+        *static_cast<Persistent*>(value) = Persistent{.high = kFresh.value.high, .low = kFresh.value.low};
+    }
     if (current.has(component)) {
         if (descriptor.size != 0) {
             detail::Column& column = current.column(current.columnIndex(component));
