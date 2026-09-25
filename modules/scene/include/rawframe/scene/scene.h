@@ -64,7 +64,11 @@
 // closed typed patch, one entry for an entity and component at most, in
 // that order: `set` gives fields new values, a default among them; `add`
 // adds a component the source's entity lacks, with its non-default fields;
-// `remove: true` removes one it has. What the source holds is checked when
+// `remove: true` removes one it has. An entry of an entity and
+// `remove: true` alone removes the entity itself, and is its only entry;
+// nothing left may name it (D120). Children are entities attached to their
+// parent, so adding a child is an entity of this scene attached to one of
+// the instance's, and moving one is setting its attachment's parent. What the source holds is checked when
 // the instance is resolved. The member is left out when there are no
 // instances, and a reference, here or in an override, may name any entity
 // this scene holds. `schema` covers the components the overrides name too.
@@ -151,11 +155,13 @@ struct Override {
     enum class Kind : std::uint8_t {
         Set,
         Add,
+        /// A component removed; with no component, the entity itself.
         Remove,
     };
 
     /// The entity, by its id in the instancing scene.
     base::Bits128 entity{};
+    /// Empty only for the entity's removal.
     std::string component;
     Kind kind = Kind::Set;
     /// Set: the fields given new values. Add: the component's non-default

@@ -24,10 +24,9 @@ using SceneSource = std::function<result::Result<Scene>(base::Bits128 scene)>;
 
 /// Refused (`instance_invalid`) when the mapping is not exactly the source's
 /// entities, an override sets or removes a component its entity lacks or
-/// adds one it has, a scene instances itself however far down, instances
-/// reach deeper than kMaximumInstanceDepth, or two scenes were authored
-/// against different layouts of one component; and with `source`'s error
-/// when a source cannot be had.
+/// adds one it has, a reference names an entity an override removed, a scene instances itself however far down,
+/// instances reach deeper than kMaximumInstanceDepth, or two scenes were authored against different layouts of one
+/// component; and with `source`'s error when a source cannot be had.
 [[nodiscard]] result::Result<Scene> resolveInstances(const Scene& scene, const SceneSource& source);
 
 } // namespace rawframe::scene

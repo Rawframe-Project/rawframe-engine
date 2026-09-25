@@ -6,6 +6,7 @@
 #include "rawframe/scene/resolve.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <map>
 #include <string>
 #include <vector>
@@ -187,4 +188,33 @@ RAWFRAME_TEST(AnInstanceThatDoesNotFitItsSourceIsRefused) {
     }
     RAWFRAME_EXPECT(unfit(resolveInstances(chain.at(base::Bits128{.high = 2, .low = 17}), sources(chain))));
     RAWFRAME_EXPECT(resolveInstances(chain.at(base::Bits128{.high = 2, .low = 15}), sources(chain)).has_value());
+}
+
+RAWFRAME_TEST(AnInstanceMayRemoveItsEntitiesButNotWhatIsStillNamed) {
+    const SceneSource kSources = sources({{kPlatformScene, platform()}});
+    // The first copy's marker removed whole: its platform stays.
+    Scene removed = level();
+    removed.instances[0].overrides.insert(removed.instances[0].overrides.begin() + 1,
+                                          Override{.entity = id(12), .kind = Override::Kind::Remove});
+    const auto kResolved = resolveInstances(removed, kSources);
+    RAWFRAME_EXPECT(kResolved.has_value() && kResolved->entities.size() == 4);
+    if (kResolved.has_value()) {
+        RAWFRAME_EXPECT(!std::ranges::contains(kResolved->entities, id(12), &SceneEntity::id));
+    }
+    // It reads back as written.
+    const auto kWritten = writeScene(removed);
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->find("\"remove\": true") != std::string::npos);
+    if (kWritten.has_value()) {
+        const auto kRead = readScene(*kWritten);
+        RAWFRAME_EXPECT(kRead.has_value() && *kRead == removed);
+    }
+    // The platform removed while its marker still links to it: refused.
+    Scene named = level();
+    named.instances[0].overrides = {Override{.entity = id(11), .kind = Override::Kind::Remove}};
+    RAWFRAME_EXPECT(unfit(resolveInstances(named, kSources)));
+    // A removal is its entity's only entry.
+    Scene crowded = level();
+    crowded.instances[0].overrides.insert(crowded.instances[0].overrides.begin(),
+                                          Override{.entity = id(11), .kind = Override::Kind::Remove});
+    RAWFRAME_EXPECT(!writeScene(crowded).has_value());
 }

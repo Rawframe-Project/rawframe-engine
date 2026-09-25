@@ -126,11 +126,19 @@ result::Status validate(const Scene& scene) {
                                      ? change.fields.empty()
                                      : fieldsInForm(change.fields, change.kind == Override::Kind::Set) &&
                                            !(change.kind == Override::Kind::Set && change.fields.empty());
-            if (!kOrdered || !kMapped || change.component.empty() || !kInForm) {
+            // An entity removed has that entry alone.
+            const bool kWhole = change.component.empty();
+            const bool kAlone =
+                !kWhole ||
+                ((at + 1 == instance.overrides.size() || instance.overrides[at + 1].entity != change.entity) &&
+                 change.kind == Override::Kind::Remove);
+            if (!kOrdered || !kMapped || !kAlone || !kInForm) {
                 return invalid("an override names an entity of its instance and a component, once, in order, and "
-                               "changes it in the one form of its kind");
+                               "changes it in the one form of its kind, or removes the entity alone");
             }
-            used.push_back(change.component);
+            if (!kWhole) {
+                used.push_back(change.component);
+            }
             kReferences(change.fields);
         }
     }
@@ -253,6 +261,15 @@ result::Result<SceneInstance> instanceOf(const Value& each) {
         const Value* set = change.find("set");
         const Value* add = change.find("add");
         const Value* remove = change.find("remove");
+        if (hasMembers(change, {"entity", "remove"})) {
+            if (remove->truth() != true) {
+                return invalid("a removal is `remove: true`");
+            }
+            Override removed{.kind = Override::Kind::Remove};
+            RAWFRAME_TRY_ASSIGN(removed.entity, idOf(change.find("entity")));
+            instance.overrides.push_back(std::move(removed));
+            continue;
+        }
         const std::string_view kVerb = set != nullptr ? "set" : add != nullptr ? "add" : "remove";
         if (!hasMembers(change, {"entity", "component", kVerb}) || change.find("component")->text() == nullptr) {
             return invalid("an override is an entity, a component, and one of set, add, or remove");
@@ -306,6 +323,11 @@ result::Result<std::string> writeScene(const Scene& scene) {
         for (const Override& change : instance.overrides) {
             Value made = Value::object();
             made.add("entity", Value::string(idText(change.entity)));
+            if (change.component.empty()) {
+                made.add("remove", Value::boolean(true));
+                overrides.push(std::move(made));
+                continue;
+            }
             made.add("component", Value::string(change.component));
             switch (change.kind) {
             case Override::Kind::Set:

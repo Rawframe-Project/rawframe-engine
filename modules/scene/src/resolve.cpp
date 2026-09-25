@@ -35,6 +35,10 @@ result::Status apply(std::vector<SceneEntity>& entities, const Override& change)
     if (kEntity == entities.end()) {
         return unfit("an override names an entity its instance does not bring");
     }
+    if (change.component.empty()) {
+        entities.erase(kEntity);
+        return {};
+    }
     std::vector<SceneComponent>& components = kEntity->components;
     const auto kAt = std::ranges::lower_bound(components, change.component, {}, &SceneComponent::name);
     const bool kHas = kAt != components.end() && kAt->name == change.component;
@@ -124,6 +128,22 @@ result::Result<Scene> resolve(const Scene& scene, const SceneSource& source, std
     }
     if (made.entities.size() > kMaximumEntities) {
         return unfit("a scene brings more than 65,536 entities");
+    }
+    // Nothing names an entity an override removed.
+    std::vector<base::Bits128> held;
+    for (const SceneEntity& entity : made.entities) {
+        held.push_back(entity.id);
+    }
+    std::ranges::sort(held);
+    for (const SceneEntity& entity : made.entities) {
+        for (const SceneComponent& component : entity.components) {
+            for (const SceneField& field : component.fields) {
+                if (field.value.kind == FieldValue::Kind::Entity &&
+                    !std::ranges::binary_search(held, field.value.entity)) {
+                    return unfit("a reference names an entity an override removed");
+                }
+            }
+        }
     }
     // The schema is what the entities now use.
     for (const SceneEntity& entity : made.entities) {
