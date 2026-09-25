@@ -1,5 +1,6 @@
 #include "rawframe/world_replication/server.h"
 
+#include "rawframe/network/close.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_replication/errors.h"
 #include "rawframe/world_replication/perception.h"
@@ -952,6 +953,18 @@ ServerReplicationStatistics ReplicationServer::statistics() const noexcept {
 
 std::size_t ReplicationServer::connections() const noexcept {
     return state_->peers.size();
+}
+
+void ReplicationServer::noticeStopping() noexcept {
+    std::array<std::byte, 8> bytes{};
+    network::Writer writer{bytes};
+    if (!network::encodeGracefulClose(writer, network::CloseNotice::ServerStopping).has_value()) {
+        return;
+    }
+    for (const auto& [id, peer] : state_->peers) {
+        static_cast<void>(
+            state_->sessions->sendFrame(peer.connection, network::ControlFrame::GracefulClose, writer.written()));
+    }
 }
 
 world::EntityHandle ReplicationServer::player(network::ConnectionId connection) const noexcept {

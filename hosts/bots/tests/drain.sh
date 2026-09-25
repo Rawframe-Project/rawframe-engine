@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # A dedicated server drains (SPEC-0012): asked to stop while bots play, it
-# closes admission, refuses a second bots process as unavailable, keeps
-# serving the first until those bots leave, and only then stops, well
-# within its drain time. Run from the repository root.
+# tells them it is stopping, closes admission, refuses a second bots process
+# as unavailable, keeps serving the first until those bots leave, and only
+# then stops, well within its drain time. Run from the repository root.
 #
 #   drain.sh <rawframe-server> <rawframe-bots>
 set -euo pipefail
@@ -81,4 +81,5 @@ cat "$work/server.log" "$work/playing.log" "$work/late.log"
 grep -q '"reason":"drained"' "$work/server.log"
 grep -q '"admissionsRefused":2' "$work/server.log"
 grep -q '"bots":2,"admitted":0,"unavailable":2' "$work/late.log"
+grep -q '"bots":2,"admitted":2,"unavailable":0,"serverStopping":2' "$work/playing.log"
 echo "drained in order"

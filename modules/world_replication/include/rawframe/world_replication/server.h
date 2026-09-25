@@ -133,6 +133,9 @@ public:
     [[nodiscard]] ServerReplicationStatistics statistics() const noexcept;
     /// Admitted connections, each with its player.
     [[nodiscard]] std::size_t connections() const noexcept;
+    /// Tells every admitted connection the server is stopping (SPEC-0012's
+    /// stopping notice): one `graceful_close` each. Play goes on.
+    void noticeStopping() noexcept;
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
 

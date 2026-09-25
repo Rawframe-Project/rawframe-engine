@@ -2,6 +2,7 @@
 
 #include "interpolation.h"
 #include "prediction.h"
+#include "rawframe/network/close.h"
 #include "rawframe/world_replication/errors.h"
 
 #include <algorithm>
@@ -59,6 +60,7 @@ struct ReplicationClient::State {
     std::optional<network::ConnectionId> connection;
     std::optional<network::Accept> accept;
     std::optional<network::RejectReason> rejection;
+    bool serverStopping = false;
     bool ended = false;
     std::map<std::uint32_t, world::EntityHandle> mirrored;
     MirrorNames names{mirrored};
@@ -102,6 +104,11 @@ struct ReplicationClient::State {
 
     void onFrame(const network::SessionEvent& event) {
         const auto kType = static_cast<network::ControlFrame>(event.frameType);
+        if (kType == network::ControlFrame::GracefulClose) {
+            serverStopping =
+                serverStopping || network::decodeGracefulClose(event.payload) == network::CloseNotice::ServerStopping;
+            return;
+        }
         if (kType != network::ControlFrame::MappingDeclare && kType != network::ControlFrame::MappingRetire) {
             return;
         }
@@ -513,6 +520,10 @@ bool ReplicationClient::admitted() const noexcept {
 
 std::optional<network::RejectReason> ReplicationClient::rejection() const noexcept {
     return state_->rejection;
+}
+
+bool ReplicationClient::serverStopping() const noexcept {
+    return state_->serverStopping;
 }
 
 const std::optional<network::Accept>& ReplicationClient::accept() const noexcept {

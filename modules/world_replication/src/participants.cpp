@@ -153,6 +153,12 @@ public:
             server_->forgetWorld();
         }
         server_->pump(*simulation_->world(), simulation_->tick());
+        // Host phases run once the Host is active, so admission closed here
+        // means it drains: the players hear so once.
+        if (!noticed_ && !context_->admitting()) {
+            noticed_ = true;
+            server_->noticeStopping();
+        }
         context_->reportConnections(server_->connections());
     }
 
@@ -194,6 +200,7 @@ private:
 
     composition::ParticipantContext* context_ = nullptr;
     std::uint64_t refused_ = 0;
+    bool noticed_ = false;
     std::string endpoint_;
     ReplicationPlan* plan_ = nullptr;
     world_runtime::Simulation* simulation_ = nullptr;
@@ -392,6 +399,7 @@ public:
         }
         std::uint64_t admitted = 0;
         std::uint64_t unavailable = 0;
+        std::uint64_t noticed = 0;
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
         PredictionStatistics predicted;
@@ -403,6 +411,7 @@ public:
             interpolated.newest += bot.client->interpolationStatistics().newest;
             admitted += bot.client->admitted() ? 1 : 0;
             unavailable += bot.client->rejection() == network::RejectReason::Unavailable ? 1 : 0;
+            noticed += bot.client->serverStopping() ? 1 : 0;
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
             const PredictionStatistics kBot = bot.client->predictionStatistics();
@@ -419,6 +428,7 @@ public:
                      {diagnostics::field("bots", bots_.size()),
                       diagnostics::field("admitted", admitted),
                       diagnostics::field("unavailable", unavailable),
+                      diagnostics::field("serverStopping", noticed),
                       diagnostics::field("unpredicted", unpredicted_),
                       diagnostics::field("handed", handed),
                       diagnostics::field("sourceFailures", sourceFailures_),
