@@ -5,8 +5,10 @@
 #include "rawframe/network/errors.h"
 #include "rawframe/network_quic/errors.h"
 #include "tls.h"
+#include "webtransport.h"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <deque>
 #include <limits>
@@ -38,6 +40,12 @@ constexpr QUIC_UINT62 kGoneCode = 2;
 
 // The transport error a server sends when its listener refuses (RFC 9000).
 constexpr QUIC_UINT62 kConnectionRefusedError = 0x2;
+
+// A browser's connection: HTTP/3, carrying WebTransport (D172).
+constexpr std::string_view kH3Alpn = "h3";
+// The streams an HTTP/3 peer opens besides its WebTransport ones: its
+// control stream and QPACK's two.
+constexpr std::uint16_t kH3PeerStreams = 3;
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, NetworkError error, std::string_view why) {
     return result::fail(errorClass, network::kNetworkDomain, network::code(error), why);
@@ -111,6 +119,9 @@ struct Connection {
     std::size_t sendingBytes = 0;
     bool datagramsEnabled = false;
     std::size_t datagramLimit = 0;
+    /// A browser's connection: its HTTP/3 and WebTransport, which it is
+    /// announced only once it opens a session through.
+    std::unique_ptr<WebTransportServer> web;
 
     void noteReason(CloseReason why) noexcept {
         if (!reasonKnown) {
@@ -164,6 +175,10 @@ struct Core {
     /// Starts ending a connection: the peer hears `code`, the owner hears
     /// `why` once MsQuic has finished with it.
     void shutDown(Connection& connection, CloseReason why, QUIC_UINT62 code) noexcept {
+        // A browser hears HTTP/3's codes; Rawframe's own mean nothing to it.
+        if (connection.web != nullptr && code < kH3NoError) {
+            code = kH3NoError;
+        }
         connection.noteReason(why);
         connection.open = false;
         if (connection.handle != nullptr) {
@@ -196,6 +211,76 @@ void closeStream(Core& core, Stream* stream) noexcept {
     delete stream;
 }
 
+void deliverStreamBytes(Core& core, Connection& connection, const Stream& stream, std::vector<std::byte> bytes) {
+    if (!core.fits(connection, bytes.size())) {
+        // A reliable stream cannot drop bytes, so the connection ends.
+        core.shutDown(connection, CloseReason::QueueExhausted, kQueueExhaustedCode);
+        return;
+    }
+    core.deliver(connection,
+                 Event{.kind = EventKind::StreamBytes, .stream = StreamId{stream.id}, .bytes = std::move(bytes)});
+}
+
+/// Hands bytes this side sends of its own (HTTP/3's, not the owner's) to
+/// MsQuic on `stream`. False if MsQuic refused them.
+bool sendOwn(Core& core, Connection& connection, HQUIC stream, std::span<const std::byte> bytes) {
+    auto* sending = new Sending{.connection = connection.id};
+    const auto* kFirst = reinterpret_cast<const std::uint8_t*>(bytes.data());
+    sending->bytes.assign(kFirst, kFirst + bytes.size());
+    sending->buffer.Length = static_cast<std::uint32_t>(sending->bytes.size());
+    sending->buffer.Buffer = sending->bytes.data();
+    connection.sendingBytes += bytes.size();
+    if (QUIC_FAILED(core.api->StreamSend(stream, &sending->buffer, 1, QUIC_SEND_FLAG_NONE, sending))) {
+        releaseSending(core, sending);
+        return false;
+    }
+    return true;
+}
+
+/// What a browser's stream carried: HTTP/3 this side answers, the session
+/// opening or ending, or the owner's bytes.
+void arrivedOnWeb(Core& core, Connection& connection, Stream& stream, std::span<const std::byte> bytes, bool finished) {
+    WebTransportServer::Arrived arrived = connection.web->receive(stream.id, bytes, finished);
+    if (arrived.failure.has_value()) {
+        core.shutDown(connection, CloseReason::PeerGone, *arrived.failure);
+        return;
+    }
+    if (!arrived.reply.empty() && !sendOwn(core, connection, stream.handle, arrived.reply)) {
+        core.shutDown(connection, CloseReason::PeerGone, kH3NoError);
+        return;
+    }
+    if (arrived.opened) {
+        connection.announced = true;
+        core.deliver(connection, Event{.kind = EventKind::Accepted});
+    }
+    if (!arrived.bytes.empty() && connection.announced) {
+        deliverStreamBytes(core, connection, stream, std::move(arrived.bytes));
+    }
+    if (arrived.closed) {
+        core.shutDown(connection, CloseReason::Closed, kH3NoError);
+    }
+}
+
+/// Opens this side's HTTP/3 control stream and says its SETTINGS. It is a
+/// one-way stream of this side's, numbered like the rest.
+bool openControlStream(Core& core, Connection& connection) {
+    const std::uint64_t kId = (connection.unidirectionalOpened << 2U) | 2U | 1U;
+    auto stream = std::make_unique<Stream>(Stream{.core = &core, .connection = connection.id, .id = kId});
+    if (QUIC_FAILED(core.api->StreamOpen(
+            connection.handle, QUIC_STREAM_OPEN_FLAG_UNIDIRECTIONAL, &streamCallback, stream.get(), &stream->handle))) {
+        return false;
+    }
+    if (QUIC_FAILED(core.api->StreamStart(
+            stream->handle, QUIC_STREAM_START_FLAG_IMMEDIATE | QUIC_STREAM_START_FLAG_SHUTDOWN_ON_FAIL))) {
+        core.api->StreamClose(stream->handle);
+        return false;
+    }
+    ++connection.unidirectionalOpened;
+    Stream* kept = stream.release();
+    connection.streams.emplace(kId, kept);
+    return sendOwn(core, connection, kept->handle, WebTransportServer::controlStream());
+}
+
 QUIC_STATUS streamCallback(HQUIC, void* context, QUIC_STREAM_EVENT* event) noexcept {
     auto* stream = static_cast<Stream*>(context);
     Core& core = *stream->core;
@@ -219,13 +304,18 @@ QUIC_STATUS streamCallback(HQUIC, void* context, QUIC_STREAM_EVENT* event) noexc
             const auto kBytes = std::as_bytes(std::span{kBuffer.Buffer, kBuffer.Length});
             bytes.insert(bytes.end(), kBytes.begin(), kBytes.end());
         }
-        if (!core.fits(*connection, bytes.size())) {
-            // A reliable stream cannot drop bytes, so the connection ends.
-            core.shutDown(*connection, CloseReason::QueueExhausted, kQueueExhaustedCode);
+        if (connection->web != nullptr) {
+            arrivedOnWeb(core, *connection, *stream, bytes, false);
             break;
         }
-        core.deliver(*connection,
-                     Event{.kind = EventKind::StreamBytes, .stream = StreamId{stream->id}, .bytes = std::move(bytes)});
+        deliverStreamBytes(core, *connection, *stream, std::move(bytes));
+        break;
+    }
+    case QUIC_STREAM_EVENT_PEER_SEND_SHUTDOWN: {
+        Connection* connection = core.find(stream->connection);
+        if (connection != nullptr && connection->open && connection->web != nullptr) {
+            arrivedOnWeb(core, *connection, *stream, {}, true);
+        }
         break;
     }
     case QUIC_STREAM_EVENT_SEND_COMPLETE:
@@ -286,13 +376,34 @@ QUIC_STATUS connectionCallback(HQUIC, void* context, QUIC_CONNECTION_EVENT* even
     Core& core = *connection->core;
     const std::lock_guard kLock{core.mutex};
     switch (event->Type) {
-    case QUIC_CONNECTION_EVENT_CONNECTED:
-        if (connection->open) {
+    case QUIC_CONNECTION_EVENT_CONNECTED: {
+        // MsQuic says whether datagrams may be sent only some packets after
+        // the handshake (D172); asked now, a datagram sent at once is not
+        // dropped. The path's limit follows with its first state change.
+        std::uint8_t sendEnabled = 0;
+        std::uint32_t length = sizeof(sendEnabled);
+        if (!connection->datagramsEnabled &&
+            QUIC_SUCCEEDED(
+                core.api->GetParam(connection->handle, QUIC_PARAM_CONN_DATAGRAM_SEND_ENABLED, &length, &sendEnabled)) &&
+            sendEnabled != 0) {
+            connection->datagramsEnabled = true;
+            connection->datagramLimit = core.profile.maximumDatagram;
+        }
+        if (connection->open && !connection->connector &&
+            std::string_view{reinterpret_cast<const char*>(event->CONNECTED.NegotiatedAlpn),
+                             event->CONNECTED.NegotiatedAlpnLength} == kH3Alpn) {
+            // A browser: announced once its session opens, not before.
+            connection->web = std::make_unique<WebTransportServer>();
+            if (!openControlStream(core, *connection)) {
+                core.shutDown(*connection, CloseReason::PeerGone, kH3NoError);
+            }
+        } else if (connection->open) {
             connection->announced = true;
             core.deliver(*connection,
                          Event{.kind = connection->connector ? EventKind::Connected : EventKind::Accepted});
         }
         break;
+    }
     case QUIC_CONNECTION_EVENT_PEER_CERTIFICATE_RECEIVED: {
         // Portable certificates: the DER bytes, which the pin is the SHA-256 of.
         const auto* certificate = static_cast<const QUIC_BUFFER*>(event->PEER_CERTIFICATE_RECEIVED.Certificate);
@@ -336,12 +447,16 @@ QUIC_STATUS connectionCallback(HQUIC, void* context, QUIC_CONNECTION_EVENT* even
         break;
     case QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED: {
         const QUIC_BUFFER& kBuffer = *event->DATAGRAM_RECEIVED.Buffer;
-        if (!connection->open || !core.fits(*connection, kBuffer.Length)) {
+        std::optional<std::span<const std::byte>> payload = std::as_bytes(std::span{kBuffer.Buffer, kBuffer.Length});
+        if (connection->web != nullptr) {
+            // A browser's datagram names its session first.
+            payload = connection->web->datagram(*payload);
+        }
+        if (!connection->open || !connection->announced || !payload || !core.fits(*connection, payload->size())) {
             ++core.statistics.datagramsDropped;
             break;
         }
-        const auto kBytes = std::as_bytes(std::span{kBuffer.Buffer, kBuffer.Length});
-        core.deliver(*connection, Event{.kind = EventKind::Datagram, .bytes = {kBytes.begin(), kBytes.end()}});
+        core.deliver(*connection, Event{.kind = EventKind::Datagram, .bytes = {payload->begin(), payload->end()}});
         break;
     }
     case QUIC_CONNECTION_EVENT_DATAGRAM_SEND_STATE_CHANGED: {
@@ -388,12 +503,22 @@ QUIC_STATUS listenerCallback(HQUIC, void* context, QUIC_LISTENER_EVENT* event) n
     return QUIC_STATUS_SUCCESS;
 }
 
+/// Rawframe's ALPN, and HTTP/3's after it where a server accepts browsers.
+std::array<QUIC_BUFFER, 2> alpnsFor(bool browsers) noexcept {
+    const auto kBuffer = [](std::string_view alpn) {
+        return QUIC_BUFFER{static_cast<std::uint32_t>(alpn.size()),
+                           reinterpret_cast<std::uint8_t*>(const_cast<char*>(alpn.data()))};
+    };
+    return {kBuffer(kAlpn), browsers ? kBuffer(kH3Alpn) : QUIC_BUFFER{}};
+}
+
 /// A configuration: ALPN, the settings a profile implies, and credentials.
 HQUIC openConfiguration(const QUIC_API_TABLE& api,
                         HQUIC registration,
                         const QuicSettings& settings,
                         const network::ProviderProfile& profile,
-                        const QUIC_CREDENTIAL_CONFIG& credential) {
+                        const QUIC_CREDENTIAL_CONFIG& credential,
+                        bool browsers) {
     QUIC_SETTINGS quic{};
     quic.IdleTimeoutMs = static_cast<std::uint64_t>(settings.idleTimeout.nanoseconds / 1'000'000);
     quic.IsSet.IdleTimeoutMs = 1;
@@ -403,7 +528,8 @@ HQUIC openConfiguration(const QUIC_API_TABLE& api,
         static_cast<std::uint16_t>(std::min<std::size_t>(profile.maximumStreamsPerConnection, 65'535));
     quic.PeerBidiStreamCount = kStreams;
     quic.IsSet.PeerBidiStreamCount = 1;
-    quic.PeerUnidiStreamCount = kStreams;
+    quic.PeerUnidiStreamCount =
+        static_cast<std::uint16_t>(browsers ? std::min(kStreams + kH3PeerStreams, 65'535) : kStreams);
     quic.IsSet.PeerUnidiStreamCount = 1;
     quic.DatagramReceiveEnabled = 1;
     quic.IsSet.DatagramReceiveEnabled = 1;
@@ -411,11 +537,10 @@ HQUIC openConfiguration(const QUIC_API_TABLE& api,
     quic.ServerResumptionLevel = QUIC_SERVER_NO_RESUME;
     quic.IsSet.ServerResumptionLevel = 1;
 
-    const QUIC_BUFFER kAlpnBuffer{static_cast<std::uint32_t>(kAlpn.size()),
-                                  reinterpret_cast<std::uint8_t*>(const_cast<char*>(kAlpn.data()))};
+    const std::array<QUIC_BUFFER, 2> kAlpns = alpnsFor(browsers);
     HQUIC configuration = nullptr;
-    if (QUIC_FAILED(
-            api.ConfigurationOpen(registration, &kAlpnBuffer, 1, &quic, sizeof(quic), nullptr, &configuration))) {
+    if (QUIC_FAILED(api.ConfigurationOpen(
+            registration, kAlpns.data(), browsers ? 2U : 1U, &quic, sizeof(quic), nullptr, &configuration))) {
         return nullptr;
     }
     if (QUIC_FAILED(api.ConfigurationLoadCredential(configuration, &credential))) {
@@ -511,9 +636,9 @@ public:
         if (QUIC_FAILED(core_->api->ListenerOpen(core_->registration, &listenerCallback, core_.get(), &listener))) {
             return fail(result::ErrorClass::Unavailable, QuicError::Unavailable, "MsQuic could not open a listener");
         }
-        const QUIC_BUFFER kAlpnBuffer{static_cast<std::uint32_t>(kAlpn.size()),
-                                      reinterpret_cast<std::uint8_t*>(const_cast<char*>(kAlpn.data()))};
-        if (QUIC_FAILED(core_->api->ListenerStart(listener, &kAlpnBuffer, 1, &address))) {
+        const bool kBrowsers = core_->settings->webTransport;
+        const std::array<QUIC_BUFFER, 2> kAlpns = alpnsFor(kBrowsers);
+        if (QUIC_FAILED(core_->api->ListenerStart(listener, kAlpns.data(), kBrowsers ? 2U : 1U, &address))) {
             // Never started, so closing it waits for nothing.
             core_->api->ListenerClose(listener);
             return refuse(result::ErrorClass::AlreadyExists, NetworkError::Unreachable, "the endpoint is taken");
@@ -565,6 +690,11 @@ public:
     result::Result<StreamId> openStream(ConnectionId connection, bool unidirectional) override {
         std::unique_lock lock{core_->mutex};
         RAWFRAME_TRY_ASSIGN(Connection * link, openConnection(connection));
+        if (link->web != nullptr && !link->web->open()) {
+            return refuse(result::ErrorClass::FailedPrecondition,
+                          NetworkError::StaleConnection,
+                          "a browser's connection has no session to open a stream in");
+        }
         std::uint64_t& opened = unidirectional ? link->unidirectionalOpened : link->bidirectionalOpened;
         if (link->bidirectionalOpened + link->unidirectionalOpened >= core_->profile.maximumStreamsPerConnection) {
             return refuse(
@@ -592,7 +722,13 @@ public:
                 result::ErrorClass::FailedPrecondition, NetworkError::StaleConnection, "the stream could not start");
         }
         ++opened;
-        link->streams.emplace(kId, stream.release());
+        Stream* kept = stream.release();
+        link->streams.emplace(kId, kept);
+        // A browser's stream names the session it belongs to first.
+        if (link->web != nullptr && !sendOwn(*core_, *link, kept->handle, link->web->streamPreface(unidirectional))) {
+            return refuse(
+                result::ErrorClass::FailedPrecondition, NetworkError::StaleConnection, "the stream could not start");
+        }
         return StreamId{kId};
     }
 
@@ -633,9 +769,19 @@ public:
     result::Status sendDatagram(ConnectionId connection, std::span<const std::byte> bytes) override {
         const std::lock_guard kLock{core_->mutex};
         RAWFRAME_TRY_ASSIGN(Connection * link, openConnection(connection));
+        // A browser's datagram names its session first.
+        std::vector<std::byte> named;
+        if (link->web != nullptr) {
+            named = link->web->datagramPrefix();
+            named.insert(named.end(), bytes.begin(), bytes.end());
+        }
+        const std::size_t kOnPath = link->web != nullptr ? named.size() : bytes.size();
         if (bytes.size() > core_->profile.maximumDatagram ||
-            (link->datagramsEnabled && bytes.size() > link->datagramLimit)) {
+            (link->datagramsEnabled && kOnPath > link->datagramLimit)) {
             return refuse(result::ErrorClass::InvalidArgument, NetworkError::TooLarge, "a datagram is too large");
+        }
+        if (link->web != nullptr) {
+            bytes = named;
         }
         ++core_->statistics.datagramsSent;
         // Unreliable: with no room on the path or in the budget it is lost.
@@ -764,8 +910,8 @@ result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const n
         QUIC_CREDENTIAL_CONFIG credential{};
         credential.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_PKCS12;
         credential.CertificatePkcs12 = &bundle;
-        core->serverConfiguration =
-            openConfiguration(*state_->api, state_->registration, state_->settings, profile, credential);
+        core->serverConfiguration = openConfiguration(
+            *state_->api, state_->registration, state_->settings, profile, credential, state_->settings.webTransport);
         if (core->serverConfiguration == nullptr) {
             return fail(result::ErrorClass::Unavailable, QuicError::BadCertificate, "MsQuic refused the certificate");
         }
@@ -779,7 +925,7 @@ result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const n
                            QUIC_CREDENTIAL_FLAG_INDICATE_CERTIFICATE_RECEIVED |
                            QUIC_CREDENTIAL_FLAG_USE_PORTABLE_CERTIFICATES;
         core->clientConfiguration =
-            openConfiguration(*state_->api, state_->registration, state_->settings, profile, credential);
+            openConfiguration(*state_->api, state_->registration, state_->settings, profile, credential, false);
         if (core->clientConfiguration == nullptr) {
             if (core->serverConfiguration != nullptr) {
                 state_->api->ConfigurationClose(core->serverConfiguration);

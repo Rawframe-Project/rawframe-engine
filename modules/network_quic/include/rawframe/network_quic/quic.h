@@ -31,6 +31,10 @@ struct QuicSettings {
     execution::MonotonicDuration idleTimeout = execution::MonotonicDuration::fromSeconds(10);
     /// How often an otherwise quiet connection says it is alive.
     execution::MonotonicDuration keepAlive = execution::MonotonicDuration::fromSeconds(2);
+    /// A server also accepts browsers: HTTP/3 connections (ALPN `h3`) that
+    /// open one WebTransport session, each then a connection like any
+    /// other, its bytes those inside the session (D172).
+    bool webTransport = false;
 };
 
 class QuicNetwork {

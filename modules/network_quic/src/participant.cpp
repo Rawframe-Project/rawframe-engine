@@ -91,7 +91,7 @@ private:
     std::optional<Fingerprint> identity_;
 };
 
-result::Result<std::optional<Certificate>> identityOf(const composition::Configuration& configuration) {
+result::Result<std::optional<Certificate>> identityOf(const composition::Configuration& configuration, bool browsers) {
     const auto kCertificateFile = configuration.text("network.quic.certificate_file");
     const auto kKeyFile = configuration.text("network.quic.private_key_file");
     const auto kSelfSigned = configuration.text("network.quic.self_signed");
@@ -103,8 +103,10 @@ result::Result<std::optional<Certificate>> identityOf(const composition::Configu
         return badFile("a QUIC identity is a certificate and key file pair, or self-signed, not both");
     }
     if (kMake) {
-        // Thirty days: an identity made at start lives as long as the process.
-        RAWFRAME_TRY_ASSIGN(Certificate made, makeSelfSignedCertificate("rawframe-server", 30));
+        // Thirty days: an identity made at start lives as long as the
+        // process. Thirteen where browsers connect: a browser pins a
+        // certificate by its hash only if it lives at most fourteen.
+        RAWFRAME_TRY_ASSIGN(Certificate made, makeSelfSignedCertificate("rawframe-server", browsers ? 13 : 30));
         return std::optional<Certificate>{std::move(made)};
     }
     if (!kCertificateFile.has_value()) {
@@ -146,10 +148,15 @@ result::Result<composition::ParticipantOwner> makeQuic(composition::ParticipantC
                             network::code(network::NetworkError::InvalidProfile),
                             "a QUIC timeout is at most an hour");
     }
+    const auto kBrowsers = configuration.text("network.quic.webtransport");
+    if (kBrowsers.has_value() && *kBrowsers != "true" && *kBrowsers != "false") {
+        return badFile("network.quic.webtransport is true or false");
+    }
     QuicSettings settings{
         .idleTimeout = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kIdle)),
-        .keepAlive = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kKeepAlive))};
-    RAWFRAME_TRY_ASSIGN(settings.certificate, identityOf(configuration));
+        .keepAlive = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kKeepAlive)),
+        .webTransport = kBrowsers == "true"};
+    RAWFRAME_TRY_ASSIGN(settings.certificate, identityOf(configuration, settings.webTransport));
     RAWFRAME_TRY_ASSIGN(settings.pin, pinOf(configuration));
     std::optional<Fingerprint> identity;
     if (settings.certificate.has_value()) {

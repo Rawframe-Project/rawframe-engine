@@ -10,6 +10,7 @@
 
 #include <arpa/inet.h>
 #include <chrono>
+#include <cstdio>
 #include <functional>
 #include <netinet/in.h>
 #include <string>
@@ -279,5 +280,60 @@ RAWFRAME_TEST(SessionsAdmitOverQuic) {
         // Epochs from the secure source, the same on both sides.
         RAWFRAME_EXPECT(admitted->accept.replicationEpoch == granted->accept.replicationEpoch);
         RAWFRAME_EXPECT(admitted->accept.replicationEpoch != 0);
+    }
+}
+
+RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
+    // aioquic, an independent HTTP/3 and WebTransport implementation, plays
+    // the browser (D172): it opens a session, sends on a stream and as a
+    // datagram, and the owner answers each way, as on any connection.
+    const auto kIdentity = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
+    auto network = QuicNetwork::create(QuicSettings{.certificate = kIdentity, .webTransport = true});
+    RAWFRAME_EXPECT(network.has_value());
+    if (!network.has_value()) {
+        return;
+    }
+    auto server = *(*network)->provider(kProfile);
+    const std::uint16_t kPort = freePort();
+    RAWFRAME_EXPECT(server->listen({endpointAt(kPort)}).has_value());
+    std::string said;
+    std::thread browser{[&said, kPort] {
+        const std::string kCommand = "python3 " RAWFRAME_WEBTRANSPORT_CLIENT " " + std::to_string(kPort) + " 2>&1";
+        if (std::FILE* output = ::popen(kCommand.c_str(), "r")) {
+            char buffer[256];
+            while (std::fgets(buffer, sizeof buffer, output) != nullptr) {
+                said += buffer;
+            }
+            said += ::pclose(output) == 0 ? "" : "(failed)";
+        }
+    }};
+    std::vector<Event> events;
+    ConnectionId browserSide;
+    bool answeredStream = false;
+    bool answeredDatagram = false;
+    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+    while (std::chrono::steady_clock::now() < kDeadline && !(answeredStream && answeredDatagram)) {
+        events.clear();
+        server->poll(events, 64);
+        for (const Event& event : events) {
+            if (event.kind == EventKind::Accepted) {
+                browserSide = event.connection;
+            } else if (event.kind == EventKind::StreamBytes && event.bytes == bytesOf("ping")) {
+                RAWFRAME_EXPECT(server->send(browserSide, event.stream, bytesOf("pong")).has_value());
+                const auto kOwn = server->openStream(browserSide, true);
+                RAWFRAME_EXPECT(kOwn.has_value() && server->send(browserSide, *kOwn, bytesOf("hello")).has_value());
+                answeredStream = true;
+            } else if (event.kind == EventKind::Datagram && event.bytes == bytesOf("dgram")) {
+                RAWFRAME_EXPECT(server->sendDatagram(browserSide, bytesOf("back")).has_value());
+                answeredDatagram = true;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    browser.join();
+    RAWFRAME_EXPECT(browserSide.valid() && answeredStream && answeredDatagram);
+    RAWFRAME_EXPECT(said.find("webtransport: answered") != std::string::npos);
+    if (said.find("webtransport: answered") == std::string::npos) {
+        std::fprintf(stderr, "%s\n", said.c_str());
     }
 }

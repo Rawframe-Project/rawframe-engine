@@ -20,6 +20,10 @@ namespace rawframe::network_quic {
 ///   network.quic.pin_file           the same, read from a file
 ///   network.quic.idle_timeout_ms    (10000)
 ///   network.quic.keep_alive_ms      (2000)
+///   network.quic.webtransport       true: a server also accepts browsers
+///                                   over WebTransport (D172); a
+///                                   self-signed identity then lives
+///                                   13 days, as browsers require (false)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::Runtime);
