@@ -14,6 +14,16 @@ namespace rawframe::world_kest {
 
 namespace {
 
+/// Sixteen hexadecimal digits, as identities are written in lines.
+std::optional<std::uint64_t> parseHex64(std::string_view word) noexcept {
+    std::uint64_t value = 0;
+    const auto kRead = std::from_chars(word.data(), word.data() + word.size(), value, 16);
+    if (word.size() != 16 || kRead.ec != std::errc{} || kRead.ptr != word.data() + word.size()) {
+        return std::nullopt;
+    }
+    return value;
+}
+
 std::vector<std::string_view> words(std::string_view line) {
     std::vector<std::string_view> found;
     std::size_t at = 0;
@@ -79,6 +89,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     GameDescription game;
     bool haveProgram = false;
     std::size_t actionsLine = 0;
+    std::size_t mixerLine = 0;
+    std::size_t firstSoundLine = 0;
+    GameAudio audio;
     std::size_t sampleLine = 0;
     GameControls controls;
     std::size_t number = 0;
@@ -117,6 +130,22 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             controls.actions = kWords[1];
             actionsLine = number;
+        } else if (kKeyword == "mixer") {
+            if (mixerLine != 0 || kWords.size() != 2) {
+                return badLine(number, WorldKestError::BadGameLine, "a game names one mixer layout, `mixer <file>`");
+            }
+            audio.mixer = kWords[1];
+            mixerLine = number;
+        } else if (kKeyword == "sound") {
+            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(number, WorldKestError::BadGameLine, "a sound line is `sound <16 hex digits> <file>`");
+            }
+            if (std::ranges::contains(audio.sounds, *kId, &GameSound::id)) {
+                return badLine(number, WorldKestError::BadGameLine, "a sound's identity is used once");
+            }
+            audio.sounds.push_back(GameSound{.id = *kId, .path = std::string{kWords[2]}});
+            firstSoundLine = firstSoundLine == 0 ? number : firstSoundLine;
         } else if (kKeyword == "sample") {
             if (sampleLine != 0 || kWords.size() != 3) {
                 return badLine(
@@ -387,6 +416,12 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     }
     if (actionsLine != 0) {
         game.controls = std::move(controls);
+    }
+    if (firstSoundLine != 0 && mixerLine == 0) {
+        return badLine(firstSoundLine, WorldKestError::BadGameLine, "sound lines need a mixer line");
+    }
+    if (mixerLine != 0) {
+        game.audio = std::move(audio);
     }
     return game;
 }

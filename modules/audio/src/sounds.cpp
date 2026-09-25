@@ -428,6 +428,10 @@ InstanceState Sounds::state(Instance instance) const noexcept {
     return state.instances[instance.slot].state;
 }
 
+const SoundDeclaration* Sounds::declaration(std::size_t sound) const noexcept {
+    return sound < state_->sounds.size() ? &state_->sounds[sound].declaration : nullptr;
+}
+
 const SoundsStatistics& Sounds::statistics() const noexcept {
     return state_->statistics;
 }

@@ -193,6 +193,20 @@ struct GameControls {
     std::string entry;
 };
 
+/// A declared sound, by the identity emitters name it by (ADR-0038).
+struct GameSound {
+    std::uint64_t id = 0;
+    /// Its `audio.sound` document, beside the description.
+    std::string path;
+};
+
+/// How a client sounds the game: its mixer layout and its sounds. Clients
+/// read the files; a server never opens them.
+struct GameAudio {
+    std::string mixer;
+    std::vector<GameSound> sounds;
+};
+
 struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
@@ -220,6 +234,9 @@ struct GameDescription {
     /// From an `actions <file>` line and a `sample <program> <entry>` line,
     /// which come together and need an `input` line.
     std::optional<GameControls> controls;
+    /// From a `mixer <file>` line and `sound <16 hex digits> <file>` lines,
+    /// which need it.
+    std::optional<GameAudio> audio;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as

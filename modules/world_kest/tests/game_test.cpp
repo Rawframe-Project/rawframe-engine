@@ -108,6 +108,22 @@ RAWFRAME_TEST(ControlsAreDeclaredByLine) {
     RAWFRAME_EXPECT(refusedAt(std::string{kHead} + "input a.stick\nsample s.kest\n", WorldKestError::BadGameLine, "4"));
 }
 
+RAWFRAME_TEST(AudioIsDeclaredByLine) {
+    auto game = parseGame("program p.kest\nmixer game.mixer\nsound 00000000000000a1 steps.sound\n"
+                          "sound 00000000000000a2 shot.sound\n");
+    RAWFRAME_EXPECT(game.has_value() && game->audio.has_value() && game->audio->mixer == "game.mixer" &&
+                    game->audio->sounds.size() == 2 && game->audio->sounds[1].id == 0xa2 &&
+                    game->audio->sounds[1].path == "shot.sound");
+    RAWFRAME_EXPECT(!parseGame("program p.kest\n")->audio.has_value());
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nsound 00000000000000a1 a.sound\n", WorldKestError::BadGameLine, "2"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nmixer m\nsound a1 a.sound\n", WorldKestError::BadGameLine, "3"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nmixer m\nsound 00000000000000a1 a.sound\nsound 00000000000000a1 "
+                              "b.sound\n",
+                              WorldKestError::BadGameLine,
+                              "4"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nmixer m\nmixer n\n", WorldKestError::BadGameLine, "3"));
+}
+
 RAWFRAME_TEST(InterestIsDeclaredByLine) {
     constexpr std::string_view kProgram = "program p.kest\n"
                                           "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.position Position\n";

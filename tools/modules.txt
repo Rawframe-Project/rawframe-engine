@@ -25,6 +25,7 @@ physics3d: physics world_runtime world composition schema execution diagnostics 
 world_kest: physics2d physics3d physics world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics result base
 world_replication: world_runtime network world composition schema execution diagnostics result base
 input_kest: input document world_kest world_replication kest world composition execution diagnostics result base
+world_audio: audio physics2d physics3d world_kest kest world schema execution diagnostics document result base
 host: composition execution diagnostics result base
 dedicated_server: host network_quic physics2d physics3d world_replication world_kest world_runtime composition diagnostics result base
 arena: host input_kest network_loopback physics2d physics3d world_replication world_kest world_runtime composition diagnostics result base

@@ -1,0 +1,29 @@
+module rawframe.sound
+
+// Sound as World data (ADR-0038): which entity sounds and which one hears.
+// A game declares components of these types; clients play them, and a
+// server carries them as it carries any other value, with no sound of its
+// own.
+
+// Despawn policies: what becomes of an emitter's continuous sound when the
+// emitter goes away.
+const STOP: u8 = 0
+const FADE_OUT: u8 = 1
+const DETACH_TO_COMPLETION: u8 = 2
+
+// An entity that sounds: the declared sound, by the identity the game's
+// `sound` line gives it, from where the entity's pose puts it. While
+// `playing`, the sound plays on; each step `cue` takes plays it once more
+// to its end. `despawn` is one of the policies above.
+struct Emitter {
+    sound: u64
+    cue: u32
+    playing: bool
+    despawn: u8
+}
+
+// Who hears, from where its pose puts it and facing as the pose turns it.
+// Exactly one listener is active at a time; two is no listener at all.
+struct Listener {
+    active: bool
+}

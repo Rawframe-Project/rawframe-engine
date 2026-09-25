@@ -103,6 +103,8 @@ public:
     void update(float seconds);
 
     [[nodiscard]] InstanceState state(Instance instance) const noexcept;
+    /// Sound `sound`'s declaration, or null for one not added.
+    [[nodiscard]] const SoundDeclaration* declaration(std::size_t sound) const noexcept;
     [[nodiscard]] const SoundsStatistics& statistics() const noexcept;
 
 private:
