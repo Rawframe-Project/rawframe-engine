@@ -7,6 +7,7 @@
 #include "rawframe/localization/number.h"
 #include "rawframe/localization/plural.h"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <map>
@@ -124,8 +125,9 @@ std::string plainOf(const Resolved& resolved) {
     }
     // Checked finite, with digits in order and under the ceiling: always
     // written.
-    return plainDecimal(
-               std::get<double>(resolved.value), kMinimum, annotation.maximumFraction.value_or(kDefaultMaximumFraction))
+    return plainDecimal(std::get<double>(resolved.value),
+                        kMinimum,
+                        annotation.maximumFraction.value_or(std::max(kMinimum, kDefaultMaximumFraction)))
         .value_or("");
 }
 

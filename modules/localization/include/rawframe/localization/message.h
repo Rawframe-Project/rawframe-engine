@@ -22,7 +22,9 @@
 // The functions are `:string` (no options), `:integer` (`select` of
 // `cardinal`, `ordinal`, or `exact`, and `useGrouping` of `auto` or
 // `never`), and `:number` (those, and `minimumFractionDigits` and
-// `maximumFractionDigits`, 0 to 15, by default 0 and 3). A function on a
+// `maximumFractionDigits`, 0 to 15, by default 0 and 3 or the minimum if
+// that is more, as ECMA-402 does (D143); only a written maximum below the
+// minimum is refused). A function on a
 // value a declaration already annotated keeps that annotation's options
 // unless it sets them again. Operands are variables or quoted literals;
 // markup, attributes, and every other function are refused.

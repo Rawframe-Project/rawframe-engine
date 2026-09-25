@@ -55,28 +55,28 @@ RAWFRAME_TEST(ASimpleMessageIsTextAndPlaceholders) {
 
 RAWFRAME_TEST(MessagesOutOfTheSubsetAreRefused) {
     for (const std::string_view kBad : {
-             " Hello",                                         // leading whitespace in a simple message (D143)
-             ".hello",                                         // a simple message beginning with `.`
-             "{$x :datetime}",                                 // an unknown function
-             "{$x :ns:number}",                                // a namespaced function
-             "{#b}bold{/b}",                                   // markup
-             "{$x @attribute}",                                // an attribute
-             "{$x :string style=loud}",                        // an option :string does not take
-             "{$x :integer minimumFractionDigits=1}",          // an option :integer does not take
-             "{$x :number minimumFractionDigits=16}",          // past the ceiling
-             "{$x :number minimumFractionDigits=4}",           // above the default maximum
-             "{$x :number select=$y}",                         // a variable option
-             "{$x :number select=exact select=ordinal}",       // an option twice
-             "{|text|}",                                       // a placeholder without a variable
-             "{42}",                                           // an unquoted literal
-             "{$X}",                                           // a variable out of the name form
-             "{$x:number}",                                    // parts not apart
-             "a } b",                                          // an unescaped brace
-             "\\n",                                            // an escape the subset lacks
-             "{$x",                                            // an expression unclosed
-             ".input {$n :integer} {{a}} b",                   // text past the quoted pattern
-             ".input {$n :integer} .match $n one {{a}}",       // no all-`*` variant
-             ".input {$n :integer} .match $n * {{a}} * {{b}}", // two
+             " Hello",                                // leading whitespace in a simple message (D143)
+             ".hello",                                // a simple message beginning with `.`
+             "{$x :datetime}",                        // an unknown function
+             "{$x :ns:number}",                       // a namespaced function
+             "{#b}bold{/b}",                          // markup
+             "{$x @attribute}",                       // an attribute
+             "{$x :string style=loud}",               // an option :string does not take
+             "{$x :integer minimumFractionDigits=1}", // an option :integer does not take
+             "{$x :number minimumFractionDigits=16}", // past the ceiling
+             "{$x :number minimumFractionDigits=2 maximumFractionDigits=1}",  // out of order
+             "{$x :number select=$y}",                                        // a variable option
+             "{$x :number select=exact select=ordinal}",                      // an option twice
+             "{|text|}",                                                      // a placeholder without a variable
+             "{42}",                                                          // an unquoted literal
+             "{$X}",                                                          // a variable out of the name form
+             "{$x:number}",                                                   // parts not apart
+             "a } b",                                                         // an unescaped brace
+             "\\n",                                                           // an escape the subset lacks
+             "{$x",                                                           // an expression unclosed
+             ".input {$n :integer} {{a}} b",                                  // text past the quoted pattern
+             ".input {$n :integer} .match $n one {{a}}",                      // no all-`*` variant
+             ".input {$n :integer} .match $n * {{a}} * {{b}}",                // two
              ".input {$n :integer} .match $n one {{a}} one {{b}} * {{c}}",    // the same keys twice
              ".input {$n :integer} .match $n |one| {{a}} * {{b}}",            // a quoted key for a number
              ".input {$n :integer} .match $n lots {{a}} * {{b}}",             // a key neither category nor integer
@@ -162,6 +162,8 @@ RAWFRAME_TEST(NumbersAreWrittenAsTheirFunctionsSay) {
     RAWFRAME_EXPECT(said("{$x}", "en", {{"x", 1234.5678}}) == "1,234.568");
     RAWFRAME_EXPECT(said("{$x :number maximumFractionDigits=1}", "de", {{"x", 1234.56}}) == "1.234,6");
     RAWFRAME_EXPECT(said("{$x :number minimumFractionDigits=2}", "fr", {{"x", std::int64_t{1234}}}) == "1\u202F234,00");
+    // A minimum past the default maximum raises it.
+    RAWFRAME_EXPECT(said("{$x :number minimumFractionDigits=5}", "en", {{"x", 0.5}}) == "0.50000");
     RAWFRAME_EXPECT(said("{$x :integer useGrouping=never}", "en", {{"x", std::int64_t{-1234}}}) == "-1234");
     RAWFRAME_EXPECT(said("{$x :string}", "en", {{"x", true}}) == "true");
     // A local keeps the options it inherits and sets its own.

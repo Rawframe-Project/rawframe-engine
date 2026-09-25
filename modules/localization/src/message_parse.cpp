@@ -274,8 +274,8 @@ result::Result<std::optional<Annotation>> checked(const Expression& expression,
         }
     }
     const std::optional<Annotation> kMade = applied(base, expression.annotation);
-    if (kMade.has_value() && kMade->function == MessageFunction::Number &&
-        kMade->minimumFraction.value_or(0) > kMade->maximumFraction.value_or(kDefaultMaximumFraction)) {
+    if (kMade.has_value() && kMade->function == MessageFunction::Number && kMade->maximumFraction.has_value() &&
+        kMade->minimumFraction.value_or(0) > *kMade->maximumFraction) {
         return invalid("a number's minimumFractionDigits is at most its maximumFractionDigits");
     }
     if (expression.operand.literal && expression.annotation.has_value() &&
