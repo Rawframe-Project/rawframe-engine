@@ -78,6 +78,9 @@ bool declared(const GameDescription& game, std::string_view component) {
 result::Result<GameDescription> parseGame(std::string_view text) {
     GameDescription game;
     bool haveProgram = false;
+    std::size_t actionsLine = 0;
+    std::size_t sampleLine = 0;
+    GameControls controls;
     std::size_t number = 0;
     // Names are checked once every component line has been read, so a
     // description may list components after the systems that use them.
@@ -108,6 +111,20 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.program = kWords[1];
             haveProgram = true;
+        } else if (kKeyword == "actions") {
+            if (actionsLine != 0 || kWords.size() != 2) {
+                return badLine(number, WorldKestError::BadGameLine, "a game names one action set, `actions <file>`");
+            }
+            controls.actions = kWords[1];
+            actionsLine = number;
+        } else if (kKeyword == "sample") {
+            if (sampleLine != 0 || kWords.size() != 3) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a game samples its input once, `sample <program> <entry>`");
+            }
+            controls.program = kWords[1];
+            controls.entry = kWords[2];
+            sampleLine = number;
         } else if (kKeyword == "component") {
             const base::Bits128Parse kId =
                 kWords.size() == 4 ? schema::parseStableIdText(kWords[1]) : base::Bits128Parse{};
@@ -362,6 +379,14 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     }
     if ((!game.collision.classes.empty() || haveDefault) && !game.physics.has_value()) {
         return badLine(number, WorldKestError::BadGameLine, "collision lines need a physics line");
+    }
+    if ((actionsLine == 0) != (sampleLine == 0) || (actionsLine != 0 && game.input.empty())) {
+        return badLine(std::max(actionsLine, sampleLine),
+                       WorldKestError::BadGameLine,
+                       "`actions` and `sample` come together, with an `input` line");
+    }
+    if (actionsLine != 0) {
+        game.controls = std::move(controls);
     }
     return game;
 }

@@ -5,6 +5,7 @@
 #include "rawframe/world/random.h"
 #include "rawframe/world_replication/client.h"
 #include "rawframe/world_replication/errors.h"
+#include "rawframe/world_replication/input_source.h"
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_replication/server.h"
@@ -28,6 +29,7 @@ constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
 
 constexpr std::string_view kServerNeeds[] = {world_runtime::kSimulation.name};
 constexpr std::string_view kMaybe[] = {network::kTransport.name, kReplicationPlan.name};
+constexpr std::string_view kBotsMaybe[] = {network::kTransport.name, kReplicationPlan.name, kInputSourcePlan.name};
 
 /// The session bounds both sides use: a datagram fits one path MTU.
 network::SessionProfile sessionProfile(std::size_t sessions) {
@@ -181,6 +183,9 @@ struct Bot {
     std::unique_ptr<Predictor> predictor;
     std::unique_ptr<ReplicationClient> client;
     world::Pcg32 random;
+    /// The game's input mapping with a hand on its controls, when the game
+    /// declares one; random input otherwise.
+    std::unique_ptr<InputSource> source;
     std::vector<std::byte> input;
     bool connecting = false;
     /// A client ticks at the server's rate: input goes out once per tick due
@@ -221,6 +226,10 @@ public:
                 .interpolated = {plan_->interpolatedComponents().begin(), plan_->interpolatedComponents().end()},
                 .clock = &context.clock()};
         }
+        InputSourcePlan* sources = nullptr;
+        if (context.has(kInputSourcePlan.name)) {
+            RAWFRAME_TRY_ASSIGN(sources, context.capability(kInputSourcePlan));
+        }
         for (std::uint64_t index = 0; index < count; ++index) {
             Bot bot{.random =
                         world::deriveStream(world::RootSeed{kSeed + index}, "rawframe.replication.bots", "steer")};
@@ -245,6 +254,14 @@ public:
                         .neighborhood = {plan_->nearbyComponents().begin(), plan_->nearbyComponents().end()}};
                 } else {
                     ++unpredicted_;
+                }
+            }
+            if (sources != nullptr) {
+                auto source = sources->botSource(kSeed + index);
+                if (source.has_value()) {
+                    bot.source = std::move(*source);
+                } else if (source.error().errorClass() != result::ErrorClass::NotFound) {
+                    return std::unexpected<result::Error>{std::move(source).error()};
                 }
             }
             RAWFRAME_TRY_ASSIGN(
@@ -310,7 +327,9 @@ public:
         std::uint64_t stateDatagrams = 0;
         PredictionStatistics predicted;
         InterpolationStatistics interpolated;
+        std::uint64_t handed = 0;
         for (Bot& bot : bots_) {
+            handed += bot.source != nullptr ? 1 : 0;
             interpolated.blended += bot.client->interpolationStatistics().blended;
             interpolated.newest += bot.client->interpolationStatistics().newest;
             admitted += bot.client->admitted() ? 1 : 0;
@@ -330,6 +349,8 @@ public:
                      {diagnostics::field("bots", bots_.size()),
                       diagnostics::field("admitted", admitted),
                       diagnostics::field("unpredicted", unpredicted_),
+                      diagnostics::field("handed", handed),
+                      diagnostics::field("sourceFailures", sourceFailures_),
                       diagnostics::field("mirroredEntities", mirrored),
                       diagnostics::field("stateDatagrams", stateDatagrams),
                       diagnostics::field("predictedTicks", predicted.predictedTicks),
@@ -345,6 +366,11 @@ public:
 private:
     /// A new random heading for every float of the input, every sixty ticks.
     void steer(Bot& bot, std::uint64_t tick) {
+        if (bot.source != nullptr) {
+            // A source that fails leaves the last input in place.
+            sourceFailures_ += bot.source->next(tick, bot.input).has_value() ? 0 : 1;
+            return;
+        }
         if (tick % 60 != 0) {
             return;
         }
@@ -365,6 +391,7 @@ private:
     std::vector<Bot> bots_;
     /// Bots that would predict but could not have a predictor.
     std::uint64_t unpredicted_ = 0;
+    std::uint64_t sourceFailures_ = 0;
     diagnostics::Emitter emitter_;
 };
 
@@ -424,7 +451,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .identity = "rawframe.replication.bots",
         .factory = &makeBots,
         .scope = composition::LifetimeScope::World,
-        .optionalCapabilities = kMaybe,
+        .optionalCapabilities = kBotsMaybe,
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "replication.bots",
         .budgetOwner = "network",

@@ -92,6 +92,22 @@ RAWFRAME_TEST(PredictionIsDeclaredByLine) {
     RAWFRAME_EXPECT(refusedAt("program p.kest\ninterpolate\n", WorldKestError::BadGameLine, "2"));
 }
 
+RAWFRAME_TEST(ControlsAreDeclaredByLine) {
+    constexpr std::string_view kHead = "program p.kest\n"
+                                       "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.stick Stick\n";
+    auto game = parseGame(std::string{kHead} + "input a.stick\nactions a.actions\nsample sample.kest sample\n");
+    RAWFRAME_EXPECT(game.has_value() && game->controls.has_value() && game->controls->actions == "a.actions" &&
+                    game->controls->program == "sample.kest" && game->controls->entry == "sample");
+    RAWFRAME_EXPECT(parseGame(kHead).has_value() && !parseGame(kHead)->controls.has_value());
+    // Together, once each, and with an input line.
+    RAWFRAME_EXPECT(
+        refusedAt(std::string{kHead} + "input a.stick\nactions a.actions\n", WorldKestError::BadGameLine, "4"));
+    RAWFRAME_EXPECT(
+        refusedAt(std::string{kHead} + "actions a.actions\nsample s.kest f\n", WorldKestError::BadGameLine, "4"));
+    RAWFRAME_EXPECT(refusedAt(std::string{kHead} + "input a.stick\nactions a b\n", WorldKestError::BadGameLine, "4"));
+    RAWFRAME_EXPECT(refusedAt(std::string{kHead} + "input a.stick\nsample s.kest\n", WorldKestError::BadGameLine, "4"));
+}
+
 RAWFRAME_TEST(InterestIsDeclaredByLine) {
     constexpr std::string_view kProgram = "program p.kest\n"
                                           "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.position Position\n";

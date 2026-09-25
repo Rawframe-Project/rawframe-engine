@@ -183,6 +183,16 @@ struct GameEntityField {
     std::string field;
 };
 
+/// How a client makes its input from a player's controls (ADR-0037): an
+/// `input.actions` document, and a Kest program whose function `entry` fills
+/// the input component from committed actions. Paths are beside the
+/// description. Clients read them; a server never opens either.
+struct GameControls {
+    std::string actions;
+    std::string program;
+    std::string entry;
+};
+
 struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
@@ -207,6 +217,9 @@ struct GameDescription {
     std::optional<GameInterest> interest;
     std::optional<GamePhysics> physics;
     GameCollision collision;
+    /// From an `actions <file>` line and a `sample <program> <entry>` line,
+    /// which come together and need an `input` line.
+    std::optional<GameControls> controls;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as
