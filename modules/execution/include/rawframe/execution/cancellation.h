@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rawframe/base/threads.h"
 #include "rawframe/execution/outcome.h"
 #include "rawframe/execution/time.h"
 #include "rawframe/result/result.h"
@@ -88,7 +89,7 @@ private:
 
     // Guarded by mutex_. Children and callbacks are intrusive lists, so
     // registering either never allocates.
-    mutable std::mutex mutex_;
+    mutable base::Mutex mutex_;
     CancellationScope* firstChild_ = nullptr;
     CancellationScope* nextSibling_ = nullptr;
     CancellationScope* previousSibling_ = nullptr;

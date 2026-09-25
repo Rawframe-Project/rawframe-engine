@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rawframe/base/threads.h"
 #include "rawframe/diagnostics/sink.h"
 
 #include <array>
@@ -49,7 +50,7 @@ private:
 
     Sink* next_;
     RateLimit limit_;
-    mutable std::mutex mutex_;
+    mutable base::Mutex mutex_;
     std::array<Entry, kMaximumRateLimitedIdentities> entries_{};
     std::size_t entryCount_ = 0;
     std::uint64_t suppressedTotal_ = 0;

@@ -1,5 +1,6 @@
 #include "rawframe/execution/parallelism.h"
 
+#include "rawframe/base/platform.h"
 #include "rawframe/execution/bounds.h"
 
 #include <algorithm>
@@ -7,7 +8,10 @@
 #include <charconv>
 #include <cstdio>
 #include <string>
+
+#if RAWFRAME_THREADS
 #include <thread>
+#endif
 
 #if defined(__linux__)
 #include <sched.h>
@@ -96,9 +100,11 @@ std::size_t effectiveParallelism() noexcept {
     }
 #endif
     // Only where no confinement can be read: other platforms, or a failed query.
+#if RAWFRAME_THREADS
     if (count == 0) {
         count = std::thread::hardware_concurrency();
     }
+#endif
     return std::max<std::size_t>(count, 1);
 }
 

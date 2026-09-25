@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rawframe/base/threads.h"
 #include "rawframe/diagnostics/emitter.h"
 #include "rawframe/execution/bounds.h"
 #include "rawframe/execution/task.h"
@@ -7,13 +8,15 @@
 #include "rawframe/result/result.h"
 
 #include <array>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <optional>
-#include <thread>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
 
 namespace rawframe::execution {
 
@@ -69,6 +72,10 @@ struct ExecutorSettings {
 /// A fixed pool of workers over one bounded queue. Submission never blocks and
 /// never allocates; a full queue refuses. Workers are the only threads this
 /// module starts, and nothing else in the engine starts threads (ADR-0010).
+///
+/// Without threads (RAWFRAME_THREADS 0, the web's main thread) it has no
+/// workers: its host runs queued work with `runOne`, every helping wait runs
+/// it too, and `stop` runs what was accepted on the calling thread.
 class Executor {
 public:
     explicit Executor(const ExecutorSettings& settings);
@@ -106,7 +113,11 @@ public:
         return kind_;
     }
     [[nodiscard]] std::size_t workerCount() const noexcept {
+#if RAWFRAME_THREADS
         return workers_.size();
+#else
+        return 0;
+#endif
     }
     [[nodiscard]] std::size_t pendingTasks() const noexcept;
     [[nodiscard]] ExecutorProgress progress() const noexcept;
@@ -139,7 +150,9 @@ private:
 
     /// The active entry for `owner`, or ownerCount_. Requires mutex_.
     [[nodiscard]] std::size_t findOwnerLocked(OwnerId owner) const noexcept;
+#if RAWFRAME_THREADS
     void workerLoop() noexcept;
+#endif
     /// Takes the next task by priority, with background promoted once it has
     /// waited half the starvation interval. Requires mutex_.
     [[nodiscard]] std::optional<Slot> popLocked() noexcept;
@@ -150,9 +163,9 @@ private:
     const MonotonicSource* clock_;
     diagnostics::Emitter emitter_;
 
-    mutable std::mutex mutex_;
-    std::condition_variable workAvailable_;
-    std::condition_variable idle_;
+    mutable base::Mutex mutex_;
+    base::Condition workAvailable_;
+    base::Condition idle_;
     std::vector<Slot> slots_; // kMaximumPendingTasksPerExecutor, allocated once
     std::uint32_t freeHead_ = kNone;
     std::array<Queue, kPriorityCount> queues_{};
@@ -165,9 +178,11 @@ private:
     bool admissionClosed_ = false;
     bool stopping_ = false;
     bool stopped_ = false;
+#if RAWFRAME_THREADS
     std::size_t exitedWorkers_ = 0;
 
     std::vector<std::thread> workers_;
+#endif
 };
 
 /// Blocking I/O is allowed on this thread: `failed_precondition` on a CPU

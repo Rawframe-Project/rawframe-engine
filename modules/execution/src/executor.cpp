@@ -2,6 +2,7 @@
 
 #include "rawframe/base/assert.h"
 #include "rawframe/base/fatal.h"
+#include "rawframe/base/threads.h"
 #include "rawframe/execution/errors.h"
 #include "rawframe/execution/parallelism.h"
 
@@ -21,6 +22,7 @@ constexpr auto kStopPollInterval = std::chrono::milliseconds(1);
 
 constexpr diagnostics::EventIdentity kShutdownOverrun{"execution", "shutdown_overrun"};
 
+#if RAWFRAME_THREADS
 std::size_t workerCountFor(const ExecutorSettings& settings) noexcept {
     if (settings.kind == ExecutorKind::BlockingIo) {
         return std::clamp(
@@ -28,6 +30,7 @@ std::size_t workerCountFor(const ExecutorSettings& settings) noexcept {
     }
     return deriveCpuWorkerCount(settings.workers);
 }
+#endif
 
 const MonotonicSource& defaultClock() noexcept {
     static const SteadyClock kClock;
@@ -43,6 +46,7 @@ Executor::Executor(const ExecutorSettings& settings)
         slots_[index].next = index + 1 < slots_.size() ? static_cast<std::uint32_t>(index + 1) : kNone;
     }
     freeHead_ = 0;
+#if RAWFRAME_THREADS
     const std::size_t kWorkers = workerCountFor(settings);
     workers_.reserve(kWorkers);
     for (std::size_t index = 0; index < kWorkers; ++index) {
@@ -50,6 +54,7 @@ Executor::Executor(const ExecutorSettings& settings)
             workerLoop();
         });
     }
+#endif
 }
 
 Executor::~Executor() {
@@ -66,7 +71,7 @@ std::size_t Executor::findOwnerLocked(OwnerId owner) const noexcept {
 }
 
 result::Status Executor::admitOwner(OwnerId owner, Quota quota) {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     if (quota.maximumPendingTasks == 0) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kExecutionDomain,
@@ -95,7 +100,7 @@ result::Status Executor::admitOwner(OwnerId owner, Quota quota) {
 }
 
 result::Status Executor::retireOwner(OwnerId owner) {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     const std::size_t kIndex = findOwnerLocked(owner);
     if (kIndex == ownerCount_) {
         return result::fail(result::ErrorClass::NotFound,
@@ -116,7 +121,7 @@ result::Status Executor::retireOwner(OwnerId owner) {
 result::Status Executor::submit(OwnerId owner, Priority priority, Task&& task) {
     RAWFRAME_ASSERT(static_cast<bool>(task), "submitting an empty task");
     {
-        const std::scoped_lock kLock{mutex_};
+        const std::lock_guard kLock{mutex_};
         if (admissionClosed_) {
             return result::fail(result::ErrorClass::Unavailable,
                                 kExecutionDomain,
@@ -222,7 +227,7 @@ void Executor::runSlot(Slot& slot) noexcept {
     slot.task = Task{};
     bool nowIdle = false;
     {
-        const std::scoped_lock kLock{mutex_};
+        const std::lock_guard kLock{mutex_};
         --running_;
         ++completed_;
         nowIdle = running_ == 0 && pending_ == 0;
@@ -235,7 +240,7 @@ void Executor::runSlot(Slot& slot) noexcept {
 bool Executor::runOne() noexcept {
     std::optional<Slot> slot;
     {
-        const std::scoped_lock kLock{mutex_};
+        const std::lock_guard kLock{mutex_};
         slot = popLocked();
     }
     if (!slot) {
@@ -245,6 +250,7 @@ bool Executor::runOne() noexcept {
     return true;
 }
 
+#if RAWFRAME_THREADS
 void Executor::workerLoop() noexcept {
     currentExecutor = this;
     for (;;) {
@@ -265,10 +271,11 @@ void Executor::workerLoop() noexcept {
         runSlot(*slot);
     }
 }
+#endif
 
 void Executor::stop() noexcept {
     {
-        const std::scoped_lock kLock{mutex_};
+        const std::lock_guard kLock{mutex_};
         if (stopped_) {
             return;
         }
@@ -285,11 +292,21 @@ void Executor::stop() noexcept {
                 lock.unlock();
                 overrun("drain");
             }
+#if !RAWFRAME_THREADS
+            // No worker will: the stopping thread runs what was accepted.
+            if (pending_ != 0) {
+                lock.unlock();
+                runOne();
+                lock.lock();
+                continue;
+            }
+#endif
             idle_.wait_for(lock, kStopPollInterval);
         }
         stopping_ = true;
     }
     workAvailable_.notify_all();
+#if RAWFRAME_THREADS
 
     // Join: the workers see stopping_ and leave, within their budget.
     const MonotonicInstant kJoinDeadline = clock_->now() + kExecutorJoinBudget;
@@ -307,6 +324,7 @@ void Executor::stop() noexcept {
         worker.join();
     }
     workers_.clear();
+#endif
 }
 
 void Executor::overrun(const char* phase) noexcept {
@@ -321,12 +339,12 @@ void Executor::overrun(const char* phase) noexcept {
 }
 
 std::size_t Executor::pendingTasks() const noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     return pending_;
 }
 
 ExecutorProgress Executor::progress() const noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     return ExecutorProgress{.waiting = pending_, .running = running_, .completed = completed_};
 }
 

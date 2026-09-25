@@ -1,12 +1,12 @@
 #pragma once
 
+#include "rawframe/base/threads.h"
 #include "rawframe/execution/cancellation.h"
 #include "rawframe/execution/executor.h"
 #include "rawframe/execution/outcome.h"
 #include "rawframe/result/result.h"
 
 #include <concepts>
-#include <condition_variable>
 #include <cstddef>
 #include <mutex>
 #include <optional>
@@ -83,8 +83,8 @@ private:
     Priority priority_;
     result::Result<CancellationScope> scope_;
 
-    std::mutex mutex_;
-    std::condition_variable done_;
+    base::Mutex mutex_;
+    base::Condition done_;
     std::size_t outstanding_ = 0;
     std::optional<result::Error> firstError_;
 };

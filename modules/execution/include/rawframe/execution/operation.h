@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rawframe/base/threads.h"
 #include "rawframe/execution/bounds.h"
 #include "rawframe/execution/cancellation.h"
 #include "rawframe/execution/errors.h"
@@ -8,7 +9,6 @@
 #include "rawframe/result/result.h"
 
 #include <atomic>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -201,8 +201,8 @@ private:
     OwnerId owner_;
     result::Result<CancellationScope> scope_;
 
-    mutable std::mutex mutex_;
-    std::condition_variable changed_;
+    mutable base::Mutex mutex_;
+    base::Condition changed_;
     std::size_t inFlight_ = 0;
     std::uint64_t generation_ = 0;
 };

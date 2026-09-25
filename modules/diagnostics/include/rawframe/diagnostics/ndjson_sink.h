@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rawframe/base/threads.h"
 #include "rawframe/diagnostics/router.h"
 #include "rawframe/diagnostics/sink.h"
 
@@ -68,7 +69,7 @@ private:
     StreamInfo stream_;
     Sensitivity clearance_;
     MonotonicClock clock_;
-    mutable std::mutex mutex_;
+    mutable base::Mutex mutex_;
     std::vector<char> pending_;    // filled by accept, capacity fixed at construction
     std::vector<char> draining_;   // swapped with pending_ by drain, written outside the lock
     std::uint64_t dropped_ = 0;    // total, under mutex_

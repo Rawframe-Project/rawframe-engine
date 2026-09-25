@@ -33,6 +33,15 @@
 #error "Rawframe supports x86-64, arm64, and wasm32; this target is unsupported."
 #endif
 
+// Whether the target has threads: 1 everywhere but WebAssembly built without
+// them, the browser's main thread (ADR-0084), where rawframe/base/threads.h
+// gives locks that are empty and waits that cannot happen.
+#if (defined(__wasi__) && !defined(_REENTRANT)) || (defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__))
+#define RAWFRAME_THREADS 0
+#else
+#define RAWFRAME_THREADS 1
+#endif
+
 /// Traps to an attached debugger. Not a termination primitive: callers only use
 /// it when a debugger is known to be attached.
 #if defined(RAWFRAME_COMPILER_MSVC)

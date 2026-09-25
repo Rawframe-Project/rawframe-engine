@@ -1,6 +1,7 @@
 #include "rawframe/execution/job_scope.h"
 
 #include "rawframe/base/assert.h"
+#include "rawframe/base/threads.h"
 #include "rawframe/execution/bounds.h"
 #include "rawframe/execution/errors.h"
 
@@ -42,7 +43,7 @@ JobScope::~JobScope() {
 }
 
 void JobScope::begin() noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     ++outstanding_;
 }
 
@@ -52,7 +53,7 @@ void JobScope::finish(result::Status status) noexcept {
     }
     // Notify under the lock: once outstanding_ reaches zero the joiner may
     // destroy this scope as soon as the lock is released.
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     if (!status.has_value() && !firstError_) {
         firstError_.emplace(std::move(status).error());
     }
@@ -65,7 +66,7 @@ void JobScope::finish(result::Status status) noexcept {
 void JobScope::wait() noexcept {
     for (;;) {
         {
-            const std::scoped_lock kLock{mutex_};
+            const std::lock_guard kLock{mutex_};
             if (outstanding_ == 0) {
                 return;
             }

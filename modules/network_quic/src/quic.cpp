@@ -1,13 +1,13 @@
 #include "rawframe/network_quic/quic.h"
 
 #include "rawframe/base/assert.h"
+#include "rawframe/base/threads.h"
 #include "rawframe/network/errors.h"
 #include "rawframe/network_quic/errors.h"
 #include "tls.h"
 
 #include <algorithm>
 #include <charconv>
-#include <condition_variable>
 #include <deque>
 #include <limits>
 #include <map>
@@ -132,8 +132,8 @@ struct Core {
     HQUIC serverConfiguration = nullptr;
     HQUIC clientConfiguration = nullptr;
 
-    std::mutex mutex;
-    std::condition_variable finished;
+    base::Mutex mutex;
+    base::Condition finished;
     HQUIC listener = nullptr;
     bool stopping = false;
     std::uint64_t nextConnection = 1;

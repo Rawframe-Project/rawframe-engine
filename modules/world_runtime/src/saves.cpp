@@ -1,3 +1,4 @@
+#include "rawframe/base/threads.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/world_runtime/errors.h"
 #include "rawframe/world_runtime/players.h"
@@ -260,7 +261,7 @@ private:
     /// here instead if none can be started.
     void queue(std::string slot, std::vector<std::byte> bytes) noexcept {
         {
-            const std::scoped_lock kLock{mutex_};
+            const std::lock_guard kLock{mutex_};
             queued_.push_back(Keep{.slot = std::move(slot), .bytes = std::move(bytes)});
         }
         if (writing_.exchange(true, std::memory_order_acq_rel)) {
@@ -288,7 +289,7 @@ private:
     }
 
     bool pending() noexcept {
-        const std::scoped_lock kLock{mutex_};
+        const std::lock_guard kLock{mutex_};
         return !queued_.empty();
     }
 
@@ -297,7 +298,7 @@ private:
         for (;;) {
             Keep next;
             {
-                const std::scoped_lock kLock{mutex_};
+                const std::lock_guard kLock{mutex_};
                 if (queued_.empty()) {
                     return;
                 }
@@ -305,7 +306,7 @@ private:
                 queued_.pop_front();
             }
             auto kept = store_->keep(next.slot, next.bytes);
-            const std::scoped_lock kLock{mutex_};
+            const std::lock_guard kLock{mutex_};
             outcomes_.push_back(
                 Outcome{.slot = std::move(next.slot),
                         .bytes = next.bytes.size(),
@@ -316,7 +317,7 @@ private:
     void report() noexcept {
         std::vector<Outcome> outcomes;
         {
-            const std::scoped_lock kLock{mutex_};
+            const std::lock_guard kLock{mutex_};
             outcomes.swap(outcomes_);
         }
         for (const Outcome& outcome : outcomes) {
@@ -355,7 +356,7 @@ private:
     bool restoring_ = false;
     /// Players whose kept save did not apply.
     std::set<PlayerIdentity> unkept_;
-    std::mutex mutex_;
+    base::Mutex mutex_;
     std::deque<Keep> queued_;
     std::vector<Outcome> outcomes_;
     std::atomic<bool> writing_{false};

@@ -2,6 +2,7 @@
 
 #include "attachments.h"
 #include "characters.h"
+#include "rawframe/base/threads.h"
 #include "rawframe/physics/filters.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/errors.h"
@@ -30,8 +31,8 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Physics2DEr
 
 /// Maul2D keeps its worlds in one process-wide table that the caller must
 /// serialize.
-std::mutex& worldTableLock() noexcept {
-    static std::mutex lock;
+base::Mutex& worldTableLock() noexcept {
+    static base::Mutex lock;
     return lock;
 }
 
@@ -270,7 +271,7 @@ struct Physics2D::State {
 
     ~State() {
         if (m2World_IsValid(physics)) {
-            const std::scoped_lock kLock{worldTableLock()};
+            const std::lock_guard kLock{worldTableLock()};
             m2DestroyWorld(physics);
         }
     }
@@ -834,7 +835,7 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
     definition.jointCapacity = static_cast<std::int32_t>(settings.jointCapacity);
     definition.enableSleeping = settings.sleeping;
     {
-        const std::scoped_lock kLock{worldTableLock()};
+        const std::lock_guard kLock{worldTableLock()};
         state->physics = m2CreateWorld(&definition);
     }
     if (state->physics.index1 == 0) {

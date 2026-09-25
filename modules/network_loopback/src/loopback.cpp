@@ -1,5 +1,6 @@
 #include "rawframe/network_loopback/loopback.h"
 
+#include "rawframe/base/threads.h"
 #include "rawframe/network/errors.h"
 
 #include <map>
@@ -60,7 +61,7 @@ std::size_t openLinks(const Side& side) noexcept {
 } // namespace
 
 struct LoopbackNetwork::State {
-    std::mutex mutex;
+    base::Mutex mutex;
     const execution::MonotonicSource* clock = nullptr;
     LoopbackConditions conditions;
     std::uint64_t random = 0;

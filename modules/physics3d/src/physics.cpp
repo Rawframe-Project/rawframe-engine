@@ -4,6 +4,7 @@
 #include "characters.h"
 #include "joints.h"
 #include "meshes.h"
+#include "rawframe/base/threads.h"
 #include "rawframe/physics/filters.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/errors.h"
@@ -32,8 +33,8 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Physics3DEr
 
 /// Maul3D keeps its worlds in one process-wide table that the caller must
 /// serialize.
-std::mutex& worldTableLock() noexcept {
-    static std::mutex lock;
+base::Mutex& worldTableLock() noexcept {
+    static base::Mutex lock;
     return lock;
 }
 
@@ -272,7 +273,7 @@ struct Physics3D::State {
 
     ~State() {
         if (m3World_IsValid(physics)) {
-            const std::scoped_lock kLock{worldTableLock()};
+            const std::lock_guard kLock{worldTableLock()};
             m3DestroyWorld(physics);
         }
     }
@@ -930,7 +931,7 @@ result::Result<std::unique_ptr<Physics3D>> Physics3D::create(const Physics3DSett
     // Every hit is told, however slow: Contact3D says how hard.
     definition.hitEventThreshold = 0;
     {
-        const std::scoped_lock kLock{worldTableLock()};
+        const std::lock_guard kLock{worldTableLock()};
         state->physics = m3CreateWorld(&definition);
     }
     if (state->physics.index1 == 0) {

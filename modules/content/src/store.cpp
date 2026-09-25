@@ -1,5 +1,6 @@
 #include "rawframe/content/store.h"
 
+#include "rawframe/base/threads.h"
 #include "rawframe/content/errors.h"
 #include "source.h"
 
@@ -28,7 +29,7 @@ struct ContentStore::State {
 
     const execution::MonotonicSource* clock;
     std::vector<ContentSource> sources;
-    mutable std::mutex catalogMutex;
+    mutable base::Mutex catalogMutex;
     std::shared_ptr<const ContentCatalog> catalog;
     // Last, so it is destroyed first: its destructor cancels and joins every
     // read while the sources are still here. Made in place: it cannot move.
@@ -57,12 +58,12 @@ std::size_t ContentStore::sourceCount() const noexcept {
 }
 
 void ContentStore::publish(std::shared_ptr<const ContentCatalog> catalog) noexcept {
-    const std::scoped_lock kLock{state_->catalogMutex};
+    const std::lock_guard kLock{state_->catalogMutex};
     state_->catalog = std::move(catalog);
 }
 
 std::shared_ptr<const ContentCatalog> ContentStore::catalog() const noexcept {
-    const std::scoped_lock kLock{state_->catalogMutex};
+    const std::lock_guard kLock{state_->catalogMutex};
     return state_->catalog;
 }
 

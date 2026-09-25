@@ -1,6 +1,7 @@
 #include "rawframe/diagnostics/ndjson_sink.h"
 
 #include "rawframe/base/assert.h"
+#include "rawframe/base/threads.h"
 
 #include <algorithm>
 #include <array>
@@ -588,7 +589,7 @@ void NdjsonSink::accept(const Record& record) noexcept {
     // thread and outside the lock, so the buffer only ever holds finished bytes.
     std::array<char, kMaximumRecordLineBytes> line;
     const std::size_t kSize = serializeRecord(record, clearance_, line);
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     if (kSize == 0) {
         ++refused_;
         ++refusedUnreported_;
@@ -668,7 +669,7 @@ bool NdjsonSink::drain(WriteBytes write, void* context) noexcept {
     bool writeHeader = false;
     std::uint64_t fileStart = 0;
     {
-        const std::scoped_lock kLock{mutex_};
+        const std::lock_guard kLock{mutex_};
         std::swap(pending_, draining_);
         unreported = std::exchange(unreported_, 0);
         refused = std::exchange(refusedUnreported_, 0);
@@ -700,18 +701,18 @@ bool NdjsonSink::drain(WriteBytes write, void* context) noexcept {
 
 void NdjsonSink::startNewFile() noexcept {
     const std::uint64_t kNow = clock_();
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     headerWritten_ = false;
     fileStartNanoseconds_ = kNow;
 }
 
 std::uint64_t NdjsonSink::droppedRecords() const noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     return dropped_;
 }
 
 std::uint64_t NdjsonSink::refusedRecords() const noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     return refused_;
 }
 

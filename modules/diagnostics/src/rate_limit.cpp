@@ -1,5 +1,6 @@
 #include "rawframe/diagnostics/rate_limit.h"
 
+#include "rawframe/base/threads.h"
 #include "rawframe/diagnostics/ndjson_sink.h"
 
 #include <algorithm>
@@ -42,7 +43,7 @@ void RateLimitedSink::accept(const Record& record) noexcept {
     }
     std::uint64_t report = 0;
     {
-        const std::scoped_lock kLock{mutex_};
+        const std::lock_guard kLock{mutex_};
         Entry* entry = find(record.identity);
         if (entry != nullptr) {
             const std::uint64_t kNow = record.time.monotonicNanoseconds;
@@ -77,7 +78,7 @@ void RateLimitedSink::accept(const Record& record) noexcept {
 }
 
 std::uint64_t RateLimitedSink::suppressedRecords() const noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     return suppressedTotal_;
 }
 

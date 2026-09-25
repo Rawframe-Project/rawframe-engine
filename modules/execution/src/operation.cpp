@@ -1,6 +1,7 @@
 #include "rawframe/execution/operation.h"
 
 #include "rawframe/base/assert.h"
+#include "rawframe/base/threads.h"
 
 #include <chrono>
 
@@ -37,7 +38,7 @@ OperationScope::~OperationScope() {
 }
 
 result::Result<std::uint64_t> OperationScope::reserve() {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     if (inFlight_ == kMaximumInFlightAsyncOperationsPerScope) {
         return result::fail(result::ErrorClass::ResourceExhausted,
                             kExecutionDomain,
@@ -49,18 +50,18 @@ result::Result<std::uint64_t> OperationScope::reserve() {
 }
 
 void OperationScope::unreserve() noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     --inFlight_;
     changed_.notify_all();
 }
 
 bool OperationScope::current(std::uint64_t generation) const noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     return generation == generation_;
 }
 
 void OperationScope::invalidate() noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     ++generation_;
 }
 
@@ -70,7 +71,7 @@ void OperationScope::completed(bool failed) noexcept {
     }
     // Notify under the lock: once inFlight_ reaches zero a joiner may destroy
     // this scope as soon as the lock is released.
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     --inFlight_;
     changed_.notify_all();
 }
@@ -90,7 +91,7 @@ void OperationScope::waitUntil(const detail::OperationBase& operation) noexcept 
 void OperationScope::join() noexcept {
     for (;;) {
         {
-            const std::scoped_lock kLock{mutex_};
+            const std::lock_guard kLock{mutex_};
             if (inFlight_ == 0) {
                 return;
             }
@@ -106,7 +107,7 @@ void OperationScope::join() noexcept {
 }
 
 std::size_t OperationScope::inFlight() const noexcept {
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     return inFlight_;
 }
 

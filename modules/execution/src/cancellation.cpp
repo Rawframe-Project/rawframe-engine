@@ -1,6 +1,7 @@
 #include "rawframe/execution/cancellation.h"
 
 #include "rawframe/base/assert.h"
+#include "rawframe/base/threads.h"
 #include "rawframe/execution/bounds.h"
 #include "rawframe/execution/errors.h"
 
@@ -32,7 +33,7 @@ result::Result<CancellationScope> CancellationScope::child(CancellationScope& pa
 
 CancellationScope::CancellationScope(ChildTag, CancellationScope& parent, FailurePolicy policy) noexcept
     : clock_(parent.clock_), parent_(&parent), depth_(parent.depth_ + 1), policy_(policy) {
-    const std::scoped_lock kLock{parent.mutex_};
+    const std::lock_guard kLock{parent.mutex_};
     nextSibling_ = parent.firstChild_;
     if (nextSibling_ != nullptr) {
         nextSibling_->previousSibling_ = this;
@@ -47,12 +48,12 @@ CancellationScope::CancellationScope(ChildTag, CancellationScope& parent, Failur
 
 CancellationScope::~CancellationScope() {
     {
-        const std::scoped_lock kLock{mutex_};
+        const std::lock_guard kLock{mutex_};
         RAWFRAME_CHECK(firstChild_ == nullptr, "a cancellation scope outlived by a child");
         RAWFRAME_CHECK(firstCallback_ == nullptr, "a cancellation scope outlived by a callback registration");
     }
     if (parent_ != nullptr) {
-        const std::scoped_lock kLock{parent_->mutex_};
+        const std::lock_guard kLock{parent_->mutex_};
         if (previousSibling_ != nullptr) {
             previousSibling_->nextSibling_ = nextSibling_;
         } else {
@@ -73,7 +74,7 @@ void CancellationScope::cancel(CancelReason reason) noexcept {
     // Lock order is always parent before child, so descending while holding
     // this scope's lock cannot deadlock against a child's destructor, which
     // takes only the parent's lock.
-    const std::scoped_lock kLock{mutex_};
+    const std::lock_guard kLock{mutex_};
     for (CancellationCallback* callback = firstCallback_; callback != nullptr; callback = callback->next_) {
         callback->function_(callback->context_, reason);
     }
@@ -146,7 +147,7 @@ CancellationCallback::CancellationCallback(CancellationScope& scope, Function fu
     : scope_(&scope), function_(function), context_(context) {
     std::optional<CancelReason> alreadyCancelled;
     {
-        const std::scoped_lock kLock{scope.mutex_};
+        const std::lock_guard kLock{scope.mutex_};
         alreadyCancelled = scope.reason();
         if (!alreadyCancelled) {
             next_ = scope.firstCallback_;
@@ -167,7 +168,7 @@ CancellationCallback::~CancellationCallback() {
         return;
     }
     // Taking the scope's lock waits out a cancel that is running callbacks.
-    const std::scoped_lock kLock{scope_->mutex_};
+    const std::lock_guard kLock{scope_->mutex_};
     if (previous_ != nullptr) {
         previous_->next_ = next_;
     } else {
