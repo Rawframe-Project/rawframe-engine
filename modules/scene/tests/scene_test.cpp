@@ -6,7 +6,10 @@
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/test/test.h"
 
+#include <cstdint>
+#include <cstdio>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace rawframe;
@@ -244,4 +247,51 @@ RAWFRAME_TEST(AnInstanceKeepsEveryRuleOfItsForm) {
     std::string empty = *writeScene(sample());
     empty.insert(empty.size() - 2, ",\n  \"instances\": []");
     RAWFRAME_EXPECT(refused(readScene(empty)));
+}
+
+RAWFRAME_TEST(HostileScenesReadOnlyAsTheyWrite) {
+    // A mod's scene is an untrusted author's text (D183): seeded mutations of
+    // a real one, and whatever the reader accepts writes back to the very
+    // same bytes, so there is no second reading of any scene.
+    const auto kSeed = writeScene(sample());
+    RAWFRAME_EXPECT(kSeed.has_value());
+    if (!kSeed.has_value()) {
+        return;
+    }
+    std::uint64_t state = 0x9E3779B97F4A7C15ULL;
+    const auto kNext = [&state] {
+        state ^= state << 13U;
+        state ^= state >> 7U;
+        state ^= state << 17U;
+        return state;
+    };
+    constexpr std::string_view kInserted = "{}[]\",: \n-.0123456789abcdefe";
+    int accepted = 0;
+    for (int round = 0; round < 20'000; ++round) {
+        std::string text = *kSeed;
+        const int kEdits = 1 + static_cast<int>(kNext() % 4);
+        for (int edit = 0; edit < kEdits && !text.empty(); ++edit) {
+            const std::size_t kAt = kNext() % text.size();
+            switch (kNext() % 3) {
+            case 0:
+                text[kAt] = static_cast<char>(kNext() & 0xFFU);
+                break;
+            case 1:
+                text.erase(kAt, 1 + (kNext() % 8));
+                break;
+            default:
+                text.insert(kAt, 1, kInserted[kNext() % kInserted.size()]);
+                break;
+            }
+        }
+        const auto kRead = readScene(text);
+        if (!kRead.has_value()) {
+            continue;
+        }
+        ++accepted;
+        const auto kWritten = writeScene(*kRead);
+        RAWFRAME_EXPECT(kWritten.has_value() && *kWritten == text);
+    }
+    std::printf("  %d of 20000 read\n", accepted);
+    RAWFRAME_EXPECT(accepted > 0);
 }
