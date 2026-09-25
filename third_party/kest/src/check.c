@@ -94,6 +94,25 @@ typedef struct {
     // it, so the line to point at is theirs.
     KestSpan asking;
     const KestSource *asking_source;
+    // Set while a block's body is checked, where `return` would leave a
+    // function that is not the one the block is written in. See D1257.
+    bool in_a_block;
+    // Set while an argument that is a block is checked, where a block the
+    // body was handed may be handed on. See D1257.
+    bool handing_a_block;
+    // The declaration whose body is being checked, which a function that
+    // takes a block may not call: it is written into where it is called, and
+    // written into itself it has no end. See D1257.
+    const KestDecl *function;
+    // A body that resumes: the enum whose cases it waits at, how many names
+    // were in reach when the body began -- the parameters, and nothing else
+    // may be in reach of a `wait` -- how many times each case is waited at,
+    // and how many `scratch` blocks are open. See D1263.
+    const KestType *resume_cases;
+    uint32_t resume_mark;
+    uint32_t *waited;
+    uint32_t waits;
+    uint32_t scratch_depth;
 } Checker;
 
 static KestType *check_expr(Checker *checker, KestExpr *expr,
@@ -926,10 +945,28 @@ static KestType *check_name(Checker *checker, KestExpr *expr,
         kest_program_used(checker->program, checker->program->source,
                           expr->span, checker->program->source, local->span,
                           local->type, true);
+        // A block is called, or handed to what takes one, and is nothing
+        // else: held, it would outlive the frame it runs in. See D1257.
+        if (local->type != NULL && local->type->tag == KEST_T_FN &&
+            local->type->block && !checker->naming_callee &&
+            !checker->handing_a_block) {
+            report(checker, expr->span, "K0367",
+                   "`%.*s` is a block, which is called or handed on and "
+                   "nothing else",
+                   (int)length, name);
+            return error_type(checker);
+        }
         return local->type;
     }
 
     KestType *chosen = named_function(checker, name, length, expected);
+    if (chosen != NULL && kest_takes_a_block(chosen) && !checker->naming_callee) {
+        report(checker, expr->span, "K0367",
+               "`%.*s` takes a block, so it is written into where it is called "
+               "and is not a value",
+               (int)length, name);
+        return error_type(checker);
+    }
     if (chosen != NULL) {
         return chosen;
     }
@@ -939,6 +976,13 @@ static KestType *check_name(Checker *checker, KestExpr *expr,
         kest_program_used(checker->program, checker->program->source,
                           expr->span, global->source, global->span,
                           global->type, false);
+        if (!checker->naming_callee && kest_takes_a_block(global->type)) {
+            report(checker, expr->span, "K0367",
+                   "`%.*s` takes a block, so it is written into where it is "
+                   "called and is not a value",
+                   (int)length, name);
+            return error_type(checker);
+        }
         // A generic function is not one function, so there is nothing to
         // hand around: which copy would it be?
         if (!checker->naming_callee && global->type->tag == KEST_T_FN &&
@@ -2900,6 +2944,228 @@ static bool names_a_type(const KestExpr *expr) {
            expr->field.object->kind == KEST_EXPR_NAME;
 }
 
+// Whether `x.f(...)` is a function called on a value rather than a function
+// under a module, an extern under its host type or a case under its enum:
+// what the dotted chain starts from is a name this body holds, a constant, or
+// something worked out -- a call, an index -- and nothing that only names a
+// place. And not a field the value has, which is called as the value it is.
+// See D1256.
+static bool is_method_call(Checker *checker, const KestExpr *expr) {
+    const KestExpr *callee = expr->call.callee;
+    if (callee->kind != KEST_EXPR_FIELD) {
+        return false;
+    }
+    const KestExpr *root = callee->field.object;
+    while (root->kind == KEST_EXPR_FIELD || root->kind == KEST_EXPR_INDEX) {
+        root = root->kind == KEST_EXPR_FIELD ? root->field.object
+                                             : root->index.object;
+    }
+    if (root->kind != KEST_EXPR_NAME) {
+        // A call, a literal, anything worked out: a value.
+        return true;
+    }
+    const char *text = span_text(checker, root->span);
+    if (find_local(checker, text, root->span.length) != NULL) {
+        return true;
+    }
+    const KestSymbol *global =
+        kest_lookup_global(checker->program, text, root->span.length);
+    return global != NULL && global->is_const;
+}
+
+// Whether the value has a field of that name, which is a function held in the
+// value and called as one rather than a function taking the value: `r.apply(3)`
+// on a `Rule` that holds `apply`. Asked quietly, because the value is checked
+// again on the way that is taken. See D1256.
+static bool calls_a_field(Checker *checker, KestExpr *expr) {
+    const KestExpr *callee = expr->call.callee;
+    KestDiags *diags = checker->program->diags;
+    kest_diags_mute(diags, true);
+    KestType *object = check_expr(checker, callee->field.object, NULL);
+    kest_diags_mute(diags, false);
+    if (is_error(object) || object->tag != KEST_T_STRUCT) {
+        return false;
+    }
+    const char *name = span_text(checker, callee->field.name);
+    for (uint32_t i = 0; i < object->member_count; i++) {
+        if (kest_word_same(object->members[i].name, name,
+                           callee->field.name.length)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The module a type was declared in, which is the other place a function
+// taking it is looked for: `t.get(k)` on a `table.Table` is `table.get(t, k)`.
+// A copy of a shape is looked for where the shape was declared. Two of the
+// language's own have a module that is theirs the same way: what is built on
+// the vectors is `std.vec`, and on text `std.text`.
+static size_t module_of(const KestType *type, const char **module) {
+    if (kest_is_vector(type)) {
+        *module = "std.vec";
+        return strlen(*module);
+    }
+    if (type != NULL && type->tag == KEST_T_TEXT) {
+        *module = "std.text";
+        return strlen(*module);
+    }
+    const KestType *named = type;
+    if (named != NULL && named->shape != NULL) {
+        named = named->shape;
+    }
+    if (named == NULL || named->name == NULL ||
+        (named->tag != KEST_T_STRUCT && named->tag != KEST_T_ENUM &&
+         named->tag != KEST_T_FLAGS)) {
+        return 0;
+    }
+    const char *end = strchr(named->name, '<');
+    size_t length = end == NULL ? strlen(named->name)
+                                : (size_t)(end - named->name);
+    while (length > 0 && named->name[length - 1] != '.') {
+        length--;
+    }
+    if (length == 0) {
+        return 0;
+    }
+    *module = named->name;
+    return length - 1;
+}
+
+// `x.f(a)` read as `f(x, a)`. The function is looked for where the file's own
+// are and where `x`'s type was declared, and taken if the first thing it takes
+// could be `x`; the language's own come last, so a module's `get` is the one a
+// value of that module's type means. What is checked after that is the call it
+// would have been written as. See D1256.
+static KestType *check_method(Checker *checker, KestExpr *expr,
+                              const KestType *expected) {
+    if (!expr->call.method) {
+        KestExpr *callee = expr->call.callee;
+        KestExpr **moved = KEST_ARENA_ARRAY(checker->program->arena,
+                                            KestExpr *,
+                                            expr->call.arg_count + 1);
+        KestExpr *named = KEST_ARENA_NEW(checker->program->arena, KestExpr);
+        if (moved == NULL || named == NULL) {
+            checker->out_of_memory = true;
+            return error_type(checker);
+        }
+        moved[0] = callee->field.object;
+        for (uint32_t i = 0; i < expr->call.arg_count; i++) {
+            moved[i + 1] = expr->call.args[i];
+        }
+        memset(named, 0, sizeof *named);
+        named->kind = KEST_EXPR_NAME;
+        named->span = callee->field.name;
+        expr->call.callee = named;
+        expr->call.args = moved;
+        expr->call.arg_count++;
+        expr->call.method = true;
+    }
+    KestType *object = check_expr(checker, expr->call.args[0], NULL);
+    if (is_error(object)) {
+        for (uint32_t i = 1; i < expr->call.arg_count; i++) {
+            check_expr(checker, expr->call.args[i], NULL);
+        }
+        return error_type(checker);
+    }
+    KestSpan name = expr->call.callee->span;
+    const char *text = span_text(checker, name);
+
+    KestSymbol *candidates[16];
+    uint32_t count = 0;
+    const char *places[2] = {checker->program->module, NULL};
+    size_t lengths[2] = {strlen(checker->program->module), 0};
+    lengths[1] = module_of(object, &places[1]);
+    for (int at = 0; at < 2; at++) {
+        // A file that names no module has its own functions under nothing.
+        if (places[at] == NULL || (at == 1 && lengths[1] == 0) ||
+            (at == 1 && lengths[1] == lengths[0] &&
+             strncmp(places[1], places[0], lengths[0]) == 0)) {
+            continue;
+        }
+        char joined[256];
+        int written = lengths[at] == 0
+                          ? snprintf(joined, sizeof joined, "%.*s",
+                                     (int)name.length, text)
+                          : snprintf(joined, sizeof joined, "%.*s.%.*s",
+                                     (int)lengths[at], places[at],
+                                     (int)name.length, text);
+        if (written <= 0 || (size_t)written >= sizeof joined) {
+            continue;
+        }
+        KestSymbol *found[16];
+        uint32_t there = kest_overloads(checker->program, joined,
+                                        (size_t)written, found, 16);
+        for (uint32_t i = 0; i < there && count < 16; i++) {
+            const KestType *takes = found[i]->type;
+            if (takes != NULL && takes->tag == KEST_T_FN &&
+                takes->param_count == expr->call.arg_count &&
+                could_take(object, takes->params[0])) {
+                candidates[count++] = found[i];
+            }
+        }
+        if (count > 0 && at == 1) {
+            // Reached through the module the type came from, which the file
+            // has to have asked for like any other name under it.
+            if (!kest_import_by_path(checker->program, places[at],
+                                     lengths[at])) {
+                report(checker, name, "K0325",
+                       "this file does not import `%.*s`", (int)lengths[at],
+                       places[at]);
+                suggest(checker, "`%.*s` is where `%s` takes a `%s`",
+                        (int)lengths[at], places[at], joined,
+                        type_name(checker, object));
+                return error_type(checker);
+            }
+        }
+        if (count > 0) {
+            break;
+        }
+    }
+    if (count > 1) {
+        return check_overloaded(checker, expr, candidates, count);
+    }
+    if (count == 1) {
+        candidates[0]->named = true;
+        KestType *callee = candidates[0]->type;
+        expr->call.callee->type = callee;
+        if (callee->type_param_count > 0) {
+            return check_generic(checker, expr, callee, expected);
+        }
+        return check_arguments(checker, expr, callee);
+    }
+    // The language's own, which take what they work on first too.
+    bool handled = false;
+    KestType *answered = check_builtin(checker, expr, expected, &handled);
+    if (handled) {
+        return answered;
+    }
+    report(checker, name, "K0307",
+           "nothing called `%.*s` takes a `%s` first", (int)name.length, text,
+           type_name(checker, object));
+    // Where it would have been looked for, and whether that is a module this
+    // file reads at all: one it did not import is one nothing was looked for
+    // in.
+    if (lengths[1] == 0) {
+        suggest(checker, "`x.f(a)` is `f(x, a)` for a function this file "
+                         "declares");
+    } else if (!kest_import_by_path(checker->program, places[1],
+                                    lengths[1])) {
+        suggest(checker, "`x.f(a)` is `f(x, a)` for a function this file or "
+                         "`%.*s` declares, and this file does not import "
+                         "`%.*s`",
+                (int)lengths[1], places[1], (int)lengths[1], places[1]);
+    } else {
+        suggest(checker, "`x.f(a)` is `f(x, a)` for a function this file or "
+                         "`%.*s` declares",
+                (int)lengths[1], places[1]);
+    }
+    for (uint32_t i = 1; i < expr->call.arg_count; i++) {
+        check_expr(checker, expr->call.args[i], NULL);
+    }
+    return error_type(checker);
+}
+
 // What else this file calls by a name, said beside a refusal about the other
 // one. The note is the same sentence a body that gives a name away is told
 // (D730), because it is the same situation one step out: two things answer to
@@ -2925,8 +3191,17 @@ static void note_the_other(Checker *checker, KestSpan where) {
                     "this file calls something else by that name");
 }
 
+static KestType *check_method(Checker *checker, KestExpr *expr,
+                              const KestType *expected);
+static bool is_method_call(Checker *checker, const KestExpr *expr);
+static bool calls_a_field(Checker *checker, KestExpr *expr);
+
 static KestType *check_call(Checker *checker, KestExpr *expr,
                             const KestType *expected) {
+    if (expr->call.method ||
+        (is_method_call(checker, expr) && !calls_a_field(checker, expr))) {
+        return check_method(checker, expr, expected);
+    }
     if (expr->call.callee->kind == KEST_EXPR_NAME) {
         bool handled = false;
         uint32_t said = checker->program->diags->count;
@@ -3244,8 +3519,119 @@ static KestType *check_arguments(Checker *checker, KestExpr *expr,
     return answered;
 }
 
+static void check_block(Checker *checker, KestBlock *block);
+
+// What is handed to a `block` parameter: one written here, `|x| x * 2`, or a
+// block this body was handed, handed on. The block is checked where it is
+// written, in the frame it will run in, with its names standing for what the
+// function says it calls it with. See D1257.
+static KestType *check_block_argument(Checker *checker, KestExpr *argument,
+                                      const KestType *wanted) {
+    if (argument->kind == KEST_EXPR_NAME) {
+        bool was = checker->handing_a_block;
+        checker->handing_a_block = true;
+        KestType *given = check_expr(checker, argument, wanted);
+        checker->handing_a_block = was;
+        if (!is_error(given) && !(given->tag == KEST_T_FN && given->block)) {
+            report(checker, argument->span, "K0367",
+                   "a block is written where it is handed over, and this is "
+                   "`%s`",
+                   type_name(checker, given));
+            suggest(checker, "write it here: `|x| ...`");
+            return error_type(checker);
+        }
+        return given;
+    }
+    if (argument->kind != KEST_EXPR_BLOCK) {
+        KestType *given = check_expr(checker, argument, NULL);
+        if (!is_error(given)) {
+            report(checker, argument->span, "K0367",
+                   "a block is written where it is handed over, and this is "
+                   "`%s`",
+                   type_name(checker, given));
+            suggest(checker, "write it here: `|x| ...`");
+        }
+        return error_type(checker);
+    }
+    const KestLambda *lambda = argument->lambda;
+    if (lambda->param_count != wanted->param_count) {
+        report(checker, argument->span, "K0367",
+               "this block takes %u, and it is called with %u",
+               lambda->param_count, wanted->param_count);
+        return error_type(checker);
+    }
+    bool gives = wanted->result != NULL && wanted->result->tag != KEST_T_VOID;
+    if (gives && lambda->value == NULL) {
+        report(checker, argument->span, "K0367",
+               "a block that gives `%s` gives it as `|x| value`",
+               type_name(checker, wanted->result));
+        return error_type(checker);
+    }
+    uint32_t mark = checker->local_count;
+    checker->depth++;
+    for (uint32_t i = 0; i < lambda->param_count; i++) {
+        declare_local(checker, lambda->params[i], wanted->params[i]);
+    }
+    // A block runs inside whatever the function does with it, so a loop
+    // around where it is written is not one it can leave, and `return` is
+    // the function's, which the block is not.
+    bool was_in = checker->in_a_block;
+    uint32_t was_looping = checker->loop_depth;
+    checker->in_a_block = true;
+    checker->loop_depth = 0;
+    if (lambda->value != NULL) {
+        KestType *value =
+            check_expr(checker, lambda->value, gives ? wanted->result : NULL);
+        if (gives && !is_error(value) &&
+            !kest_type_equal(value, wanted->result)) {
+            expected_but(checker, lambda->value->span, wanted->result, value,
+                         "this block");
+        }
+    } else {
+        KestLambda *body = argument->lambda;
+        check_block(checker, &body->body);
+    }
+    checker->in_a_block = was_in;
+    checker->loop_depth = was_looping;
+    checker->depth--;
+    drop_locals(checker, mark);
+    argument->type = (KestType *)wanted;
+    return (KestType *)wanted;
+}
+
+// The declaration a function or a copy of one was written at.
+static const KestDecl *written_at(Checker *checker, const KestType *callee) {
+    KestProgram *program = checker->program;
+    if (callee->symbol == NULL) {
+        return NULL;
+    }
+    for (uint32_t i = 0; i < program->instance_count; i++) {
+        if (program->instances[i].symbol != NULL &&
+            strcmp(program->instances[i].symbol, callee->symbol) == 0) {
+            return program->instances[i].decl;
+        }
+    }
+    for (uint32_t i = 0; i < program->global_count; i++) {
+        const KestType *type = program->globals[i].type;
+        if (type != NULL && type->symbol != NULL &&
+            strcmp(type->symbol, callee->symbol) == 0) {
+            return program->globals[i].decl;
+        }
+    }
+    return NULL;
+}
+
 static KestType *arguments_checked(Checker *checker, KestExpr *expr,
                                    const KestType *callee) {
+    // A function that takes a block is written into where it is called, so
+    // one calling itself is one written into itself for ever. See D1257.
+    if (kest_takes_a_block(callee) && checker->function != NULL &&
+        written_at(checker, callee) == checker->function) {
+        report(checker, expr->span, "K0367",
+               "a function that takes a block is written into every place it "
+               "is called, so it cannot call itself");
+        suggest(checker, "walk what it works on with a loop instead");
+    }
     // A call through a value has no name and nowhere it was declared: the
     // shape is all there is to say. Everything else is a function somebody
     // wrote, and the line they wrote it on says what it takes and what each
@@ -3286,7 +3672,14 @@ static KestType *arguments_checked(Checker *checker, KestExpr *expr,
                            : callee->param_count;
     for (uint32_t i = 0; i < checked; i++) {
         KestType *argument =
-            check_expr(checker, expr->call.args[i], callee->params[i]);
+            callee->params[i] != NULL && callee->params[i]->block
+                ? check_block_argument(checker, expr->call.args[i],
+                                       callee->params[i])
+                : check_expr(checker, expr->call.args[i], callee->params[i]);
+        if (is_error(argument) && callee->params[i] != NULL &&
+            callee->params[i]->block) {
+            continue;
+        }
         if (!kest_type_equal(argument, callee->params[i])) {
             if (written == NULL) {
                 expected_but(checker, expr->call.args[i]->span,
@@ -3578,13 +3971,13 @@ static KestType *check_field(Checker *checker, KestExpr *expr,
         if (nearest != NULL) {
             suggest(checker, "did you mean `%s`?", nearest);
         } else {
-            // What somebody writes when they have met a language with
-            // methods. There are none here: a function takes what it works on
-            // like anything else.
+            // A function named where a field would be, without the brackets
+            // that call it: `x.f()` is `f(x)` (D1256), and `x.f` is nothing.
             const char *elsewhere = names_a_function(checker, expr->field.name);
             if (elsewhere != NULL) {
-                suggest(checker, "there are no methods here: write `%s(...)`",
-                        elsewhere);
+                suggest(checker, "`%s` is a function, and one is called: "
+                                 "`%s(...)`",
+                        elsewhere, elsewhere);
             }
         }
         return error_type(checker);
@@ -3615,8 +4008,8 @@ static KestType *check_field(Checker *checker, KestExpr *expr,
     }
     const char *elsewhere = names_a_function(checker, expr->field.name);
     if (elsewhere != NULL) {
-        suggest(checker, "there are no methods here: write `%s(...)`",
-                elsewhere);
+        suggest(checker, "`%s` is a function, and one is called: `%s(...)`",
+                elsewhere, elsewhere);
     }
     return error_type(checker);
 }
@@ -4475,6 +4868,15 @@ static int64_t byte_of(Checker *checker, KestSpan span) {
 static KestType *check_expr_kind(Checker *checker, KestExpr *expr,
                                  const KestType *expected) {
     switch (expr->kind) {
+    // A block is handed to what takes one, which checks it there; anywhere
+    // else it is a value, which it is not. See D1257.
+    case KEST_EXPR_BLOCK:
+        report(checker, expr->span, "K0367",
+               "a block is handed to a function that takes one, and is "
+               "nothing anywhere else");
+        suggest(checker, "a function that takes one says so: `f: "
+                         "block(i32) -> i32`");
+        return error_type(checker);
     case KEST_EXPR_INT: {
         KestType *type = expected != NULL && expected->tag == KEST_T_INT
                              ? (KestType *)expected
@@ -4820,6 +5222,78 @@ static KestType *check_branch(Checker *checker, KestExpr *expr,
     return given;
 }
 
+// `wait Walking`: where the next call carries on from, which is a case of the
+// enum the body resumes from, one that carries nothing and is waited at once.
+// What is kept across it is the parameter and nothing else, so nothing else
+// may be in reach of it. See D1263.
+static void check_wait(Checker *checker, KestStmt *stmt) {
+    const KestType *cases = checker->resume_cases;
+    if (checker->in_a_block) {
+        report(checker, stmt->span, "K0368",
+               "a block cannot wait, because the body it is handed to is not "
+               "the one that resumes");
+        return;
+    }
+    if (cases == NULL) {
+        report(checker, stmt->span, "K0368",
+               "`wait` is written in a body that resumes");
+        kest_diags_suggest(checker->program->diags,
+                           "say what it resumes from after what it gives back: "
+                           "`fn step(c: Chore) -> Chore resumes c.at`");
+        return;
+    }
+    const char *written = span_text(checker, stmt->wait.name);
+    uint32_t tag = cases->case_count;
+    for (uint32_t i = 0; i < cases->case_count; i++) {
+        if (kest_word_same(cases->cases[i].name, written,
+                           stmt->wait.name.length)) {
+            tag = i;
+        }
+    }
+    const char *enum_name = type_name(checker, cases);
+    if (tag == cases->case_count) {
+        report(checker, stmt->wait.name, "K0368",
+               "`%.*s` is not a case of `%s`", (int)stmt->wait.name.length,
+               written, enum_name);
+        return;
+    }
+    cases->cases[tag].named = true;
+    if (cases->cases[tag].payload_count > 0) {
+        report(checker, stmt->wait.name, "K0368",
+               "`%.*s` carries something, and a body waits at a case that "
+               "carries nothing",
+               (int)stmt->wait.name.length, written);
+        return;
+    }
+    if (checker->waited != NULL && checker->waited[tag]++ > 0) {
+        report(checker, stmt->wait.name, "K0368",
+               "`%.*s` is waited at twice, and the next call would have two "
+               "places to carry on from",
+               (int)stmt->wait.name.length, written);
+        kest_diags_suggest(checker->program->diags,
+                           "give each `wait` a case of its own");
+        return;
+    }
+    if (checker->scratch_depth > 0) {
+        report(checker, stmt->span, "K0368",
+               "a `scratch` block is open at this `wait`, and it would give "
+               "back what the next call reads");
+        return;
+    }
+    if (checker->local_count > checker->resume_mark) {
+        const Local *reached = &checker->locals[checker->resume_mark];
+        report(checker, stmt->span, "K0368",
+               "`%.*s` is in reach of this `wait`, and nothing is kept across "
+               "one but what the body resumes from",
+               (int)reached->span.length, span_text(checker, reached->span));
+        kest_diags_suggest(checker->program->diags,
+                           "keep it in a field of what the body resumes from");
+        return;
+    }
+    stmt->wait.tag = tag;
+    stmt->wait.ordinal = ++checker->waits;
+}
+
 static void check_stmt(Checker *checker, KestStmt *stmt) {
     kest_diags_work(checker->program->diags, 1);
     switch (stmt->kind) {
@@ -4990,6 +5464,13 @@ static void check_stmt(Checker *checker, KestStmt *stmt) {
 
     case KEST_STMT_EXPR:
     case KEST_STMT_DEFER: {
+        // A body that resumes leaves at every `wait`, and what a `defer`
+        // would run there would run again on every call. See D1263.
+        if (stmt->kind == KEST_STMT_DEFER && checker->resume_cases != NULL) {
+            report(checker, stmt->span, "K0368",
+                   "a body that resumes runs no `defer`: it leaves at every "
+                   "`wait` and comes back to where it left");
+        }
         // A statement that is only an expression has to do something. A call
         // does — what it gives back may be worth ignoring — and an `if` or a
         // `match` whose arms are blocks does. Anything else works a value out
@@ -5174,6 +5655,14 @@ static void check_stmt(Checker *checker, KestStmt *stmt) {
     }
 
     case KEST_STMT_RETURN: {
+        if (checker->in_a_block) {
+            report(checker, stmt->span, "K0367",
+                   "a block runs inside the function it is handed to, so "
+                   "`return` has nowhere to go");
+            suggest(checker, "a block that gives a value is written "
+                             "`|x| value`");
+            break;
+        }
         KestType *want = checker->result;
         if (stmt->result == NULL) {
             if (want != NULL && want->tag != KEST_T_VOID) {
@@ -5203,8 +5692,17 @@ static void check_stmt(Checker *checker, KestStmt *stmt) {
         break;
 
     case KEST_STMT_SCRATCH:
+        checker->scratch_depth++;
+        check_block(checker, &stmt->block);
+        checker->scratch_depth--;
+        break;
+
     case KEST_STMT_BLOCK:
         check_block(checker, &stmt->block);
+        break;
+
+    case KEST_STMT_WAIT:
+        check_wait(checker, stmt);
         break;
     }
 }
@@ -5282,6 +5780,9 @@ static bool expr_leaves(const KestExpr *expr) {
     case KEST_EXPR_BOOL:
     case KEST_EXPR_NAME:
     case KEST_EXPR_NONE:
+    // A block's own `break` has no loop outside it to leave: it is refused
+    // there, and runs where it is called rather than where it is written.
+    case KEST_EXPR_BLOCK:
         return false;
     case KEST_EXPR_UNARY:
         return expr_leaves(expr->unary.operand);
@@ -5346,6 +5847,7 @@ static bool stmt_leaves(const KestStmt *stmt) {
     case KEST_STMT_BREAK:
         return true;
     case KEST_STMT_CONTINUE:
+    case KEST_STMT_WAIT:
         return false;
     case KEST_STMT_LET:
         return expr_leaves(stmt->let.value);
@@ -5405,12 +5907,86 @@ static bool stmt_returns(const KestStmt *stmt) {
     case KEST_STMT_BREAK:
     case KEST_STMT_CONTINUE:
     case KEST_STMT_DEFER:
+    case KEST_STMT_WAIT:
         return false;
     }
     return false;
 }
 
 static bool check_unit(KestProgram *program, KestUnit *unit);
+
+// `resumes c.at`, held to what it says: `c` is something the function takes, a
+// struct, and what it gives back; `at` is a field of it that is an enum. What
+// the body waits at is a case of that enum. Answers the enum, or NULL with the
+// reason said. See D1263.
+static const KestType *resumes_from(Checker *checker, const KestDecl *decl,
+                                    const KestType *signature) {
+    KestSpan param = {0, 0};
+    KestSpan field = {0, 0};
+    if (!kest_resumes_spans(checker->program->source, decl, &param, &field)) {
+        return NULL;
+    }
+    const char *param_name = span_text(checker, param);
+    const char *field_name = span_text(checker, field);
+    if (decl->type_param_count > 0) {
+        report(checker, param, "K0368",
+               "a body that resumes takes no types, because what it waits in "
+               "is one struct");
+        return NULL;
+    }
+    const KestType *held = NULL;
+    for (uint32_t p = 0;
+         p < decl->function.param_count && p < signature->param_count; p++) {
+        KestSpan name = decl->function.params[p]->name;
+        if (name.length == param.length &&
+            memcmp(span_text(checker, name), param_name, param.length) == 0) {
+            held = signature->params[p];
+        }
+    }
+    if (held == NULL) {
+        report(checker, param, "K0368",
+               "`%.*s` is not something `%.*s` takes",
+               (int)param.length, param_name, (int)decl->name.length,
+               span_text(checker, decl->name));
+        return NULL;
+    }
+    if (held->tag == KEST_T_ERROR) {
+        return NULL;
+    }
+    if (held->tag != KEST_T_STRUCT) {
+        report(checker, param, "K0368",
+               "a body resumes from a struct it is handed, and `%.*s` is `%s`",
+               (int)param.length, param_name, type_name(checker, held));
+        return NULL;
+    }
+    if (!kest_type_equal(signature->result, held)) {
+        report(checker, param, "K0368",
+               "`%.*s` resumes from `%.*s`, so it gives back a `%s`",
+               (int)decl->name.length, span_text(checker, decl->name),
+               (int)param.length, param_name, type_name(checker, held));
+        kest_diags_suggest(checker->program->diags,
+                           "a `wait` gives back what the body resumes from, "
+                           "and so does the end of it");
+        return NULL;
+    }
+    for (uint32_t m = 0; m < held->member_count; m++) {
+        if (!kest_word_same(held->members[m].name, field_name, field.length)) {
+            continue;
+        }
+        const KestType *cases = held->members[m].type;
+        if (cases == NULL || cases->tag != KEST_T_ENUM) {
+            report(checker, field, "K0368",
+                   "a body resumes from a field that is an enum, and `%.*s` "
+                   "is `%s`",
+                   (int)field.length, field_name, type_name(checker, cases));
+            return NULL;
+        }
+        return cases;
+    }
+    report(checker, field, "K0368", "`%s` has no field `%.*s`",
+           type_name(checker, held), (int)field.length, field_name);
+    return NULL;
+}
 
 // One body against one signature. A generic copy is the same thing with its
 // type names bound, which is what makes a copy not a special case.
@@ -5421,6 +5997,7 @@ static bool check_function(KestProgram *program, Checker *checker,
     checker->depth = 0;
     checker->loop_depth = 0;
     checker->result = signature->result;
+    checker->function = decl;
 
     for (uint32_t p = 0;
          p < decl->function.param_count && p < signature->param_count; p++) {
@@ -5432,7 +6009,27 @@ static bool check_function(KestProgram *program, Checker *checker,
     }
 
     uint32_t body = checker->local_count;
+    checker->resume_cases = NULL;
+    checker->waited = NULL;
+    checker->waits = 0;
+    checker->scratch_depth = 0;
+    if (decl->function.resumes > 0) {
+        checker->resume_cases = resumes_from(checker, decl, signature);
+        checker->resume_mark = body;
+        if (checker->resume_cases != NULL) {
+            checker->waited = KEST_ARENA_ARRAY(
+                program->arena, uint32_t,
+                checker->resume_cases->case_count + 1);
+            if (checker->waited == NULL) {
+                checker->out_of_memory = true;
+                return false;
+            }
+            memset(checker->waited, 0,
+                   sizeof(uint32_t) * (checker->resume_cases->case_count + 1));
+        }
+    }
     check_block(checker, (KestBlock *)&decl->function.body);
+    checker->resume_cases = NULL;
     // What the body itself declared, which is the one scope nothing else
     // rewinds: a block inside it is dropped where it ends, and this is where
     // the outermost one does. See D726.

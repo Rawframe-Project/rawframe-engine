@@ -339,6 +339,26 @@ void kest_import_reached_by(KestProgram *program, const char *alias,
     }
 }
 
+bool kest_import_by_path(KestProgram *program, const char *module,
+                         size_t length) {
+    if (program->unit == NULL) {
+        return false;
+    }
+    // A file's own module is one it may always reach.
+    if (kest_word_same(program->module, module, length)) {
+        return true;
+    }
+    for (uint32_t i = 0; i < program->unit->import_count; i++) {
+        if (kest_word_same(program->unit->import_paths[i], module, length)) {
+            if (program->unit->import_reached != NULL) {
+                program->unit->import_reached[i] = true;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 void kest_import_reached(KestProgram *program, const char *name,
                          size_t length) {
     const char *dot = memchr(name, '.', length);
@@ -799,6 +819,20 @@ static const KestExpr *constant_written(KestProgram *program, const char *name,
 // `f32` rounds where `f64` does not, which is part of what the type means.
 bool kest_is_narrow(const KestType *type) {
     return type != NULL && type->tag == KEST_T_FLOAT && type->width == 32;
+}
+
+// Whether a function takes a block, which is what makes it written into every
+// place it is called rather than called. See D1257.
+bool kest_takes_a_block(const KestType *function) {
+    if (function == NULL || function->tag != KEST_T_FN) {
+        return false;
+    }
+    for (uint32_t i = 0; i < function->param_count; i++) {
+        if (function->params[i] != NULL && function->params[i]->block) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Set on the three structs the language registers and on nothing else.
@@ -2603,6 +2637,9 @@ KestType *kest_resolve_type_ref(KestProgram *program,
     if (ref == NULL) {
         return error_type(program);
     }
+    // Only the whole of what one parameter is, and nothing inside it.
+    bool block_here = program->block_here;
+    program->block_here = false;
 
     switch (ref->kind) {
     case KEST_TYPE_FN: {
@@ -2614,8 +2651,26 @@ KestType *kest_resolve_type_ref(KestProgram *program,
         KestType *result = ref->element == NULL
                                ? kest_lookup_type(program, "void", 4)
                                : kest_resolve_type_ref(program, ref->element);
-        return fn_of(program, params, count, result, ref->no_alloc,
-                     ref->no_host, ref->deterministic);
+        // A block is code written where a function is called, handed to that
+        // function, and nothing that can be kept: not a field, not a local,
+        // not an answer, not held inside anything, and nothing a host takes.
+        // See D1257.
+        if (ref->block && !block_here) {
+            kest_diags_add(program->diags, KEST_SEVERITY_ERROR, "K0367",
+                           ref->span,
+                           "a block is what a function takes, and nothing "
+                           "else is one");
+            kest_diags_suggest(program->diags,
+                               "a value that is a function is written "
+                               "`fn(...)`");
+            return error_type(program);
+        }
+        KestType *made = fn_of(program, params, count, result, ref->no_alloc,
+                               ref->no_host, ref->deterministic);
+        if (made != NULL) {
+            made->block = ref->block;
+        }
+        return made;
     }
 
     case KEST_TYPE_NAMED:
@@ -2875,7 +2930,7 @@ const char *kest_type_name(KestArena *arena, const KestType *type) {
             type->result == NULL || type->result->tag == KEST_T_VOID
                 ? NULL
                 : kest_type_name(arena, type->result);
-        size_t room = strlen("fn()") + strlen(" no.alloc") +
+        size_t room = strlen("block()") + strlen(" no.alloc") +
                       strlen(" no.host") + strlen(" deterministic") + 1;
         for (uint32_t i = 0; i < type->param_count; i++) {
             room += strlen(kest_type_name(arena, type->params[i])) + 2;
@@ -2886,7 +2941,8 @@ const char *kest_type_name(KestArena *arena, const KestType *type) {
             return "?";
         }
 
-        size_t used = (size_t)snprintf(written, room, "fn(");
+        size_t used = (size_t)snprintf(written, room,
+                                       type->block ? "block(" : "fn(");
         for (uint32_t i = 0; i < type->param_count; i++) {
             used += (size_t)snprintf(written + used, room - used, "%s%s",
                                      i == 0 ? "" : ", ",
@@ -4177,11 +4233,15 @@ KestType *kest_substitute(KestProgram *program, KestType *type,
             params[i] = kest_substitute(program, type->params[i], names,
                                         bindings, count);
         }
-        return fn_of(
+        KestType *made = fn_of(
             program, params, used,
             kest_substitute(program, type->result, names, bindings, count),
             type->no_alloc, type->no_host,
             type->deterministic);
+        if (made != NULL) {
+            made->block = type->block;
+        }
+        return made;
     }
     // A copy of a shape, made again with what its types turned out to be. An
     // enum that takes types is a shape like a struct that does, so the two go
@@ -4576,7 +4636,12 @@ static bool declare_functions(KestProgram *program, const KestUnit *unit) {
 
         for (uint32_t p = 0; p < count; p++) {
             const KestField *param = decl->function.params[p];
+            // What a function takes may be a block, and what a host provides
+            // may not: a block is code written into the caller, and a host
+            // has nowhere to write it. See D1257.
+            program->block_here = !decl->function.is_extern;
             type->params[p] = kest_resolve_type_ref(program, param->type);
+            program->block_here = false;
 
             const char *param_name = span_string(program, param->name);
             for (uint32_t seen = 0; seen < p; seen++) {
@@ -4731,7 +4796,9 @@ bool kest_type_equal(const KestType *a, const KestType *b) {
     case KEST_T_FN: {
         // Called as (given, wanted): a value that promises more fits where
         // less is asked for.
-        if (a->param_count != b->param_count ||
+        // A block and a function value are two things however alike their
+        // shapes: one is code run where it was written, the other a value.
+        if (a->block != b->block || a->param_count != b->param_count ||
             !kest_type_equal(a->result, b->result)) {
             return false;
         }

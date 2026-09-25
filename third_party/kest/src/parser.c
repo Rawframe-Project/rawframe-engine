@@ -623,9 +623,15 @@ static KestTypeRef *parse_type(Parser *parser) {
         return NULL;
     }
 
-    if (check(parser, KEST_TOK_FN)) {
+    // `block(i32) -> bool` is written the way a function's shape is, and
+    // `block` is a word only here: a type that is a name followed by what it
+    // takes. See D1257.
+    bool block = is_word(parser, 0, "block") &&
+                 peek_at(parser, 1).kind == KEST_TOK_LPAREN;
+    if (check(parser, KEST_TOK_FN) || block) {
         advance(parser);
         type->kind = KEST_TYPE_FN;
+        type->block = block;
         if (!expect(parser, KEST_TOK_LPAREN)) {
             return NULL;
         }
@@ -753,6 +759,7 @@ static KestExpr *parse_expr(Parser *parser);
 static KestExpr *parse_match(Parser *parser);
 static KestExpr *parse_if(Parser *parser);
 static bool parse_block(Parser *parser, KestBlock *block);
+static KestExpr *parse_lambda(Parser *parser);
 
 static KestExpr *new_expr(Parser *parser, KestExprKind kind, KestSpan span) {
     parser->nodes++;
@@ -1249,6 +1256,9 @@ static KestExpr *parse_primary(Parser *parser) {
         return parse_match(parser);
     case KEST_TOK_IF:
         return parse_if(parser);
+    case KEST_TOK_PIPE:
+    case KEST_TOK_PIPEPIPE:
+        return parse_lambda(parser);
     case KEST_TOK_TRUE:
     case KEST_TOK_FALSE: {
         advance(parser);
@@ -1822,6 +1832,23 @@ static KestStmt *parse_statement(Parser *parser) {
                         start);
     }
 
+    // `wait Walking`: a word followed by a name is nothing else a statement can
+    // begin with, so this takes nobody's `wait`. See D1263.
+    if (is_word(parser, 0, "wait") &&
+        peek_at(parser, 1).kind == KEST_TOK_IDENT) {
+        advance(parser);
+        KestStmt *stmt = new_stmt(parser, KEST_STMT_WAIT,
+                                  span_between(start, current_span(parser)));
+        if (stmt == NULL) {
+            return NULL;
+        }
+        stmt->wait.name = current_span(parser);
+        stmt->wait.tag = 0;
+        stmt->wait.ordinal = 0;
+        advance(parser);
+        return stmt;
+    }
+
     // A word rather than a keyword: `scratch` followed by a brace is a thing
     // no other statement can be, and a keyword is paid for by everybody who
     // wanted the name. See the rule about words in `CLAUDE.md`.
@@ -1892,6 +1919,79 @@ static KestStmt *parse_statement(Parser *parser) {
     }
     stmt->value = expr;
     return stmt;
+}
+
+// `|x, y| value` or `|x| { ... }`, and `|| ...` for one that is handed
+// nothing. The names are only names: what they are is what the function the
+// block is handed to says it calls it with. See D1257.
+static KestExpr *parse_lambda(Parser *parser) {
+    KestSpan start = current_span(parser);
+    KestLambda *lambda = KEST_ARENA_NEW(parser->arena, KestLambda);
+    if (lambda == NULL) {
+        parser->out_of_memory = true;
+        return NULL;
+    }
+    memset(lambda, 0, sizeof *lambda);
+    List names = {0};
+    if (!match(parser, KEST_TOK_PIPEPIPE)) {
+        expect(parser, KEST_TOK_PIPE);
+        if (!check(parser, KEST_TOK_PIPE)) {
+            do {
+                KestToken name = peek(parser);
+                if (!expect(parser, KEST_TOK_IDENT)) {
+                    return NULL;
+                }
+                KestSpan *kept = KEST_ARENA_NEW(parser->arena, KestSpan);
+                if (kept == NULL) {
+                    parser->out_of_memory = true;
+                    return NULL;
+                }
+                *kept = name.span;
+                list_push(parser, &names, kept);
+            } while (match(parser, KEST_TOK_COMMA));
+        }
+        if (!expect(parser, KEST_TOK_PIPE)) {
+            return NULL;
+        }
+    }
+    lambda->param_count = names.count;
+    lambda->params = KEST_ARENA_ARRAY(parser->arena, KestSpan,
+                                      names.count == 0 ? 1 : names.count);
+    if (lambda->params == NULL) {
+        parser->out_of_memory = true;
+        return NULL;
+    }
+    KestSpan **taken = (KestSpan **)list_taken(parser, &names);
+    for (uint32_t i = 0; i < names.count; i++) {
+        lambda->params[i] = *taken[i];
+    }
+    if (check(parser, KEST_TOK_LBRACE)) {
+        if (!parse_block(parser, &lambda->body)) {
+            return NULL;
+        }
+    } else {
+        lambda->value = parse_expr(parser);
+        if (lambda->value == NULL) {
+            return NULL;
+        }
+        // `|x| total += x` is a statement where a value goes: what a block
+        // does rather than gives is written in braces.
+        if (is_assignment(peek(parser).kind)) {
+            error_at(parser, peek(parser).span, "K0201",
+                     "a block written without braces gives a value, and this "
+                     "assigns one");
+            suggest(parser, "a block that does something is written in "
+                            "braces: `|x| { total += x }`");
+            return NULL;
+        }
+    }
+    KestExpr *expr = new_expr(
+        parser, KEST_EXPR_BLOCK,
+        span_between(start, parser->tokens[parser->position - 1].span));
+    if (expr != NULL) {
+        expr->lambda = lambda;
+    }
+    return expr;
 }
 
 static bool parse_block(Parser *parser, KestBlock *block) {
@@ -2085,6 +2185,22 @@ static KestDecl *parse_function(Parser *parser, KestSpan start, bool is_extern) 
 
     if (match(parser, KEST_TOK_ARROW)) {
         decl->function.result = parse_type(parser);
+    }
+    // `resumes c.at` before the promises: a word, and one that means this
+    // only here, where nothing else can stand. See D1263.
+    if (!is_extern && is_word(parser, 0, "resumes") &&
+        peek_at(parser, 1).kind == KEST_TOK_IDENT) {
+        advance(parser);
+        decl->function.resumes = current_span(parser).offset + 1;
+        advance(parser);
+        if (!expect(parser, KEST_TOK_DOT)) {
+            suggest(parser, "a body resumes from a field of what it takes: "
+                            "`resumes c.at`");
+            return NULL;
+        }
+        if (!expect(parser, KEST_TOK_IDENT)) {
+            return NULL;
+        }
     }
     match_promises(parser, &decl->function.no_alloc,
                    &decl->function.no_host, &decl->function.deterministic);

@@ -302,6 +302,11 @@ static inline bool kest_diags_work(KestDiags *diags, uint64_t units) {
 // went wrong here is that the machine this is running on has no more room.
 void kest_diags_starve(KestDiags *diags);
 
+// A file that is nobody's, for what is said to be read back: `tmpfile`, and
+// nothing where WebAssembly's system interface has none. Every caller says
+// what it cannot do without one. See D1255.
+FILE *kest_scratch_file(void);
+
 // One diagnostic from something that has no arena to make one in: a build that
 // could not be opened at all, which is the only way to be here. The words are
 // the ones every other diagnostic is written with because they are written

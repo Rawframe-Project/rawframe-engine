@@ -673,6 +673,14 @@ typedef struct {
     KestChunk **functions;
     uint32_t count;
     uint32_t capacity;
+    // Where each function is by its name: an open-addressed table of places
+    // in `functions`, each one more than the place so that nought is empty,
+    // kept at least twice as big as there are functions. A name is looked for
+    // at every call the compiler writes and at every function it registers,
+    // and a walk of the list for each made compiling a program of a thousand
+    // modules grow as the square of it. See D1261.
+    uint32_t *places;
+    uint32_t place_capacity;
     KestExtern *externs;
     uint32_t extern_count;
     uint32_t extern_capacity;

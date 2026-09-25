@@ -262,6 +262,16 @@ static void walk_expr(Graph *graph, Function *function, const KestExpr *expr) {
     }
 
     switch (expr->kind) {
+    // What a block does is done in the body it is written in, whichever
+    // function it is handed to, so it is walked as part of that body.
+    // See D1257.
+    case KEST_EXPR_BLOCK:
+        if (expr->lambda->value != NULL) {
+            walk_expr(graph, function, expr->lambda->value);
+        } else {
+            walk_block(graph, function, &expr->lambda->body);
+        }
+        break;
     case KEST_EXPR_ARRAY:
         // A run of a written length is laid out where it stands (D064): slots
         // in the frame, or bytes inside the struct it is written into. Nothing
@@ -358,8 +368,11 @@ static void walk_expr(Graph *graph, Function *function, const KestExpr *expr) {
         // what is known about it. A function type with no symbol is a value
         // rather than a declaration, and its promise is part of its type,
         // which is what keeps this provable at all.
+        // A block is not one of those: what it does is written where it is,
+        // and judged there, as part of the body it was written in. See D1257.
         if (callee->type != NULL && callee->type->tag == KEST_T_FN &&
             callee->type->symbol == NULL && !callee->type->is_foreign &&
+            !callee->type->block &&
             !(graph->about == 2   ? callee->type->deterministic
               : graph->about == 1 ? callee->type->no_host
                                   : callee->type->no_alloc)) {

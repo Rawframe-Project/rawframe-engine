@@ -16,8 +16,10 @@
 #include <string.h>
 
 // Whether instructions hand over through a table of label addresses, which is
-// GCC's and clang's and not the standard's. See D1181.
-#if defined(__GNUC__) && !KEST_CHECKED
+// GCC's and clang's and not the standard's. See D1181. Not on WebAssembly,
+// which has no jump to an address: clang makes the table one more `switch`
+// around the real one, and the machine ran a third slower for it. See D1255.
+#if defined(__GNUC__) && !KEST_CHECKED && !defined(__wasm__)
 #define KEST_THREADED 1
 #else
 #define KEST_THREADED 0
@@ -1104,9 +1106,12 @@ static void follow_packed(Vm *rt, const unsigned char *bytes,
     }
     size_t span = (size_t)head->places * head->stride;
     if (head->loose || head->layout == NULL) {
+        // An address is as wide as the machine's, which is less than the
+        // word it is kept in where a pointer is four bytes: copying eight into
+        // one wrote past it on WebAssembly. See D1255.
         for (size_t at = 0; at + 8 <= span; at += 8) {
             void *what;
-            memcpy(&what, bytes + at, 8);
+            memcpy(&what, bytes + at, sizeof what);
             follow(rt, what);
         }
         return;
@@ -1120,7 +1125,7 @@ static void follow_packed(Vm *rt, const unsigned char *bytes,
                 continue;
             }
             void *what;
-            memcpy(&what, one + layout->pieces[piece].offset, 8);
+            memcpy(&what, one + layout->pieces[piece].offset, sizeof what);
             follow(rt, what);
         }
     }

@@ -187,6 +187,25 @@ static const char *names_only_what_is_there(const KestModule *module,
                      name, at, into + width, chunk->slot_count);
             return "K0408";
         }
+        // And two that move what is on the stack by counts the machine does
+        // not ask about: turning a run of none rolls one fewer than none,
+        // which is every value there could be, and a piece taken past the
+        // end of the value it is taken out of is whatever is above the top.
+        // Found by changing instructions nobody's compiler wrote. See D1253.
+        if (op == KEST_OP_ROTATE && kest_chunk_u16(chunk, at + 1) == 0) {
+            snprintf(said, room, "`%s` at %u turns a run of none", name, at);
+            return "K0410";
+        }
+        if (op == KEST_OP_FIELD &&
+            kest_chunk_u16(chunk, at + 1) + kest_chunk_u16(chunk, at + 3) >
+                kest_chunk_u16(chunk, at + 5)) {
+            snprintf(said, room,
+                     "`%s` at %u takes %u from %u of a value %u wide", name,
+                     at, kest_chunk_u16(chunk, at + 3),
+                     kest_chunk_u16(chunk, at + 1),
+                     kest_chunk_u16(chunk, at + 5));
+            return "K0410";
+        }
         at += wide;
     }
     return NULL;
@@ -1567,7 +1586,11 @@ static const char *kinds_step(Kinds *w) {
         return NULL;
     case KEST_OP_FIELD: {
         // `offset`, `size`, `total`: the `size` slots at `offset` of the
-        // `total` on top are what is left.
+        // `total` on top are what is left. One past the end of its value was
+        // refused before this walk and is not followed here. See D1253.
+        if (u[0] + u[1] > u[2]) {
+            return NULL;
+        }
         uint32_t base = chunk->slot_count + w->depth - u[2];
         carried_over(w, base + u[0], chunk->slot_count, base, u[1]);
         w->depth -= u[2] - u[1];
@@ -1575,7 +1598,11 @@ static const char *kinds_step(Kinds *w) {
     }
     case KEST_OP_ROTATE: {
         // The top one moved under the rest, so what a case carries is read
-        // through its tag first, where the tag still is.
+        // through its tag first, where the tag still is. A rotation of none
+        // was refused before this walk, and moves nothing here. See D1253.
+        if (u[0] == 0) {
+            return NULL;
+        }
         uint32_t base = chunk->slot_count + w->depth - u[0];
         for (uint32_t i = 0; i < u[0]; i++) {
             w->spare[i] = resolved(v, w->now, chunk->slot_count, base + i);
@@ -2972,6 +2999,16 @@ bool kest_module_prove(const KestModule *module, KestArena *arena,
                              "width");
             held = false;
         }
+    }
+
+    // The promises are walked over code the walks above proved can be
+    // walked: an instruction this machine has not got has no width, and a
+    // walk that asked it for one read past the end of the table that says.
+    // A module refused above is refused, and nothing more is asked of it.
+    // See D1253.
+    if (!held) {
+        kest_arena_free(scratch);
+        return false;
     }
 
     for (uint32_t i = 0; i < module->count; i++) {

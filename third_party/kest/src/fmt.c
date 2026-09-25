@@ -226,6 +226,11 @@ static bool holds_a_body(const KestExpr *expr) {
     case KEST_EXPR_MATCH:
         // Arms are lines of their own however they are written.
         return true;
+    // A block in braces is lines of its own; one that gives a value is as
+    // long as that value.
+    case KEST_EXPR_BLOCK:
+        return expr->lambda->value == NULL ||
+               holds_a_body(expr->lambda->value);
     case KEST_EXPR_IF:
         return expr->branch->then_body.count > 0 ||
                expr->branch->else_body.count > 0 ||
@@ -294,7 +299,7 @@ static void print_type(Printer *printer, const KestTypeRef *type) {
         put_char(printer, '?');
         break;
     case KEST_TYPE_FN:
-        put(printer, "fn(");
+        put(printer, type->block ? "block(" : "fn(");
         for (uint32_t i = 0; i < type->arg_count; i++) {
             put(printer, i > 0 ? ", " : "");
             print_type(printer, type->args[i]);
@@ -603,6 +608,26 @@ static void print_expr(Printer *printer, const KestExpr *expr, int outer) {
         print_expr(printer, expr->index.index, 0);
         put_char(printer, ']');
         break;
+    // `|x, y| value`, or `|x| {` and the body. Nothing handed over is `||`.
+    // See D1257.
+    case KEST_EXPR_BLOCK: {
+        const KestLambda *lambda = expr->lambda;
+        put(printer, "|");
+        for (uint32_t i = 0; i < lambda->param_count; i++) {
+            put(printer, i == 0 ? "" : ", ");
+            print_span(printer, lambda->params[i]);
+        }
+        put(printer, "|");
+        if (lambda->value != NULL) {
+            put(printer, " ");
+            print_expr(printer, lambda->value, 0);
+        } else {
+            print_block(printer, &lambda->body,
+                        expr->span.offset + expr->span.length);
+        }
+        break;
+    }
+
     case KEST_EXPR_IF: {
         const KestBranch *branch = expr->branch;
         put(printer, "if ");
@@ -785,6 +810,7 @@ static bool prints_flat(const KestStmt *stmt) {
         return !holds_a_body(stmt->value);
     case KEST_STMT_BREAK:
     case KEST_STMT_CONTINUE:
+    case KEST_STMT_WAIT:
         return true;
     case KEST_STMT_WHILE:
     case KEST_STMT_FOR:
@@ -894,6 +920,12 @@ static void print_stmt(Printer *printer, const KestStmt *stmt, bool bare) {
         put(printer, "continue\n");
         break;
 
+    case KEST_STMT_WAIT:
+        put(printer, "wait ");
+        print_span(printer, stmt->wait.name);
+        put_char(printer, '\n');
+        break;
+
     case KEST_STMT_SCRATCH:
     case KEST_STMT_BLOCK:
         put(printer, stmt->kind == KEST_STMT_SCRATCH ? "scratch {\n" : "{\n");
@@ -989,6 +1021,14 @@ static void print_signature(Printer *printer, const KestDecl *decl) {
     if (decl->function.result != NULL) {
         put(printer, " -> ");
         print_type(printer, decl->function.result);
+    }
+    KestSpan resumed;
+    KestSpan resumed_field;
+    if (kest_resumes_spans(printer->source, decl, &resumed, &resumed_field)) {
+        put(printer, " resumes ");
+        print_span(printer, resumed);
+        put_char(printer, '.');
+        print_span(printer, resumed_field);
     }
     if (decl->function.no_alloc) {
         put(printer, " no.alloc");

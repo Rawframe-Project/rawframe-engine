@@ -22,6 +22,9 @@ _Static_assert(MAX_EXTERNS <= (uint32_t)UINT16_MAX + 1,
 #define MAX_LOCALS 256
 #define MAX_LOOPS 16
 #define MAX_BREAKS 32
+// How many places one body can wait at. A case of an enum each, and an enum
+// with more than this many places to be in is a machine nobody can read.
+#define MOST_WAITS 64
 #define MAX_DEFERS 32
 // How many working-memory blocks may be open at once in one body. Nesting is
 // lexical, so this is a number a program can be refused for where it is
@@ -58,6 +61,10 @@ typedef struct {
     // Where it was written, which is what a body says about a name when it is
     // asked which one a place belongs to.
     KestSpan span;
+    // Not a name here: a function written into where it was called sees its
+    // own names and no others, and a block run inside one sees the names
+    // where it was written and not the function's. See D1257.
+    bool hidden;
 } Local;
 
 typedef struct {
@@ -151,6 +158,26 @@ typedef struct {
     // walk counts with is a value the body holds, so a question about it has
     // an answer where it is asked. See D1231.
     uint16_t unrolling;
+
+    // The function taking a block that is being written into where it was
+    // called, innermost, and how many deep that is; the lowest name that is
+    // this body's to see; and the place every instruction is said to come
+    // from while what is written comes from another file. See D1257.
+    struct Expanding *expanding;
+    uint32_t expansion_depth;
+    uint16_t visible_floor;
+    KestSpan span_here;
+
+    // A body that resumes: the declaration, where what it resumes from is in
+    // the frame and how wide, the slot that says where it is waiting, and the
+    // branch the start of the body takes to each `wait`, by the order they
+    // are written in. See D1263.
+    const KestDecl *resuming;
+    uint16_t resume_slot;
+    uint16_t resume_size;
+    const KestType *resume_type;
+    uint16_t resume_tag_slot;
+    uint32_t resume_jumps[MOST_WAITS + 1];
 } Compiler;
 
 static void refuse(Compiler *compiler, KestSpan span, const char *code,
@@ -238,6 +265,11 @@ static uint32_t ir_emit(Compiler *compiler, KestIrKind kind,
                         const KestType *type, uint16_t takes,
                         const KestType *gives, uint16_t slots, KestSpan span) {
     kest_diags_work(compiler->program->diags, 1);
+    // A body written in from another file is said to be where it was
+    // called: its own places are in a file this chunk does not point at.
+    if (compiler->span_here.length > 0) {
+        span = compiler->span_here;
+    }
     if (takes > compiler->value_count) {
         // Reading more than the body has made. The walk and this are out of
         // step, which is this project's mistake rather than the program's.
@@ -366,9 +398,10 @@ static const char *span_text(Compiler *compiler, KestSpan span) {
 
 static Local *find_local(Compiler *compiler, KestSpan span) {
     const char *name = span_text(compiler, span);
-    for (uint16_t i = compiler->local_count; i > 0; i--) {
+    for (uint16_t i = compiler->local_count; i > compiler->visible_floor;
+         i--) {
         Local *local = &compiler->locals[i - 1];
-        if (kest_word_same(local->name, name, span.length)) {
+        if (!local->hidden && kest_word_same(local->name, name, span.length)) {
             return local;
         }
     }
@@ -1355,6 +1388,8 @@ static bool reads_only_fields(Compiler *compiler, const KestBlock *block,
                 return false;
             }
             break;
+        case KEST_STMT_WAIT:
+            break;
         case KEST_STMT_DEFER:
             if (!expr_reads_only_fields(compiler, stmt->value, name, length,
                                         fields_are_fine)) {
@@ -1543,6 +1578,7 @@ static bool writes_no_arrays(Compiler *compiler, const KestBlock *block) {
             break;
         case KEST_STMT_BREAK:
         case KEST_STMT_CONTINUE:
+        case KEST_STMT_WAIT:
             break;
         }
     }
@@ -2504,8 +2540,371 @@ static void compile_value_call(Compiler *compiler, const KestExpr *expr) {
                shape != NULL && shape->no_alloc ? 1 : 0);
 }
 
+// A function that takes a block is written into every place it is called,
+// and the block into every place that function calls it: the function's
+// names are its own, the block's are the ones where it was written, and
+// nothing is a value or reaches the heap. What makes that true is which
+// names each can see, which file a span is read from, and which types a
+// generic's names stand for, so each of those is kept for the place a block
+// was written and put back while it runs. See D1257.
+#define MOST_BLOCKS 8
+#define DEEPEST_EXPANSION 16
+
+static uint32_t unit_index(const KestUnits *units, const KestUnitInfo *unit);
+
+typedef struct Expanding Expanding;
+
+typedef struct {
+    // The name the function calls it by.
+    const char *name;
+    size_t length;
+    const KestType *type;
+    // What was written, and everything about where.
+    const KestExpr *lambda;
+    const KestUnitInfo *unit;
+    uint32_t unit_index;
+    uint16_t floor;
+    uint16_t top;
+    const char **bound_names;
+    KestType **bound_types;
+    uint32_t bound_count;
+    Expanding *expanding;
+    KestSpan span_here;
+} BlockBinding;
+
+struct Expanding {
+    Expanding *outer;
+    BlockBinding blocks[MOST_BLOCKS];
+    uint32_t block_count;
+    // The first name that is the function's own, and what was outstanding
+    // when it began, which a `return` in it runs down to and no further.
+    uint16_t base;
+    uint16_t deferred;
+    uint16_t regions;
+    uint16_t result_slot;
+    uint16_t result_size;
+    const KestType *result;
+    uint32_t returns[MAX_BREAKS];
+    uint32_t return_count;
+};
+
+// The block a name in the function being written in is: a parameter of the
+// innermost function that takes one.
+static BlockBinding *block_named(Compiler *compiler, KestSpan span) {
+    if (compiler->expanding == NULL) {
+        return NULL;
+    }
+    const char *name = span_text(compiler, span);
+    Expanding *here = compiler->expanding;
+    for (uint32_t i = 0; i < here->block_count; i++) {
+        // The name is where it was written, which ends where the word does
+        // rather than at a nought.
+        if (here->blocks[i].length == span.length &&
+            memcmp(here->blocks[i].name, name, span.length) == 0) {
+            return &here->blocks[i];
+        }
+    }
+    return NULL;
+}
+
+// What a generic's names stand for now, kept to be put back.
+static void bindings_kept(Compiler *compiler, const char ***names,
+                          KestType ***types, uint32_t *count) {
+    KestProgram *program = compiler->program;
+    *count = program->bound_count;
+    *names = KEST_ARENA_ARRAY(program->arena, const char *,
+                              *count == 0 ? 1 : *count);
+    *types = KEST_ARENA_ARRAY(program->arena, KestType *,
+                              *count == 0 ? 1 : *count);
+    if (*names == NULL || *types == NULL) {
+        compiler->out_of_memory = true;
+        *count = 0;
+        return;
+    }
+    for (uint32_t i = 0; i < *count; i++) {
+        (*names)[i] = program->bound_names[i];
+        (*types)[i] = program->bound_types[i];
+    }
+}
+
+// Where a function is declared, and the copy of it a call names when it is a
+// generic's.
+static const KestDecl *declared_as(Compiler *compiler, const KestType *callee,
+                                   const KestUnitInfo **unit,
+                                   KestInstance **instance) {
+    KestProgram *program = compiler->program;
+    *instance = NULL;
+    for (uint32_t i = 0; i < program->instance_count; i++) {
+        KestInstance *one = &program->instances[i];
+        if (one->symbol != NULL && callee->symbol != NULL &&
+            strcmp(one->symbol, callee->symbol) == 0) {
+            *instance = one;
+            *unit = one->unit;
+            return one->decl;
+        }
+    }
+    for (uint32_t i = 0; i < program->global_count; i++) {
+        const KestSymbol *symbol = &program->globals[i];
+        if (symbol->type == NULL || symbol->type->symbol == NULL ||
+            callee->symbol == NULL || symbol->decl == NULL ||
+            strcmp(symbol->type->symbol, callee->symbol) != 0) {
+            continue;
+        }
+        for (uint32_t u = 0; u < compiler->units->count; u++) {
+            if (&compiler->units->items[u].source == symbol->source) {
+                *unit = &compiler->units->items[u];
+                return symbol->decl;
+            }
+        }
+    }
+    return NULL;
+}
+
+// A call of a function that takes a block, written where it is. What it is
+// handed goes into slots of its own first, in the order written and where it
+// was written; then its body is compiled with its names bound to those slots
+// and nothing else in sight, and its `return` is a jump to the end with the
+// answer in slots kept for it.
+static void compile_expansion(Compiler *compiler, const KestExpr *expr) {
+    KestProgram *program = compiler->program;
+    const KestType *callee = expr->call.callee->type;
+    uint16_t answer_slots = value_slots(callee->result);
+    const KestUnitInfo *unit = NULL;
+    KestInstance *instance = NULL;
+    const KestDecl *decl = declared_as(compiler, callee, &unit, &instance);
+    if (decl == NULL || compiler->expansion_depth >= DEEPEST_EXPANSION) {
+        if (decl != NULL) {
+            refuse(compiler, expr->span, "K0367",
+                   "a function that takes a block is written into where it "
+                   "is called, and this one is written into itself more "
+                   "than %d deep",
+                   DEEPEST_EXPANSION);
+        } else {
+            fault(compiler, expr->span, "this calls a function that takes a "
+                                        "block and has no body");
+        }
+        KestValue nothing = {0};
+        for (uint16_t i = 0; i < answer_slots; i++) {
+            emit_constant(compiler, nothing, KEST_CONST_INT,
+                          whole_type(compiler), expr->span);
+        }
+        return;
+    }
+    Expanding here;
+    memset(&here, 0, sizeof here);
+    here.outer = compiler->expanding;
+    uint16_t slots[16] = {0};
+    for (uint32_t i = 0; i < expr->call.arg_count && i < 16 &&
+                         i < callee->param_count && i < decl->function.param_count;
+         i++) {
+        const KestType *wanted = callee->params[i];
+        const KestExpr *argument = expr->call.args[i];
+        KestSpan named = decl->function.params[i]->name;
+        const char *name = kest_span_text(&unit->source, named);
+        if (wanted != NULL && wanted->block) {
+            if (here.block_count == MOST_BLOCKS) {
+                refuse(compiler, argument->span, "K0502",
+                       "a function takes at most %d blocks", MOST_BLOCKS);
+                continue;
+            }
+            BlockBinding *bound = &here.blocks[here.block_count++];
+            if (argument->kind == KEST_EXPR_BLOCK) {
+                memset(bound, 0, sizeof *bound);
+                bound->lambda = argument;
+                bound->unit = program->unit;
+                bound->unit_index = compiler->unit;
+                bound->floor = compiler->visible_floor;
+                bound->top = compiler->local_count;
+                bindings_kept(compiler, &bound->bound_names,
+                              &bound->bound_types, &bound->bound_count);
+                bound->expanding = compiler->expanding;
+                bound->span_here = compiler->span_here;
+            } else {
+                const BlockBinding *from = block_named(compiler, argument->span);
+                if (from == NULL) {
+                    fault(compiler, argument->span,
+                          "this hands on a block there is none of");
+                    here.block_count--;
+                    continue;
+                }
+                *bound = *from;
+            }
+            bound->name = name;
+            bound->length = named.length;
+            bound->type = wanted;
+            continue;
+        }
+        uint16_t size = value_slots(wanted);
+        compile_expr(compiler, argument);
+        slots[i] = reserve_slot(compiler, size);
+        stack_pop(compiler, size);
+        store_slots(compiler, slots[i], size, wanted, argument->span);
+    }
+    if (answer_slots > 0) {
+        here.result_slot = reserve_slot(compiler, answer_slots);
+        here.result_size = answer_slots;
+        here.result = callee->result;
+    }
+
+    // Into the function: its file, its generic's types, its names only.
+    const KestUnitInfo *was_unit = program->unit;
+    uint32_t was_index = compiler->unit;
+    uint16_t was_floor = compiler->visible_floor;
+    KestSpan was_here = compiler->span_here;
+    const char **was_names = NULL;
+    KestType **was_types = NULL;
+    uint32_t was_count = 0;
+    bindings_kept(compiler, &was_names, &was_types, &was_count);
+    if (&unit->source != program->source && compiler->span_here.length == 0) {
+        compiler->span_here = expr->span;
+    }
+    kest_program_in(program, unit);
+    compiler->unit = unit_index(compiler->units, unit);
+    if (instance != NULL) {
+        if (!kest_retype_instance(program, instance)) {
+            compiler->out_of_memory = true;
+        }
+        kest_bind_types(program, instance->names, instance->bindings,
+                        instance->count);
+    }
+    here.base = compiler->local_count;
+    here.deferred = compiler->defer_count;
+    here.regions = compiler->region_count;
+    compiler->visible_floor = here.base;
+    compiler->expanding = &here;
+    compiler->expansion_depth++;
+    for (uint32_t i = 0; i < decl->function.param_count && i < 16 &&
+                         i < callee->param_count;
+         i++) {
+        if (callee->params[i] != NULL && callee->params[i]->block) {
+            continue;
+        }
+        bind_local(compiler, decl->function.params[i]->name, slots[i],
+                   value_slots(callee->params[i]));
+        if (compiler->local_count > 0) {
+            compiler->locals[compiler->local_count - 1].type =
+                callee->params[i];
+        }
+    }
+    compile_block(compiler, &decl->function.body);
+    for (uint32_t i = 0; i < here.return_count; i++) {
+        ir_lands(compiler, here.returns[i]);
+    }
+
+    // And back out to where it was called.
+    compiler->expansion_depth--;
+    compiler->expanding = here.outer;
+    compiler->local_count = here.base;
+    compiler->visible_floor = was_floor;
+    compiler->span_here = was_here;
+    kest_program_in(program, was_unit);
+    compiler->unit = was_index;
+    kest_bind_types(program, was_names, was_types, was_count);
+    if (answer_slots > 0) {
+        stack_push(compiler, answer_slots);
+        load_slots(compiler, here.result_slot, answer_slots, callee->result,
+                   expr->span);
+    }
+}
+
+// A block called inside the function it was handed to: what it is called
+// with goes into slots of its own where the function is, and then its body
+// is compiled where it was written -- that file, those types, those names and
+// none of the function's -- with its own names bound to those slots.
+static void compile_block_call(Compiler *compiler, const KestExpr *expr,
+                               const BlockBinding *bound) {
+    KestProgram *program = compiler->program;
+    const KestLambda *lambda = bound->lambda->lambda;
+    const KestType *block = bound->type;
+    uint16_t slots[16] = {0};
+    for (uint32_t i = 0; i < expr->call.arg_count && i < 16 &&
+                         i < block->param_count;
+         i++) {
+        uint16_t size = value_slots(block->params[i]);
+        compile_expr(compiler, expr->call.args[i]);
+        slots[i] = reserve_slot(compiler, size);
+        stack_pop(compiler, size);
+        store_slots(compiler, slots[i], size, block->params[i],
+                    expr->call.args[i]->span);
+    }
+
+    // What the function sees is out of sight while the block runs.
+    uint16_t top = compiler->local_count;
+    bool was_hidden[MAX_LOCALS];
+    for (uint16_t i = bound->top; i < top; i++) {
+        was_hidden[i] = compiler->locals[i].hidden;
+        compiler->locals[i].hidden = true;
+    }
+    const KestUnitInfo *was_unit = program->unit;
+    uint32_t was_index = compiler->unit;
+    uint16_t was_floor = compiler->visible_floor;
+    KestSpan was_here = compiler->span_here;
+    Expanding *was_expanding = compiler->expanding;
+    const char **was_names = NULL;
+    KestType **was_types = NULL;
+    uint32_t was_count = 0;
+    bindings_kept(compiler, &was_names, &was_types, &was_count);
+
+    kest_program_in(program, bound->unit);
+    compiler->unit = bound->unit_index;
+    compiler->visible_floor = bound->floor;
+    compiler->span_here = bound->span_here;
+    compiler->expanding = bound->expanding;
+    kest_bind_types(program, bound->bound_names, bound->bound_types,
+                    bound->bound_count);
+    for (uint32_t i = 0; i < lambda->param_count && i < 16 &&
+                         i < block->param_count;
+         i++) {
+        bind_local(compiler, lambda->params[i], slots[i],
+                   value_slots(block->params[i]));
+        if (compiler->local_count > 0) {
+            compiler->locals[compiler->local_count - 1].type =
+                block->params[i];
+        }
+    }
+    bool gives = block->result != NULL && block->result->tag != KEST_T_VOID;
+    if (lambda->value != NULL) {
+        compile_expr(compiler, lambda->value);
+        // What a block that gives nothing works out is dropped, the way a
+        // statement that is only an expression drops what it made.
+        uint16_t made = value_slots(lambda->value->type);
+        if (!gives && made > 0) {
+            stack_pop(compiler, made);
+            ir_emit(compiler, KEST_IR_DROP, lambda->value->type, 1, NULL, 0,
+                    lambda->value->span);
+        }
+    } else {
+        compile_block(compiler, &lambda->body);
+    }
+
+    compiler->local_count = top;
+    for (uint16_t i = bound->top; i < top; i++) {
+        compiler->locals[i].hidden = was_hidden[i];
+    }
+    kest_program_in(program, was_unit);
+    compiler->unit = was_index;
+    compiler->visible_floor = was_floor;
+    compiler->span_here = was_here;
+    compiler->expanding = was_expanding;
+    kest_bind_types(program, was_names, was_types, was_count);
+}
+
 static void compile_call(Compiler *compiler, const KestExpr *expr) {
     const KestExpr *callee = expr->call.callee;
+    // A block this function was handed, called; and a function that takes
+    // one, written in. See D1257.
+    if (callee->kind == KEST_EXPR_NAME && !expr->call.method &&
+        find_local(compiler, callee->span) == NULL) {
+        const BlockBinding *bound = block_named(compiler, callee->span);
+        if (bound != NULL) {
+            compile_block_call(compiler, expr, bound);
+            return;
+        }
+    }
+    if (kest_takes_a_block(callee->type)) {
+        compile_expansion(compiler, expr);
+        return;
+    }
 
     // A call whose answer cannot be anything else is a value rather than work.
     // The folder has always known three of them -- `hash` over something
@@ -2637,7 +3036,7 @@ static void compile_call(Compiler *compiler, const KestExpr *expr) {
         callee->type != NULL && callee->type->tag == KEST_T_FN &&
         !callee->type->is_foreign &&
         (callee->type->symbol == NULL ||
-         (callee->kind == KEST_EXPR_NAME &&
+         (callee->kind == KEST_EXPR_NAME && !expr->call.method &&
           find_local(compiler, callee->span) != NULL));
     if (through_value) {
         compile_value_call(compiler, expr);
@@ -2747,6 +3146,11 @@ static void compile_call(Compiler *compiler, const KestExpr *expr) {
 
 static void compile_expr_kind(Compiler *compiler, const KestExpr *expr) {
     switch (expr->kind) {
+    // Compiled where the function it is handed to calls it, and nowhere
+    // else: the checker lets one be written as an argument and nothing more.
+    case KEST_EXPR_BLOCK:
+        fault(compiler, expr->span, "a block is compiled where it is called");
+        return;
     case KEST_EXPR_INT: {
         KestValue value = {0};
         // The lexer's reader, which the checker also uses, because a `u64`
@@ -4730,6 +5134,38 @@ static void compile_stmt_kind(Compiler *compiler, const KestStmt *stmt) {
 
     case KEST_STMT_RETURN: {
         uint16_t size = 0;
+        // Inside a function written into where it was called, `return` is
+        // the end of that function: the answer goes where the call reads it,
+        // what the function opened is closed, and the rest of it is jumped
+        // over. See D1257.
+        Expanding *here = compiler->expanding;
+        if (here != NULL && compiler->local_count >= here->base &&
+            compiler->visible_floor == here->base) {
+            if (stmt->result != NULL) {
+                compile_expr(compiler, stmt->result);
+                size = value_slots(stmt->result->type);
+                if (here->result_size > 0) {
+                    stack_pop(compiler, here->result_size);
+                    store_slots(compiler, here->result_slot,
+                                here->result_size, here->result, stmt->span);
+                } else if (size > 0) {
+                    stack_pop(compiler, size);
+                    ir_emit(compiler, KEST_IR_DROP, stmt->result->type, 1,
+                            NULL, 0, stmt->span);
+                }
+            }
+            run_deferred(compiler, here->deferred, stmt->span);
+            close_regions(compiler, here->regions, true, stmt->span);
+            if (here->return_count == MAX_BREAKS) {
+                refuse(compiler, stmt->span, "K0502",
+                       "a function that takes a block returns in at most %d "
+                       "places",
+                       MAX_BREAKS);
+                break;
+            }
+            here->returns[here->return_count++] = ir_go(compiler, stmt->span);
+            break;
+        }
         if (stmt->result != NULL) {
             compile_expr(compiler, stmt->result);
             size = value_slots(stmt->result->type);
@@ -4747,6 +5183,35 @@ static void compile_stmt_kind(Compiler *compiler, const KestStmt *stmt) {
                               stmt->result == NULL ? NULL : stmt->result->type,
                               size > 0 ? 1 : 0, NULL, 0, stmt->span);
         ir_carries(compiler, at, size, 0, 0);
+        break;
+    }
+
+    case KEST_STMT_WAIT: {
+        // Where it is waiting written into what it resumes from, that given
+        // back, and the next call's way in landed after it. Nothing else is
+        // in reach here -- the checker saw to that -- so nothing else has to
+        // be kept. See D1263.
+        if (compiler->resuming == NULL || stmt->wait.ordinal == 0 ||
+            stmt->wait.ordinal > MOST_WAITS) {
+            fault(compiler, stmt->span, "this waits in a body that does not "
+                                        "resume");
+            break;
+        }
+        KestValue tag = {0};
+        tag.integer = (int64_t)stmt->wait.tag;
+        emit_constant(compiler, tag, KEST_CONST_INT, whole_type(compiler),
+                      stmt->span);
+        stack_pop(compiler, 1);
+        store_slots(compiler, compiler->resume_tag_slot, 1,
+                    whole_type(compiler), stmt->span);
+        stack_push(compiler, compiler->resume_size);
+        load_slots(compiler, compiler->resume_slot, compiler->resume_size,
+                   compiler->resume_type, stmt->span);
+        stack_pop(compiler, compiler->resume_size);
+        uint32_t at = ir_emit(compiler, KEST_IR_GIVE, compiler->resume_type, 1,
+                              NULL, 0, stmt->span);
+        ir_carries(compiler, at, compiler->resume_size, 0, 0);
+        ir_lands(compiler, compiler->resume_jumps[stmt->wait.ordinal]);
         break;
     }
 
@@ -4940,9 +5405,114 @@ static bool open_body(Compiler *compiler, KestChunk *chunk,
     return true;
 }
 
+// Every `wait` in a body, by the order it was written in: what each is waiting
+// at, put where its number says. Nothing but a statement holds one, and the
+// statements are inside blocks, loops and the arms of an `if` or a `match`.
+static void waits_in_block(const KestBlock *block, uint32_t *tags,
+                           uint32_t *count);
+
+static void waits_in_expr(const KestExpr *expr, uint32_t *tags,
+                          uint32_t *count) {
+    if (expr == NULL) {
+        return;
+    }
+    if (expr->kind == KEST_EXPR_IF && expr->branch != NULL) {
+        waits_in_block(&expr->branch->then_body, tags, count);
+        waits_in_expr(expr->branch->otherwise, tags, count);
+        waits_in_block(&expr->branch->else_body, tags, count);
+    } else if (expr->kind == KEST_EXPR_MATCH && expr->choose != NULL) {
+        for (uint32_t a = 0; a < expr->choose->arm_count; a++) {
+            waits_in_block(&expr->choose->arms[a].body, tags, count);
+        }
+    }
+}
+
+static void waits_in_block(const KestBlock *block, uint32_t *tags,
+                           uint32_t *count) {
+    for (uint32_t i = 0; i < block->count; i++) {
+        const KestStmt *stmt = block->items[i];
+        switch (stmt->kind) {
+        case KEST_STMT_WAIT:
+            if (stmt->wait.ordinal > 0 && stmt->wait.ordinal <= MOST_WAITS) {
+                tags[stmt->wait.ordinal] = stmt->wait.tag;
+                if (stmt->wait.ordinal > *count) {
+                    *count = stmt->wait.ordinal;
+                }
+            }
+            break;
+        case KEST_STMT_WHILE:
+            waits_in_block(&stmt->loop.body, tags, count);
+            break;
+        case KEST_STMT_BLOCK:
+        case KEST_STMT_SCRATCH:
+            waits_in_block(&stmt->block, tags, count);
+            break;
+        case KEST_STMT_EXPR:
+            waits_in_expr(stmt->value, tags, count);
+            break;
+        case KEST_STMT_LET:
+        case KEST_STMT_ASSIGN:
+        case KEST_STMT_FOR:
+        case KEST_STMT_RETURN:
+        case KEST_STMT_BREAK:
+        case KEST_STMT_CONTINUE:
+        case KEST_STMT_DEFER:
+            break;
+        }
+    }
+}
+
+// The way into a body that resumes: what it resumes from says where it is
+// waiting, and each case a `wait` names is a branch to the line after that
+// `wait`. Any other case starts at the top. See D1263.
+static void resume_where_waiting(Compiler *compiler, const KestBlock *block) {
+    const KestDecl *decl = compiler->resuming;
+    KestSpan param = {0, 0};
+    KestSpan named = {0, 0};
+    kest_resumes_spans(compiler->program->source, decl, &param, &named);
+    Local *held = find_local(compiler, param);
+    if (held == NULL || held->type == NULL) {
+        fault(compiler, decl->name,
+              "this resumes from something the body was not handed");
+        return;
+    }
+    const KestMember *field =
+        find_member(held->type, span_text(compiler, named), named.length);
+    if (field == NULL) {
+        fault(compiler, decl->name,
+              "this resumes from a field the struct has not got");
+        return;
+    }
+    compiler->resume_slot = held->slot;
+    compiler->resume_size = held->size;
+    compiler->resume_type = held->type;
+    compiler->resume_tag_slot = (uint16_t)(held->slot + field->offset);
+    uint32_t tags[MOST_WAITS + 1] = {0};
+    uint32_t count = 0;
+    waits_in_block(block, tags, &count);
+    for (uint32_t w = 1; w <= count; w++) {
+        stack_push(compiler, 1);
+        load_slots(compiler, compiler->resume_tag_slot, 1,
+                   whole_type(compiler), named);
+        KestValue tag = {0};
+        tag.integer = (int64_t)tags[w];
+        emit_constant(compiler, tag, KEST_CONST_INT, whole_type(compiler),
+                      named);
+        stack_pop(compiler, 1);
+        ir_emit(compiler, KEST_IR_EQ, whole_type(compiler), 2,
+                truth_type(compiler), 1, named);
+        stack_pop(compiler, 1);
+        compiler->resume_jumps[w] =
+            ir_ask(compiler, true, named);
+    }
+}
+
 static bool close_body(Compiler *compiler, const KestBlock *block,
                        KestSpan declared) {
     compiler->body->param_slots = compiler->next_slot;
+    if (compiler->resuming != NULL) {
+        resume_where_waiting(compiler, block);
+    }
     compile_block(compiler, block);
     // Every body ends by giving something back, so that nothing runs off the
     // end of one.
@@ -5026,8 +5596,11 @@ bool kest_compile(KestProgram *program, const KestUnits *units,
                 continue;
             }
             // A generic function has no body of its own. Its copies are
-            // registered below, one per set of types it was called with.
-            if (symbol->type->type_param_count > 0) {
+            // registered below, one per set of types it was called with. And
+            // one that takes a block has none either: it is written into
+            // every place it is called. See D1257.
+            if (symbol->type->type_param_count > 0 ||
+                kest_takes_a_block(symbol->type)) {
                 continue;
             }
             KestChunk *chunk = kest_module_add(module, symbol->type->symbol);
@@ -5053,7 +5626,7 @@ bool kest_compile(KestProgram *program, const KestUnits *units,
 
     for (uint32_t i = 0; i < program->instance_count; i++) {
         const KestInstance *instance = &program->instances[i];
-        if (instance->symbol == NULL) {
+        if (instance->symbol == NULL || kest_takes_a_block(instance->type)) {
             continue;
         }
         KestChunk *chunk = kest_module_add(module, instance->symbol);
@@ -5156,7 +5729,8 @@ bool kest_compile(KestProgram *program, const KestUnits *units,
             }
             KestSymbol *declared =
                 kest_symbol_at(program, program->source, decl->name);
-            if (declared != NULL && declared->type->type_param_count > 0) {
+            if (declared != NULL && (declared->type->type_param_count > 0 ||
+                                     kest_takes_a_block(declared->type))) {
                 continue;
             }
 
@@ -5176,7 +5750,11 @@ bool kest_compile(KestProgram *program, const KestUnits *units,
                         : NULL;
                 declare_local(&compiler, decl->function.params[p]->name, type);
             }
-            if (!close_body(&compiler, &decl->function.body, decl->name)) {
+            compiler.resuming = decl->function.resumes > 0 ? decl : NULL;
+            bool closed =
+                close_body(&compiler, &decl->function.body, decl->name);
+            compiler.resuming = NULL;
+            if (!closed) {
                 return false;
             }
         }
@@ -5189,7 +5767,7 @@ bool kest_compile(KestProgram *program, const KestUnits *units,
     uint64_t copying = kest_ir_ticked(ir->now, ir->now_context);
     for (uint32_t i = 0; i < program->instance_count; i++) {
         const KestInstance *instance = &program->instances[i];
-        if (instance->symbol == NULL) {
+        if (instance->symbol == NULL || kest_takes_a_block(instance->type)) {
             continue;
         }
         kest_program_in(program, (KestUnitInfo *)instance->unit);

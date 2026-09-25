@@ -29,6 +29,9 @@ struct KestTypeRef {
     // `[f32; 16]`. Zero is `[f32]`, which is a handle to something that can
     // grow; a count makes it that many, laid out where it stands.
     KestSpan count;
+    // FN only: written `block(...)`, which a function takes and a value never
+    // is. See D1257.
+    bool block;
     // FN only. What the value promises, which is part of what it is. Two of
     // them, and a value promising more may go where one promising less is
     // wanted. See D853.
@@ -57,11 +60,15 @@ typedef enum {
     KEST_EXPR_TEXT,
     KEST_EXPR_MATCH,
     KEST_EXPR_IF,
+    // `|x| x * 2` and `|x| { total += x }`: a body handed to a function that
+    // takes a `block`, which runs where it was written. See D1257.
+    KEST_EXPR_BLOCK,
 } KestExprKind;
 
 typedef struct KestExpr KestExpr;
 typedef struct KestArm KestArm;
 typedef struct KestBranch KestBranch;
+typedef struct KestLambda KestLambda;
 
 // What a `match` is, whichever it is used as.
 typedef struct {
@@ -114,6 +121,11 @@ struct KestExpr {
             KestExpr *callee;
             KestExpr **args;
             uint32_t arg_count;
+            // Written `x.f(a)` and read as `f(x, a)`: the checker moves `x` to
+            // the front of what is passed and names `f` by its own name, and
+            // this says so for everything after it, which would otherwise
+            // take a local called `f` for the function. See D1256.
+            bool method;
         } call;
         struct {
             KestExpr *object;
@@ -138,6 +150,8 @@ struct KestExpr {
         KestChoose *choose;
         // Out of line because it holds blocks, which are named below this.
         KestBranch *branch;
+        // And for the same reason.
+        KestLambda *lambda;
     };
 };
 
@@ -163,6 +177,19 @@ struct KestBranch {
     KestExpr *otherwise;
     bool has_else;
     bool gives;
+};
+
+// A block written where it is handed over: the names it gives what it is
+// called with, and either the value it gives or the statements it runs. It
+// runs in the frame it was written in, reading and writing that frame's
+// names, and goes nowhere else, which is what lets it be no more than code.
+// See D1257.
+struct KestLambda {
+    KestSpan *params;
+    uint32_t param_count;
+    // `|x| x * 2`. NULL for a body in braces, which gives nothing.
+    KestExpr *value;
+    KestBlock body;
 };
 
 
@@ -205,6 +232,10 @@ typedef enum {
     // kept. See D966.
     KEST_STMT_SCRATCH,
     KEST_STMT_DEFER,
+    // `wait Walking` in a body that resumes: the field it resumes from is set
+    // to that case and the parameter is given back, and the next call carries
+    // on from the line after it. See D1263.
+    KEST_STMT_WAIT,
 } KestStmtKind;
 
 // What a `for` walks. `index` is zero length when the position was not asked
@@ -278,6 +309,15 @@ struct KestStmt {
         KestExpr *result;
         KestExpr *value;
         KestBlock block;
+        struct {
+            // The case, as written.
+            KestSpan name;
+            // Which case of the enum it is, and which of the body's waits,
+            // counted from one in the order they are written. Worked out by
+            // the checker; the compiler lands the next call on it.
+            uint32_t tag;
+            uint32_t ordinal;
+        } wait;
     };
 };
 
@@ -382,6 +422,13 @@ typedef struct {
             KestSpan receiver;
             KestField **params;
             uint32_t param_count;
+            // `resumes c.at`: where the `c` is, one past its offset so that
+            // nought is a function that does not wait. An offset rather than
+            // two spans because it sits in the four bytes after the count,
+            // which were padding, and a node widened is every node of every
+            // program widened; `kest_resumes_spans` reads the two names back
+            // out of the source. See D1263.
+            uint32_t resumes;
             // NULL when the function returns nothing.
             KestTypeRef *result;
             bool is_extern;
@@ -418,5 +465,10 @@ typedef struct {
 
 // Prints the tree as indented s-expressions, for seeing what the parser built.
 void kest_ast_dump(const KestUnit *unit, const KestSource *source, FILE *out);
+
+// The two names of a `resumes c.at` as spans of the source: the parameter and
+// the field. False for a function that does not wait. See D1263.
+bool kest_resumes_spans(const KestSource *source, const KestDecl *decl,
+                        KestSpan *param, KestSpan *field);
 
 #endif

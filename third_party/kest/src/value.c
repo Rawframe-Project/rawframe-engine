@@ -139,6 +139,8 @@ void kest_module_init(KestModule *module, KestArena *arena) {
     module->functions = NULL;
     module->count = 0;
     module->capacity = 0;
+    module->places = NULL;
+    module->place_capacity = 0;
     module->externs = NULL;
     module->extern_count = 0;
     module->extern_capacity = 0;
@@ -149,15 +151,57 @@ void kest_module_init(KestModule *module, KestArena *arena) {
     module->layout_capacity = 0;
 }
 
+static uint32_t name_hash(const char *name) {
+    uint32_t hash = 2166136261u;
+    for (const unsigned char *at = (const unsigned char *)name; *at; at++) {
+        hash = (hash ^ *at) * 16777619u;
+    }
+    return hash;
+}
+
+// The slot of the table a name is in, or the empty one it would go in.
+static uint32_t place_of(const KestModule *module, const char *name) {
+    uint32_t mask = module->place_capacity - 1;
+    uint32_t at = name_hash(name) & mask;
+    while (module->places[at] != 0 &&
+           strcmp(module->functions[module->places[at] - 1]->name, name) !=
+               0) {
+        at = (at + 1) & mask;
+    }
+    return at;
+}
+
+// The table made again at twice the size, with every function in it.
+static bool places_grown(KestModule *module) {
+    uint32_t wanted = module->place_capacity == 0
+                          ? 64
+                          : module->place_capacity * 2;
+    uint32_t *places = KEST_ARENA_ARRAY(module->arena, uint32_t, wanted);
+    if (places == NULL) {
+        return false;
+    }
+    memset(places, 0, sizeof(uint32_t) * wanted);
+    module->places = places;
+    module->place_capacity = wanted;
+    for (uint32_t i = 0; i < module->count; i++) {
+        module->places[place_of(module, module->functions[i]->name)] = i + 1;
+    }
+    return true;
+}
+
 KestChunk *kest_module_add(KestModule *module, const char *name) {
     // One name, one function. What a function is compiled under carries what
     // tells it from the others of its name — what it takes, or what a copy was
     // given — so two of them here is this project having built one of those
     // names wrongly, and the second would quietly be the one that runs.
-    for (uint32_t i = 0; i < module->count; i++) {
-        if (strcmp(module->functions[i]->name, name) == 0) {
-            return NULL;
-        }
+    if (module->place_capacity > 0 &&
+        module->places[place_of(module, name)] != 0) {
+        return NULL;
+    }
+    if ((module->count + 1) * 2 > module->place_capacity &&
+        !places_grown(module)) {
+        module->out_of_room = true;
+        return NULL;
     }
 
     // And nowhere to put one is not two of a name. Both answer nothing here,
@@ -193,13 +237,15 @@ KestChunk *kest_module_add(KestModule *module, const char *name) {
         return NULL;
     }
     module->functions[module->count++] = chunk;
+    module->places[place_of(module, name)] = module->count;
     return chunk;
 }
 
 int32_t kest_module_find(const KestModule *module, const char *name) {
-    for (uint32_t i = 0; i < module->count; i++) {
-        if (strcmp(module->functions[i]->name, name) == 0) {
-            return (int32_t)i;
+    if (module->place_capacity > 0) {
+        uint32_t at = module->places[place_of(module, name)];
+        if (at != 0) {
+            return (int32_t)(at - 1);
         }
     }
 

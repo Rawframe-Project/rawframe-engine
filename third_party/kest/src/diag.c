@@ -969,3 +969,11 @@ void kest_diags_write_json(const KestDiags *diags, FILE *out) {
         fprintf(out, ",\"notKept\":%u", diags->not_said);
     }
 }
+
+FILE *kest_scratch_file(void) {
+#if defined(__wasi__)
+    return NULL;
+#else
+    return tmpfile();
+#endif
+}

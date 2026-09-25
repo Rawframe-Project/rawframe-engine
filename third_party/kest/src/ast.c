@@ -2,6 +2,48 @@
 
 #include <stdio.h>
 
+bool kest_resumes_spans(const KestSource *source, const KestDecl *decl,
+                        KestSpan *param, KestSpan *field) {
+    if (decl->kind != KEST_DECL_FN || decl->function.resumes == 0 ||
+        source == NULL) {
+        return false;
+    }
+    // Read by the lexer rather than by looking at the bytes, because between
+    // the two names there may be anything a line may hold: a line ended after
+    // the dot, a comment. Only a function that waits is read this way.
+    KestArena *arena = kest_arena_new();
+    if (arena == NULL) {
+        return false;
+    }
+    KestDiags quiet;
+    kest_diags_init(&quiet, arena);
+    uint32_t count = 0;
+    KestToken *tokens =
+        kest_lex_range(arena, source, &quiet, decl->function.resumes - 1,
+                       (uint32_t)source->length, &count);
+    KestSpan names[2] = {{0, 0}, {0, 0}};
+    uint32_t found = 0;
+    bool dotted = false;
+    for (uint32_t i = 0; tokens != NULL && i < count && found < 2; i++) {
+        if (tokens[i].kind == KEST_TOK_NEWLINE) {
+            continue;
+        }
+        if (tokens[i].kind == KEST_TOK_IDENT && (found == 0 || dotted)) {
+            names[found++] = tokens[i].span;
+            continue;
+        }
+        if (tokens[i].kind == KEST_TOK_DOT && found == 1 && !dotted) {
+            dotted = true;
+            continue;
+        }
+        break;
+    }
+    kest_arena_free(arena);
+    *param = names[0];
+    *field = names[1];
+    return found == 2;
+}
+
 // What a generic may ask of a type it is given. Two, and each is a thing this
 // language itself provides for a value laid out flat: two of them are equal or
 // they are not, and some of them have an order. There is no third for `hash`,
@@ -77,7 +119,7 @@ static void print_type(const KestTypeRef *type, const KestSource *source,
         fputc(']', out);
         break;
     case KEST_TYPE_FN:
-        fputs("fn(", out);
+        fputs(type->block ? "block(" : "fn(", out);
         for (uint32_t i = 0; i < type->arg_count; i++) {
             fputs(i == 0 ? "" : ", ", out);
             print_type(type->args[i], source, out);
@@ -178,6 +220,25 @@ static void print_expr(const KestExpr *expr, const KestSource *source,
         }
         fputc(')', out);
         break;
+    case KEST_EXPR_BLOCK: {
+        const KestLambda *lambda = expr->lambda;
+        fputs("(handed |", out);
+        for (uint32_t i = 0; i < lambda->param_count; i++) {
+            fputs(i == 0 ? "" : ", ", out);
+            print_span(source, lambda->params[i], out);
+        }
+        fputs("|", out);
+        if (lambda->value != NULL) {
+            fputc(' ', out);
+            print_expr(lambda->value, source, depth, out);
+        } else {
+            fputc('\n', out);
+            print_block(&lambda->body, source, depth + 1, out);
+            indent(out, depth);
+        }
+        fputc(')', out);
+        break;
+    }
     case KEST_EXPR_IF: {
         const KestBranch *branch = expr->branch;
         fputs("(if ", out);
@@ -337,6 +398,11 @@ static void print_stmt(const KestStmt *stmt, const KestSource *source,
     case KEST_STMT_BREAK:
         fputs("(break)\n", out);
         break;
+    case KEST_STMT_WAIT:
+        fputs("(wait ", out);
+        print_span(source, stmt->wait.name, out);
+        fputs(")\n", out);
+        break;
     case KEST_STMT_CONTINUE:
         fputs("(continue)\n", out);
         break;
@@ -445,6 +511,14 @@ static void print_decl(const KestDecl *decl, const KestSource *source,
         }
         print_span(source, decl->name, out);
         print_type_params(decl, source, out);
+        KestSpan resumed;
+        KestSpan resumed_field;
+        if (kest_resumes_spans(source, decl, &resumed, &resumed_field)) {
+            fputs(" resumes ", out);
+            print_span(source, resumed, out);
+            fputc('.', out);
+            print_span(source, resumed_field, out);
+        }
         if (decl->function.no_alloc) {
             fputs(" no.alloc", out);
         }

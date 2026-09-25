@@ -354,7 +354,7 @@ bool kest_held_reload(KestHeld *held, const char *path, char *said,
     // go into `said` as well as all of it to the errors this was made with: a
     // game draws `said` in a corner, and a refusal that says only that it was
     // refused sends the person back to a terminal to find out what for.
-    FILE *heard = tmpfile();
+    FILE *heard = kest_scratch_file();
     KestBuild *candidate = kest_build(
         from, held->library, heard != NULL ? heard : held->errors,
         KEST_FORM_TEXT, 0);

@@ -136,7 +136,7 @@ static void after(Adapter *adapter, KestDebugState state, const char *why) {
     if (state == KEST_DEBUG_FAILED) {
         // What the machine said about why, which the words say to a person
         // at a terminal and the editor shows on its console.
-        FILE *report = tmpfile();
+        FILE *report = kest_scratch_file();
         if (report != NULL) {
             long nothing_read = 0;
             kest_report(adapter->runtime, report, KEST_FORM_TEXT);
@@ -173,8 +173,8 @@ static const char *launch(Adapter *adapter, const char *program,
         kest_build_report(adapter->build, diagnostics, KEST_FORM_TEXT);
         return "the program does not compile";
     }
-    adapter->wrote = tmpfile();
-    adapter->nothing = tmpfile();
+    adapter->wrote = kest_scratch_file();
+    adapter->nothing = kest_scratch_file();
     if (adapter->wrote == NULL || adapter->nothing == NULL) {
         return "there is nowhere to put what the program writes";
     }
@@ -352,7 +352,7 @@ static void handle(Adapter *adapter, const KestJson *request) {
                    "`launch` names the program to run as `program`", NULL);
             return;
         }
-        FILE *diagnostics = tmpfile();
+        FILE *diagnostics = kest_scratch_file();
         const char *why = launch(adapter, program->text, diagnostics);
         long nothing_read = 0;
         relay(adapter, diagnostics, &nothing_read, "stderr");

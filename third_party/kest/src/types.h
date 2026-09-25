@@ -178,6 +178,9 @@ struct KestType {
     bool no_host;
     bool deterministic;
     bool is_foreign;
+    // FN only: a `block(...)`, which a function takes and runs where it was
+    // written rather than a value anybody holds. See D1257.
+    bool block;
     // STRUCT only: one of the language's own `vec2`, `vec3` and `vec4`, which
     // have operators a struct a program declares has not. See D1250.
     bool vector;
@@ -348,6 +351,9 @@ typedef struct {
     KestType **bound_types;
     uint32_t bound_count;
     uint32_t bound_capacity;
+    // Set while what a function takes is resolved, which is the one place a
+    // `block(...)` may be written. See D1257.
+    bool block_here;
 
     // One per set of types a generic function is called with. The checker
     // fills this and the compiler walks it, so a copy exists exactly where it
@@ -619,6 +625,10 @@ bool kest_is_narrow(const KestType *type);
 // operators. See D1250.
 bool kest_is_vector(const KestType *type);
 
+// Whether a function takes a block, and is therefore written into every place
+// it is called rather than called. See D1257.
+bool kest_takes_a_block(const KestType *function);
+
 // And whether it is a whole number with no sign, which decides which way a
 // comparison, a shift and a widening go. Two bodies for that as well.
 bool kest_is_unsigned(const KestType *type);
@@ -784,6 +794,12 @@ const char *kest_type_name(KestArena *arena, const KestType *type);
 // The same, cut where a reader stops reading, for a message that names a type
 // it cannot promise is short. See D1248.
 const char *kest_type_name_read(KestArena *arena, const KestType *type);
+
+// Whether the file imported the module at this whole path, and if it did, that
+// the import was written to: a function reached through a value's type rather
+// than through the word in front of it. See D1256.
+bool kest_import_by_path(KestProgram *program, const char *module,
+                         size_t length);
 
 // What a program writes instead of a name the library had and has not, said
 // as a sentence, or NULL for one it never had. `alias` is the word the file
