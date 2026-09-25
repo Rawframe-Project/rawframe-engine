@@ -320,10 +320,20 @@ HostExit runHost(const HostRequest& request) noexcept {
                                                                    .configuration = &configuration,
                                                                    .lifecycle = &lifecycle}};
     if (auto started = composition.start(); !started.has_value()) {
+        // What the failure was about, as its owners recorded it: `key: value`
+        // pairs, such as a Kest program's first diagnostic.
+        std::string context;
+        for (const result::ContextField& each : started.error().context()) {
+            context += context.empty() ? "" : "; ";
+            context += each.key;
+            context += ": ";
+            context += each.value;
+        }
         kEmitter.log(Severity::Critical,
                      kStartFailed,
                      started.error().description(),
-                     {diagnostics::field("errorClass", result::describe(started.error().errorClass()))});
+                     {diagnostics::field("errorClass", result::describe(started.error().errorClass())),
+                      diagnostics::field("context", std::string_view{context})});
         kEnter(composition::HostState::Failed, "start_failed");
         kShutDown();
         kDrain();
