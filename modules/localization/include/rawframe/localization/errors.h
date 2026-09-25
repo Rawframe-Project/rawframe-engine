@@ -30,6 +30,15 @@ enum class LocalizationError : std::uint32_t {
     /// A string table or translation document out of its form, key
     /// grammar, or canonical bytes.
     DocumentInvalid = 7,
+    /// A translated key its table does not have (SPEC-0033's `orphaned`).
+    Orphaned = 8,
+    /// Documents that do not fit together in a catalog: a table missing or
+    /// given twice, two translations of one table into one locale, a
+    /// translation into its table's source locale, or a translated message
+    /// reading an argument its source does not.
+    CatalogInvalid = 9,
+    /// A key its table does not have, asked for at run time.
+    KeyUnknown = 10,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(LocalizationError error) noexcept {
