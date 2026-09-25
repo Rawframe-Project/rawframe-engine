@@ -255,9 +255,9 @@ struct Physics3D::State {
     std::optional<schema::ComponentRuntimeId> character;
     std::optional<schema::ComponentRuntimeId> meshShape;
     std::map<std::uint64_t, PreparedMesh> meshes;
-    std::optional<world::Query<world::Read<Joint3D>>> jointQuery;
+    std::optional<world::Query<world::Write<Joint3D>>> jointQuery;
     std::map<world::EntityHandle, MappedJoint> joints;
-    std::vector<std::pair<world::EntityHandle, const Joint3D*>> jointRows;
+    std::vector<std::pair<world::EntityHandle, Joint3D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
     std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
@@ -604,13 +604,13 @@ struct Physics3D::State {
     /// new, changed, or between a body made again.
     void followJoints(world::World& world) {
         jointRows.clear();
-        jointQuery->forEach(world, [this](world::EntityHandle entity, const Joint3D& joint) {
+        jointQuery->forEach(world, [this](world::EntityHandle entity, Joint3D& joint) {
             jointRows.emplace_back(entity, &joint);
         });
-        std::ranges::sort(jointRows, {}, &std::pair<world::EntityHandle, const Joint3D*>::first);
+        std::ranges::sort(jointRows, {}, &std::pair<world::EntityHandle, Joint3D*>::first);
         for (auto entry = joints.begin(); entry != joints.end();) {
             if (std::ranges::binary_search(
-                    jointRows, entry->first, {}, &std::pair<world::EntityHandle, const Joint3D*>::first)) {
+                    jointRows, entry->first, {}, &std::pair<world::EntityHandle, Joint3D*>::first)) {
                 ++entry;
                 continue;
             }
@@ -634,13 +634,42 @@ struct Physics3D::State {
                 m3DestroyJoint(entry.joint);
             }
             entry = MappedJoint{.joint = {}, .made = *kJoint, .a = kA, .b = kB, .refused = true};
+            // Broken, it waits for gameplay to mend it.
+            if (kJoint->broken) {
+                continue;
+            }
             const auto kDefinition =
                 kA.index1 != 0 && kB.index1 != 0 && !sameBody(kA, kB) ? jointDef(*kJoint, kA, kB) : std::nullopt;
             if (kDefinition.has_value()) {
                 entry.joint = m3CreateJoint(physics, &*kDefinition);
                 entry.refused = entry.joint.index1 == 0;
             }
+            if (!entry.refused && (kJoint->breakForce > 0 || kJoint->breakTorque > 0)) {
+                m3Joint_SetBreakThresholds(entry.joint, kJoint->breakForce, kJoint->breakTorque);
+            }
             ++(entry.refused ? statistics.jointsRefused : statistics.jointsMade);
+        }
+    }
+
+    /// The joints the step broke: each written `broken`, and kept unmade.
+    void breakJoints() {
+        const m3JointEvents kEvents = m3World_GetJointEvents(physics);
+        for (std::int32_t index = 0; index < kEvents.breakCount; ++index) {
+            const m3JointId kBroken = kEvents.breakEvents[index].jointId;
+            for (auto& [kEntity, entry] : joints) {
+                if (entry.refused || entry.joint.index1 != kBroken.index1 ||
+                    entry.joint.generation != kBroken.generation) {
+                    continue;
+                }
+                const auto kRow =
+                    std::ranges::lower_bound(jointRows, kEntity, {}, &std::pair<world::EntityHandle, Joint3D*>::first);
+                kRow->second->broken = true;
+                entry.made.broken = true;
+                entry.joint = {};
+                entry.refused = true;
+                ++statistics.jointsBroken;
+                break;
+            }
         }
     }
 
@@ -742,6 +771,7 @@ struct Physics3D::State {
         ++statistics.steps;
 
         report(world);
+        breakJoints();
 
         // 5. Every body's pose and velocity back into the World.
         for (const Row& row : rows) {
@@ -904,15 +934,15 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.meshShape, registry.find(Mesh3D::kComponentTypeId));
-    RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Read<Joint3D>>::resolve(registry)));
+    RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Write<Joint3D>>::resolve(registry)));
     state.reads = state.bodies->reads();
     state.reads.push_back(*state.meshShape);
-    const std::vector<schema::ComponentRuntimeId> kJointReads = state.jointQuery->reads();
-    state.reads.insert(state.reads.end(), kJointReads.begin(), kJointReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);
     state.writes.push_back(*state.character);
+    const std::vector<schema::ComponentRuntimeId> kJointWrites = state.jointQuery->writes();
+    state.writes.insert(state.writes.end(), kJointWrites.begin(), kJointWrites.end());
     state.system = std::make_unique<Step>(state);
     systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
                                                .phase = world::Phase::Simulation,

@@ -184,7 +184,10 @@ struct Character2D {
 /// colliding); any other is refused. One motor may drive the axis that
 /// moves. At least one of the bodies is dynamic. A joint that cannot be
 /// made waits until it or its bodies change; changing it, or making either
-/// body again, makes it again.
+/// body again, makes it again. Past `breakForce` newtons or `breakTorque`
+/// newton meters of reaction (nought: never) it breaks: the step writes
+/// `broken`, and a broken joint stays unmade until gameplay writes `broken`
+/// false.
 struct Joint2D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
         schema::ComponentTypeId::fromText("217eaf04-507b-4d94-b363-2c8bf99f4174");
@@ -206,6 +209,8 @@ struct Joint2D {
     float angularUpper = 0;
     float motorSpeed = 0;
     float motorEffort = 0;
+    float breakForce = 0;
+    float breakTorque = 0;
     /// physics::JointAxis each.
     std::uint8_t linearX = 0;
     std::uint8_t linearY = 0;
@@ -214,6 +219,7 @@ struct Joint2D {
     std::uint8_t motor = 0;
     /// Whether the two bodies still collide with each other.
     bool collideConnected = false;
+    bool broken = false;
 };
 
 /// Body2D, Pose2D, Velocity2D, Impulse2D, Contact2D, Character2D, and

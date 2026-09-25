@@ -136,9 +136,12 @@ struct MappedJoint {
                                    &Joint2D::angularLower,
                                    &Joint2D::angularUpper,
                                    &Joint2D::motorSpeed,
-                                   &Joint2D::motorEffort};
+                                   &Joint2D::motorEffort,
+                                   &Joint2D::breakForce,
+                                   &Joint2D::breakTorque};
     constexpr std::array kBytes = {&Joint2D::linearX, &Joint2D::linearY, &Joint2D::angular, &Joint2D::motor};
     return left.a == right.a && left.b == right.b && left.collideConnected == right.collideConnected &&
+           left.broken == right.broken &&
            std::ranges::all_of(kReals,
                                [&](float Joint2D::* field) {
                                    return std::bit_cast<std::uint32_t>(left.*field) ==
@@ -159,7 +162,8 @@ struct MappedJoint {
     constexpr auto kLimited = static_cast<std::uint8_t>(physics::JointAxis::Limited);
     const double kLength = std::sqrt((double{joint.axisX} * joint.axisX) + (double{joint.axisY} * joint.axisY));
     if (!std::isfinite(kLength) || joint.linearX > kLimited || joint.linearY > kLimited || joint.angular > kLimited ||
-        joint.motor > 3 || !(joint.motorEffort >= 0)) {
+        joint.motor > 3 || !(joint.motorEffort >= 0) || !(joint.breakForce >= 0) || !std::isfinite(joint.breakForce) ||
+        !(joint.breakTorque >= 0) || !std::isfinite(joint.breakTorque)) {
         return m2JointId{};
     }
     const m2Vec2 kAxis =
@@ -244,9 +248,9 @@ struct Physics2D::State {
     std::optional<schema::ComponentRuntimeId> impulse;
     std::optional<schema::ComponentRuntimeId> contact;
     std::optional<schema::ComponentRuntimeId> character;
-    std::optional<world::Query<world::Read<Joint2D>>> jointQuery;
+    std::optional<world::Query<world::Write<Joint2D>>> jointQuery;
     std::map<world::EntityHandle, MappedJoint> joints;
-    std::vector<std::pair<world::EntityHandle, const Joint2D*>> jointRows;
+    std::vector<std::pair<world::EntityHandle, Joint2D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
     std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
@@ -576,13 +580,13 @@ struct Physics2D::State {
     /// new, changed, or between a body made again.
     void followJoints(world::World& world) {
         jointRows.clear();
-        jointQuery->forEach(world, [this](world::EntityHandle entity, const Joint2D& joint) {
+        jointQuery->forEach(world, [this](world::EntityHandle entity, Joint2D& joint) {
             jointRows.emplace_back(entity, &joint);
         });
-        std::ranges::sort(jointRows, {}, &std::pair<world::EntityHandle, const Joint2D*>::first);
+        std::ranges::sort(jointRows, {}, &std::pair<world::EntityHandle, Joint2D*>::first);
         for (auto entry = joints.begin(); entry != joints.end();) {
             if (std::ranges::binary_search(
-                    jointRows, entry->first, {}, &std::pair<world::EntityHandle, const Joint2D*>::first)) {
+                    jointRows, entry->first, {}, &std::pair<world::EntityHandle, Joint2D*>::first)) {
                 ++entry;
                 continue;
             }
@@ -606,11 +610,40 @@ struct Physics2D::State {
                 m2DestroyJoint(entry.joint);
             }
             entry = MappedJoint{.joint = {}, .made = *kJoint, .a = kA, .b = kB, .refused = true};
+            // Broken, it waits for gameplay to mend it.
+            if (kJoint->broken) {
+                continue;
+            }
             if (kA.index1 != 0 && kB.index1 != 0 && !sameBody(kA, kB)) {
                 entry.joint = makeJoint(physics, *kJoint, kA, kB);
                 entry.refused = entry.joint.index1 == 0;
             }
+            if (!entry.refused && (kJoint->breakForce > 0 || kJoint->breakTorque > 0)) {
+                m2Joint_SetBreakLimits(entry.joint, kJoint->breakForce, kJoint->breakTorque);
+            }
             ++(entry.refused ? statistics.jointsRefused : statistics.jointsMade);
+        }
+    }
+
+    /// The joints the step broke: each written `broken`, and kept unmade.
+    void breakJoints() {
+        const m2JointEvents kEvents = m2World_GetJointEvents(physics);
+        for (std::int32_t index = 0; index < kEvents.breakCount; ++index) {
+            const m2JointId kBroken = kEvents.breakEvents[index].jointId;
+            for (auto& [kEntity, entry] : joints) {
+                if (entry.refused || entry.joint.index1 != kBroken.index1 ||
+                    entry.joint.generation != kBroken.generation) {
+                    continue;
+                }
+                const auto kRow =
+                    std::ranges::lower_bound(jointRows, kEntity, {}, &std::pair<world::EntityHandle, Joint2D*>::first);
+                kRow->second->broken = true;
+                entry.made.broken = true;
+                entry.joint = {};
+                entry.refused = true;
+                ++statistics.jointsBroken;
+                break;
+            }
         }
     }
 
@@ -705,6 +738,7 @@ struct Physics2D::State {
         ++statistics.steps;
 
         report(world);
+        breakJoints();
 
         // 5. Every body's pose and velocity back into the World.
         for (const Row& row : rows) {
@@ -810,14 +844,14 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character2D::kComponentTypeId));
-    RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Read<Joint2D>>::resolve(registry)));
+    RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Write<Joint2D>>::resolve(registry)));
     state.reads = state.bodies->reads();
-    const std::vector<schema::ComponentRuntimeId> kJointReads = state.jointQuery->reads();
-    state.reads.insert(state.reads.end(), kJointReads.begin(), kJointReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);
     state.writes.push_back(*state.character);
+    const std::vector<schema::ComponentRuntimeId> kJointWrites = state.jointQuery->writes();
+    state.writes.insert(state.writes.end(), kJointWrites.begin(), kJointWrites.end());
     state.system = std::make_unique<Step>(state);
     systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
                                                .phase = world::Phase::Simulation,

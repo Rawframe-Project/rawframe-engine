@@ -123,7 +123,7 @@ constexpr std::array<ComponentField, 1> kMeshFields = {{
     {"mesh", offsetof(Mesh3D, mesh), FieldType::U64},
 }};
 
-constexpr std::array<ComponentField, 38> kJointFields = {{
+constexpr std::array<ComponentField, 41> kJointFields = {{
     {"a.slot", offsetof(Joint3D, a) + offsetof(world::EntityHandle, slot), FieldType::U32},
     {"a.generation", offsetof(Joint3D, a) + offsetof(world::EntityHandle, generation), FieldType::U32},
     {"b.slot", offsetof(Joint3D, b) + offsetof(world::EntityHandle, slot), FieldType::U32},
@@ -154,6 +154,8 @@ constexpr std::array<ComponentField, 38> kJointFields = {{
     {"angularUpperZ", offsetof(Joint3D, angularUpperZ), FieldType::F32},
     {"motorSpeed", offsetof(Joint3D, motorSpeed), FieldType::F32},
     {"motorEffort", offsetof(Joint3D, motorEffort), FieldType::F32},
+    {"breakForce", offsetof(Joint3D, breakForce), FieldType::F32},
+    {"breakTorque", offsetof(Joint3D, breakTorque), FieldType::F32},
     {"linearX", offsetof(Joint3D, linearX), FieldType::U8},
     {"linearY", offsetof(Joint3D, linearY), FieldType::U8},
     {"linearZ", offsetof(Joint3D, linearZ), FieldType::U8},
@@ -162,6 +164,7 @@ constexpr std::array<ComponentField, 38> kJointFields = {{
     {"angularZ", offsetof(Joint3D, angularZ), FieldType::U8},
     {"motor", offsetof(Joint3D, motor), FieldType::U8},
     {"collideConnected", offsetof(Joint3D, collideConnected), FieldType::Bool},
+    {"broken", offsetof(Joint3D, broken), FieldType::Bool},
 }};
 
 const std::array<ComponentLayout, 8> kLayouts = {

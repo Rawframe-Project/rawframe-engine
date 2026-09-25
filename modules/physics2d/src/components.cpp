@@ -113,7 +113,7 @@ constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const 
                            .fields = fields};
 }
 
-constexpr std::array<ComponentField, 23> kJointFields = {{
+constexpr std::array<ComponentField, 26> kJointFields = {{
     {"a.slot", offsetof(Joint2D, a) + offsetof(world::EntityHandle, slot), FieldType::U32},
     {"a.generation", offsetof(Joint2D, a) + offsetof(world::EntityHandle, generation), FieldType::U32},
     {"b.slot", offsetof(Joint2D, b) + offsetof(world::EntityHandle, slot), FieldType::U32},
@@ -132,11 +132,14 @@ constexpr std::array<ComponentField, 23> kJointFields = {{
     {"angularUpper", offsetof(Joint2D, angularUpper), FieldType::F32},
     {"motorSpeed", offsetof(Joint2D, motorSpeed), FieldType::F32},
     {"motorEffort", offsetof(Joint2D, motorEffort), FieldType::F32},
+    {"breakForce", offsetof(Joint2D, breakForce), FieldType::F32},
+    {"breakTorque", offsetof(Joint2D, breakTorque), FieldType::F32},
     {"linearX", offsetof(Joint2D, linearX), FieldType::U8},
     {"linearY", offsetof(Joint2D, linearY), FieldType::U8},
     {"angular", offsetof(Joint2D, angular), FieldType::U8},
     {"motor", offsetof(Joint2D, motor), FieldType::U8},
     {"collideConnected", offsetof(Joint2D, collideConnected), FieldType::Bool},
+    {"broken", offsetof(Joint2D, broken), FieldType::Bool},
 }};
 
 const std::array<ComponentLayout, 7> kLayouts = {

@@ -662,3 +662,20 @@ RAWFRAME_TEST(AJointOfAShapeMaul2DHasNotIsRefused) {
     scene.run(1);
     RAWFRAME_EXPECT(scene.physics->statistics().jointsRefused == 5 && scene.physics->statistics().jointsMade == 0);
 }
+
+RAWFRAME_TEST(AJointBreaksPastItsLimitAndWaitsToBeMended) {
+    Scene scene;
+    const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+    const world::EntityHandle kHung = scene.body(kBar, {.x = 0.5, .y = 5});
+    // Ten kilograms a meter of bar weigh a hundred newtons, far past one.
+    Joint2D weak = heldAtItsEnd(kPost, kHung);
+    weak.breakForce = 1;
+    const world::EntityHandle kJoint = joint(scene, weak);
+    scene.run(30);
+    Joint2D& held = *scene.world.get(kJoint, *scene.schema->key<Joint2D>());
+    RAWFRAME_EXPECT(held.broken && scene.physics->statistics().jointsBroken == 1 && scene.pose(kHung).y < 4.5);
+    held.broken = false;
+    held.breakForce = 0;
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 2 && !held.broken);
+}

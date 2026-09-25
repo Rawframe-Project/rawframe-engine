@@ -213,7 +213,10 @@ struct Mesh3D {
 /// the other two are both locked or both free. At least one of the bodies
 /// is dynamic. A joint that cannot be made (a body without one, values out
 /// of range) waits until it or its bodies change. Changing it, or remaking
-/// either body, makes it again.
+/// either body, makes it again. Past `breakForce` newtons or `breakTorque`
+/// newton meters of reaction (nought: never) it breaks: the step writes
+/// `broken`, and a broken joint stays unmade until gameplay writes `broken`
+/// false.
 struct Joint3D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
         schema::ComponentTypeId::fromText("963bf147-4afe-4047-9b33-bdf528bf026a");
@@ -247,6 +250,8 @@ struct Joint3D {
     float angularUpperZ = 0;
     float motorSpeed = 0;
     float motorEffort = 0;
+    float breakForce = 0;
+    float breakTorque = 0;
     /// physics::JointAxis each.
     std::uint8_t linearX = 0;
     std::uint8_t linearY = 0;
@@ -258,6 +263,7 @@ struct Joint3D {
     std::uint8_t motor = 0;
     /// Whether the two bodies still collide with each other.
     bool collideConnected = false;
+    bool broken = false;
 };
 
 /// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, Character3D, Mesh3D,

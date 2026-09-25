@@ -34,7 +34,7 @@ bool same(const Joint3D& left, const Joint3D& right) noexcept {
         &Joint3D::linearLowerX,  &Joint3D::linearLowerY,  &Joint3D::linearLowerZ,  &Joint3D::linearUpperX,
         &Joint3D::linearUpperY,  &Joint3D::linearUpperZ,  &Joint3D::angularLowerX, &Joint3D::angularLowerY,
         &Joint3D::angularLowerZ, &Joint3D::angularUpperX, &Joint3D::angularUpperY, &Joint3D::angularUpperZ,
-        &Joint3D::motorSpeed,    &Joint3D::motorEffort};
+        &Joint3D::motorSpeed,    &Joint3D::motorEffort,   &Joint3D::breakForce,    &Joint3D::breakTorque};
     constexpr std::array kBytes = {&Joint3D::linearX,
                                    &Joint3D::linearY,
                                    &Joint3D::linearZ,
@@ -43,6 +43,7 @@ bool same(const Joint3D& left, const Joint3D& right) noexcept {
                                    &Joint3D::angularZ,
                                    &Joint3D::motor};
     return left.a == right.a && left.b == right.b && left.collideConnected == right.collideConnected &&
+           left.broken == right.broken &&
            std::ranges::all_of(kReals,
                                [&](float Joint3D::* field) {
                                    return std::bit_cast<std::uint32_t>(left.*field) ==
@@ -61,7 +62,9 @@ std::optional<m3JointDef> jointDef(const Joint3D& joint, m3BodyId a, m3BodyId b)
     const auto kAxisB = jointAxis(joint.axisBX, joint.axisBY, joint.axisBZ);
     const std::array<std::uint8_t, 6> kModes = {
         joint.linearX, joint.linearY, joint.linearZ, joint.angularX, joint.angularY, joint.angularZ};
-    if (!kAxisA || !kAxisB || joint.motor > 6 || std::ranges::any_of(kModes, [](std::uint8_t mode) {
+    if (!kAxisA || !kAxisB || joint.motor > 6 || !(joint.breakForce >= 0) || !std::isfinite(joint.breakForce) ||
+        !(joint.breakTorque >= 0) || !std::isfinite(joint.breakTorque) ||
+        std::ranges::any_of(kModes, [](std::uint8_t mode) {
             return mode > static_cast<std::uint8_t>(physics::JointAxis::Limited);
         })) {
         return std::nullopt;

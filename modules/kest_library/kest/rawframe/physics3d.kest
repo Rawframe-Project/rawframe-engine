@@ -153,8 +153,10 @@ const MOTOR_ANGULAR_Z: u8 = 6
 // `motorSpeed`, with at most `motorEffort`. At most one angular axis may be
 // limited, and then the other two are both locked or both free. At least
 // one body is dynamic. Changing a joint, or making either body again,
-// makes it again; `fixed`, `hinge`, `slider`, and `ball` make the usual
-// ones.
+// makes it again. Past `breakForce` newtons or `breakTorque` newton meters
+// (nought: never) it breaks: the step sets `broken`, and it stays unmade
+// until a program sets it false. `fixed`, `hinge`, `slider`, and `ball`
+// make the usual ones.
 struct Joint3D {
     a: world.Entity
     b: world.Entity
@@ -184,6 +186,8 @@ struct Joint3D {
     angularUpperZ: f32
     motorSpeed: f32
     motorEffort: f32
+    breakForce: f32
+    breakTorque: f32
     linearX: u8
     linearY: u8
     linearZ: u8
@@ -193,6 +197,7 @@ struct Joint3D {
     motor: u8
     // Whether the two bodies still collide with each other.
     collideConnected: bool
+    broken: bool
 }
 
 // Welds `b` to `a` where they are: every axis locked, the frame's z along
@@ -200,7 +205,7 @@ struct Joint3D {
 fn fixed(a: world.Entity, b: world.Entity, anchorA: vec3, anchorB: vec3, axisA: vec3, axisB: vec3) -> Joint3D {
     return Joint3D(a, b, anchorA.x, anchorA.y, anchorA.z, anchorB.x, anchorB.y, anchorB.z, axisA.x, axisA.y,
                    axisA.z, axisB.x, axisB.y, axisB.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                   0.0, 0.0, 0.0, LOCKED, LOCKED, LOCKED, LOCKED, LOCKED, LOCKED, NO_MOTOR, false)
+                   0.0, 0.0, 0.0, 0.0, 0.0, LOCKED, LOCKED, LOCKED, LOCKED, LOCKED, LOCKED, NO_MOTOR, false, false)
 }
 
 // Turns about the axis: a door, a wheel on its axle.

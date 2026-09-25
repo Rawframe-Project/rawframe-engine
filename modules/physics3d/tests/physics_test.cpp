@@ -680,3 +680,23 @@ RAWFRAME_TEST(AJointThatCannotBeMadeWaits) {
     scene.run(1);
     RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 1);
 }
+
+RAWFRAME_TEST(AJointBreaksPastItsThresholdAndWaitsToBeMended) {
+    Scene scene;
+    const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+    const world::EntityHandle kHung = scene.body(kBar, {.x = 0.5, .y = 5});
+    // A kilogram of bar weighs ten newtons, far past one.
+    Joint3D weak = heldAtItsEnd(kPost, kHung);
+    weak.breakForce = 1;
+    const world::EntityHandle kJoint = joint(scene, weak);
+    scene.run(30);
+    Joint3D& held = *scene.world.get(kJoint, *scene.schema->key<Joint3D>());
+    RAWFRAME_EXPECT(held.broken && scene.physics->statistics().jointsBroken == 1 && scene.pose(kHung).y < 4.5);
+    scene.run(10);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 1);
+    // Mended, and made strong: made again, and it holds.
+    held.broken = false;
+    held.breakForce = 0;
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 2 && !held.broken);
+}

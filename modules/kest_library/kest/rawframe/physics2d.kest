@@ -128,8 +128,10 @@ const MOTOR_ANGULAR: u8 = 3
 // one linear axis moving, or all free (the two only stop colliding); any
 // other is refused. One motor may drive the axis that moves, at
 // `motorSpeed` with at most `motorEffort`. At least one body is dynamic.
-// Changing a joint, or making either body again, makes it again; `fixed`,
-// `hinge`, and `slider` make the usual ones.
+// Changing a joint, or making either body again, makes it again. Past
+// `breakForce` newtons or `breakTorque` newton meters (nought: never) it
+// breaks: the step sets `broken`, and it stays unmade until a program sets
+// it false. `fixed`, `hinge`, and `slider` make the usual ones.
 struct Joint2D {
     a: world.Entity
     b: world.Entity
@@ -147,18 +149,21 @@ struct Joint2D {
     angularUpper: f32
     motorSpeed: f32
     motorEffort: f32
+    breakForce: f32
+    breakTorque: f32
     linearX: u8
     linearY: u8
     angular: u8
     motor: u8
     // Whether the two bodies still collide with each other.
     collideConnected: bool
+    broken: bool
 }
 
 // Welds `b` to `a` where they are: every axis locked.
 fn fixed(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2) -> Joint2D {
     return Joint2D(a, b, anchorA.x, anchorA.y, anchorB.x, anchorB.y, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                   0.0, 0.0, LOCKED, LOCKED, LOCKED, NO_MOTOR, false)
+                   0.0, 0.0, 0.0, 0.0, LOCKED, LOCKED, LOCKED, NO_MOTOR, false, false)
 }
 
 // Turns about the anchors: a door, a wheel on its axle.

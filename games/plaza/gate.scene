@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "schema": {
     "rawframe.physics3d.body": "333aeeed8b31cb31",
-    "rawframe.physics3d.joint": "0a9da40cd3b76847",
+    "rawframe.physics3d.joint": "4ed33c513a4e28bb",
     "rawframe.physics3d.pose": "4c7ea4a8be350db8",
     "rawframe.physics3d.velocity": "26f3f6625f0df9ec"
   },

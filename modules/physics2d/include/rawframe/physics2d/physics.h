@@ -77,6 +77,8 @@ struct Physics2DStatistics {
     std::uint64_t jointsMade = 0;
     std::uint64_t jointsRemoved = 0;
     std::uint64_t jointsRefused = 0;
+    /// Joints broken past their limits.
+    std::uint64_t jointsBroken = 0;
     /// Contacts and sensor overlaps that began.
     std::uint64_t contactsBegun = 0;
     std::uint64_t overlapsBegun = 0;
