@@ -66,6 +66,23 @@ RAWFRAME_TEST(AGameDescriptionParses) {
     RAWFRAME_EXPECT(game->spawns[0].components.size() == 2 && game->spawns[0].components[0].fields.size() == 1);
 }
 
+RAWFRAME_TEST(PredictionIsDeclaredByLine) {
+    auto game = parseGame("program p.kest\n"
+                          "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.position Position\n"
+                          "system a.move simulation move write a.position predicted\n"
+                          "system a.other simulation other predicted write a.position\n"
+                          "system a.server simulation serve read a.position\n"
+                          "predict a.position\n");
+    RAWFRAME_EXPECT(game.has_value());
+    if (!game.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(game->systems[0].predicted && game->systems[1].predicted && !game->systems[2].predicted);
+    RAWFRAME_EXPECT(game->systems[0].columns.size() == 1 && game->systems[1].columns.size() == 1);
+    RAWFRAME_EXPECT((game->predicted == std::vector<std::string>{"a.position"}));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\npredict\n", WorldKestError::BadGameLine, "2"));
+}
+
 RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
     constexpr std::string_view kProgram = "program p.kest\n";
     RAWFRAME_EXPECT(refusedAt("program p.kest\nbuild x\n", WorldKestError::BadGameLine, "2"));
@@ -200,7 +217,9 @@ RAWFRAME_TEST(AGameThatDoesNotLoadFailsTheStart) {
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
     for (const std::string& kText : {std::string{"kest.game = /nonexistent/x.game\n"},
-                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "broken.game\n"}) {
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "broken.game\n",
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
+                                         "mispredicted.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n"}) {
         const auto kConfiguration = composition::Configuration::parse(kText);
         composition::Composition composition{
             *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};

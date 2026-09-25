@@ -4,8 +4,10 @@
 #include "rawframe/network/admission.h"
 #include "rawframe/schema/component.h"
 #include "rawframe/world_replication/codec.h"
+#include "rawframe/world_replication/prediction.h"
 #include "rawframe/world_replication/server.h"
 
+#include <memory>
 #include <optional>
 #include <span>
 
@@ -27,6 +29,12 @@ public:
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> playerComponents() const noexcept = 0;
     [[nodiscard]] virtual const std::optional<ComponentCodec>& input() const noexcept = 0;
     [[nodiscard]] virtual network::Fingerprint game() const noexcept = 0;
+    /// The player's components a client predicts; empty for a game that
+    /// predicts nothing.
+    [[nodiscard]] virtual std::span<const schema::ComponentTypeId> predictedComponents() const noexcept = 0;
+    /// A predictor for one client, running the game's predicted systems;
+    /// `unsupported` for a game that predicts nothing.
+    [[nodiscard]] virtual result::Result<std::unique_ptr<Predictor>> predictor() const = 0;
 };
 
 inline constexpr composition::Capability<ReplicationPlan> kReplicationPlan{"rawframe.replication.plan"};

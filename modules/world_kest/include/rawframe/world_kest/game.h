@@ -24,7 +24,11 @@
 // entities with the listed components; a field not given is zero. For
 // networked play, `replicate` lists the components that replicate, `player`
 // the components each connected player's entity starts with, and `input` the
-// one component a player's input is written into. An `entity` line names a
+// one component a player's input is written into. `predict` lists the
+// player's components a client predicts, and a system marked `predicted` runs
+// on predicting clients too, over the player alone (SPEC-0041); it may write
+// no replicated component that is not predicted and draw from no World
+// stream, whose state a client does not have. An `entity` line names a
 // component's fields that hold a `rawframe.world.Entity`, which a checkpoint
 // writes as a reference rather than as numbers:
 //
@@ -70,6 +74,8 @@ struct GameSystem {
     std::vector<std::string> before;
     /// World random streams, drawn from by place through `rawframe.random`.
     std::vector<std::string> randomStreams;
+    /// Runs on predicting clients too, over the player alone.
+    bool predicted = false;
 };
 
 struct GameFieldValue {
@@ -103,6 +109,8 @@ struct GameDescription {
     std::vector<std::string> replicated;
     std::vector<std::string> player;
     std::string input;
+    /// The player's components a client predicts from its own input.
+    std::vector<std::string> predicted;
     std::vector<GameEntityField> entityFields;
 };
 

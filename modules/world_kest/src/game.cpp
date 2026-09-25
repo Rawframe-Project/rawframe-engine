@@ -133,6 +133,11 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     --at;
                     continue;
                 }
+                if (kWhat == "predicted") {
+                    system.predicted = true;
+                    --at;
+                    continue;
+                }
                 if (at + 1 == kWords.size()) {
                     return badLine(number, WorldKestError::BadGameLine, "a system column or edge names nothing");
                 }
@@ -154,10 +159,12 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 }
             }
             game.systems.push_back(std::move(system));
-        } else if (kKeyword == "replicate" || kKeyword == "player") {
-            std::vector<std::string>& into = kKeyword == "replicate" ? game.replicated : game.player;
+        } else if (kKeyword == "replicate" || kKeyword == "player" || kKeyword == "predict") {
+            std::vector<std::string>& into =
+                kKeyword == "replicate" ? game.replicated : (kKeyword == "player" ? game.player : game.predicted);
             if (kWords.size() < 2) {
-                return badLine(number, WorldKestError::BadGameLine, "a replicate or player line names components");
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a replicate, player, or predict line names components");
             }
             for (std::size_t at = 1; at < kWords.size(); ++at) {
                 into.emplace_back(kWords[at]);

@@ -24,6 +24,8 @@ namespace rawframe::world_replication {
 ///   bots.count     how many; 0 or none, nothing (0)
 ///   bots.endpoint  the server's endpoint (arena)
 ///   bots.seed      (0)
+///   bots.predict   predict each bot's player when the game declares
+///                  prediction (true)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);

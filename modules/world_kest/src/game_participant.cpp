@@ -1,3 +1,4 @@
+#include "predictor.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/kest/errors.h"
@@ -178,6 +179,7 @@ public:
             layouts_.push_back(std::move(layout));
         }
         RAWFRAME_TRY(planReplication(kText, kProgram));
+        RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planCheckpoints());
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
@@ -322,6 +324,17 @@ public:
         return fingerprint_;
     }
 
+    std::span<const schema::ComponentTypeId> predictedComponents() const noexcept override {
+        return predicted_;
+    }
+    result::Result<std::unique_ptr<world_replication::Predictor>> predictor() const override {
+        if (predicted_.empty()) {
+            return refuse(result::ErrorClass::Unsupported, WorldKestError::UnknownName, "the game predicts nothing");
+        }
+        return makePredictor(PredictorSettings{
+            .program = program_, .game = &game_, .descriptors = descriptors_, .limits = predictionLimits_});
+    }
+
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
         if (unwritable_.has_value()) {
             return std::unexpected<result::Error>{refuse(result::ErrorClass::Unsupported,
@@ -379,6 +392,54 @@ private:
         hasher.update(std::string_view{"\0", 1});
         hasher.update(kProgramText);
         fingerprint_.bytes = hasher.finish();
+        return {};
+    }
+
+    /// What a client predicts, checked against SPEC-0041's rules: only the
+    /// player's replicated components, with input to predict from, by
+    /// systems that write no other replicated component and draw from no
+    /// World stream.
+    result::Status planPrediction(const composition::Configuration& configuration) {
+        if (game_.predicted.empty()) {
+            return {};
+        }
+        const auto kIn = [](const std::vector<std::string>& names, const std::string& name) {
+            return std::ranges::find(names, name) != names.end();
+        };
+        const auto kRefuse = [](std::string_view why, std::string_view subject) {
+            return std::unexpected<result::Error>{
+                refuse(result::ErrorClass::InvalidArgument, WorldKestError::BadGameLine, why)
+                    .error()
+                    .withContext("name", subject)};
+        };
+        if (game_.input.empty()) {
+            return kRefuse("a game that predicts needs input to predict from", "input");
+        }
+        for (const std::string& name : game_.predicted) {
+            if (!kIn(game_.player, name) || !kIn(game_.replicated, name)) {
+                return kRefuse("a predicted component is one of the player's and replicates", name);
+            }
+            predicted_.push_back(componentNamed(name)->id);
+        }
+        for (const GameSystem& system : game_.systems) {
+            if (!system.predicted) {
+                continue;
+            }
+            if (!system.randomStreams.empty()) {
+                return kRefuse("a predicted system draws from no World stream: a client does not have its state",
+                               system.identity);
+            }
+            for (const GameColumn& column : system.columns) {
+                if (column.access == world::Access::Write && kIn(game_.replicated, column.component) &&
+                    !kIn(game_.predicted, column.component)) {
+                    return kRefuse("a predicted system writes no replicated component that is not predicted",
+                                   system.identity);
+                }
+            }
+        }
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap,
+                            configuration.unsignedInteger("kest.prediction_heap_bytes", 4U << 20U));
+        predictionLimits_ = kest::MachineLimits{.heapBytes = static_cast<std::size_t>(kHeap), .fuelPerCall = 1'000'000};
         return {};
     }
 
@@ -491,6 +552,8 @@ private:
     std::vector<schema::ComponentTypeId> playerComponents_;
     std::optional<world_replication::ComponentCodec> input_;
     network::Fingerprint fingerprint_;
+    std::vector<schema::ComponentTypeId> predicted_;
+    kest::MachineLimits predictionLimits_;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.
     std::optional<GameEntityField> unwritable_;

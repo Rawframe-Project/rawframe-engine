@@ -169,6 +169,8 @@ struct Bot {
     std::unique_ptr<network::Provider> provider;
     std::unique_ptr<network::Sessions> sessions;
     std::unique_ptr<world::World> world;
+    /// Declared before the client that points at it, so it outlives it.
+    std::unique_ptr<Predictor> predictor;
     std::unique_ptr<ReplicationClient> client;
     world::Pcg32 random;
     std::vector<std::byte> input;
@@ -195,6 +197,12 @@ public:
             builder.add(descriptor);
         }
         RAWFRAME_TRY_ASSIGN(registry_, builder.freeze());
+        const auto kPredict = configuration.text("bots.predict");
+        if (kPredict.has_value() && *kPredict != "true" && *kPredict != "false") {
+            return missing("bots.predict is true or false");
+        }
+        // A game that predicts is played predicting unless told otherwise.
+        const bool kPredicting = !plan_->predictedComponents().empty() && kPredict != "false";
         for (std::uint64_t index = 0; index < count; ++index) {
             Bot bot{.random =
                         world::deriveStream(world::RootSeed{kSeed + index}, "rawframe.replication.bots", "steer")};
@@ -203,11 +211,19 @@ public:
                 bot.sessions,
                 network::Sessions::client(*bot.provider, context.clock(), {.profile = sessionProfile(1)}));
             bot.world = std::make_unique<world::World>(registry_);
-            RAWFRAME_TRY_ASSIGN(
-                bot.client,
-                ReplicationClient::create(*bot.sessions,
-                                          *bot.world,
-                                          ClientReplicationSettings{.table = plan_->table(), .input = plan_->input()}));
+            std::optional<PredictionSettings> prediction;
+            if (kPredicting) {
+                RAWFRAME_TRY_ASSIGN(bot.predictor, plan_->predictor());
+                prediction = PredictionSettings{
+                    .predictor = bot.predictor.get(),
+                    .predicted = {plan_->predictedComponents().begin(), plan_->predictedComponents().end()}};
+            }
+            RAWFRAME_TRY_ASSIGN(bot.client,
+                                ReplicationClient::create(*bot.sessions,
+                                                          *bot.world,
+                                                          ClientReplicationSettings{.table = plan_->table(),
+                                                                                    .input = plan_->input(),
+                                                                                    .prediction = prediction}));
             if (plan_->input()) {
                 bot.input.assign(plan_->input()->size, std::byte{0});
             }
@@ -260,10 +276,18 @@ public:
         std::uint64_t admitted = 0;
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
+        PredictionStatistics predicted;
         for (Bot& bot : bots_) {
             admitted += bot.client->admitted() ? 1 : 0;
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
+            const PredictionStatistics kBot = bot.client->predictionStatistics();
+            predicted.predictedTicks += kBot.predictedTicks;
+            predicted.confirmed += kBot.confirmed;
+            predicted.rollbacks += kBot.rollbacks;
+            predicted.resimulatedTicks += kBot.resimulatedTicks;
+            predicted.stalled += kBot.stalled;
+            predicted.failedSteps += kBot.failedSteps;
         }
         emitter_.log(diagnostics::Severity::Info,
                      kBotsSummary,
@@ -271,7 +295,13 @@ public:
                      {diagnostics::field("bots", bots_.size()),
                       diagnostics::field("admitted", admitted),
                       diagnostics::field("mirroredEntities", mirrored),
-                      diagnostics::field("stateDatagrams", stateDatagrams)});
+                      diagnostics::field("stateDatagrams", stateDatagrams),
+                      diagnostics::field("predictedTicks", predicted.predictedTicks),
+                      diagnostics::field("confirmed", predicted.confirmed),
+                      diagnostics::field("rollbacks", predicted.rollbacks),
+                      diagnostics::field("resimulatedTicks", predicted.resimulatedTicks),
+                      diagnostics::field("stalled", predicted.stalled),
+                      diagnostics::field("failedSteps", predicted.failedSteps)});
     }
 
 private:

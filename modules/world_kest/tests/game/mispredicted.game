@@ -1,0 +1,14 @@
+# Prediction declared wrongly: a predicted system writes a replicated
+# component that is not predicted.
+program movers.kest
+
+component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 movers.position Position
+component 5b1c9e22-4f07-4d3a-8c6b-91e7d2a0f4c8 movers.velocity Velocity
+
+system movers.integrate simulation integrate write movers.position read movers.velocity predicted
+system movers.bounce simulation bounce read movers.position write movers.velocity after movers.integrate predicted
+
+replicate movers.position movers.velocity
+player movers.position movers.velocity
+input movers.velocity
+predict movers.position

@@ -1,5 +1,6 @@
 #include "rawframe/world_replication/client.h"
 
+#include "prediction.h"
 #include "rawframe/world_replication/errors.h"
 
 #include <algorithm>
@@ -38,6 +39,10 @@ struct ReplicationClient::State {
     /// The server tick each entity's component was last applied at.
     std::map<std::pair<std::uint32_t, std::size_t>, std::uint64_t> appliedAt;
     world::EntityHandle owned;
+    std::uint32_t ownedNet = 0;
+    std::optional<Prediction> prediction;
+    /// By table index: which predicted component it is, if any.
+    std::vector<std::optional<std::size_t>> predictedIndex;
     std::uint64_t serverTick = 0;
     std::uint64_t stateSequence = 0;
     std::uint64_t consumedInputTick = 0;
@@ -87,6 +92,7 @@ struct ReplicationClient::State {
             mirrored[kRecord->entity.value] = *entity;
             if (kRecord->owned) {
                 owned = *entity;
+                ownedNet = kRecord->entity.value;
             }
             acknowledge(network::ControlFrame::MappingAck, kRecord->entity);
             return;
@@ -96,6 +102,10 @@ struct ReplicationClient::State {
             static_cast<void>(world->destroy(kMirror->second));
             if (kMirror->second == owned) {
                 owned = {};
+                ownedNet = 0;
+                if (prediction) {
+                    prediction->reset();
+                }
             }
             mirrored.erase(kMirror);
             // IDs are never reused in an epoch, so nothing late can reach a
@@ -223,6 +233,48 @@ struct ReplicationClient::State {
         serverTick = std::max(serverTick, kHeader->serverTick);
         stateSequence = std::max(stateSequence, event.sequence);
         consumedInputTick = std::max(consumedInputTick, kHeader->consumedInputTick);
+        if (prediction) {
+            reconcile(kHeader->consumedInputTick);
+        }
+    }
+
+    /// Hands the server's values for the player's predicted components, as
+    /// staged from this datagram, to the prediction, and shows its result.
+    void reconcile(std::uint64_t consumed) {
+        std::vector<std::span<const std::byte>> values(prediction->count());
+        bool any = false;
+        for (const Staged& record : staged) {
+            const auto& kIndex = predictedIndex[record.component];
+            if (record.net == ownedNet && ownedNet != 0 && kIndex.has_value()) {
+                values[*kIndex] =
+                    std::span{staging}.subspan(record.offset, settings.table.components[record.component].size);
+                any = true;
+            }
+        }
+        if (any) {
+            prediction->authoritative(consumed, values);
+            present();
+        }
+    }
+
+    /// The player shows what is predicted for it, not the older server state.
+    void present() {
+        if (owned.isNull()) {
+            return;
+        }
+        for (std::size_t index = 0; index < predictedIndex.size(); ++index) {
+            if (!predictedIndex[index].has_value()) {
+                continue;
+            }
+            const auto kValue = prediction->current(*predictedIndex[index]);
+            if (!kValue.has_value() || kValue->size() != settings.table.components[index].size) {
+                continue;
+            }
+            void* const kInto = world->getErased(owned, table[index]);
+            if (kInto != nullptr) {
+                std::memcpy(kInto, kValue->data(), kValue->size());
+            }
+        }
     }
 };
 
@@ -247,6 +299,29 @@ ReplicationClient::create(network::Sessions& sessions, world::World& world, Clie
     if (settings.input && !settings.input->valid()) {
         return refuse(
             result::ErrorClass::InvalidArgument, ReplicationError::FieldUnsupported, "an invalid input codec");
+    }
+    state->predictedIndex.resize(settings.table.components.size());
+    if (settings.prediction) {
+        const PredictionSettings& kPrediction = *settings.prediction;
+        if (kPrediction.predictor == nullptr || !settings.input || kPrediction.predicted.empty() ||
+            kPrediction.window == 0) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          ReplicationError::FieldUnsupported,
+                          "prediction needs a predictor, input, predicted components, and a window");
+        }
+        for (std::size_t index = 0; index < kPrediction.predicted.size(); ++index) {
+            const auto kIn = std::find_if(
+                settings.table.components.begin(), settings.table.components.end(), [&](const ComponentCodec& codec) {
+                    return codec.component == kPrediction.predicted[index];
+                });
+            if (kIn == settings.table.components.end()) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              ReplicationError::FieldUnsupported,
+                              "a predicted component does not replicate");
+            }
+            state->predictedIndex[static_cast<std::size_t>(kIn - settings.table.components.begin())] = index;
+        }
+        state->prediction.emplace(kPrediction, settings.input->size);
     }
     state->sessions = &sessions;
     state->world = &world;
@@ -294,6 +369,10 @@ void ReplicationClient::pump() {
             state.mirrored.clear();
             state.appliedAt.clear();
             state.owned = {};
+            state.ownedNet = 0;
+            if (state.prediction) {
+                state.prediction->reset();
+            }
             state.accept.reset();
             state.received = {};
             state.acknowledgementDue = false;
@@ -338,7 +417,12 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
     std::vector<std::byte> wire(state.settings.input->wireSize());
     network::Writer commandWriter{wire};
     RAWFRAME_TRY(state.settings.input->encode(value.data(), commandWriter));
-    state.unconsumed[state.nextInputTick++] = std::move(wire);
+    const std::uint64_t kTick = state.nextInputTick++;
+    state.unconsumed[kTick] = std::move(wire);
+    if (state.prediction) {
+        state.prediction->command(kTick, value);
+        state.present();
+    }
     while (state.unconsumed.size() > kMaximumInputWindow) {
         state.unconsumed.erase(state.unconsumed.begin());
     }
@@ -364,6 +448,10 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
 
 ClientReplicationStatistics ReplicationClient::statistics() const noexcept {
     return state_->statistics;
+}
+
+PredictionStatistics ReplicationClient::predictionStatistics() const noexcept {
+    return state_->prediction ? state_->prediction->statistics() : PredictionStatistics{};
 }
 
 } // namespace rawframe::world_replication

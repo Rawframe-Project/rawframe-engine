@@ -10,6 +10,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_replication/codec.h"
+#include "rawframe/world_replication/prediction.h"
 #include "rawframe/world_replication/records.h"
 #include "rawframe/world_replication/server.h"
 
@@ -28,6 +29,9 @@ struct ClientReplicationSettings {
     std::optional<ComponentCodec> input;
     /// Entities mirrored at once.
     std::size_t maximumMapped = 4096;
+    /// Predicting the player's own components from its own input; none
+    /// shows the server's state only.
+    std::optional<PredictionSettings> prediction;
 };
 
 struct ClientReplicationStatistics {
@@ -71,6 +75,8 @@ public:
     [[nodiscard]] result::Status submitInput(std::span<const std::byte> value);
 
     [[nodiscard]] ClientReplicationStatistics statistics() const noexcept;
+    /// All zero without prediction.
+    [[nodiscard]] PredictionStatistics predictionStatistics() const noexcept;
 
     struct State;
     explicit ReplicationClient(std::unique_ptr<State> state) noexcept;

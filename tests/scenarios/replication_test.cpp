@@ -9,6 +9,7 @@
 #include "rawframe/world_replication/client.h"
 #include "rawframe/world_replication/server.h"
 
+#include <cstring>
 #include <map>
 #include <vector>
 
@@ -74,6 +75,39 @@ private:
     world::Query<world::Write<Position>, world::Read<Steer>> query_;
 };
 
+/// The player's side of Move, for the client to predict with: the same
+/// arithmetic on the same values in the same order.
+class MovePredictor final : public world_replication::Predictor {
+public:
+    std::span<const std::byte> get(schema::ComponentTypeId component) const noexcept override {
+        if (component == Position::kComponentTypeId) {
+            return std::as_bytes(std::span{&position_, 1});
+        }
+        if (component == Steer::kComponentTypeId) {
+            return std::as_bytes(std::span{&steer_, 1});
+        }
+        return {};
+    }
+    result::Status set(schema::ComponentTypeId component, std::span<const std::byte> value) override {
+        if (component == Position::kComponentTypeId && value.size() == sizeof position_) {
+            std::memcpy(&position_, value.data(), sizeof position_);
+        } else if (component == Steer::kComponentTypeId && value.size() == sizeof steer_) {
+            std::memcpy(&steer_, value.data(), sizeof steer_);
+        }
+        return {};
+    }
+    result::Status step(std::span<const std::byte> input) override {
+        std::memcpy(&steer_, input.data(), sizeof steer_);
+        position_.x += steer_.dx;
+        position_.y += steer_.dy;
+        return {};
+    }
+
+private:
+    Position position_;
+    Steer steer_;
+};
+
 constexpr network::ProviderProfile kTransport{.maximumConnections = 8,
                                               .maximumStreamsPerConnection = 4,
                                               .maximumStreamSend = 1024,
@@ -115,7 +149,11 @@ struct Scenario {
     std::unique_ptr<network::Sessions> clientSessions;
     std::unique_ptr<world_replication::ReplicationClient> client;
 
-    explicit Scenario(network_loopback::LoopbackConditions conditions, std::size_t stateBytesPerTick = 1092)
+    MovePredictor predictor;
+
+    explicit Scenario(network_loopback::LoopbackConditions conditions,
+                      std::size_t stateBytesPerTick = 1092,
+                      bool predicting = false)
         : network(clock, conditions) {
         serverSessions = *network::Sessions::server(
             *serverTransport, clock, {.profile = kSessions, .expected = compatibility(), .seed = 1});
@@ -136,7 +174,12 @@ struct Scenario {
         client = *world_replication::ReplicationClient::create(
             *clientSessions,
             clientWorld,
-            {.table = {.components = {positionCodec(), steerCodec()}}, .input = steerCodec()});
+            {.table = {.components = {positionCodec(), steerCodec()}},
+             .input = steerCodec(),
+             .prediction = predicting ? std::optional{world_replication::PredictionSettings{
+                                            .predictor = &predictor,
+                                            .predicted = {Position::kComponentTypeId, Steer::kComponentTypeId}}}
+                                      : std::nullopt});
         RAWFRAME_EXPECT(
             client
                 ->connect(
@@ -282,4 +325,51 @@ RAWFRAME_TEST(ANarrowBudgetSendsThePlayerFirstAndTheRestInTurn) {
         fresh += position.y > 90 ? 1 : 0;
     });
     RAWFRAME_EXPECT(fresh == 20);
+}
+
+RAWFRAME_TEST(APredictingClientRunsAheadAndIsConfirmed) {
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(40)}, 1092, true};
+    const auto kPosition = *scenario.schema->key<Position>();
+    for (int step = 0; step < 120; ++step) {
+        scenario.step(Steer{static_cast<float>(step % 5), 0.25F});
+    }
+    const auto kStatistics = scenario.client->predictionStatistics();
+    RAWFRAME_EXPECT(kStatistics.predictedTicks > 90 && kStatistics.confirmed > 60);
+    // On a clean network only admission and the first pace adjustments
+    // mispredict: the server held or went neutral on ticks the client had
+    // not labelled yet.
+    RAWFRAME_EXPECT(kStatistics.rollbacks <= 3);
+    // The player is shown where its own input has taken it, ahead of the
+    // server, which has not consumed the newest commands yet.
+    const Position* shown = scenario.clientWorld.get(scenario.client->owned(), kPosition);
+    const Position* server = scenario.firstPlayerPosition();
+    RAWFRAME_EXPECT(shown != nullptr && server != nullptr && shown->y > server->y);
+    // Idle input: the server catches up and both agree exactly.
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{});
+    }
+    shown = scenario.clientWorld.get(scenario.client->owned(), kPosition);
+    server = scenario.firstPlayerPosition();
+    RAWFRAME_EXPECT(shown != nullptr && server != nullptr && shown->x == server->x && shown->y == server->y);
+}
+
+RAWFRAME_TEST(PredictionRecoversFromLostInput) {
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(30),
+                       .jitter = MonotonicDuration::fromMilliseconds(30),
+                       .datagramLossPerMillion = 300'000,
+                       .seed = 5},
+                      1092,
+                      true};
+    const auto kPosition = *scenario.schema->key<Position>();
+    for (int step = 0; step < 150; ++step) {
+        scenario.step(Steer{step % 7 == 0 ? -3.0F : 1.0F, static_cast<float>(step % 3)});
+    }
+    for (int step = 0; step < 40; ++step) {
+        scenario.step(Steer{});
+    }
+    // Whatever was lost and held on the way, the client ends where the server is.
+    const Position* shown = scenario.clientWorld.get(scenario.client->owned(), kPosition);
+    const Position* server = scenario.firstPlayerPosition();
+    RAWFRAME_EXPECT(shown != nullptr && server != nullptr && shown->x == server->x && shown->y == server->y);
+    RAWFRAME_EXPECT(scenario.client->predictionStatistics().confirmed > 0);
 }
