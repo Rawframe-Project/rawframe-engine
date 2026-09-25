@@ -24,7 +24,11 @@
 // entities with the listed components; a field not given is zero. For
 // networked play, `replicate` lists the components that replicate, `player`
 // the components each connected player's entity starts with, and `input` the
-// one component a player's input is written into. `predict` lists the
+// one component a player's input is written into; `input <component>
+// perceived` also gives each player a `rawframe.replication.perception`
+// (rawframe.replication's Perception) holding the moment its client saw
+// when it gave the command being run, for lag-compensated queries such as
+// physics2d.castRayAt. `predict` lists the
 // player's components a client predicts, and a system marked `predicted` runs
 // on predicting clients too, over the player alone (SPEC-0041); it may write
 // no replicated component that is not predicted and draw from no World
@@ -175,6 +179,9 @@ struct GameDescription {
     std::vector<std::string> replicated;
     std::vector<std::string> player;
     std::string input;
+    /// Each command carries the moment its client saw, which the player's
+    /// `rawframe.replication.perception` holds when the command runs.
+    bool inputPerceived = false;
     /// The player's components a client predicts from its own input.
     std::vector<std::string> predicted;
     /// Components shown between states on every entity but the player's.

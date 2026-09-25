@@ -1,0 +1,13 @@
+module rawframe.replication
+
+// What replication hands a Kest-scripted game (SPEC-0041).
+
+// The moment a player saw when it gave the command being run: the server
+// tick of the older of the two states its client showed between, and
+// 65536ths of the way to the next. A player of a game whose input line says
+// `perceived` has one; a neutral command, when the player's did not arrive
+// in time, saw nothing (tick nought).
+struct Perception {
+    baseTick: u64
+    fraction: u16
+}

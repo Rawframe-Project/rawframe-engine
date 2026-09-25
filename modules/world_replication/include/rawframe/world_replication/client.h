@@ -30,6 +30,9 @@ struct ClientReplicationSettings {
     ReplicationTable table;
     /// The input component's codec, when the game takes input.
     std::optional<ComponentCodec> input;
+    /// Each command carries the moment shown when it was given: the one
+    /// interpolation shows, or the newest state without it.
+    bool perception = false;
     /// Entities mirrored at once.
     std::size_t maximumMapped = 4096;
     /// Predicting the player's own components from its own input; none

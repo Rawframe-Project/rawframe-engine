@@ -465,9 +465,21 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
     }
     // Commands the server consumed are done.
     state.unconsumed.erase(state.unconsumed.begin(), state.unconsumed.upper_bound(state.consumedInputTick));
-    std::vector<std::byte> wire(state.settings.input->wireSize());
+    std::vector<std::byte> wire(state.settings.input->wireSize() +
+                                (state.settings.perception ? kMaximumPerceptionBytes : 0));
     network::Writer commandWriter{wire};
     RAWFRAME_TRY(state.settings.input->encode(value.data(), commandWriter));
+    if (state.settings.perception) {
+        // What is shown now: between two states, or the newest.
+        PerceptionContext seen{.baseTick = state.serverTick, .fraction = 0};
+        if (const auto kShown = state.interpolation ? state.interpolation->perceivedTick() : std::nullopt;
+            kShown.has_value() && *kShown > 0) {
+            seen.baseTick = static_cast<std::uint64_t>(*kShown);
+            seen.fraction = static_cast<std::uint16_t>((*kShown - static_cast<double>(seen.baseTick)) * 65536.0);
+        }
+        RAWFRAME_TRY(encodePerception(commandWriter, seen));
+    }
+    wire.resize(commandWriter.written().size());
     const std::uint64_t kTick = state.nextInputTick++;
     state.unconsumed[kTick] = std::move(wire);
     if (state.prediction) {

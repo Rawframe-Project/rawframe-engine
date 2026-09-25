@@ -1,0 +1,202 @@
+// Lag compensation end to end (SPEC-0041): a client over a slow, jittery
+// network aims at where it sees a moving target, which is where the target
+// was a while ago. Each command carries the moment the client saw, and the
+// server casts the shot back to that moment. Cast now, the same shots miss.
+
+#include "rawframe/network_loopback/loopback.h"
+#include "rawframe/physics2d/components.h"
+#include "rawframe/physics2d/physics.h"
+#include "rawframe/test/test.h"
+#include "rawframe/world/query.h"
+#include "rawframe/world_replication/client.h"
+#include "rawframe/world_replication/perception.h"
+#include "rawframe/world_replication/server.h"
+
+#include <optional>
+#include <vector>
+
+using namespace rawframe;
+using execution::ManualClock;
+using execution::MonotonicDuration;
+using physics2d::Body2D;
+using physics2d::Pose2D;
+using world_replication::ComponentCodec;
+using world_replication::Perception;
+using world_replication::WireKind;
+
+namespace {
+
+/// Where the player aims: straight down at this x.
+struct Aim {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("5c0e9a13-7b42-4d8e-a1f6-3e29b8d74c05");
+    static constexpr std::string_view kComponentName = "scenario.aim";
+    double x = 0;
+};
+
+ComponentCodec poseCodec() {
+    return {.component = Pose2D::kComponentTypeId,
+            .size = sizeof(Pose2D),
+            .fields = {{offsetof(Pose2D, x), WireKind::F64},
+                       {offsetof(Pose2D, y), WireKind::F64},
+                       {offsetof(Pose2D, c), WireKind::F32},
+                       {offsetof(Pose2D, s), WireKind::F32}}};
+}
+
+ComponentCodec aimCodec() {
+    return {.component = Aim::kComponentTypeId, .size = sizeof(Aim), .fields = {{offsetof(Aim, x), WireKind::F64}}};
+}
+
+std::shared_ptr<const schema::SchemaRegistry> registry() {
+    schema::RegistryBuilder builder;
+    builder.add<Body2D>()
+        .add<Pose2D>()
+        .add<physics2d::Velocity2D>()
+        .add<physics2d::Impulse2D>()
+        .add<physics2d::Contact2D>()
+        .add<Aim>()
+        .add<Perception>();
+    return *builder.freeze();
+}
+
+constexpr network::ProviderProfile kTransport{.maximumConnections = 4,
+                                              .maximumStreamsPerConnection = 4,
+                                              .maximumStreamSend = 1024,
+                                              .maximumDatagram = 1200,
+                                              .maximumQueuedEvents = 4096,
+                                              .maximumQueuedBytes = 1 << 20};
+
+constexpr network::SessionProfile kSessions{.maximumSessions = 4,
+                                            .maximumPreAdmissionBytes = 4096,
+                                            .maximumControlBuffer = 1 << 16,
+                                            .maximumFramePayload = 4096,
+                                            .maximumDatagramPayload = 1100,
+                                            .admissionTimeout = MonotonicDuration{2'000'000'000}};
+
+network::Compatibility compatibility() {
+    network::Compatibility made{.protocol = network::protocolFingerprint()};
+    made.game.bytes.fill(std::byte{9});
+    return made;
+}
+
+/// The server's shooter: every player that aims casts straight down, back
+/// to the moment it saw and now, and counts what each hits.
+class Shoot final : public world::System {
+public:
+    Shoot(const schema::SchemaRegistry& registry, const physics2d::Physics2D& physics, world::EntityHandle target)
+        : query_(*world::Query<world::Read<Aim>, world::Read<Perception>>::resolve(registry)), physics_(&physics),
+          target_(target) {
+    }
+    result::Status run(world::SystemContext& context) noexcept override {
+        query_.forEach(context.world, [this](world::EntityHandle, const Aim& aim, const Perception& seen) {
+            if (aim.x == 0 || seen.baseTick == 0) {
+                return;
+            }
+            ++shots;
+            compensated += physics_->castRayAt(aim.x, 5, 0, -10, seen.baseTick, seen.fraction).entity == target_;
+            present += physics_->castRay(aim.x, 5, 0, -10).entity == target_;
+        });
+        return {};
+    }
+    int shots = 0;
+    int compensated = 0;
+    int present = 0;
+
+private:
+    world::Query<world::Read<Aim>, world::Read<Perception>> query_;
+    const physics2d::Physics2D* physics_;
+    world::EntityHandle target_;
+};
+
+} // namespace
+
+RAWFRAME_TEST(AShotCastBackToWhatThePlayerSawHits) {
+    ManualClock clock;
+    network_loopback::LoopbackNetwork network{clock,
+                                              {.latency = MonotonicDuration::fromMilliseconds(50),
+                                               .jitter = MonotonicDuration::fromMilliseconds(10),
+                                               .seed = 21}};
+    const auto kSchema = registry();
+
+    // The server: a target sliding right at 4 m/s, physics, and replication
+    // of every pose, with perceived input.
+    world::World server{kSchema};
+    auto physics = *physics2d::Physics2D::create({.gravityY = 0, .historyTicks = 64});
+    const world::EntityHandle kTarget = *server.create();
+    RAWFRAME_EXPECT(server
+                        .insert(kTarget,
+                                *kSchema->key<Body2D>(),
+                                Body2D{.motion = static_cast<std::uint8_t>(physics2d::Motion::Kinematic),
+                                       .shape = static_cast<std::uint8_t>(physics2d::Shape::Box),
+                                       .width = 0.5F,
+                                       .height = 0.5F})
+                        .has_value());
+    RAWFRAME_EXPECT(server.insert(kTarget, *kSchema->key<Pose2D>(), Pose2D{.x = -6}).has_value());
+    RAWFRAME_EXPECT(server.insert(kTarget, *kSchema->key<physics2d::Velocity2D>(), {.x = 4}).has_value());
+    RAWFRAME_EXPECT(server.insert(kTarget, *kSchema->key<physics2d::Impulse2D>(), {}).has_value());
+    RAWFRAME_EXPECT(server.insert(kTarget, *kSchema->key<physics2d::Contact2D>(), {}).has_value());
+    auto serverTransport = *network.provider(kTransport);
+    auto serverSessions = *network::Sessions::server(
+        *serverTransport, clock, {.profile = kSessions, .expected = compatibility(), .seed = 1});
+    RAWFRAME_EXPECT(serverSessions->listen({"server"}).has_value());
+    auto replication = *world_replication::ReplicationServer::create(
+        *serverSessions,
+        {.table = {.components = {poseCodec()}},
+         .playerComponents = {Aim::kComponentTypeId, Perception::kComponentTypeId},
+         .input = aimCodec(),
+         .perception = true});
+    std::vector<world::SystemDeclaration> declarations;
+    RAWFRAME_EXPECT(replication->declareSystems(*kSchema, declarations).has_value());
+    RAWFRAME_EXPECT(physics->declareSystems(*kSchema, declarations).has_value());
+    Shoot shoot{*kSchema, *physics, kTarget};
+    constexpr std::array<std::string_view, 1> kBeforeStep = {physics2d::kStepSystem};
+    declarations.push_back(
+        world::SystemDeclaration{.identity = "scenario.shoot", .before = kBeforeStep, .system = &shoot});
+    auto schedule = *world::Schedule::compile(declarations, *kSchema);
+    world::TickIndex tick;
+
+    // The client: it shows remote poses between states, and aims at the
+    // target where it shows it.
+    world::World mirror{kSchema};
+    auto clientTransport = *network.provider(kTransport);
+    auto clientSessions = *network::Sessions::client(*clientTransport, clock, {.profile = kSessions, .seed = 2});
+    auto client = *world_replication::ReplicationClient::create(
+        *clientSessions,
+        mirror,
+        {.table = {.components = {poseCodec()}},
+         .input = aimCodec(),
+         .perception = true,
+         .interpolation =
+             world_replication::InterpolationSettings{.interpolated = {Pose2D::kComponentTypeId}, .clock = &clock}});
+    RAWFRAME_EXPECT(
+        client
+            ->connect({"server"},
+                      network::Hello{.compatibility = compatibility(), .maximumDatagram = 1100, .maximumFrame = 4096})
+            .has_value());
+    auto shown = *world::Query<world::Read<Pose2D>>::resolve(*kSchema);
+
+    // Half a tick for the server, half a tick later the client aims: what it
+    // shows then lies between two states.
+    for (int step = 0; step < 180; ++step) {
+        clock.advance(MonotonicDuration{8'333'333});
+        replication->pump(server, tick);
+        RAWFRAME_EXPECT(schedule.runTick(server, tick, *world::TickRate::of(60)).has_value());
+        client->pump();
+        clock.advance(MonotonicDuration{8'333'334});
+        client->pump();
+        if (!client->admitted()) {
+            continue;
+        }
+        Aim aim;
+        shown.forEach(mirror, [&aim](world::EntityHandle, const Pose2D& pose) {
+            aim.x = pose.x;
+        });
+        RAWFRAME_EXPECT(client->submitInput(std::as_bytes(std::span{&aim, 1})).has_value());
+    }
+    // Shot after shot at what the client saw hits, though the target has
+    // moved on by more than its half width; cast now, they miss.
+    RAWFRAME_EXPECT(shoot.shots > 120);
+    RAWFRAME_EXPECT(shoot.compensated == shoot.shots);
+    RAWFRAME_EXPECT(shoot.present < shoot.shots / 10);
+    RAWFRAME_EXPECT(physics->statistics().rewindsClamped == 0);
+}

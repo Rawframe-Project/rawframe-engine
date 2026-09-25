@@ -2,6 +2,7 @@
 
 #include "rawframe/physics2d/components.h"
 #include "rawframe/world_kest/errors.h"
+#include "rawframe/world_replication/perception.h"
 
 #include <algorithm>
 #include <array>
@@ -283,11 +284,21 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             uses.emplace_back(number, interest.component);
             game.interest = std::move(interest);
         } else if (kKeyword == "input") {
-            if (kWords.size() != 2 || !game.input.empty()) {
-                return badLine(number, WorldKestError::BadGameLine, "a game names at most one input component");
+            if (kWords.size() < 2 || kWords.size() > 3 || (kWords.size() == 3 && kWords[2] != "perceived") ||
+                !game.input.empty()) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a game names at most one input component, `input <component> [perceived]`");
             }
             game.input = kWords[1];
             uses.emplace_back(number, game.input);
+            if (kWords.size() == 3) {
+                game.inputPerceived = true;
+                game.components.push_back(
+                    GameComponent{.id = world_replication::Perception::kComponentTypeId,
+                                  .name = std::string{world_replication::Perception::kComponentName},
+                                  .kestType = "Perception"});
+            }
         } else if (kKeyword == "spawn") {
             std::uint32_t count = 0;
             const auto kCount = kWords.size() >= 2
@@ -329,6 +340,10 @@ result::Result<GameDescription> parseGame(std::string_view text) {
         if (!declared(game, name)) {
             return badLine(line, WorldKestError::UnknownName, "a line names a component the game does not declare");
         }
+    }
+    // Every player holds the moment its client saw.
+    if (game.inputPerceived) {
+        game.player.emplace_back(world_replication::Perception::kComponentName);
     }
     for (const auto& [line, name] : collisionUses) {
         if (std::ranges::find(game.collision.classes, name, &GameCollisionClass::name) ==

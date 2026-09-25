@@ -2,6 +2,7 @@
 
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_replication/errors.h"
+#include "rawframe/world_replication/perception.h"
 
 #include <algorithm>
 #include <array>
@@ -102,6 +103,7 @@ struct ReplicationServer::State {
     std::vector<schema::ComponentRuntimeId> table;
     std::vector<schema::ComponentRuntimeId> playerComponents;
     std::optional<schema::ComponentRuntimeId> input;
+    std::optional<schema::ComponentRuntimeId> perception;
     std::vector<world::ColumnQuery> queries;
     std::optional<world::ColumnQuery> positions;
     std::size_t positionSize = 0;
@@ -232,8 +234,12 @@ struct ReplicationServer::State {
             if (kTick < peer.nextInputTick) {
                 continue; // already consumed: redundancy, not an error
             }
-            if (kTick >= peer.nextInputTick + settings.inputFutureWindow ||
-                kCommand.size() != settings.input->wireSize()) {
+            const std::size_t kWire = settings.input->wireSize();
+            const bool kShaped = settings.perception
+                                     ? kCommand.size() > kWire && kCommand.size() <= kWire + kMaximumPerceptionBytes &&
+                                           decodePerception(kCommand.subspan(kWire)).has_value()
+                                     : kCommand.size() == kWire;
+            if (kTick >= peer.nextInputTick + settings.inputFutureWindow || !kShaped) {
                 ++statistics.inputsRefused;
                 continue;
             }
@@ -265,6 +271,16 @@ struct ReplicationServer::State {
             } else {
                 command.assign(kWire, std::byte{0});
                 ++statistics.inputsNeutral;
+            }
+            if (perception) {
+                // Checked when it arrived; a neutral command saw nothing.
+                const auto kSeen = command.size() > kWire ? decodePerception(std::span{command}.subspan(kWire))
+                                                          : result::Result<PerceptionContext>{PerceptionContext{}};
+                auto* const kInto = static_cast<Perception*>(world.getErased(peer.player, *perception));
+                if (kInto != nullptr && kSeen.has_value()) {
+                    kInto->baseTick = kSeen->baseTick;
+                    kInto->fraction = kSeen->fraction;
+                }
             }
             peer.waitingInputs.erase(peer.waitingInputs.begin(), peer.waitingInputs.upper_bound(peer.nextInputTick));
             // Held or neutral, the tick is consumed all the same: a command
@@ -589,8 +605,8 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
                           "a replicated component's field lies outside its value");
         }
     }
-    if ((settings.input && !settings.input->valid()) || settings.maximumMapped == 0 ||
-        settings.inputFutureWindow == 0 || settings.paceInterval == 0 ||
+    if ((settings.input && !settings.input->valid()) || (settings.perception && !settings.input) ||
+        settings.maximumMapped == 0 || settings.inputFutureWindow == 0 || settings.paceInterval == 0 ||
         settings.targetInputLead >= settings.inputFutureWindow) {
         return refuse(result::ErrorClass::InvalidArgument,
                       ReplicationError::Malformed,
@@ -625,6 +641,7 @@ result::Status ReplicationServer::declareSystems(const schema::SchemaRegistry& r
     state.playerComponents.clear();
     state.inputWrites.clear();
     state.input.reset();
+    state.perception.reset();
     state.positions.reset();
     for (const ComponentCodec& codec : state.settings.table.components) {
         RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, registry.find(codec.component));
@@ -652,6 +669,16 @@ result::Status ReplicationServer::declareSystems(const schema::SchemaRegistry& r
         }
         state.input = kId;
         state.inputWrites.push_back(kId);
+        if (state.settings.perception) {
+            RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kSeen, registry.find(Perception::kComponentTypeId));
+            if (registry.descriptor(kSeen).size != sizeof(Perception)) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              ReplicationError::FieldUnsupported,
+                              "the perception component is not the engine's");
+            }
+            state.perception = kSeen;
+            state.inputWrites.push_back(kSeen);
+        }
     }
     state.reads = state.table;
     if (state.settings.interest) {

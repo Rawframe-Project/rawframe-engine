@@ -38,6 +38,8 @@ public:
     /// The components a client shows remote entities' values of between
     /// states; empty for a game that shows every state as it arrives.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept = 0;
+    /// Whether each command carries the moment its client saw.
+    [[nodiscard]] virtual bool perceivedInput() const noexcept = 0;
     /// Who is sent what: none for a game whose every entity every
     /// connection sees.
     [[nodiscard]] virtual const std::optional<InterestSettings>& interest() const noexcept = 0;

@@ -8,9 +8,9 @@
 
 namespace rawframe::world_kest {
 
-/// Adds `Physics2D.castRay`, answered by whatever `*queries` points at when
-/// a program calls it, and refused while that is null. `queries` must
-/// outlive every machine started with the table.
+/// Adds `Physics2D.castRay` and `Physics2D.castRayAt`, answered by whatever
+/// `*queries` points at when a program calls one, and refused while that is
+/// null. `queries` must outlive every machine started with the table.
 [[nodiscard]] result::Status addPhysicsDoors(kest::DoorTable& doors, const physics2d::Physics2DQueries* const* queries);
 
 } // namespace rawframe::world_kest

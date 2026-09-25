@@ -53,6 +53,9 @@ struct ServerReplicationSettings {
     /// The component a connection's input commands are written into, one of
     /// the player's; none for a game without input.
     std::optional<ComponentCodec> input;
+    /// Each command carries the moment its client saw, which is written
+    /// into the player's Perception (perception.h), a player component.
+    bool perception = false;
     /// Every entity is in every connection's interest without one.
     std::optional<InterestSettings> interest;
     /// Entities one connection may have mapped at once.

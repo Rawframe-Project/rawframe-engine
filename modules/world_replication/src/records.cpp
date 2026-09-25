@@ -123,6 +123,26 @@ result::Result<StateAck> decodeStateAck(std::span<const std::byte> payload) {
     return ack;
 }
 
+result::Status encodePerception(network::Writer& writer, const PerceptionContext& perception) {
+    RAWFRAME_TRY(writer.varint(perception.baseTick));
+    const std::array<std::byte, 2> kFraction = {static_cast<std::byte>(perception.fraction >> 8U),
+                                                static_cast<std::byte>(perception.fraction & 0xFFU)};
+    return writer.bytes(kFraction);
+}
+
+result::Result<PerceptionContext> decodePerception(std::span<const std::byte> bytes) {
+    network::Reader reader{bytes};
+    PerceptionContext perception;
+    RAWFRAME_TRY_ASSIGN(perception.baseTick, reader.varint());
+    RAWFRAME_TRY_ASSIGN(const std::span<const std::byte> kFraction, reader.bytes(2));
+    if (reader.remaining() != 0) {
+        return malformed("a perception context is followed by more bytes");
+    }
+    perception.fraction = static_cast<std::uint16_t>((std::to_integer<unsigned>(kFraction[0]) << 8U) |
+                                                     std::to_integer<unsigned>(kFraction[1]));
+    return perception;
+}
+
 result::Status encodeInputWindow(network::Writer& writer, const InputWindow& window) {
     if (window.commands.empty() || window.commands.size() > kMaximumInputWindow ||
         window.newestInputTick + 1 < window.commands.size()) {

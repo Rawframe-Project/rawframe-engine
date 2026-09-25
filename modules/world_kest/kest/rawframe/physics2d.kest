@@ -8,6 +8,7 @@ module rawframe.physics2d
 // after it read where they went. An entity that also has a Contact2D is told
 // what its body touched. Meters, seconds, kilograms, radians.
 
+import rawframe.replication
 import rawframe.world
 
 // Body2D.motion
@@ -107,4 +108,14 @@ extern fn Physics2D.castRay(originX: f64, originY: f64, towardX: f32, towardY: f
 // `toward`, where bodies were after the last step; sensors included.
 fn castRay(originX: f64, originY: f64, towardX: f32, towardY: f32) -> RayHit2D {
     return Physics2D.castRay(originX, originY, towardX, towardY)
+}
+
+extern fn Physics2D.castRayAt(originX: f64, originY: f64, towardX: f32, towardY: f32,
+                              seen: replication.Perception) -> RayHit2D
+
+// The same ray against every body where it was at the moment a player saw
+// (SPEC-0041 lag compensation): what the player shot at, not where it has
+// gone since. The moment is clamped into the kept history.
+fn castRayAt(originX: f64, originY: f64, towardX: f32, towardY: f32, seen: replication.Perception) -> RayHit2D {
+    return Physics2D.castRayAt(originX, originY, towardX, towardY, seen)
 }

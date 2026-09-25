@@ -104,6 +104,22 @@ struct StateAck {
 [[nodiscard]] result::Status encodeStateAck(network::Writer& writer, const StateAck& ack);
 [[nodiscard]] result::Result<StateAck> decodeStateAck(std::span<const std::byte> payload);
 
+/// SPEC-0041's PerceptionContext: the moment a client showed when it gave a
+/// command, as the server tick of the older of the two states it showed
+/// between and 65536ths of the way to the next. Follows the command's own
+/// bytes in its entry, for a game whose input is perceived.
+struct PerceptionContext {
+    std::uint64_t baseTick = 0;
+    std::uint16_t fraction = 0;
+};
+
+/// A perception context's bytes at most: a varint and two bytes.
+inline constexpr std::size_t kMaximumPerceptionBytes = 10;
+
+[[nodiscard]] result::Status encodePerception(network::Writer& writer, const PerceptionContext& perception);
+/// Everything in `bytes` must be the context.
+[[nodiscard]] result::Result<PerceptionContext> decodePerception(std::span<const std::byte> bytes);
+
 [[nodiscard]] result::Status encodeInputWindow(network::Writer& writer, const InputWindow& window);
 /// The decoded commands borrow from `payload`.
 [[nodiscard]] result::Result<InputWindow> decodeInputWindow(std::span<const std::byte> payload);

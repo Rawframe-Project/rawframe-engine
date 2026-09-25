@@ -10,6 +10,7 @@
 #include "rawframe/world_kest/kest_systems.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_kest/replication.h"
+#include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_runtime/checkpoint.h"
 
@@ -344,6 +345,9 @@ public:
                                                .level = level_});
     }
 
+    bool perceivedInput() const noexcept override {
+        return game_.inputPerceived;
+    }
     std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept override {
         return interpolated_;
     }
@@ -456,6 +460,11 @@ private:
                                system.identity);
             }
             for (const GameColumn& column : system.columns) {
+                // The moment a player saw is the server's to know: a client
+                // stepping its own command does not have it.
+                if (column.component == world_replication::Perception::kComponentName) {
+                    return kRefuse("a predicted system reads no Perception", system.identity);
+                }
                 if (column.access == world::Access::Write && kIn(game_.replicated, column.component) &&
                     !kIn(game_.predicted, column.component)) {
                     return kRefuse("a predicted system writes no replicated component that is not predicted",
@@ -578,6 +587,17 @@ private:
     /// laid out as the engine lays it out.
     [[nodiscard]] result::Result<kest::TypeLayout> layoutOf(const GameComponent& component) const {
         auto layout = program_->layout(component.kestType);
+        if (component.id == world_replication::Perception::kComponentTypeId) {
+            // Engine-made either way: the program's, if it names the type,
+            // must be the engine's.
+            const kest::TypeLayout kEngine = perceptionLayout();
+            if (layout.has_value() && !sameLayout(*layout, kEngine)) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              WorldKestError::BadGameLine,
+                              "the program's Perception is not laid out as the engine's; import rawframe.replication");
+            }
+            return kEngine;
+        }
         if (layout.has_value() || !game_.physics2d.has_value()) {
             return layout;
         }
@@ -600,6 +620,32 @@ private:
             return made;
         }
         return layout;
+    }
+
+    [[nodiscard]] static kest::TypeLayout perceptionLayout() {
+        using world_replication::Perception;
+        return kest::TypeLayout{
+            .size = sizeof(Perception),
+            .alignment = alignof(Perception),
+            .mark = 0,
+            .fields = {
+                kest::Field{.name = "baseTick", .offset = offsetof(Perception, baseTick), .kind = kest::FieldKind::U64},
+                kest::Field{
+                    .name = "fraction", .offset = offsetof(Perception, fraction), .kind = kest::FieldKind::U16}}};
+    }
+
+    [[nodiscard]] static bool sameLayout(const kest::TypeLayout& left, const kest::TypeLayout& right) {
+        if (left.size != right.size || left.alignment != right.alignment || left.fields.size() != right.fields.size()) {
+            return false;
+        }
+        for (std::size_t index = 0; index < left.fields.size(); ++index) {
+            if (left.fields[index].name != right.fields[index].name ||
+                left.fields[index].offset != right.fields[index].offset ||
+                left.fields[index].kind != right.fields[index].kind) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// 2D physics: the program's physics types must be laid out exactly as

@@ -99,6 +99,7 @@ public:
                                                           .playerComponents = {plan->playerComponents().begin(),
                                                                                plan->playerComponents().end()},
                                                           .input = plan->input(),
+                                                          .perception = plan->perceivedInput(),
                                                           .interest = plan->interest(),
                                                           .stateBytesPerTick = static_cast<std::size_t>(kPerTick)}));
         return simulation_->addSystems(*server_);
@@ -240,13 +241,15 @@ public:
                     ++unpredicted_;
                 }
             }
-            RAWFRAME_TRY_ASSIGN(bot.client,
-                                ReplicationClient::create(*bot.sessions,
-                                                          *bot.world,
-                                                          ClientReplicationSettings{.table = plan_->table(),
-                                                                                    .input = plan_->input(),
-                                                                                    .prediction = prediction,
-                                                                                    .interpolation = interpolation}));
+            RAWFRAME_TRY_ASSIGN(
+                bot.client,
+                ReplicationClient::create(*bot.sessions,
+                                          *bot.world,
+                                          ClientReplicationSettings{.table = plan_->table(),
+                                                                    .input = plan_->input(),
+                                                                    .perception = plan_->perceivedInput(),
+                                                                    .prediction = prediction,
+                                                                    .interpolation = interpolation}));
             if (plan_->input()) {
                 bot.input.assign(plan_->input()->size, std::byte{0});
             }
