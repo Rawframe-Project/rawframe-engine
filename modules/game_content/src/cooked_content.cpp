@@ -6,13 +6,17 @@
 #include "rawframe/content/product.h"
 
 #include <algorithm>
-#include <fstream>
 #include <iterator>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <fstream>
+#endif
 
 namespace rawframe::game_content {
 
 namespace {
 
+#if RAWFRAME_FILE_SYSTEM
 constexpr std::string_view kManifestName = "content.manifest";
 
 std::string readText(const std::filesystem::path& path) {
@@ -29,9 +33,20 @@ result::Result<std::vector<content::ManifestEntry>> entriesOf(std::string_view t
     }
     return entries;
 }
+#endif
 
 } // namespace
 
+result::Result<std::unique_ptr<CookedContent>> CookedContent::none(execution::Executor& blockingIo,
+                                                                   execution::OwnerId owner,
+                                                                   execution::CancellationScope& parent,
+                                                                   const execution::MonotonicSource& clock) {
+    std::unique_ptr<CookedContent> made{new CookedContent};
+    RAWFRAME_TRY_ASSIGN(made->store_, content::ContentStore::create(blockingIo, owner, parent, clock, {}));
+    return made;
+}
+
+#if RAWFRAME_FILE_SYSTEM
 result::Result<std::unique_ptr<CookedContent>> CookedContent::open(execution::Executor& blockingIo,
                                                                    execution::OwnerId owner,
                                                                    execution::CancellationScope& parent,
@@ -62,6 +77,61 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::openComposition(ex
                                                                               const execution::MonotonicSource& clock,
                                                                               std::string_view record,
                                                                               const std::filesystem::path& library) {
+    return compose(
+        blockingIo,
+        owner,
+        parent,
+        clock,
+        record,
+        [&library](std::string_view publisher) -> result::Result<std::string> {
+            return readText(library / "keys" / (std::string{publisher} + ".keys"));
+        },
+        [&library](std::string_view root, const base::Sha256Digest& digest, const signature::PublisherKeySet& keys) {
+            return content::ContentSource::build(library / "builds" / std::string{root}, digest, keys);
+        });
+}
+#endif
+
+result::Result<std::unique_ptr<CookedContent>> CookedContent::openComposition(execution::Executor& blockingIo,
+                                                                              execution::OwnerId owner,
+                                                                              execution::CancellationScope& parent,
+                                                                              const execution::MonotonicSource& clock,
+                                                                              std::string_view record,
+                                                                              HeldLibrary library) {
+    return compose(
+        blockingIo,
+        owner,
+        parent,
+        clock,
+        record,
+        [&library](std::string_view publisher) -> result::Result<std::string> {
+            const std::string kPath = "keys/" + std::string{publisher} + ".keys";
+            const auto kFound = std::ranges::find(library, kPath, &HeldLibrary::value_type::first);
+            if (kFound == library.end()) {
+                return std::string{};
+            }
+            return std::string{reinterpret_cast<const char*>(kFound->second.data()), kFound->second.size()};
+        },
+        [&library](std::string_view root, const base::Sha256Digest& digest, const signature::PublisherKeySet& keys) {
+            // The Build's own files, by their paths within it.
+            const std::string kPrefix = "builds/" + std::string{root} + "/";
+            HeldLibrary files;
+            for (const auto& [path, bytes] : library) {
+                if (path.starts_with(kPrefix)) {
+                    files.emplace_back(path.substr(kPrefix.size()), bytes);
+                }
+            }
+            return content::ContentSource::build(std::move(files), digest, keys);
+        });
+}
+
+result::Result<std::unique_ptr<CookedContent>> CookedContent::compose(execution::Executor& blockingIo,
+                                                                      execution::OwnerId owner,
+                                                                      execution::CancellationScope& parent,
+                                                                      const execution::MonotonicSource& clock,
+                                                                      std::string_view record,
+                                                                      const KeysOf& keysOf,
+                                                                      const BuildOf& buildOf) {
     RAWFRAME_TRY_ASSIGN(const content::CompositionRecord kRecord, content::readComposition(record));
     if (!kRecord.mods.empty()) {
         return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
@@ -79,12 +149,12 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::openComposition(ex
     for (const content::BuildReference* reference : builds) {
         const std::string kRoot = content::ContentDigest{.bytes = reference->build}.text().substr(7);
         const std::string kPublisher{content::publisherOf(reference->subject)};
-        const std::string kKeysText = readText(library / "keys" / (kPublisher + ".keys"));
+        RAWFRAME_TRY_ASSIGN(const std::string kKeysText, keysOf(kPublisher));
         auto keys = signature::readPublisherKeySet(kKeysText);
         if (!keys.has_value()) {
             return std::unexpected<result::Error>{std::move(keys).error().withContext("publisher", kPublisher)};
         }
-        auto opened = content::ContentSource::build(library / "builds" / kRoot, reference->build, *keys);
+        auto opened = buildOf(kRoot, reference->build, *keys);
         if (!opened.has_value()) {
             return std::unexpected<result::Error>{std::move(opened).error().withContext("build", kRoot)};
         }
@@ -132,6 +202,9 @@ result::Status CookedContent::admit(std::span<const content::AdmittedRepresentat
 }
 
 result::Result<bool> CookedContent::refresh() {
+#if !RAWFRAME_FILE_SYSTEM
+    return false;
+#else
     if (!root_.has_value()) {
         return false;
     }
@@ -148,6 +221,7 @@ result::Result<bool> CookedContent::refresh() {
     RAWFRAME_TRY(publish(manifests));
     manifests_ = std::move(manifests);
     return true;
+#endif
 }
 
 std::uint64_t CookedContent::generation() const noexcept {

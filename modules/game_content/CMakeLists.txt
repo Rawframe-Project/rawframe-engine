@@ -7,3 +7,7 @@ rawframe_module(NAME game_content
 )
 
 rawframe_module_tests(NAME game_content SOURCES tests/cooked_content_test.cpp)
+if(TARGET rawframe_game_content_tests)
+    # The tests sign a Build, to have one to verify.
+    target_link_libraries(rawframe_game_content_tests PRIVATE openssl::crypto)
+endif()

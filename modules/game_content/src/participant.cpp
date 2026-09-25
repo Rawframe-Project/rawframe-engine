@@ -4,9 +4,12 @@
 #include "rawframe/game_content/cooked_content.h"
 #include "rawframe/game_content/registrar.h"
 
-#include <fstream>
 #include <iterator>
 #include <string>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <fstream>
+#endif
 
 namespace rawframe::game_content {
 
@@ -23,10 +26,6 @@ class ContentParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
         const composition::Configuration& configuration = context.configuration();
-        std::optional<std::filesystem::path> root;
-        if (const auto kRoot = configuration.text("content.root")) {
-            root = std::filesystem::path{std::string{*kRoot}};
-        }
         RAWFRAME_TRY_ASSIGN(reloadEvery_, configuration.unsignedInteger("content.reload_every", 0));
         if (context.blockingIoExecutor() == nullptr) {
             return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
@@ -34,6 +33,26 @@ public:
                                                                code(content::ContentError::SourceUnavailable),
                                                                "cooked content is read on the blocking-I/O executor")
                                                       .error()};
+        }
+#if !RAWFRAME_FILE_SYSTEM
+        // Without files, content is held by the host that fetched it, not
+        // named by a path.
+        if (configuration.text("content.root") || configuration.text("content.composition")) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::FailedPrecondition,
+                             content::kContentDomain,
+                             code(content::ContentError::SourceUnavailable),
+                             "content.root and content.composition name directories, and there are none here")
+                    .error()};
+        }
+        RAWFRAME_TRY_ASSIGN(
+            content_,
+            CookedContent::none(*context.blockingIoExecutor(), context.owner(), context.scope(), context.clock()));
+        return {};
+#else
+        std::optional<std::filesystem::path> root;
+        if (const auto kRoot = configuration.text("content.root")) {
+            root = std::filesystem::path{std::string{*kRoot}};
         }
         // A Composition, or a cook's output, or nothing.
         if (const auto kComposition = configuration.text("content.composition")) {
@@ -63,6 +82,7 @@ public:
             CookedContent::open(
                 *context.blockingIoExecutor(), context.owner(), context.scope(), context.clock(), std::move(root)));
         return {};
+#endif
     }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {

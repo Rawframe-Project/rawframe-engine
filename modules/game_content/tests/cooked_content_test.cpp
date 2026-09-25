@@ -2,29 +2,35 @@
 // process admits, a family's admission publishes the next generation, a
 // changed manifest is published and one that does not read is refused with
 // the running catalog kept, and a process without content refuses
-// admission. A CompositionRecord is its canonical record and nothing else.
+// admission. A CompositionRecord is its canonical record and nothing else,
+// and its Builds open from a library held in memory as from a directory.
 
 #include "rawframe/content/composition_record.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/manifest.h"
+#include "rawframe/document/json.h"
 #include "rawframe/game_content/cooked_content.h"
+#include "rawframe/signature/signature.h"
 #include "rawframe/test/test.h"
 
+#include <array>
+#include <openssl/evp.h>
+#include <string>
+#include <vector>
+
+// A cook's output in a directory, where there are files.
+#if RAWFRAME_FILE_SYSTEM
 #include <filesystem>
 #include <fstream>
-#include <string>
 #include <unistd.h>
-#include <vector>
+#endif
 
 using namespace rawframe;
 using namespace rawframe::game_content;
 
 namespace {
 
-namespace fs = std::filesystem;
-
 constexpr content::ResourceTypeId kSoundType{base::Bits128{.high = 1, .low = 1}};
-constexpr content::ResourceTypeId kPictureType{base::Bits128{.high = 2, .low = 2}};
 
 std::vector<std::byte> bytesOf(std::string_view text) {
     const auto kBytes = std::as_bytes(std::span{text.data(), text.size()});
@@ -34,6 +40,30 @@ std::vector<std::byte> bytesOf(std::string_view text) {
 content::ResourceId idOf(std::uint64_t id) {
     return content::ResourceId{base::Bits128{.high = 0, .low = id}};
 }
+
+const content::AdmittedRepresentation kWave{.type = kSoundType,
+                                            .representation = *content::RepresentationId::parse("test.wave")};
+
+/// A blocking-I/O executor on the calling thread's terms, and a scope.
+struct Reader {
+    execution::ManualClock clock;
+    execution::CancellationScope scope{clock};
+    execution::Executor io{execution::ExecutorSettings{.kind = execution::ExecutorKind::BlockingIo, .workers = 1}};
+
+    Reader() {
+        RAWFRAME_EXPECT(io.admitOwner(execution::OwnerId{1}, {.maximumPendingTasks = 8}).has_value());
+    }
+    ~Reader() {
+        io.stop();
+    }
+    Reader(const Reader&) = delete;
+    Reader& operator=(const Reader&) = delete;
+};
+
+#if RAWFRAME_FILE_SYSTEM
+namespace fs = std::filesystem;
+
+constexpr content::ResourceTypeId kPictureType{base::Bits128{.high = 2, .low = 2}};
 
 content::ManifestEntry entryOf(std::uint64_t id,
                                content::ResourceTypeId type,
@@ -47,9 +77,6 @@ content::ManifestEntry entryOf(std::uint64_t id,
                                   .digest = content::ContentDigest::of(bytesOf(text)),
                                   .locator = std::string{locator}};
 }
-
-const content::AdmittedRepresentation kWave{.type = kSoundType,
-                                            .representation = *content::RepresentationId::parse("test.wave")};
 
 /// A cook's output of one sound and one picture, and the executor that
 /// reads it.
@@ -86,6 +113,7 @@ struct Output {
         return CookedContent::open(io, execution::OwnerId{1}, scope, clock, std::move(at));
     }
 };
+#endif
 
 /// What resource `id` reads as now, or empty.
 std::string readOf(CookedContent& content, std::uint64_t id, content::ResourceTypeId type) {
@@ -103,6 +131,7 @@ std::string readOf(CookedContent& content, std::uint64_t id, content::ResourceTy
 
 } // namespace
 
+#if RAWFRAME_FILE_SYSTEM
 RAWFRAME_TEST(TheCatalogHoldsWhatIsAdmitted) {
     Output output;
     {
@@ -158,9 +187,11 @@ RAWFRAME_TEST(AChangedManifestIsPublishedAndABadOneRefused) {
     RAWFRAME_EXPECT(kFixed.has_value() && *kFixed && readOf(content, 1, kSoundType) == "bang");
 }
 
+#endif
+
 RAWFRAME_TEST(AProcessWithoutContentRefusesAdmission) {
-    Output output;
-    auto opened = output.open(std::nullopt);
+    Reader reader;
+    auto opened = CookedContent::none(reader.io, execution::OwnerId{1}, reader.scope, reader.clock);
     RAWFRAME_EXPECT(opened.has_value());
     if (!opened.has_value()) {
         return;
@@ -226,7 +257,125 @@ RAWFRAME_TEST(ACompositionRecordIsItsCanonicalRecord) {
     execution::Executor io{execution::ExecutorSettings{.kind = execution::ExecutorKind::BlockingIo, .workers = 1}};
     RAWFRAME_EXPECT(io.admitOwner(execution::OwnerId{1}, {.maximumPendingTasks = 8}).has_value());
     RAWFRAME_EXPECT(
-        !CookedContent::openComposition(io, execution::OwnerId{1}, scope, clock, kModded.value_or(""), "/nowhere")
+        !CookedContent::openComposition(io, execution::OwnerId{1}, scope, clock, kModded.value_or(""), HeldLibrary{})
              .has_value());
     io.stop();
+}
+
+namespace {
+
+std::string hexOf(base::Bits128 value) {
+    std::array<char, base::kBits128HexDigits> digits{};
+    base::formatBits128Hex(value, digits);
+    return std::string{digits.data(), digits.size()};
+}
+
+/// A Game Build of `rawframe/test` 1.0.0 holding resource 1, "bang", in one
+/// raw chunk, signed with a fixed seed; its key set; and the Composition
+/// that names it: a library a web client could have fetched, never on
+/// disk.
+struct HeldGame {
+    HeldLibrary library;
+    std::string record;
+
+    HeldGame() {
+        const std::vector<std::byte> kBang = bytesOf("bang");
+        const std::string kDigest = content::ContentDigest::of(kBang).text();
+        document::Value chunk = document::Value::object();
+        chunk.add("content", document::Value::string(kDigest));
+        chunk.add("size", document::Value::integer(4));
+        chunk.add("blob", document::Value::string(kDigest));
+        chunk.add("blob_size", document::Value::integer(4));
+        chunk.add("codec", document::Value::string("raw"));
+        document::Value list = document::Value::array();
+        list.push(std::move(chunk));
+        document::Value chunks = document::Value::object();
+        chunks.add(hexOf(idOf(1).value), std::move(list));
+        document::Value resource = document::Value::object();
+        resource.add("resource", document::Value::string(hexOf(idOf(1).value)));
+        resource.add("type", document::Value::string(hexOf(kSoundType.value)));
+        resource.add("representation", document::Value::string("test.wave"));
+        resource.add("digest", document::Value::string(kDigest));
+        resource.add("size", document::Value::integer(4));
+        document::Value resources = document::Value::array();
+        resources.push(std::move(resource));
+        document::Value identity = document::Value::object();
+        identity.add("subject", document::Value::string("rawframe/test"));
+        identity.add("version", document::Value::string("1.0.0"));
+        identity.add("resources", std::move(resources));
+        const base::Sha256Digest kRoot = base::sha256(*document::writeCanonicalRecord(identity));
+        document::Value manifest = document::Value::object();
+        manifest.add("schema", document::Value::integer(1));
+        manifest.add("identity", std::move(identity));
+        manifest.add("chunks", std::move(chunks));
+        const std::string kManifest = *document::writeCanonicalRecord(manifest);
+
+        std::array<unsigned char, 32> seed{};
+        seed.fill(0x42);
+        EVP_PKEY* key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, seed.data(), seed.size());
+        signature::PublicKey publicKey{};
+        std::size_t length = publicKey.size();
+        EVP_PKEY_get_raw_public_key(key, reinterpret_cast<unsigned char*>(publicKey.data()), &length);
+        signature::Envelope envelope{.kid = "0000000000000001", .sig = {}};
+        length = envelope.sig.size();
+        EVP_MD_CTX* context = EVP_MD_CTX_new();
+        EVP_DigestSignInit(context, nullptr, nullptr, nullptr, key);
+        EVP_DigestSign(context,
+                       reinterpret_cast<unsigned char*>(envelope.sig.data()),
+                       &length,
+                       reinterpret_cast<const unsigned char*>(kManifest.data()),
+                       kManifest.size());
+        EVP_MD_CTX_free(context);
+        EVP_PKEY_free(key);
+        const signature::PublisherKeySet kKeys{
+            .publisher = "rawframe",
+            .sequence = 1,
+            .updatedAt = 1,
+            .head = "sha256:" + std::string(64, '0'),
+            .keys = {signature::PublisherKey{
+                .kid = "0000000000000001", .publicKey = publicKey, .state = signature::KeyState::Active, .since = 1}}};
+
+        const std::string kBuild = "builds/" + content::ContentDigest{.bytes = kRoot}.text().substr(7) + "/";
+        library = {{kBuild + "build.manifest", bytesOf(kManifest)},
+                   {kBuild + "build.manifest.sig", bytesOf(signature::writeEnvelope(envelope))},
+                   {kBuild + "sha256/" + kDigest.substr(7, 2) + "/" + kDigest.substr(9), kBang},
+                   {"keys/rawframe.keys", bytesOf(*signature::writePublisherKeySet(kKeys))}};
+        record = *content::writeComposition(
+            content::CompositionRecord{.game = {.subject = "rawframe/test", .version = "1.0.0", .build = kRoot},
+                                       .mods = {},
+                                       .packages = {},
+                                       .profile = "community",
+                                       .createdAt = 1'790'000'000});
+    }
+};
+
+} // namespace
+
+RAWFRAME_TEST(ACompositionOpensFromALibraryHeldInMemory) {
+    Reader reader;
+    const HeldGame kGame;
+    auto opened = CookedContent::openComposition(
+        reader.io, execution::OwnerId{1}, reader.scope, reader.clock, kGame.record, kGame.library);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    const content::AdmittedRepresentation kWaves[] = {kWave};
+    RAWFRAME_EXPECT((*opened)->held() && (*opened)->admit(kWaves).has_value());
+    RAWFRAME_EXPECT(readOf(**opened, 1, kSoundType) == "bang");
+    RAWFRAME_EXPECT((*opened)->compositionId() == content::compositionIdOf(kGame.record) && !*(*opened)->refresh());
+
+    // Without the publisher's key set, or with the Build's blob changed,
+    // it is refused or its bytes are.
+    HeldLibrary keyless = kGame.library;
+    keyless.pop_back();
+    RAWFRAME_EXPECT(!CookedContent::openComposition(
+                         reader.io, execution::OwnerId{1}, reader.scope, reader.clock, kGame.record, std::move(keyless))
+                         .has_value());
+    HeldLibrary changed = kGame.library;
+    changed[2].second = bytesOf("bong");
+    auto tampered = CookedContent::openComposition(
+        reader.io, execution::OwnerId{1}, reader.scope, reader.clock, kGame.record, std::move(changed));
+    RAWFRAME_EXPECT(tampered.has_value() && (*tampered)->admit(kWaves).has_value() &&
+                    readOf(**tampered, 1, kSoundType).empty());
 }
