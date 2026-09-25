@@ -2,7 +2,6 @@
 
 #include "rawframe/content/manifest.h"
 #include "rawframe/cook/errors.h"
-#include "rawframe/document/record.h"
 
 #include <algorithm>
 #include <array>

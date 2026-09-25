@@ -2,8 +2,8 @@
 # canonical text document, read and written in one form. Engine-neutral:
 # the game checks components and fields when it spawns one.
 rawframe_module(NAME scene
-    SOURCES src/scene.cpp
+    SOURCES src/resolve.cpp src/scene.cpp
     DEPS schema document result base
 )
 
-rawframe_module_tests(NAME scene SOURCES tests/scene_test.cpp)
+rawframe_module_tests(NAME scene SOURCES tests/resolve_test.cpp tests/scene_test.cpp)
