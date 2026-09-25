@@ -1,6 +1,7 @@
 #include "rawframe/physics2d/physics.h"
 
 #include "characters.h"
+#include "rawframe/collision/filters.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/errors.h"
 #include "rawframe/world/query.h"
@@ -98,24 +99,6 @@ struct Mapped {
     Velocity2D velocity;
 };
 
-/// How one collision class filters, as Maul2D category and mask bits: bit
-/// `i` is class `i`'s solid shapes (class nought is bodies of none) and bit
-/// `32 + i` its sensors. A solid meets another class's solid where the
-/// rule is collide, and its sensors where the rule is not ignore; a sensor
-/// twin, made for a class that triggers with another, meets the solids of
-/// the classes it triggers with; a body that is a sensor meets every solid
-/// its class does not ignore. Bit 31 is character queries: every solid but
-/// a character's meets them.
-struct ClassFilter {
-    std::uint64_t solidMask = 0;
-    std::uint64_t triggerMask = 0;
-    std::uint64_t sensorMask = 0;
-};
-
-constexpr std::uint64_t kSensorBits = 32;
-constexpr std::uint64_t kCharacterQuery = std::uint64_t{1} << 31U;
-constexpr std::uint64_t kSolids = kCharacterQuery - 1;
-
 struct Row {
     world::EntityHandle entity;
     const Body2D* body = nullptr;
@@ -128,10 +111,8 @@ struct Row {
 
 struct Physics2D::State {
     Physics2DSettings settings;
-    /// By class index, nought for bodies of no class.
-    std::vector<ClassFilter> filters;
-    /// Class identities and their indices, by identity.
-    std::vector<std::pair<std::uint64_t, std::size_t>> classes;
+    /// The collision document as Maul2D's filter bits.
+    collision::CollisionFilters filters;
     /// Entity pairs whose overlap was told this step, so a pair meeting
     /// through two sensors is told once.
     std::vector<std::pair<world::EntityHandle, world::EntityHandle>> toldEntered;
@@ -161,65 +142,6 @@ struct Physics2D::State {
     std::unique_ptr<world::System> system;
     std::vector<Row> rows;
 
-    /// Checks the collision document (SPEC-0037 §15, 2 and 3) and works out
-    /// every class's filter.
-    result::Status plan(const CollisionDocument& document) {
-        const auto kBad = [](std::string_view why) {
-            return refuse(result::ErrorClass::InvalidArgument, Physics2DError::InvalidSettings, why);
-        };
-        if (document.classes.size() > kMaximumCollisionClasses) {
-            return kBad("a collision document declares more classes than it may");
-        }
-        std::vector<std::string_view> names;
-        for (std::size_t index = 0; index < document.classes.size(); ++index) {
-            const CollisionClass& declared = document.classes[index];
-            if (declared.id == 0 || declared.name.empty()) {
-                return kBad("a collision class has identity nought or no name");
-            }
-            classes.emplace_back(declared.id, index + 1);
-            names.push_back(declared.name);
-        }
-        std::ranges::sort(classes);
-        std::ranges::sort(names);
-        if (std::ranges::adjacent_find(classes, {}, &std::pair<std::uint64_t, std::size_t>::first) != classes.end() ||
-            std::ranges::adjacent_find(names) != names.end()) {
-            return kBad("a collision class's identity or name is declared twice");
-        }
-        const std::size_t kCount = document.classes.size() + 1;
-        std::vector<std::optional<CollisionRule>> rules(kCount * kCount);
-        for (const CollisionPair& pair : document.rules) {
-            const auto kFirst = classIndex(pair.first);
-            const auto kSecond = classIndex(pair.second);
-            if (pair.first == 0 || pair.second == 0 || !kFirst.has_value() || !kSecond.has_value()) {
-                return kBad("a collision rule names a class the document does not declare");
-            }
-            auto& forward = rules[(*kFirst * kCount) + *kSecond];
-            if (forward.has_value()) {
-                return kBad("a pair of collision classes is ruled twice");
-            }
-            forward = pair.rule;
-            rules[(*kSecond * kCount) + *kFirst] = pair.rule;
-        }
-        filters.assign(kCount, ClassFilter{.solidMask = kCharacterQuery});
-        for (std::size_t one = 0; one < kCount; ++one) {
-            for (std::size_t other = 0; other < kCount; ++other) {
-                const CollisionRule kRule = rules[(one * kCount) + other].value_or(document.fallback);
-                ClassFilter& filter = filters[one];
-                if (kRule == CollisionRule::Collide) {
-                    filter.solidMask |= std::uint64_t{1} << other;
-                }
-                if (kRule != CollisionRule::Ignore) {
-                    filter.solidMask |= std::uint64_t{1} << (kSensorBits + other);
-                    filter.sensorMask |= std::uint64_t{1} << other;
-                }
-                if (kRule == CollisionRule::Trigger) {
-                    filter.triggerMask |= std::uint64_t{1} << other;
-                }
-            }
-        }
-        return {};
-    }
-
     ~State() {
         if (m2World_IsValid(physics)) {
             const std::scoped_lock kLock{worldTableLock()};
@@ -237,7 +159,7 @@ struct Physics2D::State {
         into.trigger = {};
         into.since.reset();
         into.character = row.character != nullptr;
-        const auto kClass = classIndex(body.collisionClass);
+        const auto kClass = filters.classIndex(body.collisionClass);
         into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value();
         if (into.refused) {
             ++statistics.bodiesRefused;
@@ -265,11 +187,12 @@ struct Physics2D::State {
         shape.friction = body.friction;
         shape.restitution = body.restitution;
         shape.isSensor = body.sensor;
-        const ClassFilter& filter = filters[*kClass];
-        shape.categoryBits = std::uint64_t{1} << (body.sensor ? kSensorBits + *kClass : *kClass);
+        const collision::ClassFilter& filter = filters.filter(*kClass);
+        shape.categoryBits = body.sensor ? collision::CollisionFilters::sensorBit(*kClass)
+                                         : collision::CollisionFilters::solidBit(*kClass);
         shape.maskBits = body.sensor ? filter.sensorMask : filter.solidMask;
         if (into.character) {
-            shape.maskBits &= ~kCharacterQuery;
+            shape.maskBits &= ~collision::kCharacterQuery;
         }
         const auto kShape = [&](const m2ShapeDef& definitionOf) {
             if (body.shape == static_cast<std::uint8_t>(Shape::Circle)) {
@@ -289,7 +212,7 @@ struct Physics2D::State {
             m2ShapeDef sensor = shape;
             sensor.isSensor = true;
             sensor.density = 0;
-            sensor.categoryBits = std::uint64_t{1} << (kSensorBits + *kClass);
+            sensor.categoryBits = collision::CollisionFilters::sensorBit(*kClass);
             sensor.maskBits = filter.triggerMask;
             twin = kShape(sensor);
         }
@@ -308,17 +231,6 @@ struct Physics2D::State {
         }
         ++statistics.bodiesMade;
         return true;
-    }
-
-    [[nodiscard]] std::optional<std::size_t> classIndex(std::uint64_t id) const noexcept {
-        if (id == 0) {
-            return 0;
-        }
-        const auto kFound =
-            std::lower_bound(classes.begin(), classes.end(), id, [](const auto& entry, std::uint64_t key) {
-                return entry.first < key;
-            });
-        return kFound != classes.end() && kFound->first == id ? std::optional{kFound->second} : std::nullopt;
     }
 
     /// Whether this step has not told this pair of entities yet, and now has.
@@ -477,8 +389,9 @@ struct Physics2D::State {
             return;
         }
         const m2Vec2 kWish = m2Body_GetLinearVelocity(entry.body);
-        const m2QueryFilter kFilter{.categoryBits = kCharacterQuery,
-                                    .maskBits = filters[*classIndex(body.collisionClass)].solidMask & kSolids};
+        const m2QueryFilter kFilter{.categoryBits = collision::kCharacterQuery,
+                                    .maskBits = filters.filter(*filters.classIndex(body.collisionClass)).solidMask &
+                                                collision::kSolids};
         const CharacterMove kMove = physics2d::moveCharacter(physics,
                                                              body.width,
                                                              body.height,
@@ -662,7 +575,7 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
     }
     auto state = std::make_unique<State>();
     state->settings = settings;
-    RAWFRAME_TRY(state->plan(settings.collision));
+    RAWFRAME_TRY_ASSIGN(state->filters, collision::CollisionFilters::make(settings.collision));
     m2WorldDef definition = m2DefaultWorldDef();
     definition.gravity = m2Vec2{settings.gravityX, settings.gravityY};
     definition.bodyCapacity = static_cast<std::int32_t>(settings.bodyCapacity);
@@ -717,11 +630,12 @@ Physics2D::castRay(double originX, double originY, float towardX, float towardY,
     // A class's solids and sensors, by its two bits.
     m2QueryFilter filter{~std::uint64_t{0}, ~std::uint64_t{0}};
     if (among != kEveryClass) {
-        const auto kClass = state_->classIndex(among);
+        const auto kClass = state_->filters.classIndex(among);
         if (!kClass.has_value()) {
             return RayHit2D{};
         }
-        filter.maskBits = (std::uint64_t{1} << *kClass) | (std::uint64_t{1} << (kSensorBits + *kClass));
+        filter.maskBits =
+            collision::CollisionFilters::solidBit(*kClass) | collision::CollisionFilters::sensorBit(*kClass);
     }
     const m2RayCastResult kResult =
         m2World_CastRayClosest(state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, filter);
@@ -781,7 +695,7 @@ RayHit2D Physics2D::castRayAt(double originX,
     if (!state.stepped || kKept == 0) {
         return castRay(originX, originY, towardX, towardY, among);
     }
-    if (among != kEveryClass && !state.classIndex(among).has_value()) {
+    if (among != kEveryClass && !state.filters.classIndex(among).has_value()) {
         return RayHit2D{};
     }
     ++state.raysRewound;

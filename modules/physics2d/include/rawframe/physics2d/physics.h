@@ -24,6 +24,7 @@
 // same components and the same writes give the same bits on every machine:
 // nothing here depends on addresses, hash order, or time.
 
+#include "rawframe/collision/document.h"
 #include "rawframe/composition/participant.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/result/result.h"
@@ -39,40 +40,6 @@
 
 namespace rawframe::physics2d {
 
-/// What happens where two collision classes meet (SPEC-0037's closed rule
-/// vocabulary): they push each other, overlap and are told, or pass through
-/// unaware.
-enum class CollisionRule : std::uint8_t {
-    Collide,
-    Trigger,
-    Ignore,
-};
-
-/// A collision class: a durable identity (never nought) and its name.
-struct CollisionClass {
-    std::uint64_t id = 0;
-    std::string name;
-};
-
-struct CollisionPair {
-    std::uint64_t first = 0;
-    std::uint64_t second = 0;
-    CollisionRule rule = CollisionRule::Collide;
-};
-
-/// SPEC-0037's collision document: the classes, the rules between pairs of
-/// them (either order), and the rule for every pair not listed, bodies of
-/// no class among them. A body whose Body2D names a class not here is not
-/// made. A body that is a sensor overlaps what its class does not ignore.
-struct CollisionDocument {
-    std::vector<CollisionClass> classes;
-    std::vector<CollisionPair> rules;
-    CollisionRule fallback = CollisionRule::Collide;
-};
-
-/// Classes a document may declare.
-inline constexpr std::size_t kMaximumCollisionClasses = 30;
-
 struct Physics2DSettings {
     /// Meters a second squared.
     float gravityX = 0;
@@ -86,7 +53,7 @@ struct Physics2DSettings {
     /// Ticks of every body's pose kept for casting back in time
     /// (SPEC-0041's compensation window); nought keeps none.
     std::uint32_t historyTicks = 64;
-    CollisionDocument collision;
+    collision::CollisionDocument collision;
 };
 
 struct Physics2DStatistics {
@@ -169,12 +136,10 @@ public:
 
 class Physics2D final : public world_runtime::SystemContributor, public Physics2DQueries {
 public:
-    /// Refuses settings out of range or a collision document that is not
-    /// well formed (`invalid_settings`: a class of identity nought, a name
-    /// or identity twice, more than kMaximumCollisionClasses classes, a
-    /// rule naming a class not declared, a pair ruled twice), a processor that
-    /// cannot run the build's kernels (`unsupported`), and a process with
-    /// no room for another physics world (`capacity`).
+    /// Refuses settings out of range (`invalid_settings`), a collision
+    /// document that is not well formed (rawframe.collision's `invalid_document`),
+    /// a processor that cannot run the build's kernels (`unsupported`), and
+    /// a process with no room for another physics world (`capacity`).
     [[nodiscard]] static result::Result<std::unique_ptr<Physics2D>> create(const Physics2DSettings& settings);
     ~Physics2D() override;
 

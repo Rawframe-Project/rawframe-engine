@@ -1,3 +1,4 @@
+#include "rawframe/collision/errors.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/errors.h"
 #include "rawframe/physics2d/physics.h"
@@ -14,6 +15,7 @@
 
 using namespace rawframe;
 using namespace rawframe::physics2d;
+using namespace rawframe::collision;
 
 namespace {
 
@@ -324,24 +326,11 @@ RAWFRAME_TEST(CollisionClassesDecideWhatMeets) {
     // A body of a class the document does not declare is not made.
     RAWFRAME_EXPECT(scene.physics->statistics().bodiesRefused == 1 && scene.physics->statistics().bodiesMade == 4);
 
-    // Documents that are not well formed.
-    const std::vector<CollisionDocument> kBad = {
-        {.classes = {{0, "none"}}},
-        {.classes = {{kPlayer, "player"}, {kPlayer, "again"}}},
-        {.classes = {{kPlayer, "player"}, {kGhost, "player"}}},
-        {.classes = {{kPlayer, "player"}}, .rules = {{kPlayer, kGhost, CollisionRule::Ignore}}},
-        {.classes = {{kPlayer, "player"}, {kGhost, "ghost"}},
-         .rules = {{kPlayer, kGhost, CollisionRule::Ignore}, {kGhost, kPlayer, CollisionRule::Trigger}}},
-    };
-    for (const CollisionDocument& kDocument : kBad) {
-        const auto kMade = Physics2D::create({.collision = kDocument});
-        RAWFRAME_EXPECT(!kMade.has_value() && kMade.error().code() == code(Physics2DError::InvalidSettings));
-    }
-    CollisionDocument crowded;
-    for (std::uint64_t index = 1; index <= kMaximumCollisionClasses + 1; ++index) {
-        crowded.classes.push_back({index, "class" + std::to_string(index)});
-    }
-    RAWFRAME_EXPECT(!Physics2D::create({.collision = crowded}).has_value());
+    // A document that is not well formed is refused, as rawframe.collision
+    // says.
+    const auto kMade = Physics2D::create({.collision = {.classes = {{kPlayer, "player"}, {kPlayer, "again"}}}});
+    RAWFRAME_EXPECT(!kMade.has_value() &&
+                    kMade.error().code() == collision::code(collision::CollisionError::InvalidDocument));
 }
 
 RAWFRAME_TEST(ARayCastBackInTimeFindsWhereBodiesWere) {

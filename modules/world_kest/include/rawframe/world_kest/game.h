@@ -73,6 +73,7 @@
 //
 //   entity game.target who
 
+#include "rawframe/collision/document.h"
 #include "rawframe/physics2d/physics.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/stable_id.h"
@@ -143,7 +144,7 @@ struct GameCollisionClass {
 struct GameCollisionRule {
     std::string first;
     std::string second;
-    physics2d::CollisionRule rule = physics2d::CollisionRule::Collide;
+    collision::CollisionRule rule = collision::CollisionRule::Collide;
 };
 
 /// 2D physics, and how the world is set up.
@@ -157,7 +158,7 @@ struct GamePhysics2D {
 struct GameCollision {
     std::vector<GameCollisionClass> classes;
     std::vector<GameCollisionRule> rules;
-    physics2d::CollisionRule fallback = physics2d::CollisionRule::Collide;
+    collision::CollisionRule fallback = collision::CollisionRule::Collide;
 };
 
 /// Spatial interest: the position component, its coordinate fields, and the
