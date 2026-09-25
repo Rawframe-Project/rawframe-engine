@@ -1,0 +1,11 @@
+# A bar hung from a post in two dimensions by a hinge its program makes,
+# which swings down about the post.
+program lever.kest
+physics2d gravity 0 -10
+
+component 6e17f5e8-33b2-4f9e-8b74-41823937f388 lever.swing Swing
+
+system lever.rig simulation rig write lever.swing entities before rawframe.physics2d.step
+
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=0.1 height=0.1 rawframe.physics2d.pose y=5 rawframe.physics2d.velocity lever.swing role=0
+spawn 1 rawframe.physics2d.body motion=2 shape=1 width=0.5 height=0.05 density=100 rawframe.physics2d.pose x=0.5 y=5 rawframe.physics2d.velocity lever.swing role=1

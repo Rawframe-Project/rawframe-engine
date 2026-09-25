@@ -15,6 +15,7 @@
 // a matching declaration holds.
 
 #include "rawframe/physics/ground.h"
+#include "rawframe/physics/joint.h"
 #include "rawframe/physics/layout.h"
 #include "rawframe/physics/motion.h"
 #include "rawframe/schema/stable_id.h"
@@ -172,8 +173,51 @@ struct Character2D {
     float groundNormalY = 0;
 };
 
-/// Body2D, Pose2D, Velocity2D, Impulse2D, Contact2D, and Character2D, in
-/// that order.
+/// SPEC-0037's joint (section 10) in two dimensions, physics3d's Joint3D
+/// on the reduced axis set: an entity with a Joint2D holds two bodies'
+/// entities together along the linear x and y and the angular axis of its
+/// frame. The frame sits at each body's anchor, its x along `axis` in `a`'s
+/// frame (all noughts is +x). Every axis is locked, free, or limited, in
+/// meters and radians from where the bodies are when it is made. What it
+/// can be is closed: all locked (a weld), only the angle moving (a hinge),
+/// only one linear axis moving (a slider), or all free (the two only stop
+/// colliding); any other is refused. One motor may drive the axis that
+/// moves. At least one of the bodies is dynamic. A joint that cannot be
+/// made waits until it or its bodies change; changing it, or making either
+/// body again, makes it again.
+struct Joint2D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("217eaf04-507b-4d94-b363-2c8bf99f4174");
+    static constexpr std::string_view kComponentName = "rawframe.physics2d.joint";
+
+    world::EntityHandle a;
+    world::EntityHandle b;
+    float anchorAX = 0;
+    float anchorAY = 0;
+    float anchorBX = 0;
+    float anchorBY = 0;
+    float axisX = 0;
+    float axisY = 0;
+    float linearLowerX = 0;
+    float linearLowerY = 0;
+    float linearUpperX = 0;
+    float linearUpperY = 0;
+    float angularLower = 0;
+    float angularUpper = 0;
+    float motorSpeed = 0;
+    float motorEffort = 0;
+    /// physics::JointAxis each.
+    std::uint8_t linearX = 0;
+    std::uint8_t linearY = 0;
+    std::uint8_t angular = 0;
+    /// Nought for none; 1 and 2 drive linear x and y, and 3 the angle.
+    std::uint8_t motor = 0;
+    /// Whether the two bodies still collide with each other.
+    bool collideConnected = false;
+};
+
+/// Body2D, Pose2D, Velocity2D, Impulse2D, Contact2D, Character2D, and
+/// Joint2D, in that order.
 /// An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;

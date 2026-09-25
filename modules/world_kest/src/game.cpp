@@ -338,11 +338,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     GameEntityField{.component = std::string{kFacts.contact}, .field = std::string{kField}});
             }
             // As are the bodies a joint holds.
-            if (physics.dimensions == 3) {
-                for (const std::string_view kField : {"a", "b"}) {
-                    game.entityFields.push_back(GameEntityField{
-                        .component = std::string{physics3d::Joint3D::kComponentName}, .field = std::string{kField}});
-                }
+            for (const std::string_view kField : {"a", "b"}) {
+                game.entityFields.push_back(
+                    GameEntityField{.component = std::string{kFacts.joint}, .field = std::string{kField}});
             }
             game.physics = physics;
         } else if (kKeyword == "collision") {

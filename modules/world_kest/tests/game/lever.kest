@@ -1,0 +1,34 @@
+module lever
+
+// A post and a bar, and once, a hinge between the post's middle and the
+// bar's left end.
+
+import rawframe.physics2d
+import rawframe.world
+
+struct Swing {
+    // Nought for the post, one for the bar.
+    role: u8
+    joined: bool
+}
+
+extern fn Joint2D.insert(entity: world.Entity, value: physics2d.Joint2D)
+
+fn rig(count: i32, swings: [Swing], entities: [world.Entity]) {
+    let post = 0
+    let bar = 0
+    let i = 0
+    while i < count {
+        if swings[i].role == u8(0) {
+            post = i
+        } else {
+            bar = i
+        }
+        i = i + 1
+    }
+    if count == 2 && swings[bar].joined == false {
+        let hinge = world.create()
+        Joint2D.insert(hinge, physics2d.hinge(entities[post], entities[bar], vec2(0.0, 0.0), vec2(-0.5, 0.0)))
+        swings[bar].joined = true
+    }
+}

@@ -356,7 +356,7 @@ struct MappedJoint {
     const std::array<std::uint8_t, 6> kModes = {
         joint.linearX, joint.linearY, joint.linearZ, joint.angularX, joint.angularY, joint.angularZ};
     if (!kAxisA || !kAxisB || joint.motor > 6 || std::ranges::any_of(kModes, [](std::uint8_t mode) {
-            return mode > static_cast<std::uint8_t>(JointAxis::Limited);
+            return mode > static_cast<std::uint8_t>(physics::JointAxis::Limited);
         })) {
         return std::nullopt;
     }

@@ -107,6 +107,76 @@ struct Character2D {
     groundNormalY: f32
 }
 
+// Joint2D's axes: how the joint holds each.
+const LOCKED: u8 = 0
+const FREE: u8 = 1
+// Free between the axis's lower and upper limit.
+const LIMITED: u8 = 2
+
+// Joint2D.motor: nought for none, or the axis it drives.
+const NO_MOTOR: u8 = 0
+const MOTOR_LINEAR_X: u8 = 1
+const MOTOR_LINEAR_Y: u8 = 2
+const MOTOR_ANGULAR: u8 = 3
+
+// A joint, on an entity of its own, holding bodies `a` and `b` together
+// along the linear x and y and the angular axis of its frame. The frame
+// sits at each body's anchor, in that body's own frame, with x along `axis`
+// in a's frame (all noughts is +x). Each axis is LOCKED, FREE, or LIMITED
+// between its lower and upper limit, in meters and radians from where the
+// bodies are when it is made. It is all locked, only the angle moving, only
+// one linear axis moving, or all free (the two only stop colliding); any
+// other is refused. One motor may drive the axis that moves, at
+// `motorSpeed` with at most `motorEffort`. At least one body is dynamic.
+// Changing a joint, or making either body again, makes it again; `fixed`,
+// `hinge`, and `slider` make the usual ones.
+struct Joint2D {
+    a: world.Entity
+    b: world.Entity
+    anchorAX: f32
+    anchorAY: f32
+    anchorBX: f32
+    anchorBY: f32
+    axisX: f32
+    axisY: f32
+    linearLowerX: f32
+    linearLowerY: f32
+    linearUpperX: f32
+    linearUpperY: f32
+    angularLower: f32
+    angularUpper: f32
+    motorSpeed: f32
+    motorEffort: f32
+    linearX: u8
+    linearY: u8
+    angular: u8
+    motor: u8
+    // Whether the two bodies still collide with each other.
+    collideConnected: bool
+}
+
+// Welds `b` to `a` where they are: every axis locked.
+fn fixed(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2) -> Joint2D {
+    return Joint2D(a, b, anchorA.x, anchorA.y, anchorB.x, anchorB.y, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                   0.0, 0.0, LOCKED, LOCKED, LOCKED, NO_MOTOR, false)
+}
+
+// Turns about the anchors: a door, a wheel on its axle.
+fn hinge(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2) -> Joint2D {
+    let joint = fixed(a, b, anchorA, anchorB)
+    joint.angular = FREE
+    return joint
+}
+
+// Slides along `axis`, in a's frame: a drawer, a lift.
+fn slider(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2, axis: vec2) -> Joint2D {
+    let joint = fixed(a, b, anchorA, anchorB)
+    joint.axisX = axis.x
+    joint.axisY = axis.y
+    joint.linearX = FREE
+    return joint
+}
+
 // What a ray found: the closest body along it, where, the surface's normal
 // there, and how far along the ray (0 at its origin, 1 at its end). A ray
 // that starts inside a body hits it `inside`, at its origin, with no normal.

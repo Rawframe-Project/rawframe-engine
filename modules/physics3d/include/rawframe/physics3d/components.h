@@ -14,6 +14,7 @@
 // Kest ones are rawframe.physics3d's) and each field table below says what
 // a matching declaration holds.
 
+#include "rawframe/physics/joint.h"
 #include "rawframe/physics/layout.h"
 #include "rawframe/physics/motion.h"
 #include "rawframe/schema/stable_id.h"
@@ -201,14 +202,6 @@ struct Mesh3D {
     std::uint64_t mesh = 0;
 };
 
-/// How a joint holds one axis of its frame.
-enum class JointAxis : std::uint8_t {
-    Locked = 0,
-    Free = 1,
-    /// Free between the axis's lower and upper limit.
-    Limited = 2,
-};
-
 /// SPEC-0037's joint (section 10): an entity with a Joint3D holds two
 /// bodies' entities together, per axis of the joint's frame. The frame sits
 /// at each body's anchor, its z along the body's axis (all noughts is +z),
@@ -254,7 +247,7 @@ struct Joint3D {
     float angularUpperZ = 0;
     float motorSpeed = 0;
     float motorEffort = 0;
-    /// JointAxis each.
+    /// physics::JointAxis each.
     std::uint8_t linearX = 0;
     std::uint8_t linearY = 0;
     std::uint8_t linearZ = 0;

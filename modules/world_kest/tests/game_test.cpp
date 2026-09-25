@@ -168,9 +168,9 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     }
     RAWFRAME_EXPECT(game->physics->dimensions == 2 && game->physics->gravityX == 0.5F &&
                     game->physics->gravityY == -9.8F && game->physics->substeps == 8);
-    // The engine's six components, under their engine names, and its
+    // The engine's seven components, under their engine names, and its
     // persistent identity.
-    RAWFRAME_EXPECT(game->components.size() == 7 && game->components[0].name == "rawframe.physics2d.body" &&
+    RAWFRAME_EXPECT(game->components.size() == 8 && game->components[0].name == "rawframe.physics2d.body" &&
                     game->components[1].kestType == "Pose2D");
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
     RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics->gravityY == -10.0F &&
@@ -689,6 +689,50 @@ RAWFRAME_TEST(AKestProgramHangsABarOnAHinge) {
     auto joints = *world::Query<world::Read<physics3d::Joint3D>>::resolve(world.registry());
     int made = 0;
     joints.forEach(world, [&made](world::EntityHandle, const physics3d::Joint3D&) {
+        ++made;
+    });
+    RAWFRAME_EXPECT(made == 1);
+    composition.stop();
+    simulation = nullptr;
+}
+
+RAWFRAME_TEST(AKestProgramHangsABarOnAHingeInTwoDimensions) {
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWithPhysics,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "lever.game\n" +
+                              "world.tick_rate = 60\n" + "world.maximum_ticks_per_iteration = 1\n";
+    const auto kConfiguration = composition::Configuration::parse(kText);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    auto started = composition.start();
+    RAWFRAME_EXPECT(started.has_value());
+    if (!started.has_value()) {
+        return;
+    }
+    for (std::uint64_t tick = 0; tick < 90; ++tick) {
+        clock.advance(execution::MonotonicDuration{16'666'667});
+        composition.runHostPhase(composition::HostPhase::RunWorlds,
+                                 composition::HostFrame{.iteration = tick, .now = clock.now()});
+    }
+    // The bar has swung down, its middle half a meter from the post's, and
+    // made one joint.
+    world::World& world = *simulation->world();
+    auto bodies =
+        *world::Query<world::Read<physics2d::Body2D>, world::Read<physics2d::Pose2D>>::resolve(world.registry());
+    int swung = 0;
+    bodies.forEach(world, [&swung](world::EntityHandle, const physics2d::Body2D& body, const physics2d::Pose2D& pose) {
+        const double kFromPost = std::sqrt((pose.x * pose.x) + ((pose.y - 5) * (pose.y - 5)));
+        swung += body.motion == 2 && std::abs(kFromPost - 0.5) < 0.02 && pose.y < 4.9 ? 1 : 0;
+    });
+    RAWFRAME_EXPECT(swung == 1);
+    auto joints = *world::Query<world::Read<physics2d::Joint2D>>::resolve(world.registry());
+    int made = 0;
+    joints.forEach(world, [&made](world::EntityHandle, const physics2d::Joint2D&) {
         ++made;
     });
     RAWFRAME_EXPECT(made == 1);

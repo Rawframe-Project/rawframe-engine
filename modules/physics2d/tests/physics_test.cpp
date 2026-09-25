@@ -21,7 +21,13 @@ namespace {
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
-    builder.add<Body2D>().add<Pose2D>().add<Velocity2D>().add<Impulse2D>().add<Contact2D>().add<Character2D>();
+    builder.add<Body2D>()
+        .add<Pose2D>()
+        .add<Velocity2D>()
+        .add<Impulse2D>()
+        .add<Contact2D>()
+        .add<Character2D>()
+        .add<Joint2D>();
     return *builder.freeze();
 }
 
@@ -548,4 +554,111 @@ RAWFRAME_TEST(ACircleSweptAndACircleOverlappedFindTheirBodies) {
     RAWFRAME_EXPECT(found.size() == 1 && found[0] == kSecond);
     scene.physics->overlapCircle(3.5, 0, 1.2F, 0x62, found);
     RAWFRAME_EXPECT(found.empty());
+}
+
+namespace {
+
+constexpr auto kFree = static_cast<std::uint8_t>(JointAxis::Free);
+constexpr auto kLimited = static_cast<std::uint8_t>(JointAxis::Limited);
+
+constexpr Body2D kPostBody{.motion = static_cast<std::uint8_t>(Motion::Static),
+                           .shape = static_cast<std::uint8_t>(Shape::Box),
+                           .width = 0.1F,
+                           .height = 0.1F};
+
+/// A bar a meter long along x, its own middle at its origin.
+constexpr Body2D kBar{.motion = static_cast<std::uint8_t>(Motion::Dynamic),
+                      .shape = static_cast<std::uint8_t>(Shape::Box),
+                      .width = 0.5F,
+                      .height = 0.05F,
+                      .density = 100};
+
+world::EntityHandle joint(Scene& scene, const Joint2D& joint) {
+    const world::EntityHandle kEntity = *scene.world.create();
+    RAWFRAME_EXPECT(scene.world.insert(kEntity, *scene.schema->key<Joint2D>(), joint).has_value());
+    return kEntity;
+}
+
+/// A bar whose left end is held at the post's middle.
+Joint2D heldAtItsEnd(world::EntityHandle post, world::EntityHandle bar) {
+    return Joint2D{.a = post, .b = bar, .anchorBX = -0.5F};
+}
+
+double distance(const Pose2D& from, double x, double y) {
+    return std::sqrt(((from.x - x) * (from.x - x)) + ((from.y - y) * (from.y - y)));
+}
+
+} // namespace
+
+RAWFRAME_TEST(AHingeSwingsAWeldHoldsAndASliderStopsAtItsLimit) {
+    Scene scene;
+    const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+    const world::EntityHandle kSwinging = scene.body(kBar, {.x = 0.5, .y = 5});
+    Joint2D hinge = heldAtItsEnd(kPost, kSwinging);
+    hinge.angular = kFree;
+    static_cast<void>(joint(scene, hinge));
+    const world::EntityHandle kOtherPost = scene.body(kPostBody, {.x = 5, .y = 5});
+    const world::EntityHandle kWelded = scene.body(kBar, {.x = 5.5, .y = 5});
+    static_cast<void>(joint(scene, heldAtItsEnd(kOtherPost, kWelded)));
+    // Free along the frame's y, up and down with the axis along x, until
+    // half a meter below.
+    const world::EntityHandle kThirdPost = scene.body(kPostBody, {.x = -5, .y = 5});
+    const world::EntityHandle kSliding = scene.body(kBar, {.x = -4.5, .y = 5});
+    Joint2D slider = heldAtItsEnd(kThirdPost, kSliding);
+    slider.linearY = kLimited;
+    slider.linearLowerY = -0.5F;
+    slider.linearUpperY = 0.5F;
+    static_cast<void>(joint(scene, slider));
+    scene.run(90);
+
+    const Pose2D& kSwung = scene.pose(kSwinging);
+    RAWFRAME_EXPECT(std::abs(distance(kSwung, 0, 5) - 0.5) < 0.02 && kSwung.y < 4.9);
+    RAWFRAME_EXPECT(distance(scene.pose(kWelded), 5.5, 5) < 0.01);
+    const Pose2D& kSlid = scene.pose(kSliding);
+    RAWFRAME_EXPECT(std::abs(kSlid.y - 4.5) < 0.02 && std::abs(kSlid.x + 4.5) < 0.01);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 3 && scene.physics->statistics().jointsRefused == 0);
+}
+
+RAWFRAME_TEST(AMotorTurnsAHingeAndAJointFollowsItsBodies) {
+    Scene scene{{.gravityY = 0}};
+    const world::EntityHandle kPost = scene.body(kPostBody, {});
+    const world::EntityHandle kWheel = scene.body(kBar, {.x = 0.5});
+    Joint2D driven = heldAtItsEnd(kPost, kWheel);
+    driven.angular = kFree;
+    driven.motor = 3;
+    driven.motorSpeed = 2;
+    driven.motorEffort = 1000;
+    const world::EntityHandle kJoint = joint(scene, driven);
+    scene.run(30);
+    RAWFRAME_EXPECT(std::abs(scene.velocity(kWheel).angular - 2.0F) < 0.05F);
+    // The post moved is made again, and the joint with it.
+    scene.pose(kPost).x = 3;
+    scene.run(30);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 2 &&
+                    std::abs(distance(scene.pose(kWheel), 3, 0) - 0.5) < 0.05);
+    RAWFRAME_EXPECT(scene.world.destroy(kJoint).has_value());
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsRemoved == 1);
+}
+
+RAWFRAME_TEST(AJointOfAShapeMaul2DHasNotIsRefused) {
+    Scene scene;
+    const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+    const world::EntityHandle kBarEntity = scene.body(kBar, {.x = 0.5, .y = 5});
+    Joint2D bothLinear = heldAtItsEnd(kPost, kBarEntity);
+    bothLinear.linearX = kFree;
+    bothLinear.linearY = kFree;
+    Joint2D wheel = heldAtItsEnd(kPost, kBarEntity);
+    wheel.linearY = kFree;
+    wheel.angular = kFree;
+    Joint2D lockedMotor = heldAtItsEnd(kPost, kBarEntity);
+    lockedMotor.angular = kFree;
+    lockedMotor.motor = 1;
+    Joint2D noMode = heldAtItsEnd(kPost, kBarEntity);
+    noMode.angular = 3;
+    for (const Joint2D& kRefused : {bothLinear, wheel, lockedMotor, noMode, Joint2D{.a = kPost, .b = kPost}}) {
+        static_cast<void>(joint(scene, kRefused));
+    }
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsRefused == 5 && scene.physics->statistics().jointsMade == 0);
 }

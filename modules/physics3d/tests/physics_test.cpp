@@ -549,8 +549,8 @@ RAWFRAME_TEST(AMeshBodyIsStaticAndNamesAKnownMesh) {
 
 namespace {
 
-constexpr auto kFree = static_cast<std::uint8_t>(JointAxis::Free);
-constexpr auto kLimited = static_cast<std::uint8_t>(JointAxis::Limited);
+constexpr auto kFree = static_cast<std::uint8_t>(physics::JointAxis::Free);
+constexpr auto kLimited = static_cast<std::uint8_t>(physics::JointAxis::Limited);
 
 constexpr Body3D kPostBody{.motion = static_cast<std::uint8_t>(Motion::Static),
                            .shape = static_cast<std::uint8_t>(Shape::Box),

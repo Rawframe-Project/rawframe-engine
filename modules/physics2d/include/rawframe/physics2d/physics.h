@@ -13,10 +13,12 @@
 //      and steps as one made there would: what a predicting client relies
 //      on), a Velocity2D likewise a new velocity, and an Impulse2D is
 //      applied and cleared;
-//   3. every character (components.h) finds how far it can move along the
+//   3. joints follow their entities as bodies do, and one whose body was
+//      made again is made again with it;
+//   4. every character (components.h) finds how far it can move along the
 //      velocity gameplay wants and is given the velocity that takes it
 //      there; then the world steps once, with the settings' substeps;
-//   4. every Contact2D is written from the step's contact and overlap
+//   5. every Contact2D is written from the step's contact and overlap
 //      streams, and every body's pose and velocity are written back.
 //
 // Gameplay systems that push bodies run before the step (`before
@@ -69,6 +71,12 @@ struct Physics2DStatistics {
     std::uint64_t impulses = 0;
     /// Character moves made (components.h's Character2D).
     std::uint64_t characterMoves = 0;
+    /// Joints made, taken away with their entities, and refused (a body
+    /// without one, a shape of axes it cannot be) until they or their
+    /// bodies change.
+    std::uint64_t jointsMade = 0;
+    std::uint64_t jointsRemoved = 0;
+    std::uint64_t jointsRefused = 0;
     /// Contacts and sensor overlaps that began.
     std::uint64_t contactsBegun = 0;
     std::uint64_t overlapsBegun = 0;
@@ -130,7 +138,7 @@ public:
     [[nodiscard]] static result::Result<std::unique_ptr<Physics2D>> create(const Physics2DSettings& settings);
     ~Physics2D() override;
 
-    /// Contributes kStepSystem. The registry must hold the five physics
+    /// Contributes kStepSystem. The registry must hold the seven physics
     /// components at the engine's sizes.
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;

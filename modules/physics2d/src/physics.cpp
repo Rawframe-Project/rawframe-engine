@@ -107,6 +107,120 @@ struct Row {
     Character2D* character = nullptr;
 };
 
+[[nodiscard]] bool sameBody(m2BodyId left, m2BodyId right) noexcept {
+    return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
+}
+
+/// One entity's joint: the joint made, what it was made of, and between
+/// which bodies, to tell when either was made again.
+struct MappedJoint {
+    m2JointId joint{};
+    Joint2D made;
+    m2BodyId a{};
+    m2BodyId b{};
+    bool refused = false;
+};
+
+/// Field by field, for the padding a Joint2D has.
+[[nodiscard]] bool same(const Joint2D& left, const Joint2D& right) noexcept {
+    constexpr std::array kReals = {&Joint2D::anchorAX,
+                                   &Joint2D::anchorAY,
+                                   &Joint2D::anchorBX,
+                                   &Joint2D::anchorBY,
+                                   &Joint2D::axisX,
+                                   &Joint2D::axisY,
+                                   &Joint2D::linearLowerX,
+                                   &Joint2D::linearLowerY,
+                                   &Joint2D::linearUpperX,
+                                   &Joint2D::linearUpperY,
+                                   &Joint2D::angularLower,
+                                   &Joint2D::angularUpper,
+                                   &Joint2D::motorSpeed,
+                                   &Joint2D::motorEffort};
+    constexpr std::array kBytes = {&Joint2D::linearX, &Joint2D::linearY, &Joint2D::angular, &Joint2D::motor};
+    return left.a == right.a && left.b == right.b && left.collideConnected == right.collideConnected &&
+           std::ranges::all_of(kReals,
+                               [&](float Joint2D::* field) {
+                                   return std::bit_cast<std::uint32_t>(left.*field) ==
+                                          std::bit_cast<std::uint32_t>(right.*field);
+                               }) &&
+           std::ranges::all_of(kBytes, [&](std::uint8_t Joint2D::* field) {
+               return left.*field == right.*field;
+           });
+}
+
+/// The Maul2D joint a Joint2D is, between two bodies, by the axes it lets
+/// move: a weld, a revolute, a prismatic along one frame axis, or a filter;
+/// the null joint for any other shape of axes or values out of range.
+/// Maul2D refuses the rest (a limit's order, a body pair it cannot join).
+[[nodiscard]] m2JointId makeJoint(m2WorldId physics, const Joint2D& joint, m2BodyId a, m2BodyId b) noexcept {
+    constexpr auto kLocked = static_cast<std::uint8_t>(physics::JointAxis::Locked);
+    constexpr auto kFree = static_cast<std::uint8_t>(physics::JointAxis::Free);
+    constexpr auto kLimited = static_cast<std::uint8_t>(physics::JointAxis::Limited);
+    const double kLength = std::sqrt((double{joint.axisX} * joint.axisX) + (double{joint.axisY} * joint.axisY));
+    if (!std::isfinite(kLength) || joint.linearX > kLimited || joint.linearY > kLimited || joint.angular > kLimited ||
+        joint.motor > 3 || !(joint.motorEffort >= 0)) {
+        return m2JointId{};
+    }
+    const m2Vec2 kAxis =
+        kLength == 0 ? m2Vec2{1, 0}
+                     : m2Vec2{static_cast<float>(joint.axisX / kLength), static_cast<float>(joint.axisY / kLength)};
+    const m2Vec2 kAnchorA{joint.anchorAX, joint.anchorAY};
+    const m2Vec2 kAnchorB{joint.anchorBX, joint.anchorBY};
+    const bool kLinearLocked = joint.linearX == kLocked && joint.linearY == kLocked;
+    if (kLinearLocked && joint.angular == kLocked && joint.motor == 0) {
+        m2WeldJointDef definition = m2DefaultWeldJointDef();
+        definition.bodyIdA = a;
+        definition.bodyIdB = b;
+        definition.localAnchorA = kAnchorA;
+        definition.localAnchorB = kAnchorB;
+        definition.collideConnected = joint.collideConnected;
+        return m2CreateWeldJoint(physics, &definition);
+    }
+    if (kLinearLocked && joint.angular != kLocked && (joint.motor == 0 || joint.motor == 3)) {
+        m2RevoluteJointDef definition = m2DefaultRevoluteJointDef();
+        definition.bodyIdA = a;
+        definition.bodyIdB = b;
+        definition.localAnchorA = kAnchorA;
+        definition.localAnchorB = kAnchorB;
+        definition.enableLimit = joint.angular == kLimited;
+        definition.lowerAngle = joint.angularLower;
+        definition.upperAngle = joint.angularUpper;
+        definition.enableMotor = joint.motor == 3;
+        definition.motorSpeed = joint.motorSpeed;
+        definition.maxMotorTorque = joint.motorEffort;
+        definition.collideConnected = joint.collideConnected;
+        return m2CreateRevoluteJoint(physics, &definition);
+    }
+    const bool kAlongX = joint.linearX != kLocked && joint.linearY == kLocked;
+    const bool kAlongY = joint.linearY != kLocked && joint.linearX == kLocked;
+    if ((kAlongX || kAlongY) && joint.angular == kLocked && (joint.motor == 0 || joint.motor == (kAlongX ? 1 : 2))) {
+        m2PrismaticJointDef definition = m2DefaultPrismaticJointDef();
+        definition.bodyIdA = a;
+        definition.bodyIdB = b;
+        definition.localAnchorA = kAnchorA;
+        definition.localAnchorB = kAnchorB;
+        definition.localAxisA = kAlongX ? kAxis : m2Vec2{-kAxis.y, kAxis.x};
+        definition.enableLimit = (kAlongX ? joint.linearX : joint.linearY) == kLimited;
+        definition.lowerTranslation = kAlongX ? joint.linearLowerX : joint.linearLowerY;
+        definition.upperTranslation = kAlongX ? joint.linearUpperX : joint.linearUpperY;
+        definition.enableMotor = joint.motor != 0;
+        definition.motorSpeed = joint.motorSpeed;
+        definition.maxMotorForce = joint.motorEffort;
+        definition.collideConnected = joint.collideConnected;
+        return m2CreatePrismaticJoint(physics, &definition);
+    }
+    if (joint.linearX == kFree && joint.linearY == kFree && joint.angular == kFree && joint.motor == 0 &&
+        !joint.collideConnected) {
+        // Nothing held: the pair only stops colliding.
+        m2FilterJointDef definition = m2DefaultFilterJointDef();
+        definition.bodyIdA = a;
+        definition.bodyIdB = b;
+        return m2CreateFilterJoint(physics, &definition);
+    }
+    return m2JointId{};
+}
+
 } // namespace
 
 struct Physics2D::State {
@@ -130,6 +244,9 @@ struct Physics2D::State {
     std::optional<schema::ComponentRuntimeId> impulse;
     std::optional<schema::ComponentRuntimeId> contact;
     std::optional<schema::ComponentRuntimeId> character;
+    std::optional<world::Query<world::Read<Joint2D>>> jointQuery;
+    std::map<world::EntityHandle, MappedJoint> joints;
+    std::vector<std::pair<world::EntityHandle, const Joint2D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
     std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
@@ -449,6 +566,54 @@ struct Physics2D::State {
         }
     }
 
+    /// The body an entity has now, or the null body.
+    [[nodiscard]] m2BodyId bodyOf(world::EntityHandle entity) const {
+        const auto kFound = entity.isNull() ? mapped.end() : mapped.find(entity);
+        return kFound == mapped.end() || kFound->second.refused ? m2BodyId{} : kFound->second.body;
+    }
+
+    /// 3. Joints follow their entities: what is gone first, then what is
+    /// new, changed, or between a body made again.
+    void followJoints(world::World& world) {
+        jointRows.clear();
+        jointQuery->forEach(world, [this](world::EntityHandle entity, const Joint2D& joint) {
+            jointRows.emplace_back(entity, &joint);
+        });
+        std::ranges::sort(jointRows, {}, &std::pair<world::EntityHandle, const Joint2D*>::first);
+        for (auto entry = joints.begin(); entry != joints.end();) {
+            if (std::ranges::binary_search(
+                    jointRows, entry->first, {}, &std::pair<world::EntityHandle, const Joint2D*>::first)) {
+                ++entry;
+                continue;
+            }
+            if (m2Joint_IsValid(entry->second.joint)) {
+                m2DestroyJoint(entry->second.joint);
+            }
+            ++statistics.jointsRemoved;
+            entry = joints.erase(entry);
+        }
+        for (const auto& [kEntity, kJoint] : jointRows) {
+            const auto [kEntry, kNew] = joints.try_emplace(kEntity);
+            MappedJoint& entry = kEntry->second;
+            const m2BodyId kA = bodyOf(kJoint->a);
+            const m2BodyId kB = bodyOf(kJoint->b);
+            // A joint whose body was made again went with the body.
+            if (!kNew && same(entry.made, *kJoint) && sameBody(entry.a, kA) && sameBody(entry.b, kB) &&
+                (entry.refused || m2Joint_IsValid(entry.joint))) {
+                continue;
+            }
+            if (!entry.refused && m2Joint_IsValid(entry.joint)) {
+                m2DestroyJoint(entry.joint);
+            }
+            entry = MappedJoint{.joint = {}, .made = *kJoint, .a = kA, .b = kB, .refused = true};
+            if (kA.index1 != 0 && kB.index1 != 0 && !sameBody(kA, kB)) {
+                entry.joint = makeJoint(physics, *kJoint, kA, kB);
+                entry.refused = entry.joint.index1 == 0;
+            }
+            ++(entry.refused ? statistics.jointsRefused : statistics.jointsMade);
+        }
+    }
+
     result::Status step(world::World& world, world::TickRate rate, world::TickIndex tick) {
         rows.clear();
         bodies->forEach(world,
@@ -525,7 +690,9 @@ struct Physics2D::State {
             }
         }
 
-        // 3. Characters find their moves, in entity order and each against
+        followJoints(world);
+
+        // 4. Characters find their moves, in entity order and each against
         // the world as the last step left it; then one step of the tick's
         // length.
         const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
@@ -539,7 +706,7 @@ struct Physics2D::State {
 
         report(world);
 
-        // 4. Every body's pose and velocity back into the World.
+        // 5. Every body's pose and velocity back into the World.
         for (const Row& row : rows) {
             Mapped& entry = mapped.find(row.entity)->second;
             if (entry.refused) {
@@ -643,7 +810,10 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character2D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Read<Joint2D>>::resolve(registry)));
     state.reads = state.bodies->reads();
+    const std::vector<schema::ComponentRuntimeId> kJointReads = state.jointQuery->reads();
+    state.reads.insert(state.reads.end(), kJointReads.begin(), kJointReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);
