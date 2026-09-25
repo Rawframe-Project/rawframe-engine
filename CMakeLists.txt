@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(rawframe LANGUAGES C CXX)
+project(rawframe VERSION 0.1.0 LANGUAGES C CXX)
 
 # Strict C++23: no GNU extensions, and no C++20 module scanning (Rawframe uses
 # headers, and scanning needs a clang-scan-deps that not every toolchain ships).
@@ -37,6 +37,7 @@ add_subdirectory(modules/game_content)
 add_subdirectory(modules/audio)
 add_subdirectory(modules/audio_import)
 add_subdirectory(modules/cook)
+add_subdirectory(modules/build)
 add_subdirectory(modules/input)
 add_subdirectory(modules/schema)
 add_subdirectory(modules/world)
@@ -60,6 +61,7 @@ add_subdirectory(hosts/arena)
 add_subdirectory(hosts/bots)
 add_subdirectory(hosts/import)
 add_subdirectory(hosts/cook)
+add_subdirectory(hosts/build)
 
 # Scenarios: several modules and hosts together, the way a game uses them.
 if(RAWFRAME_BUILD_TESTS)

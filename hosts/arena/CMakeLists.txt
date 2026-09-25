@@ -44,6 +44,13 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_cooked PROPERTIES
                          FIXTURES_SETUP runners_content
                          PASS_REGULAR_EXPRESSION "failed 0")
+    # Runners' cooked content packed into a Build from its receipt.
+    add_test(NAME runners_built
+             COMMAND rawframe_host_build_tool ${CONTENT} ${CMAKE_CURRENT_BINARY_DIR}/runners_build rawframe/runners
+                     0.1.0 linux x86_64 client build.development tool)
+    set_tests_properties(runners_built PROPERTIES
+                         FIXTURES_REQUIRED runners_content
+                         PASS_REGULAR_EXPRESSION "build sha256:[0-9a-f]+, manifest sha256:[0-9a-f]+, 1 resources")
     # Eight bots play runners and the first one's World is heard: its shots
     # and the others' within range sound, and the recording is not silent.
     set(RECORD ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.wav)
