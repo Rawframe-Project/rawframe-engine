@@ -93,6 +93,12 @@ public:
     /// the World will run, told to new connections as their origin.
     void pump(world::World& world, world::TickIndex tick);
 
+    /// The World was replaced (a checkpoint restore): every connection's
+    /// entities and mappings named the old one, so every connection is
+    /// closed and its players reconnect into the new World (SPEC-0010: a
+    /// remap is a new epoch, never a partial one).
+    void forgetWorld() noexcept;
+
     [[nodiscard]] ServerReplicationStatistics statistics() const noexcept;
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;

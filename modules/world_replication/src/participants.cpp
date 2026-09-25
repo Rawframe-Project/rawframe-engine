@@ -117,9 +117,14 @@ public:
     }
 
     void runHostPhase(composition::HostPhase, const composition::HostFrame&) noexcept override {
-        if (server_ != nullptr && simulation_->world() != nullptr) {
-            server_->pump(*simulation_->world(), simulation_->tick());
+        if (server_ == nullptr || simulation_->world() == nullptr) {
+            return;
         }
+        if (simulation_->generation() != generation_) {
+            generation_ = simulation_->generation();
+            server_->forgetWorld();
+        }
+        server_->pump(*simulation_->world(), simulation_->tick());
     }
 
     void stop() noexcept override {
@@ -144,6 +149,7 @@ public:
 private:
     std::string endpoint_;
     world_runtime::Simulation* simulation_ = nullptr;
+    std::uint64_t generation_ = 0;
     diagnostics::Emitter emitter_;
     std::unique_ptr<network::Provider> provider_;
     std::unique_ptr<network::Sessions> sessions_;

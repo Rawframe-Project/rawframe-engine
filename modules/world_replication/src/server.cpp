@@ -558,6 +558,14 @@ result::Status ReplicationServer::declareSystems(const schema::SchemaRegistry& r
     return {};
 }
 
+void ReplicationServer::forgetWorld() noexcept {
+    State& state = *state_;
+    for (auto& [id, peer] : state.peers) {
+        state.sessions->close(peer.connection);
+    }
+    state.peers.clear();
+}
+
 void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
     State& state = *state_;
     state.sessions->setTickOrigin(tick.value);
