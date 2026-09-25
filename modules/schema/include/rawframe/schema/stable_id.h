@@ -2,6 +2,7 @@
 
 #include "rawframe/base/bits128.h"
 
+#include <array>
 #include <compare>
 #include <cstddef>
 #include <string_view>
@@ -32,6 +33,19 @@ inline constexpr std::size_t kStableIdTextLength = 36;
         digits[count++] = kCharacter;
     }
     return base::parseBits128Hex(std::string_view{digits, base::kBits128HexDigits});
+}
+
+/// A stable ID's canonical text, which parseStableIdText reads back.
+[[nodiscard]] constexpr std::array<char, kStableIdTextLength> formatStableIdText(base::Bits128 value) noexcept {
+    std::array<char, base::kBits128HexDigits> digits{};
+    base::formatBits128Hex(value, digits);
+    std::array<char, kStableIdTextLength> text{};
+    std::size_t from = 0;
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const bool kHyphenPosition = index == 8 || index == 13 || index == 18 || index == 23;
+        text[index] = kHyphenPosition ? '-' : digits[from++];
+    }
+    return text;
 }
 
 /// The stable 128-bit identity of a component type. Chosen once, committed,
