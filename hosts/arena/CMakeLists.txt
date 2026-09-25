@@ -2,7 +2,7 @@
 # networked Kest game (Tool role).
 rawframe_host(NAME arena OUTPUT rawframe-arena
     SOURCES src/main.cpp
-    DEPS host network_loopback world_replication world_kest world_runtime composition diagnostics result base
+    DEPS host network_loopback physics2d world_replication world_kest world_runtime composition diagnostics result base
 )
 
 if(RAWFRAME_BUILD_TESTS)

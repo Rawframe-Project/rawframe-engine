@@ -38,6 +38,14 @@
 //
 //   interest game.position x y within 40
 //
+// A `physics2d` line gives the World 2D physics (D33): the game gains the
+// engine's physics components, named `rawframe.physics2d.body`, `.pose`,
+// `.velocity`, and `.impulse`, whose Kest types are rawframe.physics2d's,
+// and a step in the simulation phase, `rawframe.physics2d.step`, that
+// systems order themselves around with `before` and `after`:
+//
+//   physics2d gravity 0 -10 substeps 4
+//
 // An `entity` line names a component's fields that hold a
 // `rawframe.world.Entity`, which a checkpoint writes as a reference rather
 // than as numbers:
@@ -104,6 +112,13 @@ struct GameSpawn {
     std::vector<GameSpawnComponent> components;
 };
 
+/// 2D physics, and how the world is set up.
+struct GamePhysics2D {
+    float gravityX = 0;
+    float gravityY = -10;
+    std::uint32_t substeps = 4;
+};
+
 /// Spatial interest: the position component, its coordinate fields, and the
 /// radius within which the player is sent another entity.
 struct GameInterest {
@@ -134,6 +149,7 @@ struct GameDescription {
     std::vector<std::string> interpolated;
     std::vector<GameEntityField> entityFields;
     std::optional<GameInterest> interest;
+    std::optional<GamePhysics2D> physics2d;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as

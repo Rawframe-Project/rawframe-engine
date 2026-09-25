@@ -1,5 +1,6 @@
 #include "rawframe/world_kest/game.h"
 
+#include "rawframe/physics2d/components.h"
 #include "rawframe/world_kest/errors.h"
 
 #include <array>
@@ -186,6 +187,38 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     GameEntityField{.component = std::string{kWords[1]}, .field = std::string{kWords[at]}});
             }
             uses.emplace_back(number, std::string{kWords[1]});
+        } else if (kKeyword == "physics2d") {
+            // physics2d [gravity <x> <y>] [substeps <n>]
+            GamePhysics2D physics;
+            bool shaped = !game.physics2d.has_value();
+            std::size_t at = 1;
+            const auto kNumber = [&](auto& into) {
+                const std::string_view kWord = at < kWords.size() ? kWords[at++] : std::string_view{};
+                const auto kRead = std::from_chars(kWord.data(), kWord.data() + kWord.size(), into);
+                shaped =
+                    shaped && !kWord.empty() && kRead.ec == std::errc{} && kRead.ptr == kWord.data() + kWord.size();
+            };
+            while (shaped && at < kWords.size()) {
+                const std::string_view kWhat = kWords[at++];
+                if (kWhat == "gravity") {
+                    kNumber(physics.gravityX);
+                    kNumber(physics.gravityY);
+                } else if (kWhat == "substeps") {
+                    kNumber(physics.substeps);
+                } else {
+                    shaped = false;
+                }
+            }
+            if (!shaped) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a game has at most one physics line, `physics2d [gravity <x> <y>] [substeps <n>]`");
+            }
+            for (const physics2d::ComponentLayout& layout : physics2d::componentLayouts()) {
+                game.components.push_back(GameComponent{
+                    .id = layout.id, .name = std::string{layout.name}, .kestType = std::string{layout.scriptType}});
+            }
+            game.physics2d = physics;
         } else if (kKeyword == "interest") {
             // interest <component> <field>... within <radius>
             double radius = 0;

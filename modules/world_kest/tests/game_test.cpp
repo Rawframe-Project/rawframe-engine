@@ -2,8 +2,11 @@
 // Kest-scripted game loaded through composition and ticked by the World.
 
 #include "rawframe/composition/composition.h"
+#include "rawframe/physics2d/components.h"
+#include "rawframe/physics2d/registrar.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
+#include "rawframe/world/query.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/registrar.h"
@@ -109,6 +112,29 @@ RAWFRAME_TEST(InterestIsDeclaredByLine) {
     }
     RAWFRAME_EXPECT(
         refusedAt(std::string{kProgram} + "interest a.velocity x within 4\n", WorldKestError::UnknownName, "3"));
+}
+
+RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
+    auto game = parseGame("program p.kest\nphysics2d gravity 0.5 -9.8 substeps 8\n"
+                          "spawn 1 rawframe.physics2d.body width=1 rawframe.physics2d.pose y=2\n");
+    RAWFRAME_EXPECT(game.has_value() && game->physics2d.has_value());
+    if (!game.has_value() || !game->physics2d.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(game->physics2d->gravityX == 0.5F && game->physics2d->gravityY == -9.8F &&
+                    game->physics2d->substeps == 8);
+    // The engine's four components, under their engine names.
+    RAWFRAME_EXPECT(game->components.size() == 4 && game->components[0].name == "rawframe.physics2d.body" &&
+                    game->components[1].kestType == "Pose2D");
+    const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
+    RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics2d->gravityY == -10.0F &&
+                    kDefaults->physics2d->substeps == 4);
+    for (const std::string_view kLine :
+         {"physics2d gravity 1\n", "physics2d spin 3\n", "physics2d substeps four\n", "physics2d\nphysics2d\n"}) {
+        const std::string kText = "program p.kest\n" + std::string{kLine};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "2") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "3"));
+    }
 }
 
 RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
@@ -312,6 +338,100 @@ RAWFRAME_TEST(KestSystemsCreateAndDestroyEntities) {
     RAWFRAME_EXPECT(kLast.size() == 2 && kLast[0] == 30.0F && kLast[1] == 30.0F);
     composition.stop();
     simulation = nullptr;
+}
+
+namespace {
+
+const std::array<composition::RegistrarEntry, 4> kWithPhysics = {
+    kRegistrars[0],
+    kRegistrars[1],
+    composition::RegistrarEntry{"physics2d", &physics2d::registerParticipants, physics2d::kScopes},
+    composition::RegistrarEntry{"test", &registerWatcher, world_runtime::kScopes}};
+
+/// Every body's pose and velocity, in entity order, after each of `ticks`
+/// ticks of the crates game at 60 Hz.
+std::vector<std::vector<std::pair<physics2d::Pose2D, physics2d::Velocity2D>>> playCrates(int ticks) {
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWithPhysics,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    RAWFRAME_EXPECT(plan.has_value());
+    const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "crates.game\n" +
+                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 60\n" +
+                              "world.maximum_ticks_per_iteration = 1\n";
+    const auto kConfiguration = composition::Configuration::parse(kText);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    auto started = composition.start();
+    RAWFRAME_EXPECT(started.has_value());
+    if (!started.has_value()) {
+        return {};
+    }
+    std::vector<std::vector<std::pair<physics2d::Pose2D, physics2d::Velocity2D>>> seen;
+    for (int tick = 0; tick < ticks; ++tick) {
+        clock.advance(execution::MonotonicDuration{16'666'667});
+        composition.runHostPhase(
+            composition::HostPhase::RunWorlds,
+            composition::HostFrame{.iteration = static_cast<std::uint64_t>(tick), .now = clock.now()});
+        world::World& world = *simulation->world();
+        auto query =
+            world::Query<world::Read<physics2d::Pose2D>, world::Read<physics2d::Velocity2D>>::resolve(world.registry());
+        std::vector<std::pair<world::EntityHandle, std::pair<physics2d::Pose2D, physics2d::Velocity2D>>> bodies;
+        query->forEach(
+            world,
+            [&](world::EntityHandle entity, const physics2d::Pose2D& pose, const physics2d::Velocity2D& velocity) {
+                bodies.push_back({entity, {pose, velocity}});
+            });
+        std::sort(bodies.begin(), bodies.end(), [](const auto& left, const auto& right) {
+            return left.first < right.first;
+        });
+        seen.emplace_back();
+        for (const auto& [entity, state] : bodies) {
+            seen.back().push_back(state);
+        }
+    }
+    composition.stop();
+    simulation = nullptr;
+    return seen;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AGameWithPhysicsStepsItsBodies) {
+    const auto kFirst = playCrates(300);
+    RAWFRAME_EXPECT(kFirst.size() == 300 && kFirst.back().size() == 3);
+    if (kFirst.size() != 300 || kFirst.back().size() != 3) {
+        return;
+    }
+    // The ground stays; the crate and the ball fall onto it, come to rest at
+    // one meter, and are kicked up again by the Kest system, over and over.
+    RAWFRAME_EXPECT(kFirst.back()[0].first.y == 0);
+    int kicked = 0;
+    for (std::size_t tick = 1; tick < kFirst.size(); ++tick) {
+        for (std::size_t body = 1; body < 3; ++body) {
+            const bool kWasResting = kFirst[tick - 1][body].first.y < 1.1;
+            kicked += kWasResting && kFirst[tick][body].second.y > 2 ? 1 : 0;
+            RAWFRAME_EXPECT(kFirst[tick][body].first.y > 0.9);
+        }
+    }
+    RAWFRAME_EXPECT(kicked >= 4);
+    // Played again, every bit the same.
+    const auto kSecond = playCrates(300);
+    RAWFRAME_EXPECT(kSecond.size() == kFirst.size());
+    bool same = kSecond.size() == kFirst.size();
+    for (std::size_t tick = 0; same && tick < kFirst.size(); ++tick) {
+        same = kFirst[tick].size() == kSecond[tick].size();
+        // Field by field: a pair's padding is not state.
+        for (std::size_t body = 0; same && body < kFirst[tick].size(); ++body) {
+            same = std::memcmp(&kFirst[tick][body].first, &kSecond[tick][body].first, sizeof(physics2d::Pose2D)) == 0 &&
+                   std::memcmp(
+                       &kFirst[tick][body].second, &kSecond[tick][body].second, sizeof(physics2d::Velocity2D)) == 0;
+        }
+    }
+    RAWFRAME_EXPECT(same);
 }
 
 namespace {

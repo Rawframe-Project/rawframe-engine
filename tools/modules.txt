@@ -16,9 +16,10 @@ network_loopback: network composition execution diagnostics result base
 network_quic: network composition execution diagnostics result base
 world_snapshot: world schema execution diagnostics result base
 world_runtime: world_snapshot world composition schema execution diagnostics result base
-world_kest: world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics result base
+physics2d: world_runtime world composition schema execution diagnostics result base
+world_kest: physics2d world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics result base
 world_replication: world_runtime network world composition schema execution diagnostics result base
 host: composition execution diagnostics result base
-dedicated_server: host network_quic world_replication world_kest world_runtime composition diagnostics result base
-arena: host network_loopback world_replication world_kest world_runtime composition diagnostics result base
+dedicated_server: host network_quic physics2d world_replication world_kest world_runtime composition diagnostics result base
+arena: host network_loopback physics2d world_replication world_kest world_runtime composition diagnostics result base
 bots: host network_quic world_replication world_kest world_runtime composition diagnostics result base

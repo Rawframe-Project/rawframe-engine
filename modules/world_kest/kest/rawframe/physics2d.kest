@@ -1,0 +1,57 @@
+module rawframe.physics2d
+
+// The components of 2D physics (SPEC-0037, D33), as the engine lays them out:
+// a game with a `physics2d` line has them, and a program that reads or
+// writes them imports this module. An entity with a Body2D, a Pose2D, and a
+// Velocity2D has a body. Systems before `rawframe.physics2d.step` push bodies
+// (write an Impulse2D, or set a Pose2D or a Velocity2D outright); systems
+// after it read where they went. Meters, seconds, kilograms, radians.
+
+// Body2D.motion
+const STATIC: u8 = 0
+const KINEMATIC: u8 = 1
+const DYNAMIC: u8 = 2
+
+// Body2D.shape: a circle of radius `width`, a box of half sides `width` and
+// `height`, or an upright capsule of radius `width` whose two centers are
+// `height` above and below the origin.
+const CIRCLE: u8 = 0
+const BOX: u8 = 1
+const CAPSULE: u8 = 2
+
+// How the body is made; changing it makes the body again where it is.
+struct Body2D {
+    motion: u8
+    shape: u8
+    fixedRotation: bool
+    bullet: bool
+    width: f32
+    height: f32
+    density: f32
+    friction: f32
+    restitution: f32
+    linearDamping: f32
+    angularDamping: f32
+}
+
+// The origin, and the rotation as a cosine and a sine. Nought and nought is
+// no rotation.
+struct Pose2D {
+    x: f64
+    y: f64
+    c: f32
+    s: f32
+}
+
+struct Velocity2D {
+    x: f32
+    y: f32
+    angular: f32
+}
+
+// Applied once by the next step, then cleared.
+struct Impulse2D {
+    x: f32
+    y: f32
+    angular: f32
+}

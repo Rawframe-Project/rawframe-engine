@@ -1,0 +1,345 @@
+#include "rawframe/physics2d/physics.h"
+
+#include "rawframe/physics2d/components.h"
+#include "rawframe/physics2d/errors.h"
+#include "rawframe/world/query.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstring>
+#include <map>
+#include <maul2d/maul2d.h>
+#include <mutex>
+
+namespace rawframe::physics2d {
+
+namespace {
+
+std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Physics2DError error, std::string_view why) {
+    return result::fail(errorClass, kPhysics2DDomain, code(error), why);
+}
+
+/// Maul2D keeps its worlds in one process-wide table that the caller must
+/// serialize.
+std::mutex& worldTableLock() noexcept {
+    static std::mutex lock;
+    return lock;
+}
+
+template <typename T> [[nodiscard]] bool same(const T& left, const T& right) noexcept {
+    return std::memcmp(&left, &right, sizeof(T)) == 0;
+}
+
+[[nodiscard]] bool finite(float value) noexcept {
+    return std::isfinite(value);
+}
+
+/// Whether a body can be made of these: sizes positive, the rest finite and
+/// in range.
+[[nodiscard]] bool makeable(const Body2D& body, const Pose2D& pose, const Velocity2D& velocity) noexcept {
+    const bool kShape = body.shape == static_cast<std::uint8_t>(Shape::Circle) ||
+                        body.shape == static_cast<std::uint8_t>(Shape::Box) ||
+                        body.shape == static_cast<std::uint8_t>(Shape::Capsule);
+    const bool kHeight = body.shape == static_cast<std::uint8_t>(Shape::Circle) ||
+                         (body.shape == static_cast<std::uint8_t>(Shape::Box) && body.height > 0) ||
+                         (body.shape == static_cast<std::uint8_t>(Shape::Capsule) && body.height >= 0);
+    return body.motion <= static_cast<std::uint8_t>(Motion::Dynamic) && kShape && body.width > 0 && kHeight &&
+           finite(body.width) && finite(body.height) && body.density >= 0 && finite(body.density) &&
+           body.friction >= 0 && finite(body.friction) && body.restitution >= 0 && body.restitution <= 1 &&
+           body.linearDamping >= 0 && finite(body.linearDamping) && body.angularDamping >= 0 &&
+           finite(body.angularDamping) && std::isfinite(pose.x) && std::isfinite(pose.y) && finite(pose.c) &&
+           finite(pose.s) && finite(velocity.x) && finite(velocity.y) && finite(velocity.angular);
+}
+
+[[nodiscard]] m2Rot rotationOf(const Pose2D& pose) noexcept {
+    return pose.c == 0 && pose.s == 0 ? m2Rot{1, 0} : m2Rot{pose.c, pose.s};
+}
+
+/// One entity's body, and what the last step wrote, to tell gameplay's
+/// writes from its own.
+struct Mapped {
+    m2BodyId body{};
+    bool refused = false;
+    Body2D made;
+    Pose2D pose;
+    Velocity2D velocity;
+};
+
+struct Row {
+    world::EntityHandle entity;
+    const Body2D* body = nullptr;
+    Pose2D* pose = nullptr;
+    Velocity2D* velocity = nullptr;
+};
+
+} // namespace
+
+struct Physics2D::State {
+    Physics2DSettings settings;
+    m2WorldId physics{};
+    Physics2DStatistics statistics;
+    std::map<world::EntityHandle, Mapped> mapped;
+    std::optional<world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>> bodies;
+    std::optional<schema::ComponentRuntimeId> impulse;
+    std::vector<schema::ComponentRuntimeId> reads;
+    std::vector<schema::ComponentRuntimeId> writes;
+    std::unique_ptr<world::System> system;
+    std::vector<Row> rows;
+
+    ~State() {
+        if (m2World_IsValid(physics)) {
+            const std::scoped_lock kLock{worldTableLock()};
+            m2DestroyWorld(physics);
+        }
+    }
+
+    [[nodiscard]] bool make(const Row& row, Mapped& into) {
+        const Body2D& body = *row.body;
+        into.made = body;
+        into.pose = *row.pose;
+        into.velocity = *row.velocity;
+        into.body = {};
+        into.refused = !makeable(body, *row.pose, *row.velocity);
+        if (into.refused) {
+            ++statistics.bodiesRefused;
+            return false;
+        }
+        m2BodyDef definition = m2DefaultBodyDef();
+        definition.type = static_cast<m2BodyType>(body.motion);
+        definition.position = m2Pos2{row.pose->x, row.pose->y};
+        definition.rotation = rotationOf(*row.pose);
+        definition.linearVelocity = m2Vec2{row.velocity->x, row.velocity->y};
+        definition.angularVelocity = row.velocity->angular;
+        definition.linearDamping = body.linearDamping;
+        definition.angularDamping = body.angularDamping;
+        definition.fixedRotation = body.fixedRotation;
+        definition.isBullet = body.bullet;
+        definition.userData = (std::uint64_t{row.entity.slot} << 32U) | row.entity.generation;
+        const m2BodyId kBody = m2CreateBody(physics, &definition);
+        if (kBody.index1 == 0) {
+            into.refused = true;
+            ++statistics.bodiesRefused;
+            return false;
+        }
+        m2ShapeDef shape = m2DefaultShapeDef();
+        shape.density = body.density;
+        shape.friction = body.friction;
+        shape.restitution = body.restitution;
+        m2ShapeId made{};
+        if (body.shape == static_cast<std::uint8_t>(Shape::Circle)) {
+            const m2Circle kCircle{.center = {0, 0}, .radius = body.width};
+            made = m2CreateCircleShape(kBody, &shape, &kCircle);
+        } else if (body.shape == static_cast<std::uint8_t>(Shape::Box)) {
+            const m2Polygon kBox = m2MakeBox(body.width, body.height);
+            made = m2CreatePolygonShape(kBody, &shape, &kBox);
+        } else {
+            const m2Capsule kCapsule{.point1 = {0, -body.height}, .point2 = {0, body.height}, .radius = body.width};
+            made = m2CreateCapsuleShape(kBody, &shape, &kCapsule);
+        }
+        if (made.index1 == 0) {
+            m2DestroyBody(kBody);
+            into.refused = true;
+            ++statistics.bodiesRefused;
+            return false;
+        }
+        into.body = kBody;
+        ++statistics.bodiesMade;
+        return true;
+    }
+
+    void remove(Mapped& entry) {
+        if (!entry.refused) {
+            m2DestroyBody(entry.body);
+            ++statistics.bodiesRemoved;
+        }
+    }
+
+    result::Status step(world::World& world, world::TickRate rate) {
+        rows.clear();
+        bodies->forEach(world,
+                        [this](world::EntityHandle entity, const Body2D& body, Pose2D& pose, Velocity2D& velocity) {
+                            rows.push_back(Row{.entity = entity, .body = &body, .pose = &pose, .velocity = &velocity});
+                        });
+        std::sort(rows.begin(), rows.end(), [](const Row& left, const Row& right) {
+            return left.entity < right.entity;
+        });
+
+        // 1. Bodies follow their entities, in entity order: first what is
+        // gone, then what is new or remade.
+        auto next = rows.begin();
+        for (auto entry = mapped.begin(); entry != mapped.end();) {
+            next = std::lower_bound(next, rows.end(), entry->first, [](const Row& row, world::EntityHandle key) {
+                return row.entity < key;
+            });
+            if (next != rows.end() && next->entity == entry->first) {
+                ++entry;
+                continue;
+            }
+            remove(entry->second);
+            entry = mapped.erase(entry);
+        }
+        for (const Row& row : rows) {
+            const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
+            Mapped& entry = kEntry->second;
+            if (kNew || !same(entry.made, *row.body)) {
+                if (!kNew) {
+                    remove(entry);
+                }
+                if (!make(row, entry)) {
+                    continue;
+                }
+            } else if (entry.refused) {
+                // Refused until its Body2D changes, or its pose or velocity
+                // does and so might now be makeable.
+                if (same(entry.pose, *row.pose) && same(entry.velocity, *row.velocity)) {
+                    continue;
+                }
+                if (!make(row, entry)) {
+                    continue;
+                }
+            } else {
+                // 2. What gameplay wrote since the last step.
+                if (!same(entry.pose, *row.pose)) {
+                    if (std::isfinite(row.pose->x) && std::isfinite(row.pose->y) && finite(row.pose->c) &&
+                        finite(row.pose->s)) {
+                        m2Body_SetTransform(entry.body, m2Pos2{row.pose->x, row.pose->y}, rotationOf(*row.pose));
+                        ++statistics.teleports;
+                    }
+                }
+                if (!same(entry.velocity, *row.velocity)) {
+                    if (finite(row.velocity->x) && finite(row.velocity->y) && finite(row.velocity->angular)) {
+                        m2Body_SetLinearVelocity(entry.body, m2Vec2{row.velocity->x, row.velocity->y});
+                        m2Body_SetAngularVelocity(entry.body, row.velocity->angular);
+                        ++statistics.velocitiesSet;
+                    }
+                }
+            }
+            if (impulse) {
+                auto* const kImpulse = static_cast<Impulse2D*>(world.getErased(row.entity, *impulse));
+                if (kImpulse != nullptr && !same(*kImpulse, Impulse2D{})) {
+                    if (finite(kImpulse->x) && finite(kImpulse->y) && finite(kImpulse->angular)) {
+                        m2Body_ApplyLinearImpulse(entry.body, m2Vec2{kImpulse->x, kImpulse->y});
+                        m2Body_ApplyAngularImpulse(entry.body, kImpulse->angular);
+                        ++statistics.impulses;
+                    }
+                    *kImpulse = Impulse2D{};
+                }
+            }
+        }
+
+        // 3. One step of the tick's length.
+        const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
+        m2World_Step(physics, kSeconds, static_cast<std::int32_t>(settings.substeps));
+        ++statistics.steps;
+
+        // 4. Every body's pose and velocity back into the World.
+        for (const Row& row : rows) {
+            Mapped& entry = mapped.find(row.entity)->second;
+            if (entry.refused) {
+                continue;
+            }
+            const m2Transform kTransform = m2Body_GetTransform(entry.body);
+            const m2Vec2 kLinear = m2Body_GetLinearVelocity(entry.body);
+            *row.pose = Pose2D{.x = kTransform.p.x, .y = kTransform.p.y, .c = kTransform.q.c, .s = kTransform.q.s};
+            *row.velocity =
+                Velocity2D{.x = kLinear.x, .y = kLinear.y, .angular = m2Body_GetAngularVelocity(entry.body)};
+            entry.pose = *row.pose;
+            entry.velocity = *row.velocity;
+        }
+        return {};
+    }
+};
+
+namespace {
+
+class Step final : public world::System {
+public:
+    explicit Step(Physics2D::State& state) noexcept : state_(&state) {
+    }
+    result::Status run(world::SystemContext& context) noexcept override {
+        return state_->step(context.world, context.rate);
+    }
+
+private:
+    Physics2D::State* state_;
+};
+
+} // namespace
+
+Physics2D::Physics2D(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
+}
+
+Physics2D::~Physics2D() = default;
+
+result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSettings& settings) {
+    constexpr std::uint32_t kMost = 1U << 20U;
+    if (!std::isfinite(settings.gravityX) || !std::isfinite(settings.gravityY) || settings.substeps == 0 ||
+        settings.substeps > 64 || settings.bodyCapacity == 0 || settings.bodyCapacity > kMost ||
+        settings.shapeCapacity == 0 || settings.shapeCapacity > kMost || settings.jointCapacity == 0 ||
+        settings.jointCapacity > kMost) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      Physics2DError::InvalidSettings,
+                      "physics settings: finite gravity, 1 to 64 substeps, and capacities of 1 to 2^20");
+    }
+    if (m2CpuSupportsBackend() == 0) {
+        return refuse(result::ErrorClass::Unsupported,
+                      Physics2DError::Unsupported,
+                      "this processor cannot run the physics build's kernels");
+    }
+    auto state = std::make_unique<State>();
+    state->settings = settings;
+    m2WorldDef definition = m2DefaultWorldDef();
+    definition.gravity = m2Vec2{settings.gravityX, settings.gravityY};
+    definition.bodyCapacity = static_cast<std::int32_t>(settings.bodyCapacity);
+    definition.shapeCapacity = static_cast<std::int32_t>(settings.shapeCapacity);
+    definition.jointCapacity = static_cast<std::int32_t>(settings.jointCapacity);
+    definition.enableSleeping = settings.sleeping;
+    {
+        const std::scoped_lock kLock{worldTableLock()};
+        state->physics = m2CreateWorld(&definition);
+    }
+    if (state->physics.index1 == 0) {
+        return refuse(result::ErrorClass::ResourceExhausted,
+                      Physics2DError::Capacity,
+                      "no room for another physics world in this process");
+    }
+    return std::make_unique<Physics2D>(std::move(state));
+}
+
+result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
+                                         std::vector<world::SystemDeclaration>& systems) noexcept {
+    State& state = *state_;
+    for (const ComponentLayout& layout : componentLayouts()) {
+        const auto kId = registry.find(layout.id);
+        if (!kId.has_value() || registry.descriptor(*kId).size != layout.size || !registry.descriptor(*kId).plainData) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          Physics2DError::InvalidSettings,
+                          "the World does not hold the engine's physics components");
+        }
+    }
+    RAWFRAME_TRY_ASSIGN(
+        state.bodies,
+        (world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>::resolve(registry)));
+    RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse2D::kComponentTypeId));
+    state.reads = state.bodies->reads();
+    state.writes = state.bodies->writes();
+    state.writes.push_back(*state.impulse);
+    state.system = std::make_unique<Step>(state);
+    systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
+                                               .phase = world::Phase::Simulation,
+                                               .reads = state.reads,
+                                               .writes = state.writes,
+                                               .system = state.system.get()});
+    return {};
+}
+
+Physics2DStatistics Physics2D::statistics() const noexcept {
+    return state_->statistics;
+}
+
+std::uint64_t Physics2D::digest() const noexcept {
+    return m2World_Hash(state_->physics);
+}
+
+} // namespace rawframe::physics2d

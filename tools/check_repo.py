@@ -31,7 +31,7 @@ ATTRIBUTION = re.compile(r"co-authored-by:|generated with|claude-session:", re.I
 VALUE_CALL = re.compile(r"\.value\(\s*\)")
 BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
 BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
-INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z_]+)/', re.MULTILINE)
+INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 
 
 def tracked_files():
@@ -42,7 +42,7 @@ def tracked_files():
 def read_modules():
     allowed = {}
     for line in (ROOT / "tools" / "modules.txt").read_text().splitlines():
-        match = re.match(r"^([a-z_]+):(.*)$", line)
+        match = re.match(r"^([a-z0-9_]+):(.*)$", line)
         if match:
             allowed[match.group(1)] = set(match.group(2).split())
     return allowed

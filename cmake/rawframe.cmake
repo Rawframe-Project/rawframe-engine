@@ -17,9 +17,9 @@ endif()
 set(RAWFRAME_SANITIZE "" CACHE STRING "Sanitizers: empty, `address` (with undefined behaviour), or `thread`")
 
 # The allowed dependency table. One line per module: `name: dep dep ...`.
-file(STRINGS "${PROJECT_SOURCE_DIR}/tools/modules.txt" rawframe_module_lines REGEX "^[a-z_]+:")
+file(STRINGS "${PROJECT_SOURCE_DIR}/tools/modules.txt" rawframe_module_lines REGEX "^[a-z0-9_]+:")
 foreach(line IN LISTS rawframe_module_lines)
-    string(REGEX MATCH "^([a-z_]+):(.*)$" _ "${line}")
+    string(REGEX MATCH "^([a-z0-9_]+):(.*)$" _ "${line}")
     string(STRIP "${CMAKE_MATCH_2}" deps)
     separate_arguments(deps)
     set(RAWFRAME_ALLOWED_DEPS_${CMAKE_MATCH_1} "${deps}")

@@ -1,0 +1,9 @@
+# Crates on the ground under 2D physics, kicked by a Kest system.
+program crates.kest
+physics2d gravity 0 -10 substeps 4
+
+system crates.kick simulation kick write rawframe.physics2d.impulse read rawframe.physics2d.pose read rawframe.physics2d.body read rawframe.physics2d.velocity before rawframe.physics2d.step
+
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=10 height=0.5 friction=0.6 rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.impulse
+spawn 1 rawframe.physics2d.body motion=2 shape=1 width=0.5 height=0.5 density=1 friction=0.6 rawframe.physics2d.pose x=-2 y=3 rawframe.physics2d.velocity rawframe.physics2d.impulse
+spawn 1 rawframe.physics2d.body motion=2 shape=0 width=0.5 density=1 friction=0.6 rawframe.physics2d.pose x=2 y=4 rawframe.physics2d.velocity rawframe.physics2d.impulse

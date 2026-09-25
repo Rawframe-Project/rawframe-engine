@@ -2,6 +2,8 @@
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/kest/errors.h"
+#include "rawframe/physics2d/components.h"
+#include "rawframe/physics2d/physics.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/kest_systems.h"
@@ -24,8 +26,8 @@ namespace {
 
 constexpr std::string_view kIdentity = "rawframe.world_kest.game";
 constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
-constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.name,
-                                          world_runtime::kCheckpointPlan.name};
+constexpr std::string_view kProvides[] = {
+    world_replication::kReplicationPlan.name, world_runtime::kCheckpointPlan.name, physics2d::kPhysics2DPlan.name};
 constexpr std::size_t kMaximumGameFileBytes = std::size_t{1} << 20U;
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
@@ -132,7 +134,8 @@ bool writeField(kest::FieldKind kind, std::string_view text, std::byte* into) {
 /// declarations) lives here, and this participant lives as long as the World.
 class GameParticipant final : public composition::Participant,
                               public world_replication::ReplicationPlan,
-                              public world_runtime::CheckpointPlan {
+                              public world_runtime::CheckpointPlan,
+                              public physics2d::Physics2DPlan {
 public:
     GameParticipant() noexcept = default;
 
@@ -181,6 +184,7 @@ public:
         RAWFRAME_TRY(planReplication(kText, kProgram));
         RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planInterest());
+        RAWFRAME_TRY(planPhysics());
         for (const std::string& name : game_.interpolated) {
             if (std::ranges::find(game_.replicated, name) == game_.replicated.end()) {
                 return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
@@ -353,6 +357,10 @@ public:
         return interest_;
     }
 
+    const std::optional<physics2d::Physics2DSettings>& physics2d() const noexcept override {
+        return physics2d_;
+    }
+
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
         if (unwritable_.has_value()) {
             return std::unexpected<result::Error>{refuse(result::ErrorClass::Unsupported,
@@ -374,6 +382,9 @@ public:
         }
         if (capability == world_runtime::kCheckpointPlan.name) {
             return composition::provideAs<world_runtime::CheckpointPlan>(*this);
+        }
+        if (capability == physics2d::kPhysics2DPlan.name) {
+            return composition::provideAs<physics2d::Physics2DPlan>(*this);
         }
         return {};
     }
@@ -493,6 +504,55 @@ private:
         return {};
     }
 
+    /// 2D physics: the program's physics types must be laid out exactly as
+    /// the engine's components are, field by field. A process that plays
+    /// the game elsewhere runs no physics.
+    result::Status planPhysics() {
+        if (!game_.physics2d.has_value()) {
+            return {};
+        }
+        const auto kType = [](kest::FieldKind kind) -> std::optional<physics2d::FieldType> {
+            switch (kind) {
+            case kest::FieldKind::U8:
+                return physics2d::FieldType::U8;
+            case kest::FieldKind::Bool:
+                return physics2d::FieldType::Bool;
+            case kest::FieldKind::F32:
+                return physics2d::FieldType::F32;
+            case kest::FieldKind::F64:
+                return physics2d::FieldType::F64;
+            default:
+                return std::nullopt;
+            }
+        };
+        for (const physics2d::ComponentLayout& engine : physics2d::componentLayouts()) {
+            const GameComponent& component = *componentNamed(engine.name);
+            const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(&component - game_.components.data())];
+            bool same = layout.size == engine.size && layout.alignment == engine.alignment &&
+                        layout.fields.size() == engine.fields.size();
+            for (std::size_t index = 0; same && index < layout.fields.size(); ++index) {
+                const kest::Field& field = layout.fields[index];
+                same = field.name == engine.fields[index].name && field.offset == engine.fields[index].offset &&
+                       kType(field.kind) == engine.fields[index].type;
+            }
+            if (!same) {
+                return std::unexpected<result::Error>{
+                    refuse(result::ErrorClass::InvalidArgument,
+                           WorldKestError::BadGameLine,
+                           "the program's physics type is not laid out as the engine's component; import "
+                           "rawframe.physics2d rather than declaring it")
+                        .error()
+                        .withContext("type", engine.scriptType)};
+            }
+        }
+        if (!planOnly_) {
+            physics2d_ = physics2d::Physics2DSettings{.gravityX = game_.physics2d->gravityX,
+                                                      .gravityY = game_.physics2d->gravityY,
+                                                      .substeps = game_.physics2d->substeps};
+        }
+        return {};
+    }
+
     /// What a checkpoint holds: every component, field by field from its
     /// Kest layout, with the `entity` lines' fields as references. A game
     /// with a field a checkpoint cannot write (text, a tagged union) loads
@@ -606,6 +666,7 @@ private:
     kest::MachineLimits predictionLimits_;
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;
+    std::optional<physics2d::Physics2DSettings> physics2d_;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.
     std::optional<GameEntityField> unwritable_;

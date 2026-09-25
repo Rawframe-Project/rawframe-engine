@@ -1,0 +1,18 @@
+module crates
+
+// Crates dropped on the ground; any that has come to rest is kicked upward,
+// so the World never settles.
+
+import rawframe.physics2d
+
+fn kick(count: i32, impulses: [physics2d.Impulse2D], poses: [physics2d.Pose2D], bodies: [physics2d.Body2D],
+        velocities: [physics2d.Velocity2D]) {
+    let i = 0
+    while i < count {
+        let resting = velocities[i].y < 0.01 && velocities[i].y > -0.01 && poses[i].y < 1.1
+        if bodies[i].motion == physics2d.DYNAMIC && resting {
+            impulses[i].y = 3.0
+        }
+        i = i + 1
+    }
+}
