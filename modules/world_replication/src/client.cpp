@@ -58,6 +58,7 @@ struct ReplicationClient::State {
 
     std::optional<network::ConnectionId> connection;
     std::optional<network::Accept> accept;
+    std::optional<network::RejectReason> rejection;
     bool ended = false;
     std::map<std::uint32_t, world::EntityHandle> mirrored;
     MirrorNames names{mirrored};
@@ -474,6 +475,7 @@ void ReplicationClient::pump() {
             }
             break;
         case network::SessionEventKind::Rejected:
+            state.rejection = event.reject.reason;
             break;
         case network::SessionEventKind::Ended:
             state.ended = true;
@@ -507,6 +509,10 @@ void ReplicationClient::pump() {
 
 bool ReplicationClient::admitted() const noexcept {
     return state_->accept.has_value();
+}
+
+std::optional<network::RejectReason> ReplicationClient::rejection() const noexcept {
+    return state_->rejection;
 }
 
 const std::optional<network::Accept>& ReplicationClient::accept() const noexcept {

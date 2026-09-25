@@ -125,6 +125,7 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         started_ = true;
+        context_ = &context;
         emitter_ = context.emitter();
         clock_ = &context.clock();
         durations_.reserve(kKeptTickDurations);
@@ -168,7 +169,8 @@ public:
                              kTickFailed,
                              "a World tick failed at its barrier",
                              {diagnostics::field("tick", tick_.value)});
-                break;
+                context_->reportHealth(composition::Health::Unhealthy, "tick_failed");
+                return;
             }
             for (const auto& failure : report->failures) {
                 emitter_.log(diagnostics::Severity::Warning,
@@ -181,6 +183,14 @@ public:
         }
         if (kDue.debt != 0) {
             emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
+        }
+        // SPEC-0012's tick progress: a World a second or more behind is
+        // degraded, and healthy again once it has caught up.
+        const std::uint64_t kSecond = std::max<std::uint64_t>(1, settings_.rate.ticks / settings_.rate.seconds);
+        if (kDue.debt > kSecond) {
+            context_->reportHealth(composition::Health::Degraded, "tick_debt");
+        } else {
+            context_->reportHealth(composition::Health::Healthy, {});
         }
     }
 
@@ -236,6 +246,7 @@ private:
     world::TickIndex tick_;
     std::uint64_t generation_ = 0;
     std::optional<world::TickIndex> hold_;
+    composition::ParticipantContext* context_ = nullptr;
     diagnostics::Emitter emitter_;
     bool started_ = false;
     bool running_ = false;

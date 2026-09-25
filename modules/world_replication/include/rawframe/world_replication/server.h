@@ -131,6 +131,8 @@ public:
     void forgetWorld() noexcept;
 
     [[nodiscard]] ServerReplicationStatistics statistics() const noexcept;
+    /// Admitted connections, each with its player.
+    [[nodiscard]] std::size_t connections() const noexcept;
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
 

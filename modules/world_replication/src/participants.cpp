@@ -28,6 +28,7 @@ using diagnostics::EventIdentity;
 constexpr EventIdentity kListening{"replication", "listening"};
 constexpr EventIdentity kServerSummary{"replication", "server_summary"};
 constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
+constexpr EventIdentity kBotsAdmitted{"replication", "bots_admitted"};
 
 constexpr std::string_view kServerNeeds[] = {world_runtime::kSimulation.name};
 constexpr std::string_view kMaybe[] = {
@@ -80,6 +81,7 @@ std::unexpected<result::Error> missing(std::string_view why) {
 class ServerParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context, std::string endpoint) {
+        context_ = &context;
         endpoint_ = std::move(endpoint);
         RAWFRAME_TRY_ASSIGN(simulation_, context.capability(world_runtime::kSimulation));
         if (!context.has(network::kTransport.name) || !context.has(kReplicationPlan.name)) {
@@ -102,6 +104,8 @@ public:
                 context.clock(),
                 network::ServerSettings{.profile = sessionProfile(static_cast<std::size_t>(kConnections)),
                                         .expected = kExpected,
+                                        .admit = &admitWhileActive,
+                                        .admitContext = this,
                                         .tickRateTicks = simulation_->rate().ticks,
                                         .tickRateSeconds = simulation_->rate().seconds}));
         // SPEC-0013's steady egress objective by default; the budget is per
@@ -149,6 +153,7 @@ public:
             server_->forgetWorld();
         }
         server_->pump(*simulation_->world(), simulation_->tick());
+        context_->reportConnections(server_->connections());
     }
 
     void stop() noexcept override {
@@ -170,10 +175,25 @@ public:
                       diagnostics::field("inputsHeld", kStatistics.inputsHeld),
                       diagnostics::field("inputsNeutral", kStatistics.inputsNeutral),
                       diagnostics::field("inputsRefused", kStatistics.inputsRefused),
-                      diagnostics::field("perceptionsClamped", kStatistics.perceptionsClamped)});
+                      diagnostics::field("perceptionsClamped", kStatistics.perceptionsClamped),
+                      diagnostics::field("admissionsRefused", refused_)});
     }
 
 private:
+    /// Gameplay admission is open only while the Host is active: before,
+    /// and once it drains, a hello is refused as unavailable (SPEC-0012).
+    static std::optional<network::Reject> admitWhileActive(const network::Hello&, void* context) noexcept {
+        auto* self = static_cast<ServerParticipant*>(context);
+        if (self->context_->admitting()) {
+            return std::nullopt;
+        }
+        ++self->refused_;
+        return network::Reject{.reason = network::RejectReason::Unavailable,
+                               .message = "the server is not admitting players"};
+    }
+
+    composition::ParticipantContext* context_ = nullptr;
+    std::uint64_t refused_ = 0;
     std::string endpoint_;
     ReplicationPlan* plan_ = nullptr;
     world_runtime::Simulation* simulation_ = nullptr;
@@ -324,6 +344,7 @@ public:
     }
 
     void runHostPhase(composition::HostPhase phase, const composition::HostFrame& frame) noexcept override {
+        std::size_t admitted = 0;
         for (Bot& bot : bots_) {
             if (phase == composition::HostPhase::Ingress) {
                 // The server may start listening after the bots start, so a
@@ -338,6 +359,7 @@ public:
                 } else {
                     bot.client->pump();
                 }
+                admitted += bot.client->admitted() ? 1 : 0;
             } else if (phase == composition::HostPhase::Egress && bot.client->admitted() && !bot.input.empty()) {
                 const network::Accept& accept = *bot.client->accept();
                 if (!bot.admittedAt) {
@@ -353,6 +375,15 @@ public:
                 }
             }
         }
+        // Once, when every bot is in: what a script driving a server waits
+        // for before it goes on.
+        if (phase == composition::HostPhase::Ingress && !allAdmitted_ && !bots_.empty() && admitted == bots_.size()) {
+            allAdmitted_ = true;
+            emitter_.log(diagnostics::Severity::Info,
+                         kBotsAdmitted,
+                         "every bot is admitted",
+                         {diagnostics::field("bots", bots_.size())});
+        }
     }
 
     void stop() noexcept override {
@@ -360,6 +391,7 @@ public:
             return;
         }
         std::uint64_t admitted = 0;
+        std::uint64_t unavailable = 0;
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
         PredictionStatistics predicted;
@@ -370,6 +402,7 @@ public:
             interpolated.blended += bot.client->interpolationStatistics().blended;
             interpolated.newest += bot.client->interpolationStatistics().newest;
             admitted += bot.client->admitted() ? 1 : 0;
+            unavailable += bot.client->rejection() == network::RejectReason::Unavailable ? 1 : 0;
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
             const PredictionStatistics kBot = bot.client->predictionStatistics();
@@ -385,6 +418,7 @@ public:
                      "bots totals",
                      {diagnostics::field("bots", bots_.size()),
                       diagnostics::field("admitted", admitted),
+                      diagnostics::field("unavailable", unavailable),
                       diagnostics::field("unpredicted", unpredicted_),
                       diagnostics::field("handed", handed),
                       diagnostics::field("sourceFailures", sourceFailures_),
@@ -429,6 +463,7 @@ private:
     std::vector<Bot> bots_;
     /// Bots that would predict but could not have a predictor.
     std::uint64_t unpredicted_ = 0;
+    bool allAdmitted_ = false;
     std::uint64_t sourceFailures_ = 0;
     diagnostics::Emitter emitter_;
 };

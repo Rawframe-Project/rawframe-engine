@@ -950,6 +950,10 @@ ServerReplicationStatistics ReplicationServer::statistics() const noexcept {
     return state_->statistics;
 }
 
+std::size_t ReplicationServer::connections() const noexcept {
+    return state_->peers.size();
+}
+
 world::EntityHandle ReplicationServer::player(network::ConnectionId connection) const noexcept {
     const auto kPeer = state_->peers.find(connection.value);
     return kPeer == state_->peers.end() ? world::EntityHandle{} : kPeer->second.player;

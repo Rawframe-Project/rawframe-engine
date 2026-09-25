@@ -12,6 +12,13 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 8 1 480
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_over_quic PROPERTIES PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8")
+    # A server asked to stop drains: it refuses new bots as unavailable and
+    # stops once the bots it serves have left.
+    add_test(NAME bots_drain
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/drain.sh
+                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(bots_drain PROPERTIES PASS_REGULAR_EXPRESSION "drained in order" TIMEOUT 120)
     # Bots agreeing with the server on runners' Composition are admitted,
     # and bots naming another Composition of the same Build are not.
     add_test(NAME bots_composition
