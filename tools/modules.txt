@@ -16,6 +16,7 @@ game_content: signature content composition document execution diagnostics resul
 audio: world schema execution diagnostics document result base
 audio_import: audio result base
 animation: document result base
+animation_import: animation result base
 mesh: result base
 mesh_import: mesh result base
 cook: animation mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
@@ -48,3 +49,4 @@ import: audio_import audio result base
 cook_tool: cook animation mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
 build_tool: build signature content document result base
 scene_tool: world_kest scene kest result base
+animation_tool: animation_import animation content result base

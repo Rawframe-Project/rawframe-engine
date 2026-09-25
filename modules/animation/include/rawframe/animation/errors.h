@@ -30,6 +30,12 @@ enum class AnimationError : std::uint32_t {
     /// twice, a connection to no node or round a cycle, a reference to no
     /// `float` parameter, other than one output node.
     GraphInvalid = 5,
+    /// A source an importer reads that is not what it takes: not glTF 2.0,
+    /// a buffer that cannot be read whole, no skin, or a rig the documents
+    /// cannot hold (more than one root, a mirror, a shear).
+    BadSource = 6,
+    /// A source that requires an extension the importer does not support.
+    UnsupportedExtension = 7,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(AnimationError error) noexcept {
