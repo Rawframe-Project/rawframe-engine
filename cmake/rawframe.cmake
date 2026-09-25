@@ -8,8 +8,10 @@ set(RAWFRAME_CONFIGURATION "development" CACHE STRING "debug, development, or sh
 set_property(CACHE RAWFRAME_CONFIGURATION PROPERTY STRINGS debug development shipping)
 if(RAWFRAME_CONFIGURATION STREQUAL "shipping")
     set(RAWFRAME_ASSERTION_LEVEL 1)
+    set(RAWFRAME_SHIPPING 1)
 elseif(RAWFRAME_CONFIGURATION STREQUAL "debug" OR RAWFRAME_CONFIGURATION STREQUAL "development")
     set(RAWFRAME_ASSERTION_LEVEL 2)
+    set(RAWFRAME_SHIPPING 0)
 else()
     message(FATAL_ERROR "RAWFRAME_CONFIGURATION must be debug, development, or shipping, not '${RAWFRAME_CONFIGURATION}'")
 endif()
@@ -30,6 +32,8 @@ add_library(rawframe_policy INTERFACE)
 target_compile_features(rawframe_policy INTERFACE cxx_std_23)
 target_compile_definitions(rawframe_policy INTERFACE
     RAWFRAME_ASSERTIONS=${RAWFRAME_ASSERTION_LEVEL}
+    # 1 in shipping, where development-only surfaces refuse to compile.
+    RAWFRAME_SHIPPING=${RAWFRAME_SHIPPING}
     RAWFRAME_CONFIGURATION_NAME="${RAWFRAME_CONFIGURATION}")
 
 if(MSVC)

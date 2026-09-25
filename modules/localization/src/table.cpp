@@ -5,6 +5,7 @@
 #include "rawframe/base/sha256.h"
 #include "rawframe/document/json.h"
 #include "rawframe/localization/errors.h"
+#include "table_parts.h"
 
 #include <algorithm>
 #include <array>
@@ -80,18 +81,6 @@ result::Status tableInForm(const StringTable& table, const TableLimits& limits) 
     return entriesInForm(table.entries, limits);
 }
 
-result::Status translationsInForm(const Translations& translations, const TableLimits& limits) {
-    if (translations.table == base::Bits128{} || !canonicalLocale(translations.locale)) {
-        return invalid("a translation document names its table and a canonical locale tag");
-    }
-    for (const auto& [key, entry] : translations.entries) {
-        if (!sourceHash(entry.sourceHash)) {
-            return invalid("a source hash is 16 lowercase hex digits");
-        }
-    }
-    return entriesInForm(translations.entries, limits);
-}
-
 /// The document's members past its format and kind, if it is one of that
 /// kind and has exactly these.
 result::Result<Value> documentOf(std::string_view text,
@@ -130,6 +119,24 @@ result::Status canonical(std::string_view text, result::Result<std::string> writ
 }
 
 } // namespace
+
+bool privateUseLocale(const Locale& locale) {
+    const auto kParsed = parseLocale(locale.text());
+    return kParsed.has_value() && *kParsed == locale && locale.region.size() == 2 && locale.region[0] == 'X';
+}
+
+result::Status translationsInForm(const Translations& translations, const TableLimits& limits, bool pseudo) {
+    if (translations.table == base::Bits128{} ||
+        !(pseudo ? privateUseLocale(translations.locale) : canonicalLocale(translations.locale))) {
+        return invalid("a translation document names its table and a canonical locale tag");
+    }
+    for (const auto& [key, entry] : translations.entries) {
+        if (!sourceHash(entry.sourceHash)) {
+            return invalid("a source hash is 16 lowercase hex digits");
+        }
+    }
+    return entriesInForm(translations.entries, limits);
+}
 
 bool validKey(std::string_view key, const TableLimits& limits) {
     if (key.empty() || key.size() > limits.maximumKeyBytes) {
@@ -215,7 +222,7 @@ result::Result<StringTable> readStrings(std::string_view text, const TableLimits
 }
 
 result::Result<std::string> writeTranslations(const Translations& translations, const TableLimits& limits) {
-    RAWFRAME_TRY(translationsInForm(translations, limits));
+    RAWFRAME_TRY(translationsInForm(translations, limits, false));
     Value entries = Value::object();
     for (const auto& [key, entry] : translations.entries) {
         Value made = Value::object();

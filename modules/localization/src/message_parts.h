@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::localization {
 
@@ -26,6 +27,24 @@ inline constexpr std::size_t kMostLiteralDigits = 18;
 [[nodiscard]] bool integerLiteral(std::string_view text);
 /// An integer literal, then optionally `.` and digits.
 [[nodiscard]] bool numberLiteral(std::string_view text);
+
+/// A run of a pattern's text in the message's bytes, escapes as written.
+struct TextRun {
+    std::size_t begin = 0;
+    std::size_t end = 0;
+};
+
+/// A pattern's bytes (inside `{{` and `}}` when quoted) and its text runs.
+struct PatternSpan {
+    std::size_t begin = 0;
+    std::size_t end = 0;
+    std::vector<TextRun> runs;
+};
+
+/// `parseMessage`, also saying where each pattern is, in the order they
+/// are written.
+[[nodiscard]] result::Result<Message>
+parseMessage(std::string_view text, const MessageLimits& limits, std::vector<PatternSpan>* spans);
 
 /// `[a-z][a-zA-Z0-9_]*`.
 [[nodiscard]] bool variableName(std::string_view name);

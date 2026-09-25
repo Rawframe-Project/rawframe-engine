@@ -27,6 +27,7 @@
 #include <cstddef>
 #include <functional>
 #include <map>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -67,6 +68,17 @@ public:
                                                        std::span<const Translations> translations,
                                                        const CatalogLimits& limits = {});
 
+#if !RAWFRAME_SHIPPING
+    /// Development only (SPEC-0033): `build`, with pseudo-localized
+    /// translations beside the authored ones (pseudo.h). Their locales are
+    /// private-use tags (`en-XA`, `ar-XB`) that no authored document may
+    /// name, so nothing else can put one in a catalog.
+    [[nodiscard]] static result::Result<Catalog> buildWithPseudo(std::span<const TableDocument> tables,
+                                                                 std::span<const Translations> translations,
+                                                                 std::span<const Translations> pseudo,
+                                                                 const CatalogLimits& limits = {});
+#endif
+
     /// Stale entries, in table, locale, and key order.
     [[nodiscard]] std::span<const StaleEntry> stale() const noexcept {
         return stale_;
@@ -91,6 +103,14 @@ private:
         /// Each locale's messages, the source locale's among them.
         std::map<Locale, std::map<std::string, Message, std::less<>>> messages;
     };
+
+    [[nodiscard]] static result::Result<Catalog> assemble(std::span<const TableDocument> tables,
+                                                          std::span<const Translations> translations,
+                                                          std::span<const Translations> pseudo,
+                                                          const CatalogLimits& limits);
+    /// Adds one translation document, checked against its table.
+    [[nodiscard]] result::Status
+    add(std::span<const TableDocument> tables, const Translations& translation, bool pseudo, std::set<Locale>& locales);
 
     [[nodiscard]] result::Result<std::pair<const Locale*, const Message*>>
     find(base::Bits128 table, std::string_view key, const Locale& requested, const Locale& projectDefault) const;

@@ -35,6 +35,8 @@ bool nameCharacter(char each) {
 struct Reader {
     std::string_view text;
     std::size_t at = 0;
+    /// Where each pattern's text is, when asked.
+    std::vector<PatternSpan>* spans = nullptr;
 
     [[nodiscard]] bool done() const {
         return at >= text.size();
@@ -199,28 +201,49 @@ result::Result<Expression> expression(Reader& reader) {
 /// A pattern up to the text's end, or, `quoted`, up to its `}}`.
 result::Result<Pattern> pattern(Reader& reader, bool quotedPattern, std::size_t& placeholders) {
     Pattern made;
-    const auto kText = [&made]() -> std::string& {
+    PatternSpan span{.begin = reader.at, .end = reader.at, .runs = {}};
+    std::optional<std::size_t> run;
+    const auto kText = [&made, &run, &reader]() -> std::string& {
+        if (!run.has_value()) {
+            run = reader.at;
+        }
         if (made.empty() || made.back().placeholder.has_value()) {
             made.emplace_back();
         }
         return made.back().text;
+    };
+    const auto kEnd = [&span, &run, &reader]() {
+        if (run.has_value()) {
+            span.runs.push_back(TextRun{.begin = *run, .end = reader.at});
+            run.reset();
+        }
+    };
+    const auto kDone = [&span, &kEnd, &reader]() {
+        kEnd();
+        span.end = reader.at;
+        if (reader.spans != nullptr) {
+            reader.spans->push_back(std::move(span));
+        }
     };
     while (true) {
         if (reader.done()) {
             if (quotedPattern) {
                 return invalid("a quoted pattern ends with }}");
             }
+            kDone();
             return made;
         }
         const char kEach = reader.peek();
         if (kEach == '\\') {
+            std::string& text = kText();
             ++reader.at;
             if (reader.peek() != '\\' && reader.peek() != '{' && reader.peek() != '}') {
                 return invalid("text escapes only \\, {, and }");
             }
-            kText() += reader.peek();
+            text += reader.peek();
             ++reader.at;
         } else if (kEach == '{') {
+            kEnd();
             RAWFRAME_TRY_ASSIGN(Expression placeholder, expression(reader));
             if (placeholder.operand.literal) {
                 return invalid("a placeholder reads a variable");
@@ -229,6 +252,7 @@ result::Result<Pattern> pattern(Reader& reader, bool quotedPattern, std::size_t&
             ++placeholders;
         } else if (kEach == '}') {
             if (quotedPattern && reader.ahead("}}")) {
+                kDone();
                 reader.at += 2;
                 return made;
             }
@@ -410,10 +434,15 @@ std::optional<Annotation> applied(const std::optional<Annotation>& base, const s
 }
 
 result::Result<Message> parseMessage(std::string_view text, const MessageLimits& limits) {
+    return parseMessage(text, limits, nullptr);
+}
+
+result::Result<Message>
+parseMessage(std::string_view text, const MessageLimits& limits, std::vector<PatternSpan>* spans) {
     if (text.size() > limits.maximumBytes) {
         return overLimit("a message is longer than its limit");
     }
-    Reader reader{.text = text, .at = 0};
+    Reader reader{.text = text, .at = 0, .spans = spans};
     Message made;
     std::size_t placeholders = 0;
     reader.skip();

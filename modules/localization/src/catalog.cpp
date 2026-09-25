@@ -4,6 +4,7 @@
 #include "rawframe/localization/catalog.h"
 
 #include "rawframe/localization/errors.h"
+#include "table_parts.h"
 
 #include <algorithm>
 #include <array>
@@ -42,6 +43,22 @@ std::unexpected<result::Error> refused(
 result::Result<Catalog> Catalog::build(std::span<const TableDocument> tables,
                                        std::span<const Translations> translations,
                                        const CatalogLimits& limits) {
+    return assemble(tables, translations, {}, limits);
+}
+
+#if !RAWFRAME_SHIPPING
+result::Result<Catalog> Catalog::buildWithPseudo(std::span<const TableDocument> tables,
+                                                 std::span<const Translations> translations,
+                                                 std::span<const Translations> pseudo,
+                                                 const CatalogLimits& limits) {
+    return assemble(tables, translations, pseudo, limits);
+}
+#endif
+
+result::Result<Catalog> Catalog::assemble(std::span<const TableDocument> tables,
+                                          std::span<const Translations> translations,
+                                          std::span<const Translations> pseudo,
+                                          const CatalogLimits& limits) {
     if (tables.size() > limits.maximumTables) {
         return std::unexpected<result::Error>{
             failure(LocalizationError::OverLimit, "a catalog has more tables than its limit")};
@@ -68,53 +85,10 @@ result::Result<Catalog> Catalog::build(std::span<const TableDocument> tables,
         locales.insert(table.sourceLocale);
     }
     for (const Translations& translation : translations) {
-        const auto kFound = made.tables_.find(translation.table);
-        if (kFound == made.tables_.end()) {
-            return refused(LocalizationError::CatalogInvalid,
-                           "a translation's table is in the catalog",
-                           translation.table,
-                           &translation.locale,
-                           {});
-        }
-        Table& table = kFound->second;
-        if (translation.locale == table.sourceLocale || table.messages.contains(translation.locale)) {
-            return refused(LocalizationError::CatalogInvalid,
-                           "a table has one translation a locale, none into its source locale",
-                           translation.table,
-                           &translation.locale,
-                           {});
-        }
-        RAWFRAME_TRY(writeTranslations(translation, limits.table));
-        const auto& source = table.messages.at(table.sourceLocale);
-        const auto kDocument = std::ranges::find(tables, translation.table, &TableDocument::id);
-        std::map<std::string, Message, std::less<>> messages;
-        for (const auto& [key, entry] : translation.entries) {
-            const auto kSource = source.find(key);
-            if (kSource == source.end()) {
-                return refused(LocalizationError::Orphaned,
-                               "a translated key is in its table",
-                               translation.table,
-                               &translation.locale,
-                               key);
-            }
-            RAWFRAME_TRY_ASSIGN(Message message, parseMessage(entry.message, limits.table.message));
-            const std::vector<std::string> kAllowed = argumentsOf(kSource->second);
-            for (const std::string& argument : argumentsOf(message)) {
-                if (!std::ranges::binary_search(kAllowed, argument)) {
-                    return refused(LocalizationError::CatalogInvalid,
-                                   "a translated message reads only arguments its source reads",
-                                   translation.table,
-                                   &translation.locale,
-                                   key);
-                }
-            }
-            if (entry.sourceHash != sourceHashOf(kDocument->table.entries.find(key)->second.message)) {
-                made.stale_.push_back(StaleEntry{.table = translation.table, .locale = translation.locale, .key = key});
-            }
-            messages.emplace(key, std::move(message));
-        }
-        table.messages.emplace(translation.locale, std::move(messages));
-        locales.insert(translation.locale);
+        RAWFRAME_TRY(made.add(tables, translation, false, locales));
+    }
+    for (const Translations& translation : pseudo) {
+        RAWFRAME_TRY(made.add(tables, translation, true, locales));
     }
     if (locales.size() > limits.maximumLocales) {
         return std::unexpected<result::Error>{
@@ -122,6 +96,60 @@ result::Result<Catalog> Catalog::build(std::span<const TableDocument> tables,
     }
     std::ranges::sort(made.stale_);
     return made;
+}
+
+result::Status Catalog::add(std::span<const TableDocument> tables,
+                            const Translations& translation,
+                            bool pseudo,
+                            std::set<Locale>& locales) {
+    const auto kFound = tables_.find(translation.table);
+    if (kFound == tables_.end()) {
+        return refused(LocalizationError::CatalogInvalid,
+                       "a translation's table is in the catalog",
+                       translation.table,
+                       &translation.locale,
+                       {});
+    }
+    Table& table = kFound->second;
+    if (translation.locale == table.sourceLocale || table.messages.contains(translation.locale)) {
+        return refused(LocalizationError::CatalogInvalid,
+                       "a table has one translation a locale, none into its source locale",
+                       translation.table,
+                       &translation.locale,
+                       {});
+    }
+    RAWFRAME_TRY(translationsInForm(translation, limits_.table, pseudo));
+    const auto& source = table.messages.at(table.sourceLocale);
+    const auto kDocument = std::ranges::find(tables, translation.table, &TableDocument::id);
+    std::map<std::string, Message, std::less<>> messages;
+    for (const auto& [key, entry] : translation.entries) {
+        const auto kSource = source.find(key);
+        if (kSource == source.end()) {
+            return refused(LocalizationError::Orphaned,
+                           "a translated key is in its table",
+                           translation.table,
+                           &translation.locale,
+                           key);
+        }
+        RAWFRAME_TRY_ASSIGN(Message message, parseMessage(entry.message, limits_.table.message));
+        const std::vector<std::string> kAllowed = argumentsOf(kSource->second);
+        for (const std::string& argument : argumentsOf(message)) {
+            if (!std::ranges::binary_search(kAllowed, argument)) {
+                return refused(LocalizationError::CatalogInvalid,
+                               "a translated message reads only arguments its source reads",
+                               translation.table,
+                               &translation.locale,
+                               key);
+            }
+        }
+        if (entry.sourceHash != sourceHashOf(kDocument->table.entries.find(key)->second.message)) {
+            stale_.push_back(StaleEntry{.table = translation.table, .locale = translation.locale, .key = key});
+        }
+        messages.emplace(key, std::move(message));
+    }
+    table.messages.emplace(translation.locale, std::move(messages));
+    locales.insert(translation.locale);
+    return {};
 }
 
 result::Result<std::pair<const Locale*, const Message*>>
