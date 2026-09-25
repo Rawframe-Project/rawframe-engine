@@ -36,9 +36,10 @@ public:
     /// files as they are when asked, so a changed file is seen.
     [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path);
     /// The game whose cooked description is `description` in `content`
-    /// (D88): its documents from the description's record, and each
-    /// program's files from the Kest sources resource it names (D87). Admits
-    /// both representations, and waits for each read. Refused when a read
+    /// (D88): its documents from the description's record, each scene from
+    /// the scene resource it names (D95), and each program's files from the
+    /// Kest sources resource it names (D87). Admits the three
+    /// representations, and waits for each read. Refused when a read
     /// fails, a record does not read, or the description uses a name the
     /// record does not answer.
     [[nodiscard]] static result::Result<GameFiles> fromContent(game_content::GameContent& content,
@@ -56,11 +57,14 @@ public:
     /// The document the description names `name`; refused (`unreadable_file`)
     /// for a name it does not use.
     [[nodiscard]] result::Result<std::string_view> document(std::string_view name) const;
+    /// The scene the description names `name` (a `scene` line), its text;
+    /// refused (`unreadable_file`) for a name it does not use.
+    [[nodiscard]] result::Result<std::string_view> scene(std::string_view name) const;
     /// Compiles the program the description names `name`.
     [[nodiscard]] result::Result<std::shared_ptr<const kest::Program>>
     compile(std::string_view name, const kest::CompileSettings& settings = {}, std::string* report = nullptr) const;
     /// Everything the game is, as one digest: the description, each
-    /// document, and each Kest file, as they were read.
+    /// document, each scene, and each Kest file, as they were read.
     [[nodiscard]] const base::Sha256Digest& digest() const noexcept {
         return digest_;
     }
@@ -90,6 +94,7 @@ private:
     std::string text_;
     GameDescription description_;
     std::vector<Named> documents_;
+    std::vector<Named> scenes_;
     std::vector<Program> programs_;
     /// Each set of Kest files a program compiles from: one read from a
     /// directory, or one for each Kest sources resource named.

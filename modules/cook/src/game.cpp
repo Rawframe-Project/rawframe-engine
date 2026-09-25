@@ -5,7 +5,6 @@
 #include "rawframe/cook/errors.h"
 #include "rawframe/input/actions.h"
 #include "rawframe/kest_library/library.h"
-#include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/game.h"
 
@@ -104,13 +103,20 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
             world_kest::CookedGameProgram{.path = program, .sources = project->sources, .entry = program});
     }
 
-    // Each document, read as its owner reads it.
+    // Each scene: the resource its sidecar names, cooked by rawframe.scene.
     for (const std::string& path : kDescription.scenes) {
-        RAWFRAME_TRY_ASSIGN(const std::string_view kScene, keep(reads, game, path));
-        if (!scene::readScene(kScene).has_value()) {
-            return refuse("a scene document does not read", path);
+        auto sidecarBytes = reads.file(path + std::string{kSidecarSuffix});
+        if (!sidecarBytes.has_value()) {
+            return refuse("a scene the description names has a sidecar", path);
         }
+        RAWFRAME_TRY_ASSIGN(const Sidecar kSidecar, readSidecar(textOf(*sidecarBytes)));
+        if (kSidecar.importer != "rawframe.scene") {
+            return refuse("a scene the description names is cooked by rawframe.scene", path);
+        }
+        game.scenes.push_back(world_kest::CookedGameScene{.path = path, .scene = kSidecar.id.value});
     }
+
+    // Each document, read as its owner reads it.
     if (kDescription.controls) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kActions, keep(reads, game, kDescription.controls->actions));
         if (!input::readActionSet(kActions).has_value()) {

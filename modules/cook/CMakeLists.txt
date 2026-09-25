@@ -2,7 +2,7 @@
 # importers into content-addressed artifacts, a content manifest, and a
 # receipt. Import tooling only; no client or server closure may depend on it.
 rawframe_module(NAME cook
-    SOURCES src/audio.cpp src/cook.cpp src/game.cpp src/kest.cpp
+    SOURCES src/audio.cpp src/cook.cpp src/game.cpp src/kest.cpp src/scene.cpp
     DEPS scene world_kest input kest_library kest audio_import audio content document result base
 )
 

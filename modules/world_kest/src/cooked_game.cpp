@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 
 namespace rawframe::world_kest {
 
@@ -37,10 +38,23 @@ template <typename Named> bool ordered(const std::vector<Named>& named) {
 }
 
 bool wellFormed(const CookedGame& game) {
-    return ordered(game.files) && ordered(game.programs) &&
-           std::ranges::all_of(game.programs, [](const CookedGameProgram& program) {
-               return !program.entry.empty() && program.sources != base::Bits128{};
+    return ordered(game.files) && ordered(game.programs) && ordered(game.scenes) &&
+           std::ranges::all_of(game.programs,
+                               [](const CookedGameProgram& program) {
+                                   return !program.entry.empty() && program.sources != base::Bits128{};
+                               }) &&
+           std::ranges::all_of(game.scenes, [](const CookedGameScene& scene) {
+               return scene.scene != base::Bits128{};
            });
+}
+
+/// A resource identity as 32 lowercase hex digits, not nought.
+std::optional<base::Bits128> identityOf(const std::string* text) {
+    const base::Bits128Parse kParsed = text != nullptr ? base::parseBits128Hex(*text) : base::Bits128Parse{};
+    if (!kParsed.parsed || hexOf(kParsed.value) != *text) {
+        return std::nullopt;
+    }
+    return kParsed.value;
 }
 
 /// The text of member `name` of an object with exactly `members` members.
@@ -64,10 +78,16 @@ const CookedGameProgram* CookedGame::program(std::string_view path) const noexce
     return kFound == programs.end() ? nullptr : &*kFound;
 }
 
+const CookedGameScene* CookedGame::scene(std::string_view path) const noexcept {
+    const auto kFound = std::ranges::find(scenes, path, &CookedGameScene::path);
+    return kFound == scenes.end() ? nullptr : &*kFound;
+}
+
 result::Result<std::string> writeCookedGame(const CookedGame& game) {
     CookedGame sorted = game;
     std::ranges::sort(sorted.files, {}, &CookedGameFile::path);
     std::ranges::sort(sorted.programs, {}, &CookedGameProgram::path);
+    std::ranges::sort(sorted.scenes, {}, &CookedGameScene::path);
     if (!wellFormed(sorted)) {
         return std::unexpected<result::Error>{
             invalid("a cooked game names each path once, each program's sources and entry, and not too many")};
@@ -87,11 +107,19 @@ result::Result<std::string> writeCookedGame(const CookedGame& game) {
         each.add("sources", Value::string(hexOf(program.sources)));
         programs.push(std::move(each));
     }
+    Value scenes = Value::array();
+    for (CookedGameScene& scene : sorted.scenes) {
+        Value each = Value::object();
+        each.add("path", Value::string(std::move(scene.path)));
+        each.add("scene", Value::string(hexOf(scene.scene)));
+        scenes.push(std::move(each));
+    }
     Value record = Value::object();
     record.add("files", std::move(files));
-    record.add("formatVersion", Value::integer(1));
+    record.add("formatVersion", Value::integer(2));
     record.add("kind", Value::string("game.description"));
     record.add("programs", std::move(programs));
+    record.add("scenes", std::move(scenes));
     record.add("text", Value::string(std::move(sorted.text)));
     auto written = document::writeCanonicalRecord(record);
     if (!written.has_value()) {
@@ -109,11 +137,13 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
     const Value* version = parsed->find("formatVersion");
     const Value* files = parsed->find("files");
     const Value* programs = parsed->find("programs");
-    const std::string* text = textOf(*parsed, 5, "text");
+    const Value* scenes = parsed->find("scenes");
+    const std::string* text = textOf(*parsed, 6, "text");
     if (kind == nullptr || kind->text() == nullptr || *kind->text() != "game.description" || version == nullptr ||
-        version->integer() != 1 || files == nullptr || files->kind() != Value::Kind::Array || programs == nullptr ||
-        programs->kind() != Value::Kind::Array || text == nullptr) {
-        return std::unexpected<result::Error>{invalid("a cooked game is game.description, format 1, and its parts")};
+        version->integer() != 2 || files == nullptr || files->kind() != Value::Kind::Array || programs == nullptr ||
+        programs->kind() != Value::Kind::Array || scenes == nullptr || scenes->kind() != Value::Kind::Array ||
+        text == nullptr) {
+        return std::unexpected<result::Error>{invalid("a cooked game is game.description, format 2, and its parts")};
     }
     CookedGame game{.text = *text};
     for (const Value& each : files->items()) {
@@ -127,12 +157,19 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
     for (const Value& each : programs->items()) {
         const std::string* path = textOf(each, 3, "path");
         const std::string* entry = textOf(each, 3, "entry");
-        const std::string* sources = textOf(each, 3, "sources");
-        const base::Bits128Parse kSources = sources != nullptr ? base::parseBits128Hex(*sources) : base::Bits128Parse{};
-        if (path == nullptr || entry == nullptr || !kSources.parsed || hexOf(kSources.value) != *sources) {
+        const std::optional<base::Bits128> kSources = identityOf(textOf(each, 3, "sources"));
+        if (path == nullptr || entry == nullptr || !kSources.has_value()) {
             return std::unexpected<result::Error>{invalid("a cooked game's program is a path, sources, and entry")};
         }
-        game.programs.push_back(CookedGameProgram{.path = *path, .sources = kSources.value, .entry = *entry});
+        game.programs.push_back(CookedGameProgram{.path = *path, .sources = *kSources, .entry = *entry});
+    }
+    for (const Value& each : scenes->items()) {
+        const std::string* path = textOf(each, 2, "path");
+        const std::optional<base::Bits128> kScene = identityOf(textOf(each, 2, "scene"));
+        if (path == nullptr || !kScene.has_value()) {
+            return std::unexpected<result::Error>{invalid("a cooked game's scene is a path and a scene")};
+        }
+        game.scenes.push_back(CookedGameScene{.path = *path, .scene = *kScene});
     }
     if (!wellFormed(game)) {
         return std::unexpected<result::Error>{invalid("a cooked game names each path once, in order, fully")};

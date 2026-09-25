@@ -11,6 +11,7 @@
 #include "rawframe/cook/errors.h"
 #include "rawframe/cook/game.h"
 #include "rawframe/cook/kest.h"
+#include "rawframe/cook/scene.h"
 #include "rawframe/kest_library/library.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/cooked_game.h"
@@ -284,7 +285,8 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     fs::copy(fs::path{RAWFRAME_SAMPLE_GAMES} / "runners", kGame, fs::copy_options::recursive);
     const std::string kSourcesId = "f9f0181057571ecd398d86d2c34a641f";
     writeText(kGame / "runners.game.rfmeta", sidecar("000000000000000000000000000000a5", "", "rawframe.game"));
-    static const std::array<Importer, 3> kImporters = {audioImporter(), gameImporter(), kestImporter()};
+    static const std::array<Importer, 4> kImporters = {
+        audioImporter(), gameImporter(), kestImporter(), sceneImporter()};
     const auto kCook = [&kProject] {
         auto report = cookSources(CookRequest{
             .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
@@ -292,7 +294,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
         return report.has_value() ? std::move(*report) : CookReport{};
     };
     const CookReport kFirst = kCook();
-    RAWFRAME_EXPECT(kFirst.cooked == 5 && kFirst.failures.empty());
+    RAWFRAME_EXPECT(kFirst.cooked == 6 && kFirst.failures.empty());
     const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
         const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
         if (!kManifest.has_value()) {
@@ -311,12 +313,15 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     if (!kGameRead.has_value()) {
         return;
     }
-    // The text as written; the four documents it names; both programs as
+    // The text as written; the three documents it names; its scene by
+    // resource; both programs as
     // entries of the project's sources.
     RAWFRAME_EXPECT(kGameRead->text == readText(kGame / "runners.game"));
-    RAWFRAME_EXPECT(kGameRead->files.size() == 4 && kGameRead->file("runners.actions") != nullptr &&
-                    kGameRead->file("level.scene") != nullptr && kGameRead->file("runners.mixer") != nullptr &&
-                    kGameRead->file("shot.sound") != nullptr &&
+    RAWFRAME_EXPECT(kGameRead->files.size() == 3 && kGameRead->file("runners.actions") != nullptr &&
+                    kGameRead->scenes.size() == 1 && kGameRead->scene("level.scene") != nullptr &&
+                    kGameRead->scene("level.scene")->scene ==
+                        base::parseBits128Hex("52771075251e7361deaecf4939c72e56").value &&
+                    kGameRead->file("runners.mixer") != nullptr && kGameRead->file("shot.sound") != nullptr &&
                     kGameRead->file("shot.sound")->text == readText(kGame / "shot.sound"));
     const base::Bits128 kSources = base::parseBits128Hex(kSourcesId).value;
     RAWFRAME_EXPECT(kGameRead->programs.size() == 2 && kGameRead->program("runners.kest") != nullptr &&
@@ -353,14 +358,17 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     fs::rename(kProject.base / "aside", kGame / "kest.project.rfmeta");
     RAWFRAME_EXPECT(kCook().failures.empty());
 
-    // A scene it names is carried in it; one that does not read is refused.
+    // A scene it names is named by its resource; one without a sidecar is
+    // refused, and one that does not read is its importer's failure.
     writeText(kGame / "runners.game", readText(kGame / "runners.game") + "scene extra.scene\n");
     writeText(
         kGame / "extra.scene",
         "{\n  \"kind\": \"rawframe.scene\",\n  \"formatVersion\": 1,\n  \"schema\": {},\n  \"entities\": []\n}\n");
-    RAWFRAME_EXPECT(kCook().failures.empty() && kCooked().has_value() && kCooked()->file("extra.scene") != nullptr);
-    writeText(kGame / "extra.scene", "{}\n");
     RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    writeText(kGame / "extra.scene.rfmeta", sidecar("000000000000000000000000000000a6", "", "rawframe.scene"));
+    RAWFRAME_EXPECT(kCook().failures.empty() && kCooked().has_value() && kCooked()->scene("extra.scene") != nullptr);
+    writeText(kGame / "extra.scene", "{}\n");
+    RAWFRAME_EXPECT(!kCook().failures.empty());
 }
 
 RAWFRAME_TEST(NothingIsPublishedUnlessNothingFailed) {

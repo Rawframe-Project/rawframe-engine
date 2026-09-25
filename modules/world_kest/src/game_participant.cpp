@@ -660,7 +660,7 @@ private:
                                                           .withContext("name", name)};
             };
         for (const std::string& path : game_.scenes) {
-            RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.document(path));
+            RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.scene(path));
             auto read = scene::readScene(kText);
             if (!read.has_value()) {
                 return std::unexpected<result::Error>{std::move(read).error().withContext("scene", path)};

@@ -51,6 +51,11 @@
 
 namespace rawframe::scene {
 
+/// The resource type of a scene (D95), and its one representation: the
+/// document's text in its one form.
+inline constexpr base::Bits128 kSceneType = base::parseBits128Hex("afe08759c97c18977fcf1a5f4f320b2b").value;
+inline constexpr std::string_view kSceneRepresentation = "rawframe.scene";
+
 inline constexpr std::size_t kMaximumEntities = 65536;
 inline constexpr std::size_t kMaximumComponents = 256;
 inline constexpr std::size_t kMaximumFields = 1024;

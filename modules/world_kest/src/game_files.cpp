@@ -3,6 +3,7 @@
 #include "game_files_participant.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/kest_library/library.h"
+#include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/errors.h"
 
@@ -82,7 +83,6 @@ std::vector<std::string> documentNames(const GameDescription& description) {
     if (description.controls) {
         names.push_back(description.controls->actions);
     }
-    names.insert(names.end(), description.scenes.begin(), description.scenes.end());
     if (description.audio) {
         names.push_back(description.audio->mixer);
         for (const GameSound& sound : description.audio->sounds) {
@@ -136,6 +136,10 @@ void GameFiles::seal() {
         field(digest, document.name);
         field(digest, document.text);
     }
+    for (const Named& scene : scenes_) {
+        field(digest, scene.name);
+        field(digest, scene.text);
+    }
     for (const std::vector<kest::SourceFile>& files : sources_) {
         for (const kest::SourceFile& file : files) {
             field(digest, file.path);
@@ -155,6 +159,10 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
         RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / name));
         game.documents_.push_back(Named{.name = std::move(name), .text = std::move(text)});
     }
+    for (const std::string& name : game.description_.scenes) {
+        RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / name));
+        game.scenes_.push_back(Named{.name = name, .text = std::move(text)});
+    }
     RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesUnder(kDirectory));
     game.sources_.push_back(std::move(files));
     for (std::string& name : programNames(game.description_)) {
@@ -168,12 +176,15 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
 result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& content, content::ResourceId description) {
     const content::ResourceTypeId kGameType{kCookedGameType};
     const content::ResourceTypeId kSourcesType{kest_library::kGameSourcesType};
-    const std::array<content::AdmittedRepresentation, 2> kAdmitted = {
+    const content::ResourceTypeId kSceneType{scene::kSceneType};
+    const std::array<content::AdmittedRepresentation, 3> kAdmitted = {
         content::AdmittedRepresentation{.type = kGameType,
                                         .representation = *content::RepresentationId::parse(kCookedGameRepresentation)},
         content::AdmittedRepresentation{
             .type = kSourcesType,
-            .representation = *content::RepresentationId::parse(kest_library::kGameSourcesRepresentation)}};
+            .representation = *content::RepresentationId::parse(kest_library::kGameSourcesRepresentation)},
+        content::AdmittedRepresentation{
+            .type = kSceneType, .representation = *content::RepresentationId::parse(scene::kSceneRepresentation)}};
     RAWFRAME_TRY(content.admit(kAdmitted));
     RAWFRAME_TRY_ASSIGN(const std::string kRecord,
                         readResource(content.store(), content::ResourceRef{.id = description, .type = kGameType}));
@@ -189,6 +200,17 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
             return invalid("the cooked description does not hold a document it names", name);
         }
         game.documents_.push_back(Named{.name = std::move(name), .text = kFile->text});
+    }
+    for (const std::string& name : game.description_.scenes) {
+        const CookedGameScene* const kScene = kCooked.scene(name);
+        if (kScene == nullptr) {
+            return invalid("the cooked description does not name the resource of a scene it names", name);
+        }
+        RAWFRAME_TRY_ASSIGN(
+            std::string text,
+            readResource(content.store(),
+                         content::ResourceRef{.id = content::ResourceId{kScene->scene}, .type = kSceneType}));
+        game.scenes_.push_back(Named{.name = name, .text = std::move(text)});
     }
     // Each Kest sources resource once, however many programs it holds.
     std::vector<base::Bits128> read;
@@ -220,6 +242,14 @@ result::Result<std::string_view> GameFiles::document(std::string_view name) cons
     const auto kFound = std::ranges::find(documents_, name, &Named::name);
     if (kFound == documents_.end()) {
         return unreadable("the description names no such document", name);
+    }
+    return std::string_view{kFound->text};
+}
+
+result::Result<std::string_view> GameFiles::scene(std::string_view name) const {
+    const auto kFound = std::ranges::find(scenes_, name, &Named::name);
+    if (kFound == scenes_.end()) {
+        return unreadable("the description names no such scene", name);
     }
     return std::string_view{kFound->text};
 }
