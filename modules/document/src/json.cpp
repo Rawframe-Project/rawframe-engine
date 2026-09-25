@@ -9,6 +9,7 @@
 #include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace rawframe::document {
 
@@ -590,6 +591,106 @@ result::Result<Value> parseCanonical(std::string_view text, const ReadLimits& li
         const auto kDiffer = std::ranges::mismatch(kCanonical, text);
         const auto kOffset = static_cast<std::size_t>(kDiffer.in2 - text.begin());
         return failAt(text, kOffset, DocumentError::NotCanonical, "the document is not written canonically");
+    }
+    return value;
+}
+
+namespace {
+
+constexpr std::int64_t kSafeInteger = 9'007'199'254'740'991;
+
+result::Status writeRecordValue(std::string& out, const Value& value) {
+    const auto kInvalid = [](std::string_view why) -> result::Status {
+        return std::unexpected<result::Error>{
+            result::fail(result::ErrorClass::InvalidArgument, kDocumentDomain, code(DocumentError::Invalid), why)
+                .error()};
+    };
+    switch (value.kind()) {
+    case Value::Kind::Null:
+        out += "null";
+        return {};
+    case Value::Kind::Bool:
+        out += *value.truth() ? "true" : "false";
+        return {};
+    case Value::Kind::Number: {
+        const std::optional<std::int64_t> kInteger = value.integer();
+        if (!kInteger.has_value() || *kInteger < -kSafeInteger || *kInteger > kSafeInteger) {
+            return kInvalid("a canonical record's numbers are integers within +/-(2^53 - 1)");
+        }
+        out += std::to_string(*kInteger);
+        return {};
+    }
+    case Value::Kind::String:
+        writeString(out, *value.text());
+        return {};
+    case Value::Kind::Array: {
+        out.push_back('[');
+        for (std::size_t index = 0; index < value.items().size(); ++index) {
+            if (index != 0) {
+                out.push_back(',');
+            }
+            RAWFRAME_TRY(writeRecordValue(out, value.items()[index]));
+        }
+        out.push_back(']');
+        return {};
+    }
+    case Value::Kind::Object: {
+        // Printable ASCII names sort by their bytes as JCS sorts them by
+        // UTF-16 code units.
+        std::vector<std::size_t> order(value.names().size());
+        for (std::size_t index = 0; index < order.size(); ++index) {
+            const std::string& name = value.names()[index];
+            if (std::ranges::any_of(name, [](char each) {
+                    return each < 0x20 || each > 0x7e;
+                })) {
+                return kInvalid("a canonical record's member names are printable ASCII");
+            }
+            order[index] = index;
+        }
+        std::ranges::sort(order, [&value](std::size_t left, std::size_t right) {
+            return value.names()[left] < value.names()[right];
+        });
+        out.push_back('{');
+        for (std::size_t index = 0; index < order.size(); ++index) {
+            if (index != 0) {
+                if (value.names()[order[index]] == value.names()[order[index - 1]]) {
+                    return kInvalid("a canonical record's member names are unique");
+                }
+                out.push_back(',');
+            }
+            writeString(out, value.names()[order[index]]);
+            out.push_back(':');
+            RAWFRAME_TRY(writeRecordValue(out, value.items()[order[index]]));
+        }
+        out.push_back('}');
+        return {};
+    }
+    }
+    return {};
+}
+
+} // namespace
+
+result::Result<std::string> writeCanonicalRecord(const Value& value) {
+    if (value.kind() != Value::Kind::Object) {
+        return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                           kDocumentDomain,
+                                                           code(DocumentError::Invalid),
+                                                           "a canonical record is one object")
+                                                  .error()};
+    }
+    std::string out;
+    RAWFRAME_TRY(writeRecordValue(out, value));
+    return out;
+}
+
+result::Result<Value> parseCanonicalRecord(std::string_view text, const ReadLimits& limits) {
+    RAWFRAME_TRY_ASSIGN(Value value, parse(text, limits));
+    RAWFRAME_TRY_ASSIGN(const std::string kCanonical, writeCanonicalRecord(value));
+    if (kCanonical != text) {
+        const auto kDiffer = std::ranges::mismatch(kCanonical, text);
+        const auto kOffset = static_cast<std::size_t>(kDiffer.in2 - text.begin());
+        return failAt(text, kOffset, DocumentError::NotCanonical, "the record is not written canonically");
     }
     return value;
 }

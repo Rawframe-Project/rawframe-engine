@@ -105,4 +105,16 @@ struct ReadLimits {
 /// that `write` would not have produced byte for byte.
 [[nodiscard]] result::Result<Value> parseCanonical(std::string_view text, const ReadLimits& limits = {});
 
+/// A canonical record's bytes (SPEC-0017, for records whose identity is a
+/// digest of them): RFC 8785 JCS of one object, members sorted by name at
+/// every depth, no whitespace and no final line feed, strings escaped as
+/// `write` escapes them. Stricter than JCS: member names are printable
+/// ASCII, and numbers are integers within +/-(2^53 - 1). Refuses
+/// (`Invalid`) anything else, and two members of one name.
+[[nodiscard]] result::Result<std::string> writeCanonicalRecord(const Value& value);
+
+/// `parse`, refusing (`NotCanonical`) text that `writeCanonicalRecord` would
+/// not have produced byte for byte, and what it refuses to write.
+[[nodiscard]] result::Result<Value> parseCanonicalRecord(std::string_view text, const ReadLimits& limits = {});
+
 } // namespace rawframe::document

@@ -1,6 +1,7 @@
 // Authored JSON documents: canonical text reads and writes back to the same
 // bytes, anything else is refused where it is, and hostile bytes never get
-// past the reader into a value that writes differently.
+// past the reader into a value that writes differently. Canonical records
+// are JCS bytes, members sorted and integers only.
 
 #include "rawframe/document/errors.h"
 #include "rawframe/document/json.h"
@@ -233,4 +234,54 @@ RAWFRAME_TEST(HostileBytesNeverWriteDifferentlyThanTheyRead) {
     }
     // Some mutations land inside strings and numbers and stay JSON.
     RAWFRAME_EXPECT(accepted > 100);
+}
+
+RAWFRAME_TEST(CanonicalRecordsAreJcsBytes) {
+    // Members sorted at every depth, no whitespace, strings escaped as JCS
+    // escapes them, whatever order the members were made in.
+    const auto kRead = parse("{\"z\": [3, {\"b\": null, \"a\": true}], \"a\": \"\\u0001\\\"\u00e9\", \"m\": -12}");
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    const auto kBytes = writeCanonicalRecord(*kRead);
+    RAWFRAME_EXPECT(kBytes.has_value() &&
+                    *kBytes == "{\"a\":\"\\u0001\\\"\u00e9\",\"m\":-12,\"z\":[3,{\"a\":true,\"b\":null}]}");
+    if (kBytes.has_value()) {
+        RAWFRAME_EXPECT(parseCanonicalRecord(*kBytes).has_value());
+    }
+
+    // Refused to write: not an object, a fraction, an integer past 2^53 - 1,
+    // a name that is not printable ASCII, and a name twice.
+    const auto kInvalid = [](const Value& value) {
+        const auto kWritten = writeCanonicalRecord(value);
+        return !kWritten.has_value() && kWritten.error().code() == code(DocumentError::Invalid);
+    };
+    RAWFRAME_EXPECT(kInvalid(Value::array()));
+    Value fraction = Value::object();
+    fraction.add("x", Value::real(0.5));
+    RAWFRAME_EXPECT(kInvalid(fraction));
+    Value wide = Value::object();
+    wide.add("x", Value::integer(9'007'199'254'740'992));
+    RAWFRAME_EXPECT(kInvalid(wide));
+    Value safe = Value::object();
+    safe.add("x", Value::integer(-9'007'199'254'740'991));
+    RAWFRAME_EXPECT(writeCanonicalRecord(safe).has_value());
+    Value named = Value::object();
+    named.add("\u00e9", Value::integer(1));
+    RAWFRAME_EXPECT(kInvalid(named));
+    Value twice = Value::object();
+    twice.add("x", Value::integer(1));
+    twice.add("x", Value::integer(2));
+    RAWFRAME_EXPECT(kInvalid(twice));
+
+    // Refused to read: whitespace, a final line feed, unsorted members, a
+    // number not in its one form, and a fraction.
+    for (const std::string_view kText : {std::string_view{"{\"a\": 1}"},
+                                         std::string_view{"{\"a\":1}\n"},
+                                         std::string_view{"{\"b\":1,\"a\":2}"},
+                                         std::string_view{"{\"a\":-0}"},
+                                         std::string_view{"{\"a\":1.0}"}}) {
+        RAWFRAME_EXPECT(!parseCanonicalRecord(kText).has_value());
+    }
 }
