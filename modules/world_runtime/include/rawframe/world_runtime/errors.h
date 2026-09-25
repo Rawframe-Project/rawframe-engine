@@ -15,6 +15,10 @@ inline constexpr result::ErrorDomain kWorldRuntimeDomain{
 enum class WorldRuntimeError : std::uint32_t {
     SettingOutOfRange = 1,
     AlreadyStarted = 2,
+    /// Something that needs the running World was asked for before start.
+    NotStarted = 3,
+    /// A checkpoint could not be read, written, or published.
+    CheckpointFailed = 4,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(WorldRuntimeError error) noexcept {

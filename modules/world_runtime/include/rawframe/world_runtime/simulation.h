@@ -9,6 +9,8 @@
 #include "rawframe/world/world.h"
 
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <vector>
 
 namespace rawframe::world_runtime {
@@ -50,6 +52,21 @@ public:
     /// The next tick to run.
     [[nodiscard]] virtual world::TickIndex tick() const noexcept = 0;
     [[nodiscard]] virtual world::TickRate rate() const noexcept = 0;
+
+    /// Counts World replacements. A participant that keeps entity handles
+    /// checks it and lets them go when it changes: they name nothing in the
+    /// new World (SPEC-0011 publication).
+    [[nodiscard]] virtual std::uint64_t generation() const noexcept = 0;
+    /// An empty World with the running one's registry and settings, for a
+    /// restore to build off to the side. `failed_precondition` before start.
+    [[nodiscard]] virtual result::Result<std::unique_ptr<world::World>> candidate() const = 0;
+    /// Replaces the World, between ticks and on the Host thread only; `next`
+    /// is the next tick to run. It cannot fail once called: the old World is
+    /// gone and the new one ticks from `next`.
+    virtual void replace(std::unique_ptr<world::World> world, world::TickIndex next) noexcept = 0;
+    /// Runs no tick at or past `limit` until the limit moves or is lifted, so
+    /// something can happen at an exact tick between two of them.
+    virtual void holdAt(std::optional<world::TickIndex> limit) noexcept = 0;
 };
 
 inline constexpr composition::Capability<Simulation> kSimulation{"rawframe.world.simulation"};

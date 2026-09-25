@@ -1,3 +1,4 @@
+#include "checkpoints.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/world_runtime/errors.h"
 #include "rawframe/world_runtime/registrar.h"
@@ -96,6 +97,31 @@ public:
     world::TickRate rate() const noexcept override {
         return settings_.rate;
     }
+    std::uint64_t generation() const noexcept override {
+        return generation_;
+    }
+
+    result::Result<std::unique_ptr<world::World>> candidate() const override {
+        if (registry_ == nullptr) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::FailedPrecondition,
+                             kWorldRuntimeDomain,
+                             code(WorldRuntimeError::NotStarted),
+                             "a candidate World exists only once the World has started")
+                    .error()};
+        }
+        return std::make_unique<world::World>(registry_, settings_.world);
+    }
+
+    void replace(std::unique_ptr<world::World> world, world::TickIndex next) noexcept override {
+        world_ = std::move(world);
+        tick_ = next;
+        ++generation_;
+    }
+
+    void holdAt(std::optional<world::TickIndex> limit) noexcept override {
+        hold_ = limit;
+    }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         started_ = true;
@@ -130,7 +156,7 @@ public:
             return;
         }
         const world::TickPacer::Due kDue = pacer_->due(frame.now);
-        for (std::uint32_t index = 0; index < kDue.run && running_; ++index) {
+        for (std::uint32_t index = 0; index < kDue.run && running_ && (!hold_ || tick_ < *hold_); ++index) {
             const execution::MonotonicInstant kStart = clock_->now();
             auto report = schedule_->runTick(*world_, tick_, settings_.rate, emitter_);
             record(clock_->now() - kStart);
@@ -208,6 +234,8 @@ private:
     std::optional<world::Schedule> schedule_;
     std::optional<world::TickPacer> pacer_;
     world::TickIndex tick_;
+    std::uint64_t generation_ = 0;
+    std::optional<world::TickIndex> hold_;
     diagnostics::Emitter emitter_;
     bool started_ = false;
     bool running_ = false;
@@ -231,6 +259,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .budgetOwner = "world",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::RunWorlds),
     });
+    registerCheckpoints(registrar);
 }
 
 } // namespace rawframe::world_runtime
