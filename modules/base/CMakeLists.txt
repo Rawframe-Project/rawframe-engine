@@ -9,3 +9,11 @@ rawframe_module_tests(NAME base SOURCES
     tests/secure_random_test.cpp
     tests/sha256_test.cpp
 )
+
+# SHA-256 is optimized in every configuration: the cook hashes its own
+# executable and every source for its keys, and unoptimized hashing under
+# the sanitizers took a recook past the runners_recooked test's window
+# (D146). Its known-answer tests hold it to the standard either way.
+if(NOT MSVC)
+    set_source_files_properties(src/sha256.cpp PROPERTIES COMPILE_OPTIONS "-O2")
+endif()
