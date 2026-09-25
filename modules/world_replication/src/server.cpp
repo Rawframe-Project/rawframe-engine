@@ -181,12 +181,22 @@ struct ReplicationServer::State {
     /// where each is, by present index.
     std::vector<std::byte> named;
     std::vector<std::size_t> namedAt;
+    /// Whether each table component's codec names entities, known once.
+    std::vector<std::uint8_t> naming;
     /// Every positioned entity, in entity order, when interest is spatial.
     struct Located {
         world::EntityHandle entity;
         std::array<double, 3> at{};
     };
     std::vector<Located> located;
+    /// Every entity with a replicated value, in entity order, and where it
+    /// is: what each connection's mappings are walked along.
+    struct PresentEntity {
+        world::EntityHandle entity;
+        bool located = false;
+        std::array<double, 3> at{};
+    };
+    std::vector<PresentEntity> entities;
     std::vector<std::pair<std::uint32_t, std::size_t>> inDatagram;
     struct Candidate {
         std::uint64_t priority = 0;
@@ -395,6 +405,20 @@ struct ReplicationServer::State {
             return left.entity != right.entity ? left.entity < right.entity : left.component < right.component;
         });
         locate(world);
+        entities.clear();
+        auto where = located.begin();
+        for (std::size_t index = 0; index < present.size(); ++index) {
+            const world::EntityHandle kEntity = present[index].entity;
+            if (index != 0 && present[index - 1].entity == kEntity) {
+                continue;
+            }
+            while (where != located.end() && where->entity < kEntity) {
+                ++where;
+            }
+            const bool kLocated = where != located.end() && where->entity == kEntity;
+            entities.push_back(PresentEntity{
+                .entity = kEntity, .located = kLocated, .at = kLocated ? where->at : std::array<double, 3>{}});
+        }
         for (auto& [id, peer] : peers) {
             publishTo(peer, tick);
         }
@@ -430,24 +454,23 @@ struct ReplicationServer::State {
         });
     }
 
-    [[nodiscard]] const Located* locationOf(world::EntityHandle entity) const noexcept {
+    /// Where a connection's player is, if it has a position.
+    [[nodiscard]] const std::array<double, 3>* locationOf(world::EntityHandle entity) const noexcept {
         const auto kFound =
             std::lower_bound(located.begin(), located.end(), entity, [](const Located& value, world::EntityHandle key) {
                 return value.entity < key;
             });
-        return kFound != located.end() && kFound->entity == entity ? &*kFound : nullptr;
+        return kFound != located.end() && kFound->entity == entity ? &kFound->at : nullptr;
     }
 
     /// Whether `entity` is in the interest of a connection whose player is
     /// at `viewer`; `mapped` says whether it already is, and so whether it
     /// is held to the leaving radius or the entering one.
-    [[nodiscard]] bool
-    relevant(const Peer& peer, const Located* viewer, world::EntityHandle entity, bool mapped) const noexcept {
-        if (!settings.interest || entity == peer.player) {
-            return true;
-        }
-        const Located* const kWhere = locationOf(entity);
-        if (kWhere == nullptr) {
+    [[nodiscard]] bool relevant(const Peer& peer,
+                                const std::array<double, 3>* viewer,
+                                const PresentEntity& entity,
+                                bool mapped) const noexcept {
+        if (!settings.interest || entity.entity == peer.player || !entity.located) {
             return true;
         }
         if (viewer == nullptr) {
@@ -455,7 +478,7 @@ struct ReplicationServer::State {
         }
         double distance = 0;
         for (std::size_t axis = 0; axis < 3; ++axis) {
-            const double kDelta = kWhere->at[axis] - viewer->at[axis];
+            const double kDelta = entity.at[axis] - (*viewer)[axis];
             distance += kDelta * kDelta;
         }
         const double kLimit = mapped ? settings.interest->leaveRadius : settings.interest->radius;
@@ -465,10 +488,10 @@ struct ReplicationServer::State {
 
     [[nodiscard]] bool isPresent(world::EntityHandle entity) const noexcept {
         const auto kFound = std::lower_bound(
-            present.begin(), present.end(), entity, [](const PresentValue& value, world::EntityHandle key) {
+            entities.begin(), entities.end(), entity, [](const PresentEntity& value, world::EntityHandle key) {
                 return value.entity < key;
             });
-        return kFound != present.end() && kFound->entity == entity;
+        return kFound != entities.end() && kFound->entity == entity;
     }
 
     void sendPace(Peer& peer) {
@@ -492,12 +515,16 @@ struct ReplicationServer::State {
         if (settings.input && peer.heardInput && tick.value % settings.paceInterval == 0) {
             sendPace(peer);
         }
-        const Located* const kViewer = locationOf(peer.player);
+        const std::array<double, 3>* const kViewer = locationOf(peer.player);
         // Retire what is gone or out of interest; the ID is never used again
-        // in this epoch.
+        // in this epoch. Both in entity order: one walk along the entities.
+        auto walk = entities.begin();
         for (auto mapping = peer.mapped.begin(); mapping != peer.mapped.end();) {
-            const bool kPresent = isPresent(mapping->first);
-            if (kPresent && relevant(peer, kViewer, mapping->first, true)) {
+            while (walk != entities.end() && walk->entity < mapping->first) {
+                ++walk;
+            }
+            const bool kPresent = walk != entities.end() && walk->entity == mapping->first;
+            if (kPresent && relevant(peer, kViewer, *walk, true)) {
                 ++mapping;
                 continue;
             }
@@ -524,20 +551,16 @@ struct ReplicationServer::State {
         // Both in entity order: one walk along the mappings, which a
         // declaration never moves behind.
         auto known = peer.mapped.begin();
-        for (std::size_t index = 0; index < present.size(); ++index) {
-            const world::EntityHandle kEntity = present[index].entity;
-            if (index != 0 && present[index - 1].entity == kEntity) {
-                continue;
-            }
-            while (known != peer.mapped.end() && known->first < kEntity) {
+        for (const PresentEntity& entity : entities) {
+            while (known != peer.mapped.end() && known->first < entity.entity) {
                 ++known;
             }
-            if ((known != peer.mapped.end() && known->first == kEntity) ||
+            if ((known != peer.mapped.end() && known->first == entity.entity) ||
                 peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0 ||
-                !relevant(peer, kViewer, kEntity, false)) {
+                !relevant(peer, kViewer, entity, false)) {
                 continue;
             }
-            kDeclare(kEntity);
+            kDeclare(entity.entity);
         }
         // State for acknowledged mappings, as many datagrams as the byte
         // budget allows.
@@ -592,7 +615,7 @@ struct ReplicationServer::State {
         const PeerNames kNames{peer};
         const auto kValueOf = [this](std::size_t index) {
             const PresentValue& value = present[index];
-            return settings.table.components[value.component].namesEntities()
+            return naming[value.component] != 0
                        ? std::span<const std::byte>{named}.subspan(namedAt[index], value.length)
                        : std::span<const std::byte>{encoded}.subspan(value.offset, value.length);
         };
@@ -615,7 +638,7 @@ struct ReplicationServer::State {
             Replica& replica = mapping->replicas[value.component];
             // An entity it names goes by this connection's name for it.
             const ComponentCodec& codec = settings.table.components[value.component];
-            if (codec.namesEntities()) {
+            if (naming[value.component] != 0) {
                 namedAt[index] = named.size();
                 named.resize(named.size() + value.length);
                 network::Writer writer{std::span{named}.subspan(namedAt[index])};
@@ -749,6 +772,9 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
     auto state = std::make_unique<State>();
     state->sessions = &sessions;
     state->settings = std::move(settings);
+    for (const ComponentCodec& codec : state->settings.table.components) {
+        state->naming.push_back(codec.namesEntities() ? 1 : 0);
+    }
     return std::make_unique<ReplicationServer>(std::move(state));
 }
 
