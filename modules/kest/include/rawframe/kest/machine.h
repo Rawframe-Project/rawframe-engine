@@ -14,8 +14,9 @@
 
 namespace rawframe::kest {
 
-/// Who wrote the code a machine runs. Untrusted code waits for Kest's
-/// untrusted profile, and starting it is refused until then (ADR-0084).
+/// Who wrote the code a machine runs (ADR-0084). Untrusted code is offered
+/// only doors marked safe for it and runs under Kest's untrusted profile:
+/// only what the verifier proved, with its heap and fuel ceilings.
 enum class Trust : std::uint8_t {
     Trusted,
     Untrusted

@@ -265,13 +265,34 @@ RAWFRAME_TEST(DoorsAreCheckedBeforeAnythingRuns) {
                                 KestError::DoorShapeMismatch));
 }
 
-RAWFRAME_TEST(UntrustedCodeWaitsForItsProfile) {
-    const auto kProgram = compile(kDoors);
+RAWFRAME_TEST(UntrustedCodeRunsWithOnlyItsDoors) {
     Doorway doorway;
-    RAWFRAME_EXPECT(refusedWith(Machine::start(kProgram, table(doorway, false), Trust::Untrusted, kLimits),
+    // Every door it asks for must be marked safe.
+    RAWFRAME_EXPECT(refusedWith(Machine::start(compile(kDoors), table(doorway, true), Trust::Untrusted, kLimits),
                                 KestError::DoorNotForUntrusted));
-    RAWFRAME_EXPECT(
-        refusedWith(Machine::start(compile(kAdd), {}, Trust::Untrusted, kLimits), KestError::UntrustedNotYetSupported));
+    // One that asks only for safe doors runs, under its ceilings.
+    constexpr std::string_view kScaled = "module t\n"
+                                         "\n"
+                                         "extern fn Engine.scale(value: i32) -> i32 no.alloc\n"
+                                         "\n"
+                                         "fn run(value: i32) -> i32 {\n"
+                                         "    return Engine.scale(value)\n"
+                                         "}\n";
+    auto machine = Machine::start(compile(kScaled), table(doorway, true), Trust::Untrusted, kLimits);
+    RAWFRAME_EXPECT(machine.has_value());
+    if (!machine.has_value()) {
+        return;
+    }
+    auto run = (*machine)->entry("run");
+    std::array<Value, 1> frame{Value{.integer = 4}};
+    RAWFRAME_EXPECT(run.has_value() && (*machine)->call(*run, frame).hasValue() && frame[0].integer == 40);
+    auto spinning = Machine::start(compile(kAdd), {}, Trust::Untrusted, kLimits);
+    RAWFRAME_EXPECT(spinning.has_value());
+    if (spinning.has_value()) {
+        auto spin = (*spinning)->entry("spin");
+        std::array<Value, 1> empty{};
+        RAWFRAME_EXPECT(spin.has_value() && failedWith((*spinning)->call(*spin, empty), KestError::FuelExhausted));
+    }
 }
 
 RAWFRAME_TEST(EveryMachineHasFiniteLimits) {

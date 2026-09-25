@@ -162,12 +162,6 @@ result::Result<std::unique_ptr<Machine>> Machine::start(std::shared_ptr<const Pr
                                           .shape = std::move(shape),
                                           .name = std::string{kName}});
     }
-    if (trust == Trust::Untrusted) {
-        return refuse(result::ErrorClass::Unsupported,
-                      KestError::UntrustedNotYetSupported,
-                      "untrusted code waits for Kest's untrusted profile");
-    }
-
     KestLimits kestLimits{.stack_slots = limits.stackSlots,
                           .call_depth = limits.callDepth,
                           .heap_bytes = limits.heapBytes,
@@ -188,13 +182,18 @@ result::Result<std::unique_ptr<Machine>> Machine::start(std::shared_ptr<const Pr
         return refuse(result::ErrorClass::ResourceExhausted, KestError::DidNotStart, "no memory for a door table");
     }
     for (Binding& binding : state->bindings) {
-        if (!kest_host_bind(kHost, binding.name.c_str(), &crossing, &binding)) {
+        // Every door untrusted code asks for is marked safe (checked above);
+        // Kest refuses the start for any it was not told of.
+        if (!kest_host_bind(kHost, binding.name.c_str(), &crossing, &binding) ||
+            (trust == Trust::Untrusted && !kest_host_open(kHost, binding.name.c_str()))) {
             kest_host_free(kHost);
             return refuse(result::ErrorClass::ResourceExhausted, KestError::DidNotStart, "a door could not be bound");
         }
     }
     // A machine keeps its own copy of what was bound, so the host goes now.
-    state->runtime = kest_start(kBuild, kHost, &kestLimits);
+    // Untrusted code runs only what Kest's verifier proved (ADR-0084).
+    state->runtime = trust == Trust::Untrusted ? kest_start_untrusted(kBuild, kHost, &kestLimits)
+                                               : kest_start(kBuild, kHost, &kestLimits);
     kest_host_free(kHost);
     if (state->runtime == nullptr) {
         ReportFile said;

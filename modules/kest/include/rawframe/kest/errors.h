@@ -22,8 +22,6 @@ enum class KestError : std::uint32_t {
     DoorShapeMismatch = 4,
     /// Untrusted code asked for a door not marked safe for it.
     DoorNotForUntrusted = 5,
-    /// Untrusted code waits for Kest's untrusted profile (ADR-0084).
-    UntrustedNotYetSupported = 6,
     /// A required limit was zero.
     MissingLimit = 7,
     /// The machine did not start; the report says why.
