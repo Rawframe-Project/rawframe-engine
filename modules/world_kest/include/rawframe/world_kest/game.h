@@ -28,9 +28,16 @@
 // player's components a client predicts, and a system marked `predicted` runs
 // on predicting clients too, over the player alone (SPEC-0041); it may write
 // no replicated component that is not predicted and draw from no World
-// stream, whose state a client does not have. An `entity` line names a
-// component's fields that hold a `rawframe.world.Entity`, which a checkpoint
-// writes as a reference rather than as numbers:
+// stream, whose state a client does not have. An `interest` line makes what
+// each connection is sent spatial: an entity whose component's coordinate
+// fields lie within the radius of the player's is sent, one without the
+// component is sent to every connection, and the player always is:
+//
+//   interest game.position x y within 40
+//
+// An `entity` line names a component's fields that hold a
+// `rawframe.world.Entity`, which a checkpoint writes as a reference rather
+// than as numbers:
 //
 //   entity game.target who
 
@@ -41,6 +48,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -93,6 +101,14 @@ struct GameSpawn {
     std::vector<GameSpawnComponent> components;
 };
 
+/// Spatial interest: the position component, its coordinate fields, and the
+/// radius within which the player is sent another entity.
+struct GameInterest {
+    std::string component;
+    std::vector<std::string> axes;
+    double radius = 0;
+};
+
 /// A component field holding an entity, by its path in the Kest type.
 struct GameEntityField {
     std::string component;
@@ -112,6 +128,7 @@ struct GameDescription {
     /// The player's components a client predicts from its own input.
     std::vector<std::string> predicted;
     std::vector<GameEntityField> entityFields;
+    std::optional<GameInterest> interest;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as

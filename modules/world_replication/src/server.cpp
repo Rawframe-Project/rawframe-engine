@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstring>
 #include <deque>
 #include <map>
 #include <optional>
@@ -48,7 +50,9 @@ struct SentState {
     std::uint64_t sequence = 0;
     std::uint64_t tick = 0;
     bool acknowledged = false;
-    std::vector<std::pair<world::EntityHandle, std::size_t>> records;
+    /// By mapping ID, which an entity that left interest and came back
+    /// does not share with its earlier mapping.
+    std::vector<std::pair<std::uint32_t, std::size_t>> records;
 };
 
 /// State datagrams remembered per connection for acknowledgement. One not
@@ -99,6 +103,9 @@ struct ReplicationServer::State {
     std::vector<schema::ComponentRuntimeId> playerComponents;
     std::optional<schema::ComponentRuntimeId> input;
     std::vector<world::ColumnQuery> queries;
+    std::optional<world::ColumnQuery> positions;
+    std::size_t positionSize = 0;
+    std::vector<schema::ComponentRuntimeId> reads;
     std::vector<std::unique_ptr<world::System>> systems;
     std::vector<schema::ComponentRuntimeId> inputWrites;
 
@@ -112,7 +119,13 @@ struct ReplicationServer::State {
     };
     std::vector<PresentValue> present;
     std::vector<std::byte> encoded;
-    std::vector<std::pair<world::EntityHandle, std::size_t>> inDatagram;
+    /// Every positioned entity, in entity order, when interest is spatial.
+    struct Located {
+        world::EntityHandle entity;
+        std::array<double, 3> at{};
+    };
+    std::vector<Located> located;
+    std::vector<std::pair<std::uint32_t, std::size_t>> inDatagram;
     struct Candidate {
         std::uint64_t priority = 0;
         std::size_t present = 0;
@@ -180,8 +193,12 @@ struct ReplicationServer::State {
                 continue;
             }
             sent->acknowledged = true;
-            for (const auto& [entity, component] : sent->records) {
-                const auto kMapping = peer.mapped.find(entity);
+            for (const auto& [id, component] : sent->records) {
+                const auto kEntity = peer.byNetEntity.find(id);
+                if (kEntity == peer.byNetEntity.end()) {
+                    continue;
+                }
+                const auto kMapping = peer.mapped.find(kEntity->second);
                 if (kMapping == peer.mapped.end() || component >= kMapping->second.replicas.size()) {
                     continue;
                 }
@@ -281,9 +298,73 @@ struct ReplicationServer::State {
         std::sort(present.begin(), present.end(), [](const PresentValue& left, const PresentValue& right) {
             return left.entity != right.entity ? left.entity < right.entity : left.component < right.component;
         });
+        locate(world);
         for (auto& [id, peer] : peers) {
             publishTo(peer, tick);
         }
+    }
+
+    void locate(world::World& world) {
+        located.clear();
+        if (!positions) {
+            return;
+        }
+        const InterestSettings& interest = *settings.interest;
+        positions->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                const std::byte* const kValue = chunk.columns[0] + (row * positionSize);
+                Located entry{.entity = chunk.entities[row]};
+                for (std::size_t axis = 0; axis < std::min(interest.axes.size(), entry.at.size()); ++axis) {
+                    const WireField& field = interest.axes[axis];
+                    if (field.kind == WireKind::F32) {
+                        float value = 0;
+                        std::memcpy(&value, kValue + field.offset, sizeof value);
+                        entry.at[axis] = value;
+                    } else {
+                        double value = 0;
+                        std::memcpy(&value, kValue + field.offset, sizeof value);
+                        entry.at[axis] = value;
+                    }
+                }
+                located.push_back(entry);
+            }
+        });
+        std::sort(located.begin(), located.end(), [](const Located& left, const Located& right) {
+            return left.entity < right.entity;
+        });
+    }
+
+    [[nodiscard]] const Located* locationOf(world::EntityHandle entity) const noexcept {
+        const auto kFound =
+            std::lower_bound(located.begin(), located.end(), entity, [](const Located& value, world::EntityHandle key) {
+                return value.entity < key;
+            });
+        return kFound != located.end() && kFound->entity == entity ? &*kFound : nullptr;
+    }
+
+    /// Whether `entity` is in the interest of a connection whose player is
+    /// at `viewer`; `mapped` says whether it already is, and so whether it
+    /// is held to the leaving radius or the entering one.
+    [[nodiscard]] bool
+    relevant(const Peer& peer, const Located* viewer, world::EntityHandle entity, bool mapped) const noexcept {
+        if (!settings.interest || entity == peer.player) {
+            return true;
+        }
+        const Located* const kWhere = locationOf(entity);
+        if (kWhere == nullptr) {
+            return true;
+        }
+        if (viewer == nullptr) {
+            return false;
+        }
+        double distance = 0;
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            const double kDelta = kWhere->at[axis] - viewer->at[axis];
+            distance += kDelta * kDelta;
+        }
+        const double kLimit = mapped ? settings.interest->leaveRadius : settings.interest->radius;
+        // A position that is not a number is never within reach.
+        return distance <= kLimit * kLimit;
     }
 
     [[nodiscard]] bool isPresent(world::EntityHandle entity) const noexcept {
@@ -312,27 +393,39 @@ struct ReplicationServer::State {
         if (settings.input && peer.heardInput && tick.value % settings.paceInterval == 0) {
             sendPace(peer);
         }
-        // Retire what is gone; the ID is never used again in this epoch.
+        const Located* const kViewer = locationOf(peer.player);
+        // Retire what is gone or out of interest; the ID is never used again
+        // in this epoch.
         for (auto mapping = peer.mapped.begin(); mapping != peer.mapped.end();) {
-            if (isPresent(mapping->first)) {
+            const bool kPresent = isPresent(mapping->first);
+            if (kPresent && relevant(peer, kViewer, mapping->first, true)) {
                 ++mapping;
                 continue;
             }
+            statistics.interestLeft += kPresent ? 1 : 0;
             sendMapping(peer, network::ControlFrame::MappingRetire, mapping->second.id, false);
             peer.byNetEntity.erase(mapping->second.id.value);
             mapping = peer.mapped.erase(mapping);
         }
-        // Declare what is new, before any state names it.
+        // Declare what is new, before any state names it: the connection's
+        // own player first, whatever the bound on mappings.
+        const auto kDeclare = [&](world::EntityHandle entity) {
+            const NetEntityId kId{peer.nextNetEntity++};
+            peer.mapped[entity] = Mapping{.id = kId};
+            peer.byNetEntity[kId.value] = entity;
+            sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
+        };
+        if (!peer.mapped.contains(peer.player) && isPresent(peer.player) && peer.nextNetEntity != 0) {
+            kDeclare(peer.player);
+        }
         for (std::size_t index = 0; index < present.size(); ++index) {
             const world::EntityHandle kEntity = present[index].entity;
             if ((index != 0 && present[index - 1].entity == kEntity) || peer.mapped.contains(kEntity) ||
-                peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0) {
+                peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0 ||
+                !relevant(peer, kViewer, kEntity, false)) {
                 continue;
             }
-            const NetEntityId kId{peer.nextNetEntity++};
-            peer.mapped[kEntity] = Mapping{.id = kId};
-            peer.byNetEntity[kId.value] = kEntity;
-            sendMapping(peer, network::ControlFrame::MappingDeclare, kId, kEntity == peer.player);
+            kDeclare(kEntity);
         }
         // State for acknowledged mappings, as many datagrams as the byte
         // budget allows.
@@ -440,7 +533,7 @@ struct ReplicationServer::State {
             }
             replica.sentAt = tick.value;
             replica.priority = 0;
-            inDatagram.emplace_back(value.entity, value.component);
+            inDatagram.emplace_back(candidate.mapping->id.value, value.component);
             used = recordWriter.written().size();
             ++count;
             ++statistics.recordsSent;
@@ -503,6 +596,21 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
                       ReplicationError::Malformed,
                       "the input codec is invalid, or a replication bound is zero");
     }
+    if (settings.interest) {
+        const InterestSettings& interest = *settings.interest;
+        const bool kAxes = !interest.axes.empty() && interest.axes.size() <= 3 &&
+                           std::ranges::all_of(interest.axes, [](const WireField& field) {
+                               return field.kind == WireKind::F32 || field.kind == WireKind::F64;
+                           });
+        // Written so that a radius that is not a number fails too.
+        if (!kAxes || !(interest.radius > 0) || !(interest.leaveRadius >= interest.radius) ||
+            !std::isfinite(interest.leaveRadius)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          ReplicationError::Malformed,
+                          "interest takes one to three floating-point axes, a positive radius, and a leaving radius "
+                          "no smaller");
+        }
+    }
     auto state = std::make_unique<State>();
     state->sessions = &sessions;
     state->settings = std::move(settings);
@@ -517,6 +625,7 @@ result::Status ReplicationServer::declareSystems(const schema::SchemaRegistry& r
     state.playerComponents.clear();
     state.inputWrites.clear();
     state.input.reset();
+    state.positions.reset();
     for (const ComponentCodec& codec : state.settings.table.components) {
         RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, registry.find(codec.component));
         const schema::ComponentDescriptor& descriptor = registry.descriptor(kId);
@@ -544,6 +653,25 @@ result::Status ReplicationServer::declareSystems(const schema::SchemaRegistry& r
         state.input = kId;
         state.inputWrites.push_back(kId);
     }
+    state.reads = state.table;
+    if (state.settings.interest) {
+        const InterestSettings& interest = *state.settings.interest;
+        RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, registry.find(interest.position));
+        const std::size_t kSize = registry.descriptor(kId).size;
+        state.positionSize = kSize;
+        if (!std::ranges::all_of(interest.axes, [&](const WireField& field) {
+                return field.offset <= kSize && widthOf(field.kind) <= kSize - field.offset;
+            })) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          ReplicationError::FieldUnsupported,
+                          "an interest axis lies outside the position component");
+        }
+        const std::array<world::ColumnTerm, 1> kTerm = {world::ColumnTerm{kId, world::Access::Read}};
+        RAWFRAME_TRY_ASSIGN(state.positions, world::ColumnQuery::resolve(kTerm, registry));
+        if (std::ranges::find(state.reads, kId) == state.reads.end()) {
+            state.reads.push_back(kId);
+        }
+    }
     state.systems.clear();
     state.systems.push_back(std::make_unique<ApplyInputs>(state));
     state.systems.push_back(std::make_unique<Publish>(state));
@@ -553,7 +681,7 @@ result::Status ReplicationServer::declareSystems(const schema::SchemaRegistry& r
                                                .system = state.systems[0].get()});
     systems.push_back(world::SystemDeclaration{.identity = "rawframe.replication.publish",
                                                .phase = world::Phase::Replication,
-                                               .reads = state.table,
+                                               .reads = state.reads,
                                                .system = state.systems[1].get()});
     return {};
 }

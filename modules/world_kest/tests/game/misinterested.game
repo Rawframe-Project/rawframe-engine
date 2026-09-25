@@ -1,0 +1,10 @@
+# Interest declared wrongly: a coordinate the position does not have.
+program movers.kest
+
+component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 movers.position Position
+component 5b1c9e22-4f07-4d3a-8c6b-91e7d2a0f4c8 movers.velocity Velocity
+
+system movers.integrate simulation integrate write movers.position read movers.velocity
+
+replicate movers.position
+interest movers.position x z within 10

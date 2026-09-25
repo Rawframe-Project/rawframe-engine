@@ -4,6 +4,7 @@
 
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <optional>
 
 namespace rawframe::world_kest {
@@ -180,6 +181,25 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     GameEntityField{.component = std::string{kWords[1]}, .field = std::string{kWords[at]}});
             }
             uses.emplace_back(number, std::string{kWords[1]});
+        } else if (kKeyword == "interest") {
+            // interest <component> <field>... within <radius>
+            double radius = 0;
+            const bool kShaped = kWords.size() >= 5 && kWords.size() <= 7 && kWords[kWords.size() - 2] == "within";
+            const std::string_view kRadius = kShaped ? kWords.back() : std::string_view{};
+            const auto kRead = std::from_chars(kRadius.data(), kRadius.data() + kRadius.size(), radius);
+            if (!kShaped || game.interest.has_value() || kRead.ec != std::errc{} ||
+                kRead.ptr != kRadius.data() + kRadius.size() || !(radius > 0) || !std::isfinite(radius)) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a game has at most one interest line, `interest <component> <field>... within "
+                               "<radius>`, with one to three fields and a positive radius");
+            }
+            GameInterest interest{.component = std::string{kWords[1]}, .axes = {}, .radius = radius};
+            for (std::size_t at = 2; at + 2 < kWords.size(); ++at) {
+                interest.axes.emplace_back(kWords[at]);
+            }
+            uses.emplace_back(number, interest.component);
+            game.interest = std::move(interest);
         } else if (kKeyword == "input") {
             if (kWords.size() != 2 || !game.input.empty()) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names at most one input component");

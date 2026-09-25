@@ -1,7 +1,7 @@
 // A server World and a client World over loopback: the client is admitted,
 // gets a player, mirrors every replicated entity, drives its player with
 // input, and sees exactly the server's committed values, late but never wrong,
-// through loss and reordering.
+// through loss and reordering, and only what is in its interest.
 
 #include "rawframe/network_loopback/loopback.h"
 #include "rawframe/test/test.h"
@@ -9,6 +9,7 @@
 #include "rawframe/world_replication/client.h"
 #include "rawframe/world_replication/server.h"
 
+#include <algorithm>
 #include <cstring>
 #include <map>
 #include <vector>
@@ -153,7 +154,8 @@ struct Scenario {
 
     explicit Scenario(network_loopback::LoopbackConditions conditions,
                       std::size_t stateBytesPerTick = 1092,
-                      bool predicting = false)
+                      bool predicting = false,
+                      std::optional<world_replication::InterestSettings> interest = std::nullopt)
         : network(clock, conditions) {
         serverSessions = *network::Sessions::server(
             *serverTransport, clock, {.profile = kSessions, .expected = compatibility(), .seed = 1});
@@ -163,6 +165,7 @@ struct Scenario {
             {.table = {.components = {positionCodec(), steerCodec()}},
              .playerComponents = {Position::kComponentTypeId, Steer::kComponentTypeId},
              .input = steerCodec(),
+             .interest = std::move(interest),
              .stateBytesPerTick = stateBytesPerTick});
         std::vector<world::SystemDeclaration> declarations;
         RAWFRAME_EXPECT(server->declareSystems(*schema, declarations).has_value());
@@ -206,6 +209,19 @@ struct Scenario {
     const Position* firstPlayerPosition() {
         const world::EntityHandle kPlayer = server->player(network::ConnectionId{1});
         return kPlayer.isNull() ? nullptr : serverWorld.get(kPlayer, *schema->key<Position>());
+    }
+
+    /// Where the client mirrors something other than its own player.
+    std::vector<float> othersAt() {
+        std::vector<float> found;
+        auto query = world::Query<world::Read<Position>>::resolve(*schema);
+        query->forEach(clientWorld, [&](world::EntityHandle entity, const Position& position) {
+            if (entity != client->owned()) {
+                found.push_back(position.x);
+            }
+        });
+        std::sort(found.begin(), found.end());
+        return found;
     }
 
     std::size_t mirrored() {
@@ -372,4 +388,68 @@ RAWFRAME_TEST(PredictionRecoversFromLostInput) {
     const Position* server = scenario.firstPlayerPosition();
     RAWFRAME_EXPECT(shown != nullptr && server != nullptr && shown->x == server->x && shown->y == server->y);
     RAWFRAME_EXPECT(scenario.client->predictionStatistics().confirmed > 0);
+}
+
+RAWFRAME_TEST(InterestSendsWhatIsNearThePlayerAndAlwaysThePlayer) {
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)},
+                      1092,
+                      false,
+                      world_replication::InterestSettings{
+                          .position = Position::kComponentTypeId,
+                          .axes = {{offsetof(Position, x), WireKind::F32}, {offsetof(Position, y), WireKind::F32}},
+                          .radius = 10,
+                          .leaveRadius = 12}};
+    const auto kPosition = *scenario.schema->key<Position>();
+    const auto kSteer = *scenario.schema->key<Steer>();
+    for (const float kX : {5.0F, 30.0F, 1000.0F}) {
+        const world::EntityHandle kProp = *scenario.serverWorld.create();
+        RAWFRAME_EXPECT(scenario.serverWorld.insert(kProp, kPosition, Position{kX, 0}).has_value());
+    }
+    // Without a position, it is everywhere and sent to everyone.
+    const world::EntityHandle kEverywhere = *scenario.serverWorld.create();
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kEverywhere, kSteer, Steer{2, 2}).has_value());
+    const auto kPlaceAt = [&](float x) {
+        const world::EntityHandle kPlayer = scenario.server->player(network::ConnectionId{1});
+        if (!kPlayer.isNull()) {
+            *scenario.serverWorld.get(kPlayer, kPosition) = Position{x, 0};
+        }
+        for (int step = 0; step < 20; ++step) {
+            scenario.step(Steer{});
+        }
+    };
+    const auto kEverywhereMirrored = [&] {
+        std::size_t count = 0;
+        auto query = world::Query<world::Read<Steer>>::resolve(*scenario.schema);
+        query->forEach(scenario.clientWorld, [&](world::EntityHandle entity, const Steer& steer) {
+            count += entity != scenario.client->owned() && steer.dx == 2 ? 1 : 0;
+        });
+        return count;
+    };
+
+    kPlaceAt(0);
+    kPlaceAt(0);
+    RAWFRAME_EXPECT(!scenario.client->owned().isNull());
+    RAWFRAME_EXPECT(scenario.othersAt() == std::vector<float>{5});
+    RAWFRAME_EXPECT(kEverywhereMirrored() == 1);
+
+    // Far from where it was: what it left behind is retired, what it came
+    // to is declared.
+    kPlaceAt(30);
+    RAWFRAME_EXPECT(scenario.othersAt() == std::vector<float>{30});
+    RAWFRAME_EXPECT(scenario.server->statistics().interestLeft == 1);
+    // Beyond the radius and within the leaving radius, it stays; beyond
+    // that, it goes.
+    kPlaceAt(41);
+    RAWFRAME_EXPECT(scenario.othersAt() == std::vector<float>{30});
+    kPlaceAt(43);
+    RAWFRAME_EXPECT(scenario.othersAt().empty());
+    kPlaceAt(1000);
+    RAWFRAME_EXPECT(scenario.othersAt() == std::vector<float>{1000});
+    // Coming back, it is declared afresh and its value sent again.
+    kPlaceAt(0);
+    RAWFRAME_EXPECT(scenario.othersAt() == std::vector<float>{5});
+    RAWFRAME_EXPECT(kEverywhereMirrored() == 1);
+    // The player itself was never out of its own interest.
+    const Position* mirror = scenario.clientWorld.get(scenario.client->owned(), kPosition);
+    RAWFRAME_EXPECT(mirror != nullptr && mirror->x == 0);
 }

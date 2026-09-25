@@ -1,5 +1,5 @@
 # The sample networked game: players steer, props drift, and clients
-# predict their own player.
+# predict their own player; each is sent what is within 64 of it.
 program arena.kest
 
 component 4e8c1a27-b6d3-4f90-8a15-c3e72d9b0f46 arena.position Position
@@ -13,3 +13,4 @@ replicate arena.position arena.steer
 player arena.position arena.steer
 input arena.steer
 predict arena.position arena.steer
+interest arena.position x y within 64

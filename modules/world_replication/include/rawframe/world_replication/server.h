@@ -5,7 +5,7 @@
 // its input window is decoded outside the tick and consumed exactly once per
 // input tick in `apply_inputs`; committed state is read in `replication` and
 // sent as self-sufficient state datagrams for entities whose mapping the
-// client has acknowledged. Interest is every replicated entity for now.
+// client has acknowledged, for the entities in that connection's interest.
 
 #include "rawframe/network/session.h"
 #include "rawframe/result/result.h"
@@ -29,6 +29,23 @@ struct ReplicationTable {
     std::vector<ComponentCodec> components;
 };
 
+/// Spatial interest (SPEC-0010; SPEC-0041's owned-entity invariant). A
+/// connection's own player is always in its interest, before any other rule
+/// or bound. Another entity with the position component enters when it lies
+/// within `radius` of the player and leaves beyond `leaveRadius`, so one at
+/// the edge does not come and go every tick; one without the component is
+/// in every connection's interest. A player without a position sees only
+/// itself and what has none. An entity that leaves is retired from the
+/// connection, as though it were gone, and one that comes back is declared
+/// afresh under a new ID.
+struct InterestSettings {
+    schema::ComponentTypeId position;
+    /// One to three coordinates, each an F32 or F64 field of the component.
+    std::vector<WireField> axes;
+    double radius = 0;
+    double leaveRadius = 0;
+};
+
 struct ServerReplicationSettings {
     ReplicationTable table;
     /// Components a player entity starts with, zeroed.
@@ -36,6 +53,8 @@ struct ServerReplicationSettings {
     /// The component a connection's input commands are written into, one of
     /// the player's; none for a game without input.
     std::optional<ComponentCodec> input;
+    /// Every entity is in every connection's interest without one.
+    std::optional<InterestSettings> interest;
     /// Entities one connection may have mapped at once.
     std::size_t maximumMapped = 4096;
     /// Input ticks a command may run ahead of the newest consumed one.
@@ -69,6 +88,8 @@ struct ServerReplicationStatistics {
     /// Left for a later tick by the per-connection byte budget.
     std::uint64_t recordsDeferred = 0;
     std::uint64_t acknowledgementsRefused = 0;
+    /// Mappings retired because the entity left a connection's interest.
+    std::uint64_t interestLeft = 0;
     std::uint64_t inputsConsumed = 0;
     std::uint64_t inputsHeld = 0;
     std::uint64_t inputsNeutral = 0;

@@ -83,6 +83,31 @@ RAWFRAME_TEST(PredictionIsDeclaredByLine) {
     RAWFRAME_EXPECT(refusedAt("program p.kest\npredict\n", WorldKestError::BadGameLine, "2"));
 }
 
+RAWFRAME_TEST(InterestIsDeclaredByLine) {
+    constexpr std::string_view kProgram = "program p.kest\n"
+                                          "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.position Position\n";
+    auto game = parseGame(std::string{kProgram} + "interest a.position x y within 40.5\n");
+    RAWFRAME_EXPECT(game.has_value() && game->interest.has_value());
+    if (!game.has_value() || !game->interest.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(game->interest->component == "a.position" && game->interest->radius == 40.5);
+    RAWFRAME_EXPECT((game->interest->axes == std::vector<std::string>{"x", "y"}));
+    // No field, four fields, no radius, a radius that is not positive, a
+    // second line, and an undeclared component.
+    for (const std::string_view kLine : {"interest a.position within 4\n",
+                                         "interest a.position x y z w within 4\n",
+                                         "interest a.position x y\n",
+                                         "interest a.position x within 0\n",
+                                         "interest a.position x within nan\n",
+                                         "interest a.position x within 4\n\ninterest a.position y within 4\n"}) {
+        RAWFRAME_EXPECT(refusedAt(std::string{kProgram} + std::string{kLine}, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(std::string{kProgram} + std::string{kLine}, WorldKestError::BadGameLine, "5"));
+    }
+    RAWFRAME_EXPECT(
+        refusedAt(std::string{kProgram} + "interest a.velocity x within 4\n", WorldKestError::UnknownName, "3"));
+}
+
 RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
     constexpr std::string_view kProgram = "program p.kest\n";
     RAWFRAME_EXPECT(refusedAt("program p.kest\nbuild x\n", WorldKestError::BadGameLine, "2"));
@@ -219,7 +244,9 @@ RAWFRAME_TEST(AGameThatDoesNotLoadFailsTheStart) {
     for (const std::string& kText : {std::string{"kest.game = /nonexistent/x.game\n"},
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "broken.game\n",
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
-                                         "mispredicted.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n"}) {
+                                         "mispredicted.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n",
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
+                                         "misinterested.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n"}) {
         const auto kConfiguration = composition::Configuration::parse(kText);
         composition::Composition composition{
             *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};

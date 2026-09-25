@@ -180,6 +180,7 @@ public:
         }
         RAWFRAME_TRY(planReplication(kText, kProgram));
         RAWFRAME_TRY(planPrediction(configuration));
+        RAWFRAME_TRY(planInterest());
         RAWFRAME_TRY(planCheckpoints());
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
@@ -335,6 +336,10 @@ public:
             .program = program_, .game = &game_, .descriptors = descriptors_, .limits = predictionLimits_});
     }
 
+    const std::optional<world_replication::InterestSettings>& interest() const noexcept override {
+        return interest_;
+    }
+
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
         if (unwritable_.has_value()) {
             return std::unexpected<result::Error>{refuse(result::ErrorClass::Unsupported,
@@ -440,6 +445,38 @@ private:
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap,
                             configuration.unsignedInteger("kest.prediction_heap_bytes", 4U << 20U));
         predictionLimits_ = kest::MachineLimits{.heapBytes = static_cast<std::size_t>(kHeap), .fuelPerCall = 1'000'000};
+        return {};
+    }
+
+    /// Who is sent what: the interest line's coordinate fields, each a
+    /// floating-point number of the position component. An entity leaves at
+    /// an eighth beyond the radius it entered at.
+    result::Status planInterest() {
+        if (!game_.interest.has_value()) {
+            return {};
+        }
+        const GameInterest& interest = *game_.interest;
+        const GameComponent& component = *componentNamed(interest.component);
+        const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(&component - game_.components.data())];
+        world_replication::InterestSettings settings{
+            .position = component.id, .axes = {}, .radius = interest.radius, .leaveRadius = interest.radius * 1.125};
+        for (const std::string& axis : interest.axes) {
+            const auto kField = std::ranges::find(layout.fields, axis, &kest::Field::name);
+            if (kField == layout.fields.end() ||
+                (kField->kind != kest::FieldKind::F32 && kField->kind != kest::FieldKind::F64)) {
+                return std::unexpected<result::Error>{
+                    refuse(result::ErrorClass::InvalidArgument,
+                           WorldKestError::UnknownName,
+                           "an interest line names a field that is not a floating-point number of its component")
+                        .error()
+                        .withContext("field", axis)};
+            }
+            settings.axes.push_back(world_replication::WireField{.offset = kField->offset,
+                                                                 .kind = kField->kind == kest::FieldKind::F32
+                                                                             ? world_replication::WireKind::F32
+                                                                             : world_replication::WireKind::F64});
+        }
+        interest_ = std::move(settings);
         return {};
     }
 
@@ -554,6 +591,7 @@ private:
     network::Fingerprint fingerprint_;
     std::vector<schema::ComponentTypeId> predicted_;
     kest::MachineLimits predictionLimits_;
+    std::optional<world_replication::InterestSettings> interest_;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.
     std::optional<GameEntityField> unwritable_;

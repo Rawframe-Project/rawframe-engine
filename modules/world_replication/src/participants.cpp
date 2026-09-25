@@ -99,6 +99,7 @@ public:
                                                           .playerComponents = {plan->playerComponents().begin(),
                                                                                plan->playerComponents().end()},
                                                           .input = plan->input(),
+                                                          .interest = plan->interest(),
                                                           .stateBytesPerTick = static_cast<std::size_t>(kPerTick)}));
         return simulation_->addSystems(*server_);
     }
@@ -140,6 +141,7 @@ public:
                       diagnostics::field("recordsSent", kStatistics.recordsSent),
                       diagnostics::field("recordsHeld", kStatistics.recordsHeld),
                       diagnostics::field("recordsDeferred", kStatistics.recordsDeferred),
+                      diagnostics::field("interestLeft", kStatistics.interestLeft),
                       diagnostics::field("inputsConsumed", kStatistics.inputsConsumed),
                       diagnostics::field("inputsHeld", kStatistics.inputsHeld),
                       diagnostics::field("inputsNeutral", kStatistics.inputsNeutral),

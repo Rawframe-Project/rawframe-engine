@@ -15,8 +15,8 @@ namespace rawframe::world_replication {
 
 /// What a game replicates, as the participant that loaded the game says:
 /// every component (so a client World can hold the same registry), the
-/// replication table, what a player starts with, where its input goes, and
-/// the game's exact identity for admission.
+/// replication table, what a player starts with, where its input goes, its
+/// interest, and the game's exact identity for admission.
 class ReplicationPlan {
 public:
     ReplicationPlan() = default;
@@ -35,6 +35,9 @@ public:
     /// A predictor for one client, running the game's predicted systems;
     /// `unsupported` for a game that predicts nothing.
     [[nodiscard]] virtual result::Result<std::unique_ptr<Predictor>> predictor() const = 0;
+    /// Who is sent what: none for a game whose every entity every
+    /// connection sees.
+    [[nodiscard]] virtual const std::optional<InterestSettings>& interest() const noexcept = 0;
 };
 
 inline constexpr composition::Capability<ReplicationPlan> kReplicationPlan{"rawframe.replication.plan"};
