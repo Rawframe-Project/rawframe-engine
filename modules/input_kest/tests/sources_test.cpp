@@ -4,6 +4,7 @@
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
+#include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
 
 #include <array>
@@ -12,6 +13,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace rawframe;
@@ -22,9 +24,18 @@ namespace {
 /// runners.Stick: run, jump, aimX, aimY, fire.
 using Stick = std::array<float, 5>;
 
+/// The sample game `path` names, its directory's files held in memory as a
+/// web client holds them (D166).
 const world_kest::GameFiles& gameAt(std::string_view path) {
     static std::vector<std::unique_ptr<world_kest::GameFiles>> read;
-    auto files = world_kest::GameFiles::fromDirectory(std::string{RAWFRAME_SAMPLE_GAMES} + std::string{path});
+    const std::size_t kSlash = path.rfind('/');
+    const std::string kDirectory = std::string{RAWFRAME_SAMPLE_GAMES} + std::string{path.substr(0, kSlash + 1)};
+    std::vector<std::pair<std::string, std::string>> held;
+    for (std::string& name : test::filesUnder(kDirectory, "")) {
+        std::string text = test::readFile(kDirectory + name);
+        held.emplace_back(std::move(name), std::move(text));
+    }
+    auto files = world_kest::GameFiles::fromHeld(path.substr(kSlash + 1), std::move(held));
     RAWFRAME_EXPECT(files.has_value());
     read.push_back(
         std::make_unique<world_kest::GameFiles>(files.has_value() ? std::move(*files) : world_kest::GameFiles{}));
