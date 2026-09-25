@@ -5,7 +5,9 @@
 # the repository root.
 #
 #   play.sh <rawframe-server> <rawframe-bots> <bots per process> [processes]
-#           [bots iterations] [game]
+#           [bots iterations] [game] [server settings] [bots settings]
+#
+# The settings files, when given, are appended to each side's configuration.
 #
 # Iterations are the Host's, at 120 a second; the server ticks at 60. The
 # server runs until every bots process has stopped and is then asked to stop,
@@ -18,6 +20,8 @@ count="$3"
 processes="${4:-1}"
 bots_iterations="${5:-240}"
 game="${6:-games/arena/arena.game}"
+server_settings="${7:-/dev/null}"
+bots_settings="${8:-/dev/null}"
 work="$(mktemp -d)"
 pids=()
 trap 'kill "${pids[@]}" 2>/dev/null || true; rm -rf "$work"' EXIT
@@ -34,6 +38,7 @@ network.quic.self_signed = true
 network.quic.fingerprint_file = $work/fingerprint
 replication.endpoint = 127.0.0.1:$port
 CONF
+cat "$server_settings" >>"$work/server.conf"
 cat >"$work/bots.conf" <<CONF
 host.maximum_iterations = $bots_iterations
 host.iteration_rate = 120
@@ -44,6 +49,7 @@ network.quic.pin_file = $work/fingerprint
 bots.count = $count
 bots.endpoint = 127.0.0.1:$port
 CONF
+cat "$bots_settings" >>"$work/bots.conf"
 
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 server_pid=$!
