@@ -1,0 +1,20 @@
+module linked
+
+// Links that name each other: every link holds the entity of the next one,
+// so a checkpoint has references to carry.
+
+import rawframe.world
+
+struct Link {
+    next: world.Entity
+    hops: i32
+}
+
+fn chain(count: i32, links: [Link], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        links[i].next = entities[(i + 1) % count]
+        links[i].hops = links[i].hops + 1
+        i = i + 1
+    }
+}

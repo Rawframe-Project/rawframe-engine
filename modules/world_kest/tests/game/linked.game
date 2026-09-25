@@ -1,0 +1,9 @@
+# Links holding entities, for checkpoint references.
+program linked.kest
+
+component 5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84 linked.link Link
+entity linked.link next
+
+system linked.chain simulation chain write linked.link entities
+
+spawn 3 linked.link hops=0

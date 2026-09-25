@@ -4,7 +4,7 @@
 # rawframe.world and rawframe.kest because neither should know the other.
 rawframe_module(NAME world_kest
     SOURCES src/game.cpp src/game_participant.cpp src/kest_systems.cpp src/replication.cpp
-    DEPS world_replication world_runtime kest network world composition schema execution diagnostics result base
+    DEPS world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics result base
 )
 
 rawframe_module_tests(NAME world_kest SOURCES tests/game_test.cpp tests/kest_systems_test.cpp)

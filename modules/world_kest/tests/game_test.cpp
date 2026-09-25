@@ -10,11 +10,14 @@
 #include "rawframe/world_runtime/registrar.h"
 #include "rawframe/world_runtime/simulation.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <string>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -352,4 +355,91 @@ RAWFRAME_TEST(AChangedProgramReloadsBetweenTicks) {
     composition.stop();
     simulation = nullptr;
     std::filesystem::remove_all(kDirectory, error);
+}
+
+namespace {
+
+struct LinkRow {
+    world::EntityHandle entity;
+    world::EntityHandle next;
+    std::int32_t hops = 0;
+};
+
+/// Every link: its entity, the entity it names, and its hop count.
+std::vector<LinkRow> links() {
+    world::World& world = *simulation->world();
+    const auto kId = world.registry().find(schema::ComponentTypeId::fromText("5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84"));
+    const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
+    auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+    std::vector<LinkRow> found;
+    query->forEachChunk(world, [&found](const world::ColumnChunk& chunk) {
+        for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+            LinkRow link{.entity = chunk.entities[row]};
+            std::memcpy(&link.next, chunk.columns[0] + (row * 12), sizeof link.next);
+            std::memcpy(&link.hops, chunk.columns[0] + (row * 12) + 8, sizeof link.hops);
+            found.push_back(link);
+        }
+    });
+    return found;
+}
+
+} // namespace
+
+RAWFRAME_TEST(CheckpointsCarryEntityReferences) {
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-checkpoint-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory);
+    const std::string kGame = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
+                              "linked.game\nkest.library = " + RAWFRAME_KEST_LIBRARY +
+                              "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n";
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    RAWFRAME_EXPECT(plan.has_value());
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    const auto kRun = [&](const std::string& extra) {
+        const auto kConfiguration = composition::Configuration::parse(kGame + extra);
+        composition::Composition composition{
+            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        RAWFRAME_EXPECT(composition.start().has_value());
+        // Ten ticks are due; the capture holds the World at tick 5.
+        clock.advance(execution::MonotonicDuration::fromSeconds(1));
+        const composition::HostFrame kFrame{.iteration = 0, .now = clock.now()};
+        composition.runHostPhase(composition::HostPhase::RunWorlds, kFrame);
+        composition.runHostPhase(composition::HostPhase::Maintenance, kFrame);
+        return std::pair{simulation->tick().value, links()};
+    };
+
+    const auto [kCaptured, kBefore] =
+        kRun("checkpoint.capture_ticks = 5\ncheckpoint.capture_prefix = " + (kDirectory / "c-").string() + "\n");
+    RAWFRAME_EXPECT(kCaptured == 5 && kBefore.size() == 3);
+    RAWFRAME_EXPECT(std::filesystem::exists(kDirectory / "c-5.rfsn"));
+
+    // A World restored from it: three links, each naming another live link,
+    // around a cycle of three, five hops each, at tick 5.
+    const auto kConfiguration =
+        composition::Configuration::parse(kGame + "checkpoint.restore = " + (kDirectory / "c-5.rfsn").string() + "\n");
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    RAWFRAME_EXPECT(simulation->tick().value == 5);
+    const std::vector<LinkRow> kAfter = links();
+    RAWFRAME_EXPECT(kAfter.size() == 3);
+    for (const LinkRow& link : kAfter) {
+        RAWFRAME_EXPECT(link.hops == 5 && simulation->world()->alive(link.next) && !(link.next == link.entity));
+        world::EntityHandle at = link.entity;
+        for (int hop = 0; hop < 3; ++hop) {
+            const auto kFound = std::find_if(kAfter.begin(), kAfter.end(), [&](const LinkRow& each) {
+                return each.entity == at;
+            });
+            at = kFound == kAfter.end() ? world::EntityHandle{} : kFound->next;
+        }
+        RAWFRAME_EXPECT(at == link.entity);
+    }
+    composition.stop();
+    simulation = nullptr;
+    std::filesystem::remove_all(kDirectory);
 }

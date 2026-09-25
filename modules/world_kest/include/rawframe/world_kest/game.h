@@ -24,7 +24,11 @@
 // entities with the listed components; a field not given is zero. For
 // networked play, `replicate` lists the components that replicate, `player`
 // the components each connected player's entity starts with, and `input` the
-// one component a player's input is written into.
+// one component a player's input is written into. An `entity` line names a
+// component's fields that hold a `rawframe.world.Entity`, which a checkpoint
+// writes as a reference rather than as numbers:
+//
+//   entity game.target who
 
 #include "rawframe/result/result.h"
 #include "rawframe/schema/stable_id.h"
@@ -83,6 +87,12 @@ struct GameSpawn {
     std::vector<GameSpawnComponent> components;
 };
 
+/// A component field holding an entity, by its path in the Kest type.
+struct GameEntityField {
+    std::string component;
+    std::string field;
+};
+
 struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
@@ -93,6 +103,7 @@ struct GameDescription {
     std::vector<std::string> replicated;
     std::vector<std::string> player;
     std::string input;
+    std::vector<GameEntityField> entityFields;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as

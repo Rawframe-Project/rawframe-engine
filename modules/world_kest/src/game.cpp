@@ -163,6 +163,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 into.emplace_back(kWords[at]);
                 uses.emplace_back(number, std::string{kWords[at]});
             }
+        } else if (kKeyword == "entity") {
+            if (kWords.size() < 3) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "an entity line is `entity <component> <field>...`");
+            }
+            for (std::size_t at = 2; at < kWords.size(); ++at) {
+                game.entityFields.push_back(
+                    GameEntityField{.component = std::string{kWords[1]}, .field = std::string{kWords[at]}});
+            }
+            uses.emplace_back(number, std::string{kWords[1]});
         } else if (kKeyword == "input") {
             if (kWords.size() != 2 || !game.input.empty()) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names at most one input component");

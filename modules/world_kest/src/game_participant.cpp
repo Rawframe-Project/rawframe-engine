@@ -7,6 +7,7 @@
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_kest/replication.h"
 #include "rawframe/world_replication/plan.h"
+#include "rawframe/world_runtime/checkpoint.h"
 
 #include <algorithm>
 #include <charconv>
@@ -22,7 +23,8 @@ namespace {
 
 constexpr std::string_view kIdentity = "rawframe.world_kest.game";
 constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
-constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.name};
+constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.name,
+                                          world_runtime::kCheckpointPlan.name};
 constexpr std::size_t kMaximumGameFileBytes = std::size_t{1} << 20U;
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
@@ -127,7 +129,9 @@ bool writeField(kest::FieldKind kind, std::string_view text, std::byte* into) {
 
 /// The loaded game. Everything the registry and the systems borrow (names,
 /// declarations) lives here, and this participant lives as long as the World.
-class GameParticipant final : public composition::Participant, public world_replication::ReplicationPlan {
+class GameParticipant final : public composition::Participant,
+                              public world_replication::ReplicationPlan,
+                              public world_runtime::CheckpointPlan {
 public:
     GameParticipant() noexcept = default;
 
@@ -174,6 +178,7 @@ public:
             layouts_.push_back(std::move(layout));
         }
         RAWFRAME_TRY(planReplication(kText, kProgram));
+        RAWFRAME_TRY(planCheckpoints());
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
             // not the game running here.
@@ -317,9 +322,27 @@ public:
         return fingerprint_;
     }
 
+    result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
+        if (unwritable_.has_value()) {
+            return std::unexpected<result::Error>{refuse(result::ErrorClass::Unsupported,
+                                                         WorldKestError::UnknownName,
+                                                         "a component has a field a checkpoint cannot write")
+                                                      .error()
+                                                      .withContext("component", unwritable_->component)
+                                                      .withContext("field", unwritable_->field)};
+        }
+        return &projection_;
+    }
+    world_snapshot::CheckpointIdentity identity() const noexcept override {
+        return world_snapshot::CheckpointIdentity{.schema = fingerprint_.bytes};
+    }
+
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
         if (capability == world_replication::kReplicationPlan.name) {
             return composition::provideAs<world_replication::ReplicationPlan>(*this);
+        }
+        if (capability == world_runtime::kCheckpointPlan.name) {
+            return composition::provideAs<world_runtime::CheckpointPlan>(*this);
         }
         return {};
     }
@@ -359,6 +382,90 @@ private:
         return {};
     }
 
+    /// What a checkpoint holds: every component, field by field from its
+    /// Kest layout, with the `entity` lines' fields as references. A game
+    /// with a field a checkpoint cannot write (text, a tagged union) loads
+    /// and runs; only checkpoints of it are refused, with the reason.
+    result::Status planCheckpoints() {
+        for (const GameEntityField& field : game_.entityFields) {
+            const GameComponent& component = *componentNamed(field.component);
+            const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(&component - game_.components.data())];
+            const auto kPiece = [&](std::string_view suffix) -> const kest::Field* {
+                for (const kest::Field& piece : layout.fields) {
+                    if (piece.name == field.field + std::string{suffix} && piece.kind == kest::FieldKind::U32) {
+                        return &piece;
+                    }
+                }
+                return nullptr;
+            };
+            const kest::Field* slot = kPiece(".slot");
+            const kest::Field* generation = kPiece(".generation");
+            if (slot == nullptr || generation == nullptr || generation->offset != slot->offset + 4) {
+                return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                             WorldKestError::UnknownName,
+                                                             "an entity line names a field that is not an Entity")
+                                                          .error()
+                                                          .withContext("field", field.field)};
+            }
+        }
+        for (std::size_t index = 0; index < game_.components.size(); ++index) {
+            const GameComponent& component = game_.components[index];
+            const kest::TypeLayout& layout = layouts_[index];
+            world_snapshot::SnapshotComponent projected{.id = component.id, .size = layout.size, .fields = {}};
+            for (const kest::Field& piece : layout.fields) {
+                const auto kEntity = std::find_if(
+                    game_.entityFields.begin(), game_.entityFields.end(), [&](const GameEntityField& each) {
+                        return each.component == component.name &&
+                               (piece.name == each.field + ".slot" || piece.name == each.field + ".generation");
+                    });
+                if (kEntity != game_.entityFields.end()) {
+                    if (piece.name.ends_with(".slot")) {
+                        projected.fields.push_back({piece.offset, world_snapshot::FieldKind::Entity});
+                    }
+                    continue;
+                }
+                const std::optional<world_snapshot::FieldKind> kKind = snapshotKind(piece.kind);
+                if (!kKind.has_value()) {
+                    unwritable_ = GameEntityField{.component = component.name, .field = piece.name};
+                    return {};
+                }
+                projected.fields.push_back({piece.offset, *kKind});
+            }
+            projection_.components.push_back(std::move(projected));
+        }
+        return {};
+    }
+
+    static std::optional<world_snapshot::FieldKind> snapshotKind(kest::FieldKind kind) noexcept {
+        switch (kind) {
+        case kest::FieldKind::I8:
+            return world_snapshot::FieldKind::I8;
+        case kest::FieldKind::I16:
+            return world_snapshot::FieldKind::I16;
+        case kest::FieldKind::I32:
+            return world_snapshot::FieldKind::I32;
+        case kest::FieldKind::I64:
+            return world_snapshot::FieldKind::I64;
+        case kest::FieldKind::U8:
+            return world_snapshot::FieldKind::U8;
+        case kest::FieldKind::U16:
+            return world_snapshot::FieldKind::U16;
+        case kest::FieldKind::U32:
+            return world_snapshot::FieldKind::U32;
+        case kest::FieldKind::U64:
+            return world_snapshot::FieldKind::U64;
+        case kest::FieldKind::F32:
+            return world_snapshot::FieldKind::F32;
+        case kest::FieldKind::F64:
+            return world_snapshot::FieldKind::F64;
+        case kest::FieldKind::Bool:
+            return world_snapshot::FieldKind::Bool;
+        case kest::FieldKind::Other:
+            return std::nullopt;
+        }
+        return std::nullopt;
+    }
+
     [[nodiscard]] const GameComponent* componentNamed(std::string_view name) const noexcept {
         for (const GameComponent& component : game_.components) {
             if (component.name == name) {
@@ -384,6 +491,9 @@ private:
     std::vector<schema::ComponentTypeId> playerComponents_;
     std::optional<world_replication::ComponentCodec> input_;
     network::Fingerprint fingerprint_;
+    world_snapshot::SnapshotProjection projection_;
+    /// A field no checkpoint can write, which refuses checkpoints of this game.
+    std::optional<GameEntityField> unwritable_;
     std::vector<std::vector<KestColumn>> columns_;
     std::vector<KestComponent> components_;
     std::vector<std::vector<std::string_view>> after_;
