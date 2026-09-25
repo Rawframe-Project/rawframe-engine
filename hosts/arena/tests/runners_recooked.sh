@@ -18,7 +18,7 @@ cp -r "$repository/games/runners/." "$work/sources/"
 "$cook" "$work/sources" "$work/content" "$work/cache" >/dev/null
 
 cat >"$work/arena.conf" <<CONF
-host.maximum_iterations = 720
+host.maximum_iterations = 1200
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = games/runners/runners.game
@@ -34,7 +34,9 @@ CONF
 (cd "$repository" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson") &
 running=$!
 
-# Recook only once the client's sounds were read from the first cook.
+# Recook only once the client's sounds were read from the first cook. The
+# run lasts ten seconds, room for a sanitized recook of five on a busy
+# machine.
 for _ in $(seq 1 200); do
     grep -q '"code":"started"' "$work/log.ndjson" 2>/dev/null && break
     sleep 0.05
