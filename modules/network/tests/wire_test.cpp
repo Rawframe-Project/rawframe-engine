@@ -6,6 +6,7 @@
 #include "rawframe/network/wire.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <initializer_list>

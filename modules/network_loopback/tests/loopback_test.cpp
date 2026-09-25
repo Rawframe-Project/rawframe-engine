@@ -2,14 +2,18 @@
 // that are lost, duplicated, and reordered by seed, every bound, closing from
 // either side, and two threads using one network.
 
+#include "rawframe/base/platform.h"
 #include "rawframe/network/errors.h"
 #include "rawframe/network_loopback/loopback.h"
 #include "rawframe/test/test.h"
 
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
 
 using namespace rawframe;
 using execution::ManualClock;
@@ -237,6 +241,7 @@ RAWFRAME_TEST(ConditionsFollowTheSeed) {
     RAWFRAME_EXPECT(reordered);
 }
 
+#if RAWFRAME_THREADS
 RAWFRAME_TEST(TwoThreadsShareOneNetwork) {
     const execution::SteadyClock kClock;
     LoopbackNetwork network{kClock, {}};
@@ -267,3 +272,4 @@ RAWFRAME_TEST(TwoThreadsShareOneNetwork) {
     reader.join();
     RAWFRAME_EXPECT(received == kSent && client->statistics().datagramsDropped == 0);
 }
+#endif
