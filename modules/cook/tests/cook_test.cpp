@@ -3,9 +3,14 @@
 // included) that is verified before it is trusted, double cooks that catch
 // a nondeterministic importer, and nothing published unless nothing failed.
 
+#include "rawframe/animation/clip.h"
+#include "rawframe/animation/graph.h"
+#include "rawframe/animation/resources.h"
+#include "rawframe/animation/skeleton.h"
 #include "rawframe/audio/decode.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/content/store.h"
+#include "rawframe/cook/animation.h"
 #include "rawframe/cook/audio.h"
 #include "rawframe/cook/cook.h"
 #include "rawframe/cook/errors.h"
@@ -452,6 +457,56 @@ RAWFRAME_TEST(AGltfCooksIntoAMeshWithItsBuffers) {
     writeText(kProps / "shard.gltf", gltf);
     const CookReport kOutside = kCook();
     RAWFRAME_EXPECT(kOutside.failures.size() == 1 && kOutside.failures[0].domain() == mesh::kMeshDomain);
+}
+
+RAWFRAME_TEST(AnimationDocumentsCookIntoResourcesOfTheirKind) {
+    const Project kProject;
+    const fs::path kRig = kProject.sources / "rig";
+    const base::Bits128 kSkeletonId{0, 0xb1};
+    const animation::Skeleton kSkeleton{
+        .bones = {animation::Bone{.target = {1, 1}, .name = "root", .parent = std::nullopt, .bind = {}}}};
+    const animation::Clip kClip{.skeleton = kSkeletonId,
+                                .duration = 1.0,
+                                .loop = animation::Loop::Loop,
+                                .tracks = {animation::Track{.bone = {1, 1}, .keys = {animation::Key{}}}}};
+    const animation::Graph kGraph{
+        .parameters = {},
+        .nodes = {animation::GraphNode{.id = 1, .node = animation::ClipNode{.clip = {0, 0xb2}}},
+                  animation::GraphNode{.id = 2, .node = animation::OutputNode{.pose = {.node = 1}}}},
+        .presentation = {}};
+    const std::string kSkeletonText = *animation::writeSkeleton(kSkeleton);
+    writeText(kRig / "body.rfanim", kSkeletonText);
+    writeText(kRig / "walk.rfanim", *animation::writeClip(kClip));
+    writeText(kRig / "moves.rfanim", *animation::writeGraph(kGraph));
+    writeText(kRig / "body.rfanim.rfmeta", sidecar("000000000000000000000000000000b1", "", "rawframe.animation"));
+    writeText(kRig / "walk.rfanim.rfmeta", sidecar("000000000000000000000000000000b2", "", "rawframe.animation"));
+    writeText(kRig / "moves.rfanim.rfmeta", sidecar("000000000000000000000000000000b3", "", "rawframe.animation"));
+    static const std::array<Importer, 2> kImporters = {animationImporter(), audioImporter()};
+    const auto kCook = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+        RAWFRAME_EXPECT(report.has_value());
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    RAWFRAME_EXPECT(kCook().cooked == 5);
+    // Each of its kind, its text as it was.
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value());
+    std::size_t kinds = 0;
+    for (const content::ManifestEntry& each : kManifest.value_or(std::vector<content::ManifestEntry>{})) {
+        if (each.id.value == kSkeletonId) {
+            ++kinds;
+            RAWFRAME_EXPECT(each.type.value == animation::kSkeletonType &&
+                            each.representation.text() == animation::kSkeletonRepresentation &&
+                            readText(kProject.output / each.locator) == kSkeletonText);
+        }
+        kinds += each.type.value == animation::kClipType || each.type.value == animation::kGraphType ? 1 : 0;
+    }
+    RAWFRAME_EXPECT(kinds == 3);
+    // Not in its one form, or of no kind the importer knows: refused.
+    writeText(kRig / "walk.rfanim", *animation::writeClip(kClip) + " ");
+    writeText(kRig / "moves.rfanim", "{\"kind\": \"animation.mask\"}\n");
+    RAWFRAME_EXPECT(kCook().failures.size() == 2);
 }
 
 RAWFRAME_TEST(ANondeterministicImporterIsCaught) {
