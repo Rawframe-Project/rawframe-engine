@@ -6,6 +6,7 @@
 #include "rawframe/world_snapshot/checkpoint.h"
 #include "rawframe/world_snapshot/errors.h"
 
+#include <algorithm>
 #include <bit>
 #include <cmath>
 #include <cstddef>
