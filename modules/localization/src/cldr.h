@@ -30,6 +30,24 @@ struct Pair {
 [[nodiscard]] std::span<const std::string_view> scripts() noexcept;
 [[nodiscard]] std::span<const std::string_view> regions() noexcept;
 
+/// A locale's number symbols (CLDR's default numbering system's).
+struct NumberSymbols {
+    std::string_view locale;
+    std::string_view decimal;
+    std::string_view group;
+    std::string_view minus;
+    /// Nought to nine, in order.
+    std::string_view digits;
+    /// The rightmost group's size, and every other's; nought for none.
+    unsigned primary = 3;
+    unsigned secondary = 3;
+    /// How many integer digits past the first group before any grouping.
+    unsigned minimumGrouping = 1;
+};
+
+/// Every locale of modern coverage, in tag order.
+[[nodiscard]] std::span<const NumberSymbols> numberSymbols() noexcept;
+
 /// The value `key` maps to in a sorted table, if it has one.
 [[nodiscard]] inline const std::string_view* find(std::span<const Pair> table, std::string_view key) noexcept {
     std::size_t low = 0;

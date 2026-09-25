@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,7 +31,18 @@ def supplemental(name):
 
 
 def literal(text):
-    return json.dumps(text, ensure_ascii=False)
+    """A C++ string literal of UTF-8 text; characters a reader cannot see,
+    such as marks and spaces other than the space itself, are escaped."""
+    made = ['"']
+    for each in text:
+        if each in '"\\':
+            made.append("\\" + each)
+        elif each != " " and (unicodedata.category(each)[0] in "CZ"):
+            made.append(f"\\u{ord(each):04X}" if ord(each) <= 0xFFFF else f"\\U{ord(each):08X}")
+        else:
+            made.append(each)
+    made.append('"')
+    return "".join(made)
 
 
 def pairs(name, entries, comment):
@@ -228,6 +240,38 @@ def plural_samples():
     )
 
 
+def numbers():
+    """Each modern locale's number symbols, digits, and grouping."""
+    systems = supplemental("numberingSystems")["numberingSystems"]
+    rows = []
+    for path in sorted((CLDR / "cldr-numbers-full" / "main").glob("*/numbers.json")):
+        locale = path.parent.name
+        if not TAG.match(locale):
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))["main"][locale]["numbers"]
+        system = data["defaultNumberingSystem"]
+        symbols = data[f"symbols-numberSystem-{system}"]
+        pattern = data[f"decimalFormats-numberSystem-{system}"]["standard"].split(";")[0]
+        whole = pattern.split(".")[0]
+        groups = whole.split(",")
+        primary = len(groups[-1]) if len(groups) > 1 else 0
+        secondary = len(groups[-2]) if len(groups) > 2 else primary
+        digits = systems[system]["_digits"]
+        if len(digits) != 10:
+            raise ValueError(f"{locale}: {system} has no ten digits")
+        rows.append(
+            f"    NumberSymbols{{{literal(locale)}, {literal(symbols['decimal'])}, {literal(symbols['group'])}, "
+            f"{literal(symbols['minusSign'])}, {literal(digits)}, {primary}, {secondary}, {int(data['minimumGroupingDigits'])}}},"
+        )
+    lines = "\n".join(rows)
+    return (
+        "// Each locale of modern coverage: its decimal and group separators, minus\n"
+        "// sign, digits nought to nine, grouping sizes, and least digits grouped.\n"
+        f"constexpr std::array<NumberSymbols, {len(rows)}> kNumbers{{{{\n{lines}\n}}}};\n\n"
+        "std::span<const NumberSymbols> numberSymbols() noexcept {\n    return kNumbers;\n}\n"
+    )
+
+
 def write(name, body, header='"../cldr.h"', namespace="rawframe::localization::cldr", out=None):
     version = supplemental("plurals")["version"]["_cldrVersion"]
     text = (
@@ -247,6 +291,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     write("locales.cpp", locales())
     write("plurals.cpp", plural_rules(), header='"../plural_rules.h"')
+    write("numbers.cpp", numbers())
     samples = ROOT / "modules" / "localization" / "tests" / "generated"
     samples.mkdir(parents=True, exist_ok=True)
     write("plural_samples.cpp", plural_samples(), header='"../plural_samples.h"', namespace="rawframe::localization::oracle", out=samples)
