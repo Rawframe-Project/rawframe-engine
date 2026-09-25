@@ -1,0 +1,50 @@
+module hostile3d
+
+// Every 3D physics door asked with hostile values, argument by argument and
+// all at once. Every call must answer; the count says they all were made.
+
+import hostile
+import rawframe.physics3d
+
+fn poke3(count: i32, pokes: [hostile.Poke]) {
+    let calls: u32 = 0
+    let hits: u32 = 0
+    let kind = 0
+    while kind < hostile.KINDS {
+        let at = 0
+        while at < 8 {
+            let a0 = hostile.arg(0, at, 6, kind)
+            let a1 = hostile.arg(1, at, 6, kind)
+            let a2 = hostile.arg(2, at, 6, kind)
+            let a3 = f32(hostile.arg(3, at, 6, kind))
+            let a4 = f32(hostile.arg(4, at, 6, kind))
+            let a5 = f32(hostile.arg(5, at, 6, kind))
+            let a6 = f32(hostile.arg(6, at, 6, kind))
+            if physics3d.castRay(a0, a1, a2, a3, a4, a5).hit {
+                hits = hits + u32(1)
+            }
+            if physics3d.castRayAt(a0, a1, a2, a3, a4, a5, hostile.moment(kind)).hit {
+                hits = hits + u32(1)
+            }
+            if physics3d.castRayAmong(hostile.among(kind), a0, a1, a2, a3, a4, a5).hit {
+                hits = hits + u32(1)
+            }
+            if physics3d.castRayAtAmong(hostile.among(kind), a0, a1, a2, a3, a4, a5, hostile.moment(kind)).hit {
+                hits = hits + u32(1)
+            }
+            if physics3d.castSphere(hostile.among(kind), a0, a1, a2, a3, a4, a5, a6).hit {
+                hits = hits + u32(1)
+            }
+            hits = hits + physics3d.overlapSphere(hostile.among(kind), a0, a1, a2, a3, hostile.index(kind)).count
+            calls = calls + u32(6)
+            at = at + 1
+        }
+        kind = kind + 1
+    }
+    let i = 0
+    while i < count {
+        pokes[i].calls = calls
+        pokes[i].hits = hits
+        i = i + 1
+    }
+}

@@ -1,0 +1,9 @@
+# Entities made, marked, unmarked, and destroyed over and again by a
+# program, twice over where once is all there is to do.
+program churn.kest
+
+component f4faaf4f-ceb6-4c26-b31c-6740919259a9 churn.mark Mark
+
+system churn.churn simulation churn write churn.mark entities
+
+spawn 4 churn.mark

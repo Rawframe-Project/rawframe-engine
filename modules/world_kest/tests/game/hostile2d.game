@@ -1,0 +1,12 @@
+# Every 2D physics door asked with hostile values after each step, beside a
+# floor and a falling ball.
+program hostile2d.kest
+physics2d gravity 0 -10
+
+component 13fbb802-8fea-4b06-a6c7-01d749ff4b0e hostile.poke hostile.Poke
+
+system hostile.poke simulation poke2 write hostile.poke after rawframe.physics2d.step
+
+spawn 1 rawframe.physics2d.body motion=0 shape=1 width=10 height=0.5 rawframe.physics2d.pose rawframe.physics2d.velocity
+spawn 1 rawframe.physics2d.body motion=2 shape=0 width=0.4 density=1 rawframe.physics2d.pose y=3 rawframe.physics2d.velocity
+spawn 1 hostile.poke

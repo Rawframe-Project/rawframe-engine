@@ -1,0 +1,48 @@
+module hostile2d
+
+// Every 2D physics door asked with hostile values, argument by argument and
+// all at once. Every call must answer; the count says they all were made.
+
+import hostile
+import rawframe.physics2d
+
+fn poke2(count: i32, pokes: [hostile.Poke]) {
+    let calls: u32 = 0
+    let hits: u32 = 0
+    let kind = 0
+    while kind < hostile.KINDS {
+        let at = 0
+        while at < 6 {
+            let a0 = hostile.arg(0, at, 4, kind)
+            let a1 = hostile.arg(1, at, 4, kind)
+            let a2 = f32(hostile.arg(2, at, 4, kind))
+            let a3 = f32(hostile.arg(3, at, 4, kind))
+            let a4 = f32(hostile.arg(4, at, 4, kind))
+            if physics2d.castRay(a0, a1, a2, a3).hit {
+                hits = hits + u32(1)
+            }
+            if physics2d.castRayAt(a0, a1, a2, a3, hostile.moment(kind)).hit {
+                hits = hits + u32(1)
+            }
+            if physics2d.castRayAmong(hostile.among(kind), a0, a1, a2, a3).hit {
+                hits = hits + u32(1)
+            }
+            if physics2d.castRayAtAmong(hostile.among(kind), a0, a1, a2, a3, hostile.moment(kind)).hit {
+                hits = hits + u32(1)
+            }
+            if physics2d.castCircle(hostile.among(kind), a0, a1, a2, a3, a4).hit {
+                hits = hits + u32(1)
+            }
+            hits = hits + physics2d.overlapCircle(hostile.among(kind), a0, a1, a2, hostile.index(kind)).count
+            calls = calls + u32(6)
+            at = at + 1
+        }
+        kind = kind + 1
+    }
+    let i = 0
+    while i < count {
+        pokes[i].calls = calls
+        pokes[i].hits = hits
+        i = i + 1
+    }
+}
