@@ -3,7 +3,8 @@ module swing
 // A pendulum's swing, played at the speed its gait says. After each
 // animation step: how far along x its one bone has reached, how many steps
 // fired an event, and how many answers the animation doors gave past the
-// bones, events, and state machines there are, which must be none.
+// bones, events, and state machines there are, or for an entity made this
+// tick, which must be none.
 
 import rawframe.animation
 import rawframe.world
@@ -16,6 +17,13 @@ struct Gait {
 }
 
 const FAR: u32 = 4294967295
+
+// Whether any animation door answers anything for `entity`, at any index.
+fn asked(entity: world.Entity) -> bool {
+    return animation.bone(entity, u32(0)).posed || animation.bone(entity, FAR).posed ||
+           animation.event(entity, u32(0)).found || animation.state(entity, u64(1)).found ||
+           animation.state(entity, u64(18446744073709551615)).found
+}
 
 fn follow(count: i32, gaits: [Gait], entities: [world.Entity]) {
     let i = 0
@@ -33,6 +41,10 @@ fn follow(count: i32, gaits: [Gait], entities: [world.Entity]) {
         }
         // The graph's clip node is no state machine, and it has no node 0.
         if animation.state(entity, u64(1)).found || animation.state(entity, u64(0)).found {
+            gaits[i].strays = gaits[i].strays + u32(1)
+        }
+        // An entity made this tick: not yet in the World, with no Animator.
+        if asked(world.create()) {
             gaits[i].strays = gaits[i].strays + u32(1)
         }
         i = i + 1
