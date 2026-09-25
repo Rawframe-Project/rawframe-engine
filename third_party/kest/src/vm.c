@@ -676,7 +676,20 @@ typedef struct {
     // for every frame the machine made, which reads it from where the
     // instruction pointer has got to. See D1098.
     uint32_t said_at;
+#if KEST_CHECKED
+    // How deep the operand stack is to be at this frame's next instruction,
+    // plus one, as the verifier's table says the last one left it: nought
+    // before the first. It sits in what the three above leave over, so a
+    // frame is no bigger for it. See D1239.
+    uint32_t expect;
+#endif
 } Frame;
+
+#if KEST_CHECKED
+#define FRESH(frame) ((frame)->expect = 0)
+#else
+#define FRESH(frame) ((void)0)
+#endif
 
 // The same shape, said again where a generated file can read it, and held to
 // being the same shape by the compiler rather than by a rule somebody
@@ -3486,6 +3499,7 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
     } else {
         rt->frame_count = under;
         frame = &rt->frames[rt->frame_count++];
+        FRESH(frame);
         frame->chunk = chunk;
         frame->ip = chunk->code;
         frame->base = floor;
@@ -3772,7 +3786,7 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         [KEST_OP_I2F] = &&thread_KEST_OP_I2F,
         [KEST_OP_U2F] = &&thread_KEST_OP_U2F,
         [KEST_OP_TO_F32] = &&thread_KEST_OP_TO_F32,
-        [KEST_OP_F32_BITS] = &&thread_KEST_OP_F32_BITS,
+        [KEST_OP_FLOAT_BITS] = &&thread_KEST_OP_FLOAT_BITS,
         [KEST_OP_BITS_F32] = &&thread_KEST_OP_BITS_F32,
         [KEST_OP_F2I] = &&thread_KEST_OP_F2I,
         [KEST_OP_NARROW] = &&thread_KEST_OP_NARROW,
@@ -3937,6 +3951,36 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
             }
             if (rt->frame_count > rt->went_frames) {
                 rt->went_frames = rt->frame_count;
+            }
+        }
+        // And the verifier's own table held to what the machine moved, an
+        // instruction at a time: what the one before left is what this one
+        // finds. The verifier walks every path with that table before
+        // anything runs, so a row of it that is wrong is a program proved
+        // with the wrong numbers, and every program run in this build is a
+        // test of every row it reaches. See D1239.
+        {
+            uint32_t now = (uint32_t)(top - mine - frame->chunk->slot_count);
+            if (frame->expect != 0 && now != frame->expect - 1) {
+                fail(vmp, frame, instruction, "K0655",
+                     "the verifier says this body is %u deep here and it is "
+                     "%u",
+                     frame->expect - 1, now);
+                kest_diags_fault(vmp->diags,
+                                 "what the verifier says an instruction does "
+                                 "to the operand stack and what the machine "
+                                 "did disagree");
+                return false;
+            }
+            uint32_t takes = 0;
+            uint32_t gives = 0;
+            frame->expect = 0;
+            if (*instruction != KEST_OP_RETURN && *instruction != KEST_OP_STOP &&
+                kest_op_stack(module, frame->chunk,
+                              (uint32_t)(instruction - frame->chunk->code),
+                              &takes, &gives) == NULL &&
+                takes <= now) {
+                frame->expect = now - takes + gives + 1;
             }
         }
         if (top > mine + frame->chunk->slot_count +
@@ -5030,6 +5074,11 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
                 // Nought and minus nought are one value to `==`, so they are
                 // one value here.
                 bits = 0;
+            } else if (instruction[0] == KEST_OP_HASH_F &&
+                       top[-1].real != top[-1].real) {
+                // And every value that is not a number is one value, for the
+                // reason `float.bits` gives. See D1238.
+                bits = UINT64_C(0x7FF8000000000000);
             }
             top[-1].integer = (int64_t)kest_mix(bits);
             NEXT;
@@ -5438,11 +5487,23 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         case KEST_OP_TO_F32: THREADED(KEST_OP_TO_F32)
             top[-1].real = (double)(float)top[-1].real;
             NEXT;
-        case KEST_OP_F32_BITS: THREADED(KEST_OP_F32_BITS) {
-            float narrow = (float)top[-1].real;
-            uint32_t bits;
-            memcpy(&bits, &narrow, sizeof bits);
-            top[-1].integer = bits;
+        // A float as its bits. What is not a number is one value, whatever
+        // the processor that made it put in its sign and its payload: x86
+        // makes `inf - inf` with the sign set and arm64 without it, and a
+        // program that could read the difference would answer differently on
+        // the two. See D1238.
+        case KEST_OP_FLOAT_BITS: THREADED(KEST_OP_FLOAT_BITS) {
+            uint16_t width = READ_U16();
+            if (width == 32) {
+                float narrow = (float)top[-1].real;
+                uint32_t bits = UINT32_C(0x7FC00000);
+                if (narrow == narrow) {
+                    memcpy(&bits, &narrow, sizeof bits);
+                }
+                top[-1].integer = bits;
+            } else if (top[-1].real != top[-1].real) {
+                top[-1].integer = (int64_t)UINT64_C(0x7FF8000000000000);
+            }
             NEXT;
         }
         case KEST_OP_BITS_F32: THREADED(KEST_OP_BITS_F32) {
@@ -6180,6 +6241,7 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
             // true of it. See D1094.
             if (callee->native != NULL) {
                 frame = &rt->frames[rt->frame_count++];
+                FRESH(frame);
                 frame->chunk = callee;
                 frame->ip = callee->code;
                 frame->base = base;
@@ -6204,6 +6266,7 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
                 break;
             }
             frame = &rt->frames[rt->frame_count++];
+            FRESH(frame);
             frame->chunk = callee;
             frame->ip = callee->code;
             frame->base = base;
@@ -6261,6 +6324,7 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
 
             frame->ip = ip;
             frame = &rt->frames[rt->frame_count++];
+            FRESH(frame);
             frame->chunk = callee;
             frame->ip = callee->code;
             frame->base = base;

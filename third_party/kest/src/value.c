@@ -1247,113 +1247,243 @@ typedef enum {
     WEIGH_ELEMENT,
 } Operands;
 
+// The table below is written in the header's names for what an operand is,
+// shortened so that a row still reads as one line.
+#define IS_NUMBER KEST_OPERAND_NUMBER
+#define IS_SLOT KEST_OPERAND_SLOT
+#define IS_SLOT_RUN KEST_OPERAND_SLOT_RUN
+#define IS_CONSTANT KEST_OPERAND_CONSTANT
+#define IS_CONSTANT_RUN KEST_OPERAND_CONSTANT_RUN
+#define IS_FUNCTION KEST_OPERAND_FUNCTION
+#define IS_EXTERN KEST_OPERAND_EXTERN
+#define IS_LAYOUT KEST_OPERAND_LAYOUT
+#define IS_FORWARD KEST_OPERAND_FORWARD
+#define IS_BACKWARD KEST_OPERAND_BACKWARD
+
 typedef struct {
     const char *name;
     Operands operands;
+    KestOperand is[5];
 } Instruction;
 
 static const Instruction INSTRUCTIONS[] = {
-    {"const", U16},        {"const.run", U16_U16},
-    {"const.at", U16_U16_U16},        {"load", U16},         {"store", U16},
-    {"load.n", U16_U16},   {"store.n", U16_U16},
-    {"load2", U16_U16},    {"load.k", U16_U16},
-    {"field", U16_U16_U16},
-    {"array", U16_U16},    {"make.array", U16},   {"push", U16},         {"fit", U16},
-    {"push.text", U16},    {"fit.text", U16},
-    {"room", U16},
-    {"index", U16},        {"index.ll", U16_U16_U16},
-    {"pop.last", U16},     {"take", U16},
-    {"clear", NONE},       {"elem.addr", U16},    {"elem.at", U16_U16},
-    {"load.slots", U16_U16_U16},              {"store.slots", U16_U16_U16},
-    {"offset.addr", U16_U16},
-    {"load.at", U16_U16},   {"len", NONE},
-    {"text.len", NONE},    {"text.at", NONE},     {"text.in", U16_U16},     {"text.slice", NONE},  {"text.rest", NONE},   {"text.matches", NONE},
-    {"text.find", NONE},
-    {"text.i", NONE},      {"text.u", NONE},      {"text.f", NONE},
-    {"text.f32", NONE},    {"text.b", NONE},     {"text.flags", U16},
-    {"text.value", U16},
-    {"concat", U16},
-    {"hash.i", NONE},      {"hash.f", NONE},      {"hash.t", NONE},
-    {"hash.value", U16},   {"eq.value", U16},     {"ne.value", U16},
-    {"text.from", NONE},
-    {"new.store", U16_U16},  {"load.elem", U16_U16},
-    {"store.elem", U16_U16},
-    {"index.to", U16_U16},  {"elem.from", U16_U16_U16},
-    {"add.i.narrow.to", U16_U16}, {"sub.i.narrow.to", U16_U16},
-    {"add.f.to", U16},      {"sub.f.to", U16},
-    {"add", U16},          {"get", U16},
-    {"set", U16},          {"remove", NONE},      {"count", NONE},
-    {"seek.from", FIND},   {"seek.next", FIND_BACK},        {"store.ref", NONE},
-    {"true", NONE},        {"false", NONE},       {"pop", NONE},
-    {"pop.n", U16},                 {"rotate", U16},
-    {"add.i", NONE},       {"sub.i", NONE},
-    {"mul.i", NONE},       {"div.i", NONE},       {"mod.i", NONE},
-    {"div.u", NONE},       {"mod.u", NONE},       {"neg.i", NONE},
-    {"and.i", NONE},       {"or.i", NONE},        {"xor.i", NONE},
-    {"not.i", NONE},       {"shl", NONE},         {"shr.i", NONE},
-    {"shr.u", NONE},
-    {"narrow", U16},
-    {"add.i.narrow", U16}, {"sub.i.narrow", U16}, {"mul.i.narrow", U16},
-    {"i2f", NONE},         {"u2f", NONE},
-    {"f2i", U16},          {"to.f32", NONE},
-    {"add.f", NONE},       {"sub.f", NONE},       {"mul.f", NONE},
-    {"div.f", NONE},       {"mod.f", NONE},       {"neg.f", NONE},
-    {"add.f32", NONE},     {"sub.f32", NONE},     {"mul.f32", NONE},
-    {"div.f32", NONE},     {"mod.f32", NONE},     {"neg.f32", NONE},
-    {"lt.i", NONE},
-    {"le.i", NONE},        {"gt.i", NONE},        {"ge.i", NONE},
-    {"lt.u", NONE},        {"le.u", NONE},        {"gt.u", NONE},
-    {"ge.u", NONE},        {"lt.f", NONE},        {"le.f", NONE},
-    {"gt.f", NONE},        {"ge.f", NONE},        {"eq.i", NONE},
-    {"ne.i", NONE},        {"eq.f", NONE},        {"ne.f", NONE},
-    {"eq.t", NONE},        {"ne.t", NONE},
-    {"lt.t", NONE},        {"le.t", NONE},        {"gt.t", NONE},
-    {"ge.t", NONE},        {"not", NONE},
-    {"jump", JUMP},        {"jump.false", JUMP},  {"jump.true", JUMP},
-    {"jump.false.lt.i", JUMP}, {"jump.false.le.i", JUMP},
-    {"jump.false.gt.i", JUMP}, {"jump.false.ge.i", JUMP},
-    {"jump.false.eq.i", JUMP}, {"jump.false.ne.i", JUMP},
-    {"jump.true.lt.i", JUMP}, {"jump.true.le.i", JUMP},
-    {"jump.true.gt.i", JUMP}, {"jump.true.ge.i", JUMP},
-    {"jump.true.eq.i", JUMP}, {"jump.true.ne.i", JUMP},
-    {"jump.false.lt.f", JUMP}, {"jump.false.le.f", JUMP},
-    {"jump.false.gt.f", JUMP}, {"jump.false.ge.f", JUMP},
-    {"jump.false.eq.f", JUMP}, {"jump.false.ne.f", JUMP},
-    {"jump.true.lt.f", JUMP}, {"jump.true.le.f", JUMP},
-    {"jump.true.gt.f", JUMP}, {"jump.true.ge.f", JUMP},
-    {"jump.true.eq.f", JUMP}, {"jump.true.ne.f", JUMP},
-    {"store.k", U16_U16},
-    {"add.k.self", U16_U16_U16}, {"sub.k.self", U16_U16_U16},
-    {"jump.false.lt.k", FIND}, {"jump.false.le.k", FIND},
-    {"jump.false.gt.k", FIND}, {"jump.false.ge.k", FIND},
-    {"jump.false.eq.k", FIND}, {"jump.false.ne.k", FIND},
-    {"jump.false.lt.c", WEIGH}, {"jump.false.le.c", WEIGH},
-    {"jump.false.gt.c", WEIGH}, {"jump.false.ge.c", WEIGH},
-    {"jump.false.eq.c", WEIGH}, {"jump.false.ne.c", WEIGH},
-    {"jump.false.lt.f.k", FIND}, {"jump.false.le.f.k", FIND},
-    {"jump.false.gt.f.k", FIND}, {"jump.false.ge.f.k", FIND},
-    {"jump.false.eq.f.k", FIND}, {"jump.false.ne.f.k", FIND},
-    {"jump.true.lt.f.k", FIND}, {"jump.true.le.f.k", FIND},
-    {"jump.true.gt.f.k", FIND}, {"jump.true.ge.f.k", FIND},
-    {"jump.true.eq.f.k", FIND}, {"jump.true.ne.f.k", FIND},
-    {"add.f.ll", U16_U16_U16}, {"sub.f.ll", U16_U16_U16},
-    {"index.to.ll", U16_X4}, {"elem.from.ll", U16_X5},
-    {"mod.i.c", U16}, {"mod.i.k", U16_U16},
-    {"div.i.c", U16}, {"div.i.k", U16_U16},
-    {"add.i.narrow.c", U16_U16}, {"add.i.narrow.k", U16_U16_U16},
-    {"sub.i.narrow.c", U16_U16}, {"sub.i.narrow.k", U16_U16_U16},
-    {"mul.i.narrow.c", U16_U16}, {"mul.i.narrow.k", U16_U16_U16},
-    {"f32.bits", NONE}, {"bits.f32", NONE},
-    {"jump.false.lt.e", WEIGH_ELEMENT}, {"jump.false.le.e", WEIGH_ELEMENT},
-    {"jump.false.gt.e", WEIGH_ELEMENT}, {"jump.false.ge.e", WEIGH_ELEMENT},
-    {"jump.false.eq.e", WEIGH_ELEMENT}, {"jump.false.ne.e", WEIGH_ELEMENT},
-    {"loop", BACK},
-{"next.less.i", WALK}, {"next.less.u", WALK},
-    {"scratch", U16},      {"unscratch", U16},
-    {"call", U16_U16},     {"call.value", U16_U16},
-    {"call.host", U16_U16_U16},
-    {"return", U16},
-    {"stop", NONE},
+    {"const", U16, {IS_CONSTANT}},
+    {"const.run", U16_U16, {IS_CONSTANT, IS_CONSTANT_RUN}},
+    {"const.at", U16_U16_U16, {IS_CONSTANT, IS_NUMBER, IS_NUMBER}},
+    {"load", U16, {IS_SLOT}},
+    {"store", U16, {IS_SLOT}},
+    {"load.n", U16_U16, {IS_SLOT, IS_SLOT_RUN}},
+    {"store.n", U16_U16, {IS_SLOT, IS_SLOT_RUN}},
+    {"load2", U16_U16, {IS_SLOT, IS_SLOT}},
+    {"load.k", U16_U16, {IS_SLOT, IS_CONSTANT}},
+    {"field", U16_U16_U16, {IS_NUMBER, IS_NUMBER, IS_NUMBER}},
+    {"array", U16_U16, {IS_NUMBER, IS_LAYOUT}},
+    {"make.array", U16, {IS_LAYOUT}},
+    {"push", U16, {IS_LAYOUT}},
+    {"fit", U16, {IS_LAYOUT}},
+    {"push.text", U16, {IS_LAYOUT}},
+    {"fit.text", U16, {IS_LAYOUT}},
+    {"room", U16, {IS_LAYOUT}},
+    {"index", U16, {IS_LAYOUT}},
+    {"index.ll", U16_U16_U16, {IS_SLOT, IS_SLOT, IS_LAYOUT}},
+    {"pop.last", U16, {IS_LAYOUT}},
+    {"take", U16, {IS_LAYOUT}},
+    {"clear", NONE, {}},
+    {"elem.addr", U16, {IS_NUMBER}},
+    {"elem.at", U16_U16, {IS_NUMBER, IS_LAYOUT}},
+    {"load.slots", U16_U16_U16, {IS_SLOT, IS_NUMBER, IS_NUMBER}},
+    {"store.slots", U16_U16_U16, {IS_SLOT, IS_NUMBER, IS_NUMBER}},
+    {"offset.addr", U16_U16, {IS_NUMBER, IS_NUMBER}},
+    {"load.at", U16_U16, {IS_NUMBER, IS_LAYOUT}},
+    {"len", NONE, {}},
+    {"text.len", NONE, {}},
+    {"text.at", NONE, {}},
+    {"text.in", U16_U16, {IS_SLOT, IS_SLOT}},
+    {"text.slice", NONE, {}},
+    {"text.rest", NONE, {}},
+    {"text.matches", NONE, {}},
+    {"text.find", NONE, {}},
+    {"text.i", NONE, {}},
+    {"text.u", NONE, {}},
+    {"text.f", NONE, {}},
+    {"text.f32", NONE, {}},
+    {"text.b", NONE, {}},
+    {"text.flags", U16, {IS_LAYOUT}},
+    {"text.value", U16, {IS_LAYOUT}},
+    {"concat", U16, {IS_NUMBER}},
+    {"hash.i", NONE, {}},
+    {"hash.f", NONE, {}},
+    {"hash.t", NONE, {}},
+    {"hash.value", U16, {IS_LAYOUT}},
+    {"eq.value", U16, {IS_LAYOUT}},
+    {"ne.value", U16, {IS_LAYOUT}},
+    {"text.from", NONE, {}},
+    {"new.store", U16_U16, {IS_NUMBER, IS_LAYOUT}},
+    {"load.elem", U16_U16, {IS_NUMBER, IS_LAYOUT}},
+    {"store.elem", U16_U16, {IS_NUMBER, IS_LAYOUT}},
+    {"index.to", U16_U16, {IS_LAYOUT, IS_SLOT}},
+    {"elem.from", U16_U16_U16, {IS_NUMBER, IS_LAYOUT, IS_SLOT}},
+    {"add.i.narrow.to", U16_U16, {IS_NUMBER, IS_SLOT}},
+    {"sub.i.narrow.to", U16_U16, {IS_NUMBER, IS_SLOT}},
+    {"add.f.to", U16, {IS_SLOT}},
+    {"sub.f.to", U16, {IS_SLOT}},
+    {"add", U16, {IS_NUMBER}},
+    {"get", U16, {IS_NUMBER}},
+    {"set", U16, {IS_NUMBER}},
+    {"remove", NONE, {}},
+    {"count", NONE, {}},
+    {"seek.from", FIND, {IS_SLOT, IS_SLOT, IS_FORWARD}},
+    {"seek.next", FIND_BACK, {IS_SLOT, IS_SLOT, IS_BACKWARD}},
+    {"store.ref", NONE, {}},
+    {"true", NONE, {}},
+    {"false", NONE, {}},
+    {"pop", NONE, {}},
+    {"pop.n", U16, {IS_NUMBER}},
+    {"rotate", U16, {IS_NUMBER}},
+    {"add.i", NONE, {}},
+    {"sub.i", NONE, {}},
+    {"mul.i", NONE, {}},
+    {"div.i", NONE, {}},
+    {"mod.i", NONE, {}},
+    {"div.u", NONE, {}},
+    {"mod.u", NONE, {}},
+    {"neg.i", NONE, {}},
+    {"and.i", NONE, {}},
+    {"or.i", NONE, {}},
+    {"xor.i", NONE, {}},
+    {"not.i", NONE, {}},
+    {"shl", NONE, {}},
+    {"shr.i", NONE, {}},
+    {"shr.u", NONE, {}},
+    {"narrow", U16, {IS_NUMBER}},
+    {"add.i.narrow", U16, {IS_NUMBER}},
+    {"sub.i.narrow", U16, {IS_NUMBER}},
+    {"mul.i.narrow", U16, {IS_NUMBER}},
+    {"i2f", NONE, {}},
+    {"u2f", NONE, {}},
+    {"f2i", U16, {IS_NUMBER}},
+    {"to.f32", NONE, {}},
+    {"add.f", NONE, {}},
+    {"sub.f", NONE, {}},
+    {"mul.f", NONE, {}},
+    {"div.f", NONE, {}},
+    {"mod.f", NONE, {}},
+    {"neg.f", NONE, {}},
+    {"add.f32", NONE, {}},
+    {"sub.f32", NONE, {}},
+    {"mul.f32", NONE, {}},
+    {"div.f32", NONE, {}},
+    {"mod.f32", NONE, {}},
+    {"neg.f32", NONE, {}},
+    {"lt.i", NONE, {}},
+    {"le.i", NONE, {}},
+    {"gt.i", NONE, {}},
+    {"ge.i", NONE, {}},
+    {"lt.u", NONE, {}},
+    {"le.u", NONE, {}},
+    {"gt.u", NONE, {}},
+    {"ge.u", NONE, {}},
+    {"lt.f", NONE, {}},
+    {"le.f", NONE, {}},
+    {"gt.f", NONE, {}},
+    {"ge.f", NONE, {}},
+    {"eq.i", NONE, {}},
+    {"ne.i", NONE, {}},
+    {"eq.f", NONE, {}},
+    {"ne.f", NONE, {}},
+    {"eq.t", NONE, {}},
+    {"ne.t", NONE, {}},
+    {"lt.t", NONE, {}},
+    {"le.t", NONE, {}},
+    {"gt.t", NONE, {}},
+    {"ge.t", NONE, {}},
+    {"not", NONE, {}},
+    {"jump", JUMP, {IS_FORWARD}},
+    {"jump.false", JUMP, {IS_FORWARD}},
+    {"jump.true", JUMP, {IS_FORWARD}},
+    {"jump.false.lt.i", JUMP, {IS_FORWARD}},
+    {"jump.false.le.i", JUMP, {IS_FORWARD}},
+    {"jump.false.gt.i", JUMP, {IS_FORWARD}},
+    {"jump.false.ge.i", JUMP, {IS_FORWARD}},
+    {"jump.false.eq.i", JUMP, {IS_FORWARD}},
+    {"jump.false.ne.i", JUMP, {IS_FORWARD}},
+    {"jump.true.lt.i", JUMP, {IS_FORWARD}},
+    {"jump.true.le.i", JUMP, {IS_FORWARD}},
+    {"jump.true.gt.i", JUMP, {IS_FORWARD}},
+    {"jump.true.ge.i", JUMP, {IS_FORWARD}},
+    {"jump.true.eq.i", JUMP, {IS_FORWARD}},
+    {"jump.true.ne.i", JUMP, {IS_FORWARD}},
+    {"jump.false.lt.f", JUMP, {IS_FORWARD}},
+    {"jump.false.le.f", JUMP, {IS_FORWARD}},
+    {"jump.false.gt.f", JUMP, {IS_FORWARD}},
+    {"jump.false.ge.f", JUMP, {IS_FORWARD}},
+    {"jump.false.eq.f", JUMP, {IS_FORWARD}},
+    {"jump.false.ne.f", JUMP, {IS_FORWARD}},
+    {"jump.true.lt.f", JUMP, {IS_FORWARD}},
+    {"jump.true.le.f", JUMP, {IS_FORWARD}},
+    {"jump.true.gt.f", JUMP, {IS_FORWARD}},
+    {"jump.true.ge.f", JUMP, {IS_FORWARD}},
+    {"jump.true.eq.f", JUMP, {IS_FORWARD}},
+    {"jump.true.ne.f", JUMP, {IS_FORWARD}},
+    {"store.k", U16_U16, {IS_SLOT, IS_CONSTANT}},
+    {"add.k.self", U16_U16_U16, {IS_NUMBER, IS_SLOT, IS_CONSTANT}},
+    {"sub.k.self", U16_U16_U16, {IS_NUMBER, IS_SLOT, IS_CONSTANT}},
+    {"jump.false.lt.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.le.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.gt.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.ge.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.eq.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.ne.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.lt.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.le.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.gt.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.ge.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.eq.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.ne.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.lt.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.le.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.gt.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.ge.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.eq.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.ne.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.true.lt.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.true.le.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.true.gt.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.true.ge.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.true.eq.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.true.ne.f.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"add.f.ll", U16_U16_U16, {IS_SLOT, IS_SLOT, IS_SLOT}},
+    {"sub.f.ll", U16_U16_U16, {IS_SLOT, IS_SLOT, IS_SLOT}},
+    {"index.to.ll", U16_X4, {IS_LAYOUT, IS_SLOT, IS_SLOT, IS_SLOT}},
+    {"elem.from.ll", U16_X5, {IS_NUMBER, IS_LAYOUT, IS_SLOT, IS_SLOT, IS_SLOT}},
+    {"mod.i.c", U16, {IS_CONSTANT}},
+    {"mod.i.k", U16_U16, {IS_SLOT, IS_CONSTANT}},
+    {"div.i.c", U16, {IS_CONSTANT}},
+    {"div.i.k", U16_U16, {IS_SLOT, IS_CONSTANT}},
+    {"add.i.narrow.c", U16_U16, {IS_NUMBER, IS_CONSTANT}},
+    {"add.i.narrow.k", U16_U16_U16, {IS_NUMBER, IS_SLOT, IS_CONSTANT}},
+    {"sub.i.narrow.c", U16_U16, {IS_NUMBER, IS_CONSTANT}},
+    {"sub.i.narrow.k", U16_U16_U16, {IS_NUMBER, IS_SLOT, IS_CONSTANT}},
+    {"mul.i.narrow.c", U16_U16, {IS_NUMBER, IS_CONSTANT}},
+    {"mul.i.narrow.k", U16_U16_U16, {IS_NUMBER, IS_SLOT, IS_CONSTANT}},
+    {"float.bits", U16, {IS_NUMBER}},
+    {"bits.f32", NONE, {}},
+    {"jump.false.lt.e", WEIGH_ELEMENT, {IS_SLOT, IS_SLOT, IS_LAYOUT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.le.e", WEIGH_ELEMENT, {IS_SLOT, IS_SLOT, IS_LAYOUT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.gt.e", WEIGH_ELEMENT, {IS_SLOT, IS_SLOT, IS_LAYOUT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.ge.e", WEIGH_ELEMENT, {IS_SLOT, IS_SLOT, IS_LAYOUT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.eq.e", WEIGH_ELEMENT, {IS_SLOT, IS_SLOT, IS_LAYOUT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.ne.e", WEIGH_ELEMENT, {IS_SLOT, IS_SLOT, IS_LAYOUT, IS_CONSTANT, IS_FORWARD}},
+    {"loop", BACK, {IS_BACKWARD}},
+    {"next.less.i", WALK, {IS_SLOT, IS_SLOT, IS_BACKWARD}},
+    {"next.less.u", WALK, {IS_SLOT, IS_SLOT, IS_BACKWARD}},
+    {"scratch", U16, {IS_SLOT}},
+    {"unscratch", U16, {IS_SLOT}},
+    {"call", U16_U16, {IS_FUNCTION, IS_NUMBER}},
+    {"call.value", U16_U16, {IS_NUMBER, IS_NUMBER}},
+    {"call.host", U16_U16_U16, {IS_EXTERN, IS_NUMBER, IS_NUMBER}},
+    {"return", U16, {IS_NUMBER}},
+    {"stop", NONE, {}},
 };
 
 // One name an opcode, and the compiler counts them, the same way the token
@@ -1366,8 +1496,17 @@ const char *kest_op_name(uint8_t op) {
     return op <= KEST_OP_STOP ? INSTRUCTIONS[op].name : "?";
 }
 
+KestOperand kest_op_operand(uint8_t op, uint32_t k) {
+    uint32_t known = (uint32_t)(sizeof(INSTRUCTIONS) / sizeof(INSTRUCTIONS[0]));
+    return op < known && k < 5 ? INSTRUCTIONS[op].is[k] : KEST_OPERAND_NUMBER;
+}
+
 static uint16_t read_u16(const KestChunk *chunk, uint32_t offset) {
     return (uint16_t)(chunk->code[offset] | (chunk->code[offset + 1] << 8));
+}
+
+uint16_t kest_chunk_u16(const KestChunk *chunk, uint32_t offset) {
+    return read_u16(chunk, offset);
 }
 
 // How many bytes an instruction takes. This is the only place that knows, so
@@ -1807,7 +1946,7 @@ void kest_module_cycles(const KestModule *module, KestArena *arena,
 // itself keeps, read off the cases that call the allocator, and it is the one
 // thing that makes a `no.alloc` promise a property of what runs rather than
 // of what was read.
-static bool op_allocates(uint8_t op) {
+bool kest_op_allocates(uint8_t op) {
     // Every instruction is named, and none of them falls into a `default`: an
     // instruction added to the language that reaches the heap would otherwise
     // be one this proof does not know about, and a promise kept by not
@@ -1869,7 +2008,7 @@ static bool op_allocates(uint8_t op) {
     case KEST_OP_SUB_I_NARROW_K:
     case KEST_OP_MUL_I_NARROW_C:
     case KEST_OP_MUL_I_NARROW_K:
-    case KEST_OP_F32_BITS:
+    case KEST_OP_FLOAT_BITS:
     case KEST_OP_BITS_F32:
     case KEST_OP_ADD_I_NARROW_TO:
     case KEST_OP_SUB_I_NARROW_TO:
@@ -2044,176 +2183,387 @@ static bool op_allocates(uint8_t op) {
     return false;
 }
 
-// Which chunk first reaches the heap, following calls, or -1. `where` is left
-// at the instruction that does it.
-// Where a promise is broken in what was emitted, and which chunk it is in. The
-// same walk for both promises, because the thing that differs is one
-// instruction: what reaches the heap is a list of them, and what reaches the
-// host is `KEST_OP_CALL_HOST` and nothing else. See D853.
-static int32_t breaks_in(const KestModule *module, uint32_t which,
-                         uint8_t *state, uint32_t *where, int about) {
-    if (state[which] != 0) {
-        return -1;
-    }
-    state[which] = 1;
-
-    const KestChunk *chunk = module->functions[which];
-    for (uint32_t at = 0; at < chunk->code_count;) {
-        uint8_t op = chunk->code[at];
-        if (about == 0 && op_allocates(op)) {
-            *where = at;
-            return (int32_t)which;
-        }
-        if (about == 1 && op == KEST_OP_CALL_HOST) {
-            *where = at;
-            return (int32_t)which;
-        }
-        // And a crossing out of the simulation profile, which is a crossing to
-        // a door that does not promise it is inside one. `no.host` refuses
-        // every crossing; this refuses the ones nobody has vouched for.
-        // See D942.
-        if (about == 2 && op == KEST_OP_CALL_HOST) {
-            uint16_t door = read_u16(chunk, at + 1);
-            if (door >= module->extern_count ||
-                !module->externs[door].deterministic) {
-                *where = at;
-                return (int32_t)which;
-            }
-        }
-        if (op == KEST_OP_CALL) {
-            uint16_t callee = read_u16(chunk, at + 1);
-            if (callee < module->count) {
-                int32_t found =
-                    breaks_in(module, callee, state, where, about);
-                if (found >= 0) {
-                    return found;
-                }
-            }
-        }
-        at += kest_op_width(op);
-    }
-    return -1;
-}
-
-bool kest_module_prove(const KestModule *module, KestArena *arena,
-                       KestDiags *diags) {
-    if (module->count == 0) {
-        return true;
-    }
-    uint8_t *state = kest_arena_alloc(arena, module->count, 1);
-    if (state == NULL) {
-        return false;
-    }
-
-    bool held = true;
-
-    // Every chunk has to be walkable, which means that stepping by what each
-    // instruction says it takes lands exactly on the end. A width that is
-    // wrong for one instruction puts everything after it out of step, and a
-    // walk that reads the middle of an instruction as an instruction is how
-    // half the calls in a program went unseen once (D057).
-    uint32_t known = (uint32_t)(sizeof(INSTRUCTIONS) / sizeof(INSTRUCTIONS[0]));
-    for (uint32_t i = 0; i < module->count; i++) {
-        const KestChunk *chunk = module->functions[i];
-        uint32_t at = 0;
-        uint8_t last = KEST_OP_RETURN;
-        const char *wrong = NULL;
-        // A `return` may give back less than the function says, because the
-        // one written past the end of a body gives nothing and is there for a
-        // body that falls off it. More is what a host would read out of its
-        // frame past the end, so it is the direction that is held.
-        int32_t gives = -1;
-        while (at < chunk->code_count) {
-            last = chunk->code[at];
-            if (last >= known) {
-                wrong = "lands on something that is not an instruction";
-                break;
-            }
-            if (last == KEST_OP_RETURN && gives < 0) {
-                uint16_t count = read_u16(chunk, at + 1);
-                if (count > chunk->result_slots) {
-                    gives = count;
-                }
-            }
-            at += kest_op_width(last);
-        }
-        if (wrong == NULL && at != chunk->code_count) {
-            wrong = "steps past the end";
-        }
-        // Every chunk ends in a return, so a walk that ends anywhere else
-        // stepped through the middle of something. Landing on the end by luck
-        // is possible; landing on the end having last seen a return is not.
-        if (wrong == NULL && last != KEST_OP_RETURN) {
-            wrong = "ends on something that is not a return";
-        }
-        if (wrong != NULL) {
-            KestSpan nowhere = {0, 0};
-            kest_diags_in(diags, chunk->source);
-            kest_diags_add(diags, KEST_SEVERITY_ERROR, "K0406", nowhere,
-                           "`%s` cannot be walked: %u bytes of code and a walk "
-                           "that %s",
-                           chunk->name, chunk->code_count, wrong);
-            kest_diags_fault(diags,
-                             "an instruction is a different width from what "
-                             "it says");
-            held = false;
-        }
-        // How wide a frame has to be is answered from the declaration before
-        // anything runs, so a `return` wider than that would be read back into
-        // a host's frame past the end of it.
-        if (wrong == NULL && gives >= 0) {
-            KestSpan nowhere = {0, 0};
-            kest_diags_in(diags, chunk->source);
-            kest_diags_add(diags, KEST_SEVERITY_ERROR, "K0407", nowhere,
-                           "`%s` has a `return` giving %d slots back where its "
-                           "declaration gives %u",
-                           chunk->name, gives, chunk->result_slots);
-            kest_diags_fault(diags,
-                             "what a call reads back is the declaration's "
-                             "width");
-            held = false;
+const char *kest_op_stack(const KestModule *module, const KestChunk *chunk,
+                          uint32_t at, uint32_t *takes, uint32_t *gives) {
+    uint8_t op = chunk->code[at];
+    uint32_t u[5] = {0, 0, 0, 0, 0};
+    // A layout or a function this names is one there is before anything is
+    // read out of it: the verifier has asked by the time it gets here, and
+    // the machine that checks itself asks this before the handler's own
+    // guard has had its turn.
+    for (uint32_t k = 0; k < (kest_op_width(op) - 1) / 2 && k < 5; k++) {
+        u[k] = read_u16(chunk, at + 1 + 2 * k);
+        if ((INSTRUCTIONS[op].is[k] == IS_LAYOUT && u[k] >= module->layout_count) ||
+            (INSTRUCTIONS[op].is[k] == IS_FUNCTION && u[k] >= module->count)) {
+            return "names what the program has not got";
         }
     }
-
-    for (uint32_t i = 0; i < module->count; i++) {
-        for (int about = 0; about < 3; about++) {
-            if (!(about == 2   ? module->functions[i]->deterministic
-                  : about == 1 ? module->functions[i]->no_host
-                               : module->functions[i]->no_alloc)) {
-                continue;
-            }
-            memset(state, 0, module->count);
-            uint32_t where = 0;
-            int32_t at = breaks_in(module, i, state, &where, about);
-            if (at < 0) {
-                continue;
-            }
-            // Reaching here means the walk over the tree missed something, so
-            // it is reported against the instruction rather than against a
-            // promise: the promise was checked and this is the code that was
-            // emitted for it.
-            const KestChunk *guilty = module->functions[at];
-            KestSpan span = {kest_chunk_origin(guilty, where), 1};
-            const char *written = module->functions[i]->wrote;
-
-            kest_diags_in(diags, guilty->source);
-            kest_diags_add(diags, KEST_SEVERITY_ERROR, "K0405", span,
-                           about == 2
-                               ? "this reaches outside the simulation "
-                                 "profile, and `%s` promises `deterministic`"
-                           : about == 1
-                               ? "this calls the host, and `%s` promises "
-                                 "`no.host`"
-                               : "this reaches the heap, and `%s` promises "
-                                 "`no.alloc`",
-                           written);
-            kest_diags_fault(diags,
-                             "the promise was allowed and the code says "
-                             "otherwise");
-            held = false;
+    // What a layout operand holds, in slots: the machine reads it as the
+    // layout's width in one place and as the type's in another, and the two
+    // are the same number except for a type of no slots, which the layout
+    // counts as one.
+#define LAID(k) ((uint32_t)module->layouts[u[k]].slots)
+#define TYPED(k)                                                               \
+    (module->layout_types[u[k]] == NULL ? UINT32_MAX                           \
+                                        : (uint32_t)module->layout_types[u[k]]->slots)
+    uint32_t t = 0;
+    uint32_t g = 0;
+    switch ((KestOp)op) {
+    case KEST_OP_CONST:
+    case KEST_OP_LOAD:
+    case KEST_OP_TRUE:
+    case KEST_OP_FALSE:
+    case KEST_OP_TEXT_IN:
+    case KEST_OP_MOD_I_K:
+    case KEST_OP_DIV_I_K:
+    case KEST_OP_ADD_I_NARROW_K:
+    case KEST_OP_SUB_I_NARROW_K:
+    case KEST_OP_MUL_I_NARROW_K:
+        g = 1;
+        break;
+    case KEST_OP_LOAD2:
+    case KEST_OP_LOADK:
+        g = 2;
+        break;
+    case KEST_OP_CONST_RUN:
+    case KEST_OP_LOADN:
+        g = u[1];
+        break;
+    case KEST_OP_STOREN:
+        t = u[1];
+        break;
+    case KEST_OP_CONST_AT:
+    case KEST_OP_LOAD_SLOTS:
+        t = 1;
+        g = u[1];
+        break;
+    case KEST_OP_STORE_SLOTS:
+        t = u[1] + 1;
+        break;
+    case KEST_OP_STORE:
+    case KEST_OP_POP:
+    case KEST_OP_CLEAR:
+    case KEST_OP_JUMP_FALSE:
+    case KEST_OP_JUMP_TRUE:
+    case KEST_OP_JUMP_FALSE_LT_C:
+    case KEST_OP_JUMP_FALSE_LE_C:
+    case KEST_OP_JUMP_FALSE_GT_C:
+    case KEST_OP_JUMP_FALSE_GE_C:
+    case KEST_OP_JUMP_FALSE_EQ_C:
+    case KEST_OP_JUMP_FALSE_NE_C:
+        t = 1;
+        break;
+    case KEST_OP_POPN:
+        t = u[0];
+        break;
+    case KEST_OP_ROTATE:
+        t = u[0];
+        g = u[0];
+        break;
+    case KEST_OP_FIELD:
+        t = u[2];
+        g = u[1];
+        break;
+    case KEST_OP_ARRAY:
+        t = u[0] * LAID(1);
+        g = 1;
+        break;
+    case KEST_OP_MAKE_ARRAY:
+    case KEST_OP_FIT:
+        t = 1 + LAID(0);
+        g = 1;
+        break;
+    case KEST_OP_PUSH:
+        t = 1 + LAID(0);
+        break;
+    case KEST_OP_PUSH_TEXT:
+        t = 3;
+        break;
+    case KEST_OP_FIT_TEXT:
+        t = 3;
+        g = 1;
+        break;
+    case KEST_OP_ROOM:
+    case KEST_OP_INDEX_TO:
+    case KEST_OP_ELEM_FROM:
+    case KEST_OP_ADD_I_NARROW_TO:
+    case KEST_OP_SUB_I_NARROW_TO:
+    case KEST_OP_ADD_F_TO:
+    case KEST_OP_SUB_F_TO:
+    case KEST_OP_JUMP_FALSE_LT_I:
+    case KEST_OP_JUMP_FALSE_LE_I:
+    case KEST_OP_JUMP_FALSE_GT_I:
+    case KEST_OP_JUMP_FALSE_GE_I:
+    case KEST_OP_JUMP_FALSE_EQ_I:
+    case KEST_OP_JUMP_FALSE_NE_I:
+    case KEST_OP_JUMP_TRUE_LT_I:
+    case KEST_OP_JUMP_TRUE_LE_I:
+    case KEST_OP_JUMP_TRUE_GT_I:
+    case KEST_OP_JUMP_TRUE_GE_I:
+    case KEST_OP_JUMP_TRUE_EQ_I:
+    case KEST_OP_JUMP_TRUE_NE_I:
+    case KEST_OP_JUMP_FALSE_LT_F:
+    case KEST_OP_JUMP_FALSE_LE_F:
+    case KEST_OP_JUMP_FALSE_GT_F:
+    case KEST_OP_JUMP_FALSE_GE_F:
+    case KEST_OP_JUMP_FALSE_EQ_F:
+    case KEST_OP_JUMP_FALSE_NE_F:
+    case KEST_OP_JUMP_TRUE_LT_F:
+    case KEST_OP_JUMP_TRUE_LE_F:
+    case KEST_OP_JUMP_TRUE_GT_F:
+    case KEST_OP_JUMP_TRUE_GE_F:
+    case KEST_OP_JUMP_TRUE_EQ_F:
+    case KEST_OP_JUMP_TRUE_NE_F:
+        t = 2;
+        break;
+    case KEST_OP_INDEX:
+    case KEST_OP_TAKE:
+        t = 2;
+        g = LAID(0);
+        break;
+    case KEST_OP_ELEM_AT:
+        t = 2;
+        g = LAID(1);
+        break;
+    case KEST_OP_INDEX_LL:
+        g = LAID(2);
+        break;
+    case KEST_OP_POP_LAST:
+        t = 1;
+        g = LAID(0) + 1;
+        break;
+    case KEST_OP_ELEM_ADDR:
+    case KEST_OP_OFFSET_ADDR:
+    case KEST_OP_REMOVE:
+    case KEST_OP_STORE_REF:
+    case KEST_OP_ADD_I:
+    case KEST_OP_SUB_I:
+    case KEST_OP_MUL_I:
+    case KEST_OP_DIV_I:
+    case KEST_OP_MOD_I:
+    case KEST_OP_DIV_U:
+    case KEST_OP_MOD_U:
+    case KEST_OP_AND_I:
+    case KEST_OP_OR_I:
+    case KEST_OP_XOR_I:
+    case KEST_OP_SHL:
+    case KEST_OP_SHR_I:
+    case KEST_OP_SHR_U:
+    case KEST_OP_ADD_I_NARROW:
+    case KEST_OP_SUB_I_NARROW:
+    case KEST_OP_MUL_I_NARROW:
+    case KEST_OP_ADD_F:
+    case KEST_OP_SUB_F:
+    case KEST_OP_MUL_F:
+    case KEST_OP_DIV_F:
+    case KEST_OP_MOD_F:
+    case KEST_OP_ADD_F32:
+    case KEST_OP_SUB_F32:
+    case KEST_OP_MUL_F32:
+    case KEST_OP_DIV_F32:
+    case KEST_OP_MOD_F32:
+    case KEST_OP_LT_I:
+    case KEST_OP_LE_I:
+    case KEST_OP_GT_I:
+    case KEST_OP_GE_I:
+    case KEST_OP_LT_U:
+    case KEST_OP_LE_U:
+    case KEST_OP_GT_U:
+    case KEST_OP_GE_U:
+    case KEST_OP_LT_F:
+    case KEST_OP_LE_F:
+    case KEST_OP_GT_F:
+    case KEST_OP_GE_F:
+    case KEST_OP_EQ_I:
+    case KEST_OP_NE_I:
+    case KEST_OP_EQ_F:
+    case KEST_OP_NE_F:
+    case KEST_OP_HASH_T:
+    case KEST_OP_TEXT_LEN:
+        t = 2;
+        g = 1;
+        break;
+    case KEST_OP_LOAD_AT:
+        t = 1;
+        g = LAID(1);
+        break;
+    case KEST_OP_LOAD_ELEM:
+        t = 2;
+        g = 2 + LAID(1);
+        break;
+    case KEST_OP_STORE_ELEM:
+        t = 2 + LAID(1);
+        break;
+    case KEST_OP_LEN:
+    case KEST_OP_COUNT:
+    case KEST_OP_HASH_I:
+    case KEST_OP_HASH_F:
+    case KEST_OP_NEW_STORE:
+    case KEST_OP_NEG_I:
+    case KEST_OP_NOT_I:
+    case KEST_OP_NARROW:
+    case KEST_OP_I2F:
+    case KEST_OP_U2F:
+    case KEST_OP_F2I:
+    case KEST_OP_TO_F32:
+    case KEST_OP_NEG_F:
+    case KEST_OP_NEG_F32:
+    case KEST_OP_NOT:
+    case KEST_OP_MOD_I_C:
+    case KEST_OP_DIV_I_C:
+    case KEST_OP_ADD_I_NARROW_C:
+    case KEST_OP_SUB_I_NARROW_C:
+    case KEST_OP_MUL_I_NARROW_C:
+    case KEST_OP_FLOAT_BITS:
+    case KEST_OP_BITS_F32:
+        t = 1;
+        g = 1;
+        break;
+    case KEST_OP_TEXT_AT:
+        t = 3;
+        g = 1;
+        break;
+    case KEST_OP_TEXT_SLICE:
+        t = 4;
+        g = 2;
+        break;
+    case KEST_OP_TEXT_REST:
+        t = 3;
+        g = 2;
+        break;
+    case KEST_OP_TEXT_MATCHES:
+        t = 5;
+        g = 1;
+        break;
+    case KEST_OP_TEXT_FIND:
+        t = 5;
+        g = 2;
+        break;
+    case KEST_OP_TEXT_I:
+    case KEST_OP_TEXT_U:
+    case KEST_OP_TEXT_F:
+    case KEST_OP_TEXT_F32:
+    case KEST_OP_TEXT_B:
+    case KEST_OP_TEXT_FROM:
+        t = 1;
+        g = 2;
+        break;
+    case KEST_OP_TEXT_FLAGS:
+    case KEST_OP_TEXT_VALUE:
+        t = TYPED(0);
+        g = 2;
+        break;
+    case KEST_OP_CONCAT:
+        t = 2 * u[0];
+        g = 2;
+        break;
+    case KEST_OP_HASH_VALUE:
+        t = TYPED(0);
+        g = 1;
+        break;
+    case KEST_OP_EQ_VALUE:
+    case KEST_OP_NE_VALUE:
+        t = TYPED(0) == UINT32_MAX ? UINT32_MAX : 2 * TYPED(0);
+        g = 1;
+        break;
+    case KEST_OP_EQ_T:
+    case KEST_OP_NE_T:
+    case KEST_OP_LT_T:
+    case KEST_OP_LE_T:
+    case KEST_OP_GT_T:
+    case KEST_OP_GE_T:
+        t = 4;
+        g = 1;
+        break;
+    case KEST_OP_ADD:
+        t = u[0] + 1;
+        g = 1;
+        break;
+    case KEST_OP_GET:
+        t = 2;
+        g = u[0] + 1;
+        break;
+    case KEST_OP_SET:
+        t = u[0] + 2;
+        g = 1;
+        break;
+    case KEST_OP_SEEK_FROM:
+    case KEST_OP_SEEK_NEXT:
+    case KEST_OP_JUMP:
+    case KEST_OP_STORE_K:
+    case KEST_OP_ADD_K_SELF:
+    case KEST_OP_SUB_K_SELF:
+    case KEST_OP_JUMP_FALSE_LT_K:
+    case KEST_OP_JUMP_FALSE_LE_K:
+    case KEST_OP_JUMP_FALSE_GT_K:
+    case KEST_OP_JUMP_FALSE_GE_K:
+    case KEST_OP_JUMP_FALSE_EQ_K:
+    case KEST_OP_JUMP_FALSE_NE_K:
+    case KEST_OP_JUMP_FALSE_LT_FK:
+    case KEST_OP_JUMP_FALSE_LE_FK:
+    case KEST_OP_JUMP_FALSE_GT_FK:
+    case KEST_OP_JUMP_FALSE_GE_FK:
+    case KEST_OP_JUMP_FALSE_EQ_FK:
+    case KEST_OP_JUMP_FALSE_NE_FK:
+    case KEST_OP_JUMP_TRUE_LT_FK:
+    case KEST_OP_JUMP_TRUE_LE_FK:
+    case KEST_OP_JUMP_TRUE_GT_FK:
+    case KEST_OP_JUMP_TRUE_GE_FK:
+    case KEST_OP_JUMP_TRUE_EQ_FK:
+    case KEST_OP_JUMP_TRUE_NE_FK:
+    case KEST_OP_ADD_F_LL:
+    case KEST_OP_SUB_F_LL:
+    case KEST_OP_INDEX_TO_LL:
+    case KEST_OP_ELEM_FROM_LL:
+    case KEST_OP_JUMP_FALSE_LT_E:
+    case KEST_OP_JUMP_FALSE_LE_E:
+    case KEST_OP_JUMP_FALSE_GT_E:
+    case KEST_OP_JUMP_FALSE_GE_E:
+    case KEST_OP_JUMP_FALSE_EQ_E:
+    case KEST_OP_JUMP_FALSE_NE_E:
+    case KEST_OP_LOOP:
+    case KEST_OP_NEXT_LESS_I:
+    case KEST_OP_NEXT_LESS_U:
+    case KEST_OP_SCRATCH:
+    case KEST_OP_UNSCRATCH:
+    case KEST_OP_STOP:
+        break;
+    case KEST_OP_CALL: {
+        // What a call leaves is what the body it enters gives back, which is
+        // held to its declaration at every `return` it reaches; what it takes
+        // is held here, because the machine starts the callee's frame that
+        // many slots down and a frame that starts anywhere else reads the
+        // caller's values as its own arguments.
+        const KestChunk *callee = module->functions[u[0]];
+        if (u[1] != callee->param_slots) {
+            return "hands a function other than what it takes";
         }
+        t = u[1];
+        g = callee->result_slots;
+        break;
     }
-    return held;
+    case KEST_OP_CALL_VALUE:
+        // The function is a number only a run can know, so the machine holds
+        // the one it finds to taking and giving what this says.
+        t = u[0] + 1;
+        g = u[1];
+        break;
+    case KEST_OP_CALL_HOST:
+        t = u[1];
+        g = u[2];
+        break;
+    case KEST_OP_RETURN:
+        t = u[0];
+        break;
+    }
+#undef LAID
+#undef TYPED
+    if (t == UINT32_MAX) {
+        return "reads a value of a layout with no type";
+    }
+    *takes = t;
+    *gives = g;
+    return NULL;
 }
 
 bool kest_module_needs(const KestModule *module, KestArena *arena,

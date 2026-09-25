@@ -859,19 +859,25 @@ static bool compile_function_value(Compiler *compiler, const KestExpr *expr) {
 }
 
 // A value is laid out flat, so a constant that is a struct is a push a scalar,
-// each with what its bits mean beside it: the machine never reads that and the
-// disassembler does.
-static void value_classes(const KestType *type, uint8_t *classes,
-                          uint32_t *at) {
-    if (type != NULL && type->tag == KEST_T_STRUCT) {
+// each with what its bits mean beside it. The machine never reads that; the
+// disassembler does, the other backend does -- it writes a piece of text as
+// text only where this says one is, and every other slot as the bits it holds
+// -- and so will the verifier. So it says one wherever one is: inside an
+// optional, and inside the case of an enum the value's own tag names. And it
+// writes exactly as many as the type takes, a struct with nothing in it being
+// one, because a description one short puts every field after it one out.
+// See D1241.
+static void value_classes(const KestType *type, const KestValue *values,
+                          uint8_t *classes, uint32_t *at) {
+    if (type != NULL && type->tag == KEST_T_STRUCT && type->member_count > 0) {
         for (uint32_t i = 0; i < type->member_count; i++) {
-            value_classes(type->members[i].type, classes, at);
+            value_classes(type->members[i].type, values, classes, at);
         }
         return;
     }
     if (type != NULL && type->tag == KEST_T_FIXED) {
         for (uint32_t i = 0; i < type->count; i++) {
-            value_classes(type->element, classes, at);
+            value_classes(type->element, values, classes, at);
         }
         return;
     }
@@ -880,6 +886,27 @@ static void value_classes(const KestType *type, uint8_t *classes,
     if (type != NULL && type->tag == KEST_T_TEXT) {
         classes[(*at)++] = KEST_CONST_TEXT;
         classes[(*at)++] = KEST_CONST_INT;
+        return;
+    }
+    if (type != NULL && type->tag == KEST_T_OPTIONAL) {
+        value_classes(type->element, values, classes, at);
+        classes[(*at)++] = KEST_CONST_INT;
+        return;
+    }
+    if (type != NULL && type->tag == KEST_T_ENUM && type->slots > 1) {
+        uint32_t tag_at = *at;
+        for (uint32_t s = 0; s < type->slots; s++) {
+            classes[tag_at + s] = KEST_CONST_INT;
+        }
+        int64_t tag = values[tag_at].integer;
+        if (tag >= 0 && (uint64_t)tag < type->case_count) {
+            const KestVariantType *variant = &type->cases[tag];
+            for (uint32_t p = 0; p < variant->payload_count; p++) {
+                uint32_t piece = tag_at + variant->offsets[p];
+                value_classes(variant->payload[p], values, classes, &piece);
+            }
+        }
+        *at = tag_at + type->slots;
         return;
     }
     classes[(*at)++] = type != NULL && type->tag == KEST_T_FLOAT
@@ -914,7 +941,7 @@ static bool constant_run(Compiler *compiler, const KestType *type,
         }
     }
     uint32_t at = 0;
-    value_classes(type, classes, &at);
+    value_classes(type, values, classes, &at);
     *first = kest_ir_constants_add(compiler->ir, compiler->body, values,
                                    classes, slots);
     if (compiler->ir->out_of_memory) {
@@ -4179,7 +4206,18 @@ static void compile_stmt_kind(Compiler *compiler, const KestStmt *stmt) {
         if (loop == NULL) {
             break;
         }
-        Exits exit = compile_condition(compiler, stmt->loop.condition, opening);
+        // `while true` asks nothing: a loop written to be left by a `return`
+        // or a `break` is one whose condition is not a way out, and asking it
+        // anyway wrote a way out to the end of the body -- a `return` of
+        // nothing in a function that gives something, which no run reaches
+        // and the verifier, walking every path, cannot tell from one that
+        // does. See D1239.
+        Exits exit = {NULL, 0, 0};
+        if (opening || stmt->loop.condition == NULL ||
+            stmt->loop.condition->kind != KEST_EXPR_BOOL ||
+            !stmt->loop.condition->boolean) {
+            exit = compile_condition(compiler, stmt->loop.condition, opening);
+        }
 
         // `while let` leaves what the optional held below the tag the jump
         // consumed. The turn that ran binds it; the turn that stopped drops

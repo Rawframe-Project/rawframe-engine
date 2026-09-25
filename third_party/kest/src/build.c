@@ -1,6 +1,7 @@
 #include "build.h"
 
 #include "emitc.h"
+#include "verify.h"
 
 #include <stdlib.h>
 #include <string.h>

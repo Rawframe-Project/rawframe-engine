@@ -826,7 +826,7 @@ static const struct {
     {KEST_OP_U2F, {NO_OPERAND}},
     {KEST_OP_F2I, {A_NUMBER}},
     {KEST_OP_TO_F32, {NO_OPERAND}},
-    {KEST_OP_F32_BITS, {NO_OPERAND}},
+    {KEST_OP_FLOAT_BITS, {A_NUMBER}},
     {KEST_OP_BITS_F32, {NO_OPERAND}},
     {KEST_OP_ADD_F, {NO_OPERAND}},
     {KEST_OP_SUB_F, {NO_OPERAND}},
@@ -1655,9 +1655,16 @@ static void lower_op(Lower *lower, uint32_t index, const KestIrOp *op) {
         // its bits are the same slot read two ways and there is nothing to
         // do. An `f32` is held widened, so it is narrowed and read as its
         // thirty-two bits, and the other way. See D1171.
-        if (kest_is_narrow(op->type)) {
-            emit(lower, op->imm[0] == 0 ? KEST_OP_F32_BITS : KEST_OP_BITS_F32,
-                 span);
+        //
+        // And the way to the bits is always an instruction, whatever the
+        // width, because what is not a number is one such value there: the
+        // sign and the payload the processor gave it are the processor's.
+        // See D1238.
+        if (op->imm[0] == 0) {
+            emit(lower, KEST_OP_FLOAT_BITS, span);
+            emit_u16(lower, kest_is_narrow(op->type) ? 32 : 64, span);
+        } else if (kest_is_narrow(op->type)) {
+            emit(lower, KEST_OP_BITS_F32, span);
         }
         return;
 

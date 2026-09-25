@@ -1793,16 +1793,27 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
         break;
     case KEST_IR_BITS:
         // The machine's two instructions, written out; an `f64` and its bits
-        // are one slot read two ways. See D1171.
+        // are one slot read two ways, and what is not a number is one value
+        // as bits in either width. See D1171 and D1238.
+        at_stack(walk, first, base);
+        if (op->imm[0] == 0 && !kest_is_narrow(op->type)) {
+            say(c, out,
+                "    if (%s.real != %s.real) {\n"
+                "        %s.integer = (int64_t)UINT64_C(0x7FF8000000000000);\n"
+                "    }\n",
+                first, first, first);
+            break;
+        }
         if (!kest_is_narrow(op->type)) {
             break;
         }
-        at_stack(walk, first, base);
         if (op->imm[0] == 0) {
             say(c, out,
                 "    {\n        float narrow = (float)%s.real;\n"
-                "        uint32_t bits;\n"
-                "        memcpy(&bits, &narrow, sizeof bits);\n"
+                "        uint32_t bits = UINT32_C(0x7FC00000);\n"
+                "        if (narrow == narrow) {\n"
+                "            memcpy(&bits, &narrow, sizeof bits);\n"
+                "        }\n"
                 "        %s.integer = bits;\n    }\n",
                 first, first);
         } else {
@@ -2092,8 +2103,9 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
             // value here.
             say(c, out,
                 "    %s.integer = (int64_t)kest_mix(%s.real == 0.0 ? 0 :\n"
+                "        %s.real != %s.real ? UINT64_C(0x7FF8000000000000) :\n"
                 "                                   (uint64_t)%s.integer);\n",
-                first, first, first);
+                first, first, first, first, first);
             break;
         }
         say(c, out,

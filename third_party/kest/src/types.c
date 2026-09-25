@@ -926,19 +926,26 @@ static bool fold(KestProgram *program, const KestExpr *expr, KestValue *out,
                 bool narrow = what->slots == 1 &&
                               (kest_scalar_of(what) == KEST_L_U32 ||
                                kest_scalar_of(what) == KEST_L_F32);
+                bool to_bits = kest_word_same("bits", called, length);
                 if (!narrow) {
                     *out = held;
+                    // What is not a number is one value as bits. See D1238.
+                    if (to_bits && held.real != held.real) {
+                        out->integer = (int64_t)UINT64_C(0x7FF8000000000000);
+                    }
                     return true;
                 }
-                if (kest_word_same("float", called, length)) {
+                if (!to_bits) {
                     uint32_t word = (uint32_t)held.integer;
                     float single;
                     memcpy(&single, &word, sizeof single);
                     out->real = single;
                 } else {
                     float single = (float)held.real;
-                    uint32_t word;
-                    memcpy(&word, &single, sizeof word);
+                    uint32_t word = UINT32_C(0x7FC00000);
+                    if (single == single) {
+                        memcpy(&word, &single, sizeof word);
+                    }
                     out->integer = word;
                 }
                 return true;
@@ -1498,7 +1505,12 @@ static uint32_t fold_slots(KestProgram *program, const KestExpr *expr,
 uint64_t kest_hash_value(const KestType *type, const KestValue *slots) {
     switch (type->tag) {
     case KEST_T_FLOAT:
-        return kest_mix(slots[0].real == 0.0 ? 0 : (uint64_t)slots[0].integer);
+        // Nought with either sign is one value, and so is everything that is
+        // not a number, whatever sign and payload it was made with. See D1238.
+        return kest_mix(slots[0].real == 0.0 ? 0
+                        : slots[0].real != slots[0].real
+                            ? UINT64_C(0x7FF8000000000000)
+                            : (uint64_t)slots[0].integer);
     // The same whole number `==` compares, mixed the way every other whole
     // number here is: `hash` applies to exactly what `==` applies to, so a
     // reference that compares is a reference that hashes. See D923.

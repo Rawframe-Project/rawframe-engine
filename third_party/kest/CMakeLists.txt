@@ -26,6 +26,7 @@ add_library(rawframe_kest_vendor STATIC
     src/project.c
     src/types.c
     src/value.c
+    src/verify.c
     src/vm.c
     src/wire.c
 )
