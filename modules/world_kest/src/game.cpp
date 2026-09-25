@@ -89,6 +89,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     GameDescription game;
     bool haveProgram = false;
     std::size_t actionsLine = 0;
+    std::size_t admissionLine = 0;
     std::size_t mixerLine = 0;
     std::size_t firstSoundLine = 0;
     GameAudio audio;
@@ -124,6 +125,13 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.program = kWords[1];
             haveProgram = true;
+        } else if (kKeyword == "admission") {
+            if (admissionLine != 0 || kWords.size() != 2) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a game names one admission rule, `admission <function>`");
+            }
+            game.admission = kWords[1];
+            admissionLine = number;
         } else if (kKeyword == "actions") {
             if (actionsLine != 0 || kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names one action set, `actions <file>`");
@@ -434,6 +442,10 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     }
     if (actionsLine != 0) {
         game.controls = std::move(controls);
+    }
+    if (admissionLine != 0 && game.replicated.empty()) {
+        return badLine(
+            admissionLine, WorldKestError::BadGameLine, "an admission rule needs a networked game, with `replicate`");
     }
     if (firstSoundLine != 0 && mixerLine == 0) {
         return badLine(firstSoundLine, WorldKestError::BadGameLine, "sound lines need a mixer line");

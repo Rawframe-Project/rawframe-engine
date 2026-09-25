@@ -197,14 +197,17 @@ public:
 private:
     /// Gameplay admission is open only while the Host is active: before,
     /// and once it drains, a hello is refused as unavailable (SPEC-0012).
-    static std::optional<network::Reject> admitWhileActive(const network::Hello&, void* context) noexcept {
+    /// While it is open, the game's own rule has the last word.
+    static std::optional<network::Reject> admitWhileActive(const network::Hello& hello, void* context) noexcept {
         auto* self = static_cast<ServerParticipant*>(context);
-        if (self->context_->admitting()) {
-            return std::nullopt;
+        if (!self->context_->admitting()) {
+            ++self->refused_;
+            return network::Reject{.reason = network::RejectReason::Unavailable,
+                                   .message = "the server is not admitting players"};
         }
-        ++self->refused_;
-        return network::Reject{.reason = network::RejectReason::Unavailable,
-                               .message = "the server is not admitting players"};
+        auto refusal = self->plan_->admit(hello);
+        self->refused_ += refusal.has_value() ? 1 : 0;
+        return refusal;
     }
 
     composition::ParticipantContext* context_ = nullptr;
@@ -277,6 +280,11 @@ public:
         RAWFRAME_TRY_ASSIGN(compatibility_, compatibilityOf(context, *plan_));
         const composition::Configuration& configuration = context.configuration();
         endpoint_ = std::string{configuration.text("bots.endpoint").value_or("arena")};
+        // What every bot offers as its join ticket, byte for byte; none by
+        // default.
+        for (const char kCharacter : configuration.text("bots.ticket").value_or("")) {
+            ticket_.push_back(static_cast<std::byte>(kCharacter));
+        }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kSeed, configuration.unsignedInteger("bots.seed", 0));
         schema::RegistryBuilder builder;
         for (const schema::ComponentDescriptor& descriptor : plan_->components()) {
@@ -369,6 +377,7 @@ public:
                     bot.connecting = bot.client
                                          ->connect(network::Endpoint{endpoint_},
                                                    network::Hello{.compatibility = compatibility_,
+                                                                  .ticket = ticket_,
                                                                   .maximumDatagram = 1100,
                                                                   .maximumFrame = 4096})
                                          .has_value();
@@ -410,6 +419,7 @@ public:
         std::uint64_t unavailable = 0;
         std::uint64_t noticed = 0;
         std::uint64_t full = 0;
+        std::uint64_t ticketInvalid = 0;
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
         PredictionStatistics predicted;
@@ -423,6 +433,7 @@ public:
             unavailable += bot.client->rejection() == network::RejectReason::Unavailable ? 1 : 0;
             noticed += bot.client->serverStopping() ? 1 : 0;
             full += bot.client->rejection() == network::RejectReason::Capacity ? 1 : 0;
+            ticketInvalid += bot.client->rejection() == network::RejectReason::TicketInvalid ? 1 : 0;
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
             const PredictionStatistics kBot = bot.client->predictionStatistics();
@@ -441,6 +452,7 @@ public:
                       diagnostics::field("unavailable", unavailable),
                       diagnostics::field("serverStopping", noticed),
                       diagnostics::field("full", full),
+                      diagnostics::field("ticketInvalid", ticketInvalid),
                       diagnostics::field("unpredicted", unpredicted_),
                       diagnostics::field("handed", handed),
                       diagnostics::field("sourceFailures", sourceFailures_),
@@ -481,6 +493,7 @@ private:
     const ReplicationPlan* plan_ = nullptr;
     network::Compatibility compatibility_;
     std::string endpoint_;
+    std::vector<std::byte> ticket_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     std::vector<Bot> bots_;
     /// Bots that would predict but could not have a predictor.

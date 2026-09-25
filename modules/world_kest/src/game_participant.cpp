@@ -1,3 +1,4 @@
+#include "admission.h"
 #include "game_files_participant.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
@@ -44,6 +45,7 @@ constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.na
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
 constexpr diagnostics::EventIdentity kGameReloaded{"world_kest", "game_reloaded"};
 constexpr diagnostics::EventIdentity kReloadRefused{"world_kest", "game_reload_refused"};
+constexpr diagnostics::EventIdentity kAdmissionFailed{"world_kest", "admission_rule_failed"};
 
 /// The newest modification among the `.kest` files beside the program, or
 /// nullopt when the directory cannot be read.
@@ -247,6 +249,15 @@ public:
                                 .prefabs = prefabs_,
                                 .limits = {.heapBytes = static_cast<std::size_t>(kHeap), .fuelPerCall = kFuel},
                                 .systems = declarations}));
+        if (!game_.admission.empty()) {
+            RAWFRAME_TRY_ASSIGN(const std::uint64_t kAdmissionHeap,
+                                configuration.unsignedInteger("kest.admission_heap_bytes", 1U << 20U));
+            RAWFRAME_TRY_ASSIGN(const std::uint64_t kAdmissionFuel,
+                                configuration.unsignedInteger("kest.admission_fuel", 100'000));
+            admissionLimits_ = kest::MachineLimits{.heapBytes = static_cast<std::size_t>(kAdmissionHeap),
+                                                   .fuelPerCall = kAdmissionFuel};
+            RAWFRAME_TRY_ASSIGN(admission_, KestAdmission::create(program_, game_.admission, admissionLimits_));
+        }
         return simulation_->addSystems(*systems_);
     }
 
@@ -316,9 +327,26 @@ public:
         sourcesWritten_ = kWritten;
         std::string report;
         auto program = files_->compile(game_.program, {}, &report);
-        result::Status reloaded = program.has_value()
-                                      ? systems_->reload(*program)
-                                      : result::Status{std::unexpected<result::Error>{std::move(program).error()}};
+        // The admission rule follows the program, and only if the systems
+        // do: a refused reload keeps both as they were.
+        std::unique_ptr<KestAdmission> admission;
+        result::Status reloaded;
+        if (!program.has_value()) {
+            reloaded = std::unexpected<result::Error>{std::move(program).error()};
+        } else if (admission_ != nullptr) {
+            auto made = KestAdmission::create(*program, game_.admission, admissionLimits_);
+            if (made.has_value()) {
+                admission = std::move(*made);
+            } else {
+                reloaded = std::unexpected<result::Error>{std::move(made).error()};
+            }
+        }
+        if (reloaded.has_value()) {
+            reloaded = systems_->reload(*program);
+        }
+        if (reloaded.has_value() && admission != nullptr) {
+            admission_ = std::move(admission);
+        }
         if (!reloaded.has_value()) {
             emitter_.log(diagnostics::Severity::Warning,
                          kReloadRefused,
@@ -373,6 +401,20 @@ public:
     }
     const std::optional<world_replication::InterestSettings>& interest() const noexcept override {
         return interest_;
+    }
+    std::optional<network::Reject> admit(const network::Hello& hello) noexcept override {
+        if (admission_ == nullptr) {
+            return std::nullopt;
+        }
+        const std::uint64_t kFailures = admission_->failures();
+        auto refusal = admission_->admit(hello);
+        if (admission_->failures() != kFailures) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kAdmissionFailed,
+                         "the game's admission rule failed; the client was refused as unavailable",
+                         {diagnostics::field("report", std::string_view{admission_->lastReport()})});
+        }
+        return refusal;
     }
 
     const std::optional<physics2d::Physics2DSettings>& physics2d() const noexcept override {
@@ -994,6 +1036,8 @@ private:
     std::vector<schema::ComponentTypeId> predicted_;
     std::vector<schema::ComponentTypeId> nearby_;
     kest::MachineLimits predictionLimits_;
+    kest::MachineLimits admissionLimits_;
+    std::unique_ptr<KestAdmission> admission_;
     std::optional<physics2d::Physics2DSettings> predictedPhysics_;
     std::optional<physics3d::Physics3DSettings> predictedPhysics3d_;
     std::vector<SpawnValues> level_;

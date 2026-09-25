@@ -18,7 +18,19 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/arena_full.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(arena_full PROPERTIES
-                         PASS_REGULAR_EXPRESSION "\"bots\":3,\"admitted\":2,\"unavailable\":0,\"serverStopping\":0,\"full\":1")
+                         PASS_REGULAR_EXPRESSION "\"bots\":3,\"admitted\":2,\"unavailable\":0,\"serverStopping\":0,\"full\":1,")
+    # A game's own admission rule, in Kest, admits bots with the right
+    # ticket and tells the others their ticket is invalid.
+    add_test(NAME arena_gate_pass
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/gate_pass.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(arena_gate_pass PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bots\":2,\"admitted\":2,.*\"ticketInvalid\":0")
+    add_test(NAME arena_gate_nope
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/gate_nope.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(arena_gate_nope PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bots\":2,\"admitted\":0,.*\"ticketInvalid\":2")
     # Sixteen bots play the sample physics game: eleven bodies of the level
     # and one ball for each player are made, and nothing is refused.
     add_test(NAME crates_bots

@@ -1,0 +1,10 @@
+# An admission rule whose arguments are not a session and a ticket.
+program gate.kest
+
+component 2b7d4e61-0c93-4a58-b1f2-7e9a3c5d8f04 gate.seat Seat
+
+system gate.sit simulation sit write gate.seat
+
+replicate gate.seat
+player gate.seat
+admission twice

@@ -50,6 +50,9 @@ public:
     /// What the game's compensated queries gate by, from the server made
     /// for it until that server goes (null).
     virtual void attach(const InterestHistory* history) noexcept = 0;
+    /// The game's own admission rule (ADR-0043), asked on the Host thread
+    /// after the engine's checks: a rejection, or none to admit.
+    [[nodiscard]] virtual std::optional<network::Reject> admit(const network::Hello& hello) noexcept = 0;
 };
 
 inline constexpr composition::Capability<ReplicationPlan> kReplicationPlan{"rawframe.replication.plan"};

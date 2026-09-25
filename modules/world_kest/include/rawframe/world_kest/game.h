@@ -52,6 +52,11 @@
 //
 //   interest game.position x y within 40
 //
+// An `admission <function>` line names the game's own admission rule, a
+// function of the program the server asks about each client it would admit
+// (rawframe.admission says its shape and answers); a game without one
+// admits every client the engine does. It needs `replicate`.
+//
 // A `physics2d` line gives the World 2D physics (D33): the game gains the
 // engine's physics components, named `rawframe.physics2d.body`, `.pose`,
 // `.velocity`, `.impulse`, and `.contact`, whose Kest types are
@@ -256,6 +261,9 @@ struct GameDescription {
     /// From a `mixer <file>` line and `sound <16 hex digits> <file>` lines,
     /// which need it.
     std::optional<GameAudio> audio;
+    /// The program's admission rule, from an `admission <function>` line;
+    /// empty admits every client the engine does.
+    std::string admission;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as

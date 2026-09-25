@@ -1,0 +1,59 @@
+module gate
+
+// A game that decides who joins: a ticket is the word "pass", a session
+// asking for "full" meets a full game and one asking for "late" a game not
+// taking players; "loop" runs out of fuel and "odd" answers what
+// rawframe.admission does not name.
+
+import rawframe.admission
+
+struct Seat {
+    taken: i32
+}
+
+fn spells(bytes: [u8], a: u32, b: u32, c: u32, d: u32) -> bool {
+    if len(bytes) != 4 {
+        return false
+    }
+    return u32(bytes[0]) == a && u32(bytes[1]) == b && u32(bytes[2]) == c &&
+        u32(bytes[3]) == d
+}
+
+fn admit(session: [u8], ticket: [u8]) -> u32 {
+    if spells(session, 108, 111, 111, 112) {
+        let spun = 0
+        while true {
+            spun = spun + 1
+        }
+    }
+    if spells(session, 111, 100, 100, 32) {
+        return 3
+    }
+    if len(session) == 0 && len(ticket) == 0 {
+        return admission.admitted
+    }
+    if !spells(ticket, 112, 97, 115, 115) {
+        return admission.ticketInvalid
+    }
+    if spells(session, 102, 117, 108, 108) {
+        return admission.full
+    }
+    if spells(session, 108, 97, 116, 101) {
+        return admission.unavailable
+    }
+    return admission.admitted
+}
+
+// The shape of a rule, but not of its arguments.
+fn twice(a: i32, b: i32) -> u32 {
+    return u32(a + b)
+}
+
+// Players sit; the game is about who may.
+fn sit(count: i32, seats: [Seat]) {
+    let i = 0
+    while i < count {
+        seats[i].taken = 1
+        i = i + 1
+    }
+}

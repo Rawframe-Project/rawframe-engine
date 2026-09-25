@@ -1,0 +1,21 @@
+module rawframe.admission
+
+// What a game's admission rule answers (ADR-0043). A game description's
+// `admission <function>` line names a function of the game's program shaped
+//
+//   fn admit(session: [u8], ticket: [u8]) -> u32
+//
+// which the server calls, outside the tick, for each compatible hello while
+// it has room and is admitting: `session` is the session the client asks
+// for, `ticket` its join ticket, both byte for byte as the client sent them.
+// It answers `admitted`, or the reason the client is told it may not join.
+// Any other answer, or a rule that fails, refuses the client as unavailable.
+
+// Let the client in.
+const admitted: u32 = 0
+// The ticket is missing, malformed, expired, or not for this server.
+const ticketInvalid: u32 = 7
+// The game has no room for this client, though the server may.
+const full: u32 = 8
+// The game is not taking players now, such as a match in progress.
+const unavailable: u32 = 10
