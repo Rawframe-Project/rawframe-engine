@@ -17,11 +17,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 #include <iterator>
+#include <string>
+#include <utility>
+#include <vector>
+
+#if RAWFRAME_THREADS
 #include <thread>
-#include <unistd.h>
+#endif
 
 using namespace rawframe;
 using namespace rawframe::world_audio;
@@ -222,12 +225,10 @@ RAWFRAME_TEST(AQuietEmitterCountsItsCuesAndABoundListenerHears) {
 }
 
 RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-world-audio-" + std::to_string(::getpid()));
-    std::filesystem::create_directories(kDirectory);
-    const auto kWrite = [&kDirectory](std::string_view name, std::string_view text) {
-        std::ofstream file{kDirectory / name, std::ios::binary};
-        file << text;
+    // The game's files held in memory, as a web client holds them.
+    std::vector<std::pair<std::string, std::string>> held;
+    const auto kWrite = [&held](std::string_view name, std::string_view text) {
+        held.emplace_back(std::string{name}, std::string{text});
     };
     kWrite("heard.kest",
            "module heard\n\nimport rawframe.sound\n\n// A Kest type is laid out when a function uses it.\nfn "
@@ -243,10 +244,9 @@ RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
     kWrite("click.sound",
            "{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      "
            "\"resource\": \"000000000000000000000000000000c1\"\n    }\n  ],\n  \"bus\": \"0000000000000001\"\n}\n");
-    const auto kFiles = world_kest::GameFiles::fromDirectory(kDirectory / "heard.game");
+    const auto kFiles = world_kest::GameFiles::fromHeld("heard.game", std::move(held));
     RAWFRAME_EXPECT(kFiles.has_value());
     if (!kFiles.has_value()) {
-        std::filesystem::remove_all(kDirectory);
         return;
     }
     std::string report;
@@ -262,7 +262,6 @@ RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
     } else {
         std::fprintf(stderr, "%s\n", report.c_str());
     }
-    std::filesystem::remove_all(kDirectory);
 }
 
 namespace {
@@ -332,6 +331,17 @@ struct Content {
     Content(const Content&) = delete;
     Content& operator=(const Content&) = delete;
 
+    /// Lets the loads go on: a worker's turn, or, without workers, the
+    /// queued work run here as a Host would run it.
+    void pause() {
+#if RAWFRAME_THREADS
+        std::this_thread::yield();
+#else
+        while (io.runOne() || cpu.runOne()) {
+        }
+#endif
+    }
+
     result::Result<std::unique_ptr<SoundLoader>>
     loader(std::vector<std::pair<std::uint64_t, audio::SoundDeclaration>> sounds) {
         return SoundLoader::create(*store, cpu, execution::OwnerId{1}, root, clock, std::move(sounds));
@@ -339,14 +349,14 @@ struct Content {
 };
 
 /// Updates `loader` until it is ready or fails, within ten seconds.
-result::Result<bool> settle(SoundLoader& loader) {
+result::Result<bool> settle(Content& content, SoundLoader& loader) {
     const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     for (;;) {
         auto done = loader.update(1);
         if (!done.has_value() || *done || std::chrono::steady_clock::now() >= kDeadline) {
             return done;
         }
-        std::this_thread::yield();
+        content.pause();
     }
 }
 
@@ -363,7 +373,7 @@ RAWFRAME_TEST(SoundsAreReadByIdentityFromCookedContent) {
         if (!loader.has_value()) {
             return;
         }
-        const auto kReady = settle(**loader);
+        const auto kReady = settle(content, **loader);
         RAWFRAME_EXPECT(kReady.has_value() && *kReady);
         const auto kSounds = (*loader)->sounds(1);
         RAWFRAME_EXPECT(kSounds.has_value() && kSounds->size() == 2);
@@ -384,7 +394,7 @@ RAWFRAME_TEST(SoundsAreReadByIdentityFromCookedContent) {
         auto loader = content.loader({{kHum, declared({1, 3}, audio::Loading::Preload)}});
         RAWFRAME_EXPECT(loader.has_value());
         if (loader.has_value()) {
-            const auto kReady = settle(**loader);
+            const auto kReady = settle(content, **loader);
             RAWFRAME_EXPECT(!kReady.has_value() && kReady.error().domain() == assets::kAssetsDomain &&
                             kReady.error().code() == code(assets::AssetError::DecodeFailed));
         }
@@ -404,7 +414,7 @@ RAWFRAME_TEST(OnDemandSoundsAreReadWhenFirstWanted) {
         return;
     }
     SoundLoader& sounds = **loader;
-    const auto kReady = settle(sounds);
+    const auto kReady = settle(content, sounds);
     RAWFRAME_EXPECT(kReady.has_value() && *kReady);
     const auto kMade = sounds.sounds(1);
     RAWFRAME_EXPECT(kMade.has_value() && kMade->size() == 4 && (*kMade)[0].second.clips.size() == 2 &&
@@ -425,7 +435,7 @@ RAWFRAME_TEST(OnDemandSoundsAreReadWhenFirstWanted) {
             RAWFRAME_EXPECT(kError.code() == code(assets::AssetError::DecodeFailed));
             failed.push_back(kSound);
         }
-        std::this_thread::yield();
+        content.pause();
     }
     RAWFRAME_EXPECT(arrived.size() == 2 && arrived[0].sound == 0 && arrived[0].variant == 0 &&
                     arrived[0].clip->frames() == 2 && arrived[1].variant == 1 && arrived[1].clip->frames() == 6);
@@ -442,7 +452,7 @@ RAWFRAME_TEST(AMixerHearsAnOnDemandSoundOnceServed) {
     Content content;
     auto loader = content.loader(
         {{kHum, declared({1, 2}, audio::Loading::OnDemand)}, {kClick, declared({3}, audio::Loading::OnDemand)}});
-    RAWFRAME_EXPECT(loader.has_value() && settle(**loader).has_value());
+    RAWFRAME_EXPECT(loader.has_value() && settle(content, **loader).has_value());
     if (!loader.has_value()) {
         return;
     }
@@ -468,7 +478,7 @@ RAWFRAME_TEST(AMixerHearsAnOnDemandSoundOnceServed) {
             unread.push_back(kSound);
         }
         heard = sounds->play(0).has_value();
-        std::this_thread::yield();
+        content.pause();
     }
     std::vector<float> out(4);
     mixer->render(out);
@@ -479,7 +489,7 @@ RAWFRAME_TEST(AMixerHearsAnOnDemandSoundOnceServed) {
         for (const auto& [kSound, kError] : (*loader)->serve(*sounds, 100 + tick).unread) {
             unread.push_back(kSound);
         }
-        std::this_thread::yield();
+        content.pause();
     }
     RAWFRAME_EXPECT(unread == std::vector<std::size_t>{1} && !sounds->play(1).has_value() &&
                     (*loader)->serve(*sounds, 999).unread.empty());
@@ -489,7 +499,7 @@ RAWFRAME_TEST(AReloadedSoundPlaysItsNewRevision) {
     Content content;
     auto loader = content.loader(
         {{kHum, declared({1}, audio::Loading::Preload)}, {kClick, declared({2}, audio::Loading::Preload)}});
-    RAWFRAME_EXPECT(loader.has_value() && settle(**loader).has_value());
+    RAWFRAME_EXPECT(loader.has_value() && settle(content, **loader).has_value());
     if (!loader.has_value()) {
         return;
     }
@@ -527,7 +537,7 @@ RAWFRAME_TEST(AReloadedSoundPlaysItsNewRevision) {
             RAWFRAME_EXPECT(kError.code() == code(assets::AssetError::DecodeFailed));
             notReloaded.push_back(kSound);
         }
-        std::this_thread::yield();
+        content.pause();
     }
     RAWFRAME_EXPECT(reloaded == std::vector<std::size_t>{0} && notReloaded == std::vector<std::size_t>{1});
     // The next play of 1 is its new revision; 2 plays on as it was.
@@ -541,7 +551,7 @@ RAWFRAME_TEST(AReloadedSoundPlaysItsNewRevision) {
 RAWFRAME_TEST(AnIdleOnDemandSoundIsReleasedAndReadAgain) {
     Content content;
     auto loader = content.loader({{kHum, declared({1}, audio::Loading::OnDemand)}});
-    RAWFRAME_EXPECT(loader.has_value() && settle(**loader).has_value());
+    RAWFRAME_EXPECT(loader.has_value() && settle(content, **loader).has_value());
     if (!loader.has_value()) {
         return;
     }
@@ -563,7 +573,7 @@ RAWFRAME_TEST(AnIdleOnDemandSoundIsReleasedAndReadAgain) {
             if (sounds->play(0).has_value()) {
                 return true;
             }
-            std::this_thread::yield();
+            content.pause();
         }
         return false;
     };

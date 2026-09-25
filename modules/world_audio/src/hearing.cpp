@@ -18,10 +18,13 @@
 #include <array>
 #include <charconv>
 #include <cmath>
-#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <fstream>
+#endif
 
 namespace rawframe::world_audio {
 
@@ -243,6 +246,14 @@ public:
         if (!kPath.has_value()) {
             return {};
         }
+#if !RAWFRAME_FILE_SYSTEM
+        // A recording is a file, and there are none here.
+        return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
+                                                           composition::kCompositionDomain,
+                                                           code(composition::CompositionError::BadConfiguration),
+                                                           "audio.record names a file, and there are none here")
+                                                  .error()};
+#endif
         path_ = std::string{*kPath};
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kSeconds, configuration.unsignedInteger("audio.record_seconds", 60));
         limitFrames_ = kSeconds * kRecordingRate;
@@ -289,14 +300,19 @@ public:
             peak = std::max(peak, std::abs(kSample));
         }
         const std::vector<std::byte> kWave = audio::encodeWav(clip);
+#if RAWFRAME_FILE_SYSTEM
         std::ofstream file{path_, std::ios::binary};
         file.write(reinterpret_cast<const char*>(kWave.data()), static_cast<std::streamsize>(kWave.size()));
+        const bool kWritten = static_cast<bool>(file);
+#else
+        const bool kWritten = false;
+#endif
         const WorldAudioStatistics kHeard = hearing_.statistics();
         emitter_.log(diagnostics::Severity::Info,
                      kRecording,
                      "what one client heard",
                      {diagnostics::field("path", path_),
-                      diagnostics::field("written", static_cast<bool>(file)),
+                      diagnostics::field("written", kWritten),
                       diagnostics::field("frames", clip.frames()),
                       diagnostics::field("peak", static_cast<double>(peak)),
                       diagnostics::field("cues", kHeard.cues),
