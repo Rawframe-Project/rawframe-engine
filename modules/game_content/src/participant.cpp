@@ -32,6 +32,28 @@ public:
                                                                "cooked content is read on the blocking-I/O executor")
                                                       .error()};
         }
+        // A Build, named by its root hash, or a cook's output, or nothing.
+        if (const auto kBuild = configuration.text("content.build")) {
+            const auto kRoot = configuration.text("content.build_root");
+            const auto kDigest = kRoot.has_value() ? content::ContentDigest::parse(*kRoot) : std::nullopt;
+            if (root.has_value() || !kDigest.has_value()) {
+                return std::unexpected<result::Error>{
+                    result::fail(result::ErrorClass::InvalidArgument,
+                                 content::kContentDomain,
+                                 code(content::ContentError::SourceUnavailable),
+                                 "a Build is named by content.build and its root hash content.build_root, without "
+                                 "content.root")
+                        .error()};
+            }
+            RAWFRAME_TRY_ASSIGN(content_,
+                                CookedContent::openBuild(*context.blockingIoExecutor(),
+                                                         context.owner(),
+                                                         context.scope(),
+                                                         context.clock(),
+                                                         std::filesystem::path{std::string{*kBuild}},
+                                                         kDigest->bytes));
+            return {};
+        }
         RAWFRAME_TRY_ASSIGN(
             content_,
             CookedContent::open(

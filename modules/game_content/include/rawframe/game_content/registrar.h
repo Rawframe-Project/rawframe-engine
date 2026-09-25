@@ -15,6 +15,9 @@ namespace rawframe::game_content {
 ///                          objects it names
 ///   content.reload_every   every this many Host iterations, publish a
 ///                          changed manifest as the next catalog (0: never)
+///   content.build          a Build instead (SPEC-0021): its directory
+///   content.build_root     the Build's root hash, `sha256:` and 64 hex;
+///                          a Build of any other identity is refused
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::Runtime);

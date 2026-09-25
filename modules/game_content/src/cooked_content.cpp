@@ -46,9 +46,28 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::open(execution::Ex
     RAWFRAME_TRY_ASSIGN(made->store_,
                         content::ContentStore::create(blockingIo, owner, parent, clock, std::move(sources)));
     made->root_ = std::move(root);
-    if (made->root_.has_value()) {
+    made->held_ = made->root_.has_value();
+    if (made->held_) {
         RAWFRAME_TRY(made->publish(made->entries_));
     }
+    return made;
+}
+
+result::Result<std::unique_ptr<CookedContent>> CookedContent::openBuild(execution::Executor& blockingIo,
+                                                                        execution::OwnerId owner,
+                                                                        execution::CancellationScope& parent,
+                                                                        const execution::MonotonicSource& clock,
+                                                                        const std::filesystem::path& build,
+                                                                        const base::Sha256Digest& root) {
+    RAWFRAME_TRY_ASSIGN(content::BuildContent opened, content::ContentSource::build(build, root));
+    std::unique_ptr<CookedContent> made{new CookedContent};
+    std::vector<content::ContentSource> sources;
+    sources.push_back(std::move(opened.source));
+    RAWFRAME_TRY_ASSIGN(made->store_,
+                        content::ContentStore::create(blockingIo, owner, parent, clock, std::move(sources)));
+    made->entries_ = std::move(opened.entries);
+    made->held_ = true;
+    RAWFRAME_TRY(made->publish(made->entries_));
     return made;
 }
 
@@ -57,12 +76,13 @@ content::ContentStore& CookedContent::store() noexcept {
 }
 
 result::Status CookedContent::admit(std::span<const content::AdmittedRepresentation> representations) {
-    if (!root_.has_value()) {
-        return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
-                                                           content::kContentDomain,
-                                                           code(content::ContentError::SourceUnavailable),
-                                                           "the process has no cooked content (content.root)")
-                                                  .error()};
+    if (!held_) {
+        return std::unexpected<result::Error>{
+            result::fail(result::ErrorClass::FailedPrecondition,
+                         content::kContentDomain,
+                         code(content::ContentError::SourceUnavailable),
+                         "the process has no cooked content (content.root or content.build)")
+                .error()};
     }
     for (const content::AdmittedRepresentation& each : representations) {
         const bool kKnown = std::ranges::any_of(admitted_, [&each](const content::AdmittedRepresentation& other) {
