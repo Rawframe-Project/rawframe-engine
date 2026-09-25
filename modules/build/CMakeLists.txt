@@ -9,4 +9,7 @@ rawframe_module(NAME build
 # signing, linked privately.
 target_link_libraries(rawframe_build PRIVATE rawframe_zstd_compress openssl::crypto)
 
-rawframe_module_tests(NAME build SOURCES tests/build_test.cpp tests/chunking_test.cpp)
+rawframe_module_tests(NAME build SOURCES tests/build_test.cpp tests/chunking_test.cpp tests/golden_test.cpp)
+if(TARGET rawframe_build_tests)
+    target_compile_definitions(rawframe_build_tests PRIVATE RAWFRAME_BUILD_GOLDEN="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/")
+endif()
