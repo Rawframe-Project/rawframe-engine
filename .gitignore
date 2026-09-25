@@ -10,9 +10,9 @@ Thumbs.db
 Desktop.ini
 
 # Build and generated output
-build/
-out/
-dist/
+/build/
+/out/
+/dist/
 bin/
 obj/
 .cache/
