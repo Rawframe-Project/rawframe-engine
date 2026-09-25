@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <array>
+#include <string>
+#include <string_view>
 
 namespace rawframe::animation {
 
@@ -29,6 +31,47 @@ std::array<double, 4> widened(const std::array<double, 3>& numbers) {
 
 std::array<double, 3> narrowed(const std::array<double, 4>& numbers) {
     return {numbers[0], numbers[1], numbers[2]};
+}
+
+constexpr std::string_view kAxes = "xyz";
+
+std::string translationText(const RootMotionSource& source) {
+    std::string made;
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+        if (source.translation[axis]) {
+            made.push_back(kAxes[axis]);
+        }
+    }
+    return made;
+}
+
+/// The source a document's `rootMotion` spells; none for any other text.
+std::optional<RootMotionSource> sourceOf(const Value& value) {
+    if (!hasMembers(value, {"translation", "rotation"}) || value.find("translation")->text() == nullptr ||
+        value.find("rotation")->text() == nullptr) {
+        return std::nullopt;
+    }
+    RootMotionSource made;
+    for (const char kAxis : *value.find("translation")->text()) {
+        const std::size_t kAt = kAxes.find(kAxis);
+        if (kAt == std::string_view::npos) {
+            return std::nullopt;
+        }
+        made.translation[kAt] = true;
+    }
+    const std::string& rotation = *value.find("rotation")->text();
+    if (rotation.size() > 1 || (rotation.size() == 1 && !kAxes.contains(rotation[0]))) {
+        return std::nullopt;
+    }
+    if (rotation.size() == 1) {
+        made.rotation = static_cast<Axis>(kAxes.find(rotation[0]));
+    }
+    // Written again, it must be what was read, which refuses a repeated or
+    // unordered axis.
+    if (translationText(made) != *value.find("translation")->text()) {
+        return std::nullopt;
+    }
+    return made;
 }
 
 } // namespace
@@ -87,6 +130,10 @@ result::Status validate(const Skeleton& skeleton, const SkeletonLimits& limits) 
     if (std::ranges::adjacent_find(targets) != targets.end()) {
         return invalid("a skeleton has each target once");
     }
+    if (skeleton.rootMotion.has_value() && !skeleton.rootMotion->rotation.has_value() &&
+        !std::ranges::contains(skeleton.rootMotion->translation, true)) {
+        return invalid("a root motion source takes a translation axis or a turn");
+    }
     return {};
 }
 
@@ -109,6 +156,14 @@ result::Result<std::string> writeSkeleton(const Skeleton& skeleton, const Skelet
     made.add("formatVersion", Value::integer(1));
     made.add("kind", Value::string("animation.skeleton"));
     made.add("bones", std::move(bones));
+    if (skeleton.rootMotion.has_value()) {
+        Value source = Value::object();
+        source.add("translation", Value::string(translationText(*skeleton.rootMotion)));
+        const std::optional<Axis>& rotation = skeleton.rootMotion->rotation;
+        source.add("rotation",
+                   Value::string(rotation.has_value() ? std::string{kAxes[static_cast<std::size_t>(*rotation)]} : ""));
+        made.add("rootMotion", std::move(source));
+    }
     return document::write(made);
 }
 
@@ -118,10 +173,13 @@ result::Result<Skeleton> readSkeleton(std::string_view text, const SkeletonLimit
         return std::unexpected<result::Error>{std::move(parsed).error()};
     }
     const Value* kind = parsed->find("kind");
-    if (!hasMembers(*parsed, {"formatVersion", "kind", "bones"}) || kind->text() == nullptr ||
-        *kind->text() != "animation.skeleton" || parsed->find("formatVersion")->integer() != 1 ||
-        parsed->find("bones")->kind() != Value::Kind::Array) {
-        return invalid("a skeleton is format version 1, kind animation.skeleton, and bones");
+    const Value* rootMotion = parsed->find("rootMotion");
+    const bool kShape = rootMotion != nullptr ? hasMembers(*parsed, {"formatVersion", "kind", "bones", "rootMotion"})
+                                              : hasMembers(*parsed, {"formatVersion", "kind", "bones"});
+    if (!kShape || kind->text() == nullptr || *kind->text() != "animation.skeleton" ||
+        parsed->find("formatVersion")->integer() != 1 || parsed->find("bones")->kind() != Value::Kind::Array) {
+        return invalid("a skeleton is format version 1, kind animation.skeleton, bones, and an optional root "
+                       "motion source");
     }
     const Value& bones = *parsed->find("bones");
     if (bones.items().size() > limits.maximumBones) {
@@ -155,6 +213,12 @@ result::Result<Skeleton> readSkeleton(std::string_view text, const SkeletonLimit
             bone.parent = BoneIndex{static_cast<std::uint32_t>(*kParent)};
         }
         skeleton.bones.push_back(std::move(bone));
+    }
+    if (rootMotion != nullptr) {
+        skeleton.rootMotion = sourceOf(*rootMotion);
+        if (!skeleton.rootMotion.has_value()) {
+            return invalid("a root motion source is its translation axes, in order, and a turn's axis");
+        }
     }
     // What the writer makes of it is the text, byte for byte, or the text
     // was not in the one form.

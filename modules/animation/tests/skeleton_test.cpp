@@ -65,6 +65,38 @@ RAWFRAME_TEST(ASkeletonHasOneText) {
     RAWFRAME_EXPECT(kRead.has_value() && !kRead->find(target("arm")).has_value());
 }
 
+RAWFRAME_TEST(ASkeletonMayDeclareItsRootMotion) {
+    Skeleton walker = rig();
+    walker.rootMotion = RootMotionSource{.translation = {true, false, true}, .rotation = Axis::Y};
+    const auto kText = writeSkeleton(walker);
+    RAWFRAME_EXPECT(
+        kText.has_value() &&
+        kText->ends_with("  \"rootMotion\": {\n    \"translation\": \"xz\",\n    \"rotation\": \"y\"\n  }\n}\n"));
+    RAWFRAME_EXPECT(kText.has_value() && readSkeleton(*kText) == walker);
+    // A turn alone, or a translation alone.
+    Skeleton turner = rig();
+    turner.rootMotion = RootMotionSource{.rotation = Axis::Z};
+    const auto kTurner = writeSkeleton(turner);
+    RAWFRAME_EXPECT(kTurner.has_value() && kTurner->contains("\"translation\": \"\"") &&
+                    readSkeleton(*kTurner) == turner);
+    // Taking nothing is no source; an axis out of order, repeated, or
+    // unknown, or two turns, is no text of one.
+    Skeleton idle = rig();
+    idle.rootMotion = RootMotionSource{};
+    RAWFRAME_EXPECT(refusedWith(writeSkeleton(idle), AnimationError::SkeletonInvalid));
+    if (!kText.has_value()) {
+        return;
+    }
+    for (const std::string_view kWrong : {"\"zx\"", "\"xx\"", "\"w\"", "7"}) {
+        std::string text = *kText;
+        text.replace(text.find("\"xz\""), 4, kWrong);
+        RAWFRAME_EXPECT(refusedWith(readSkeleton(text), AnimationError::SkeletonInvalid));
+    }
+    std::string twoTurns = *kText;
+    twoTurns.replace(twoTurns.find("\"y\""), 3, "\"yz\"");
+    RAWFRAME_EXPECT(refusedWith(readSkeleton(twoTurns), AnimationError::SkeletonInvalid));
+}
+
 RAWFRAME_TEST(ATargetIsItsWholeNamePath) {
     const std::array<std::string_view, 2> kSplitLate{"ab", "c"};
     const std::array<std::string_view, 2> kSplitEarly{"a", "bc"};

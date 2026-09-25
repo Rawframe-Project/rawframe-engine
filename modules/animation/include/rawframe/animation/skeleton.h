@@ -25,6 +25,19 @@
 //     ]
 //   }
 //
+// A skeleton may declare its root motion source (SPEC-0035), the root's
+// channels a graph takes out of the pose and gives the World as a delta
+// instead, after the bones:
+//
+//     "rootMotion": {
+//       "translation": "xz",
+//       "rotation": "y"
+//     }
+//
+// `translation` is the axes of the root's translation that move the
+// character, in order, and `rotation` the one axis the character turns
+// about, its twist from the bind rotation; either may be empty, not both.
+//
 // The first bone is the one root and every other names a parent before it,
 // so the order is the hierarchy's and nothing sorts it at runtime. A bind
 // pose is in ADR-0046's units: meters, and a unit quaternion (x, y, z, w).
@@ -73,8 +86,27 @@ struct Bone {
     friend bool operator==(const Bone&, const Bone&) = default;
 };
 
+enum class Axis : std::uint8_t {
+    X,
+    Y,
+    Z,
+};
+
+/// SPEC-0035's one root-motion source: the root bone's channels that move
+/// the character rather than the pose.
+struct RootMotionSource {
+    /// Which of the root's translation axes are taken.
+    std::array<bool, 3> translation{};
+    /// The axis the root's turn is taken about; none takes no turn.
+    std::optional<Axis> rotation;
+
+    friend bool operator==(const RootMotionSource&, const RootMotionSource&) = default;
+};
+
 struct Skeleton {
     std::vector<Bone> bones;
+    /// None: a graph's root motion stays in the pose.
+    std::optional<RootMotionSource> rootMotion;
 
     /// The bone of a target, if the skeleton has it.
     [[nodiscard]] std::optional<BoneIndex> find(base::Bits128 target) const noexcept;
