@@ -463,6 +463,48 @@ RAWFRAME_TEST(AGameWithPhysicsStepsItsBodies) {
     RAWFRAME_EXPECT(same);
 }
 
+RAWFRAME_TEST(AKestSystemShootsBackInTime) {
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWithPhysics,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "sniper.game\n" +
+                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 60\n" +
+                              "world.maximum_ticks_per_iteration = 1\n";
+    const auto kConfiguration = composition::Configuration::parse(kText);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    auto started = composition.start();
+    RAWFRAME_EXPECT(started.has_value());
+    if (!started.has_value()) {
+        return;
+    }
+    for (std::uint64_t tick = 0; tick < 90; ++tick) {
+        clock.advance(execution::MonotonicDuration{16'666'667});
+        composition.runHostPhase(composition::HostPhase::RunWorlds,
+                                 composition::HostFrame{.iteration = tick, .now = clock.now()});
+    }
+    // The target passes the spot around tick 29 and is gone by tick 35; the
+    // scope, shooting at tick 30's world, hits on every tick from the one
+    // after tick 30 was stepped, besides the few before it when the moment
+    // was still ahead and so clamped to now.
+    world::World& world = *simulation->world();
+    const auto kScope =
+        world.registry().find(schema::ComponentTypeId::fromText("4e18ba81-c515-47e7-94a6-abd288fa6c60"));
+    const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kScope, world::Access::Read}};
+    auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+    std::int32_t hits = -1;
+    query->forEachChunk(world, [&hits](const world::ColumnChunk& chunk) {
+        std::memcpy(&hits, chunk.columns[0] + 8, sizeof hits);
+    });
+    RAWFRAME_EXPECT(hits >= 59 && hits <= 66);
+    composition.stop();
+    simulation = nullptr;
+}
+
 namespace {
 
 void writeText(const std::filesystem::path& path, std::string_view text) {

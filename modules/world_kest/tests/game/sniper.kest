@@ -1,0 +1,23 @@
+module sniper
+
+// Scopes shooting straight down at one spot, each at the moment it holds:
+// a lag-compensated shot at where a target was, not where it is.
+
+import rawframe.physics2d
+import rawframe.replication
+
+struct Scope {
+    aimX: f64
+    hits: i32
+}
+
+fn shoot(count: i32, scopes: [Scope], seen: [replication.Perception]) {
+    let i = 0
+    while i < count {
+        let hit = physics2d.castRayAt(scopes[i].aimX, 5.0, 0.0, -10.0, seen[i])
+        if hit.hit && !hit.discontinuous {
+            scopes[i].hits = scopes[i].hits + 1
+        }
+        i = i + 1
+    }
+}

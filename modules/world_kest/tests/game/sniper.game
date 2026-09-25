@@ -1,0 +1,11 @@
+# A target sliding through the spot a scope aims at; the scope shoots at the
+# moment it holds, tick 30, when the target was there.
+program sniper.kest
+physics2d gravity 0 0
+component 4e18ba81-c515-47e7-94a6-abd288fa6c60 sniper.scope Scope
+input sniper.scope perceived
+
+system sniper.shoot simulation shoot write sniper.scope read rawframe.replication.perception before rawframe.physics2d.step
+
+spawn 1 rawframe.physics2d.body motion=1 shape=1 width=0.5 height=0.5 rawframe.physics2d.pose x=-3 rawframe.physics2d.velocity x=6 rawframe.physics2d.impulse rawframe.physics2d.contact
+spawn 1 sniper.scope aimX=0 rawframe.replication.perception baseTick=30
