@@ -25,6 +25,7 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
+#include <tuple>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -426,6 +427,89 @@ RAWFRAME_TEST(AGameStartsWithItsScenes) {
     stranger.schema.push_back({.component = "movers.spin", .mark = 1});
     stranger.entities[0].components.push_back({.name = "movers.spin", .fields = {}});
     RAWFRAME_EXPECT(!kRun(stranger).has_value());
+    std::filesystem::remove_all(kDirectory);
+}
+
+RAWFRAME_TEST(AScenesEntitiesNameEachOther) {
+    // Two links naming each other and one naming none, by their ids in the
+    // scene; spawned, each holds the other's entity.
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-links-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory);
+    writeText(kDirectory / "linked.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "linked.kest"));
+    const std::string kGame = "program linked.kest\ncomponent 5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84 linked.link Link\n";
+    writeText(kDirectory / "linked.game", kGame + "entity linked.link next\nscene links.scene\n");
+    writeText(kDirectory / "links.scene", "");
+    auto files = world_kest::GameFiles::fromDirectory(kDirectory / "linked.game");
+    const auto kProgram = files.has_value() ? files->compile("linked.kest") : std::unexpected{files.error().clone()};
+    RAWFRAME_EXPECT(kProgram.has_value());
+    if (!kProgram.has_value()) {
+        return;
+    }
+    const base::Bits128 kFirst{.high = 0, .low = 1};
+    const base::Bits128 kSecond{.high = 0, .low = 2};
+    const auto kLink = [](base::Bits128 to) {
+        return scene::SceneField{.name = "next", .value = {.kind = scene::FieldValue::Kind::Entity, .entity = to}};
+    };
+    const scene::Scene kLinks{
+        .schema = {{.component = "linked.link", .mark = (*kProgram)->layout("Link")->mark}},
+        .entities = {
+            {.id = kFirst,
+             .components = {{.name = "linked.link",
+                             .fields = {{.name = "hops", .value = {.number = "1"}}, kLink(kSecond)}}}},
+            {.id = kSecond,
+             .components = {{.name = "linked.link",
+                             .fields = {{.name = "hops", .value = {.number = "2"}}, kLink(kFirst)}}}},
+            {.id = base::Bits128{.high = 0, .low = 3},
+             .components = {{.name = "linked.link", .fields = {{.name = "hops", .value = {.number = "3"}}}}}},
+        }};
+    const auto kStart = [&kDirectory](const scene::Scene& authored, std::string_view game) {
+        writeText(kDirectory / "links.scene", *scene::writeScene(authored));
+        writeText(kDirectory / "linked.game", game);
+        std::vector<composition::Problem> problems;
+        auto plan = composition::compose(
+            composition::CompositionRequest{.registrars = kWatched,
+                                            .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+            problems);
+        const auto kConfiguration =
+            composition::Configuration::parse("kest.game = " + (kDirectory / "linked.game").string() + "\n");
+        execution::ManualClock clock;
+        execution::CancellationScope root{clock};
+        composition::Composition composition{
+            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        // By hops: each link's entity and the entity it holds.
+        std::vector<std::tuple<std::int32_t, world::EntityHandle, world::EntityHandle>> links;
+        if (composition.start().has_value()) {
+            world::World& world = *simulation->world();
+            const auto kId =
+                world.registry().find(schema::ComponentTypeId::fromText("5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84"));
+            const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
+            auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+            query->forEachChunk(world, [&links](const world::ColumnChunk& chunk) {
+                for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                    std::array<std::uint32_t, 3> link{};
+                    std::memcpy(link.data(), chunk.columns[0] + (row * 12), 12);
+                    links.emplace_back(static_cast<std::int32_t>(link[2]),
+                                       chunk.entities[row],
+                                       world::EntityHandle{.slot = link[0], .generation = link[1]});
+                }
+            });
+            composition.stop();
+        }
+        simulation = nullptr;
+        std::ranges::sort(links, {}, [](const auto& link) {
+            return std::get<0>(link);
+        });
+        return links;
+    };
+    const auto kLinked = kStart(kLinks, kGame + "entity linked.link next\nscene links.scene\n");
+    RAWFRAME_EXPECT(kLinked.size() == 3);
+    if (kLinked.size() == 3) {
+        RAWFRAME_EXPECT(std::get<2>(kLinked[0]) == std::get<1>(kLinked[1]) &&
+                        std::get<2>(kLinked[1]) == std::get<1>(kLinked[0]) && std::get<2>(kLinked[2]).isNull());
+    }
+    // A reference only through a field the description declares holds one.
+    RAWFRAME_EXPECT(kStart(kLinks, kGame + "scene links.scene\n").empty());
     std::filesystem::remove_all(kDirectory);
 }
 

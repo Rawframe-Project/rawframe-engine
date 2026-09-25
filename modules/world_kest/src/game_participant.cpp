@@ -241,16 +241,35 @@ public:
             return {};
         }
         world::World& world = *simulation_->world();
+        // Every entity first, so a scene's references have something to
+        // name; then each one's components, references written in.
+        std::vector<std::vector<world::EntityHandle>> made(game_.spawns.size());
+        for (std::size_t index = 0; index < game_.spawns.size(); ++index) {
+            for (std::uint32_t count = 0; count < game_.spawns[index].count; ++count) {
+                RAWFRAME_TRY_ASSIGN(const world::EntityHandle kEntity, world.create());
+                made[index].push_back(kEntity);
+            }
+        }
         std::size_t spawned = 0;
-        for (const GameSpawn& spawn : game_.spawns) {
-            RAWFRAME_TRY_ASSIGN(const SpawnValues kSpawned, spawnValues(spawn));
+        for (std::size_t index = 0; index < game_.spawns.size(); ++index) {
+            RAWFRAME_TRY_ASSIGN(SpawnValues spawnedValues, spawnValues(game_.spawns[index]));
+            for (const SceneReference& reference : references_) {
+                if (reference.spawn != index) {
+                    continue;
+                }
+                const auto kValue =
+                    std::ranges::find(spawnedValues, reference.component, &SpawnValues::value_type::first);
+                const world::EntityHandle kTarget = made[reference.target].front();
+                std::memcpy(kValue->second.data() + reference.slot, &kTarget.slot, sizeof kTarget.slot);
+                std::memcpy(
+                    kValue->second.data() + reference.generation, &kTarget.generation, sizeof kTarget.generation);
+            }
             std::vector<std::pair<schema::ComponentRuntimeId, std::vector<std::byte>>> values;
-            for (const auto& [kComponent, kBytes] : kSpawned) {
+            for (const auto& [kComponent, kBytes] : spawnedValues) {
                 RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, world.registry().find(kComponent));
                 values.emplace_back(kId, kBytes);
             }
-            for (std::uint32_t made = 0; made < spawn.count; ++made) {
-                RAWFRAME_TRY_ASSIGN(const world::EntityHandle kEntity, world.create());
+            for (const world::EntityHandle kEntity : made[index]) {
                 for (auto& [id, bytes] : values) {
                     RAWFRAME_TRY(world.insertErased(kEntity, id, bytes.data()));
                 }
@@ -589,6 +608,45 @@ private:
 
     using SpawnValues = std::vector<std::pair<schema::ComponentTypeId, std::vector<std::byte>>>;
 
+    /// A scene entity's field that names another: the spawn it is written
+    /// into, the component and where its entity's slot and generation lie,
+    /// and the spawn it names.
+    struct SceneReference {
+        std::size_t spawn = 0;
+        schema::ComponentTypeId component;
+        std::size_t slot = 0;
+        std::size_t generation = 0;
+        std::size_t target = 0;
+    };
+
+    /// Where `field` of `component` holds an entity: a field the description
+    /// declares with an `entity` line, laid out as rawframe.world's Entity.
+    result::Result<SceneReference>
+    referenceIn(std::string_view component, std::string_view field, std::string_view scene) const {
+        const bool kDeclared = std::ranges::any_of(game_.entityFields, [&](const GameEntityField& declared) {
+            return declared.component == component && declared.field == field;
+        });
+        const GameComponent* const kComponent = componentNamed(component);
+        const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(kComponent - game_.components.data())];
+        const auto kPart = [&layout, field](std::string_view part) -> const kest::Field* {
+            const std::string kName = std::string{field} + "." + std::string{part};
+            const auto kFound = std::ranges::find(layout.fields, kName, &kest::Field::name);
+            return kFound != layout.fields.end() && kFound->kind == kest::FieldKind::U32 ? &*kFound : nullptr;
+        };
+        const kest::Field* const kSlot = kPart("slot");
+        const kest::Field* const kGeneration = kPart("generation");
+        if (!kDeclared || kSlot == nullptr || kGeneration == nullptr) {
+            return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                         WorldKestError::UnknownName,
+                                                         "a scene's reference is a field the game declares with an "
+                                                         "entity line, holding a rawframe.world Entity")
+                                                      .error()
+                                                      .withContext("scene", scene)
+                                                      .withContext("name", field)};
+        }
+        return SceneReference{.component = kComponent->id, .slot = kSlot->offset, .generation = kGeneration->offset};
+    }
+
     /// Each scene the description names, as the spawns of its entities, one
     /// each: its components must be the game's, laid out as the scene was
     /// authored against.
@@ -622,16 +680,25 @@ private:
                                    mark.component);
                 }
             }
+            // Where each of the scene's entities spawns, by its id.
+            std::vector<std::pair<base::Bits128, std::size_t>> spawnOf;
+            for (const scene::SceneEntity& entity : read->entities) {
+                spawnOf.emplace_back(entity.id, game_.spawns.size() + spawnOf.size());
+            }
             for (const scene::SceneEntity& entity : read->entities) {
                 GameSpawn spawn{.count = 1, .components = {}};
                 for (const scene::SceneComponent& component : entity.components) {
                     GameSpawnComponent part{.component = component.name, .fields = {}};
                     for (const scene::SceneField& field : component.fields) {
                         if (field.value.kind == scene::FieldValue::Kind::Entity) {
-                            return kRefuse(WorldKestError::BadGameLine,
-                                           "references between a scene's entities are not spawned yet",
-                                           path,
-                                           field.name);
+                            RAWFRAME_TRY_ASSIGN(SceneReference reference,
+                                                referenceIn(component.name, field.name, path));
+                            reference.spawn = game_.spawns.size();
+                            reference.target =
+                                std::ranges::find(spawnOf, field.value.entity, &decltype(spawnOf)::value_type::first)
+                                    ->second;
+                            references_.push_back(std::move(reference));
+                            continue;
                         }
                         part.fields.push_back(GameFieldValue{.field = field.name,
                                                              .value = field.value.kind == scene::FieldValue::Kind::True
@@ -925,6 +992,7 @@ private:
     std::optional<physics2d::Physics2DSettings> predictedPhysics_;
     std::optional<physics3d::Physics3DSettings> predictedPhysics3d_;
     std::vector<SpawnValues> level_;
+    std::vector<SceneReference> references_;
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;
     std::optional<physics2d::Physics2DSettings> physics2d_;
