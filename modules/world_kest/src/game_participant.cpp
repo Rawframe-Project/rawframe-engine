@@ -5,6 +5,7 @@
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "predictor.h"
+#include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/kest/errors.h"
@@ -31,9 +32,12 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 #include <memory>
 #include <optional>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <filesystem>
+#endif
 
 namespace rawframe::world_kest {
 
@@ -53,6 +57,7 @@ constexpr diagnostics::EventIdentity kGameReloaded{"world_kest", "game_reloaded"
 constexpr diagnostics::EventIdentity kReloadRefused{"world_kest", "game_reload_refused"};
 constexpr diagnostics::EventIdentity kAdmissionFailed{"world_kest", "admission_rule_failed"};
 
+#if RAWFRAME_FILE_SYSTEM
 /// The newest modification among the `.kest` files beside the program, or
 /// nullopt when the directory cannot be read.
 std::optional<std::filesystem::file_time_type> newestSource(const std::filesystem::path& directory) {
@@ -73,6 +78,7 @@ std::optional<std::filesystem::file_time_type> newestSource(const std::filesyste
     }
     return newest;
 }
+#endif
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldKestError error, std::string_view why) {
     return result::fail(errorClass, kWorldKestDomain, code(error), why);
@@ -150,9 +156,11 @@ public:
                 result::ErrorClass::InvalidArgument, WorldKestError::UnknownName, "kest.plan_only is true or false");
         }
         planOnly_ = kPlanOnly == "true";
+#if RAWFRAME_FILE_SYSTEM
         if (files.directory()) {
             sourcesWritten_ = newestSource(*files.directory());
         }
+#endif
         auto program = files.compile(game_.program, {});
         if (!program.has_value()) {
             // The compiler's first diagnostic is on the error already.
@@ -329,6 +337,8 @@ public:
         if (systems_ == nullptr || reloadEvery_ == 0 || frame.iteration % reloadEvery_ != 0) {
             return;
         }
+        // A reload watches a game's directory; from content, nothing changes.
+#if RAWFRAME_FILE_SYSTEM
         if (!files_->directory()) {
             return;
         }
@@ -337,6 +347,9 @@ public:
             return;
         }
         sourcesWritten_ = kWritten;
+#else
+        return;
+#endif
         std::string report;
         auto program = files_->compile(game_.program, {}, &report);
         // The admission rule follows the program, and only if the systems
@@ -1166,7 +1179,9 @@ private:
     const GameFiles* files_ = nullptr;
     std::uint64_t reloadEvery_ = 0;
     bool planOnly_ = false;
+#if RAWFRAME_FILE_SYSTEM
     std::optional<std::filesystem::file_time_type> sourcesWritten_;
+#endif
     GameDescription game_;
     std::shared_ptr<const kest::Program> program_;
     std::vector<kest::TypeLayout> layouts_;

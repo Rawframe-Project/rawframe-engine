@@ -15,15 +15,16 @@
 
 #include <algorithm>
 #include <array>
-#include <fstream>
 #include <iterator>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <fstream>
+#endif
 
 namespace rawframe::world_kest {
 
 namespace {
 
-/// The largest description, document, or Kest file a game reads.
-constexpr std::uintmax_t kLargestFile = std::uintmax_t{1} << 20U;
 /// The most clips and skeletons a game's animators reach.
 constexpr std::size_t kMaximumAnimationDocuments = 4096;
 
@@ -33,6 +34,10 @@ std::unexpected<result::Error> unreadable(std::string_view why, std::string_view
             .error()
             .withContext("path", where)};
 }
+
+#if RAWFRAME_FILE_SYSTEM
+/// The largest description, document, or Kest file a game reads.
+constexpr std::uintmax_t kLargestFile = std::uintmax_t{1} << 20U;
 
 result::Result<std::string> readText(const std::filesystem::path& path) {
     std::error_code error;
@@ -101,6 +106,7 @@ result::Result<std::vector<kest::SourceFile>> kestFilesUnder(const std::filesyst
     std::ranges::sort(files, {}, &kest::SourceFile::path);
     return files;
 }
+#endif
 
 /// A field of the digest: its length, then its bytes, so no two games read
 /// as one.
@@ -331,6 +337,7 @@ result::Status GameFiles::readInstanced(const std::function<result::Result<std::
     return {};
 }
 
+#if RAWFRAME_FILE_SYSTEM
 result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& path,
                                                    game_content::GameContent* content) {
     GameFiles game;
@@ -415,6 +422,7 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
     game.seal();
     return game;
 }
+#endif
 
 result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& content, content::ResourceId description) {
     const content::ResourceTypeId kGameType{kCookedGameType};
@@ -583,10 +591,12 @@ GameFiles::compile(std::string_view name, const kest::CompileSettings& settings,
     if (kProgram == programs_.end()) {
         return unreadable("the description names no such program", name);
     }
+#if RAWFRAME_FILE_SYSTEM
     if (directory_) {
         RAWFRAME_TRY_ASSIGN(const std::vector<kest::SourceFile> kNow, kestFilesUnder(*directory_));
         return kest_library::compile(kProgram->entry, kNow, settings, report);
     }
+#endif
     return kest_library::compile(kProgram->entry, sources_[kProgram->sources], settings, report);
 }
 
@@ -618,11 +628,18 @@ result::Result<composition::ParticipantOwner> makeGameFiles(composition::Partici
                             "a game is named by kest.game or kest.game_resource, not both");
     }
     if (kPath) {
+#if RAWFRAME_FILE_SYSTEM
         game_content::GameContent* content = nullptr;
         if (context.has(game_content::kGameContent.name)) {
             RAWFRAME_TRY_ASSIGN(content, context.capability(game_content::kGameContent));
         }
         RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromDirectory(std::string{*kPath}, content));
+#else
+        return result::fail(result::ErrorClass::FailedPrecondition,
+                            kWorldKestDomain,
+                            code(WorldKestError::UnreadableFile),
+                            "kest.game names a directory, and there are none here; name kest.game_resource");
+#endif
     } else if (kResource) {
         const base::Bits128Parse kId = base::parseBits128Hex(*kResource);
         if (!kId.parsed || kId.value == base::Bits128{} || !context.has(game_content::kGameContent.name)) {

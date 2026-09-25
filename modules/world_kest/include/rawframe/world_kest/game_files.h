@@ -7,9 +7,12 @@
 // controls the game takes them from it rather than opening paths itself.
 // They come from a directory in development, or from the Runtime's content
 // as the cook made them (D88, D90), and are the same game either way.
+// Directories exist only where there are files (RAWFRAME_FILE_SYSTEM, D159):
+// a web client reads its game from content.
 
 #include "rawframe/animation/resources.h"
 #include "rawframe/base/bits128.h"
+#include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/participant.h"
 #include "rawframe/content/identity.h"
@@ -19,13 +22,16 @@
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
 
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <filesystem>
+#endif
 
 namespace rawframe::world_kest {
 
@@ -41,6 +47,7 @@ public:
     /// No game: `named()` is false and nothing else is asked.
     GameFiles() = default;
 
+#if RAWFRAME_FILE_SYSTEM
     /// The game whose description is at `path`, in development: the
     /// documents and scenes it names read beside it, a scene an instance
     /// names found by the sidecar under the description's directory that
@@ -54,6 +61,7 @@ public:
     /// the description's directory that name them.
     [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path,
                                                                  game_content::GameContent* content = nullptr);
+#endif
     /// The game whose cooked description is `description` in `content`
     /// (D88): its documents from the description's record, each scene from
     /// the scene resource it names (D95), each mesh from the mesh resource
@@ -120,11 +128,13 @@ public:
     [[nodiscard]] const base::Sha256Digest& digest() const noexcept {
         return digest_;
     }
+#if RAWFRAME_FILE_SYSTEM
     /// The directory the game is read from in development, whose files a
     /// reload watches; none for a game from content.
     [[nodiscard]] const std::optional<std::filesystem::path>& directory() const noexcept {
         return directory_;
     }
+#endif
 
 private:
     struct Named {
@@ -176,7 +186,9 @@ private:
     /// directory, or one for each Kest sources resource named.
     std::vector<std::vector<kest::SourceFile>> sources_;
     base::Sha256Digest digest_{};
+#if RAWFRAME_FILE_SYSTEM
     std::optional<std::filesystem::path> directory_;
+#endif
 };
 
 /// The Runtime's game files: `named()` when the configuration names a game.
