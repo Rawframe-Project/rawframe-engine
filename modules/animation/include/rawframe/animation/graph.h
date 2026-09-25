@@ -60,7 +60,23 @@
 //                        `loop` overrides it (`clamp` or `loop`)
 //   `rawframe/blend@1`   blends its inputs, each by its entry in
 //                        `weights` (default 1), normalized
+//   `rawframe/state_machine@1`
+//                        one of its inputs, each a state, at a time,
+//                        starting at `entry` and moving by `transitions`
 //   `rawframe/output@1`  the graph's pose, from its input `pose`; one
+//
+// A state machine's transitions are in order of their source, those from
+// any state (`from` left out) first, then of priority, highest first, and
+// a state's own and those from any state never share a priority, so one
+// always wins. Each is `from`, `to` (another state), `priority` (0),
+// `duration` in seconds (0), `curve` (`linear`, or `cubic_in_out`),
+// `interruption` (`none`, `by_higher_priority`, or `by_any`), `cooldown`
+// in seconds (0), `resetPhase` (false), and its `conditions`, all of which
+// must hold: `{"parameter": id, "comparison": c, "value": v}` with c one of
+// `equal`, `not_equal`, `less`, `less_or_equal`, `greater`, and
+// `greater_or_equal`; `{"phase": p}`, the source state's phase reached;
+// `{"finished": true}`, its clip played out; or `{"event": id}`, fired in
+// it. Members at the defaults in parentheses are left out.
 //
 // A node of any other type is quarantined: kept byte for byte and written
 // back, while a graph holding one cannot be hashed or played. An optional
@@ -158,6 +174,91 @@ struct OutputNode {
     friend bool operator==(const OutputNode&, const OutputNode&) = default;
 };
 
+enum class Comparison : std::uint8_t {
+    Equal,
+    NotEqual,
+    Less,
+    LessOrEqual,
+    Greater,
+    GreaterOrEqual,
+};
+
+/// A parameter compared with a value of its type; a `vec2` compares with
+/// nothing, a `bool` only equal or not.
+struct ParameterCondition {
+    std::uint64_t parameter = 0;
+    Comparison comparison = Comparison::Equal;
+    double value = 0.0;
+
+    friend bool operator==(const ParameterCondition&, const ParameterCondition&) = default;
+};
+
+/// The source state's phase has reached this, in [0, 1].
+struct PhaseCondition {
+    double phase = 0.0;
+
+    friend bool operator==(const PhaseCondition&, const PhaseCondition&) = default;
+};
+
+/// The source state's clip has played to its end without looping.
+struct FinishedCondition {
+    friend bool operator==(const FinishedCondition&, const FinishedCondition&) = default;
+};
+
+/// An event of this identity fired in the source state this advance.
+struct EventCondition {
+    std::uint64_t event = 0;
+
+    friend bool operator==(const EventCondition&, const EventCondition&) = default;
+};
+
+using Condition = std::variant<ParameterCondition, PhaseCondition, FinishedCondition, EventCondition>;
+
+enum class BlendCurve : std::uint8_t {
+    Linear,
+    CubicInOut,
+};
+
+/// Whether a transition under way may be replaced by another.
+enum class Interruption : std::uint8_t {
+    None,
+    ByHigherPriority,
+    ByAny,
+};
+
+struct Transition {
+    /// None for a transition from any state.
+    std::optional<std::string> from;
+    std::string to;
+    std::int32_t priority = 0;
+    double duration = 0.0;
+    BlendCurve curve = BlendCurve::Linear;
+    Interruption interruption = Interruption::None;
+    /// Seconds `to` must have been left before it is entered again.
+    double cooldown = 0.0;
+    /// Entering `to` starts its clips from their beginning.
+    bool resetPhase = false;
+    /// All of them, or none for always.
+    std::vector<Condition> conditions;
+
+    friend bool operator==(const Transition&, const Transition&) = default;
+};
+
+struct State {
+    std::string name;
+    Connection from;
+
+    friend bool operator==(const State&, const State&) = default;
+};
+
+struct StateMachineNode {
+    std::vector<State> states;
+    std::string entry;
+    std::vector<Transition> transitions;
+
+    friend bool operator==(const StateMachineNode&, const StateMachineNode&) = default;
+};
+
 /// A node of a type this engine does not know, as it was read.
 struct QuarantinedNode {
     std::string type;
@@ -168,7 +269,7 @@ struct QuarantinedNode {
 
 struct GraphNode {
     std::uint64_t id = 0;
-    std::variant<ClipNode, BlendNode, OutputNode, QuarantinedNode> node;
+    std::variant<ClipNode, BlendNode, StateMachineNode, OutputNode, QuarantinedNode> node;
 
     friend bool operator==(const GraphNode&, const GraphNode&) = default;
 };
@@ -186,8 +287,11 @@ struct Graph {
 /// `OverLimit`.
 struct GraphLimits {
     std::size_t maximumNodes = 1024;
+    /// A blend's inputs, and a state machine's states.
     std::size_t maximumInputs = 64;
     std::size_t maximumParameters = 256;
+    std::size_t maximumTransitions = 256;
+    std::size_t maximumConditions = 16;
 };
 
 /// Refuses (`GraphInvalid`) a graph out of its rules: an id twice, a

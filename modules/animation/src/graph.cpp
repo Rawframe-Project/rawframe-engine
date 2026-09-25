@@ -1,5 +1,6 @@
 #include "rawframe/animation/graph.h"
 
+#include "graph_parts.h"
 #include "rawframe/animation/errors.h"
 #include "text.h"
 
@@ -9,41 +10,51 @@
 
 namespace rawframe::animation {
 
-namespace {
-
 using document::Value;
 
-std::unexpected<result::Error> invalid(std::string_view why) {
+std::unexpected<result::Error> graphInvalid(std::string_view why) {
     return result::fail(result::ErrorClass::InvalidArgument, kAnimationDomain, code(AnimationError::GraphInvalid), why);
 }
 
-std::unexpected<result::Error> overLimit(std::string_view why) {
+std::unexpected<result::Error> graphOverLimit(std::string_view why) {
     return result::fail(result::ErrorClass::InvalidArgument, kAnimationDomain, code(AnimationError::OverLimit), why);
 }
 
+const Parameter* parameterOf(const Graph& graph, std::uint64_t id) {
+    const auto kFound = std::ranges::find(graph.parameters, id, &Parameter::id);
+    return kFound == graph.parameters.end() ? nullptr : &*kFound;
+}
+
+Value hexValue(std::uint64_t id) {
+    return Value::string(hexOf(id));
+}
+
+Value connectionValue(const Connection& connection) {
+    Value made = Value::object();
+    made.add("node", hexValue(connection.node));
+    made.add("output", Value::string(connection.output));
+    return made;
+}
+
+std::optional<Connection> connectionOf(const Value& value) {
+    const std::optional<std::uint64_t> kNode =
+        hasMembers(value, {"node", "output"}) ? bits64Of(value.find("node")) : std::nullopt;
+    if (!kNode.has_value() || value.find("output")->kind() != Value::Kind::String) {
+        return std::nullopt;
+    }
+    return Connection{.node = *kNode, .output = *value.find("output")->text()};
+}
+
+namespace {
+
 constexpr std::string_view kClipType = "rawframe/clip@1";
 constexpr std::string_view kBlendType = "rawframe/blend@1";
+constexpr std::string_view kStateMachineType = "rawframe/state_machine@1";
 constexpr std::string_view kOutputType = "rawframe/output@1";
 
 constexpr std::array<std::string_view, 4> kTypes{"bool", "int", "float", "vec2"};
 constexpr std::array<std::string_view, 3> kReplications{"server_authoritative", "client_predicted", "local"};
 constexpr std::array<std::string_view, 2> kLoops{"clamp", "loop"};
-
-/// An int parameter's range: whole numbers a double holds exactly and
-/// Kest's int reaches.
-constexpr double kIntLimit = 2147483648.0;
-
-template <std::size_t Count>
-std::optional<std::size_t> placeOf(const std::array<std::string_view, Count>& names, const Value* value) {
-    if (value == nullptr || value->kind() != Value::Kind::String) {
-        return std::nullopt;
-    }
-    const auto kFound = std::ranges::find(names, *value->text());
-    if (kFound == names.end()) {
-        return std::nullopt;
-    }
-    return static_cast<std::size_t>(kFound - names.begin());
-}
 
 /// SPEC-0028's `<namespace>/<name>@<major>[.<minor>]`, the namespace
 /// `rawframe` or a package's `publisher/package`.
@@ -73,11 +84,6 @@ bool typeIdInForm(std::string_view type) {
                                 ? kNumber(kVersion)
                                 : kNumber(kVersion.substr(0, kDot)) && kNumber(kVersion.substr(kDot + 1));
     return (segments == 2 || segments == 3) && kVersioned;
-}
-
-const Parameter* parameterOf(const Graph& graph, std::uint64_t id) {
-    const auto kFound = std::ranges::find(graph.parameters, id, &Parameter::id);
-    return kFound == graph.parameters.end() ? nullptr : &*kFound;
 }
 
 bool scalarInForm(const Graph& graph, const Scalar& scalar, bool negative) {
@@ -110,6 +116,10 @@ std::vector<const Connection*> connectionsOf(const GraphNode& node) {
         for (const BlendInput& input : kBlend->inputs) {
             made.push_back(&input.from);
         }
+    } else if (const auto* kMachine = std::get_if<StateMachineNode>(&node.node)) {
+        for (const State& state : kMachine->states) {
+            made.push_back(&state.from);
+        }
     } else if (const auto* kOutput = std::get_if<OutputNode>(&node.node)) {
         made.push_back(&kOutput->pose);
     }
@@ -122,7 +132,7 @@ result::Status parametersInForm(const Graph& graph) {
         const Parameter& parameter = graph.parameters[at];
         if (!machineName(parameter.name) || (at > 0 && !(graph.parameters[at - 1].name < parameter.name)) ||
             parameter.id == 0) {
-            return invalid("a graph's parameters have an identity and a machine name, once each, in name order");
+            return graphInvalid("a graph's parameters have an identity and a machine name, once each, in name order");
         }
         ids.push_back(parameter.id);
         const double kInitial = parameter.initial[0];
@@ -146,13 +156,13 @@ result::Status parametersInForm(const Graph& graph) {
             break;
         }
         if (!inForm) {
-            return invalid("a parameter's default is of its type, within its minimum and maximum, which only int "
-                           "and float parameters have");
+            return graphInvalid("a parameter's default is of its type, within its minimum and maximum, which only int "
+                                "and float parameters have");
         }
     }
     std::ranges::sort(ids);
     if (std::ranges::adjacent_find(ids) != ids.end()) {
-        return invalid("a graph has each parameter identity once");
+        return graphInvalid("a graph has each parameter identity once");
     }
     return {};
 }
@@ -178,7 +188,7 @@ result::Status acyclic(const Graph& graph) {
             }
             const auto kTo = static_cast<std::size_t>(nodeOf(graph, kFrom[next++]->node) - graph.nodes.data());
             if (marks[kTo] == 1) {
-                return invalid("a graph has no cycle");
+                return graphInvalid("a graph has no cycle");
             }
             if (marks[kTo] == 0) {
                 marks[kTo] = 1;
@@ -187,10 +197,6 @@ result::Status acyclic(const Graph& graph) {
         }
     }
     return {};
-}
-
-Value hexValue(std::uint64_t id) {
-    return Value::string(hexOf(id));
 }
 
 Value scalarValue(const Scalar& scalar) {
@@ -210,22 +216,6 @@ std::optional<Scalar> scalarOf(const Value& value) {
     const std::optional<std::uint64_t> kId =
         hasMembers(value, {"parameter"}) ? bits64Of(value.find("parameter")) : std::nullopt;
     return kId.has_value() ? std::optional<Scalar>{ParameterRef{*kId}} : std::nullopt;
-}
-
-Value connectionValue(const Connection& connection) {
-    Value made = Value::object();
-    made.add("node", hexValue(connection.node));
-    made.add("output", Value::string(connection.output));
-    return made;
-}
-
-std::optional<Connection> connectionOf(const Value& value) {
-    const std::optional<std::uint64_t> kNode =
-        hasMembers(value, {"node", "output"}) ? bits64Of(value.find("node")) : std::nullopt;
-    if (!kNode.has_value() || value.find("output")->kind() != Value::Kind::String) {
-        return std::nullopt;
-    }
-    return Connection{.node = *kNode, .output = *value.find("output")->text()};
 }
 
 Value parameterValue(const Parameter& parameter) {
@@ -270,8 +260,8 @@ result::Result<Parameter> parameterOf(const std::string& name, const Value& valu
     const std::size_t kMembers = 4 + (minimum != nullptr ? 1 : 0) + (maximum != nullptr ? 1 : 0);
     if (value.kind() != Value::Kind::Object || value.names().size() != kMembers || !kType.has_value() ||
         !kReplication.has_value() || !kId.has_value() || initial == nullptr) {
-        return invalid("a parameter is its identity, a type, a default, an optional minimum and maximum, and a "
-                       "replication class");
+        return graphInvalid("a parameter is its identity, a type, a default, an optional minimum and maximum, and a "
+                            "replication class");
     }
     Parameter made{.name = name,
                    .id = *kId,
@@ -290,7 +280,7 @@ result::Result<Parameter> parameterOf(const std::string& name, const Value& valu
     }
     if (!kInitial.has_value() || (minimum != nullptr && !numberOf(minimum).has_value()) ||
         (maximum != nullptr && !numberOf(maximum).has_value())) {
-        return invalid("a parameter's default is of its type, and its bounds numbers");
+        return graphInvalid("a parameter's default is of its type, and its bounds numbers");
     }
     made.initial = *kInitial;
     if (minimum != nullptr) {
@@ -303,7 +293,7 @@ result::Result<Parameter> parameterOf(const std::string& name, const Value& valu
 }
 
 /// A known node's record: type, params, inputs.
-Value nodeValue(const GraphNode& node) {
+Value nodeValue(const Graph& graph, const GraphNode& node) {
     Value params = Value::object();
     Value inputs = Value::object();
     std::string_view type;
@@ -328,6 +318,10 @@ Value nodeValue(const GraphNode& node) {
         if (!weights.items().empty()) {
             params.add("weights", std::move(weights));
         }
+    } else if (const auto* kMachine = std::get_if<StateMachineNode>(&node.node)) {
+        type = kStateMachineType;
+        params = stateMachineParams(graph, *kMachine);
+        inputs = stateMachineInputs(*kMachine);
     } else {
         type = kOutputType;
         inputs.add("pose", connectionValue(std::get<OutputNode>(node.node).pose));
@@ -349,7 +343,7 @@ result::Result<ClipNode> clipNodeOf(const Value& params, const Value& inputs) {
     const std::optional<Scalar> kSpeed = speed != nullptr ? scalarOf(*speed) : std::nullopt;
     if (params.names().size() != kMembers || !inputs.items().empty() || !kClip.has_value() ||
         (loop != nullptr && !kLoop.has_value()) || (speed != nullptr && !kSpeed.has_value())) {
-        return invalid("a clip node's params are its clip, and optionally a loop and a speed; it has no inputs");
+        return graphInvalid("a clip node's params are its clip, and optionally a loop and a speed; it has no inputs");
     }
     ClipNode made{.clip = *kClip, .speed = kSpeed.value_or(Scalar{1.0}), .loop = std::nullopt};
     if (kLoop.has_value()) {
@@ -362,13 +356,13 @@ result::Result<BlendNode> blendNodeOf(const Value& params, const Value& inputs) 
     const Value* weights = params.find("weights");
     if (params.names().size() != (weights != nullptr ? 1U : 0U) ||
         (weights != nullptr && weights->kind() != Value::Kind::Object)) {
-        return invalid("a blend node's one param is its weights");
+        return graphInvalid("a blend node's one param is its weights");
     }
     BlendNode made;
     for (std::size_t at = 0; at < inputs.names().size(); ++at) {
         const std::optional<Connection> kFrom = connectionOf(inputs.items()[at]);
         if (!kFrom.has_value()) {
-            return invalid("a blend node's inputs are connections");
+            return graphInvalid("a blend node's inputs are connections");
         }
         made.inputs.push_back(BlendInput{.name = inputs.names()[at], .from = *kFrom, .weight = 1.0});
     }
@@ -376,7 +370,7 @@ result::Result<BlendNode> blendNodeOf(const Value& params, const Value& inputs) 
         const auto kInput = std::ranges::find(made.inputs, weights->names()[at], &BlendInput::name);
         const std::optional<Scalar> kWeight = scalarOf(weights->items()[at]);
         if (kInput == made.inputs.end() || !kWeight.has_value()) {
-            return invalid("a blend node weighs its own inputs, by number or parameter");
+            return graphInvalid("a blend node weighs its own inputs, by number or parameter");
         }
         kInput->weight = *kWeight;
     }
@@ -386,17 +380,17 @@ result::Result<BlendNode> blendNodeOf(const Value& params, const Value& inputs) 
 result::Result<GraphNode> nodeOf(std::uint64_t id, const Value& record) {
     const Value* type = record.find("type");
     if (type == nullptr || type->kind() != Value::Kind::String || !typeIdInForm(*type->text())) {
-        return invalid("a node's type is namespace/name@version");
+        return graphInvalid("a node's type is namespace/name@version");
     }
     const std::string_view kType = *type->text();
-    if (kType != kClipType && kType != kBlendType && kType != kOutputType) {
+    if (kType != kClipType && kType != kBlendType && kType != kStateMachineType && kType != kOutputType) {
         // Kept whole and never read further.
         return GraphNode{.id = id,
                          .node = QuarantinedNode{.type = std::string{kType}, .record = document::writeCompact(record)}};
     }
     if (!hasMembers(record, {"type", "params", "inputs"}) || record.find("params")->kind() != Value::Kind::Object ||
         record.find("inputs")->kind() != Value::Kind::Object) {
-        return invalid("a node is its type, its params, and its inputs");
+        return graphInvalid("a node is its type, its params, and its inputs");
     }
     const Value& params = *record.find("params");
     const Value& inputs = *record.find("inputs");
@@ -408,10 +402,14 @@ result::Result<GraphNode> nodeOf(std::uint64_t id, const Value& record) {
         RAWFRAME_TRY_ASSIGN(BlendNode made, blendNodeOf(params, inputs));
         return GraphNode{.id = id, .node = std::move(made)};
     }
+    if (kType == kStateMachineType) {
+        RAWFRAME_TRY_ASSIGN(StateMachineNode made, stateMachineOf(params, inputs));
+        return GraphNode{.id = id, .node = std::move(made)};
+    }
     const std::optional<Connection> kPose =
         hasMembers(inputs, {"pose"}) ? connectionOf(*inputs.find("pose")) : std::nullopt;
     if (!params.items().empty() || !kPose.has_value()) {
-        return invalid("an output node has no params and one input, its pose");
+        return graphInvalid("an output node has no params and one input, its pose");
     }
     return GraphNode{.id = id, .node = OutputNode{.pose = *kPose}};
 }
@@ -439,58 +437,62 @@ std::string hexOf(const base::Sha256Digest& digest) {
 
 result::Status validate(const Graph& graph, const GraphLimits& limits) {
     if (graph.nodes.size() > limits.maximumNodes || graph.parameters.size() > limits.maximumParameters) {
-        return overLimit("a graph has more nodes or parameters than its limits");
+        return graphOverLimit("a graph has more nodes or parameters than its limits");
     }
     RAWFRAME_TRY(parametersInForm(graph));
     std::size_t outputs = 0;
     for (std::size_t at = 0; at < graph.nodes.size(); ++at) {
         const GraphNode& node = graph.nodes[at];
         if (node.id == 0 || (at > 0 && !(graph.nodes[at - 1].id < node.id))) {
-            return invalid("a graph's nodes have an id each, once, in order");
+            return graphInvalid("a graph's nodes have an id each, once, in order");
         }
         if (const auto* kClip = std::get_if<ClipNode>(&node.node)) {
             if (kClip->clip == base::Bits128{} || !scalarInForm(graph, kClip->speed, true)) {
-                return invalid("a clip node names its clip, and its speed is a number or a float parameter");
+                return graphInvalid("a clip node names its clip, and its speed is a number or a float parameter");
             }
         } else if (const auto* kBlend = std::get_if<BlendNode>(&node.node)) {
             if (kBlend->inputs.empty() || kBlend->inputs.size() > limits.maximumInputs) {
-                return kBlend->inputs.empty() ? invalid("a blend node has an input")
-                                              : overLimit("a blend node has more inputs than its limit");
+                return kBlend->inputs.empty() ? graphInvalid("a blend node has an input")
+                                              : graphOverLimit("a blend node has more inputs than its limit");
             }
             for (std::size_t input = 0; input < kBlend->inputs.size(); ++input) {
                 const BlendInput& each = kBlend->inputs[input];
                 if (!machineName(each.name) || (input > 0 && !(kBlend->inputs[input - 1].name < each.name)) ||
                     !scalarInForm(graph, each.weight, false)) {
-                    return invalid("a blend node's inputs are machine names in order, weighed by a number of nought "
-                                   "or more or by a float parameter");
+                    return graphInvalid(
+                        "a blend node's inputs are machine names in order, weighed by a number of nought "
+                        "or more or by a float parameter");
                 }
             }
+        } else if (const auto* kMachine = std::get_if<StateMachineNode>(&node.node)) {
+            RAWFRAME_TRY(stateMachineInForm(graph, *kMachine, limits));
         } else if (const auto* kQuarantined = std::get_if<QuarantinedNode>(&node.node)) {
             const auto kRecord = document::parse(kQuarantined->record);
             const Value* type = kRecord.has_value() ? kRecord->find("type") : nullptr;
             if (type == nullptr || type->text() == nullptr || *type->text() != kQuarantined->type ||
                 !typeIdInForm(kQuarantined->type) || kQuarantined->type == kClipType ||
-                kQuarantined->type == kBlendType || kQuarantined->type == kOutputType) {
-                return invalid("a quarantined node is a record of a type this engine does not know");
+                kQuarantined->type == kBlendType || kQuarantined->type == kStateMachineType ||
+                kQuarantined->type == kOutputType) {
+                return graphInvalid("a quarantined node is a record of a type this engine does not know");
             }
         } else {
             ++outputs;
         }
         for (const Connection* kFrom : connectionsOf(node)) {
             if (!connectionInForm(graph, *kFrom)) {
-                return invalid("a connection names a node of the graph and an output it has");
+                return graphInvalid("a connection names a node of the graph and an output it has");
             }
         }
     }
     if (outputs != 1) {
-        return invalid("a graph has one output node");
+        return graphInvalid("a graph has one output node");
     }
     RAWFRAME_TRY(acyclic(graph));
     for (std::size_t at = 0; at < graph.presentation.size(); ++at) {
         const auto& [kNode, kDrawing] = graph.presentation[at];
         if (nodeOf(graph, kNode) == nullptr || (at > 0 && !(graph.presentation[at - 1].first < kNode)) ||
             !document::parse(kDrawing).has_value()) {
-            return invalid("a graph's presentation draws its nodes, once each, in order");
+            return graphInvalid("a graph's presentation draws its nodes, once each, in order");
         }
     }
     return {};
@@ -504,7 +506,7 @@ result::Result<std::string> writeGraph(const Graph& graph, const GraphLimits& li
             RAWFRAME_TRY_ASSIGN(Value record, document::parse(kQuarantined->record));
             nodes.add(hexOf(node.id), std::move(record));
         } else {
-            nodes.add(hexOf(node.id), nodeValue(node));
+            nodes.add(hexOf(node.id), nodeValue(graph, node));
         }
     }
     Value made = Value::object();
@@ -537,13 +539,13 @@ result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits
         parsed->find("interface")->find("parameters")->kind() != Value::Kind::Object ||
         parsed->find("graph")->kind() != Value::Kind::Object ||
         (kDrawn && parsed->find("presentation")->kind() != Value::Kind::Object)) {
-        return invalid("a graph is format version 1, kind animation.graph, an interface of parameters, its nodes, "
-                       "and an optional presentation");
+        return graphInvalid("a graph is format version 1, kind animation.graph, an interface of parameters, its nodes, "
+                            "and an optional presentation");
     }
     const Value& parameters = *parsed->find("interface")->find("parameters");
     const Value& nodes = *parsed->find("graph");
     if (parameters.names().size() > limits.maximumParameters || nodes.names().size() > limits.maximumNodes) {
-        return overLimit("a graph has more nodes or parameters than its limits");
+        return graphOverLimit("a graph has more nodes or parameters than its limits");
     }
     Graph graph;
     for (std::size_t at = 0; at < parameters.names().size(); ++at) {
@@ -554,7 +556,7 @@ result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits
         const Value kName = Value::string(nodes.names()[at]);
         const std::optional<std::uint64_t> kNodeId = bits64Of(&kName);
         if (!kNodeId.has_value() || nodes.items()[at].kind() != Value::Kind::Object) {
-            return invalid("a graph's nodes are keyed by 16 hex digits");
+            return graphInvalid("a graph's nodes are keyed by 16 hex digits");
         }
         RAWFRAME_TRY_ASSIGN(GraphNode made, nodeOf(*kNodeId, nodes.items()[at]));
         graph.nodes.push_back(std::move(made));
@@ -565,7 +567,7 @@ result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits
             const Value kName = Value::string(presentation.names()[at]);
             const std::optional<std::uint64_t> kNode = bits64Of(&kName);
             if (!kNode.has_value()) {
-                return invalid("a graph's presentation is keyed by its nodes");
+                return graphInvalid("a graph's presentation is keyed by its nodes");
             }
             graph.presentation.emplace_back(*kNode, document::writeCompact(presentation.items()[at]));
         }
@@ -574,7 +576,7 @@ result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits
     // was not in the one form.
     RAWFRAME_TRY_ASSIGN(const std::string kWritten, writeGraph(graph, limits));
     if (kWritten != text) {
-        return invalid("a graph is not in its canonical form");
+        return graphInvalid("a graph is not in its canonical form");
     }
     return graph;
 }
@@ -584,7 +586,7 @@ result::Result<base::Sha256Digest> semanticHash(const Graph& graph) {
     if (std::ranges::any_of(graph.nodes, [](const GraphNode& node) {
             return std::holds_alternative<QuarantinedNode>(node.node);
         })) {
-        return invalid("a graph with a quarantined node has no semantic hash");
+        return graphInvalid("a graph with a quarantined node has no semantic hash");
     }
     // Bottom up: a node's digest covers its type, params, and inputs, each
     // input by the digest of the node it comes from rather than that
@@ -606,7 +608,7 @@ result::Result<base::Sha256Digest> semanticHash(const Graph& graph) {
                 }
                 continue;
             }
-            Value record = nodeValue(node);
+            Value record = nodeValue(graph, node);
             Value inputs = Value::object();
             const Value& written = *record.find("inputs");
             for (std::size_t at = 0; at < written.names().size(); ++at) {

@@ -29,19 +29,6 @@ constexpr std::array<std::string_view, 3> kInterpolations{"linear", "step", "cub
 constexpr std::array<std::string_view, 2> kLoops{"clamp", "loop"};
 constexpr std::array<std::string_view, 2> kRelevances{"presentation", "simulation"};
 
-/// The place of `text` among `names`, if it is one.
-template <std::size_t Count>
-std::optional<std::size_t> placeOf(const std::array<std::string_view, Count>& names, const Value* value) {
-    if (value == nullptr || value->kind() != Value::Kind::String) {
-        return std::nullopt;
-    }
-    const auto kFound = std::ranges::find(names, *value->text());
-    if (kFound == names.end()) {
-        return std::nullopt;
-    }
-    return static_cast<std::size_t>(kFound - names.begin());
-}
-
 /// Within the clip: up to its duration, short of it when it loops.
 bool within(const Clip& clip, double time) {
     return time >= 0.0 && (clip.loop == Loop::Loop ? time < clip.duration : time <= clip.duration);

@@ -26,6 +26,7 @@
 #include <span>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace rawframe::animation {
@@ -49,6 +50,9 @@ struct EvaluationLimits {
     double eventWeightThreshold = 1e-5;
     /// Events reported by one advance, across the graph.
     std::size_t maximumEvents = 256;
+    /// Transitions one state machine takes in one advance, instant ones
+    /// chaining into the next.
+    std::size_t maximumHops = 4;
 };
 
 class CompiledGraph {
@@ -77,7 +81,38 @@ public:
         return bind_;
     }
 
-    /// One node as it plays: a clip, or a blend of earlier nodes.
+    /// A transition's condition as it plays.
+    struct Test {
+        Condition condition;
+        /// A parameter condition's parameter.
+        ParameterIndex parameter;
+    };
+
+    /// A transition as it plays, between a machine's states by their place.
+    struct Move {
+        /// None from any state.
+        std::optional<std::size_t> from;
+        std::size_t to = 0;
+        std::int32_t priority = 0;
+        double duration = 0.0;
+        BlendCurve curve = BlendCurve::Linear;
+        Interruption interruption = Interruption::None;
+        double cooldown = 0.0;
+        bool resetPhase = false;
+        std::vector<Test> tests;
+    };
+
+    /// A state machine as it plays: its states are the step's inputs.
+    struct Machine {
+        std::size_t entry = 0;
+        std::vector<Move> moves;
+        /// Each state's clip steps, in step order: what its phase, finish,
+        /// and events are read from.
+        std::vector<std::vector<std::size_t>> clips;
+    };
+
+    /// One node as it plays: a clip, a blend of earlier nodes, or a state
+    /// machine over them.
     struct Step {
         /// A clip node's clip; none for a blend.
         std::optional<BoundClip> clip;
@@ -91,6 +126,8 @@ public:
         std::vector<std::size_t> inputs;
         std::vector<double> weights;
         std::vector<std::optional<ParameterIndex>> weightParameters;
+        /// A state machine's own; none for a clip or a blend.
+        std::optional<Machine> machine;
     };
 
     /// Steps in evaluation order, inputs first; the last is the output's.
@@ -145,6 +182,12 @@ public:
     [[nodiscard]] double playhead(std::size_t step) const noexcept {
         return playheads_[step];
     }
+    /// A state machine step's state, and the transition under way into it,
+    /// if one is: its place among the machine's moves and seconds elapsed.
+    [[nodiscard]] std::size_t state(std::size_t step) const noexcept {
+        return machines_[step].current;
+    }
+    [[nodiscard]] std::optional<std::pair<std::size_t, double>> transition(std::size_t step) const noexcept;
     [[nodiscard]] double weight(std::size_t step) const noexcept {
         return weights_[step];
     }
@@ -152,12 +195,35 @@ public:
 private:
     friend class PoseEvaluator;
 
+    /// A state machine's state, SPEC-0035's typed runtime state.
+    struct MachineState {
+        std::size_t current = 0;
+        std::optional<std::size_t> move;
+        /// The state a transition under way leaves.
+        std::size_t source = 0;
+        double elapsed = 0.0;
+        /// Seconds since each state was last left.
+        std::vector<double> sinceLeft;
+    };
+
+    void weigh();
+    void runMachine(std::size_t step, double delta, std::span<const std::pair<std::size_t, std::uint64_t>> heard);
+    [[nodiscard]] bool holds(const CompiledGraph::Test& test,
+                             const CompiledGraph::Machine& machine,
+                             std::size_t state,
+                             std::span<const std::pair<std::size_t, std::uint64_t>> heard) const;
+    [[nodiscard]] std::size_t leader(const CompiledGraph::Machine& machine, std::size_t state) const;
+
     std::shared_ptr<const CompiledGraph> graph_;
     std::vector<ParameterValue> values_;
     std::vector<double> playheads_;
     std::vector<double> weights_;
-    /// Each blend's inputs' shares of it, as the last advance weighed them.
+    /// Each blend's and machine's inputs' shares of it, as the last
+    /// advance weighed them.
     std::vector<std::vector<double>> shares_;
+    /// Each clip step's speed at the last advance.
+    std::vector<double> speeds_;
+    std::vector<MachineState> machines_;
 };
 
 /// The pose phase's working memory, one per thread that poses.

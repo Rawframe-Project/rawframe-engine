@@ -17,6 +17,21 @@
 
 namespace rawframe::animation {
 
+/// The place of a string among `names`, if it is one.
+template <std::size_t Count>
+[[nodiscard]] std::optional<std::size_t> placeOf(const std::array<std::string_view, Count>& names,
+                                                 const document::Value* value) {
+    if (value == nullptr || value->kind() != document::Value::Kind::String) {
+        return std::nullopt;
+    }
+    for (std::size_t at = 0; at < Count; ++at) {
+        if (names[at] == *value->text()) {
+            return at;
+        }
+    }
+    return std::nullopt;
+}
+
 /// An object with exactly these members.
 [[nodiscard]] bool hasMembers(const document::Value& value, std::initializer_list<std::string_view> names);
 
