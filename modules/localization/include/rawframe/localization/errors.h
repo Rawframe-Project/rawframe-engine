@@ -27,6 +27,9 @@ enum class LocalizationError : std::uint32_t {
     /// A format call's argument of a type its message's function does not
     /// take (SPEC-0033's argument typing).
     ArgumentMistyped = 6,
+    /// A string table or translation document out of its form, key
+    /// grammar, or canonical bytes.
+    DocumentInvalid = 7,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(LocalizationError error) noexcept {
