@@ -90,6 +90,14 @@ if(RAWFRAME_BUILD_TESTS)
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_with_package)
     set_tests_properties(runners_with_package PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+    # Runners composed with the runners-timers mod, each cooked, packed, and
+    # signed apart: the game takes it and its timers join the World, and a
+    # mod outside the game's Mod API version is refused.
+    add_test(NAME runners_with_mod
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_with_mod.sh $<TARGET_FILE:rawframe_host_arena>
+                     $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_with_mod)
+    set_tests_properties(runners_with_mod PROPERTIES PASS_REGULAR_EXPRESSION "mod taken: [0-9]+ entities")
     # Runners' text read from its cooked content into one catalog, for a
     # player asking for Turkish.
     configure_file(tests/runners_text.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_text.conf @ONLY)

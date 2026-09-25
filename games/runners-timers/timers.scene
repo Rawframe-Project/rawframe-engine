@@ -1,0 +1,23 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "runners.age": "b1e3cd3c575b7a33"
+  },
+  "entities": [
+    {
+      "id": "faadb25f-9d04-442e-bbd6-db5e371a6a89",
+      "name": "dawn",
+      "components": {
+        "runners.age": {}
+      }
+    },
+    {
+      "id": "7f080c30-cc11-4e29-8de3-00c0ee84b5ab",
+      "name": "dusk",
+      "components": {
+        "runners.age": {}
+      }
+    }
+  ]
+}
