@@ -18,6 +18,12 @@ apply to vendored files; the code is upstream's, not ours.
 | CLDR 48.1.0 (JSON) | `unicode-org/cldr-json` | `d2988851207ba643d9ccc4c2e895e5ca1f4fbaf3` | Unicode-3.0 | `LICENSE`; `cldr-core`'s `plurals`, `ordinals`, `likelySubtags`, `parentLocales`, `aliases`, and `numberingSystems` supplements and `coverageLevels.json`; `cldr-numbers-full`'s `numbers.json` of every locale of modern coverage |
 | OpenSSL 3.5 | `openssl/openssl` | `453eaaa9e6bb1304730abacfbb73d51868cb6ab9` | Apache-2.0 | everything but `test/`, `demos/`, the programs' sample keys, and the documentation and fuzzers other than their `build.info` files |
 
+OpenSSL is built once per machine natively (tools/build_quic.sh) and, for the
+web build, its libcrypto alone for wasm32-wasi (tools/build_openssl_wasm.sh,
+with cmake/openssl_wasi_shim.h forced in for the chmod wasi-libc lacks). Moving
+its pin moves both: the revision in third_party/quic.cmake and
+third_party/openssl_wasm.cmake.
+
 To move the Kest pin, run `tools/update_kest.sh <kest checkout> <revision>`,
 build, run the full check, and commit the result with the new revision in this
 table.
