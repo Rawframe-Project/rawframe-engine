@@ -5,11 +5,13 @@
 // admission. A CompositionRecord is its canonical record and nothing else,
 // and its Builds open from a library held in memory as from a directory.
 
+#include "rawframe/composition/composition.h"
 #include "rawframe/content/composition_record.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/document/json.h"
 #include "rawframe/game_content/cooked_content.h"
+#include "rawframe/game_content/registrar.h"
 #include "rawframe/signature/signature.h"
 #include "rawframe/test/test.h"
 
@@ -378,4 +380,75 @@ RAWFRAME_TEST(ACompositionOpensFromALibraryHeldInMemory) {
         reader.io, execution::OwnerId{1}, reader.scope, reader.clock, kGame.record, std::move(changed));
     RAWFRAME_EXPECT(tampered.has_value() && (*tampered)->admit(kWaves).has_value() &&
                     readOf(**tampered, 1, kSoundType).empty());
+}
+
+namespace {
+
+/// The content the Runtime was composed with, found through a participant
+/// of the test's own.
+GameContent* composed = nullptr;
+
+constexpr std::string_view kNeedsContent[] = {kGameContent.name};
+
+void registerFinder(composition::ParticipantRegistrar& registrar) noexcept {
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = "test.finder",
+        .factory =
+            [](composition::ParticipantContext& context) noexcept -> result::Result<composition::ParticipantOwner> {
+            RAWFRAME_TRY_ASSIGN(composed, context.capability(kGameContent));
+            struct Finder final : composition::Participant {};
+            return composition::ParticipantOwner{new Finder{}};
+        },
+        .scope = composition::LifetimeScope::Runtime,
+        .requiredCapabilities = kNeedsContent,
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
+    });
+}
+
+} // namespace
+
+RAWFRAME_TEST(AHostHoldsItsCompositionAsItFetchedIt) {
+    // The record and the library among the files the host holds (D167),
+    // named by the configuration as a disk's would be.
+    const HeldGame kGame;
+    std::vector<composition::HeldFiles::File> files;
+    for (const auto& [path, bytes] : kGame.library) {
+        files.emplace_back("library/" + path, bytes);
+    }
+    files.emplace_back("game.composition", bytesOf(kGame.record));
+    const auto kHeld = composition::HeldFiles::of(std::move(files));
+    RAWFRAME_EXPECT(kHeld.has_value());
+    const std::array<composition::RegistrarEntry, 2> kRegistrars = {
+        composition::RegistrarEntry{"game_content", &registerParticipants, kScopes},
+        composition::RegistrarEntry{"test", &registerFinder, kScopes}};
+    std::vector<composition::Problem> problems;
+    const auto kPlan = composition::compose(
+        composition::CompositionRequest{.registrars = kRegistrars,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    RAWFRAME_EXPECT(kPlan.has_value());
+    if (!kPlan.has_value() || !kHeld.has_value()) {
+        return;
+    }
+    Reader reader;
+    const auto kStart = [&](std::string_view text) {
+        const auto kConfiguration = composition::Configuration::parse(text);
+        composition::Composition composition{*kPlan,
+                                             composition::HostServices{.clock = &reader.clock,
+                                                                       .scope = &reader.scope,
+                                                                       .blockingIo = &reader.io,
+                                                                       .configuration = &*kConfiguration,
+                                                                       .files = &*kHeld}};
+        composed = nullptr;
+        const bool kStarted = composition.start().has_value();
+        const bool kRead =
+            kStarted && composed != nullptr && composed->compositionId() == content::compositionIdOf(kGame.record);
+        composition.stop();
+        return kRead;
+    };
+    RAWFRAME_EXPECT(kStart("content.composition = game.composition\ncontent.library = library\n"));
+    // Not held, without a library, or a cook's output: refused.
+    RAWFRAME_EXPECT(!kStart("content.composition = other.composition\ncontent.library = library\n"));
+    RAWFRAME_EXPECT(!kStart("content.composition = game.composition\n"));
+    RAWFRAME_EXPECT(!kStart("content.root = library\n"));
 }
