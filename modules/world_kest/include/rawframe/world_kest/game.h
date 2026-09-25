@@ -32,7 +32,12 @@
 // player's components a client predicts, and a system marked `predicted` runs
 // on predicting clients too, over the player alone (SPEC-0041); it may write
 // no replicated component that is not predicted and draw from no World
-// stream, whose state a client does not have. `interpolate` lists the
+// stream, whose state a client does not have. `nearby` lists replicated
+// components of other entities a predicting client puts beside its player,
+// as last heard, whenever it simulates again, so the player's steps meet
+// them (D39): a game with physics lists the three body components. It
+// changes what a client predicts, never what it compares. `interpolate`
+// lists the
 // replicated components a client shows other entities' values of between
 // the states it receives, a little in the past, rather than as each arrives.
 // An `interest` line makes what each connection is sent spatial: an entity
@@ -184,6 +189,9 @@ struct GameDescription {
     bool inputPerceived = false;
     /// The player's components a client predicts from its own input.
     std::vector<std::string> predicted;
+    /// Components of other entities a predicting client steps its player
+    /// among.
+    std::vector<std::string> nearby;
     /// Components shown between states on every entity but the player's.
     std::vector<std::string> interpolated;
     std::vector<GameEntityField> entityFields;

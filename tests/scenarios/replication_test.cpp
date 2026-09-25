@@ -92,6 +92,9 @@ public:
     }
     void rate(world::TickRate) noexcept override {
     }
+    result::Status place(std::span<const world_replication::NeighborValue>) override {
+        return {};
+    }
     result::Status set(schema::ComponentTypeId component, std::span<const std::byte> value) override {
         if (component == Position::kComponentTypeId && value.size() == sizeof position_) {
             std::memcpy(&position_, value.data(), sizeof position_);

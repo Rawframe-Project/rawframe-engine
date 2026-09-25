@@ -5,6 +5,7 @@
 
 #include "rawframe/world_replication/prediction.h"
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <span>
@@ -30,6 +31,11 @@ public:
         return settings_.predicted.size();
     }
     void reset();
+    /// Called when prediction starts and before every resimulation, to
+    /// give the predictor the neighborhood as last heard.
+    void neighbors(std::function<void()> place) {
+        place_ = std::move(place);
+    }
 
     [[nodiscard]] const PredictionStatistics& statistics() const noexcept {
         return statistics_;
@@ -57,6 +63,7 @@ private:
     std::uint64_t predictedTick_ = 0;
     std::uint64_t newestCommand_ = 0;
     PredictionStatistics statistics_;
+    std::function<void()> place_;
 };
 
 } // namespace rawframe::world_replication

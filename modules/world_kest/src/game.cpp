@@ -166,16 +166,18 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.systems.push_back(std::move(system));
         } else if (kKeyword == "replicate" || kKeyword == "player" || kKeyword == "predict" ||
-                   kKeyword == "interpolate") {
+                   kKeyword == "interpolate" || kKeyword == "nearby") {
             std::vector<std::string>& into =
                 kKeyword == "replicate"
                     ? game.replicated
-                    : (kKeyword == "player" ? game.player
-                                            : (kKeyword == "predict" ? game.predicted : game.interpolated));
+                    : (kKeyword == "player"
+                           ? game.player
+                           : (kKeyword == "predict" ? game.predicted
+                                                    : (kKeyword == "nearby" ? game.nearby : game.interpolated)));
             if (kWords.size() < 2) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
-                               "a replicate, player, predict, or interpolate line names components");
+                               "a replicate, player, predict, nearby, or interpolate line names components");
             }
             for (std::size_t at = 1; at < kWords.size(); ++at) {
                 into.emplace_back(kWords[at]);

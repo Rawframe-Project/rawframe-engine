@@ -82,6 +82,9 @@ void Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
             return;
         }
         write(known_);
+        if (place_) {
+            place_();
+        }
         started_ = true;
         predictedTick_ = consumed;
         history_.clear();
@@ -115,6 +118,9 @@ void Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
     ++statistics_.rollbacks;
     const std::uint64_t kThrough = std::max(predictedTick_, consumed);
     write(base);
+    if (place_) {
+        place_();
+    }
     history_.clear();
     predictedTick_ = consumed;
     const std::uint64_t kBefore = statistics_.predictedTicks;

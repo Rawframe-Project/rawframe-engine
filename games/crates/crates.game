@@ -36,3 +36,4 @@ input crates.steer
 interest rawframe.physics2d.pose x y within 40
 interpolate rawframe.physics2d.pose
 predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity crates.steer
+nearby rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity

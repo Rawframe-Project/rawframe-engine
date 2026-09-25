@@ -6,7 +6,9 @@
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
 
+#include <cstddef>
 #include <cstring>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -138,6 +140,37 @@ public:
         rate_ = rate;
     }
 
+    result::Status place(std::span<const world_replication::NeighborValue> values) override {
+        // Static bodies are the level's already.
+        const auto kStatic = [](const world_replication::NeighborValue& value) {
+            return value.component == physics2d::Body2D::kComponentTypeId &&
+                   value.value.size() == sizeof(physics2d::Body2D) &&
+                   std::to_integer<std::uint8_t>(value.value[offsetof(physics2d::Body2D, motion)]) ==
+                       static_cast<std::uint8_t>(physics2d::Motion::Static);
+        };
+        std::map<std::uint32_t, world::EntityHandle> kept;
+        for (std::size_t first = 0; first < values.size();) {
+            std::size_t last = first;
+            bool skip = false;
+            while (last < values.size() && values[last].entity == values[first].entity) {
+                skip = skip || kStatic(values[last]);
+                ++last;
+            }
+            if (!skip) {
+                RAWFRAME_TRY(placeOne(values.subspan(first, last - first), kept));
+            }
+            first = last;
+        }
+        // Whatever the client no longer mirrors is gone here too.
+        for (const auto& [net, entity] : neighbors_) {
+            if (!kept.contains(net)) {
+                static_cast<void>(world_->destroy(entity));
+            }
+        }
+        neighbors_ = std::move(kept);
+        return {};
+    }
+
     result::Status step(std::span<const std::byte> input) override {
         RAWFRAME_TRY(set(registry_->descriptor(input_).id, input));
         // A system that fails leaves the tick to the server's correction.
@@ -152,6 +185,32 @@ public:
     }
 
 private:
+    /// One other entity's values, onto the entity that stands for it here.
+    result::Status placeOne(std::span<const world_replication::NeighborValue> values,
+                            std::map<std::uint32_t, world::EntityHandle>& kept) {
+        const std::uint32_t kNet = values.front().entity;
+        world::EntityHandle entity;
+        if (const auto kFound = neighbors_.find(kNet); kFound != neighbors_.end()) {
+            entity = kFound->second;
+        } else {
+            RAWFRAME_TRY_ASSIGN(entity, world_->create());
+        }
+        kept[kNet] = entity;
+        for (const world_replication::NeighborValue& value : values) {
+            RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kRuntime, registry_->find(value.component));
+            if (value.value.size() != registry_->descriptor(kRuntime).size) {
+                continue;
+            }
+            if (void* const kInto = world_->getErased(entity, kRuntime)) {
+                std::memcpy(kInto, value.value.data(), value.value.size());
+            } else {
+                std::vector<std::byte> copy(value.value.begin(), value.value.end());
+                RAWFRAME_TRY(world_->insertErased(entity, kRuntime, copy.data()));
+            }
+        }
+        return {};
+    }
+
     struct Declared {
         const GameSystem* system = nullptr;
         std::vector<KestColumn> columns;
@@ -171,6 +230,8 @@ private:
     std::optional<world::Schedule> schedule_;
     world::TickIndex tick_;
     world::TickRate rate_;
+    /// The entities standing for other entities the client mirrors.
+    std::map<std::uint32_t, world::EntityHandle> neighbors_;
 };
 
 } // namespace

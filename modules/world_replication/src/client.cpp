@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <map>
+#include <utility>
 #include <vector>
 
 namespace rawframe::world_replication {
@@ -43,6 +44,9 @@ struct ReplicationClient::State {
     std::uint32_t ownedNet = 0;
     std::optional<Prediction> prediction;
     std::optional<Interpolation> interpolation;
+    /// Table indices of the neighborhood components, and scratch.
+    std::vector<std::size_t> neighborhood;
+    std::vector<NeighborValue> neighborValues;
     /// By table index: which predicted component it is, if any.
     std::vector<std::optional<std::size_t>> predictedIndex;
     std::uint64_t serverTick = 0;
@@ -274,6 +278,32 @@ struct ReplicationClient::State {
         }
     }
 
+    /// Every other mirrored entity's neighborhood values as last heard, for
+    /// the predictor: the newest state for an interpolated component, not
+    /// the one shown.
+    void placeNeighbors() {
+        neighborValues.clear();
+        for (const auto& [net, entity] : mirrored) {
+            if (net == ownedNet) {
+                continue;
+            }
+            for (const std::size_t kIndex : neighborhood) {
+                const ComponentCodec& codec = settings.table.components[kIndex];
+                std::span<const std::byte> value;
+                if (interpolation && interpolation->interpolates(kIndex)) {
+                    value = interpolation->newest(net, kIndex);
+                } else if (const void* const kHeld = std::as_const(*world).getErased(entity, table[kIndex])) {
+                    value = std::span{static_cast<const std::byte*>(kHeld), codec.size};
+                }
+                if (!value.empty()) {
+                    neighborValues.push_back(
+                        NeighborValue{.entity = net, .component = codec.component, .value = value});
+                }
+            }
+        }
+        static_cast<void>(settings.prediction->predictor->place(neighborValues));
+    }
+
     /// The player shows what is predicted for it, not the older server state.
     void present() {
         if (owned.isNull()) {
@@ -359,9 +389,25 @@ ReplicationClient::create(network::Sessions& sessions, world::World& world, Clie
         }
         state->interpolation.emplace(kInterpolation, settings.table.components, std::move(interpolated));
     }
+    if (settings.prediction) {
+        for (const schema::ComponentTypeId kComponent : settings.prediction->neighborhood) {
+            const auto kIn = std::ranges::find(settings.table.components, kComponent, &ComponentCodec::component);
+            if (kIn == settings.table.components.end()) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              ReplicationError::FieldUnsupported,
+                              "a neighborhood component does not replicate");
+            }
+            state->neighborhood.push_back(static_cast<std::size_t>(kIn - settings.table.components.begin()));
+        }
+    }
     state->sessions = &sessions;
     state->world = &world;
     state->settings = std::move(settings);
+    if (state->prediction && !state->neighborhood.empty()) {
+        state->prediction->neighbors([raw = state.get()] {
+            raw->placeNeighbors();
+        });
+    }
     return std::make_unique<ReplicationClient>(std::move(state));
 }
 

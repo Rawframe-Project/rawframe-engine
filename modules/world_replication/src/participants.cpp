@@ -236,7 +236,8 @@ public:
                     bot.predictor = std::move(*predictor);
                     prediction = PredictionSettings{
                         .predictor = bot.predictor.get(),
-                        .predicted = {plan_->predictedComponents().begin(), plan_->predictedComponents().end()}};
+                        .predicted = {plan_->predictedComponents().begin(), plan_->predictedComponents().end()},
+                        .neighborhood = {plan_->nearbyComponents().begin(), plan_->nearbyComponents().end()}};
                 } else {
                     ++unpredicted_;
                 }

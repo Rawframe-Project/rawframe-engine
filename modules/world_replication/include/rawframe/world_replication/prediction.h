@@ -19,6 +19,13 @@
 
 namespace rawframe::world_replication {
 
+/// One value of another entity the client mirrors, by its NetEntityId.
+struct NeighborValue {
+    std::uint32_t entity = 0;
+    schema::ComponentTypeId component;
+    std::span<const std::byte> value;
+};
+
 /// A game's predicted systems over one entity, the connection's own player.
 /// Values are in memory layout.
 class Predictor {
@@ -37,6 +44,11 @@ public:
     /// The server's tick rate, told on admission before any step: what a
     /// tick's length is, for systems that integrate over time.
     virtual void rate(world::TickRate rate) noexcept = 0;
+    /// The other entities the client mirrors, as last heard: their values of
+    /// the neighborhood components, in entity then component order. They
+    /// replace what the predictor held of other entities; the player's
+    /// steps meet them, and they are never compared.
+    [[nodiscard]] virtual result::Status place(std::span<const NeighborValue> values) = 0;
 };
 
 struct PredictionSettings {
@@ -51,6 +63,11 @@ struct PredictionSettings {
     /// Ticks the server holds the last command when the next is missing,
     /// before input goes neutral: the server's `inputHoldLast`.
     std::uint32_t holdLast = 4;
+    /// Components of the other entities the client mirrors that the
+    /// predictor is given, as last heard, when prediction starts and before
+    /// every resimulation (D39): what the player's own entity may meet.
+    /// Replicated components; none gives the predictor nothing else.
+    std::vector<schema::ComponentTypeId> neighborhood;
 };
 
 struct PredictionStatistics {

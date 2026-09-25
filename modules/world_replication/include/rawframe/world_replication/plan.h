@@ -32,6 +32,9 @@ public:
     /// The player's components a client predicts; empty for a game that
     /// predicts nothing.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> predictedComponents() const noexcept = 0;
+    /// Components of other entities a predicting client steps its player
+    /// among (D39); empty for none.
+    [[nodiscard]] virtual std::span<const schema::ComponentTypeId> nearbyComponents() const noexcept = 0;
     /// A predictor for one client, running the game's predicted systems;
     /// `unsupported` for a game that predicts nothing.
     [[nodiscard]] virtual result::Result<std::unique_ptr<Predictor>> predictor() const = 0;

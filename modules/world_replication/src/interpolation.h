@@ -35,6 +35,8 @@ public:
     /// A received state of one entity's component, in memory layout.
     void sample(std::uint32_t net, std::size_t component, std::uint64_t tick, std::span<const std::byte> value);
     void retire(std::uint32_t net);
+    /// The newest state received of one entity's component; empty if none.
+    [[nodiscard]] std::span<const std::byte> newest(std::uint32_t net, std::size_t component) const noexcept;
     void reset() noexcept;
 
     /// The server tick shown now, fractional; none before the first state.

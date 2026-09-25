@@ -345,6 +345,9 @@ public:
                                                .level = level_});
     }
 
+    std::span<const schema::ComponentTypeId> nearbyComponents() const noexcept override {
+        return nearby_;
+    }
     bool perceivedInput() const noexcept override {
         return game_.inputPerceived;
     }
@@ -489,6 +492,12 @@ private:
                     level_.push_back(values);
                 }
             }
+        }
+        for (const std::string& name : game_.nearby) {
+            if (!kIn(game_.replicated, name)) {
+                return kRefuse("a nearby component replicates", name);
+            }
+            nearby_.push_back(componentNamed(name)->id);
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap,
                             configuration.unsignedInteger("kest.prediction_heap_bytes", 4U << 20U));
@@ -817,6 +826,7 @@ private:
     std::optional<world_replication::ComponentCodec> input_;
     network::Fingerprint fingerprint_;
     std::vector<schema::ComponentTypeId> predicted_;
+    std::vector<schema::ComponentTypeId> nearby_;
     kest::MachineLimits predictionLimits_;
     std::optional<physics2d::Physics2DSettings> predictedPhysics_;
     std::vector<SpawnValues> level_;

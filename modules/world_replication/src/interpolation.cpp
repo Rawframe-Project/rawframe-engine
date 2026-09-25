@@ -55,6 +55,13 @@ void Interpolation::sample(std::uint32_t net,
     }
 }
 
+std::span<const std::byte> Interpolation::newest(std::uint32_t net, std::size_t component) const noexcept {
+    const auto kStates = states_.find({net, component});
+    return kStates == states_.end() || kStates->second.empty()
+               ? std::span<const std::byte>{}
+               : std::span<const std::byte>{kStates->second.back().value};
+}
+
 void Interpolation::retire(std::uint32_t net) {
     states_.erase(states_.lower_bound({net, 0}), states_.lower_bound({net + 1, 0}));
 }
