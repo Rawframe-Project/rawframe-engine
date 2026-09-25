@@ -8,16 +8,18 @@
 
 #include "rawframe/audio/errors.h"
 #include "rawframe/audio/stream.h"
+#include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
-#include <fstream>
-#include <iterator>
-#include <thread>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
 
 using namespace rawframe;
 using namespace rawframe::audio;
@@ -27,8 +29,7 @@ namespace {
 constexpr std::size_t kBlock = 256;
 
 std::shared_ptr<const std::vector<std::byte>> fixture() {
-    std::ifstream file{std::string{RAWFRAME_AUDIO_DATA} + "tones.rfopus", std::ios::binary};
-    const std::vector<char> kRead{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    const std::string kRead = test::readFile(std::string{RAWFRAME_AUDIO_DATA} + "tones.rfopus");
     auto bytes = std::make_shared<std::vector<std::byte>>(kRead.size());
     std::ranges::transform(kRead, bytes->begin(), [](char each) {
         return static_cast<std::byte>(each);
@@ -134,7 +135,13 @@ RAWFRAME_TEST(AnExecutorKeepsTheRingFilled) {
     const std::vector<float> kOut = renderIn(*mixer, 80'000, [&] {
         streamer.update();
         while ((stream->available() < kBlock * 2 && !stream->ended()) && std::chrono::steady_clock::now() < kDeadline) {
+#if RAWFRAME_THREADS
             std::this_thread::yield();
+#else
+            // No worker: the frame loop's host runs the decoding.
+            while (executor.runOne()) {
+            }
+#endif
             streamer.update();
         }
     });

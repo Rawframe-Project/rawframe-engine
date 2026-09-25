@@ -6,14 +6,13 @@
 
 #include "rawframe/audio/errors.h"
 #include "rawframe/audio/sounds.h"
+#include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <span>
 #include <vector>
 
@@ -211,8 +210,7 @@ RAWFRAME_TEST(AnInstanceWithoutAVoiceWaitsVirtual) {
 namespace {
 
 std::shared_ptr<const std::vector<std::byte>> cookedFixture() {
-    std::ifstream file{std::string{RAWFRAME_AUDIO_DATA} + "tones.rfopus", std::ios::binary};
-    const std::vector<char> kRead{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    const std::string kRead = test::readFile(std::string{RAWFRAME_AUDIO_DATA} + "tones.rfopus");
     auto bytes = std::make_shared<std::vector<std::byte>>(kRead.size());
     std::ranges::transform(kRead, bytes->begin(), [](char each) {
         return static_cast<std::byte>(each);

@@ -12,8 +12,11 @@
 #include <chrono>
 #include <cmath>
 #include <numbers>
-#include <thread>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
 
 using namespace rawframe;
 using namespace rawframe::audio;
@@ -225,6 +228,8 @@ RAWFRAME_TEST(VoicesAndTheQueueAreFinite) {
                     !mixer->play(std::shared_ptr<const Clip>{}, {}).has_value());
 }
 
+// The mixer's owner and its mix thread, where there are threads.
+#if RAWFRAME_THREADS
 RAWFRAME_TEST(TheMixThreadRendersWhileTheOwnerPlays) {
     auto mixer = *Mixer::create(layout(), {.voices = 16});
     std::atomic<bool> done{false};
@@ -277,3 +282,4 @@ RAWFRAME_TEST(TheMixThreadRendersWhileTheOwnerPlays) {
     }
     RAWFRAME_EXPECT(played > 100 && !anyLeft);
 }
+#endif
