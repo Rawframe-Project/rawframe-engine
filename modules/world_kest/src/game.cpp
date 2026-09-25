@@ -231,15 +231,15 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.physics2d = physics;
         } else if (kKeyword == "collision") {
-            const auto kRule = [](std::string_view word) -> std::optional<collision::CollisionRule> {
+            const auto kRule = [](std::string_view word) -> std::optional<physics::CollisionRule> {
                 if (word == "collide") {
-                    return collision::CollisionRule::Collide;
+                    return physics::CollisionRule::Collide;
                 }
                 if (word == "trigger") {
-                    return collision::CollisionRule::Trigger;
+                    return physics::CollisionRule::Trigger;
                 }
                 if (word == "ignore") {
-                    return collision::CollisionRule::Ignore;
+                    return physics::CollisionRule::Ignore;
                 }
                 return std::nullopt;
             };

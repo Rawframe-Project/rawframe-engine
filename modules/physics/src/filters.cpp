@@ -1,17 +1,16 @@
-#include "rawframe/collision/filters.h"
+#include "rawframe/physics/filters.h"
 
-#include "rawframe/collision/errors.h"
+#include "rawframe/physics/errors.h"
 
 #include <algorithm>
 #include <string_view>
 
-namespace rawframe::collision {
+namespace rawframe::physics {
 
 namespace {
 
 std::unexpected<result::Error> refuse(std::string_view why) {
-    return result::fail(
-        result::ErrorClass::InvalidArgument, kCollisionDomain, code(CollisionError::InvalidDocument), why);
+    return result::fail(result::ErrorClass::InvalidArgument, kPhysicsDomain, code(PhysicsError::InvalidDocument), why);
 }
 
 } // namespace
@@ -83,4 +82,4 @@ std::optional<std::size_t> CollisionFilters::classIndex(std::uint64_t id) const 
     return kFound != classes_.end() && kFound->first == id ? std::optional{kFound->second} : std::nullopt;
 }
 
-} // namespace rawframe::collision
+} // namespace rawframe::physics

@@ -82,7 +82,7 @@ network::Compatibility compatibility() {
 }
 
 /// Takes back only what one connection was sent by the moment it saw.
-class SentGate final : public physics2d::RewindGate {
+class SentGate final : public physics::RewindGate {
 public:
     SentGate(const world_replication::InterestHistory& interest, const Perception& seen) noexcept
         : interest_(&interest), seen_(seen) {
@@ -129,14 +129,14 @@ public:
             }
             ++counted.shots;
             const SentGate kGate{*interest_, seen};
-            const physics2d::Moment kGated{.base = seen.baseTick, .fraction = seen.fraction, .gate = &kGate};
-            const physics2d::Moment kEvery{.base = seen.baseTick, .fraction = seen.fraction};
+            const physics::Moment kGated{.base = seen.baseTick, .fraction = seen.fraction, .gate = &kGate};
+            const physics::Moment kEvery{.base = seen.baseTick, .fraction = seen.fraction};
             counted.compensated +=
-                physics_->castRayAt(aim.x, trackY_ + 5, 0, -10, kGated, physics2d::kEveryClass).entity == target_;
-            counted.present += physics_->castRay(aim.x, trackY_ + 5, 0, -10, physics2d::kEveryClass).entity == target_;
-            const double kGatedX = physics_->castRayAt(-60, trackY_, 120, 0, kGated, physics2d::kEveryClass).x;
-            const double kRewoundX = physics_->castRayAt(-60, trackY_, 120, 0, kEvery, physics2d::kEveryClass).x;
-            const double kNowX = physics_->castRay(-60, trackY_, 120, 0, physics2d::kEveryClass).x;
+                physics_->castRayAt(aim.x, trackY_ + 5, 0, -10, kGated, physics::kEveryClass).entity == target_;
+            counted.present += physics_->castRay(aim.x, trackY_ + 5, 0, -10, physics::kEveryClass).entity == target_;
+            const double kGatedX = physics_->castRayAt(-60, trackY_, 120, 0, kGated, physics::kEveryClass).x;
+            const double kRewoundX = physics_->castRayAt(-60, trackY_, 120, 0, kEvery, physics::kEveryClass).x;
+            const double kNowX = physics_->castRay(-60, trackY_, 120, 0, physics::kEveryClass).x;
             counted.gatedAsRewound += kGatedX == kRewoundX;
             counted.gatedAsNow += kGatedX == kNowX;
             counted.rewoundNotNow += kRewoundX != kNowX;

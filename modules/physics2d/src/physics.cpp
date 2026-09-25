@@ -1,7 +1,7 @@
 #include "rawframe/physics2d/physics.h"
 
 #include "characters.h"
-#include "rawframe/collision/filters.h"
+#include "rawframe/physics/filters.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/errors.h"
 #include "rawframe/world/query.h"
@@ -112,7 +112,7 @@ struct Row {
 struct Physics2D::State {
     Physics2DSettings settings;
     /// The collision document as Maul2D's filter bits.
-    collision::CollisionFilters filters;
+    physics::CollisionFilters filters;
     /// Entity pairs whose overlap was told this step, so a pair meeting
     /// through two sensors is told once.
     std::vector<std::pair<world::EntityHandle, world::EntityHandle>> toldEntered;
@@ -187,12 +187,12 @@ struct Physics2D::State {
         shape.friction = body.friction;
         shape.restitution = body.restitution;
         shape.isSensor = body.sensor;
-        const collision::ClassFilter& filter = filters.filter(*kClass);
-        shape.categoryBits = body.sensor ? collision::CollisionFilters::sensorBit(*kClass)
-                                         : collision::CollisionFilters::solidBit(*kClass);
+        const physics::ClassFilter& filter = filters.filter(*kClass);
+        shape.categoryBits =
+            body.sensor ? physics::CollisionFilters::sensorBit(*kClass) : physics::CollisionFilters::solidBit(*kClass);
         shape.maskBits = body.sensor ? filter.sensorMask : filter.solidMask;
         if (into.character) {
-            shape.maskBits &= ~collision::kCharacterQuery;
+            shape.maskBits &= ~physics::kCharacterQuery;
         }
         const auto kShape = [&](const m2ShapeDef& definitionOf) {
             if (body.shape == static_cast<std::uint8_t>(Shape::Circle)) {
@@ -212,7 +212,7 @@ struct Physics2D::State {
             m2ShapeDef sensor = shape;
             sensor.isSensor = true;
             sensor.density = 0;
-            sensor.categoryBits = collision::CollisionFilters::sensorBit(*kClass);
+            sensor.categoryBits = physics::CollisionFilters::sensorBit(*kClass);
             sensor.maskBits = filter.triggerMask;
             twin = kShape(sensor);
         }
@@ -389,9 +389,9 @@ struct Physics2D::State {
             return;
         }
         const m2Vec2 kWish = m2Body_GetLinearVelocity(entry.body);
-        const m2QueryFilter kFilter{.categoryBits = collision::kCharacterQuery,
+        const m2QueryFilter kFilter{.categoryBits = physics::kCharacterQuery,
                                     .maskBits = filters.filter(*filters.classIndex(body.collisionClass)).solidMask &
-                                                collision::kSolids};
+                                                physics::kSolids};
         const CharacterMove kMove = physics2d::moveCharacter(physics,
                                                              body.width,
                                                              body.height,
@@ -575,7 +575,7 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
     }
     auto state = std::make_unique<State>();
     state->settings = settings;
-    RAWFRAME_TRY_ASSIGN(state->filters, collision::CollisionFilters::make(settings.collision));
+    RAWFRAME_TRY_ASSIGN(state->filters, physics::CollisionFilters::make(settings.collision));
     m2WorldDef definition = m2DefaultWorldDef();
     definition.gravity = m2Vec2{settings.gravityX, settings.gravityY};
     definition.bodyCapacity = static_cast<std::int32_t>(settings.bodyCapacity);
@@ -629,13 +629,12 @@ RayHit2D
 Physics2D::castRay(double originX, double originY, float towardX, float towardY, std::uint64_t among) const noexcept {
     // A class's solids and sensors, by its two bits.
     m2QueryFilter filter{~std::uint64_t{0}, ~std::uint64_t{0}};
-    if (among != kEveryClass) {
+    if (among != physics::kEveryClass) {
         const auto kClass = state_->filters.classIndex(among);
         if (!kClass.has_value()) {
             return RayHit2D{};
         }
-        filter.maskBits =
-            collision::CollisionFilters::solidBit(*kClass) | collision::CollisionFilters::sensorBit(*kClass);
+        filter.maskBits = physics::CollisionFilters::solidBit(*kClass) | physics::CollisionFilters::sensorBit(*kClass);
     }
     const m2RayCastResult kResult =
         m2World_CastRayClosest(state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, filter);
@@ -688,14 +687,14 @@ RayHit2D Physics2D::castRayAt(double originX,
                               double originY,
                               float towardX,
                               float towardY,
-                              const Moment& moment,
+                              const physics::Moment& moment,
                               std::uint64_t among) const noexcept {
     const State& state = *state_;
     const std::uint32_t kKept = state.settings.historyTicks;
     if (!state.stepped || kKept == 0) {
         return castRay(originX, originY, towardX, towardY, among);
     }
-    if (among != kEveryClass && !state.filters.classIndex(among).has_value()) {
+    if (among != physics::kEveryClass && !state.filters.classIndex(among).has_value()) {
         return RayHit2D{};
     }
     ++state.raysRewound;
@@ -711,7 +710,7 @@ RayHit2D Physics2D::castRayAt(double originX,
     RayHit2D closest;
     const m2Vec2 kToward{towardX, towardY};
     for (const auto& [entity, entry] : state.mapped) {
-        if (entry.refused || (among != kEveryClass && entry.made.collisionClass != among)) {
+        if (entry.refused || (among != physics::kEveryClass && entry.made.collisionClass != among)) {
             continue;
         }
         const m2Transform kNow = m2Body_GetTransform(entry.body);

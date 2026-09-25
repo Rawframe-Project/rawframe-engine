@@ -1,4 +1,4 @@
-#include "rawframe/collision/errors.h"
+#include "rawframe/physics/errors.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/errors.h"
 #include "rawframe/physics2d/physics.h"
@@ -15,7 +15,7 @@
 
 using namespace rawframe;
 using namespace rawframe::physics2d;
-using namespace rawframe::collision;
+using namespace rawframe::physics;
 
 namespace {
 
@@ -330,7 +330,7 @@ RAWFRAME_TEST(CollisionClassesDecideWhatMeets) {
     // says.
     const auto kMade = Physics2D::create({.collision = {.classes = {{kPlayer, "player"}, {kPlayer, "again"}}}});
     RAWFRAME_EXPECT(!kMade.has_value() &&
-                    kMade.error().code() == collision::code(collision::CollisionError::InvalidDocument));
+                    kMade.error().code() == physics::code(physics::PhysicsError::InvalidDocument));
 }
 
 RAWFRAME_TEST(ARayCastBackInTimeFindsWhereBodiesWere) {

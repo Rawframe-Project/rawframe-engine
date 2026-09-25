@@ -25,7 +25,7 @@ constexpr std::array<kest::Parameter, 1> kRayGives = {
 /// A ray door: `Among` doors take the class first; `At` doors take the
 /// moment seen last.
 /// Takes back what one connection was sent, no further than it was sent.
-class SentGate final : public physics2d::RewindGate {
+class SentGate final : public physics::RewindGate {
 public:
     SentGate(const world_replication::InterestHistory& interest, std::uint32_t viewer, std::uint64_t tick) noexcept
         : interest_(&interest), viewer_(viewer), tick_(tick) {
@@ -48,7 +48,7 @@ template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context)
         return;
     }
     constexpr std::size_t kFirst = Among ? 1 : 0;
-    const std::uint64_t kAmong = Among ? static_cast<std::uint64_t>(call.integer(0)) : physics2d::kEveryClass;
+    const std::uint64_t kAmong = Among ? static_cast<std::uint64_t>(call.integer(0)) : physics::kEveryClass;
     physics2d::RayHit2D hit;
     if constexpr (At) {
         world_replication::Perception seen;
@@ -65,9 +65,9 @@ template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context)
                                   call.real(kFirst + 1),
                                   static_cast<float>(call.real(kFirst + 2)),
                                   static_cast<float>(call.real(kFirst + 3)),
-                                  physics2d::Moment{.base = seen.baseTick,
-                                                    .fraction = seen.fraction,
-                                                    .gate = gate.has_value() ? &*gate : nullptr},
+                                  physics::Moment{.base = seen.baseTick,
+                                                  .fraction = seen.fraction,
+                                                  .gate = gate.has_value() ? &*gate : nullptr},
                                   kAmong);
     } else {
         hit = kQueries->castRay(call.real(kFirst),

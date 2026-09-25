@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace rawframe::collision {
+namespace rawframe::physics {
 
 /// What happens where two collision classes meet (SPEC-0037's closed rule
 /// vocabulary): they push each other, overlap and are told, or pass through
@@ -42,7 +42,10 @@ struct CollisionDocument {
     CollisionRule fallback = CollisionRule::Collide;
 };
 
+/// A query's `among` that meets bodies of every class, and of none.
+inline constexpr std::uint64_t kEveryClass = 0;
+
 /// Classes a document may declare.
 inline constexpr std::size_t kMaximumCollisionClasses = 30;
 
-} // namespace rawframe::collision
+} // namespace rawframe::physics

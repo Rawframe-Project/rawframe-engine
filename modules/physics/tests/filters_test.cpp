@@ -1,12 +1,12 @@
-#include "rawframe/collision/errors.h"
-#include "rawframe/collision/filters.h"
+#include "rawframe/physics/errors.h"
+#include "rawframe/physics/filters.h"
 #include "rawframe/test/test.h"
 
 #include <string>
 #include <vector>
 
 using namespace rawframe;
-using namespace rawframe::collision;
+using namespace rawframe::physics;
 
 namespace {
 
@@ -56,7 +56,7 @@ RAWFRAME_TEST(ADocumentThatIsNotWellFormedIsRefused) {
     };
     for (const CollisionDocument& kDocument : kBad) {
         const auto kMade = CollisionFilters::make(kDocument);
-        RAWFRAME_EXPECT(!kMade.has_value() && kMade.error().code() == code(CollisionError::InvalidDocument));
+        RAWFRAME_EXPECT(!kMade.has_value() && kMade.error().code() == code(PhysicsError::InvalidDocument));
     }
     CollisionDocument crowded;
     for (std::uint64_t index = 1; index <= kMaximumCollisionClasses; ++index) {

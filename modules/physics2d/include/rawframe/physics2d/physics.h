@@ -24,8 +24,9 @@
 // same components and the same writes give the same bits on every machine:
 // nothing here depends on addresses, hash order, or time.
 
-#include "rawframe/collision/document.h"
 #include "rawframe/composition/participant.h"
+#include "rawframe/physics/collision.h"
+#include "rawframe/physics/rewind.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world/schedule.h"
@@ -53,7 +54,7 @@ struct Physics2DSettings {
     /// Ticks of every body's pose kept for casting back in time
     /// (SPEC-0041's compensation window); nought keeps none.
     std::uint32_t historyTicks = 64;
-    collision::CollisionDocument collision;
+    physics::CollisionDocument collision;
 };
 
 struct Physics2DStatistics {
@@ -81,33 +82,6 @@ inline constexpr std::string_view kStepSystem = "rawframe.physics2d.step";
 /// Questions about where bodies are, answered from the last step: what
 /// gameplay sees between steps (SPEC-0037 queries against committed state).
 /// Only from the World's thread, between steps or from a system.
-/// A ray's `among` that meets bodies of every class, and of none.
-inline constexpr std::uint64_t kEveryClass = 0;
-
-/// Which bodies a query cast back in time takes back, and how far (SPEC-0041's
-/// victim gate): none are tried where they are now.
-class RewindGate {
-public:
-    RewindGate() = default;
-    RewindGate(const RewindGate&) = delete;
-    RewindGate& operator=(const RewindGate&) = delete;
-    virtual ~RewindGate() = default;
-
-    /// The earliest tick `entity`'s body may be taken back to: a moment
-    /// before it is taken back to that tick's pose exactly, which is what a
-    /// client shows of an entity before its first two states.
-    [[nodiscard]] virtual std::optional<std::uint64_t> since(world::EntityHandle entity) const noexcept = 0;
-};
-
-/// A moment to cast back to: `fraction` 65536ths of the way from the pose
-/// committed at tick `base` to the next, as a client shows it between
-/// states, and what is taken back to it (every body without a gate).
-struct Moment {
-    std::uint64_t base = 0;
-    std::uint16_t fraction = 0;
-    const RewindGate* gate = nullptr;
-};
-
 class Physics2DQueries {
 public:
     Physics2DQueries() = default;
@@ -118,7 +92,7 @@ public:
     /// The closest body along the ray from the origin to the origin plus
     /// `toward`, sensors included, of the collision class whose identity is
     /// `among` (a class the settings do not declare meets nothing), or of any
-    /// for kEveryClass.
+    /// for physics::kEveryClass.
     [[nodiscard]] virtual RayHit2D
     castRay(double originX, double originY, float towardX, float towardY, std::uint64_t among) const noexcept = 0;
     /// The same ray against every body where it was at an earlier moment
@@ -130,7 +104,7 @@ public:
                                              double originY,
                                              float towardX,
                                              float towardY,
-                                             const Moment& moment,
+                                             const physics::Moment& moment,
                                              std::uint64_t among) const noexcept = 0;
 };
 
@@ -159,7 +133,7 @@ public:
                                      double originY,
                                      float towardX,
                                      float towardY,
-                                     const Moment& moment,
+                                     const physics::Moment& moment,
                                      std::uint64_t among) const noexcept override;
 
     struct State;

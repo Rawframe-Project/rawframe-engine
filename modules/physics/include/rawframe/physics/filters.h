@@ -10,7 +10,7 @@
 // class does not ignore. Every solid meets character queries except a
 // character's own, which drops the bit.
 
-#include "rawframe/collision/document.h"
+#include "rawframe/physics/collision.h"
 #include "rawframe/result/result.h"
 
 #include <cstddef>
@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-namespace rawframe::collision {
+namespace rawframe::physics {
 
 /// How one class's shapes filter.
 struct ClassFilter {
@@ -60,4 +60,4 @@ private:
     std::vector<std::pair<std::uint64_t, std::size_t>> classes_;
 };
 
-} // namespace rawframe::collision
+} // namespace rawframe::physics

@@ -148,8 +148,8 @@ RAWFRAME_TEST(CollisionIsDeclaredByLine) {
     RAWFRAME_EXPECT(game->collision.classes.size() == 2 && game->collision.classes[0].id == 0x3f1c9a7e52d04b18 &&
                     game->collision.classes[1].name == "wall" && game->collision.classes[1].id == 0xa1);
     RAWFRAME_EXPECT(game->collision.rules.size() == 1 &&
-                    game->collision.rules[0].rule == collision::CollisionRule::Trigger &&
-                    game->collision.fallback == collision::CollisionRule::Ignore);
+                    game->collision.rules[0].rule == physics::CollisionRule::Trigger &&
+                    game->collision.fallback == physics::CollisionRule::Ignore);
     // A short identity, nought, no hex, an unknown rule, a second default,
     // a class not declared, and collision without physics.
     for (const std::string_view kLine : {"collision class ball 3f1c9a7e52d04b1\n",
