@@ -143,6 +143,45 @@ struct RayHit2D {
     float fraction = 0;
 };
 
+/// What a character is standing on, after a step.
+enum class Ground : std::uint8_t {
+    Airborne = 0,
+    /// On a surface no steeper than `groundNormal` allows.
+    Grounded = 1,
+    /// Pressed against a surface too steep to stand on.
+    Sliding = 2,
+};
+
+/// SPEC-0037's character controller: an entity with a Body2D (kinematic,
+/// an upright capsule) and a Character2D is moved by trace and slide rather
+/// than by velocity alone. Gameplay writes the Velocity2D it wants this
+/// tick, gravity and all; the step moves the body as far along it as the
+/// world allows, sliding along what it meets, and leaves in Velocity2D the
+/// velocity it moved with. The world's solid bodies stop it, by its Body2D's
+/// collision class; other characters never do, and it pushes dynamic bodies
+/// as a kinematic body does. Nothing about it is random or timed, so a
+/// predicting client moves its own character exactly as the server does
+/// wherever the same things are in its way.
+struct Character2D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("edfb6a6b-7640-4204-9ff7-d1e07b4fcac8");
+    static constexpr std::string_view kComponentName = "rawframe.physics2d.character";
+
+    /// The least upward a surface's normal may be and still be ground: its
+    /// y, from 0 to 1 (0.7 stands on slopes up to about 45 degrees).
+    float groundNormal = 0;
+    /// A character that was on ground and now is not is stepped down to
+    /// ground within this far below it, so walking down slopes and stairs
+    /// keeps it on them; nought never.
+    float snap = 0;
+    /// Written by every step: the Ground it is on, what it stands on or
+    /// slides along (the null entity in the air), and that surface's normal.
+    std::uint8_t ground = 0;
+    world::EntityHandle groundEntity;
+    float groundNormalX = 0;
+    float groundNormalY = 0;
+};
+
 enum class FieldType : std::uint8_t {
     U8,
     U32,
@@ -169,7 +208,8 @@ struct ComponentLayout {
     std::span<const ComponentField> fields;
 };
 
-/// Body2D, Pose2D, Velocity2D, Impulse2D, and Contact2D, in that order.
+/// Body2D, Pose2D, Velocity2D, Impulse2D, Contact2D, and Character2D, in
+/// that order.
 /// An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const ComponentLayout> componentLayouts() noexcept;

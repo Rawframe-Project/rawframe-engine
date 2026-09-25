@@ -19,7 +19,7 @@ namespace {
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
-    builder.add<Body2D>().add<Pose2D>().add<Velocity2D>().add<Impulse2D>().add<Contact2D>();
+    builder.add<Body2D>().add<Pose2D>().add<Velocity2D>().add<Impulse2D>().add<Contact2D>().add<Character2D>();
     return *builder.freeze();
 }
 
@@ -46,6 +46,32 @@ struct Scene {
         RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Impulse2D>(), Impulse2D{}).has_value());
         RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Contact2D>(), Contact2D{}).has_value());
         return kEntity;
+    }
+
+    world::EntityHandle character(const Pose2D& pose, float snap = 0) {
+        const world::EntityHandle kEntity = body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
+                                                        .shape = static_cast<std::uint8_t>(Shape::Capsule),
+                                                        .fixedRotation = true,
+                                                        .width = 0.3F,
+                                                        .height = 0.4F},
+                                                 pose);
+        RAWFRAME_EXPECT(
+            world.insert(kEntity, *schema->key<Character2D>(), Character2D{.groundNormal = 0.7F, .snap = snap})
+                .has_value());
+        return kEntity;
+    }
+
+    /// A platformer's gameplay for one tick: run at `run` meters a second,
+    /// and fall under gravity unless on ground.
+    void walk(world::EntityHandle entity, float run) {
+        Velocity2D& wanted = velocity(entity);
+        const bool kGrounded = character(entity).ground == static_cast<std::uint8_t>(Ground::Grounded);
+        wanted = Velocity2D{.x = run, .y = kGrounded ? 0 : wanted.y - (20.0F / 60)};
+        this->run(1);
+    }
+
+    Character2D& character(world::EntityHandle entity) {
+        return *world.get(entity, *schema->key<Character2D>());
     }
 
     void run(int ticks) {
@@ -363,4 +389,107 @@ RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {
     auto physics = *Physics2D::create({});
     std::vector<world::SystemDeclaration> declarations;
     RAWFRAME_EXPECT(!physics->declareSystems(*kSchema, declarations).has_value());
+}
+
+RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
+    Scene scene;
+    const world::EntityHandle kFloor = scene.body(kGround, {.x = 0, .y = 0});
+    scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                      .shape = static_cast<std::uint8_t>(Shape::Box),
+                      .width = 0.5F,
+                      .height = 2},
+               {.x = 3, .y = 2.5});
+    // Dropped from a meter up, running right at 4 m/s.
+    const world::EntityHandle kRunner = scene.character({.x = 0, .y = 2.2});
+    bool landed = false;
+    for (int tick = 0; tick < 120; ++tick) {
+        scene.walk(kRunner, 4);
+        landed = landed || scene.character(kRunner).ground == static_cast<std::uint8_t>(Ground::Grounded);
+        // Never into the floor or the wall.
+        RAWFRAME_EXPECT(scene.pose(kRunner).y > 1.2 - 0.001 && scene.pose(kRunner).x < 2.2 + 0.001);
+    }
+    RAWFRAME_EXPECT(landed);
+    // Stood on the floor, pressed against the wall, still.
+    const Pose2D& kAt = scene.pose(kRunner);
+    RAWFRAME_EXPECT(std::abs(kAt.x - 2.2) < 0.02 && std::abs(kAt.y - 1.2) < 0.02);
+    const Character2D& kOn = scene.character(kRunner);
+    RAWFRAME_EXPECT(kOn.ground == static_cast<std::uint8_t>(Ground::Grounded) && kOn.groundEntity == kFloor);
+    RAWFRAME_EXPECT(kOn.groundNormalY > 0.99F);
+    RAWFRAME_EXPECT(std::abs(scene.velocity(kRunner).x) < 0.05F && std::abs(scene.velocity(kRunner).y) < 0.05F);
+    RAWFRAME_EXPECT(scene.physics->statistics().characterMoves == 120);
+}
+
+RAWFRAME_TEST(ACharacterSlidesDownASteepSlopeAndStandsOnAGentleOne) {
+    // Two slopes rising to the right, of 60 and of 20 degrees.
+    const auto kSlope = [](Scene& scene, double x, float degrees) {
+        const float kRadians = degrees * 3.14159265F / 180;
+        scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                          .shape = static_cast<std::uint8_t>(Shape::Box),
+                          .width = 5,
+                          .height = 0.5F},
+                   {.x = x, .y = 0, .c = std::cos(kRadians), .s = std::sin(kRadians)});
+    };
+    Scene steep;
+    kSlope(steep, 0, 60);
+    const world::EntityHandle kSlider = steep.character({.x = -0.5, .y = 2.5});
+    bool slid = false;
+    for (int tick = 0; tick < 60; ++tick) {
+        steep.walk(kSlider, 0);
+        slid = slid || steep.character(kSlider).ground == static_cast<std::uint8_t>(Ground::Sliding);
+        RAWFRAME_EXPECT(steep.character(kSlider).ground != static_cast<std::uint8_t>(Ground::Grounded));
+    }
+    // Down the slope, which pushes it left and up.
+    RAWFRAME_EXPECT(slid && steep.pose(kSlider).x < -1);
+    RAWFRAME_EXPECT(steep.character(kSlider).groundNormalX < -0.8F);
+
+    Scene gentle;
+    kSlope(gentle, 0, 20);
+    const world::EntityHandle kStander = gentle.character({.x = 0, .y = 2});
+    for (int tick = 0; tick < 60; ++tick) {
+        gentle.walk(kStander, 0);
+    }
+    const Pose2D kStood = gentle.pose(kStander);
+    gentle.walk(kStander, 0);
+    RAWFRAME_EXPECT(gentle.character(kStander).ground == static_cast<std::uint8_t>(Ground::Grounded));
+    RAWFRAME_EXPECT(std::abs(gentle.pose(kStander).x - kStood.x) < 1e-6);
+}
+
+RAWFRAME_TEST(ACharacterRunningDownhillSnapsToTheSlope) {
+    // Downhill at 6 m/s, a tenth of a meter a tick, leaves a 20 degree slope
+    // a little each tick; a character that snaps stays on it.
+    const auto kRun = [](float snap) {
+        Scene scene;
+        const float kRadians = 20 * 3.14159265F / 180;
+        scene.body(Body2D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                          .shape = static_cast<std::uint8_t>(Shape::Box),
+                          .width = 8,
+                          .height = 0.5F},
+                   {.c = std::cos(kRadians), .s = std::sin(kRadians)});
+        const world::EntityHandle kRunner = scene.character({.x = 4, .y = 3.5}, snap);
+        for (int tick = 0; tick < 60; ++tick) {
+            scene.walk(kRunner, 0);
+        }
+        int airborne = 0;
+        for (int tick = 0; tick < 40; ++tick) {
+            scene.walk(kRunner, -6);
+            airborne += scene.character(kRunner).ground == static_cast<std::uint8_t>(Ground::Airborne) ? 1 : 0;
+        }
+        return airborne;
+    };
+    RAWFRAME_EXPECT(kRun(0.2F) == 0);
+    RAWFRAME_EXPECT(kRun(0) > 5);
+}
+
+RAWFRAME_TEST(CharactersPassThroughEachOtherAndBlockNothingOfTheirOwn) {
+    Scene scene;
+    scene.body(kGround, {.x = 0, .y = 0});
+    const world::EntityHandle kLeft = scene.character({.x = -2, .y = 1.2});
+    const world::EntityHandle kRight = scene.character({.x = 2, .y = 1.2});
+    for (int tick = 0; tick < 90; ++tick) {
+        Velocity2D& right = scene.velocity(kRight);
+        right = Velocity2D{.x = -3};
+        scene.walk(kLeft, 3);
+    }
+    RAWFRAME_EXPECT(scene.pose(kLeft).x > 2 && scene.pose(kRight).x < -2);
+    RAWFRAME_EXPECT(scene.character(kRight).ground == static_cast<std::uint8_t>(Ground::Grounded));
 }

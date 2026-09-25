@@ -1,5 +1,6 @@
 #include "rawframe/physics2d/physics.h"
 
+#include "characters.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/errors.h"
 #include "rawframe/world/query.h"
@@ -90,6 +91,8 @@ struct Mapped {
     std::vector<Pose2D> history;
     std::optional<std::uint64_t> since;
     bool refused = false;
+    /// Made as a character's, which character queries do not see.
+    bool character = false;
     Body2D made;
     Pose2D pose;
     Velocity2D velocity;
@@ -101,7 +104,8 @@ struct Mapped {
 /// rule is collide, and its sensors where the rule is not ignore; a sensor
 /// twin, made for a class that triggers with another, meets the solids of
 /// the classes it triggers with; a body that is a sensor meets every solid
-/// its class does not ignore.
+/// its class does not ignore. Bit 31 is character queries: every solid but
+/// a character's meets them.
 struct ClassFilter {
     std::uint64_t solidMask = 0;
     std::uint64_t triggerMask = 0;
@@ -109,12 +113,15 @@ struct ClassFilter {
 };
 
 constexpr std::uint64_t kSensorBits = 32;
+constexpr std::uint64_t kCharacterQuery = std::uint64_t{1} << 31U;
+constexpr std::uint64_t kSolids = kCharacterQuery - 1;
 
 struct Row {
     world::EntityHandle entity;
     const Body2D* body = nullptr;
     Pose2D* pose = nullptr;
     Velocity2D* velocity = nullptr;
+    Character2D* character = nullptr;
 };
 
 } // namespace
@@ -141,6 +148,7 @@ struct Physics2D::State {
     std::optional<world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>> bodies;
     std::optional<schema::ComponentRuntimeId> impulse;
     std::optional<schema::ComponentRuntimeId> contact;
+    std::optional<schema::ComponentRuntimeId> character;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
     std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
@@ -192,7 +200,7 @@ struct Physics2D::State {
             forward = pair.rule;
             rules[(*kSecond * kCount) + *kFirst] = pair.rule;
         }
-        filters.assign(kCount, ClassFilter{});
+        filters.assign(kCount, ClassFilter{.solidMask = kCharacterQuery});
         for (std::size_t one = 0; one < kCount; ++one) {
             for (std::size_t other = 0; other < kCount; ++other) {
                 const CollisionRule kRule = rules[(one * kCount) + other].value_or(document.fallback);
@@ -228,6 +236,7 @@ struct Physics2D::State {
         into.shape = {};
         into.trigger = {};
         into.since.reset();
+        into.character = row.character != nullptr;
         const auto kClass = classIndex(body.collisionClass);
         into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value();
         if (into.refused) {
@@ -259,6 +268,9 @@ struct Physics2D::State {
         const ClassFilter& filter = filters[*kClass];
         shape.categoryBits = std::uint64_t{1} << (body.sensor ? kSensorBits + *kClass : *kClass);
         shape.maskBits = body.sensor ? filter.sensorMask : filter.solidMask;
+        if (into.character) {
+            shape.maskBits &= ~kCharacterQuery;
+        }
         const auto kShape = [&](const m2ShapeDef& definitionOf) {
             if (body.shape == static_cast<std::uint8_t>(Shape::Circle)) {
                 const m2Circle kCircle{.center = {0, 0}, .radius = body.width};
@@ -449,6 +461,42 @@ struct Physics2D::State {
         }
     }
 
+    /// A character's move this tick, as the velocity its kinematic body
+    /// steps with; one that is not a made kinematic capsule stays Airborne
+    /// and moves as its body would.
+    void moveCharacter(const Row& row, const Mapped& entry, float seconds) {
+        Character2D& controlled = *row.character;
+        const bool kWasGrounded = controlled.ground == static_cast<std::uint8_t>(Ground::Grounded);
+        controlled.ground = static_cast<std::uint8_t>(Ground::Airborne);
+        controlled.groundEntity = {};
+        controlled.groundNormalX = 0;
+        controlled.groundNormalY = 0;
+        const Body2D& body = entry.made;
+        if (entry.refused || body.motion != static_cast<std::uint8_t>(Motion::Kinematic) ||
+            body.shape != static_cast<std::uint8_t>(Shape::Capsule) || body.sensor ||
+            !finite(controlled.groundNormal) || !finite(controlled.snap) || !(seconds > 0)) {
+            return;
+        }
+        const m2Vec2 kWish = m2Body_GetLinearVelocity(entry.body);
+        const m2QueryFilter kFilter{.categoryBits = kCharacterQuery,
+                                    .maskBits = filters[*classIndex(body.collisionClass)].solidMask & kSolids};
+        const CharacterMove kMove = physics2d::moveCharacter(physics,
+                                                             body.width,
+                                                             body.height,
+                                                             m2Body_GetTransform(entry.body),
+                                                             m2Vec2{kWish.x * seconds, kWish.y * seconds},
+                                                             controlled,
+                                                             kWasGrounded,
+                                                             kFilter);
+        m2Body_SetLinearVelocity(entry.body, m2Vec2{kMove.translation.x / seconds, kMove.translation.y / seconds});
+        m2Body_SetAngularVelocity(entry.body, 0);
+        controlled.ground = static_cast<std::uint8_t>(kMove.ground);
+        controlled.groundEntity = kMove.ground == Ground::Airborne ? world::EntityHandle{} : ownerOf(kMove.surface);
+        controlled.groundNormalX = kMove.normal.x;
+        controlled.groundNormalY = kMove.normal.y;
+        ++statistics.characterMoves;
+    }
+
     void remove(Mapped& entry) {
         if (!entry.refused) {
             owners.erase(entry.shape.index1);
@@ -464,6 +512,9 @@ struct Physics2D::State {
                         [this](world::EntityHandle entity, const Body2D& body, Pose2D& pose, Velocity2D& velocity) {
                             rows.push_back(Row{.entity = entity, .body = &body, .pose = &pose, .velocity = &velocity});
                         });
+        for (Row& row : rows) {
+            row.character = static_cast<Character2D*>(world.getErased(row.entity, *character));
+        }
         std::sort(rows.begin(), rows.end(), [](const Row& left, const Row& right) {
             return left.entity < right.entity;
         });
@@ -485,7 +536,7 @@ struct Physics2D::State {
         for (const Row& row : rows) {
             const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
             Mapped& entry = kEntry->second;
-            if (kNew || !same(entry.made, *row.body)) {
+            if (kNew || !same(entry.made, *row.body) || entry.character != (row.character != nullptr)) {
                 if (!kNew) {
                     remove(entry);
                 }
@@ -531,8 +582,15 @@ struct Physics2D::State {
             }
         }
 
-        // 3. One step of the tick's length.
+        // 3. Characters find their moves, in entity order and each against
+        // the world as the last step left it; then one step of the tick's
+        // length.
         const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
+        for (const Row& row : rows) {
+            if (row.character != nullptr) {
+                moveCharacter(row, mapped.find(row.entity)->second, kSeconds);
+            }
+        }
         m2World_Step(physics, kSeconds, static_cast<std::int32_t>(settings.substeps));
         ++statistics.steps;
 
@@ -641,10 +699,12 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
         (world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>::resolve(registry)));
     RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact2D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character2D::kComponentTypeId));
     state.reads = state.bodies->reads();
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);
+    state.writes.push_back(*state.character);
     state.system = std::make_unique<Step>(state);
     systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
                                                .phase = world::Phase::Simulation,

@@ -123,8 +123,8 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     }
     RAWFRAME_EXPECT(game->physics2d->gravityX == 0.5F && game->physics2d->gravityY == -9.8F &&
                     game->physics2d->substeps == 8);
-    // The engine's five components, under their engine names.
-    RAWFRAME_EXPECT(game->components.size() == 5 && game->components[0].name == "rawframe.physics2d.body" &&
+    // The engine's six components, under their engine names.
+    RAWFRAME_EXPECT(game->components.size() == 6 && game->components[0].name == "rawframe.physics2d.body" &&
                     game->components[1].kestType == "Pose2D");
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
     RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics2d->gravityY == -10.0F &&

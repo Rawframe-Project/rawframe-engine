@@ -77,6 +77,18 @@ const ComponentLayout kRayHitLayout{.id = {},
                                     .alignment = alignof(RayHit2D),
                                     .fields = kRayHitFields};
 
+constexpr std::array<ComponentField, 7> kCharacterFields = {{
+    {"groundNormal", offsetof(Character2D, groundNormal), FieldType::F32},
+    {"snap", offsetof(Character2D, snap), FieldType::F32},
+    {"ground", offsetof(Character2D, ground), FieldType::U8},
+    {"groundEntity.slot", offsetof(Character2D, groundEntity) + offsetof(world::EntityHandle, slot), FieldType::U32},
+    {"groundEntity.generation",
+     offsetof(Character2D, groundEntity) + offsetof(world::EntityHandle, generation),
+     FieldType::U32},
+    {"groundNormalX", offsetof(Character2D, groundNormalX), FieldType::F32},
+    {"groundNormalY", offsetof(Character2D, groundNormalY), FieldType::F32},
+}};
+
 template <typename T>
 constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const ComponentField> fields) noexcept {
     return ComponentLayout{.id = T::kComponentTypeId,
@@ -87,12 +99,13 @@ constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const 
                            .fields = fields};
 }
 
-const std::array<ComponentLayout, 5> kLayouts = {
+const std::array<ComponentLayout, 6> kLayouts = {
     layoutOf<Body2D>("Body2D", kBodyFields),
     layoutOf<Pose2D>("Pose2D", kPoseFields),
     layoutOf<Velocity2D>("Velocity2D", kVelocityFields),
     layoutOf<Impulse2D>("Impulse2D", kImpulseFields),
     layoutOf<Contact2D>("Contact2D", kContactFields),
+    layoutOf<Character2D>("Character2D", kCharacterFields),
 };
 
 } // namespace

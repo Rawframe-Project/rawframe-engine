@@ -13,7 +13,9 @@
 //      and steps as one made there would: what a predicting client relies
 //      on), a Velocity2D likewise a new velocity, and an Impulse2D is
 //      applied and cleared;
-//   3. the world steps once, with the settings' substeps;
+//   3. every character (components.h) finds how far it can move along the
+//      velocity gameplay wants and is given the velocity that takes it
+//      there; then the world steps once, with the settings' substeps;
 //   4. every Contact2D is written from the step's contact and overlap
 //      streams, and every body's pose and velocity are written back.
 //
@@ -69,7 +71,7 @@ struct CollisionDocument {
 };
 
 /// Classes a document may declare.
-inline constexpr std::size_t kMaximumCollisionClasses = 31;
+inline constexpr std::size_t kMaximumCollisionClasses = 30;
 
 struct Physics2DSettings {
     /// Meters a second squared.
@@ -97,6 +99,8 @@ struct Physics2DStatistics {
     std::uint64_t teleports = 0;
     std::uint64_t velocitiesSet = 0;
     std::uint64_t impulses = 0;
+    /// Character moves made (components.h's Character2D).
+    std::uint64_t characterMoves = 0;
     /// Contacts and sensor overlaps that began.
     std::uint64_t contactsBegun = 0;
     std::uint64_t overlapsBegun = 0;

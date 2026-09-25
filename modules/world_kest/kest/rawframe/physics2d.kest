@@ -85,6 +85,29 @@ struct Contact2D {
     visitor: world.Entity
 }
 
+// Character2D.ground
+const AIRBORNE: u8 = 0
+const GROUNDED: u8 = 1
+const SLIDING: u8 = 2
+
+// A character: with a Body2D that is a kinematic capsule, the body moves by
+// trace and slide. Write the Velocity2D it wants this tick, gravity and all;
+// the step moves it as far along that as the solids of its collision class
+// allow, sliding along what it meets, and leaves in Velocity2D the velocity
+// it moved with. Other characters never stop it. A surface whose normal's y
+// is at least `groundNormal` is ground (0.7 stands on slopes to about 45
+// degrees); one walked off is stepped down to if within `snap` below. The
+// step writes the rest: `ground`, the entity it stands on or slides along
+// (the null one in the air), and that surface's normal.
+struct Character2D {
+    groundNormal: f32
+    snap: f32
+    ground: u8
+    groundEntity: world.Entity
+    groundNormalX: f32
+    groundNormalY: f32
+}
+
 // What a ray found: the closest body along it, where, the surface's normal
 // there, and how far along the ray (0 at its origin, 1 at its end). A ray
 // that starts inside a body hits it `inside`, at its origin, with no normal.
