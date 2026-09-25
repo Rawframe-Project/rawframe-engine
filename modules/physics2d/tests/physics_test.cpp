@@ -27,7 +27,8 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<Impulse2D>()
         .add<Contact2D>()
         .add<Character2D>()
-        .add<Joint2D>();
+        .add<Joint2D>()
+        .add<Attach2D>();
     return *builder.freeze();
 }
 
@@ -678,4 +679,25 @@ RAWFRAME_TEST(AJointBreaksPastItsLimitAndWaitsToBeMended) {
     held.breakForce = 0;
     scene.run(1);
     RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 2 && !held.broken);
+}
+
+RAWFRAME_TEST(AttachedEntitiesFollowTheirParents) {
+    Scene scene{{.gravityY = 0}};
+    // A body turning a quarter turn a second, moving along x.
+    const world::EntityHandle kCart = scene.body(kBall, {.c = 1}, {.x = 1, .angular = 1.5707964F});
+    const world::EntityHandle kHand = *scene.world.create();
+    const world::EntityHandle kArm = *scene.world.create();
+    RAWFRAME_EXPECT(
+        scene.world.insert(kHand, *scene.schema->key<Attach2D>(), Attach2D{.parent = kArm, .x = 1}).has_value());
+    RAWFRAME_EXPECT(scene.world.insert(kHand, *scene.schema->key<Pose2D>(), Pose2D{}).has_value());
+    RAWFRAME_EXPECT(
+        scene.world.insert(kArm, *scene.schema->key<Attach2D>(), Attach2D{.parent = kCart, .x = 2}).has_value());
+    RAWFRAME_EXPECT(scene.world.insert(kArm, *scene.schema->key<Pose2D>(), Pose2D{}).has_value());
+    scene.run(60);
+    // A second on: the cart at x 1, turned a quarter; the arm's +x offset
+    // now points along +y, and the hand a meter further along it.
+    const Pose2D& kCartPose = scene.pose(kCart);
+    const Pose2D& kHandPose = scene.pose(kHand);
+    RAWFRAME_EXPECT(std::abs(kHandPose.x - kCartPose.x) < 0.05 && std::abs(kHandPose.y - (kCartPose.y + 3)) < 0.05);
+    RAWFRAME_EXPECT(std::abs(kHandPose.s - 1) < 0.02 && scene.physics->statistics().attachmentsRefused == 0);
 }

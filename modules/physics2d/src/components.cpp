@@ -142,7 +142,16 @@ constexpr std::array<ComponentField, 26> kJointFields = {{
     {"broken", offsetof(Joint2D, broken), FieldType::Bool},
 }};
 
-const std::array<ComponentLayout, 7> kLayouts = {
+constexpr std::array<ComponentField, 6> kAttachFields = {{
+    {"parent.slot", offsetof(Attach2D, parent) + offsetof(world::EntityHandle, slot), FieldType::U32},
+    {"parent.generation", offsetof(Attach2D, parent) + offsetof(world::EntityHandle, generation), FieldType::U32},
+    {"x", offsetof(Attach2D, x), FieldType::F32},
+    {"y", offsetof(Attach2D, y), FieldType::F32},
+    {"c", offsetof(Attach2D, c), FieldType::F32},
+    {"s", offsetof(Attach2D, s), FieldType::F32},
+}};
+
+const std::array<ComponentLayout, 8> kLayouts = {
     layoutOf<Body2D>("Body2D", kBodyFields),
     layoutOf<Pose2D>("Pose2D", kPoseFields),
     layoutOf<Velocity2D>("Velocity2D", kVelocityFields),
@@ -150,6 +159,7 @@ const std::array<ComponentLayout, 7> kLayouts = {
     layoutOf<Contact2D>("Contact2D", kContactFields),
     layoutOf<Character2D>("Character2D", kCharacterFields),
     layoutOf<Joint2D>("Joint2D", kJointFields),
+    layoutOf<Attach2D>("Attach2D", kAttachFields),
 };
 
 } // namespace

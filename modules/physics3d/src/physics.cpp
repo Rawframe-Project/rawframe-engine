@@ -1,5 +1,6 @@
 #include "rawframe/physics3d/physics.h"
 
+#include "attachments.h"
 #include "characters.h"
 #include "joints.h"
 #include "meshes.h"
@@ -256,6 +257,7 @@ struct Physics3D::State {
     std::optional<schema::ComponentRuntimeId> meshShape;
     std::map<std::uint64_t, PreparedMesh> meshes;
     std::optional<world::Query<world::Write<Joint3D>>> jointQuery;
+    std::optional<Attachments> attachments;
     std::map<world::EntityHandle, MappedJoint> joints;
     std::vector<std::pair<world::EntityHandle, Joint3D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
@@ -803,6 +805,9 @@ struct Physics3D::State {
                 entry.since = entry.since.value_or(tick.value);
             }
         }
+
+        // 6. Attached entities follow their parents where they now are.
+        attachments->follow(world, statistics.attachmentsRefused);
         lastTick = tick.value;
         stepped = true;
         return {};
@@ -937,6 +942,9 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Write<Joint3D>>::resolve(registry)));
     state.reads = state.bodies->reads();
     state.reads.push_back(*state.meshShape);
+    RAWFRAME_TRY_ASSIGN(state.attachments, Attachments::resolve(registry));
+    const std::vector<schema::ComponentRuntimeId> kAttachReads = state.attachments->reads();
+    state.reads.insert(state.reads.end(), kAttachReads.begin(), kAttachReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);

@@ -168,18 +168,18 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     }
     RAWFRAME_EXPECT(game->physics->dimensions == 2 && game->physics->gravityX == 0.5F &&
                     game->physics->gravityY == -9.8F && game->physics->substeps == 8);
-    // The engine's seven components, under their engine names, and its
+    // The engine's eight components, under their engine names, and its
     // persistent identity.
-    RAWFRAME_EXPECT(game->components.size() == 8 && game->components[0].name == "rawframe.physics2d.body" &&
+    RAWFRAME_EXPECT(game->components.size() == 9 && game->components[0].name == "rawframe.physics2d.body" &&
                     game->components[1].kestType == "Pose2D");
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
     RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics->gravityY == -10.0F &&
                     kDefaults->physics->substeps == 4);
-    // In three dimensions: three numbers of gravity, and the eight 3D
+    // In three dimensions: three numbers of gravity, and the nine 3D
     // components.
     const auto kThree = parseGame("program p.kest\nphysics3d gravity 0 -9.8 1.5\n");
     RAWFRAME_EXPECT(kThree.has_value() && kThree->physics->dimensions == 3 && kThree->physics->gravityZ == 1.5F &&
-                    kThree->components.size() == 9 && kThree->components[1].name == "rawframe.physics3d.pose");
+                    kThree->components.size() == 10 && kThree->components[1].name == "rawframe.physics3d.pose");
     for (const std::string_view kLine : {"physics2d gravity 1\n",
                                          "physics2d spin 3\n",
                                          "physics2d substeps four\n",
@@ -692,6 +692,15 @@ RAWFRAME_TEST(AKestProgramHangsABarOnAHinge) {
         ++made;
     });
     RAWFRAME_EXPECT(made == 1);
+    // The lamp hangs a meter from the post, where the bar's far end is.
+    auto lamps =
+        *world::Query<world::Read<physics3d::Attach3D>, world::Read<physics3d::Pose3D>>::resolve(world.registry());
+    int hanging = 0;
+    lamps.forEach(world, [&hanging](world::EntityHandle, const physics3d::Attach3D&, const physics3d::Pose3D& pose) {
+        const double kFromPost = std::sqrt((pose.x * pose.x) + ((pose.y - 5) * (pose.y - 5)) + (pose.z * pose.z));
+        hanging += std::abs(kFromPost - 1) < 0.03 ? 1 : 0;
+    });
+    RAWFRAME_EXPECT(hanging == 1);
     composition.stop();
     simulation = nullptr;
 }

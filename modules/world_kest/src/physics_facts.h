@@ -25,6 +25,8 @@ struct PhysicsFacts {
     std::string_view contact;
     /// The joint component, whose two bodies are entity fields.
     std::string_view joint;
+    /// The attachment component, whose parent is an entity field.
+    std::string_view attach;
     /// The Kest module a program imports for them.
     std::string_view module;
 };
@@ -39,6 +41,7 @@ struct PhysicsFacts {
                             .collisionClass = offsetof(physics3d::Body3D, collisionClass),
                             .contact = physics3d::Contact3D::kComponentName,
                             .joint = physics3d::Joint3D::kComponentName,
+                            .attach = physics3d::Attach3D::kComponentName,
                             .module = "rawframe.physics3d"};
     }
     return PhysicsFacts{.components = physics2d::componentLayouts(),
@@ -48,6 +51,7 @@ struct PhysicsFacts {
                         .collisionClass = offsetof(physics2d::Body2D, collisionClass),
                         .contact = physics2d::Contact2D::kComponentName,
                         .joint = physics2d::Joint2D::kComponentName,
+                        .attach = physics2d::Attach2D::kComponentName,
                         .module = "rawframe.physics2d"};
 }
 

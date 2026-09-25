@@ -19,7 +19,9 @@
 //      velocity gameplay wants and is given the velocity that takes it
 //      there; then the world steps once, with the settings' substeps;
 //   5. every Contact2D is written from the step's contact and overlap
-//      streams, and every body's pose and velocity are written back.
+//      streams, and every body's pose and velocity are written back;
+//   6. every attached entity (components.h's Attach2D) is put at its
+//      parent's pose and offset, parents before children.
 //
 // Gameplay systems that push bodies run before the step (`before
 // rawframe.physics2d.step`); those that read where bodies went, after. The
@@ -79,6 +81,9 @@ struct Physics2DStatistics {
     std::uint64_t jointsRefused = 0;
     /// Joints broken past their limits.
     std::uint64_t jointsBroken = 0;
+    /// Attachments that could not follow (no parent pose, a loop, a body of
+    /// their own), each counted when it first could not.
+    std::uint64_t attachmentsRefused = 0;
     /// Contacts and sensor overlaps that began.
     std::uint64_t contactsBegun = 0;
     std::uint64_t overlapsBegun = 0;
@@ -140,7 +145,7 @@ public:
     [[nodiscard]] static result::Result<std::unique_ptr<Physics2D>> create(const Physics2DSettings& settings);
     ~Physics2D() override;
 
-    /// Contributes kStepSystem. The registry must hold the seven physics
+    /// Contributes kStepSystem. The registry must hold the eight physics
     /// components at the engine's sizes.
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;

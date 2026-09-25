@@ -167,7 +167,19 @@ constexpr std::array<ComponentField, 41> kJointFields = {{
     {"broken", offsetof(Joint3D, broken), FieldType::Bool},
 }};
 
-const std::array<ComponentLayout, 8> kLayouts = {
+constexpr std::array<ComponentField, 9> kAttachFields = {{
+    {"parent.slot", offsetof(Attach3D, parent) + offsetof(world::EntityHandle, slot), FieldType::U32},
+    {"parent.generation", offsetof(Attach3D, parent) + offsetof(world::EntityHandle, generation), FieldType::U32},
+    {"x", offsetof(Attach3D, x), FieldType::F32},
+    {"y", offsetof(Attach3D, y), FieldType::F32},
+    {"z", offsetof(Attach3D, z), FieldType::F32},
+    {"qx", offsetof(Attach3D, qx), FieldType::F32},
+    {"qy", offsetof(Attach3D, qy), FieldType::F32},
+    {"qz", offsetof(Attach3D, qz), FieldType::F32},
+    {"qw", offsetof(Attach3D, qw), FieldType::F32},
+}};
+
+const std::array<ComponentLayout, 9> kLayouts = {
     layoutOf<Body3D>("Body3D", kBodyFields),
     layoutOf<Pose3D>("Pose3D", kPoseFields),
     layoutOf<Velocity3D>("Velocity3D", kMotionFields<Velocity3D>),
@@ -176,6 +188,7 @@ const std::array<ComponentLayout, 8> kLayouts = {
     layoutOf<Character3D>("Character3D", kCharacterFields),
     layoutOf<Mesh3D>("Mesh3D", kMeshFields),
     layoutOf<Joint3D>("Joint3D", kJointFields),
+    layoutOf<Attach3D>("Attach3D", kAttachFields),
 };
 
 } // namespace

@@ -1,5 +1,6 @@
 #include "rawframe/physics2d/physics.h"
 
+#include "attachments.h"
 #include "characters.h"
 #include "rawframe/physics/filters.h"
 #include "rawframe/physics2d/components.h"
@@ -249,6 +250,7 @@ struct Physics2D::State {
     std::optional<schema::ComponentRuntimeId> contact;
     std::optional<schema::ComponentRuntimeId> character;
     std::optional<world::Query<world::Write<Joint2D>>> jointQuery;
+    std::optional<Attachments> attachments;
     std::map<world::EntityHandle, MappedJoint> joints;
     std::vector<std::pair<world::EntityHandle, Joint2D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
@@ -759,6 +761,8 @@ struct Physics2D::State {
                 entry.since = entry.since.value_or(tick.value);
             }
         }
+        // 6. Attached entities follow their parents where they now are.
+        attachments->follow(world, statistics.attachmentsRefused);
         lastTick = tick.value;
         stepped = true;
         return {};
@@ -845,7 +849,10 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Write<Joint2D>>::resolve(registry)));
+    RAWFRAME_TRY_ASSIGN(state.attachments, Attachments::resolve(registry));
     state.reads = state.bodies->reads();
+    const std::vector<schema::ComponentRuntimeId> kAttachReads = state.attachments->reads();
+    state.reads.insert(state.reads.end(), kAttachReads.begin(), kAttachReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);

@@ -160,6 +160,19 @@ struct Joint2D {
     broken: bool
 }
 
+// Follows `parent`: after every step the engine puts this entity's Pose2D
+// at the parent's pose with this offset, in the parent's frame (a rotation,
+// as a cosine and a sine, of all noughts is none). Chains follow parents
+// first. One whose parent has no pose, that is its own ancestor, or that
+// has a body stays where it is.
+struct Attach2D {
+    parent: world.Entity
+    x: f32
+    y: f32
+    c: f32
+    s: f32
+}
+
 // Welds `b` to `a` where they are: every axis locked.
 fn fixed(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2) -> Joint2D {
     return Joint2D(a, b, anchorA.x, anchorA.y, anchorB.x, anchorB.y, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,

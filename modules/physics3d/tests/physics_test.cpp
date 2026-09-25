@@ -27,7 +27,8 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<Contact3D>()
         .add<Character3D>()
         .add<Mesh3D>()
-        .add<Joint3D>();
+        .add<Joint3D>()
+        .add<Attach3D>();
     return *builder.freeze();
 }
 
@@ -699,4 +700,53 @@ RAWFRAME_TEST(AJointBreaksPastItsThresholdAndWaitsToBeMended) {
     held.breakForce = 0;
     scene.run(1);
     RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 2 && !held.broken);
+}
+
+namespace {
+
+world::EntityHandle attached(Scene& scene, const Attach3D& attach) {
+    const world::EntityHandle kEntity = *scene.world.create();
+    RAWFRAME_EXPECT(scene.world.insert(kEntity, *scene.schema->key<Attach3D>(), attach).has_value());
+    RAWFRAME_EXPECT(scene.world.insert(kEntity, *scene.schema->key<Pose3D>(), Pose3D{}).has_value());
+    return kEntity;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AttachedEntitiesFollowTheirParentsInChains) {
+    Scene scene{{.gravityY = 0}};
+    // A body turning a quarter turn a second about y, moving along x.
+    const world::EntityHandle kCart = scene.body(kCrate, {.qw = 1}, {.x = 1, .angularY = 1.5707964F});
+    // A child of the arm, made before it: parents first, whatever the order.
+    const world::EntityHandle kHand = attached(scene, {.parent = kCart, .x = 1, .qy = 0.7071068F, .qw = 0.7071068F});
+    const world::EntityHandle kArm = attached(scene, {.parent = kCart, .z = 2});
+    scene.world.get(kHand, *scene.schema->key<Attach3D>())->parent = kArm;
+    scene.run(60);
+    // A second on: the cart at x 1, turned a quarter; its +z offset now
+    // points along +x, and the hand's +x, turned with it, along -z.
+    const Pose3D& kCartPose = scene.pose(kCart);
+    const Pose3D& kArmPose = scene.pose(kArm);
+    const Pose3D& kHandPose = scene.pose(kHand);
+    RAWFRAME_EXPECT(std::abs(kCartPose.x - 1) < 0.02);
+    RAWFRAME_EXPECT(std::abs(kArmPose.x - (kCartPose.x + 2)) < 0.05 && std::abs(kArmPose.z - kCartPose.z) < 0.05);
+    RAWFRAME_EXPECT(std::abs(kHandPose.x - kArmPose.x) < 0.05 && std::abs(kHandPose.z - (kArmPose.z - 1)) < 0.05);
+    // The hand is turned a half turn about y in all: its rotation is y's.
+    RAWFRAME_EXPECT(std::abs(std::abs(kHandPose.qy) - 1) < 0.02);
+    RAWFRAME_EXPECT(scene.physics->statistics().attachmentsRefused == 0);
+}
+
+RAWFRAME_TEST(AnAttachmentThatCannotFollowStaysWhereItIs) {
+    Scene scene;
+    const world::EntityHandle kFloor = scene.body(kGround, {});
+    // Its own parent's parent; a parent with no pose; one with a body.
+    const world::EntityHandle kFirst = attached(scene, {.x = 1});
+    const world::EntityHandle kSecond = attached(scene, {.parent = kFirst, .x = 1});
+    scene.world.get(kFirst, *scene.schema->key<Attach3D>())->parent = kSecond;
+    const world::EntityHandle kOrphan = attached(scene, {.parent = world::EntityHandle{.slot = 99, .generation = 5}});
+    const world::EntityHandle kBodied = scene.body(kCrate, {.y = 3});
+    RAWFRAME_EXPECT(
+        scene.world.insert(kBodied, *scene.schema->key<Attach3D>(), Attach3D{.parent = kFloor}).has_value());
+    scene.run(3);
+    RAWFRAME_EXPECT(scene.physics->statistics().attachmentsRefused == 4);
+    RAWFRAME_EXPECT(scene.pose(kOrphan).x == 0 && scene.pose(kFirst).x == 0 && scene.pose(kBodied).y < 3);
 }

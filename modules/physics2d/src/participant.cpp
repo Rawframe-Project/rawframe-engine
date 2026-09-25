@@ -74,6 +74,7 @@ public:
                       diagnostics::field("jointsRemoved", kStatistics.jointsRemoved),
                       diagnostics::field("jointsRefused", kStatistics.jointsRefused),
                       diagnostics::field("jointsBroken", kStatistics.jointsBroken),
+                      diagnostics::field("attachmentsRefused", kStatistics.attachmentsRefused),
                       diagnostics::field("contactsBegun", kStatistics.contactsBegun),
                       diagnostics::field("overlapsBegun", kStatistics.overlapsBegun),
                       diagnostics::field("raysRewound", kStatistics.raysRewound),

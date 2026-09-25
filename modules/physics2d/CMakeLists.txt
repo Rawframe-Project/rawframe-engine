@@ -3,7 +3,7 @@
 # with physics. Maul2D is linked privately, so no header above this module
 # can include it.
 rawframe_module(NAME physics2d
-    SOURCES src/characters.cpp src/components.cpp src/participant.cpp src/physics.cpp
+    SOURCES src/attachments.cpp src/characters.cpp src/components.cpp src/participant.cpp src/physics.cpp
     DEPS physics world_runtime world composition schema execution diagnostics result base
 )
 target_link_libraries(rawframe_physics2d PRIVATE maul2d::maul2d)

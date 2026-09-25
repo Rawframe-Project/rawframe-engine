@@ -266,8 +266,29 @@ struct Joint3D {
     bool broken = false;
 };
 
+/// A typed relation (SPEC-0006): an entity with an Attach3D and a Pose3D
+/// and no body follows `parent`, whose Pose3D it takes at the offset here,
+/// in the parent's frame, after every step. A rotation of all noughts is
+/// taken as none. Attachments chain, parents before children; one whose
+/// parent has no pose, or that is its own ancestor, or that has a body
+/// (whose pose is the physics world's) is left where it is.
+struct Attach3D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("488b47cb-ae24-4d20-b8c7-bbc9a8176743");
+    static constexpr std::string_view kComponentName = "rawframe.physics3d.attach";
+
+    world::EntityHandle parent;
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float qx = 0;
+    float qy = 0;
+    float qz = 0;
+    float qw = 0;
+};
+
 /// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, Character3D, Mesh3D,
-/// and Joint3D, in that order. An entity field appears as its two parts, `<name>.slot` and
+/// Joint3D, and Attach3D, in that order. An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;
 

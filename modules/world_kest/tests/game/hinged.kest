@@ -1,7 +1,7 @@
 module hinged
 
 // A post and a bar, and once, a hinge between the post's middle and the
-// bar's left end, about z.
+// bar's left end, about z, and a lamp attached at the bar's right end.
 
 import rawframe.physics3d
 import rawframe.world
@@ -13,6 +13,8 @@ struct Swing {
 }
 
 extern fn Joint3D.insert(entity: world.Entity, value: physics3d.Joint3D)
+extern fn Attach3D.insert(entity: world.Entity, value: physics3d.Attach3D)
+extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
 
 fn rig(count: i32, swings: [Swing], entities: [world.Entity]) {
     let post = 0
@@ -30,6 +32,10 @@ fn rig(count: i32, swings: [Swing], entities: [world.Entity]) {
         let hinge = world.create()
         Joint3D.insert(hinge, physics3d.hinge(entities[post], entities[bar], vec3(0.0, 0.0, 0.0),
                                               vec3(-0.5, 0.0, 0.0), vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, 1.0)))
+        // A lamp at the bar's far end, which follows it.
+        let lamp = world.create()
+        Attach3D.insert(lamp, physics3d.Attach3D(entities[bar], 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        Pose3D.insert(lamp, physics3d.Pose3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
         swings[bar].joined = true
     }
 }

@@ -222,8 +222,26 @@ struct Joint2D {
     bool broken = false;
 };
 
-/// Body2D, Pose2D, Velocity2D, Impulse2D, Contact2D, Character2D, and
-/// Joint2D, in that order.
+/// physics3d's Attach3D in two dimensions: an entity with an Attach2D and a
+/// Pose2D and no body follows `parent`, whose Pose2D it takes at the offset
+/// here, in the parent's frame, after every step. The rotation is a cosine
+/// and a sine, all noughts as none. Attachments chain, parents before
+/// children; one whose parent has no pose, or that is its own ancestor, or
+/// that has a body is left where it is.
+struct Attach2D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("57e25807-df70-452f-8798-ab3a1137e1f0");
+    static constexpr std::string_view kComponentName = "rawframe.physics2d.attach";
+
+    world::EntityHandle parent;
+    float x = 0;
+    float y = 0;
+    float c = 0;
+    float s = 0;
+};
+
+/// Body2D, Pose2D, Velocity2D, Impulse2D, Contact2D, Character2D, Joint2D,
+/// and Attach2D, in that order.
 /// An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;

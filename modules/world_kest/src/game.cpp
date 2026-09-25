@@ -337,11 +337,12 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 game.entityFields.push_back(
                     GameEntityField{.component = std::string{kFacts.contact}, .field = std::string{kField}});
             }
-            // As are the bodies a joint holds.
+            // As are the bodies a joint holds, and an attachment's parent.
             for (const std::string_view kField : {"a", "b"}) {
                 game.entityFields.push_back(
                     GameEntityField{.component = std::string{kFacts.joint}, .field = std::string{kField}});
             }
+            game.entityFields.push_back(GameEntityField{.component = std::string{kFacts.attach}, .field = "parent"});
             game.physics = physics;
         } else if (kKeyword == "collision") {
             const auto kRule = [](std::string_view word) -> std::optional<physics::CollisionRule> {
