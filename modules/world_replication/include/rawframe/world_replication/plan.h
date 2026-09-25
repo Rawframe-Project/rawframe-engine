@@ -35,6 +35,9 @@ public:
     /// A predictor for one client, running the game's predicted systems;
     /// `unsupported` for a game that predicts nothing.
     [[nodiscard]] virtual result::Result<std::unique_ptr<Predictor>> predictor() const = 0;
+    /// The components a client shows remote entities' values of between
+    /// states; empty for a game that shows every state as it arrives.
+    [[nodiscard]] virtual std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept = 0;
     /// Who is sent what: none for a game whose every entity every
     /// connection sees.
     [[nodiscard]] virtual const std::optional<InterestSettings>& interest() const noexcept = 0;

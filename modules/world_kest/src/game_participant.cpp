@@ -181,6 +181,16 @@ public:
         RAWFRAME_TRY(planReplication(kText, kProgram));
         RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planInterest());
+        for (const std::string& name : game_.interpolated) {
+            if (std::ranges::find(game_.replicated, name) == game_.replicated.end()) {
+                return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                             WorldKestError::BadGameLine,
+                                                             "an interpolated component replicates")
+                                                          .error()
+                                                          .withContext("name", name)};
+            }
+            interpolated_.push_back(componentNamed(name)->id);
+        }
         RAWFRAME_TRY(planCheckpoints());
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
@@ -336,6 +346,9 @@ public:
             .program = program_, .game = &game_, .descriptors = descriptors_, .limits = predictionLimits_});
     }
 
+    std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept override {
+        return interpolated_;
+    }
     const std::optional<world_replication::InterestSettings>& interest() const noexcept override {
         return interest_;
     }
@@ -592,6 +605,7 @@ private:
     std::vector<schema::ComponentTypeId> predicted_;
     kest::MachineLimits predictionLimits_;
     std::optional<world_replication::InterestSettings> interest_;
+    std::vector<schema::ComponentTypeId> interpolated_;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.
     std::optional<GameEntityField> unwritable_;

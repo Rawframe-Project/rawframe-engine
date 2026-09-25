@@ -205,6 +205,16 @@ public:
         }
         // A game that predicts is played predicting unless told otherwise.
         const bool kPredicting = !plan_->predictedComponents().empty() && kPredict != "false";
+        const auto kInterpolate = configuration.text("bots.interpolate");
+        if (kInterpolate.has_value() && *kInterpolate != "true" && *kInterpolate != "false") {
+            return missing("bots.interpolate is true or false");
+        }
+        std::optional<InterpolationSettings> interpolation;
+        if (!plan_->interpolatedComponents().empty() && kInterpolate != "false") {
+            interpolation = InterpolationSettings{
+                .interpolated = {plan_->interpolatedComponents().begin(), plan_->interpolatedComponents().end()},
+                .clock = &context.clock()};
+        }
         for (std::uint64_t index = 0; index < count; ++index) {
             Bot bot{.random =
                         world::deriveStream(world::RootSeed{kSeed + index}, "rawframe.replication.bots", "steer")};
@@ -225,7 +235,8 @@ public:
                                                           *bot.world,
                                                           ClientReplicationSettings{.table = plan_->table(),
                                                                                     .input = plan_->input(),
-                                                                                    .prediction = prediction}));
+                                                                                    .prediction = prediction,
+                                                                                    .interpolation = interpolation}));
             if (plan_->input()) {
                 bot.input.assign(plan_->input()->size, std::byte{0});
             }
@@ -279,7 +290,10 @@ public:
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
         PredictionStatistics predicted;
+        InterpolationStatistics interpolated;
         for (Bot& bot : bots_) {
+            interpolated.blended += bot.client->interpolationStatistics().blended;
+            interpolated.newest += bot.client->interpolationStatistics().newest;
             admitted += bot.client->admitted() ? 1 : 0;
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
@@ -303,7 +317,9 @@ public:
                       diagnostics::field("rollbacks", predicted.rollbacks),
                       diagnostics::field("resimulatedTicks", predicted.resimulatedTicks),
                       diagnostics::field("stalled", predicted.stalled),
-                      diagnostics::field("failedSteps", predicted.failedSteps)});
+                      diagnostics::field("failedSteps", predicted.failedSteps),
+                      diagnostics::field("blended", interpolated.blended),
+                      diagnostics::field("shownNewest", interpolated.newest)});
     }
 
 private:

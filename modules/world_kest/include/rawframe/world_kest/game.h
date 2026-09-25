@@ -28,10 +28,13 @@
 // player's components a client predicts, and a system marked `predicted` runs
 // on predicting clients too, over the player alone (SPEC-0041); it may write
 // no replicated component that is not predicted and draw from no World
-// stream, whose state a client does not have. An `interest` line makes what
-// each connection is sent spatial: an entity whose component's coordinate
-// fields lie within the radius of the player's is sent, one without the
-// component is sent to every connection, and the player always is:
+// stream, whose state a client does not have. `interpolate` lists the
+// replicated components a client shows other entities' values of between
+// the states it receives, a little in the past, rather than as each arrives.
+// An `interest` line makes what each connection is sent spatial: an entity
+// whose component's coordinate fields lie within the radius of the player's
+// is sent, one without the component is sent to every connection, and the
+// player always is:
 //
 //   interest game.position x y within 40
 //
@@ -127,6 +130,8 @@ struct GameDescription {
     std::string input;
     /// The player's components a client predicts from its own input.
     std::vector<std::string> predicted;
+    /// Components shown between states on every entity but the player's.
+    std::vector<std::string> interpolated;
     std::vector<GameEntityField> entityFields;
     std::optional<GameInterest> interest;
 };

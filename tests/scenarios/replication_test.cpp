@@ -10,6 +10,7 @@
 #include "rawframe/world_replication/server.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <vector>
@@ -129,6 +130,16 @@ network::Compatibility compatibility() {
     return made;
 }
 
+/// What differs between scenarios besides the network.
+struct Options {
+    std::size_t stateBytesPerTick = 1092;
+    bool predicting = false;
+    std::optional<world_replication::InterestSettings> interest;
+    bool interpolating = false;
+    /// How much time one step is.
+    MonotonicDuration stepLength = MonotonicDuration::fromMilliseconds(16);
+};
+
 /// Everything on both sides of one connection.
 struct Scenario {
     ManualClock clock;
@@ -151,12 +162,10 @@ struct Scenario {
     std::unique_ptr<world_replication::ReplicationClient> client;
 
     MovePredictor predictor;
+    MonotonicDuration stepLength;
 
-    explicit Scenario(network_loopback::LoopbackConditions conditions,
-                      std::size_t stateBytesPerTick = 1092,
-                      bool predicting = false,
-                      std::optional<world_replication::InterestSettings> interest = std::nullopt)
-        : network(clock, conditions) {
+    explicit Scenario(network_loopback::LoopbackConditions conditions, Options options = {})
+        : network(clock, conditions), stepLength(options.stepLength) {
         serverSessions = *network::Sessions::server(
             *serverTransport, clock, {.profile = kSessions, .expected = compatibility(), .seed = 1});
         RAWFRAME_EXPECT(serverSessions->listen({"server"}).has_value());
@@ -165,8 +174,8 @@ struct Scenario {
             {.table = {.components = {positionCodec(), steerCodec()}},
              .playerComponents = {Position::kComponentTypeId, Steer::kComponentTypeId},
              .input = steerCodec(),
-             .interest = std::move(interest),
-             .stateBytesPerTick = stateBytesPerTick});
+             .interest = std::move(options.interest),
+             .stateBytesPerTick = options.stateBytesPerTick});
         std::vector<world::SystemDeclaration> declarations;
         RAWFRAME_EXPECT(server->declareSystems(*schema, declarations).has_value());
         move = std::make_unique<Move>(*schema);
@@ -179,10 +188,14 @@ struct Scenario {
             clientWorld,
             {.table = {.components = {positionCodec(), steerCodec()}},
              .input = steerCodec(),
-             .prediction = predicting ? std::optional{world_replication::PredictionSettings{
-                                            .predictor = &predictor,
-                                            .predicted = {Position::kComponentTypeId, Steer::kComponentTypeId}}}
-                                      : std::nullopt});
+             .prediction = options.predicting ? std::optional{world_replication::PredictionSettings{
+                                                    .predictor = &predictor,
+                                                    .predicted = {Position::kComponentTypeId, Steer::kComponentTypeId}}}
+                                              : std::nullopt,
+             .interpolation = options.interpolating
+                                  ? std::optional{world_replication::InterpolationSettings{
+                                        .interpolated = {Position::kComponentTypeId}, .clock = &clock}}
+                                  : std::nullopt});
         RAWFRAME_EXPECT(
             client
                 ->connect(
@@ -191,9 +204,9 @@ struct Scenario {
                 .has_value());
     }
 
-    /// One 16 ms step: the server pumps and ticks, the client pumps and steers.
+    /// One step: the server pumps and ticks, the client pumps and steers.
     void step(Steer steer) {
-        clock.advance(MonotonicDuration::fromMilliseconds(16));
+        clock.advance(stepLength);
         server->pump(serverWorld, tick);
         const std::uint64_t kRan = tick.value;
         RAWFRAME_EXPECT(schedule->runTick(serverWorld, tick, *world::TickRate::of(60)).has_value());
@@ -204,6 +217,12 @@ struct Scenario {
         if (client->admitted()) {
             RAWFRAME_EXPECT(client->submitInput(std::as_bytes(std::span{&steer, 1})).has_value());
         }
+    }
+
+    /// Time passes between server ticks, and the client shows what it has.
+    void betweenTicks(MonotonicDuration elapsed) {
+        clock.advance(elapsed);
+        client->pump();
     }
 
     const Position* firstPlayerPosition() {
@@ -313,7 +332,7 @@ RAWFRAME_TEST(ReplicationHoldsThroughLossAndReordering) {
 RAWFRAME_TEST(ANarrowBudgetSendsThePlayerFirstAndTheRestInTurn) {
     // Room for the header and two or three records a tick: far less than
     // twenty moving props need.
-    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}, 64};
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}, {.stateBytesPerTick = 64}};
     const auto kPosition = *scenario.schema->key<Position>();
     const auto kSteer = *scenario.schema->key<Steer>();
     for (int index = 0; index < 20; ++index) {
@@ -344,7 +363,7 @@ RAWFRAME_TEST(ANarrowBudgetSendsThePlayerFirstAndTheRestInTurn) {
 }
 
 RAWFRAME_TEST(APredictingClientRunsAheadAndIsConfirmed) {
-    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(40)}, 1092, true};
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(40)}, {.predicting = true}};
     const auto kPosition = *scenario.schema->key<Position>();
     for (int step = 0; step < 120; ++step) {
         scenario.step(Steer{static_cast<float>(step % 5), 0.25F});
@@ -374,8 +393,7 @@ RAWFRAME_TEST(PredictionRecoversFromLostInput) {
                        .jitter = MonotonicDuration::fromMilliseconds(30),
                        .datagramLossPerMillion = 300'000,
                        .seed = 5},
-                      1092,
-                      true};
+                      {.predicting = true}};
     const auto kPosition = *scenario.schema->key<Position>();
     for (int step = 0; step < 150; ++step) {
         scenario.step(Steer{step % 7 == 0 ? -3.0F : 1.0F, static_cast<float>(step % 3)});
@@ -392,13 +410,11 @@ RAWFRAME_TEST(PredictionRecoversFromLostInput) {
 
 RAWFRAME_TEST(InterestSendsWhatIsNearThePlayerAndAlwaysThePlayer) {
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)},
-                      1092,
-                      false,
-                      world_replication::InterestSettings{
-                          .position = Position::kComponentTypeId,
-                          .axes = {{offsetof(Position, x), WireKind::F32}, {offsetof(Position, y), WireKind::F32}},
-                          .radius = 10,
-                          .leaveRadius = 12}};
+                      {.interest = world_replication::InterestSettings{
+                           .position = Position::kComponentTypeId,
+                           .axes = {{offsetof(Position, x), WireKind::F32}, {offsetof(Position, y), WireKind::F32}},
+                           .radius = 10,
+                           .leaveRadius = 12}}};
     const auto kPosition = *scenario.schema->key<Position>();
     const auto kSteer = *scenario.schema->key<Steer>();
     for (const float kX : {5.0F, 30.0F, 1000.0F}) {
@@ -452,4 +468,79 @@ RAWFRAME_TEST(InterestSendsWhatIsNearThePlayerAndAlwaysThePlayer) {
     // The player itself was never out of its own interest.
     const Position* mirror = scenario.clientWorld.get(scenario.client->owned(), kPosition);
     RAWFRAME_EXPECT(mirror != nullptr && mirror->x == 0);
+}
+
+RAWFRAME_TEST(RemoteEntitiesAreShownBetweenStates) {
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(30),
+                       .jitter = MonotonicDuration::fromMilliseconds(20),
+                       .datagramLossPerMillion = 100'000,
+                       .seed = 11},
+                      {.interpolating = true, .stepLength = MonotonicDuration{8'333'333}}};
+    const auto kPosition = *scenario.schema->key<Position>();
+    const auto kSteer = *scenario.schema->key<Steer>();
+    // Props moving steadily, each known by its y.
+    std::vector<world::EntityHandle> props;
+    for (int index = 0; index < 5; ++index) {
+        props.push_back(*scenario.serverWorld.create());
+        RAWFRAME_EXPECT(
+            scenario.serverWorld.insert(props.back(), kPosition, Position{0, static_cast<float>(index)}).has_value());
+        RAWFRAME_EXPECT(scenario.serverWorld.insert(props.back(), kSteer, Steer{0.5F, 0}).has_value());
+    }
+    // Where each prop truly was after each server tick.
+    std::map<std::uint64_t, std::vector<float>> truth;
+    const auto kStep = [&] {
+        const std::uint64_t kRan = scenario.tick.value;
+        scenario.step(Steer{});
+        std::vector<float>& at = truth[kRan];
+        for (const world::EntityHandle kProp : props) {
+            at.push_back(scenario.serverWorld.get(kProp, kPosition)->x);
+        }
+    };
+    for (int step = 0; step < 90; ++step) {
+        kStep();
+        scenario.betweenTicks(MonotonicDuration{8'333'334});
+    }
+    // Shown exactly where each prop was at the moment shown, which the
+    // client shows at twice the tick rate, so half the time between ticks,
+    // though states arrive late, jittered, and not at all.
+    double worst = 0;
+    int compared = 0;
+    for (int step = 0; step < 120; ++step) {
+        if (step % 2 == 0) {
+            kStep();
+        } else {
+            scenario.betweenTicks(MonotonicDuration{8'333'334});
+        }
+        const std::optional<double> kPerceived = scenario.client->perceivedTick();
+        RAWFRAME_EXPECT(kPerceived.has_value());
+        if (!kPerceived.has_value()) {
+            return;
+        }
+        const auto kBase = static_cast<std::uint64_t>(*kPerceived);
+        const double kFraction = *kPerceived - static_cast<double>(kBase);
+        const auto kBefore = truth.find(kBase);
+        const auto kAfter = truth.find(kBase + 1);
+        RAWFRAME_EXPECT(kBefore != truth.end() && kAfter != truth.end());
+        if (kBefore == truth.end() || kAfter == truth.end()) {
+            return;
+        }
+        auto query = world::Query<world::Read<Position>>::resolve(*scenario.schema);
+        query->forEach(scenario.clientWorld, [&](world::EntityHandle entity, const Position& shown) {
+            if (entity == scenario.client->owned()) {
+                return;
+            }
+            const auto kIndex = static_cast<std::size_t>(shown.y);
+            const double kTrue =
+                kBefore->second[kIndex] + ((kAfter->second[kIndex] - kBefore->second[kIndex]) * kFraction);
+            worst = std::max(worst, std::abs(shown.x - kTrue));
+            ++compared;
+        });
+    }
+    RAWFRAME_EXPECT(compared == 600);
+    RAWFRAME_EXPECT(worst < 0.001);
+    // The moment shown is the delay behind the newest state, give or take
+    // the network's jitter.
+    const double kBehind = static_cast<double>(scenario.client->serverTick()) - *scenario.client->perceivedTick();
+    RAWFRAME_EXPECT(kBehind > 4 && kBehind < 9);
+    RAWFRAME_EXPECT(scenario.client->interpolationStatistics().blended > 500);
 }

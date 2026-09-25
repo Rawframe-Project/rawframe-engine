@@ -5,11 +5,14 @@
 // entities are made and removed between local ticks, as the server declares
 // and retires them; a state datagram is decoded whole and staged before any
 // of it is applied, and a value older than the one already applied is not.
+// Remote entities' interpolated components are shown a little in the past,
+// between two received states (interpolation.h).
 
 #include "rawframe/network/session.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_replication/codec.h"
+#include "rawframe/world_replication/interpolation.h"
 #include "rawframe/world_replication/prediction.h"
 #include "rawframe/world_replication/records.h"
 #include "rawframe/world_replication/server.h"
@@ -32,6 +35,9 @@ struct ClientReplicationSettings {
     /// Predicting the player's own components from its own input; none
     /// shows the server's state only.
     std::optional<PredictionSettings> prediction;
+    /// Showing remote entities between states; none shows each state as
+    /// it arrives.
+    std::optional<InterpolationSettings> interpolation;
 };
 
 struct ClientReplicationStatistics {
@@ -77,6 +83,11 @@ public:
     [[nodiscard]] ClientReplicationStatistics statistics() const noexcept;
     /// All zero without prediction.
     [[nodiscard]] PredictionStatistics predictionStatistics() const noexcept;
+    /// The server tick remote entities are shown at, fractional; none
+    /// without interpolation or before the first state.
+    [[nodiscard]] std::optional<double> perceivedTick() const noexcept;
+    /// All zero without interpolation.
+    [[nodiscard]] InterpolationStatistics interpolationStatistics() const noexcept;
 
     struct State;
     explicit ReplicationClient(std::unique_ptr<State> state) noexcept;

@@ -21,11 +21,13 @@ namespace rawframe::world_replication {
 /// `rawframe.replication.bots` plays headless clients against a server,
 /// each with its own mirror World, steering its player at random:
 ///
-///   bots.count     how many; 0 or none, nothing (0)
-///   bots.endpoint  the server's endpoint (arena)
-///   bots.seed      (0)
-///   bots.predict   predict each bot's player when the game declares
-///                  prediction (true)
+///   bots.count        how many; 0 or none, nothing (0)
+///   bots.endpoint     the server's endpoint (arena)
+///   bots.seed         (0)
+///   bots.predict      predict each bot's player when the game declares
+///                     prediction (true)
+///   bots.interpolate  show remote entities between states when the game
+///                     declares interpolation (true)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);

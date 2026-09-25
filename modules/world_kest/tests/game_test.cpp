@@ -72,7 +72,8 @@ RAWFRAME_TEST(PredictionIsDeclaredByLine) {
                           "system a.move simulation move write a.position predicted\n"
                           "system a.other simulation other predicted write a.position\n"
                           "system a.server simulation serve read a.position\n"
-                          "predict a.position\n");
+                          "predict a.position\n"
+                          "interpolate a.position\n");
     RAWFRAME_EXPECT(game.has_value());
     if (!game.has_value()) {
         return;
@@ -80,7 +81,9 @@ RAWFRAME_TEST(PredictionIsDeclaredByLine) {
     RAWFRAME_EXPECT(game->systems[0].predicted && game->systems[1].predicted && !game->systems[2].predicted);
     RAWFRAME_EXPECT(game->systems[0].columns.size() == 1 && game->systems[1].columns.size() == 1);
     RAWFRAME_EXPECT((game->predicted == std::vector<std::string>{"a.position"}));
+    RAWFRAME_EXPECT((game->interpolated == std::vector<std::string>{"a.position"}));
     RAWFRAME_EXPECT(refusedAt("program p.kest\npredict\n", WorldKestError::BadGameLine, "2"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\ninterpolate\n", WorldKestError::BadGameLine, "2"));
 }
 
 RAWFRAME_TEST(InterestIsDeclaredByLine) {

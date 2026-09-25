@@ -1,5 +1,6 @@
 #include "rawframe/world_replication/client.h"
 
+#include "interpolation.h"
 #include "prediction.h"
 #include "rawframe/world_replication/errors.h"
 
@@ -41,6 +42,7 @@ struct ReplicationClient::State {
     world::EntityHandle owned;
     std::uint32_t ownedNet = 0;
     std::optional<Prediction> prediction;
+    std::optional<Interpolation> interpolation;
     /// By table index: which predicted component it is, if any.
     std::vector<std::optional<std::size_t>> predictedIndex;
     std::uint64_t serverTick = 0;
@@ -108,6 +110,9 @@ struct ReplicationClient::State {
                 }
             }
             mirrored.erase(kMirror);
+            if (interpolation) {
+                interpolation->retire(kRecord->entity.value);
+            }
             // IDs are never reused in an epoch, so nothing late can reach a
             // replacement; what is kept of the retired one can go.
             appliedAt.erase(appliedAt.lower_bound({kRecord->entity.value, 0}),
@@ -219,7 +224,21 @@ struct ReplicationClient::State {
         ++statistics.stateDatagrams;
         statistics.recordsUnmapped += unmapped;
         receive(event.sequence);
+        if (interpolation) {
+            interpolation->heard(kHeader->serverTick);
+        }
         for (const Staged& record : staged) {
+            appliedAt[{record.net, record.component}] = kHeader->serverTick;
+            ++statistics.recordsApplied;
+            if (interpolation && interpolation->interpolates(record.component) && record.net != ownedNet) {
+                // Shown when the moment shown reaches it.
+                interpolation->sample(
+                    record.net,
+                    record.component,
+                    kHeader->serverTick,
+                    std::span{staging}.subspan(record.offset, settings.table.components[record.component].size));
+                continue;
+            }
             const schema::ComponentRuntimeId kId = table[record.component];
             void* const kValue = world->getErased(record.entity, kId);
             if (kValue != nullptr) {
@@ -227,8 +246,6 @@ struct ReplicationClient::State {
             } else {
                 static_cast<void>(world->insertErased(record.entity, kId, staging.data() + record.offset));
             }
-            appliedAt[{record.net, record.component}] = kHeader->serverTick;
-            ++statistics.recordsApplied;
         }
         serverTick = std::max(serverTick, kHeader->serverTick);
         stateSequence = std::max(stateSequence, event.sequence);
@@ -323,6 +340,25 @@ ReplicationClient::create(network::Sessions& sessions, world::World& world, Clie
         }
         state->prediction.emplace(kPrediction, settings.input->size);
     }
+    if (settings.interpolation) {
+        const InterpolationSettings& kInterpolation = *settings.interpolation;
+        std::vector<bool> interpolated(settings.table.components.size());
+        for (const schema::ComponentTypeId kComponent : kInterpolation.interpolated) {
+            const auto kIn = std::ranges::find(settings.table.components, kComponent, &ComponentCodec::component);
+            if (kIn == settings.table.components.end()) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              ReplicationError::FieldUnsupported,
+                              "an interpolated component does not replicate");
+            }
+            interpolated[static_cast<std::size_t>(kIn - settings.table.components.begin())] = true;
+        }
+        if (kInterpolation.clock == nullptr || kInterpolation.maximumSpan == 0 || kInterpolation.samples < 2) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          ReplicationError::FieldUnsupported,
+                          "interpolation needs a clock, a span, and room for two states");
+        }
+        state->interpolation.emplace(kInterpolation, settings.table.components, std::move(interpolated));
+    }
     state->sessions = &sessions;
     state->world = &world;
     state->settings = std::move(settings);
@@ -348,6 +384,9 @@ void ReplicationClient::pump() {
             state.accept = event.accept;
             state.consumedInputTick = event.accept.tickOrigin;
             state.nextInputTick = event.accept.tickOrigin + 1;
+            if (state.interpolation) {
+                state.interpolation->admitted(event.accept.tickRateTicks, event.accept.tickRateSeconds);
+            }
             break;
         case network::SessionEventKind::Frame:
             if (state.accept) {
@@ -373,6 +412,9 @@ void ReplicationClient::pump() {
             if (state.prediction) {
                 state.prediction->reset();
             }
+            if (state.interpolation) {
+                state.interpolation->reset();
+            }
             state.accept.reset();
             state.received = {};
             state.acknowledgementDue = false;
@@ -382,6 +424,9 @@ void ReplicationClient::pump() {
     // One acknowledgement per pump covers every state datagram since the last.
     if (state.accept && state.acknowledgementDue) {
         state.sendAcknowledgement();
+    }
+    if (state.accept && state.interpolation) {
+        state.interpolation->show(*state.world, state.mirrored, state.table);
     }
 }
 
@@ -452,6 +497,14 @@ ClientReplicationStatistics ReplicationClient::statistics() const noexcept {
 
 PredictionStatistics ReplicationClient::predictionStatistics() const noexcept {
     return state_->prediction ? state_->prediction->statistics() : PredictionStatistics{};
+}
+
+std::optional<double> ReplicationClient::perceivedTick() const noexcept {
+    return state_->interpolation ? state_->interpolation->perceivedTick() : std::nullopt;
+}
+
+InterpolationStatistics ReplicationClient::interpolationStatistics() const noexcept {
+    return state_->interpolation ? state_->interpolation->statistics() : InterpolationStatistics{};
 }
 
 } // namespace rawframe::world_replication
