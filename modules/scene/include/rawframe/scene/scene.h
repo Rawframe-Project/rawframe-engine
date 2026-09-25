@@ -37,6 +37,38 @@
 // found rather than read as something else. Entities keep the order they
 // were authored in.
 //
+// A scene may also instance other scenes (D96), after its entities:
+//
+//     "instances": [
+//       {
+//         "scene": "52771075251e7361deaecf4939c72e56",
+//         "entities": {
+//           "<an entity of that scene>": "<its id in this scene>"
+//         },
+//         "overrides": [
+//           {
+//             "entity": "<its id in this scene>",
+//             "component": "game.position",
+//             "set": {
+//               "x": 0
+//             }
+//           }
+//         ]
+//       }
+//     ]
+//
+// `scene` is the source scene's resource identity. `entities` maps every
+// entity the source scene has (its own and those of its instances, as it
+// names them) to the id it has here, in the order of the source's ids; the
+// ids here are unique among everything this scene holds. `overrides` is the
+// closed typed patch, one entry for an entity and component at most, in
+// that order: `set` gives fields new values, a default among them; `add`
+// adds a component the source's entity lacks, with its non-default fields;
+// `remove: true` removes one it has. What the source holds is checked when
+// the instance is resolved. The member is left out when there are no
+// instances, and a reference, here or in an override, may name any entity
+// this scene holds. `schema` covers the components the overrides name too.
+//
 // The document is engine-neutral: which components exist, their fields,
 // and whether a value fits are the game's to check when it spawns a scene.
 
@@ -69,6 +101,9 @@ struct FieldValue {
         True,
         /// Another entity of the document (`entity`).
         Entity,
+        /// The truth value `false`: only in an override's `set`, where a
+        /// default is a change.
+        False,
     };
 
     Kind kind = Kind::Number;
@@ -110,18 +145,62 @@ struct SchemaMark {
     friend bool operator==(const SchemaMark&, const SchemaMark&) = default;
 };
 
+/// One entry of an instance's patch: what it does to one component of one
+/// of the instance's entities.
+struct Override {
+    enum class Kind : std::uint8_t {
+        Set,
+        Add,
+        Remove,
+    };
+
+    /// The entity, by its id in the instancing scene.
+    base::Bits128 entity{};
+    std::string component;
+    Kind kind = Kind::Set;
+    /// Set: the fields given new values. Add: the component's non-default
+    /// fields. Remove: none.
+    std::vector<SceneField> fields;
+
+    friend bool operator==(const Override&, const Override&) = default;
+};
+
+/// A source scene's entity, and the id it has in the instancing scene.
+struct IdentityMapping {
+    base::Bits128 source{};
+    base::Bits128 instance{};
+
+    friend bool operator==(const IdentityMapping&, const IdentityMapping&) = default;
+};
+
+struct SceneInstance {
+    /// The source scene's resource identity.
+    base::Bits128 scene{};
+    /// In the order of the source's ids.
+    std::vector<IdentityMapping> entities;
+    /// In the order of entity, then component.
+    std::vector<Override> overrides;
+
+    friend bool operator==(const SceneInstance&, const SceneInstance&) = default;
+};
+
 struct Scene {
     std::vector<SchemaMark> schema;
     std::vector<SceneEntity> entities;
+    std::vector<SceneInstance> instances;
 
     friend bool operator==(const Scene&, const Scene&) = default;
 };
 
+inline constexpr std::size_t kMaximumInstances = 4096;
+inline constexpr std::size_t kMaximumOverrides = 65536;
+
 /// The one form of `scene`; refused (`scene_invalid`) when the scene breaks
 /// a rule above: an id nought or twice, components or fields out of name
-/// order or twice, a field at its default, an entity reference to no entity
-/// of the document, a schema that is not exactly the components used, or a
-/// limit passed.
+/// order or twice, a field at its default outside an override's `set`, an
+/// entity reference to no entity the scene holds, a mapping or patch out of
+/// order or naming an entity the instance does not map, a schema that is
+/// not exactly the components used, or a limit passed.
 [[nodiscard]] result::Result<std::string> writeScene(const Scene& scene);
 
 /// Reads a scene, refusing (`scene_invalid`) anything `writeScene` would not
