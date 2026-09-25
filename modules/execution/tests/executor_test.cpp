@@ -1,5 +1,5 @@
 // The executor: admission, quotas, ceilings, priorities, background progress,
-// the blocking rule, worker derivation, and shutdown.
+// service progress, the blocking rule, worker derivation, and shutdown.
 
 #include "rawframe/execution/bounds.h"
 #include "rawframe/execution/budget.h"
@@ -57,6 +57,22 @@ RAWFRAME_TEST(SubmittedTasksAllRunAndStopDrainsThem) {
                                 ErrorClass::Unavailable,
                                 ExecutionError::AdmissionClosed));
     executor.stop();
+}
+
+RAWFRAME_TEST(ProgressCountsWaitingRunningAndFinishedWork) {
+    Executor executor{oneWorker()};
+    RAWFRAME_EXPECT(executor.admitOwner(kOwner, Quota{.maximumPendingTasks = 8}).has_value());
+    Gate gate;
+    occupyWorker(executor, gate);
+    RAWFRAME_EXPECT(executor.submit(kOwner, Priority::Normal, []() noexcept {}).has_value());
+    // The worker is held: one task runs, one waits, none has finished, and
+    // it stays so, which is what a stall looks like.
+    const ExecutorProgress kHeld = executor.progress();
+    RAWFRAME_EXPECT(kHeld.running == 1 && kHeld.waiting == 1 && kHeld.completed == 0);
+    gate.open.store(true);
+    executor.stop();
+    const ExecutorProgress kDone = executor.progress();
+    RAWFRAME_EXPECT(kDone.running == 0 && kDone.waiting == 0 && kDone.completed == 2);
 }
 
 RAWFRAME_TEST(OwnersNeedAnAcceptedQuota) {

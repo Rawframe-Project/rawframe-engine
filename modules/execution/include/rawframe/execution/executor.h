@@ -45,6 +45,15 @@ struct Quota {
     bool mayUseCritical = false;
 };
 
+/// Service progress, for a watchdog: work that waits or runs, and how many
+/// tasks have finished. Work present while the count stands still is a
+/// stall (SPEC-0012 health evidence).
+struct ExecutorProgress {
+    std::size_t waiting = 0;
+    std::size_t running = 0;
+    std::uint64_t completed = 0;
+};
+
 struct ExecutorSettings {
     ExecutorKind kind = ExecutorKind::Cpu;
     /// Explicit worker count from the target or profile, clamped to the kind's
@@ -100,6 +109,7 @@ public:
         return workers_.size();
     }
     [[nodiscard]] std::size_t pendingTasks() const noexcept;
+    [[nodiscard]] ExecutorProgress progress() const noexcept;
 
     /// The executor whose worker is the calling thread, or null.
     [[nodiscard]] static const Executor* current() noexcept;
@@ -148,6 +158,7 @@ private:
     std::array<Queue, kPriorityCount> queues_{};
     std::size_t pending_ = 0;
     std::size_t running_ = 0;
+    std::uint64_t completed_ = 0;
     std::optional<MonotonicInstant> backgroundWaitingSince_;
     std::array<OwnerEntry, kMaximumQuotaOwners> owners_{};
     std::size_t ownerCount_ = 0;

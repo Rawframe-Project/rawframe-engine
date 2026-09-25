@@ -224,6 +224,7 @@ void Executor::runSlot(Slot& slot) noexcept {
     {
         const std::scoped_lock kLock{mutex_};
         --running_;
+        ++completed_;
         nowIdle = running_ == 0 && pending_ == 0;
     }
     if (nowIdle) {
@@ -322,6 +323,11 @@ void Executor::overrun(const char* phase) noexcept {
 std::size_t Executor::pendingTasks() const noexcept {
     const std::scoped_lock kLock{mutex_};
     return pending_;
+}
+
+ExecutorProgress Executor::progress() const noexcept {
+    const std::scoped_lock kLock{mutex_};
+    return ExecutorProgress{.waiting = pending_, .running = running_, .completed = completed_};
 }
 
 const Executor* Executor::current() noexcept {
