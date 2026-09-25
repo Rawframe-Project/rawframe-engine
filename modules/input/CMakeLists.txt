@@ -2,8 +2,8 @@
 # device controls to per-player action state. Client only: the dedicated
 # server links none of it.
 rawframe_module(NAME input
-    SOURCES src/controls.cpp src/actions.cpp
+    SOURCES src/controls.cpp src/actions.cpp src/mapper.cpp
     DEPS document result base
 )
 
-rawframe_module_tests(NAME input SOURCES tests/actions_test.cpp)
+rawframe_module_tests(NAME input SOURCES tests/actions_test.cpp tests/mapper_test.cpp)
