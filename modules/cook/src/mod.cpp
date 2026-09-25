@@ -1,5 +1,6 @@
 #include "rawframe/cook/mod.h"
 
+#include "project.h"
 #include "rawframe/cook/errors.h"
 #include "rawframe/world_kest/cooked_mod.h"
 #include "rawframe/world_kest/mod.h"
@@ -50,6 +51,13 @@ result::Result<Artifact> cookMod(std::span<const std::byte> source, std::string_
             return refuse("a scene a mod contributes is cooked by rawframe.scene", contribution.scene);
         }
         mod.scenes.push_back(world_kest::CookedGameScene{.path = contribution.scene, .scene = kSidecar.id.value});
+    }
+    // Its program: an entry among the Kest sources beside it that compiles.
+    if (!kDescription.program.empty()) {
+        RAWFRAME_TRY_ASSIGN(const KestProject kProject, projectBeside(reads, kDescription.program));
+        RAWFRAME_TRY(compiles(kProject, kDescription.program));
+        mod.programs.push_back(world_kest::CookedGameProgram{
+            .path = kDescription.program, .sources = kProject.sources, .entry = kDescription.program});
     }
     RAWFRAME_TRY_ASSIGN(const std::string kWritten, world_kest::writeCookedMod(mod));
     const auto kBytes = std::as_bytes(std::span{kWritten.data(), kWritten.size()});

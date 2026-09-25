@@ -2,7 +2,9 @@
 
 // The mod importer (`rawframe.mod`, D178): a mod's description cooked with
 // every scene it contributes, each the scene resource its sidecar names, so
-// a process reads the mod from its Build alone. The description must parse;
+// a process reads the mod from its Build alone, and the program its handlers
+// are in, which must compile from the Kest sources of the `kest.project`
+// beside it (D181). The description must parse;
 // what its contributions mean is checked against the game when a
 // Composition opens it (D177).
 

@@ -1,11 +1,11 @@
 #include "rawframe/cook/game.h"
 
+#include "project.h"
 #include "rawframe/animation/resources.h"
 #include "rawframe/audio/layout.h"
 #include "rawframe/audio/sound.h"
 #include "rawframe/cook/errors.h"
 #include "rawframe/input/actions.h"
-#include "rawframe/kest_library/library.h"
 #include "rawframe/localization/catalog.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/game.h"
@@ -49,31 +49,6 @@ result::Result<std::string_view> keep(Reads& reads, world_kest::CookedGame& game
     return textOf(kBytes);
 }
 
-/// The Kest sources of the project beside the description, by its sidecar,
-/// and their files, read once for every program.
-struct Project {
-    base::Bits128 sources{};
-    std::vector<kest::SourceFile> files;
-};
-
-result::Result<Project> projectBeside(Reads& reads, std::string_view program) {
-    auto sidecarBytes = reads.file(std::string{"kest.project"} + std::string{content::kSidecarSuffix});
-    if (!sidecarBytes.has_value()) {
-        return refuse("a program's kest.project is beside the description, with a sidecar", program);
-    }
-    RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
-    if (kSidecar.importer != "rawframe.kest") {
-        return refuse("the project beside the description is cooked by rawframe.kest", program);
-    }
-    Project project{.sources = kSidecar.id.value};
-    RAWFRAME_TRY_ASSIGN(const std::vector<std::string> kNames, reads.files(".", ".kest"));
-    for (const std::string& name : kNames) {
-        RAWFRAME_TRY_ASSIGN(const std::span<const std::byte> kBytes, reads.file(name));
-        project.files.push_back(kest::SourceFile{.path = name, .text = std::string{textOf(kBytes)}});
-    }
-    return project;
-}
-
 result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string_view, Reads& reads) {
     const std::string_view kText = textOf(source);
     RAWFRAME_TRY_ASSIGN(const world_kest::GameDescription kDescription, world_kest::parseGame(kText));
@@ -84,23 +59,16 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
     if (kDescription.controls) {
         programs.push_back(kDescription.controls->program);
     }
-    std::optional<Project> project;
+    std::optional<KestProject> project;
     for (const std::string& program : programs) {
         if (game.program(program) != nullptr) {
             continue;
         }
-        if (!kest_library::plainGamePath(program)) {
-            return refuse("a program is named by a plain path under the description's directory", program);
-        }
         if (!project) {
-            RAWFRAME_TRY_ASSIGN(Project found, projectBeside(reads, program));
+            RAWFRAME_TRY_ASSIGN(KestProject found, projectBeside(reads, program));
             project = std::move(found);
         }
-        std::string report;
-        if (!kest_library::compile(program, project->files, {}, &report).has_value()) {
-            return std::unexpected<result::Error>{
-                refuse("a program does not compile from its sources", program).error().withContext("report", report)};
-        }
+        RAWFRAME_TRY(compiles(*project, program));
         game.programs.push_back(
             world_kest::CookedGameProgram{.path = program, .sources = project->sources, .entry = program});
     }

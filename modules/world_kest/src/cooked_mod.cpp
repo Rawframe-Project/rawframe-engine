@@ -25,7 +25,11 @@ std::string hexOf(base::Bits128 value) {
 }
 
 bool wellFormed(const CookedMod& mod) {
-    if (mod.scenes.size() > kMaximumCookedGameNames) {
+    if (mod.scenes.size() > kMaximumCookedGameNames || mod.programs.size() > 1) {
+        return false;
+    }
+    if (!mod.programs.empty() &&
+        (mod.programs[0].path.empty() || mod.programs[0].entry.empty() || mod.programs[0].sources == base::Bits128{})) {
         return false;
     }
     for (std::size_t at = 0; at < mod.scenes.size(); ++at) {
@@ -65,9 +69,18 @@ result::Result<std::string> writeCookedMod(const CookedMod& mod) {
         each.add("scene", Value::string(hexOf(scene.scene)));
         scenes.push(std::move(each));
     }
+    Value programs = Value::array();
+    for (CookedGameProgram& program : sorted.programs) {
+        Value each = Value::object();
+        each.add("entry", Value::string(std::move(program.entry)));
+        each.add("path", Value::string(std::move(program.path)));
+        each.add("sources", Value::string(hexOf(program.sources)));
+        programs.push(std::move(each));
+    }
     Value record = Value::object();
-    record.add("formatVersion", Value::integer(1));
+    record.add("formatVersion", Value::integer(2));
     record.add("kind", Value::string("mod.description"));
+    record.add("programs", std::move(programs));
     record.add("scenes", std::move(scenes));
     record.add("text", Value::string(std::move(sorted.text)));
     auto written = document::writeCanonicalRecord(record);
@@ -85,10 +98,12 @@ result::Result<CookedMod> readCookedMod(std::string_view bytes) {
     const Value* kind = parsed->find("kind");
     const Value* version = parsed->find("formatVersion");
     const Value* scenes = parsed->find("scenes");
-    const std::string* text = textOf(*parsed, 4, "text");
+    const Value* programs = parsed->find("programs");
+    const std::string* text = textOf(*parsed, 5, "text");
     if (kind == nullptr || kind->text() == nullptr || *kind->text() != "mod.description" || version == nullptr ||
-        version->integer() != 1 || scenes == nullptr || scenes->kind() != Value::Kind::Array || text == nullptr) {
-        return std::unexpected<result::Error>{invalid("a cooked mod is mod.description, format 1, and its parts")};
+        version->integer() != 2 || scenes == nullptr || scenes->kind() != Value::Kind::Array || programs == nullptr ||
+        programs->kind() != Value::Kind::Array || text == nullptr) {
+        return std::unexpected<result::Error>{invalid("a cooked mod is mod.description, format 2, and its parts")};
     }
     CookedMod mod{.text = *text};
     for (const Value& each : scenes->items()) {
@@ -99,6 +114,16 @@ result::Result<CookedMod> readCookedMod(std::string_view bytes) {
             return std::unexpected<result::Error>{invalid("a cooked mod's scene is a path and a scene")};
         }
         mod.scenes.push_back(CookedGameScene{.path = *path, .scene = kScene.value});
+    }
+    for (const Value& each : programs->items()) {
+        const std::string* path = textOf(each, 3, "path");
+        const std::string* entry = textOf(each, 3, "entry");
+        const std::string* sources = textOf(each, 3, "sources");
+        const base::Bits128Parse kSources = sources != nullptr ? base::parseBits128Hex(*sources) : base::Bits128Parse{};
+        if (path == nullptr || entry == nullptr || !kSources.parsed || hexOf(kSources.value) != *sources) {
+            return std::unexpected<result::Error>{invalid("a cooked mod's program is a path, sources, and entry")};
+        }
+        mod.programs.push_back(CookedGameProgram{.path = *path, .sources = kSources.value, .entry = *entry});
     }
     if (!wellFormed(mod)) {
         return std::unexpected<result::Error>{invalid("a cooked mod names each scene once, in order, fully")};

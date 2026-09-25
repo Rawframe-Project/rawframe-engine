@@ -1,13 +1,15 @@
 #pragma once
 
-// A mod's description cooked (D178): its text and each scene it contributes
-// as the resource it is, in one record, so a process reads the mod from its
-// Build and opens no path.
+// A mod's description cooked (D178): its text, each scene it contributes
+// as the resource it is, and the program its handlers are in as an entry of
+// its Kest sources resource (D181), in one record, so a process reads the
+// mod from its Build and opens no path.
 //
-//   {"formatVersion": 1, "kind": "mod.description", "scenes": [{"path", "scene"}], "text"}
+//   {"formatVersion": 2, "kind": "mod.description",
+//    "programs": [{"entry", "path", "sources"}], "scenes": [{"path", "scene"}], "text"}
 //
-// Scenes are in path order, each path once, each scene resource as 32 hex
-// digits.
+// Scenes and programs are in path order, each path once, each resource as
+// 32 hex digits. A mod has at most one program.
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
@@ -27,14 +29,15 @@ inline constexpr std::string_view kCookedModRepresentation = "rawframe.mod.descr
 struct CookedMod {
     std::string text;
     std::vector<CookedGameScene> scenes;
+    std::vector<CookedGameProgram> programs;
 
     /// The scene it contributes by `path`, or none.
     [[nodiscard]] const CookedGameScene* scene(std::string_view path) const noexcept;
 };
 
 /// The record's bytes, scenes in path order; refused (`cooked_game_invalid`)
-/// for a path empty or named twice, a scene of no identity, or more than
-/// kMaximumCookedGameNames scenes.
+/// for a path empty or named twice, a resource of no identity, more than
+/// kMaximumCookedGameNames scenes, or more than one program.
 [[nodiscard]] result::Result<std::string> writeCookedMod(const CookedMod& mod);
 
 /// Reads a record as written, and nothing else.

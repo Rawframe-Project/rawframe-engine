@@ -450,6 +450,38 @@ RAWFRAME_TEST(AModCooksWithTheScenesItContributes) {
     RAWFRAME_EXPECT(!kCook().failures.empty());
     writeText(kMod / "horde.mod", kText);
     RAWFRAME_EXPECT(kCook().failures.empty());
+
+    // A mod with handlers names their program, which must compile from the
+    // project beside it; the record names it as an entry of those sources.
+    const std::string kHandled = kText + "program horde.kest\nhandle hits bounty\n";
+    writeText(kMod / "horde.mod", kHandled);
+    writeText(kMod / "horde.kest", "module horde\n\nfn bounty(count: i32) {\n}\n");
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    writeText(kMod / "kest.project", "project horde\nsource .\n");
+    writeText(kMod / "kest.project.rfmeta", sidecar("000000000000000000000000000000b4", "", "rawframe.kest"));
+    static const std::array<Importer, 4> kWithKest = {audioImporter(), kestImporter(), modImporter(), sceneImporter()};
+    const auto kCookKest = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kWithKest});
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    RAWFRAME_EXPECT(kCookKest().failures.empty());
+    const auto kWithProgram = content::readManifest(readText(kProject.output / "content.manifest"));
+    const auto kModEntry = kWithProgram.has_value()
+                               ? std::ranges::find(*kWithProgram,
+                                                   content::ResourceTypeId{world_kest::kCookedModType},
+                                                   &content::ManifestEntry::type)
+                               : std::vector<content::ManifestEntry>::const_iterator{};
+    const auto kProgrammed = kWithProgram.has_value() && kModEntry != kWithProgram->end()
+                                 ? world_kest::readCookedMod(readText(kProject.output / kModEntry->locator))
+                                 : result::Result<world_kest::CookedMod>{};
+    RAWFRAME_EXPECT(kProgrammed.has_value() && kProgrammed->programs.size() == 1 &&
+                    kProgrammed->programs[0].entry == "horde.kest" &&
+                    kProgrammed->programs[0].sources ==
+                        base::parseBits128Hex("000000000000000000000000000000b4").value);
+    // A program that does not compile fails the mod.
+    writeText(kMod / "horde.kest", "module horde\n\nfn bounty(count: i32 {\n}\n");
+    RAWFRAME_EXPECT(failedWith(kCookKest(), CookError::BadReference));
 }
 
 RAWFRAME_TEST(NothingIsPublishedUnlessNothingFailed) {
