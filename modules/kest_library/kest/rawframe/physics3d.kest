@@ -130,6 +130,102 @@ struct Mesh3D {
     mesh: u64
 }
 
+// Joint3D's axes: how the joint holds each.
+const LOCKED: u8 = 0
+const FREE: u8 = 1
+// Free between the axis's lower and upper limit.
+const LIMITED: u8 = 2
+
+// Joint3D.motor: nought for none, or the axis it drives.
+const NO_MOTOR: u8 = 0
+const MOTOR_LINEAR_X: u8 = 1
+const MOTOR_LINEAR_Y: u8 = 2
+const MOTOR_LINEAR_Z: u8 = 3
+const MOTOR_ANGULAR_X: u8 = 4
+const MOTOR_ANGULAR_Y: u8 = 5
+const MOTOR_ANGULAR_Z: u8 = 6
+
+// A joint, on an entity of its own, holding bodies `a` and `b` together
+// axis by axis. Its frame sits at each body's anchor, in that body's own
+// frame, with z along the body's axis (all noughts is +z). Each linear and
+// angular axis is LOCKED, FREE, or LIMITED between its lower and upper
+// limit, in meters and radians. One motor may drive one axis that moves at
+// `motorSpeed`, with at most `motorEffort`. At most one angular axis may be
+// limited, and then the other two are both locked or both free. At least
+// one body is dynamic. Changing a joint, or making either body again,
+// makes it again; `fixed`, `hinge`, `slider`, and `ball` make the usual
+// ones.
+struct Joint3D {
+    a: world.Entity
+    b: world.Entity
+    anchorAX: f32
+    anchorAY: f32
+    anchorAZ: f32
+    anchorBX: f32
+    anchorBY: f32
+    anchorBZ: f32
+    axisAX: f32
+    axisAY: f32
+    axisAZ: f32
+    axisBX: f32
+    axisBY: f32
+    axisBZ: f32
+    linearLowerX: f32
+    linearLowerY: f32
+    linearLowerZ: f32
+    linearUpperX: f32
+    linearUpperY: f32
+    linearUpperZ: f32
+    angularLowerX: f32
+    angularLowerY: f32
+    angularLowerZ: f32
+    angularUpperX: f32
+    angularUpperY: f32
+    angularUpperZ: f32
+    motorSpeed: f32
+    motorEffort: f32
+    linearX: u8
+    linearY: u8
+    linearZ: u8
+    angularX: u8
+    angularY: u8
+    angularZ: u8
+    motor: u8
+    // Whether the two bodies still collide with each other.
+    collideConnected: bool
+}
+
+// Welds `b` to `a` where they are: every axis locked, the frame's z along
+// each body's `axis`.
+fn fixed(a: world.Entity, b: world.Entity, anchorA: vec3, anchorB: vec3, axisA: vec3, axisB: vec3) -> Joint3D {
+    return Joint3D(a, b, anchorA.x, anchorA.y, anchorA.z, anchorB.x, anchorB.y, anchorB.z, axisA.x, axisA.y,
+                   axisA.z, axisB.x, axisB.y, axisB.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                   0.0, 0.0, 0.0, LOCKED, LOCKED, LOCKED, LOCKED, LOCKED, LOCKED, NO_MOTOR, false)
+}
+
+// Turns about the axis: a door, a wheel on its axle.
+fn hinge(a: world.Entity, b: world.Entity, anchorA: vec3, anchorB: vec3, axisA: vec3, axisB: vec3) -> Joint3D {
+    let joint = fixed(a, b, anchorA, anchorB, axisA, axisB)
+    joint.angularZ = FREE
+    return joint
+}
+
+// Slides along the axis: a drawer, a piston.
+fn slider(a: world.Entity, b: world.Entity, anchorA: vec3, anchorB: vec3, axisA: vec3, axisB: vec3) -> Joint3D {
+    let joint = fixed(a, b, anchorA, anchorB, axisA, axisB)
+    joint.linearZ = FREE
+    return joint
+}
+
+// Turns every way about the anchors: a shoulder, a hanging lamp.
+fn ball(a: world.Entity, b: world.Entity, anchorA: vec3, anchorB: vec3) -> Joint3D {
+    let joint = fixed(a, b, anchorA, anchorB, vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, 1.0))
+    joint.angularX = FREE
+    joint.angularY = FREE
+    joint.angularZ = FREE
+    return joint
+}
+
 // What a ray or a sweep found: the closest body along it, where, the
 // surface's normal there, and how far along (0 at its origin, 1 at its end).
 // A ray meets only surfaces it comes to from outside; a sweep that starts

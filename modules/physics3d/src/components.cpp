@@ -123,7 +123,48 @@ constexpr std::array<ComponentField, 1> kMeshFields = {{
     {"mesh", offsetof(Mesh3D, mesh), FieldType::U64},
 }};
 
-const std::array<ComponentLayout, 7> kLayouts = {
+constexpr std::array<ComponentField, 38> kJointFields = {{
+    {"a.slot", offsetof(Joint3D, a) + offsetof(world::EntityHandle, slot), FieldType::U32},
+    {"a.generation", offsetof(Joint3D, a) + offsetof(world::EntityHandle, generation), FieldType::U32},
+    {"b.slot", offsetof(Joint3D, b) + offsetof(world::EntityHandle, slot), FieldType::U32},
+    {"b.generation", offsetof(Joint3D, b) + offsetof(world::EntityHandle, generation), FieldType::U32},
+    {"anchorAX", offsetof(Joint3D, anchorAX), FieldType::F32},
+    {"anchorAY", offsetof(Joint3D, anchorAY), FieldType::F32},
+    {"anchorAZ", offsetof(Joint3D, anchorAZ), FieldType::F32},
+    {"anchorBX", offsetof(Joint3D, anchorBX), FieldType::F32},
+    {"anchorBY", offsetof(Joint3D, anchorBY), FieldType::F32},
+    {"anchorBZ", offsetof(Joint3D, anchorBZ), FieldType::F32},
+    {"axisAX", offsetof(Joint3D, axisAX), FieldType::F32},
+    {"axisAY", offsetof(Joint3D, axisAY), FieldType::F32},
+    {"axisAZ", offsetof(Joint3D, axisAZ), FieldType::F32},
+    {"axisBX", offsetof(Joint3D, axisBX), FieldType::F32},
+    {"axisBY", offsetof(Joint3D, axisBY), FieldType::F32},
+    {"axisBZ", offsetof(Joint3D, axisBZ), FieldType::F32},
+    {"linearLowerX", offsetof(Joint3D, linearLowerX), FieldType::F32},
+    {"linearLowerY", offsetof(Joint3D, linearLowerY), FieldType::F32},
+    {"linearLowerZ", offsetof(Joint3D, linearLowerZ), FieldType::F32},
+    {"linearUpperX", offsetof(Joint3D, linearUpperX), FieldType::F32},
+    {"linearUpperY", offsetof(Joint3D, linearUpperY), FieldType::F32},
+    {"linearUpperZ", offsetof(Joint3D, linearUpperZ), FieldType::F32},
+    {"angularLowerX", offsetof(Joint3D, angularLowerX), FieldType::F32},
+    {"angularLowerY", offsetof(Joint3D, angularLowerY), FieldType::F32},
+    {"angularLowerZ", offsetof(Joint3D, angularLowerZ), FieldType::F32},
+    {"angularUpperX", offsetof(Joint3D, angularUpperX), FieldType::F32},
+    {"angularUpperY", offsetof(Joint3D, angularUpperY), FieldType::F32},
+    {"angularUpperZ", offsetof(Joint3D, angularUpperZ), FieldType::F32},
+    {"motorSpeed", offsetof(Joint3D, motorSpeed), FieldType::F32},
+    {"motorEffort", offsetof(Joint3D, motorEffort), FieldType::F32},
+    {"linearX", offsetof(Joint3D, linearX), FieldType::U8},
+    {"linearY", offsetof(Joint3D, linearY), FieldType::U8},
+    {"linearZ", offsetof(Joint3D, linearZ), FieldType::U8},
+    {"angularX", offsetof(Joint3D, angularX), FieldType::U8},
+    {"angularY", offsetof(Joint3D, angularY), FieldType::U8},
+    {"angularZ", offsetof(Joint3D, angularZ), FieldType::U8},
+    {"motor", offsetof(Joint3D, motor), FieldType::U8},
+    {"collideConnected", offsetof(Joint3D, collideConnected), FieldType::Bool},
+}};
+
+const std::array<ComponentLayout, 8> kLayouts = {
     layoutOf<Body3D>("Body3D", kBodyFields),
     layoutOf<Pose3D>("Pose3D", kPoseFields),
     layoutOf<Velocity3D>("Velocity3D", kMotionFields<Velocity3D>),
@@ -131,6 +172,7 @@ const std::array<ComponentLayout, 7> kLayouts = {
     layoutOf<Contact3D>("Contact3D", kContactFields),
     layoutOf<Character3D>("Character3D", kCharacterFields),
     layoutOf<Mesh3D>("Mesh3D", kMeshFields),
+    layoutOf<Joint3D>("Joint3D", kJointFields),
 };
 
 } // namespace

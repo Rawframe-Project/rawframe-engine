@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -174,11 +175,11 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
     RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics->gravityY == -10.0F &&
                     kDefaults->physics->substeps == 4);
-    // In three dimensions: three numbers of gravity, and the seven 3D
+    // In three dimensions: three numbers of gravity, and the eight 3D
     // components.
     const auto kThree = parseGame("program p.kest\nphysics3d gravity 0 -9.8 1.5\n");
     RAWFRAME_EXPECT(kThree.has_value() && kThree->physics->dimensions == 3 && kThree->physics->gravityZ == 1.5F &&
-                    kThree->components.size() == 8 && kThree->components[1].name == "rawframe.physics3d.pose");
+                    kThree->components.size() == 9 && kThree->components[1].name == "rawframe.physics3d.pose");
     for (const std::string_view kLine : {"physics2d gravity 1\n",
                                          "physics2d spin 3\n",
                                          "physics2d substeps four\n",
@@ -646,6 +647,51 @@ RAWFRAME_TEST(AKestSystemAsksThreeDimensionalPhysics) {
         }
     });
     RAWFRAME_EXPECT(found == 2);
+    composition.stop();
+    simulation = nullptr;
+}
+
+RAWFRAME_TEST(AKestProgramHangsABarOnAHinge) {
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWithPhysics,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "hinged.game\n" +
+                              "world.tick_rate = 60\n" + "world.maximum_ticks_per_iteration = 1\n";
+    const auto kConfiguration = composition::Configuration::parse(kText);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    auto started = composition.start();
+    RAWFRAME_EXPECT(started.has_value());
+    if (!started.has_value()) {
+        return;
+    }
+    for (std::uint64_t tick = 0; tick < 90; ++tick) {
+        clock.advance(execution::MonotonicDuration{16'666'667});
+        composition.runHostPhase(composition::HostPhase::RunWorlds,
+                                 composition::HostFrame{.iteration = tick, .now = clock.now()});
+    }
+    // The bar has swung down about z, its middle half a meter from the
+    // post's, and made one joint.
+    world::World& world = *simulation->world();
+    auto bodies =
+        *world::Query<world::Read<physics3d::Body3D>, world::Read<physics3d::Pose3D>>::resolve(world.registry());
+    int swung = 0;
+    bodies.forEach(world, [&swung](world::EntityHandle, const physics3d::Body3D& body, const physics3d::Pose3D& pose) {
+        const double kFromPost = std::sqrt((pose.x * pose.x) + ((pose.y - 5) * (pose.y - 5)) + (pose.z * pose.z));
+        swung +=
+            body.motion == 2 && std::abs(kFromPost - 0.5) < 0.02 && pose.y < 4.9 && std::abs(pose.z) < 0.01 ? 1 : 0;
+    });
+    RAWFRAME_EXPECT(swung == 1);
+    auto joints = *world::Query<world::Read<physics3d::Joint3D>>::resolve(world.registry());
+    int made = 0;
+    joints.forEach(world, [&made](world::EntityHandle, const physics3d::Joint3D&) {
+        ++made;
+    });
+    RAWFRAME_EXPECT(made == 1);
     composition.stop();
     simulation = nullptr;
 }

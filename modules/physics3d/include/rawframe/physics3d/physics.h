@@ -12,10 +12,12 @@
 //      not what the last step wrote is a teleport, which makes the body
 //      again there, a Velocity3D likewise a new velocity, and an Impulse3D
 //      is applied and cleared;
-//   3. every character (components.h) finds how far it can move along the
+//   3. joints follow their entities as bodies do, and one whose body was
+//      made again is made again with it;
+//   4. every character (components.h) finds how far it can move along the
 //      velocity gameplay wants and is given the velocity that takes it
 //      there; then the world steps once, with the settings' substeps;
-//   4. every Contact3D is written from the step's contact, hit, and overlap
+//   5. every Contact3D is written from the step's contact, hit, and overlap
 //      streams, and every body's pose and velocity are written back.
 //
 // Gameplay systems that push bodies run before the step (`before
@@ -80,6 +82,11 @@ struct Physics3DStatistics {
     std::uint64_t impulses = 0;
     /// Character moves made (components.h's Character3D).
     std::uint64_t characterMoves = 0;
+    /// Joints made, taken away with their entities, and refused (a body
+    /// without one, values out of range) until they or their bodies change.
+    std::uint64_t jointsMade = 0;
+    std::uint64_t jointsRemoved = 0;
+    std::uint64_t jointsRefused = 0;
     /// Contacts and sensor overlaps that began.
     std::uint64_t contactsBegun = 0;
     std::uint64_t overlapsBegun = 0;
@@ -155,7 +162,7 @@ public:
     [[nodiscard]] static result::Result<std::unique_ptr<Physics3D>> create(const Physics3DSettings& settings);
     ~Physics3D() override;
 
-    /// Contributes kStepSystem. The registry must hold the seven physics
+    /// Contributes kStepSystem. The registry must hold the eight physics
     /// components at the engine's sizes.
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;

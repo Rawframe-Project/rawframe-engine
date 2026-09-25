@@ -292,6 +292,106 @@ struct Row {
     return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
 }
 
+[[nodiscard]] bool sameBody(m3BodyId left, m3BodyId right) noexcept {
+    return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
+}
+
+/// One entity's joint: the joint made, what it was made of, and between
+/// which bodies, to tell when either was made again.
+struct MappedJoint {
+    m3JointId joint{};
+    Joint3D made;
+    m3BodyId a{};
+    m3BodyId b{};
+    bool refused = false;
+};
+
+/// Field by field, for the padding a Joint3D may have.
+[[nodiscard]] bool same(const Joint3D& left, const Joint3D& right) noexcept {
+    constexpr std::array kReals = {
+        &Joint3D::anchorAX,      &Joint3D::anchorAY,      &Joint3D::anchorAZ,      &Joint3D::anchorBX,
+        &Joint3D::anchorBY,      &Joint3D::anchorBZ,      &Joint3D::axisAX,        &Joint3D::axisAY,
+        &Joint3D::axisAZ,        &Joint3D::axisBX,        &Joint3D::axisBY,        &Joint3D::axisBZ,
+        &Joint3D::linearLowerX,  &Joint3D::linearLowerY,  &Joint3D::linearLowerZ,  &Joint3D::linearUpperX,
+        &Joint3D::linearUpperY,  &Joint3D::linearUpperZ,  &Joint3D::angularLowerX, &Joint3D::angularLowerY,
+        &Joint3D::angularLowerZ, &Joint3D::angularUpperX, &Joint3D::angularUpperY, &Joint3D::angularUpperZ,
+        &Joint3D::motorSpeed,    &Joint3D::motorEffort};
+    constexpr std::array kBytes = {&Joint3D::linearX,
+                                   &Joint3D::linearY,
+                                   &Joint3D::linearZ,
+                                   &Joint3D::angularX,
+                                   &Joint3D::angularY,
+                                   &Joint3D::angularZ,
+                                   &Joint3D::motor};
+    return left.a == right.a && left.b == right.b && left.collideConnected == right.collideConnected &&
+           std::ranges::all_of(kReals,
+                               [&](float Joint3D::* field) {
+                                   return std::bit_cast<std::uint32_t>(left.*field) ==
+                                          std::bit_cast<std::uint32_t>(right.*field);
+                               }) &&
+           std::ranges::all_of(kBytes, [&](std::uint8_t Joint3D::* field) {
+               return left.*field == right.*field;
+           });
+}
+
+/// A joint's axis in a body's frame: unit, all noughts as +z; none for one
+/// that is not finite.
+[[nodiscard]] std::optional<m3Vec3> jointAxis(float x, float y, float z) noexcept {
+    const double kLength = std::sqrt((double{x} * x) + (double{y} * y) + (double{z} * z));
+    if (!std::isfinite(kLength)) {
+        return std::nullopt;
+    }
+    if (kLength == 0) {
+        return m3Vec3{0, 0, 1};
+    }
+    return m3Vec3{static_cast<float>(x / kLength), static_cast<float>(y / kLength), static_cast<float>(z / kLength)};
+}
+
+/// The Maul3D generic joint a Joint3D is, between two bodies; none for
+/// values out of range. Maul3D refuses the rest (a limit's order, the
+/// angular contract, a motor on a locked axis) when the joint is made.
+[[nodiscard]] std::optional<m3JointDef> jointDef(const Joint3D& joint, m3BodyId a, m3BodyId b) noexcept {
+    const auto kAxisA = jointAxis(joint.axisAX, joint.axisAY, joint.axisAZ);
+    const auto kAxisB = jointAxis(joint.axisBX, joint.axisBY, joint.axisBZ);
+    const std::array<std::uint8_t, 6> kModes = {
+        joint.linearX, joint.linearY, joint.linearZ, joint.angularX, joint.angularY, joint.angularZ};
+    if (!kAxisA || !kAxisB || joint.motor > 6 || std::ranges::any_of(kModes, [](std::uint8_t mode) {
+            return mode > static_cast<std::uint8_t>(JointAxis::Limited);
+        })) {
+        return std::nullopt;
+    }
+    m3JointDef definition = m3DefaultJointDef();
+    definition.type = m3_genericJoint;
+    definition.bodyIdA = a;
+    definition.bodyIdB = b;
+    definition.localAnchorA = m3Vec3{joint.anchorAX, joint.anchorAY, joint.anchorAZ};
+    definition.localAnchorB = m3Vec3{joint.anchorBX, joint.anchorBY, joint.anchorBZ};
+    definition.localAxisA = *kAxisA;
+    definition.localAxisB = *kAxisB;
+    definition.collideConnected = joint.collideConnected;
+    // The modes are Maul3D's own numbers: locked, free, limited.
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+        definition.genericLinear[axis] = kModes[axis];
+        definition.genericAngular[axis] = kModes[3 + axis];
+    }
+    definition.genericLinearLower[0] = joint.linearLowerX;
+    definition.genericLinearLower[1] = joint.linearLowerY;
+    definition.genericLinearLower[2] = joint.linearLowerZ;
+    definition.genericLinearUpper[0] = joint.linearUpperX;
+    definition.genericLinearUpper[1] = joint.linearUpperY;
+    definition.genericLinearUpper[2] = joint.linearUpperZ;
+    definition.genericAngularLower[0] = joint.angularLowerX;
+    definition.genericAngularLower[1] = joint.angularLowerY;
+    definition.genericAngularLower[2] = joint.angularLowerZ;
+    definition.genericAngularUpper[0] = joint.angularUpperX;
+    definition.genericAngularUpper[1] = joint.angularUpperY;
+    definition.genericAngularUpper[2] = joint.angularUpperZ;
+    definition.genericMotorAxis = joint.motor == 0 ? std::uint8_t{255} : static_cast<std::uint8_t>(joint.motor - 1);
+    definition.motorSpeed = joint.motorSpeed;
+    definition.maxMotorEffort = joint.motorEffort;
+    return definition;
+}
+
 } // namespace
 
 struct Physics3D::State {
@@ -318,6 +418,9 @@ struct Physics3D::State {
     std::optional<schema::ComponentRuntimeId> character;
     std::optional<schema::ComponentRuntimeId> meshShape;
     std::map<std::uint64_t, PreparedMesh> meshes;
+    std::optional<world::Query<world::Read<Joint3D>>> jointQuery;
+    std::map<world::EntityHandle, MappedJoint> joints;
+    std::vector<std::pair<world::EntityHandle, const Joint3D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
     std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
@@ -654,6 +757,56 @@ struct Physics3D::State {
         });
     }
 
+    /// The body an entity has now, or the null body.
+    [[nodiscard]] m3BodyId bodyOf(world::EntityHandle entity) const {
+        const auto kFound = entity.isNull() ? mapped.end() : mapped.find(entity);
+        return kFound == mapped.end() || kFound->second.refused ? m3BodyId{} : kFound->second.body;
+    }
+
+    /// 3. Joints follow their entities: what is gone first, then what is
+    /// new, changed, or between a body made again.
+    void followJoints(world::World& world) {
+        jointRows.clear();
+        jointQuery->forEach(world, [this](world::EntityHandle entity, const Joint3D& joint) {
+            jointRows.emplace_back(entity, &joint);
+        });
+        std::ranges::sort(jointRows, {}, &std::pair<world::EntityHandle, const Joint3D*>::first);
+        for (auto entry = joints.begin(); entry != joints.end();) {
+            if (std::ranges::binary_search(
+                    jointRows, entry->first, {}, &std::pair<world::EntityHandle, const Joint3D*>::first)) {
+                ++entry;
+                continue;
+            }
+            if (m3Joint_IsValid(entry->second.joint)) {
+                m3DestroyJoint(entry->second.joint);
+            }
+            ++statistics.jointsRemoved;
+            entry = joints.erase(entry);
+        }
+        for (const auto& [kEntity, kJoint] : jointRows) {
+            const auto [kEntry, kNew] = joints.try_emplace(kEntity);
+            MappedJoint& entry = kEntry->second;
+            const m3BodyId kA = bodyOf(kJoint->a);
+            const m3BodyId kB = bodyOf(kJoint->b);
+            // A joint whose body was made again went with the body.
+            if (!kNew && same(entry.made, *kJoint) && sameBody(entry.a, kA) && sameBody(entry.b, kB) &&
+                (entry.refused || m3Joint_IsValid(entry.joint))) {
+                continue;
+            }
+            if (!entry.refused && m3Joint_IsValid(entry.joint)) {
+                m3DestroyJoint(entry.joint);
+            }
+            entry = MappedJoint{.joint = {}, .made = *kJoint, .a = kA, .b = kB, .refused = true};
+            const auto kDefinition =
+                kA.index1 != 0 && kB.index1 != 0 && !sameBody(kA, kB) ? jointDef(*kJoint, kA, kB) : std::nullopt;
+            if (kDefinition.has_value()) {
+                entry.joint = m3CreateJoint(physics, &*kDefinition);
+                entry.refused = entry.joint.index1 == 0;
+            }
+            ++(entry.refused ? statistics.jointsRefused : statistics.jointsMade);
+        }
+    }
+
     result::Status step(world::World& world, world::TickRate rate, world::TickIndex tick) {
         rows.clear();
         bodies->forEach(world,
@@ -737,7 +890,9 @@ struct Physics3D::State {
             }
         }
 
-        // 3. Characters find their moves, in entity order and each against
+        followJoints(world);
+
+        // 4. Characters find their moves, in entity order and each against
         // the world as the last step left it; then one step of the tick's
         // length.
         const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
@@ -751,7 +906,7 @@ struct Physics3D::State {
 
         report(world);
 
-        // 4. Every body's pose and velocity back into the World.
+        // 5. Every body's pose and velocity back into the World.
         for (const Row& row : rows) {
             Mapped& entry = mapped.find(row.entity)->second;
             if (entry.refused) {
@@ -912,8 +1067,11 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.meshShape, registry.find(Mesh3D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Read<Joint3D>>::resolve(registry)));
     state.reads = state.bodies->reads();
     state.reads.push_back(*state.meshShape);
+    const std::vector<schema::ComponentRuntimeId> kJointReads = state.jointQuery->reads();
+    state.reads.insert(state.reads.end(), kJointReads.begin(), kJointReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);

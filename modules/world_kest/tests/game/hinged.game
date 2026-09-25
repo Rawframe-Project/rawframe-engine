@@ -1,0 +1,11 @@
+# A bar hung from a post by a hinge its program makes, which swings down
+# about the hinge's axis.
+program hinged.kest
+physics3d gravity 0 -10 0
+
+component bd831a83-41bd-455d-9b2b-3ea6ba84aef2 hinged.swing Swing
+
+system hinged.rig simulation rig write hinged.swing entities before rawframe.physics3d.step
+
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=0.1 height=0.1 depth=0.1 rawframe.physics3d.pose y=5 rawframe.physics3d.velocity hinged.swing role=0
+spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.5 height=0.05 depth=0.05 density=100 rawframe.physics3d.pose x=0.5 y=5 rawframe.physics3d.velocity hinged.swing role=1

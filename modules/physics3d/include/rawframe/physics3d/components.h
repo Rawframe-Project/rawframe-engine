@@ -201,8 +201,74 @@ struct Mesh3D {
     std::uint64_t mesh = 0;
 };
 
-/// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, Character3D, and
-/// Mesh3D, in that order. An entity field appears as its two parts, `<name>.slot` and
+/// How a joint holds one axis of its frame.
+enum class JointAxis : std::uint8_t {
+    Locked = 0,
+    Free = 1,
+    /// Free between the axis's lower and upper limit.
+    Limited = 2,
+};
+
+/// SPEC-0037's joint (section 10): an entity with a Joint3D holds two
+/// bodies' entities together, per axis of the joint's frame. The frame sits
+/// at each body's anchor, its z along the body's axis (all noughts is +z),
+/// and each of its three linear and three angular axes is locked, free, or
+/// limited, in meters and radians. Fixed, hinge, slider, and ball joints are
+/// settings of these (rawframe.physics3d's `fixed`, `hinge`, `slider`, and
+/// `ball`). One motor may drive one axis that moves, at `motorSpeed` with at
+/// most `motorEffort`. At most one angular axis may be limited, and then
+/// the other two are both locked or both free. At least one of the bodies
+/// is dynamic. A joint that cannot be made (a body without one, values out
+/// of range) waits until it or its bodies change. Changing it, or remaking
+/// either body, makes it again.
+struct Joint3D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("963bf147-4afe-4047-9b33-bdf528bf026a");
+    static constexpr std::string_view kComponentName = "rawframe.physics3d.joint";
+
+    world::EntityHandle a;
+    world::EntityHandle b;
+    float anchorAX = 0;
+    float anchorAY = 0;
+    float anchorAZ = 0;
+    float anchorBX = 0;
+    float anchorBY = 0;
+    float anchorBZ = 0;
+    float axisAX = 0;
+    float axisAY = 0;
+    float axisAZ = 0;
+    float axisBX = 0;
+    float axisBY = 0;
+    float axisBZ = 0;
+    float linearLowerX = 0;
+    float linearLowerY = 0;
+    float linearLowerZ = 0;
+    float linearUpperX = 0;
+    float linearUpperY = 0;
+    float linearUpperZ = 0;
+    float angularLowerX = 0;
+    float angularLowerY = 0;
+    float angularLowerZ = 0;
+    float angularUpperX = 0;
+    float angularUpperY = 0;
+    float angularUpperZ = 0;
+    float motorSpeed = 0;
+    float motorEffort = 0;
+    /// JointAxis each.
+    std::uint8_t linearX = 0;
+    std::uint8_t linearY = 0;
+    std::uint8_t linearZ = 0;
+    std::uint8_t angularX = 0;
+    std::uint8_t angularY = 0;
+    std::uint8_t angularZ = 0;
+    /// Nought for none; 1 to 3 drive linear x, y, z, and 4 to 6 angular.
+    std::uint8_t motor = 0;
+    /// Whether the two bodies still collide with each other.
+    bool collideConnected = false;
+};
+
+/// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, Character3D, Mesh3D,
+/// and Joint3D, in that order. An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;
 

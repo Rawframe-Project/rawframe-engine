@@ -26,7 +26,8 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<Impulse3D>()
         .add<Contact3D>()
         .add<Character3D>()
-        .add<Mesh3D>();
+        .add<Mesh3D>()
+        .add<Joint3D>();
     return *builder.freeze();
 }
 
@@ -544,4 +545,138 @@ RAWFRAME_TEST(AMeshBodyIsStaticAndNamesAKnownMesh) {
         const auto kRefused = Physics3D::create({.meshes = kMeshes});
         RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().code() == code(Physics3DError::InvalidSettings));
     }
+}
+
+namespace {
+
+constexpr auto kFree = static_cast<std::uint8_t>(JointAxis::Free);
+constexpr auto kLimited = static_cast<std::uint8_t>(JointAxis::Limited);
+
+constexpr Body3D kPostBody{.motion = static_cast<std::uint8_t>(Motion::Static),
+                           .shape = static_cast<std::uint8_t>(Shape::Box),
+                           .width = 0.1F,
+                           .height = 0.1F,
+                           .depth = 0.1F};
+
+/// A bar a meter long along x, its own middle at its origin.
+constexpr Body3D kBar{.motion = static_cast<std::uint8_t>(Motion::Dynamic),
+                      .shape = static_cast<std::uint8_t>(Shape::Box),
+                      .width = 0.5F,
+                      .height = 0.05F,
+                      .depth = 0.05F,
+                      .density = 100};
+
+world::EntityHandle joint(Scene& scene, const Joint3D& joint) {
+    const world::EntityHandle kEntity = *scene.world.create();
+    RAWFRAME_EXPECT(scene.world.insert(kEntity, *scene.schema->key<Joint3D>(), joint).has_value());
+    return kEntity;
+}
+
+/// A bar whose left end is held at the post's middle.
+Joint3D heldAtItsEnd(world::EntityHandle post, world::EntityHandle bar) {
+    return Joint3D{.a = post, .b = bar, .anchorBX = -0.5F};
+}
+
+double distance(const Pose3D& from, double x, double y, double z) {
+    return std::sqrt(((from.x - x) * (from.x - x)) + ((from.y - y) * (from.y - y)) + ((from.z - z) * (from.z - z)));
+}
+
+} // namespace
+
+RAWFRAME_TEST(AHingeSwingsAWeldHoldsAndASliderStopsAtItsLimit) {
+    Scene scene;
+    const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+    // About z, the joint frame's axis: the bar swings down in the xy plane.
+    const world::EntityHandle kSwinging = scene.body(kBar, {.x = 0.5, .y = 5});
+    Joint3D hinge = heldAtItsEnd(kPost, kSwinging);
+    hinge.angularZ = kFree;
+    static_cast<void>(joint(scene, hinge));
+    // Locked every way: it stays where it was made.
+    const world::EntityHandle kWelded = scene.body(kBar, {.x = 0.5, .y = 5, .z = 2});
+    Joint3D weld = heldAtItsEnd(kPost, kWelded);
+    weld.anchorAZ = 2;
+    static_cast<void>(joint(scene, weld));
+    // Free along its axis, turned to point down, until half a meter.
+    const world::EntityHandle kSliding = scene.body(kBar, {.x = 0.5, .y = 5, .z = -2});
+    Joint3D slider = heldAtItsEnd(kPost, kSliding);
+    slider.anchorAZ = -2;
+    slider.axisAY = -1;
+    slider.axisBY = -1;
+    slider.linearZ = kLimited;
+    slider.linearLowerZ = 0;
+    slider.linearUpperZ = 0.5F;
+    static_cast<void>(joint(scene, slider));
+    scene.run(90);
+
+    const Pose3D& kSwung = scene.pose(kSwinging);
+    RAWFRAME_EXPECT(std::abs(distance(kSwung, 0, 5, 0) - 0.5) < 0.02 && kSwung.y < 4.9 && std::abs(kSwung.z) < 0.01);
+    RAWFRAME_EXPECT(distance(scene.pose(kWelded), 0.5, 5, 2) < 0.01);
+    const Pose3D& kSlid = scene.pose(kSliding);
+    RAWFRAME_EXPECT(std::abs(kSlid.y - 4.5) < 0.02 && std::abs(kSlid.x - 0.5) < 0.01);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 3 && scene.physics->statistics().jointsRefused == 0);
+}
+
+RAWFRAME_TEST(AMotorDrivesItsAxis) {
+    Scene scene{{.gravityY = 0}};
+    const world::EntityHandle kPost = scene.body(kPostBody, {});
+    const world::EntityHandle kWheel = scene.body(kBar, {.x = 0.5});
+    Joint3D driven = heldAtItsEnd(kPost, kWheel);
+    driven.angularZ = kFree;
+    driven.motor = 6;
+    driven.motorSpeed = 2;
+    driven.motorEffort = 1000;
+    static_cast<void>(joint(scene, driven));
+    scene.run(30);
+    RAWFRAME_EXPECT(std::abs(scene.velocity(kWheel).angularZ - 2.0F) < 0.05F);
+}
+
+RAWFRAME_TEST(AJointFollowsItsEntityAndItsBodies) {
+    Scene scene{{.gravityY = -10}};
+    const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+    const world::EntityHandle kHung = scene.body(kBar, {.x = 0.5, .y = 5});
+    Joint3D ball = heldAtItsEnd(kPost, kHung);
+    ball.angularX = kFree;
+    ball.angularY = kFree;
+    ball.angularZ = kFree;
+    const world::EntityHandle kJoint = joint(scene, ball);
+    scene.run(1);
+    // The post moved is made again, and the joint with it, to where it is.
+    scene.pose(kPost).x = 3;
+    scene.run(60);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 2);
+    RAWFRAME_EXPECT(std::abs(distance(scene.pose(kHung), 3, 5, 0) - 0.5) < 0.05);
+    // Gone with its entity: the bar, swinging from the post's jump, flies
+    // off and falls.
+    RAWFRAME_EXPECT(scene.world.destroy(kJoint).has_value());
+    scene.run(120);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsRemoved == 1 && scene.pose(kHung).y < 4);
+}
+
+RAWFRAME_TEST(AJointThatCannotBeMadeWaits) {
+    Scene scene;
+    const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+    const world::EntityHandle kOtherPost = scene.body(kPostBody, {.y = 5, .z = 3});
+    const world::EntityHandle kBarEntity = scene.body(kBar, {.x = 0.5, .y = 5});
+    Joint3D twoLimited = heldAtItsEnd(kPost, kBarEntity);
+    twoLimited.angularX = kLimited;
+    twoLimited.angularY = kLimited;
+    Joint3D noMode = heldAtItsEnd(kPost, kBarEntity);
+    noMode.linearX = 3;
+    Joint3D lockedMotor = heldAtItsEnd(kPost, kBarEntity);
+    lockedMotor.motor = 1;
+    for (const Joint3D& kRefused : {Joint3D{.a = kPost, .b = kOtherPost},
+                                    Joint3D{.a = kPost, .b = world::EntityHandle{}},
+                                    Joint3D{.a = kBarEntity, .b = kBarEntity},
+                                    twoLimited,
+                                    noMode,
+                                    lockedMotor}) {
+        static_cast<void>(joint(scene, kRefused));
+    }
+    const world::EntityHandle kLater = joint(scene, Joint3D{.a = kPost, .b = world::EntityHandle{}});
+    scene.run(2);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsRefused == 7 && scene.physics->statistics().jointsMade == 0);
+    // Named again with a body to hold: made.
+    scene.world.get(kLater, *scene.schema->key<Joint3D>())->b = kBarEntity;
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 1);
 }
