@@ -221,6 +221,7 @@ struct Physics3D::State {
     mutable std::uint64_t raysRewound = 0;
     mutable std::uint64_t rewindsClamped = 0;
     mutable std::vector<m3RayHit> rayHits;
+    mutable std::vector<m3ShapeId> overlapShapes;
     m3WorldId physics{};
     Physics3DStatistics statistics;
     std::map<world::EntityHandle, Mapped> mapped;
@@ -643,6 +644,23 @@ struct Physics3D::State {
         return {};
     }
 
+    /// A cast's closest hit as the answer a script reads.
+    [[nodiscard]] RayHit3D hitOf(const m3RayCastResult& result) const {
+        if (!result.hit) {
+            return RayHit3D{};
+        }
+        return RayHit3D{.hit = true,
+                        .inside = result.normal.x == 0 && result.normal.y == 0 && result.normal.z == 0,
+                        .entity = ownerOf(result.shapeId),
+                        .x = result.point.x,
+                        .y = result.point.y,
+                        .z = result.point.z,
+                        .normalX = result.normal.x,
+                        .normalY = result.normal.y,
+                        .normalZ = result.normal.z,
+                        .fraction = result.fraction};
+    }
+
     /// The query filter that sees the shapes of the class `among`, or all.
     [[nodiscard]] std::optional<m3QueryFilter> amongFilter(std::uint64_t among) const noexcept {
         m3QueryFilter filter{~std::uint64_t{0}, ~std::uint64_t{0}};
@@ -764,20 +782,62 @@ RayHit3D Physics3D::castRay(double originX,
     if (!kFilter.has_value()) {
         return RayHit3D{};
     }
-    const m3RayCastResult kResult = m3World_CastRayClosest(
-        state_->physics, m3Pos3{originX, originY, originZ}, m3Vec3{towardX, towardY, towardZ}, *kFilter);
-    if (!kResult.hit) {
+    // A ray never starts inside what it meets: Maul3D rays pass out of it.
+    RayHit3D hit = state_->hitOf(m3World_CastRayClosest(
+        state_->physics, m3Pos3{originX, originY, originZ}, m3Vec3{towardX, towardY, towardZ}, *kFilter));
+    hit.inside = false;
+    return hit;
+}
+
+RayHit3D Physics3D::castSphere(double originX,
+                               double originY,
+                               double originZ,
+                               float radius,
+                               float towardX,
+                               float towardY,
+                               float towardZ,
+                               std::uint64_t among) const noexcept {
+    const auto kFilter = state_->amongFilter(among);
+    if (!kFilter.has_value() || !(radius > 0) || !std::isfinite(radius)) {
         return RayHit3D{};
     }
-    return RayHit3D{.hit = true,
-                    .entity = state_->ownerOf(kResult.shapeId),
-                    .x = kResult.point.x,
-                    .y = kResult.point.y,
-                    .z = kResult.point.z,
-                    .normalX = kResult.normal.x,
-                    .normalY = kResult.normal.y,
-                    .normalZ = kResult.normal.z,
-                    .fraction = kResult.fraction};
+    return state_->hitOf(m3World_CastSphereClosest(
+        state_->physics, m3Pos3{originX, originY, originZ}, radius, m3Vec3{towardX, towardY, towardZ}, *kFilter));
+}
+
+void Physics3D::overlapSphere(
+    double x, double y, double z, float radius, std::uint64_t among, std::vector<world::EntityHandle>& into) const {
+    into.clear();
+    const auto kFilter = state_->amongFilter(among);
+    if (!kFilter.has_value() || !(radius > 0) || !std::isfinite(radius)) {
+        return;
+    }
+    // Maul3D says how many it wrote, not how many there are: ask again
+    // with more room until some is left over.
+    std::vector<m3ShapeId>& shapes = state_->overlapShapes;
+    shapes.resize(std::max<std::size_t>(shapes.size(), 16));
+    std::int32_t written = 0;
+    while (true) {
+        written = m3World_OverlapSphere(state_->physics,
+                                        m3Pos3{x, y, z},
+                                        radius,
+                                        shapes.data(),
+                                        static_cast<std::int32_t>(shapes.size()),
+                                        *kFilter);
+        if (static_cast<std::size_t>(written) < shapes.size()) {
+            break;
+        }
+        shapes.resize(shapes.size() * 2);
+    }
+    for (std::int32_t index = 0; index < written; ++index) {
+        const world::EntityHandle kOwner = state_->ownerOf(shapes[static_cast<std::size_t>(index)]);
+        if (!kOwner.isNull()) {
+            into.push_back(kOwner);
+        }
+    }
+    // A body met through its sensor twin too is told once.
+    std::ranges::sort(into);
+    into.erase(std::unique(into.begin(), into.end()), into.end());
 }
 
 RayHit3D Physics3D::castRayAt(double originX,

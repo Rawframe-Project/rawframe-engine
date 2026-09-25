@@ -159,3 +159,30 @@ fn castRayAtAmong(among: u64, originX: f64, originY: f64, towardX: f32, towardY:
                   seen: replication.Perception) -> RayHit2D {
     return Physics2D.castRayAtAmong(among, originX, originY, towardX, towardY, seen)
 }
+
+// What an overlap query found: how many bodies overlap the shape asked about,
+// and the one at the asked index among them in entity order (the null
+// Entity past the last). Ask with index 0 to learn the count, then 1, 2, ...
+struct Overlap2D {
+    count: u32
+    entity: world.Entity
+}
+
+extern fn Physics2D.castCircle(among: u64, originX: f64, originY: f64, radius: f32, towardX: f32,
+                               towardY: f32) -> RayHit2D
+
+// A circle of `radius` swept from the origin along `toward`, meeting bodies
+// of the collision class `among` (nought: any): the first it meets, as a
+// ray's answer. One it starts inside is met `inside`, at its start.
+fn castCircle(among: u64, originX: f64, originY: f64, radius: f32, towardX: f32, towardY: f32) -> RayHit2D {
+    return Physics2D.castCircle(among, originX, originY, radius, towardX, towardY)
+}
+
+extern fn Physics2D.overlapCircle(among: u64, x: f64, y: f64, radius: f32, index: u32) -> Overlap2D
+
+// The bodies of the class `among` (nought: any) a circle of `radius` at the
+// point overlaps, sensors included, each once: how many, and the one at
+// `index` in entity order.
+fn overlapCircle(among: u64, x: f64, y: f64, radius: f32, index: u32) -> Overlap2D {
+    return Physics2D.overlapCircle(among, x, y, radius, index)
+}

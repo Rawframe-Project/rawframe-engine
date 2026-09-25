@@ -137,14 +137,17 @@ struct Contact3D {
     world::EntityHandle visitor;
 };
 
-/// What a ray found: the closest body along it, where, the surface's normal
-/// there, and how far along the ray (0 at its origin, 1 at its end). A ray
-/// meets only surfaces it arrives at from outside: one that starts inside a
-/// body passes out of it unaware. A ray cast back in time hits a body
-/// `discontinuous` when the body has no unbroken trail back to then, and so
-/// was tried where it is now. Not a component: a value a query answers.
+/// What a ray or a sweep found: the closest body along it, where, the
+/// surface's normal there, and how far along (0 at its origin, 1 at its
+/// end). A ray meets only surfaces it arrives at from outside: one that
+/// starts inside a body passes out of it unaware. A sweep that starts inside
+/// a body meets it `inside`, at its start, with no normal. A ray cast back in
+/// time hits a body `discontinuous` when the body has no unbroken trail back
+/// to then, and so was tried where it is now. Not a component: a value a
+/// query answers.
 struct RayHit3D {
     bool hit = false;
+    bool inside = false;
     bool discontinuous = false;
     world::EntityHandle entity;
     double x = 0;
@@ -189,7 +192,16 @@ struct Character3D {
 /// `<name>.generation`.
 [[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;
 
-/// RayHit3D as a script must declare it; its identity is none.
-[[nodiscard]] const physics::ComponentLayout& rayHitLayout() noexcept;
+/// What an overlap query found: how many bodies overlap the shape asked
+/// about, and the one at the asked index among them in entity order (the
+/// null entity past the last). Not a component: a value a query answers.
+struct Overlap3D {
+    std::uint32_t count = 0;
+    world::EntityHandle entity;
+};
+
+/// RayHit3D and Overlap3D as a script must declare them; their identities
+/// are none.
+[[nodiscard]] std::span<const physics::ComponentLayout> answerLayouts() noexcept;
 
 } // namespace rawframe::physics3d

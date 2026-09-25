@@ -9,6 +9,7 @@
 #include "rawframe/world_replication/perception.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace rawframe::world_kest {
 
@@ -20,12 +21,15 @@ struct PhysicsDoorContext {
     const physics2d::Physics2DQueries* queries = nullptr;
     const physics3d::Physics3DQueries* queries3d = nullptr;
     const world_replication::InterestHistory* interest = nullptr;
+    /// What the last overlap query found.
+    std::vector<world::EntityHandle> found;
 };
 
 /// Adds `castRay`, `castRayAt`, `castRayAmong`, and `castRayAtAmong` of
-/// `Physics2D` or, for 3 `dimensions`, `Physics3D`, answered from `context`
-/// as it is when a program calls one. `context` must outlive every machine
-/// started with the table.
+/// `Physics2D`, with `castCircle` and `overlapCircle`, or, for 3
+/// `dimensions`, those of `Physics3D`, with `castSphere` and
+/// `overlapSphere`, answered from `context` as it is when a program calls
+/// one. `context` must outlive every machine started with the table.
 [[nodiscard]] result::Status
 addPhysicsDoors(kest::DoorTable& doors, std::uint8_t dimensions, const PhysicsDoorContext* context);
 

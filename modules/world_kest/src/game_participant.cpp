@@ -725,9 +725,11 @@ private:
             const GameComponent& component = *componentNamed(engine.name);
             checked.emplace_back(&engine, layouts_[static_cast<std::size_t>(&component - game_.components.data())]);
         }
-        // The ray's answer, if the program uses it.
-        if (auto rayHit = program_->layout(kFacts.rayHit->scriptType)) {
-            checked.emplace_back(kFacts.rayHit, std::move(*rayHit));
+        // The queries' answers, those the program uses.
+        for (const physics::ComponentLayout& answer : kFacts.answers) {
+            if (auto layout = program_->layout(answer.scriptType)) {
+                checked.emplace_back(&answer, std::move(*layout));
+            }
         }
         for (const auto& [kEngine, layout] : checked) {
             const physics::ComponentLayout& engine = *kEngine;

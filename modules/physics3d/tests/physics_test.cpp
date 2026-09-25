@@ -402,3 +402,39 @@ RAWFRAME_TEST(CharactersPassThroughEachOther) {
     RAWFRAME_EXPECT(scene.pose(kLeft).x > 2 && scene.pose(kRight).x < -2);
     RAWFRAME_EXPECT(scene.characterOf(kRight).ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
 }
+
+RAWFRAME_TEST(ASphereSweptAndASphereOverlappedFindTheirBodies) {
+    constexpr std::uint64_t kMarked = 0x81;
+    Scene scene{{.gravityY = 0, .collision = {.classes = {{kMarked, "marked"}}}}};
+    const Body3D kBlock{.motion = static_cast<std::uint8_t>(Motion::Static),
+                        .shape = static_cast<std::uint8_t>(Shape::Box),
+                        .width = 0.5F,
+                        .height = 0.5F,
+                        .depth = 0.5F};
+    Body3D marked = kBlock;
+    marked.collisionClass = kMarked;
+    const world::EntityHandle kFirst = scene.body(kBlock, {.x = 2});
+    const world::EntityHandle kSecond = scene.body(marked, {.x = 5});
+    scene.run(1);
+    // A sphere of a quarter meter just over the first block grazes its top.
+    const RayHit3D kSwept = scene.physics->castSphere(-2, 0.7, 0, 0.25F, 10, 0, 0, physics::kEveryClass);
+    RAWFRAME_EXPECT(kSwept.hit && kSwept.entity == kFirst && !kSwept.inside && kSwept.fraction < 0.5F);
+    RAWFRAME_EXPECT(scene.physics->castSphere(-2, 0.7, 0, 0.25F, 10, 0, 0, kMarked).entity == kSecond);
+    // Started inside: met there, with no normal.
+    const RayHit3D kInside = scene.physics->castSphere(2, 0, 0, 0.1F, 1, 0, 0, physics::kEveryClass);
+    RAWFRAME_EXPECT(kInside.hit && kInside.inside && kInside.entity == kFirst && kInside.fraction == 0);
+    std::vector<world::EntityHandle> found;
+    scene.physics->overlapSphere(3.5, 0, 0, 1.2F, physics::kEveryClass, found);
+    RAWFRAME_EXPECT(found.size() == 2 && found[0] == kFirst && found[1] == kSecond);
+    scene.physics->overlapSphere(3.5, 0, 0, 0.8F, physics::kEveryClass, found);
+    RAWFRAME_EXPECT(found.empty());
+    scene.physics->overlapSphere(3.5, 0, 0, 1.2F, kMarked, found);
+    RAWFRAME_EXPECT(found.size() == 1 && found[0] == kSecond);
+    // Many at once, more than the first room the query makes.
+    for (int index = 0; index < 40; ++index) {
+        scene.body(kBlock, {.x = 20 + (index % 8) * 1.1, .z = (index / 8) * 1.1});
+    }
+    scene.run(1);
+    scene.physics->overlapSphere(24, 0, 2.2, 10, physics::kEveryClass, found);
+    RAWFRAME_EXPECT(found.size() == 40);
+}

@@ -1,7 +1,7 @@
 #pragma once
 
 // What a game's physics line brings, by dimension: the engine components the
-// game gains, the ray's answer, and where in a body its motion and collision
+// game gains, the values queries answer with, and where in a body its motion and collision
 // class are. Everything else about the two is the same (rawframe.physics).
 
 #include "rawframe/physics/layout.h"
@@ -17,7 +17,8 @@ namespace rawframe::world_kest {
 
 struct PhysicsFacts {
     std::span<const physics::ComponentLayout> components;
-    const physics::ComponentLayout* rayHit = nullptr;
+    /// The values queries answer with (a ray's hit, an overlap).
+    std::span<const physics::ComponentLayout> answers;
     schema::ComponentTypeId body;
     std::size_t motion = 0;
     std::size_t collisionClass = 0;
@@ -30,7 +31,7 @@ struct PhysicsFacts {
 [[nodiscard]] inline PhysicsFacts physicsFacts(std::uint8_t dimensions) noexcept {
     if (dimensions == 3) {
         return PhysicsFacts{.components = physics3d::componentLayouts(),
-                            .rayHit = &physics3d::rayHitLayout(),
+                            .answers = physics3d::answerLayouts(),
                             .body = physics3d::Body3D::kComponentTypeId,
                             .motion = offsetof(physics3d::Body3D, motion),
                             .collisionClass = offsetof(physics3d::Body3D, collisionClass),
@@ -38,7 +39,7 @@ struct PhysicsFacts {
                             .module = "rawframe.physics3d"};
     }
     return PhysicsFacts{.components = physics2d::componentLayouts(),
-                        .rayHit = &physics2d::rayHitLayout(),
+                        .answers = physics2d::answerLayouts(),
                         .body = physics2d::Body2D::kComponentTypeId,
                         .motion = offsetof(physics2d::Body2D, motion),
                         .collisionClass = offsetof(physics2d::Body2D, collisionClass),

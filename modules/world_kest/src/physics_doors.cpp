@@ -30,6 +30,16 @@ constexpr std::array<kest::Parameter, 8> kRay3AtAmongTakes = {
 constexpr std::array<kest::Parameter, 1> kRay3Gives = {
     kest::Parameter{kest::Slot::Value, "rawframe.physics3d.RayHit3D"}};
 
+constexpr kest::Parameter kIndex{kest::Slot::U32};
+constexpr std::array<kest::Parameter, 6> kCircleTakes = {kClass, kReal, kReal, kFloat, kFloat, kFloat};
+constexpr std::array<kest::Parameter, 5> kOverlapCircleTakes = {kClass, kReal, kReal, kFloat, kIndex};
+constexpr std::array<kest::Parameter, 1> kOverlapGives = {
+    kest::Parameter{kest::Slot::Value, "rawframe.physics2d.Overlap2D"}};
+constexpr std::array<kest::Parameter, 8> kSphereTakes = {kClass, kReal, kReal, kReal, kFloat, kFloat, kFloat, kFloat};
+constexpr std::array<kest::Parameter, 6> kOverlapSphereTakes = {kClass, kReal, kReal, kReal, kFloat, kIndex};
+constexpr std::array<kest::Parameter, 1> kOverlap3Gives = {
+    kest::Parameter{kest::Slot::Value, "rawframe.physics3d.Overlap3D"}};
+
 /// Takes back what one connection was sent, no further than it was sent.
 class SentGate final : public physics::RewindGate {
 public:
@@ -143,6 +153,76 @@ template <bool Among, bool At> void ray3Door(kest::DoorCall& call, void* context
     }
 }
 
+/// `Physics2D.castCircle(among, x, y, radius, towardX, towardY)`.
+void circleDoor(kest::DoorCall& call, void* context) noexcept {
+    const PhysicsDoorContext& doors = *static_cast<const PhysicsDoorContext*>(context);
+    if (doors.queries == nullptr) {
+        call.fail("this World has no physics to ask");
+        return;
+    }
+    const physics2d::RayHit2D kHit = doors.queries->castCircle(call.real(1),
+                                                               call.real(2),
+                                                               static_cast<float>(call.real(3)),
+                                                               static_cast<float>(call.real(4)),
+                                                               static_cast<float>(call.real(5)),
+                                                               static_cast<std::uint64_t>(call.integer(0)));
+    if (!call.answerValue(std::as_bytes(std::span{&kHit, 1}))) {
+        call.fail("the program's RayHit2D is not the engine's");
+    }
+}
+
+/// `Physics3D.castSphere(among, x, y, z, radius, towardX, towardY, towardZ)`.
+void sphereDoor(kest::DoorCall& call, void* context) noexcept {
+    const PhysicsDoorContext& doors = *static_cast<const PhysicsDoorContext*>(context);
+    if (doors.queries3d == nullptr) {
+        call.fail("this World has no physics to ask");
+        return;
+    }
+    const physics3d::RayHit3D kHit = doors.queries3d->castSphere(call.real(1),
+                                                                 call.real(2),
+                                                                 call.real(3),
+                                                                 static_cast<float>(call.real(4)),
+                                                                 static_cast<float>(call.real(5)),
+                                                                 static_cast<float>(call.real(6)),
+                                                                 static_cast<float>(call.real(7)),
+                                                                 static_cast<std::uint64_t>(call.integer(0)));
+    if (!call.answerValue(std::as_bytes(std::span{&kHit, 1}))) {
+        call.fail("the program's RayHit3D is not the engine's");
+    }
+}
+
+/// An overlap door: how many bodies overlap, and the one at the index
+/// asked, the last argument.
+template <bool Three> void overlapDoor(kest::DoorCall& call, void* context) noexcept {
+    PhysicsDoorContext& doors = *static_cast<PhysicsDoorContext*>(context);
+    const std::uint64_t kAmong = static_cast<std::uint64_t>(call.integer(0));
+    std::size_t index = 0;
+    if constexpr (Three) {
+        if (doors.queries3d == nullptr) {
+            call.fail("this World has no physics to ask");
+            return;
+        }
+        doors.queries3d->overlapSphere(
+            call.real(1), call.real(2), call.real(3), static_cast<float>(call.real(4)), kAmong, doors.found);
+        index = static_cast<std::size_t>(call.integer(5));
+    } else {
+        if (doors.queries == nullptr) {
+            call.fail("this World has no physics to ask");
+            return;
+        }
+        doors.queries->overlapCircle(call.real(1), call.real(2), static_cast<float>(call.real(3)), kAmong, doors.found);
+        index = static_cast<std::size_t>(call.integer(4));
+    }
+    // Both dimensions answer with the same layout.
+    static_assert(sizeof(physics2d::Overlap2D) == sizeof(physics3d::Overlap3D));
+    const physics2d::Overlap2D kFound{.count = static_cast<std::uint32_t>(doors.found.size()),
+                                      .entity =
+                                          index < doors.found.size() ? doors.found[index] : world::EntityHandle{}};
+    if (!call.answerValue(std::as_bytes(std::span{&kFound, 1}))) {
+        call.fail("the program's overlap answer is not the engine's");
+    }
+}
+
 } // namespace
 
 result::Status addPhysicsDoors(kest::DoorTable& doors, std::uint8_t dimensions, const PhysicsDoorContext* context) {
@@ -163,11 +243,21 @@ result::Status addPhysicsDoors(kest::DoorTable& doors, std::uint8_t dimensions, 
                                           .context = kContext,
                                           .takes = kRay3AmongTakes,
                                           .gives = kRay3Gives}));
-        return doors.add(kest::Door{.name = "Physics3D.castRayAtAmong",
-                                    .function = &ray3Door<true, true>,
+        RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics3D.castRayAtAmong",
+                                          .function = &ray3Door<true, true>,
+                                          .context = kContext,
+                                          .takes = kRay3AtAmongTakes,
+                                          .gives = kRay3Gives}));
+        RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics3D.castSphere",
+                                          .function = &sphereDoor,
+                                          .context = kContext,
+                                          .takes = kSphereTakes,
+                                          .gives = kRay3Gives}));
+        return doors.add(kest::Door{.name = "Physics3D.overlapSphere",
+                                    .function = &overlapDoor<true>,
                                     .context = kContext,
-                                    .takes = kRay3AtAmongTakes,
-                                    .gives = kRay3Gives});
+                                    .takes = kOverlapSphereTakes,
+                                    .gives = kOverlap3Gives});
     }
     RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRay",
                                       .function = &rayDoor<false, false>,
@@ -184,11 +274,21 @@ result::Status addPhysicsDoors(kest::DoorTable& doors, std::uint8_t dimensions, 
                                       .context = kContext,
                                       .takes = kRayAmongTakes,
                                       .gives = kRayGives}));
-    return doors.add(kest::Door{.name = "Physics2D.castRayAtAmong",
-                                .function = &rayDoor<true, true>,
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRayAtAmong",
+                                      .function = &rayDoor<true, true>,
+                                      .context = kContext,
+                                      .takes = kRayAtAmongTakes,
+                                      .gives = kRayGives}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castCircle",
+                                      .function = &circleDoor,
+                                      .context = kContext,
+                                      .takes = kCircleTakes,
+                                      .gives = kRayGives}));
+    return doors.add(kest::Door{.name = "Physics2D.overlapCircle",
+                                .function = &overlapDoor<false>,
                                 .context = kContext,
-                                .takes = kRayAtAmongTakes,
-                                .gives = kRayGives});
+                                .takes = kOverlapCircleTakes,
+                                .gives = kOverlapGives});
 }
 
 } // namespace rawframe::world_kest

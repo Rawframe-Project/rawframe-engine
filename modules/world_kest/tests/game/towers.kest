@@ -1,7 +1,8 @@
 module towers
 
 // A probe on a body: after each step, a ray from the body's center straight
-// down, which passes out of the body unaware and meets what is under it.
+// down, which passes out of the body unaware and meets what is under it, and
+// a sphere about its center, which overlaps it and what it rests on.
 
 import rawframe.physics3d
 
@@ -10,6 +11,8 @@ struct Probe {
     // surface was found.
     floor: f64
     found: i32
+    // How many bodies a sphere of a meter about its center overlaps.
+    crowd: u32
 }
 
 fn probe(count: i32, poses: [physics3d.Pose3D], probes: [Probe]) {
@@ -20,6 +23,7 @@ fn probe(count: i32, poses: [physics3d.Pose3D], probes: [Probe]) {
             probes[i].floor = hit.y
             probes[i].found = probes[i].found + 1
         }
+        probes[i].crowd = physics3d.overlapSphere(0, poses[i].x, poses[i].y, poses[i].z, 1.0, 0).count
         i = i + 1
     }
 }

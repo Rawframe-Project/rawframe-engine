@@ -64,8 +64,9 @@ constexpr std::array<ComponentField, 14> kContactFields = {{
     {"visitor.generation", offsetof(Contact3D, visitor) + offsetof(world::EntityHandle, generation), FieldType::U32},
 }};
 
-constexpr std::array<ComponentField, 11> kRayHitFields = {{
+constexpr std::array<ComponentField, 12> kRayHitFields = {{
     {"hit", offsetof(RayHit3D, hit), FieldType::Bool},
+    {"inside", offsetof(RayHit3D, inside), FieldType::Bool},
     {"discontinuous", offsetof(RayHit3D, discontinuous), FieldType::Bool},
     {"entity.slot", offsetof(RayHit3D, entity) + offsetof(world::EntityHandle, slot), FieldType::U32},
     {"entity.generation", offsetof(RayHit3D, entity) + offsetof(world::EntityHandle, generation), FieldType::U32},
@@ -78,12 +79,26 @@ constexpr std::array<ComponentField, 11> kRayHitFields = {{
     {"fraction", offsetof(RayHit3D, fraction), FieldType::F32},
 }};
 
-const ComponentLayout kRayHitLayout{.id = {},
-                                    .name = {},
-                                    .scriptType = "RayHit3D",
-                                    .size = sizeof(RayHit3D),
-                                    .alignment = alignof(RayHit3D),
-                                    .fields = kRayHitFields};
+constexpr std::array<ComponentField, 3> kOverlapFields = {{
+    {"count", offsetof(Overlap3D, count), FieldType::U32},
+    {"entity.slot", offsetof(Overlap3D, entity) + offsetof(world::EntityHandle, slot), FieldType::U32},
+    {"entity.generation", offsetof(Overlap3D, entity) + offsetof(world::EntityHandle, generation), FieldType::U32},
+}};
+
+const std::array<ComponentLayout, 2> kAnswerLayouts = {
+    ComponentLayout{.id = {},
+                    .name = {},
+                    .scriptType = "RayHit3D",
+                    .size = sizeof(RayHit3D),
+                    .alignment = alignof(RayHit3D),
+                    .fields = kRayHitFields},
+    ComponentLayout{.id = {},
+                    .name = {},
+                    .scriptType = "Overlap3D",
+                    .size = sizeof(Overlap3D),
+                    .alignment = alignof(Overlap3D),
+                    .fields = kOverlapFields},
+};
 
 constexpr std::array<ComponentField, 6> kCharacterFields = {{
     {"groundNormal", offsetof(Character3D, groundNormal), FieldType::F32},
@@ -119,8 +134,8 @@ std::span<const ComponentLayout> componentLayouts() noexcept {
     return kLayouts;
 }
 
-const ComponentLayout& rayHitLayout() noexcept {
-    return kRayHitLayout;
+std::span<const ComponentLayout> answerLayouts() noexcept {
+    return kAnswerLayouts;
 }
 
 } // namespace rawframe::physics3d

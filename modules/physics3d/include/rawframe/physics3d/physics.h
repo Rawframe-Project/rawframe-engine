@@ -111,6 +111,25 @@ public:
                                              float towardZ,
                                              const physics::Moment& moment,
                                              std::uint64_t among) const noexcept = 0;
+    /// A sphere of `radius` swept from the origin along `toward`: the first
+    /// body it meets, as a ray's answer; one it starts inside is met
+    /// `inside`, at its start, with no normal (SPEC-0037 §9's start_solid).
+    [[nodiscard]] virtual RayHit3D castSphere(double originX,
+                                              double originY,
+                                              double originZ,
+                                              float radius,
+                                              float towardX,
+                                              float towardY,
+                                              float towardZ,
+                                              std::uint64_t among) const noexcept = 0;
+    /// Every body a sphere of `radius` at the point overlaps, sensors
+    /// included, each once and in entity order, into `into`.
+    virtual void overlapSphere(double x,
+                               double y,
+                               double z,
+                               float radius,
+                               std::uint64_t among,
+                               std::vector<world::EntityHandle>& into) const = 0;
 };
 
 class Physics3D final : public world_runtime::SystemContributor, public Physics3DQueries {
@@ -148,6 +167,20 @@ public:
                                      float towardZ,
                                      const physics::Moment& moment,
                                      std::uint64_t among) const noexcept override;
+    [[nodiscard]] RayHit3D castSphere(double originX,
+                                      double originY,
+                                      double originZ,
+                                      float radius,
+                                      float towardX,
+                                      float towardY,
+                                      float towardZ,
+                                      std::uint64_t among) const noexcept override;
+    void overlapSphere(double x,
+                       double y,
+                       double z,
+                       float radius,
+                       std::uint64_t among,
+                       std::vector<world::EntityHandle>& into) const override;
 
     struct State;
     explicit Physics3D(std::unique_ptr<State> state) noexcept;

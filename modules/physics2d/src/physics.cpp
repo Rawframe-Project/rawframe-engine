@@ -136,6 +136,8 @@ struct Physics2D::State {
     /// Live sensor shapes, in entity order.
     std::vector<m2ShapeId> sensors;
     std::vector<m2ShapeId> overlaps;
+    /// Scratch for overlap queries, which are const.
+    mutable std::vector<m2ShapeId> overlapShapes;
     std::vector<m2ContactData> touching;
     std::vector<schema::ComponentRuntimeId> reads;
     std::vector<schema::ComponentRuntimeId> writes;
@@ -252,6 +254,36 @@ struct Physics2D::State {
         const auto kOwner = owners.find(shape.index1);
         return kOwner != owners.end() && kOwner->second.first == shape.generation ? kOwner->second.second
                                                                                   : world::EntityHandle{};
+    }
+
+    /// The query filter that sees the shapes of the class `among`, its
+    /// solids and sensors by its two bits, or all.
+    [[nodiscard]] std::optional<m2QueryFilter> amongFilter(std::uint64_t among) const noexcept {
+        m2QueryFilter filter{~std::uint64_t{0}, ~std::uint64_t{0}};
+        if (among == physics::kEveryClass) {
+            return filter;
+        }
+        const auto kClass = filters.classIndex(among);
+        if (!kClass.has_value()) {
+            return std::nullopt;
+        }
+        filter.maskBits = physics::CollisionFilters::solidBit(*kClass) | physics::CollisionFilters::sensorBit(*kClass);
+        return filter;
+    }
+
+    /// A cast's closest hit as the answer a script reads.
+    [[nodiscard]] RayHit2D hitOf(const m2RayCastResult& result) const {
+        if (!result.hit) {
+            return RayHit2D{};
+        }
+        return RayHit2D{.hit = true,
+                        .inside = result.normal.x == 0 && result.normal.y == 0,
+                        .entity = ownerOf(result.shapeId),
+                        .x = result.point.x,
+                        .y = result.point.y,
+                        .normalX = result.normal.x,
+                        .normalY = result.normal.y,
+                        .fraction = result.fraction};
     }
 
     [[nodiscard]] Contact2D* contactOf(world::World& world, world::EntityHandle entity) const {
@@ -627,28 +659,54 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
 
 RayHit2D
 Physics2D::castRay(double originX, double originY, float towardX, float towardY, std::uint64_t among) const noexcept {
-    // A class's solids and sensors, by its two bits.
-    m2QueryFilter filter{~std::uint64_t{0}, ~std::uint64_t{0}};
-    if (among != physics::kEveryClass) {
-        const auto kClass = state_->filters.classIndex(among);
-        if (!kClass.has_value()) {
-            return RayHit2D{};
-        }
-        filter.maskBits = physics::CollisionFilters::solidBit(*kClass) | physics::CollisionFilters::sensorBit(*kClass);
-    }
-    const m2RayCastResult kResult =
-        m2World_CastRayClosest(state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, filter);
-    if (!kResult.hit) {
+    const auto kFilter = state_->amongFilter(among);
+    if (!kFilter.has_value()) {
         return RayHit2D{};
     }
-    return RayHit2D{.hit = true,
-                    .inside = kResult.normal.x == 0 && kResult.normal.y == 0,
-                    .entity = state_->ownerOf(kResult.shapeId),
-                    .x = kResult.point.x,
-                    .y = kResult.point.y,
-                    .normalX = kResult.normal.x,
-                    .normalY = kResult.normal.y,
-                    .fraction = kResult.fraction};
+    return state_->hitOf(
+        m2World_CastRayClosest(state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, *kFilter));
+}
+
+RayHit2D Physics2D::castCircle(
+    double originX, double originY, float radius, float towardX, float towardY, std::uint64_t among) const noexcept {
+    const auto kFilter = state_->amongFilter(among);
+    if (!kFilter.has_value() || !(radius > 0) || !std::isfinite(radius)) {
+        return RayHit2D{};
+    }
+    const m2Circle kCircle{.center = {0, 0}, .radius = radius};
+    return state_->hitOf(m2World_CastCircleClosest(state_->physics,
+                                                   &kCircle,
+                                                   m2Transform{.p = {originX, originY}, .q = {1, 0}},
+                                                   m2Vec2{towardX, towardY},
+                                                   *kFilter));
+}
+
+void Physics2D::overlapCircle(
+    double x, double y, float radius, std::uint64_t among, std::vector<world::EntityHandle>& into) const {
+    into.clear();
+    const auto kFilter = state_->amongFilter(among);
+    if (!kFilter.has_value() || !(radius > 0) || !std::isfinite(radius)) {
+        return;
+    }
+    const m2Circle kCircle{.center = {0, 0}, .radius = radius};
+    const m2Transform kAt{.p = {x, y}, .q = {1, 0}};
+    std::vector<m2ShapeId>& shapes = state_->overlapShapes;
+    shapes.resize(std::max<std::size_t>(shapes.size(), 16));
+    std::int32_t total = m2World_OverlapCircle(
+        state_->physics, &kCircle, kAt, shapes.data(), static_cast<std::int32_t>(shapes.size()), *kFilter);
+    if (static_cast<std::size_t>(total) > shapes.size()) {
+        shapes.resize(static_cast<std::size_t>(total));
+        total = m2World_OverlapCircle(state_->physics, &kCircle, kAt, shapes.data(), total, *kFilter);
+    }
+    for (std::int32_t index = 0; index < total; ++index) {
+        const world::EntityHandle kOwner = state_->ownerOf(shapes[static_cast<std::size_t>(index)]);
+        if (!kOwner.isNull()) {
+            into.push_back(kOwner);
+        }
+    }
+    // A body met through its sensor twin too is told once.
+    std::ranges::sort(into);
+    into.erase(std::unique(into.begin(), into.end()), into.end());
 }
 
 namespace {

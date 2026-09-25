@@ -514,3 +514,38 @@ RAWFRAME_TEST(ARayAmongOneClassSeesThroughTheRest) {
     RAWFRAME_EXPECT(scene.physics->castRayAt(0, -0.3, 10, 0, {.base = 2, .fraction = 0}, kEveryClass).entity == kWall);
     RAWFRAME_EXPECT(!scene.physics->castRayAt(0, -0.3, 10, 0, {.base = 2, .fraction = 0}, kUndeclared).hit);
 }
+
+RAWFRAME_TEST(ACircleSweptAndACircleOverlappedFindTheirBodies) {
+    constexpr std::uint64_t kMarked = 0x61;
+    Scene scene({.gravityY = 0, .collision = {.classes = {{kMarked, "marked"}}}});
+    const Body2D kBlock{.motion = static_cast<std::uint8_t>(physics::Motion::Static),
+                        .shape = static_cast<std::uint8_t>(Shape::Box),
+                        .width = 0.5F,
+                        .height = 0.5F};
+    Body2D marked = kBlock;
+    marked.collisionClass = kMarked;
+    const world::EntityHandle kFirst = scene.body(kBlock, {.x = 2});
+    const world::EntityHandle kSecond = scene.body(marked, {.x = 5});
+    scene.run(1);
+    // A ray over the first block misses it; a circle of a quarter meter along
+    // the same line grazes its top.
+    RAWFRAME_EXPECT(!scene.physics->castRay(-2, 0.7, 10, 0, physics::kEveryClass).hit);
+    const RayHit2D kSwept = scene.physics->castCircle(-2, 0.7, 0.25F, 10, 0, physics::kEveryClass);
+    RAWFRAME_EXPECT(kSwept.hit && kSwept.entity == kFirst && !kSwept.inside && kSwept.fraction < 0.5F);
+    // Among the marked class it passes the first.
+    RAWFRAME_EXPECT(scene.physics->castCircle(-2, 0.7, 0.25F, 10, 0, kMarked).entity == kSecond);
+    // Started inside: met there, with no normal.
+    const RayHit2D kInside = scene.physics->castCircle(2, 0, 0.1F, 1, 0, physics::kEveryClass);
+    RAWFRAME_EXPECT(kInside.hit && kInside.inside && kInside.entity == kFirst && kInside.fraction == 0);
+    // Between the two: a meter from each face, so a circle of 1.2 meets both,
+    // in entity order, and one of 0.8 neither.
+    std::vector<world::EntityHandle> found;
+    scene.physics->overlapCircle(3.5, 0, 1.2F, physics::kEveryClass, found);
+    RAWFRAME_EXPECT(found.size() == 2 && found[0] == kFirst && found[1] == kSecond);
+    scene.physics->overlapCircle(3.5, 0, 0.8F, physics::kEveryClass, found);
+    RAWFRAME_EXPECT(found.empty());
+    scene.physics->overlapCircle(3.5, 0, 1.2F, kMarked, found);
+    RAWFRAME_EXPECT(found.size() == 1 && found[0] == kSecond);
+    scene.physics->overlapCircle(3.5, 0, 1.2F, 0x62, found);
+    RAWFRAME_EXPECT(found.empty());
+}

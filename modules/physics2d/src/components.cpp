@@ -74,12 +74,26 @@ constexpr std::array<ComponentField, 10> kRayHitFields = {{
     {"fraction", offsetof(RayHit2D, fraction), FieldType::F32},
 }};
 
-const ComponentLayout kRayHitLayout{.id = {},
-                                    .name = {},
-                                    .scriptType = "RayHit2D",
-                                    .size = sizeof(RayHit2D),
-                                    .alignment = alignof(RayHit2D),
-                                    .fields = kRayHitFields};
+constexpr std::array<ComponentField, 3> kOverlapFields = {{
+    {"count", offsetof(Overlap2D, count), FieldType::U32},
+    {"entity.slot", offsetof(Overlap2D, entity) + offsetof(world::EntityHandle, slot), FieldType::U32},
+    {"entity.generation", offsetof(Overlap2D, entity) + offsetof(world::EntityHandle, generation), FieldType::U32},
+}};
+
+const std::array<ComponentLayout, 2> kAnswerLayouts = {
+    ComponentLayout{.id = {},
+                    .name = {},
+                    .scriptType = "RayHit2D",
+                    .size = sizeof(RayHit2D),
+                    .alignment = alignof(RayHit2D),
+                    .fields = kRayHitFields},
+    ComponentLayout{.id = {},
+                    .name = {},
+                    .scriptType = "Overlap2D",
+                    .size = sizeof(Overlap2D),
+                    .alignment = alignof(Overlap2D),
+                    .fields = kOverlapFields},
+};
 
 constexpr std::array<ComponentField, 5> kCharacterFields = {{
     {"groundNormal", offsetof(Character2D, groundNormal), FieldType::F32},
@@ -114,8 +128,8 @@ std::span<const ComponentLayout> componentLayouts() noexcept {
     return kLayouts;
 }
 
-const ComponentLayout& rayHitLayout() noexcept {
-    return kRayHitLayout;
+std::span<const ComponentLayout> answerLayouts() noexcept {
+    return kAnswerLayouts;
 }
 
 } // namespace rawframe::physics2d

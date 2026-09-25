@@ -178,7 +178,16 @@ struct Character2D {
 /// `<name>.generation`.
 [[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;
 
-/// RayHit2D as a script must declare it; its identity is none.
-[[nodiscard]] const physics::ComponentLayout& rayHitLayout() noexcept;
+/// What an overlap query found: how many bodies overlap the shape asked
+/// about, and the one at the asked index among them in entity order (the
+/// null entity past the last). Not a component: a value a query answers.
+struct Overlap2D {
+    std::uint32_t count = 0;
+    world::EntityHandle entity;
+};
+
+/// RayHit2D and Overlap2D as a script must declare them; their identities
+/// are none.
+[[nodiscard]] std::span<const physics::ComponentLayout> answerLayouts() noexcept;
 
 } // namespace rawframe::physics2d

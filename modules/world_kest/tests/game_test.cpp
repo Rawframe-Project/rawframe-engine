@@ -542,7 +542,8 @@ RAWFRAME_TEST(AKestSystemAsksThreeDimensionalPhysics) {
                                  composition::HostFrame{.iteration = tick, .now = clock.now()});
     }
     // Both have fallen onto the floor, whose top is half a meter up, and
-    // the probe under each found it on every tick after a step.
+    // the probe under each found it on every tick after a step; a meter
+    // about each overlaps the body and the floor.
     world::World& world = *simulation->world();
     const auto kProbe =
         world.registry().find(schema::ComponentTypeId::fromText("478adedf-3aad-4510-8073-dc421516ce7e"));
@@ -561,7 +562,9 @@ RAWFRAME_TEST(AKestSystemAsksThreeDimensionalPhysics) {
             std::int32_t ticks = 0;
             std::memcpy(&floor, chunk.columns[0] + (row * 16), sizeof floor);
             std::memcpy(&ticks, chunk.columns[0] + (row * 16) + 8, sizeof ticks);
-            found += std::abs(floor - 0.5) < 1e-4 && ticks == 120 ? 1 : 0;
+            std::uint32_t crowd = 0;
+            std::memcpy(&crowd, chunk.columns[0] + (row * 16) + 12, sizeof crowd);
+            found += std::abs(floor - 0.5) < 1e-4 && ticks == 120 && crowd == 2 ? 1 : 0;
         }
     });
     RAWFRAME_EXPECT(found == 2);

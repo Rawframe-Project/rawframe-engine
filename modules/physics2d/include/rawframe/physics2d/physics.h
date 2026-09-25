@@ -106,6 +106,19 @@ public:
                                              float towardY,
                                              const physics::Moment& moment,
                                              std::uint64_t among) const noexcept = 0;
+    /// A circle of `radius` swept from the origin along `toward`: the first
+    /// body it meets, as a ray's answer; one it starts inside is met
+    /// `inside`, at its start, with no normal (SPEC-0037 §9's start_solid).
+    [[nodiscard]] virtual RayHit2D castCircle(double originX,
+                                              double originY,
+                                              float radius,
+                                              float towardX,
+                                              float towardY,
+                                              std::uint64_t among) const noexcept = 0;
+    /// Every body a circle of `radius` at the point overlaps, sensors
+    /// included, each once and in entity order, into `into`.
+    virtual void overlapCircle(
+        double x, double y, float radius, std::uint64_t among, std::vector<world::EntityHandle>& into) const = 0;
 };
 
 class Physics2D final : public world_runtime::SystemContributor, public Physics2DQueries {
@@ -135,6 +148,14 @@ public:
                                      float towardY,
                                      const physics::Moment& moment,
                                      std::uint64_t among) const noexcept override;
+    [[nodiscard]] RayHit2D castCircle(double originX,
+                                      double originY,
+                                      float radius,
+                                      float towardX,
+                                      float towardY,
+                                      std::uint64_t among) const noexcept override;
+    void overlapCircle(
+        double x, double y, float radius, std::uint64_t among, std::vector<world::EntityHandle>& into) const override;
 
     struct State;
     explicit Physics2D(std::unique_ptr<State> state) noexcept;
