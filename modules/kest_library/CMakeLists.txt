@@ -13,12 +13,12 @@ add_custom_command(
     VERBATIM)
 
 rawframe_module(NAME kest_library
-    SOURCES src/library.cpp "${embedded}"
-    DEPS kest result base
+    SOURCES src/library.cpp src/sources.cpp "${embedded}"
+    DEPS kest document result base
 )
 target_include_directories(rawframe_kest_library PRIVATE src)
 
-rawframe_module_tests(NAME kest_library SOURCES tests/library_test.cpp)
+rawframe_module_tests(NAME kest_library SOURCES tests/library_test.cpp tests/sources_test.cpp)
 if(TARGET rawframe_kest_library_tests)
     target_compile_definitions(rawframe_kest_library_tests PRIVATE
         RAWFRAME_KEST_LIBRARY="${RAWFRAME_KEST_LIBRARY}"

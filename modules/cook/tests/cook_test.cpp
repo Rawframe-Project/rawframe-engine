@@ -9,6 +9,8 @@
 #include "rawframe/cook/audio.h"
 #include "rawframe/cook/cook.h"
 #include "rawframe/cook/errors.h"
+#include "rawframe/cook/kest.h"
+#include "rawframe/kest_library/library.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
@@ -226,6 +228,52 @@ RAWFRAME_TEST(WhatAnImporterReadsIsAnInputToo) {
         const CookReport kRefused = cookGathered(kProject);
         RAWFRAME_EXPECT(failedWith(kRefused, CookError::BadRead));
     }
+}
+
+RAWFRAME_TEST(AKestProjectCooksIntoItsFiles) {
+    const Project kProject;
+    const fs::path kGame = kProject.sources / "game";
+    writeText(kGame / "kest.project", "project shots\nsource .\nsource ../../modules/kest_library/kest\n");
+    writeText(kGame / "kest.project.rfmeta", sidecar("000000000000000000000000000000a4", "", "rawframe.kest"));
+    writeText(kGame / "shots.kest", "module shots\n\nimport rawframe.world\nimport rules.score\n\nfn fire() {\n}\n");
+    writeText(kGame / "rules" / "score.kest", "module rules.score\n\nfn add() {\n}\n");
+    writeText(kGame / "notes.txt", "not Kest");
+    static const std::array<Importer, 2> kImporters = {audioImporter(), kestImporter()};
+    const auto kCook = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+        RAWFRAME_EXPECT(report.has_value());
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    RAWFRAME_EXPECT(kCook().cooked == 3);
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value());
+    if (!kManifest.has_value()) {
+        return;
+    }
+    const auto kEntry = std::ranges::find(
+        *kManifest, content::ResourceTypeId{kest_library::kGameSourcesType}, &content::ManifestEntry::type);
+    RAWFRAME_EXPECT(kEntry != kManifest->end());
+    if (kEntry == kManifest->end()) {
+        return;
+    }
+    // Its own two files, the notes and the library left out, and they
+    // compile with the engine's library alone.
+    const auto kFiles = kest_library::readGameSources(readText(kProject.output / kEntry->locator));
+    RAWFRAME_EXPECT(kFiles.has_value() && kFiles->size() == 2 && (*kFiles)[0].path == "rules/score.kest" &&
+                    (*kFiles)[1].path == "shots.kest");
+    RAWFRAME_EXPECT(kFiles.has_value() && kest_library::compile("shots.kest", *kFiles, {}).has_value());
+
+    // A file changed or added: the project again.
+    writeText(kGame / "rules" / "score.kest", "module rules.score\n\nfn add() {\n}\n\nfn take() {\n}\n");
+    RAWFRAME_EXPECT(kCook().cooked == 1);
+    writeText(kGame / "more.kest", "module more\n");
+    RAWFRAME_EXPECT(kCook().cooked == 1);
+    RAWFRAME_EXPECT(kCook().reused == 3);
+    // Settings are refused.
+    writeText(kGame / "kest.project.rfmeta",
+              sidecar("000000000000000000000000000000a4", "\"entry\": \"shots.kest\"", "rawframe.kest"));
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadSidecar));
 }
 
 RAWFRAME_TEST(NothingIsPublishedUnlessNothingFailed) {

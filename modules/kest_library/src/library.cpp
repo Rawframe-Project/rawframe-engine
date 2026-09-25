@@ -15,15 +15,13 @@ result::Result<std::shared_ptr<const kest::Program>> refuse(std::string_view why
         result::ErrorClass::InvalidArgument, kest::kKestDomain, code(kest::KestError::DoesNotCompile), why);
 }
 
-/// A path that names one place under the game and only that one: relative,
-/// already in its normal form, and never climbing out.
-bool plain(std::string_view path) {
+} // namespace
+
+bool plainGamePath(std::string_view path) {
     const std::filesystem::path kPath{path};
     return !path.empty() && kPath.is_relative() && kPath.lexically_normal().generic_string() == path &&
-           *kPath.begin() != ".." && path != "kest.project";
+           !path.ends_with('/') && *kPath.begin() != ".." && path != "kest.project";
 }
-
-} // namespace
 
 std::vector<kest::SourceFile> files() {
     std::vector<kest::SourceFile> made;
@@ -38,7 +36,7 @@ result::Result<std::shared_ptr<const kest::Program>> compile(std::string_view en
                                                              const kest::CompileSettings& settings,
                                                              std::string* report) {
     if (!std::ranges::all_of(game, [](const kest::SourceFile& file) {
-            return plain(file.path);
+            return plainGamePath(file.path);
         })) {
         return refuse("a game's file is named by a plain path under the game");
     }

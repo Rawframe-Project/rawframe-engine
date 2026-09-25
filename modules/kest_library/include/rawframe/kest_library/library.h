@@ -14,9 +14,11 @@
 // on disk from a project that says `source .` and names the engine's
 // `modules/kest_library/kest`.
 
+#include "rawframe/base/bits128.h"
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
 
+#include <cstddef>
 #include <memory>
 #include <span>
 #include <string>
@@ -31,6 +33,27 @@ inline constexpr std::string_view kStandardLibrary = "engine/lib/";
 inline constexpr std::string_view kEngineModules = "engine/modules/";
 /// Where it is handed a game's files.
 inline constexpr std::string_view kGame = "game/";
+
+/// The resource type of a game's Kest files, all of them as one resource
+/// (D87), and its one representation: a canonical record
+/// `{kind: "kest.sources", formatVersion: 1, files: [{path, text}]}`, files
+/// in path order, each path plain as `compile` requires.
+inline constexpr base::Bits128 kGameSourcesType = base::parseBits128Hex("49be428d0ae12ec9b0f817b7c1e0e956").value;
+inline constexpr std::string_view kGameSourcesRepresentation = "rawframe.kest.sources";
+/// The most files a game's sources hold.
+inline constexpr std::size_t kMaximumGameFiles = 4096;
+
+/// A game's files as the resource holds them; refused (`SourcesInvalid`)
+/// when they are more than kMaximumGameFiles, a path is not plain, or two
+/// share one.
+[[nodiscard]] result::Result<std::string> writeGameSources(std::span<const kest::SourceFile> files);
+/// The files a resource holds, in path order; refused (`SourcesInvalid`) for
+/// anything `writeGameSources` would not have written byte for byte.
+[[nodiscard]] result::Result<std::vector<kest::SourceFile>> readGameSources(std::string_view bytes);
+
+/// Whether `path` names one place under a game and only that one: relative,
+/// in normal form, never climbing out, and not where the project stands.
+[[nodiscard]] bool plainGamePath(std::string_view path);
 
 /// Every file of the library, at the path a compile is handed it.
 [[nodiscard]] std::vector<kest::SourceFile> files();
