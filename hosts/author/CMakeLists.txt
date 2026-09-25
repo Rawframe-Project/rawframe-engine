@@ -23,6 +23,12 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_arena> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/author_migrate)
     set_tests_properties(author_migrate PROPERTIES PASS_REGULAR_EXPRESSION "migrated runners")
+    # Runners' level read through queries, typed by the game's catalog,
+    # and a value read set back through a request to no change.
+    add_test(NAME author_read
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_read.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_read)
+    set_tests_properties(author_read PROPERTIES PASS_REGULAR_EXPRESSION "read runners")
     # Runners' platforms moved and reverted through their instances'
     # patches, and the game started on the changed level.
     add_test(NAME author_instances

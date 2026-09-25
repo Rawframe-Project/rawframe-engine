@@ -2,11 +2,13 @@
 // a command line, run by an author, a pipeline, or an agent; never part of a
 // client or a server.
 //
-//   rawframe-author describe
+//   rawframe-author describe [<game description>]
 //   rawframe-author apply <game description> <scene> <request> [--dry-run]
+//   rawframe-author read <game description> <scene> <queries>
 //   rawframe-author migrate <game description> <scene>... [--dry-run]
 //
-// `describe` writes the discovery document. `apply` reads the scene,
+// `describe` writes the discovery document; given a game, with the game's
+// components, so a request can name them by type id. `apply` reads the scene,
 // builds its component catalog from the game (each component's layout from
 // the game's program, an `entity` field a reference), runs the request, and
 // writes one outcome: the document's generation after it, whether the
@@ -15,6 +17,10 @@
 // generation is its content digest, which a request's `expects` names. The
 // scene is replaced whole, by rename, only when something changed and not
 // with `--dry-run`.
+//
+// `read` answers a query document (D155) against the scene: the document's
+// generation read, and per query its answer or the one error record, each
+// on its own. It never writes.
 //
 // `migrate` brings scenes authored against older layouts of the game's
 // components to the current ones (ADR-0067, D153): per scene, every
@@ -29,9 +35,11 @@
 
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/operations.h"
+#include "rawframe/authoring/queries.h"
 #include "rawframe/authoring/request.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/document/json.h"
+#include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/layouts.h"
 
@@ -233,6 +241,66 @@ int apply(const char* game, const std::filesystem::path& scenePath, const char* 
     return failed ? 1 : 0;
 }
 
+int describe(const char* game) {
+    auto files = rawframe::world_kest::GameFiles::fromDirectory(game);
+    if (!files.has_value()) {
+        return refused(files.error());
+    }
+    auto catalog = catalogOf(*files);
+    if (!catalog.has_value()) {
+        return refused(catalog.error());
+    }
+    std::fputs(authoring::writeDiscovery(&*catalog).c_str(), stdout);
+    return 0;
+}
+
+int answerQueries(const char* game, const std::filesystem::path& scenePath, const char* queriesPath) {
+    const auto kQueriesText = readFile(queriesPath);
+    const auto kSceneText = readFile(scenePath);
+    if (!kQueriesText.has_value() || !kSceneText.has_value()) {
+        return refused(result::fail(result::ErrorClass::NotFound,
+                                    authoring::kAuthoringDomain,
+                                    code(authoring::AuthoringError::TargetNotFound),
+                                    "the queries and the scene are files that read")
+                           .error());
+    }
+    auto queries = authoring::readQueries(*kQueriesText);
+    if (!queries.has_value()) {
+        return refused(queries.error());
+    }
+    auto files = rawframe::world_kest::GameFiles::fromDirectory(game);
+    if (!files.has_value()) {
+        return refused(files.error());
+    }
+    auto catalog = catalogOf(*files);
+    if (!catalog.has_value()) {
+        return refused(catalog.error());
+    }
+    auto scene = rawframe::scene::readScene(*kSceneText);
+    if (!scene.has_value()) {
+        return refused(scene.error());
+    }
+    Value answers = Value::array();
+    bool failed = false;
+    for (const authoring::Query& query : *queries) {
+        const auto kAnswer = authoring::answer(*scene, query, *catalog);
+        Value made = Value::object();
+        if (kAnswer.has_value()) {
+            made.add("answer", authoring::answerValue(*kAnswer));
+        } else {
+            failed = true;
+            made.add("error", authoring::errorRecord(kAnswer.error()));
+        }
+        answers.push(std::move(made));
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.answers"));
+    made.add("document", Value::string(digestOf(*kSceneText)));
+    made.add("answers", std::move(answers));
+    std::fputs(rawframe::document::write(made).c_str(), stdout);
+    return failed ? 1 : 0;
+}
+
 int migrate(const char* game, std::span<char* const> scenes, bool dryRun) {
     auto files = rawframe::world_kest::GameFiles::fromDirectory(game);
     if (!files.has_value()) {
@@ -330,6 +398,12 @@ int main(int argc, char** argv) {
         std::fputs(authoring::writeDiscovery().c_str(), stdout);
         return 0;
     }
+    if (kVerb == "describe" && argc == 3) {
+        return describe(argv[2]);
+    }
+    if (kVerb == "read" && argc == 5) {
+        return answerQueries(argv[2], argv[3], argv[4]);
+    }
     const bool kDryRun = argc == 6 && std::string_view{argv[5]} == "--dry-run";
     if (kVerb == "apply" && (argc == 5 || kDryRun)) {
         return apply(argv[2], argv[3], argv[4], kDryRun);
@@ -341,8 +415,9 @@ int main(int argc, char** argv) {
             return migrate(argv[2], kScenes, kDry);
         }
     }
-    std::fputs("usage: rawframe-author describe\n"
+    std::fputs("usage: rawframe-author describe [<game description>]\n"
                "       rawframe-author apply <game description> <scene> <request> [--dry-run]\n"
+               "       rawframe-author read <game description> <scene> <queries>\n"
                "       rawframe-author migrate <game description> <scene>... [--dry-run]\n",
                stderr);
     return 2;
