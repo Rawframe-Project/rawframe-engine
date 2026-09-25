@@ -47,6 +47,7 @@ world_localization: localization world_kest game_content content composition exe
 host: composition execution diagnostics result base
 dedicated_server: host game_content network_quic physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 arena: host game_content input_kest world_audio world_localization audio network_loopback physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
+web_client: host game_content physics2d physics3d world_animation world_kest world_runtime composition execution diagnostics result base
 bots: host game_content input_kest world_audio world_localization audio network_quic world_replication world_kest world_runtime composition diagnostics result base
 import: audio_import audio result base
 cook_tool: cook localization animation mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base

@@ -18,7 +18,8 @@ if(RAWFRAME_BUILD_TESTS)
 endif()
 
 # The web build (cmake/wasm32-wasi.cmake) is the modules tools/web_modules.txt
-# lists and the third-party code they need, and nothing else: no hosts yet.
+# lists, the third-party code they need, and the web client host, which is
+# listed there too.
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
     file(STRINGS "${PROJECT_SOURCE_DIR}/tools/web_modules.txt" rawframe_web_lines REGEX "^[a-z]")
     string(JOIN " " rawframe_web_modules ${rawframe_web_lines})
@@ -40,7 +41,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
         include(third_party/openssl_wasm.cmake)
     endif()
     foreach(module IN LISTS rawframe_web_modules)
-        add_subdirectory(modules/${module})
+        if(module STREQUAL "web_client")
+            add_subdirectory(hosts/web_client)
+        else()
+            add_subdirectory(modules/${module})
+        endif()
     endforeach()
     return()
 endif()

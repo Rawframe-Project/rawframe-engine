@@ -2,4 +2,4 @@
 # `wasm-development` preset. Each module's dependencies on its
 # tools/modules.txt line are here too (tools/check_repo.py). Every module a
 # client needs joins this list before the web client exists.
-base result diagnostics execution composition document schema world world_snapshot world_save world_runtime kest kest_library network network_loopback signature content game_content physics physics2d physics3d world_animation world_replication world_kest scene authoring animation localization mesh input input_kest host
+base result diagnostics execution composition document schema world world_snapshot world_save world_runtime kest kest_library network network_loopback signature content game_content physics physics2d physics3d world_animation world_replication world_kest scene authoring animation localization mesh input input_kest host web_client
