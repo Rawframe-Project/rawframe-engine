@@ -2,7 +2,7 @@
 # No runtime closure contains it.
 rawframe_host(NAME cook_tool OUTPUT rawframe-cook
     SOURCES src/main.cpp
-    DEPS cook scene world_kest input kest_library kest audio_import audio content document execution result base
+    DEPS cook mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
 )
 
 if(RAWFRAME_BUILD_TESTS)

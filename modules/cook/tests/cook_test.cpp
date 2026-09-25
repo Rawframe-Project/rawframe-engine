@@ -11,8 +11,11 @@
 #include "rawframe/cook/errors.h"
 #include "rawframe/cook/game.h"
 #include "rawframe/cook/kest.h"
+#include "rawframe/cook/mesh.h"
 #include "rawframe/cook/scene.h"
 #include "rawframe/kest_library/library.h"
+#include "rawframe/mesh/errors.h"
+#include "rawframe/mesh/mesh.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/cooked_game.h"
 
@@ -390,6 +393,65 @@ RAWFRAME_TEST(NothingIsPublishedUnlessNothingFailed) {
     const auto kInside = cookSources(
         CookRequest{.sources = kProject.sources, .output = kProject.sources / "out", .importers = kImporters});
     RAWFRAME_EXPECT(!kInside.has_value() && kInside.error().code() == code(CookError::BadRequest));
+}
+
+RAWFRAME_TEST(AGltfCooksIntoAMeshWithItsBuffers) {
+    const Project kProject;
+    const fs::path kProps = kProject.sources / "props";
+    std::string buffer;
+    for (const float kValue : {0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F}) {
+        buffer.append(reinterpret_cast<const char*>(&kValue), sizeof(kValue));
+    }
+    writeText(kProps / "shard.bin", buffer);
+    writeText(kProps / "shard.gltf",
+              R"({"asset": {"version": "2.0"}, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}], )"
+              R"("meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}], )"
+              R"("buffers": [{"uri": "shard.bin", "byteLength": 36}], )"
+              R"("bufferViews": [{"buffer": 0, "byteLength": 36}], )"
+              R"("accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", )"
+              R"("min": [0, 0, 0], "max": [1, 1, 0]}]})");
+    writeText(kProps / "shard.gltf.rfmeta", sidecar("000000000000000000000000000000a7", "", "rawframe.mesh"));
+    static const std::array<Importer, 2> kImporters = {audioImporter(), meshImporter()};
+    const auto kCook = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+        RAWFRAME_EXPECT(report.has_value());
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    const auto kMeshOf = [&kProject]() -> std::optional<mesh::Mesh> {
+        const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+        if (!kManifest.has_value()) {
+            return std::nullopt;
+        }
+        for (const content::ManifestEntry& each : *kManifest) {
+            if (each.type.value == mesh::kMeshType && each.representation.text() == mesh::kMeshRepresentation) {
+                const std::string kBytes = readText(kProject.output / each.locator);
+                auto read = mesh::decode(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
+                return read.has_value() ? std::optional{std::move(*read)} : std::nullopt;
+            }
+        }
+        return std::nullopt;
+    };
+    RAWFRAME_EXPECT(kCook().cooked == 3);
+    const auto kFirst = kMeshOf();
+    RAWFRAME_EXPECT(kFirst.has_value() && kFirst->indices == (std::vector<std::uint32_t>{0, 1, 2}) &&
+                    kFirst->positions[1] == (mesh::Vector3{1.0F, 0.0F, 0.0F}));
+    // The buffer is an input: changed, the mesh cooks again from it.
+    const float kTwo = 2.0F;
+    buffer.replace(12, sizeof(kTwo), reinterpret_cast<const char*>(&kTwo), sizeof(kTwo));
+    writeText(kProps / "shard.bin", buffer);
+    const CookReport kEdited = kCook();
+    RAWFRAME_EXPECT(kEdited.cooked == 1 && kEdited.reused == 2);
+    const auto kSecond = kMeshOf();
+    RAWFRAME_EXPECT(kSecond.has_value() && kSecond->positions[1] == (mesh::Vector3{2.0F, 0.0F, 0.0F}));
+    // A buffer gone, or named outside the sources, fails the mesh.
+    fs::rename(kProps / "shard.bin", kProject.sources / "shard.bin");
+    RAWFRAME_EXPECT(kCook().failures.size() == 1);
+    std::string gltf = readText(kProps / "shard.gltf");
+    gltf.replace(gltf.find("shard.bin"), 9, "../../shard.bin");
+    writeText(kProps / "shard.gltf", gltf);
+    const CookReport kOutside = kCook();
+    RAWFRAME_EXPECT(kOutside.failures.size() == 1 && kOutside.failures[0].domain() == mesh::kMeshDomain);
 }
 
 RAWFRAME_TEST(ANondeterministicImporterIsCaught) {
