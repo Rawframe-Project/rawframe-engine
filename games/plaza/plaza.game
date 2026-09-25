@@ -1,6 +1,6 @@
 # The sample 3D game: players are characters running and jumping about a
-# square plaza with a ramp, a raised terrace, pillars, and a grassy mound
-# modeled in an authoring tool, all of it Maul3D.
+# square plaza with a ramp, a raised terrace, pillars, a grassy mound
+# modeled in an authoring tool, and a gate on a hinge, all of it Maul3D.
 # A client predicts its own character exactly, is sent what is within 30
 # meters on the ground plane, and sees the others between states.
 program plaza.kest
@@ -31,6 +31,10 @@ spawn 1 rawframe.physics3d.body motion=0 shape=1 width=4 height=0.5 depth=3 rawf
 spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=-10 y=3.5 z=-10 rawframe.physics3d.velocity
 spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=10 y=3.5 z=-10 rawframe.physics3d.velocity
 spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=-10 y=3.5 z=10 rawframe.physics3d.velocity
+
+# A gate in the far corner, hung on its post by a hinge that turns about
+# the post.
+scene gate.scene
 
 # The mound, ten meters across and 1.2 high, on the plaza's floor.
 spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-20 y=0.5 z=20 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=mound.gltf

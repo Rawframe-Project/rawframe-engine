@@ -136,15 +136,15 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "failed 0")
     configure_file(tests/plaza.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza.conf @ONLY)
     configure_file(tests/plaza_prediction.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_prediction.conf @ONLY)
-    # Sixteen bots play the sample 3D game: eleven bodies of the plaza, its
-    # mound a cooked mesh among them, and one walker for each player are
-    # made, and the walkers move as characters.
+    # Sixteen bots play the sample 3D game: thirteen bodies of the plaza, its
+    # mound a cooked mesh among them, its gate's hinge, and one walker for
+    # each player are made, and the walkers move as characters.
     add_test(NAME plaza_bots
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_bots PROPERTIES
                          FIXTURES_REQUIRED plaza_content
-                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":27,\"bodiesRemoved\":0,\"bodiesRefused\":0,.*\"characterMoves\":[1-9]")
+                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":29,\"bodiesRemoved\":0,\"bodiesRefused\":0,.*\"characterMoves\":[1-9][0-9]*,\"jointsMade\":1,\"jointsRemoved\":0,\"jointsRefused\":0")
     # Four bots predict their walkers in 3D: a thousand ticks confirmed, the
     # rollbacks only those of admission.
     add_test(NAME plaza_prediction

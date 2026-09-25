@@ -1,0 +1,68 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "rawframe.physics3d.body": "333aeeed8b31cb31",
+    "rawframe.physics3d.joint": "0a9da40cd3b76847",
+    "rawframe.physics3d.pose": "4c7ea4a8be350db8",
+    "rawframe.physics3d.velocity": "26f3f6625f0df9ec"
+  },
+  "entities": [
+    {
+      "id": "6c632219-53a9-4af4-8781-bb2a8f4fa53b",
+      "name": "gate post",
+      "components": {
+        "rawframe.physics3d.body": {
+          "depth": 0.15,
+          "friction": 0.5,
+          "height": 2,
+          "shape": 1,
+          "width": 0.15
+        },
+        "rawframe.physics3d.pose": {
+          "x": -30,
+          "y": 2.5,
+          "z": -30
+        },
+        "rawframe.physics3d.velocity": {}
+      }
+    },
+    {
+      "id": "c7c23a08-b089-4bc2-b6ae-efcdc63ab63d",
+      "name": "gate",
+      "components": {
+        "rawframe.physics3d.body": {
+          "density": 50,
+          "depth": 0.05,
+          "friction": 0.5,
+          "height": 1,
+          "motion": 2,
+          "shape": 1,
+          "width": 1.5
+        },
+        "rawframe.physics3d.pose": {
+          "x": -28.35,
+          "y": 1.6,
+          "z": -30
+        },
+        "rawframe.physics3d.velocity": {}
+      }
+    },
+    {
+      "id": "19523730-fce5-44ed-8073-eb9ca02cd9f0",
+      "name": "gate hinge",
+      "components": {
+        "rawframe.physics3d.joint": {
+          "a": "6c632219-53a9-4af4-8781-bb2a8f4fa53b",
+          "anchorAX": 0.15,
+          "anchorAY": -0.9,
+          "anchorBX": -1.5,
+          "angularZ": 1,
+          "axisAY": 1,
+          "axisBY": 1,
+          "b": "c7c23a08-b089-4bc2-b6ae-efcdc63ab63d"
+        }
+      }
+    }
+  ]
+}
