@@ -62,6 +62,23 @@ std::array<double, 4> between(Channel channel, const Key& from, const Key& to, d
     return made;
 }
 
+/// A looping track's first key where the wrap arrives: moved by the
+/// track's drift, if it has one.
+Key arrival(const Track& track) {
+    Key made = track.keys.front();
+    if (!track.drift.has_value()) {
+        return made;
+    }
+    if (track.channel == Channel::Rotation) {
+        made.value = normalized(multiplied(*track.drift, made.value));
+    } else {
+        for (std::size_t each = 0; each < 3; ++each) {
+            made.value[each] += (*track.drift)[each];
+        }
+    }
+    return made;
+}
+
 } // namespace
 
 Pose bindPose(const Skeleton& skeleton) {
@@ -123,6 +140,9 @@ BoundClip::bind(std::shared_ptr<const Clip> clip, const Skeleton& skeleton, base
         if (kFound == targets.end() || std::get<0>(*kFound) != track.bone) {
             return unbound("a clip animates only bones its skeleton has");
         }
+        if (track.drift.has_value() && std::get<1>(*kFound) != 0) {
+            return unbound("only the skeleton's root drifts");
+        }
         made.bones_.push_back(BoneIndex{std::get<1>(*kFound)});
     }
     made.clip_ = std::move(clip);
@@ -166,19 +186,44 @@ std::array<double, 4> sampleTrack(const Clip& clip, const Track& track, double t
     // The key at or before `time`.
     const auto kAfter = std::ranges::upper_bound(keys, time, {}, &Key::time);
     std::array<double, 4> made{};
-    if (keys.size() == 1 || (clip.loop == Loop::Clamp && (kAfter == keys.begin() || kAfter == keys.end()))) {
+    if ((keys.size() == 1 && !track.drift.has_value()) ||
+        (clip.loop == Loop::Clamp && (kAfter == keys.begin() || kAfter == keys.end()))) {
         made = kAfter == keys.begin() ? first.value : (kAfter - 1)->value;
-    } else if (kAfter == keys.begin() || kAfter == keys.end()) {
-        // Across the wrap, from the last key to the first.
+    } else if (kAfter == keys.end()) {
+        // Across the wrap, from the last key to the first where the wrap
+        // arrives.
         const double kSpan = kDuration - last.time + first.time;
-        const double kSince = kAfter == keys.end() ? time - last.time : time + kDuration - last.time;
-        made = between(track.channel, last, first, kSince / kSpan, kSpan);
+        made = between(track.channel, last, arrival(track), (time - last.time) / kSpan, kSpan);
+    } else if (kAfter == keys.begin()) {
+        // Before the first key, still on the way from the last: where the
+        // previous period's wrap was going, the first key as it is.
+        const double kSpan = kDuration - last.time + first.time;
+        Key from = last;
+        if (track.drift.has_value()) {
+            // The last key a period earlier, so the segment ends on the
+            // first key as it is.
+            if (track.channel == Channel::Rotation) {
+                from.value = normalized(multiplied(inverted(*track.drift), from.value));
+            } else {
+                for (std::size_t each = 0; each < 3; ++each) {
+                    from.value[each] -= (*track.drift)[each];
+                }
+            }
+        }
+        made = between(track.channel, from, first, (time + kDuration - last.time) / kSpan, kSpan);
     } else {
         const Key& from = *(kAfter - 1);
         const double kSpan = kAfter->time - from.time;
         made = between(track.channel, from, *kAfter, (time - from.time) / kSpan, kSpan);
     }
     return track.channel == Channel::Rotation ? normalized(made) : made;
+}
+
+std::array<double, 4> sampleTrackAtEnd(const Clip& clip, const Track& track) {
+    if (clip.loop == Loop::Clamp) {
+        return sampleTrack(clip, track, clip.duration);
+    }
+    return arrival(track).value;
 }
 
 Advance advance(

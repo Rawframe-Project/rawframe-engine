@@ -140,18 +140,27 @@ result::Result<Key> readKey(const Value& each, std::size_t width) {
 }
 
 result::Result<Track> readTrack(const Value& each, const ClipLimits& limits) {
-    const std::optional<base::Bits128> kBone =
-        hasMembers(each, {"bone", "channel", "keys"}) ? bits128Of(each.find("bone")) : std::nullopt;
+    const bool kDrifts = each.find("drift") != nullptr;
+    const std::optional<base::Bits128> kBone = (kDrifts ? hasMembers(each, {"bone", "channel", "keys", "drift"})
+                                                        : hasMembers(each, {"bone", "channel", "keys"}))
+                                                   ? bits128Of(each.find("bone"))
+                                                   : std::nullopt;
     const std::optional<std::size_t> kChannel =
         kBone.has_value() ? placeOf(kChannels, each.find("channel")) : std::nullopt;
     if (!kChannel.has_value() || each.find("keys")->kind() != Value::Kind::Array) {
-        return invalid("a track is a bone, a channel, and keys");
+        return invalid("a track is a bone, a channel, keys, and an optional drift");
     }
     const Value& keys = *each.find("keys");
     if (keys.items().size() > limits.maximumKeys) {
         return overLimit("a track has more keys than its limit");
     }
-    Track track{.bone = *kBone, .channel = static_cast<Channel>(*kChannel), .keys = {}};
+    Track track{.bone = *kBone, .channel = static_cast<Channel>(*kChannel), .keys = {}, .drift = std::nullopt};
+    if (kDrifts) {
+        track.drift = numbersOf(each.find("drift"), widthOf(track.channel));
+        if (!track.drift.has_value()) {
+            return invalid("a track's drift is as many numbers as its channel has");
+        }
+    }
     for (const Value& key : keys.items()) {
         RAWFRAME_TRY_ASSIGN(Key made, readKey(key, widthOf(track.channel)));
         track.keys.push_back(made);
@@ -180,6 +189,13 @@ result::Status validate(const Clip& clip, const ClipLimits& limits) {
             return invalid("a track names its bone");
         }
         RAWFRAME_TRY(keysInForm(clip, track, limits));
+        if (track.drift.has_value()) {
+            const bool kUnused = track.channel == Channel::Rotation || (*track.drift)[3] == 0.0;
+            if (clip.loop != Loop::Loop || track.channel == Channel::Scale || !finite(*track.drift) || !kUnused ||
+                (track.channel == Channel::Rotation && !unit(*track.drift))) {
+                return invalid("a drift is a looping clip's, on a translation or a unit rotation");
+            }
+        }
         bindings.emplace_back(track.bone, track.channel);
     }
     std::ranges::sort(bindings);
@@ -201,6 +217,9 @@ result::Result<std::string> writeClip(const Clip& clip, const ClipLimits& limits
         made.add("bone", Value::string(hexOf(track.bone)));
         made.add("channel", Value::string(std::string{kChannels[static_cast<std::size_t>(track.channel)]}));
         made.add("keys", std::move(keys));
+        if (track.drift.has_value()) {
+            made.add("drift", arrayOf(*track.drift, widthOf(track.channel)));
+        }
         tracks.push(std::move(made));
     }
     Value events = Value::array();

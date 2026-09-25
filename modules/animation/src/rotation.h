@@ -13,6 +13,16 @@ namespace rawframe::animation {
 [[nodiscard]] std::array<double, 4>
 slerp(const std::array<double, 4>& from, const std::array<double, 4>& to, double at) noexcept;
 
+/// `a` turned onto `b`: the Hamilton product a b, which turns by `b` first.
+[[nodiscard]] std::array<double, 4> multiplied(const std::array<double, 4>& a, const std::array<double, 4>& b) noexcept;
+
+/// The opposite turn of a unit rotation.
+[[nodiscard]] std::array<double, 4> inverted(const std::array<double, 4>& rotation) noexcept;
+
+/// `vector` turned by the unit rotation `rotation`.
+[[nodiscard]] std::array<double, 3> rotated(const std::array<double, 4>& rotation,
+                                            const std::array<double, 3>& vector) noexcept;
+
 /// Made unit; the identity when there is no length to make unit.
 [[nodiscard]] std::array<double, 4> normalized(const std::array<double, 4>& rotation) noexcept;
 

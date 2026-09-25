@@ -96,6 +96,41 @@ RAWFRAME_TEST(KeysInterpolateAsTheirKindSays) {
     RAWFRAME_EXPECT(yAt(kLooped, -1.75) == 2.5);
 }
 
+RAWFRAME_TEST(ADriftCarriesTheWrapOnward) {
+    // Two meters up a period: the wrap runs from the last key to the first
+    // moved by it, and the time before the first key comes from the last
+    // key a period back.
+    Clip climbing = clipOf(
+        Loop::Loop, {moving({Key{.time = 0.5, .value = {0, 2, 0, 0}}, Key{.time = 1.5, .value = {0, 4, 0, 0}}})});
+    climbing.tracks[0].drift = std::array<double, 4>{0, 4, 0, 0};
+    RAWFRAME_EXPECT(yAt(climbing, 1.0) == 3.0);
+    RAWFRAME_EXPECT(yAt(climbing, 1.75) == 4.5);
+    RAWFRAME_EXPECT(yAt(climbing, 0.25) == 1.5);
+    RAWFRAME_EXPECT(sampleTrackAtEnd(climbing, climbing.tracks[0])[1] == 6.0);
+    // Undrifted, the end is the start again.
+    Clip still = climbing;
+    still.tracks[0].drift.reset();
+    RAWFRAME_EXPECT(sampleTrackAtEnd(still, still.tracks[0])[1] == 2.0);
+    // One key drifts across the whole period.
+    Clip strolling = clipOf(Loop::Loop, {moving({Key{.time = 0.0, .value = {0, 0, 0, 0}}})});
+    strolling.tracks[0].drift = std::array<double, 4>{0, 2, 0, 0};
+    RAWFRAME_EXPECT(yAt(strolling, 1.0) == 1.0 && sampleTrackAtEnd(strolling, strolling.tracks[0])[1] == 2.0);
+    // A turn drifts onto the first key.
+    Clip turning =
+        clipOf(Loop::Loop,
+               {Track{.bone = kRoot, .channel = Channel::Rotation, .keys = {Key{.time = 0.0, .value = aboutZ(0)}}}});
+    turning.tracks[0].drift = aboutZ(std::numbers::pi / 2.0);
+    const std::array<double, 4> kHalfway = sampleTrack(turning, turning.tracks[0], 1.0);
+    RAWFRAME_EXPECT(near(kHalfway[2], aboutZ(std::numbers::pi / 4.0)[2]) &&
+                    near(kHalfway[3], aboutZ(std::numbers::pi / 4.0)[3]));
+    // Only the root drifts.
+    Clip reaching = strolling;
+    reaching.tracks[0].bone = kArm;
+    RAWFRAME_EXPECT(refusedWith(BoundClip::bind(std::make_shared<const Clip>(reaching), rig(), kSkeletonId),
+                                AnimationError::BindingInvalid));
+    RAWFRAME_EXPECT(BoundClip::bind(std::make_shared<const Clip>(strolling), rig(), kSkeletonId).has_value());
+}
+
 RAWFRAME_TEST(RotationsTurnBySlerpAlongTheShorterArc) {
     const auto kTurned = [](std::array<double, 4> to, double at) {
         const Clip kClip =

@@ -52,7 +52,12 @@
 // `out` (glTF's CUBICSPLINE). A rotation turns by slerp and never by
 // component, so it has no `cubic`. A looping clip wraps from its last key
 // to its first, and has no key, event, or marker at its duration, which is
-// its start again. A bone's channel has one track. Events and markers are
+// its start again. A looping clip's translation or rotation track of its
+// skeleton's root may declare a `drift` (D134): what one period moves it,
+// added to a translation and turned onto a rotation, so the wrap runs from
+// the last key to the first key moved by it. That is how a walk cycle
+// carries the ground it covers to root motion while its keys stay one
+// period's. A bone's channel has one track. Events and markers are
 // in time order; events of one time fire in the order written. An event's
 // `event` identifies its kind (16 lowercase hex digits) and `name` is its
 // machine name, one to each other within the clip; `relevance` is
@@ -101,6 +106,9 @@ struct Track {
     base::Bits128 bone;
     Channel channel = Channel::Translation;
     std::vector<Key> keys;
+    /// What one period of a looping clip moves the track: a translation,
+    /// or a unit rotation turned onto the first key. None is no drift.
+    std::optional<std::array<double, 4>> drift;
 
     friend bool operator==(const Track&, const Track&) = default;
 };

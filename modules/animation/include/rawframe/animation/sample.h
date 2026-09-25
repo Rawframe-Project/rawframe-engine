@@ -40,7 +40,8 @@ void toModelSpace(std::span<const std::optional<BoneIndex>> parents, const Pose&
 class BoundClip {
 public:
     /// Refuses (`BindingInvalid`) a clip of another skeleton than
-    /// `skeletonId`, or a track of a bone `skeleton` lacks.
+    /// `skeletonId`, a track of a bone `skeleton` lacks, or a drift on a
+    /// bone other than its root.
     [[nodiscard]] static result::Result<BoundClip>
     bind(std::shared_ptr<const Clip> clip, const Skeleton& skeleton, base::Bits128 skeletonId);
 
@@ -63,6 +64,11 @@ private:
 /// A curve's value at `time`: one track's keys, as its clip wraps or holds
 /// them. A rotation is unit.
 [[nodiscard]] std::array<double, 4> sampleTrack(const Clip& clip, const Track& track, double time);
+
+/// A curve's value at the end of a period: at its duration, which for a
+/// looping clip is where the wrap arrives, its first key moved by the
+/// track's drift, rather than the start of the next period.
+[[nodiscard]] std::array<double, 4> sampleTrackAtEnd(const Clip& clip, const Track& track);
 
 /// An event the playhead crossed: its place in the clip's events, and
 /// whether it was crossed playing backwards.

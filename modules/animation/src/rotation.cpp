@@ -59,6 +59,32 @@ std::array<double, 4> normalized(const std::array<double, 4>& rotation) noexcept
     return {rotation[0] / kLength, rotation[1] / kLength, rotation[2] / kLength, rotation[3] / kLength};
 }
 
+std::array<double, 4> multiplied(const std::array<double, 4>& a, const std::array<double, 4>& b) noexcept {
+    return {(a[3] * b[0]) + (a[0] * b[3]) + (a[1] * b[2]) - (a[2] * b[1]),
+            (a[3] * b[1]) - (a[0] * b[2]) + (a[1] * b[3]) + (a[2] * b[0]),
+            (a[3] * b[2]) + (a[0] * b[1]) - (a[1] * b[0]) + (a[2] * b[3]),
+            (a[3] * b[3]) - (a[0] * b[0]) - (a[1] * b[1]) - (a[2] * b[2])};
+}
+
+std::array<double, 4> inverted(const std::array<double, 4>& rotation) noexcept {
+    return {-rotation[0], -rotation[1], -rotation[2], rotation[3]};
+}
+
+std::array<double, 3> rotated(const std::array<double, 4>& rotation, const std::array<double, 3>& vector) noexcept {
+    // v + 2w (q x v) + 2 q x (q x v).
+    const std::array<double, 4>& q = rotation;
+    const std::array<double, 3> kC{(q[1] * vector[2]) - (q[2] * vector[1]),
+                                   (q[2] * vector[0]) - (q[0] * vector[2]),
+                                   (q[0] * vector[1]) - (q[1] * vector[0])};
+    const std::array<double, 3> kCc{
+        (q[1] * kC[2]) - (q[2] * kC[1]), (q[2] * kC[0]) - (q[0] * kC[2]), (q[0] * kC[1]) - (q[1] * kC[0])};
+    std::array<double, 3> made{};
+    for (std::size_t each = 0; each < 3; ++each) {
+        made[each] = vector[each] + (2.0 * q[3] * kC[each]) + (2.0 * kCc[each]);
+    }
+    return made;
+}
+
 std::array<double, 4> slerp(const std::array<double, 4>& from, const std::array<double, 4>& to, double at) noexcept {
     // The shorter arc: q and -q are one rotation.
     const double kDot = (from[0] * to[0]) + (from[1] * to[1]) + (from[2] * to[2]) + (from[3] * to[3]);

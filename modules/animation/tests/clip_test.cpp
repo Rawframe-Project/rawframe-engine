@@ -5,6 +5,7 @@
 #include "rawframe/animation/errors.h"
 #include "rawframe/test/test.h"
 
+#include <array>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -118,6 +119,27 @@ RAWFRAME_TEST(AClipOutOfItsRulesIsRefused) {
     RAWFRAME_EXPECT(refusedWith(writeClip(walk(), {.maximumTracks = 1}), AnimationError::OverLimit));
     RAWFRAME_EXPECT(refusedWith(writeClip(walk(), {.maximumKeys = 2}), AnimationError::OverLimit));
     RAWFRAME_EXPECT(refusedWith(writeClip(walk(), {.maximumEvents = 3}), AnimationError::OverLimit));
+}
+
+RAWFRAME_TEST(ALoopingTrackMayDrift) {
+    // The hips carried a meter along z a period, and the spine a quarter
+    // turn about y.
+    const double kHalf = std::sqrt(0.5);
+    Clip drifting = walk();
+    drifting.tracks[0].drift = std::array<double, 4>{0.0, 0.0, 1.0, 0.0};
+    drifting.tracks[1].drift = std::array<double, 4>{0.0, kHalf, 0.0, kHalf};
+    const auto kText = writeClip(drifting);
+    RAWFRAME_EXPECT(kText.has_value() && kText->contains("\"drift\": ["));
+    RAWFRAME_EXPECT(kText.has_value() && readClip(*kText) == drifting);
+    // Only a looping clip's translation or unit rotation drifts.
+    std::vector<Clip> wrong(4, drifting);
+    wrong[0].loop = Loop::Clamp;
+    wrong[1].tracks[1].drift = std::array<double, 4>{0.0, 1.0, 0.0, 1.0};
+    wrong[2].tracks[0].drift = std::array<double, 4>{0.0, 0.0, 1.0, 1.0};
+    wrong[3].tracks[0].channel = Channel::Scale;
+    for (const Clip& kClip : wrong) {
+        RAWFRAME_EXPECT(refusedWith(writeClip(kClip), AnimationError::ClipInvalid));
+    }
 }
 
 RAWFRAME_TEST(OnlyTheCanonicalClipTextReads) {
