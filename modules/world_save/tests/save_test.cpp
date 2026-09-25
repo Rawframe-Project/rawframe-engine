@@ -47,8 +47,13 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
 SaveDeclaration declaration() {
     return SaveDeclaration{
         .document = "progress",
-        .components = {{.id = Door::kComponentTypeId, .mark = 11, .entityFields = {offsetof(Door, key)}},
-                       {.id = Key::kComponentTypeId, .mark = 12, .entityFields = {}}}};
+        .components = {{.id = Door::kComponentTypeId,
+                        .mark = 11,
+                        .fields = {{.name = "open", .offset = offsetof(Door, open), .kind = FieldKind::I32},
+                                   {.name = "key", .offset = offsetof(Door, key), .kind = FieldKind::Entity}}},
+                       {.id = Key::kComponentTypeId,
+                        .mark = 12,
+                        .fields = {{.name = "teeth", .offset = offsetof(Key, teeth), .kind = FieldKind::I32}}}}};
 }
 
 struct Keys {
@@ -167,17 +172,27 @@ RAWFRAME_TEST(ASaveIsHostileInput) {
     // With the digest made to match: a later format, another namespace, and
     // a byte past the end.
     std::vector<std::byte> later = kSaved;
-    later[8] = std::byte{2};
+    later[8] = std::byte{3};
     RAWFRAME_EXPECT(refusedWith(kRead(redigested(later)), SaveError::TooNew));
     RAWFRAME_EXPECT(
         refusedWith(read(kSaved, declaration(), *kRegistry, base::Bits128{.high = 9, .low = 9}), SaveError::Mismatch));
     std::vector<std::byte> longer = kSaved;
     longer.insert(longer.end() - 32, std::byte{0});
     RAWFRAME_EXPECT(refusedWith(kRead(redigested(longer)), SaveError::Malformed));
-    // A declaration whose door is laid out otherwise.
-    SaveDeclaration changed = declaration();
-    changed.components[0].mark = 99;
-    RAWFRAME_EXPECT(refusedWith(read(kSaved, changed, *kRegistry, kSpace), SaveError::Mismatch));
+    // A declaration whose door is laid out otherwise, with a field it cannot
+    // be migrated to, or with no fields to migrate by.
+    SaveDeclaration narrowed = declaration();
+    narrowed.components[0].mark = 99;
+    narrowed.components[0].fields[0].kind = FieldKind::I16;
+    RAWFRAME_EXPECT(refusedWith(read(kSaved, narrowed, *kRegistry, kSpace), SaveError::Mismatch));
+    SaveDeclaration bare = declaration();
+    bare.components[0].mark = 99;
+    bare.components[0].fields.clear();
+    RAWFRAME_EXPECT(refusedWith(read(kSaved, bare, *kRegistry, kSpace), SaveError::Mismatch));
+    // Another document.
+    SaveDeclaration other = declaration();
+    other.document = "elsewhere";
+    RAWFRAME_EXPECT(refusedWith(read(kSaved, other, *kRegistry, kSpace), SaveError::Mismatch));
     // Over the limits.
     RAWFRAME_EXPECT(
         refusedWith(read(kSaved, declaration(), *kRegistry, kSpace, {.maximumEntities = 1}), SaveError::LimitExceeded));
@@ -252,4 +267,51 @@ RAWFRAME_TEST(OneEntityIsSavedAndAppliedUnderAnIdentityItNeedNotCarry) {
     // Under another identity, it is not this player's.
     RAWFRAME_EXPECT(
         refusedWith(applyTo(*kStaged, declaration(), joined, kNewcomer, kDoorName.id()), SaveError::Mismatch));
+}
+
+namespace {
+
+/// The door a later version of the game lays out: the key first, the open
+/// count widened, and a creak it did not have. Same component identity.
+struct DoorLater {
+    static constexpr schema::ComponentTypeId kComponentTypeId = Door::kComponentTypeId;
+    static constexpr std::string_view kComponentName = "test.door";
+
+    world::EntityHandle key;
+    std::int64_t open = 0;
+    std::int32_t creak = 0;
+    std::uint32_t padding = 0;
+};
+
+} // namespace
+
+RAWFRAME_TEST(ASaveOfAnEarlierDeclarationIsMigratedByFieldName) {
+    const std::vector<std::byte> kSaved = played();
+    schema::RegistryBuilder builder;
+    builder.add<world::Persistent>().add<DoorLater>();
+    const auto kLater = *builder.freeze();
+    // The door as it is now, and the key no longer kept.
+    const SaveDeclaration kNow{
+        .document = "progress",
+        .components = {{.id = Door::kComponentTypeId,
+                        .mark = 21,
+                        .fields = {{.name = "key", .offset = offsetof(DoorLater, key), .kind = FieldKind::Entity},
+                                   {.name = "open", .offset = offsetof(DoorLater, open), .kind = FieldKind::I64},
+                                   {.name = "creak", .offset = offsetof(DoorLater, creak), .kind = FieldKind::I32}}}}};
+    const auto kStaged = read(kSaved, kNow, *kLater, kSpace);
+    RAWFRAME_EXPECT(kStaged.has_value());
+    if (!kStaged.has_value()) {
+        return;
+    }
+    // The key's entity kept only a key, which is dropped, so only the door
+    // is left; its open count widened, its creak new, its key still named.
+    RAWFRAME_EXPECT(kStaged->migrated && kStaged->entities.size() == 1 && kStaged->entities[0].id == kDoorName.id());
+    DoorLater door;
+    std::memcpy(static_cast<void*>(&door), kStaged->entities[0].values[0]->data(), sizeof door);
+    RAWFRAME_EXPECT(door.open == 1 && door.creak == 0 && door.key.isNull());
+    RAWFRAME_EXPECT(kStaged->entities[0].references[0].size() == 1 &&
+                    kStaged->entities[0].references[0][0] == kKeyName.id());
+    // Read under the declaration it was written with, nothing migrates.
+    const auto kRegistry = registry();
+    RAWFRAME_EXPECT(!read(kSaved, declaration(), *kRegistry, kSpace)->migrated);
 }

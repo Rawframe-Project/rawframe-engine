@@ -8,13 +8,20 @@
 // through one command buffer at a barrier, completely or not at all. Where
 // the bytes are kept is a storage provider's business (store.h).
 //
+// A save written under an older declaration of the same document is
+// migrated as it is read, by field name, with no game code (ADR-0011): a
+// field kept keeps its value, widened if its kind grew; a field added
+// starts at nought; a field or component removed is dropped; a component
+// added is absent. Any other change is refused.
+//
 // The container, little-endian throughout:
 //
-//   magic "RFSAVE\0\0", format u32 (1)
+//   magic "RFSAVE\0\0", format u32 (2)
 //   namespace: 16 bytes, the persistence namespace identities belong to
 //   document: u16 length, its name's bytes
 //   components: u32 count, then each: type id 16 bytes, layout mark u64,
-//     size u32, entity field count u32, each field's offset u32
+//     size u32, field count u16, then each field: name (u8 length, bytes),
+//     offset u32, kind u8
 //   entities: u32 count, then each, in ascending identity: identity 16
 //     bytes, a u64 of which components it has, each present component's
 //     value with its entity fields zeroed, then for each of those entity
@@ -38,16 +45,44 @@
 
 namespace rawframe::world_save {
 
-inline constexpr std::uint32_t kSaveFormat = 1;
-/// The most components one document keeps.
+inline constexpr std::uint32_t kSaveFormat = 2;
+/// The most components one document keeps, and fields one component has.
 inline constexpr std::size_t kMaximumSavedComponents = 64;
+inline constexpr std::size_t kMaximumSavedFields = 256;
 
-/// One component a document keeps, with what it must be: its layout's mark,
-/// so a changed shape is refused, and where its value holds entities.
+/// What a field holds; the values are the container's.
+enum class FieldKind : std::uint8_t {
+    I8 = 1,
+    I16 = 2,
+    I32 = 3,
+    I64 = 4,
+    U8 = 5,
+    U16 = 6,
+    U32 = 7,
+    U64 = 8,
+    F32 = 9,
+    F64 = 10,
+    Bool = 11,
+    /// An EntityHandle, saved as the persistent identity it names.
+    Entity = 12,
+};
+
+struct SavedField {
+    /// 1 to 255 bytes, unique within its component.
+    std::string name;
+    std::uint32_t offset = 0;
+    FieldKind kind = FieldKind::U8;
+
+    friend bool operator==(const SavedField&, const SavedField&) = default;
+};
+
+/// One component a document keeps: its layout's mark and its fields, which
+/// a save written under another layout is migrated by. A component without
+/// fields is saved and read whole, and cannot be migrated.
 struct SavedComponent {
     schema::ComponentTypeId id;
     std::uint64_t mark = 0;
-    std::vector<std::uint32_t> entityFields;
+    std::vector<SavedField> fields;
 };
 
 struct SaveDeclaration {
@@ -80,7 +115,8 @@ capture(world::World& world, const SaveDeclaration& declaration, base::Bits128 s
                                                                    world::PersistentEntityId as,
                                                                    const SaveLimits& limits = {});
 
-/// A read save: every value checked, waiting to be applied.
+/// A read save: every value checked, in the declaration's layout, waiting
+/// to be applied.
 struct StagedSave {
     struct Entity {
         world::PersistentEntityId id;
@@ -90,12 +126,16 @@ struct StagedSave {
         std::vector<std::vector<world::PersistentEntityId>> references;
     };
     std::vector<Entity> entities;
+    /// Whether it was written under another declaration and migrated.
+    bool migrated = false;
 };
 
-/// Reads `bytes` as a save of `declaration` in `space` and stages it.
+/// Reads `bytes` as a save of `declaration` in `space` and stages it,
+/// migrated if it was written under an older declaration of the document.
 /// Nothing is trusted: the digest first, then the format (`too_new` for a
-/// later one), the namespace, document, and declaration, every bound, and
-/// the order of entities.
+/// later one), the namespace and document, the declaration it was written
+/// under (`mismatch` when it cannot be migrated), every bound, and the
+/// order of entities.
 [[nodiscard]] result::Result<StagedSave> read(std::span<const std::byte> bytes,
                                               const SaveDeclaration& declaration,
                                               const schema::SchemaRegistry& registry,

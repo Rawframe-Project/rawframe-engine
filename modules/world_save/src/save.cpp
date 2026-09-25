@@ -93,7 +93,68 @@ private:
 struct Resolved {
     schema::ComponentRuntimeId runtime;
     const schema::ComponentDescriptor* descriptor = nullptr;
+    /// Offsets of its entity fields, in field order.
+    std::vector<std::uint32_t> entities;
 };
+
+std::size_t widthOf(FieldKind kind) noexcept {
+    switch (kind) {
+    case FieldKind::I8:
+    case FieldKind::U8:
+    case FieldKind::Bool:
+        return 1;
+    case FieldKind::I16:
+    case FieldKind::U16:
+        return 2;
+    case FieldKind::I32:
+    case FieldKind::U32:
+    case FieldKind::F32:
+        return 4;
+    case FieldKind::I64:
+    case FieldKind::U64:
+    case FieldKind::F64:
+    case FieldKind::Entity:
+        return 8;
+    }
+    return 0;
+}
+
+bool knownKind(std::uint8_t kind) noexcept {
+    return kind >= static_cast<std::uint8_t>(FieldKind::I8) && kind <= static_cast<std::uint8_t>(FieldKind::Entity);
+}
+
+/// Whether a component's fields are named once, sized to a known kind,
+/// inside a value of `size`, and apart.
+bool fieldsFit(const std::vector<SavedField>& fields, std::size_t size) {
+    if (fields.size() > kMaximumSavedFields) {
+        return false;
+    }
+    for (std::size_t index = 0; index < fields.size(); ++index) {
+        const SavedField& field = fields[index];
+        if (field.name.empty() || field.name.size() > 255 || !knownKind(static_cast<std::uint8_t>(field.kind)) ||
+            field.offset + widthOf(field.kind) > size) {
+            return false;
+        }
+        for (std::size_t other = 0; other < index; ++other) {
+            const SavedField& before = fields[other];
+            if (before.name == field.name || (field.offset < before.offset + widthOf(before.kind) &&
+                                              before.offset < field.offset + widthOf(field.kind))) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+std::vector<std::uint32_t> entityOffsets(const std::vector<SavedField>& fields) {
+    std::vector<std::uint32_t> offsets;
+    for (const SavedField& field : fields) {
+        if (field.kind == FieldKind::Entity) {
+            offsets.push_back(field.offset);
+        }
+    }
+    return offsets;
+}
 
 result::Result<std::vector<Resolved>> resolve(const SaveDeclaration& declaration,
                                               const schema::SchemaRegistry& registry) {
@@ -122,14 +183,13 @@ result::Result<std::vector<Resolved>> resolve(const SaveDeclaration& declaration
                         SaveError::InvalidDeclaration,
                         "a saved component is plain data with a value");
         }
-        for (const std::uint32_t kOffset : component.entityFields) {
-            if (kOffset + sizeof(world::EntityHandle) > descriptor.size) {
-                return fail(result::ErrorClass::InvalidArgument,
-                            SaveError::InvalidDeclaration,
-                            "a saved component's entity field lies outside its value");
-            }
+        if (!fieldsFit(component.fields, descriptor.size)) {
+            return fail(result::ErrorClass::InvalidArgument,
+                        SaveError::InvalidDeclaration,
+                        "a saved component's fields are named once, of a known kind, apart, inside its value");
         }
-        resolved.push_back(Resolved{.runtime = *runtime, .descriptor = &descriptor});
+        resolved.push_back(
+            Resolved{.runtime = *runtime, .descriptor = &descriptor, .entities = entityOffsets(component.fields)});
     }
     return resolved;
 }
@@ -177,9 +237,12 @@ void writeHeader(Writer& writer,
         writer.identity(component.id.value);
         writer.number(component.mark);
         writer.number(static_cast<std::uint32_t>(resolved[index].descriptor->size));
-        writer.number(static_cast<std::uint32_t>(component.entityFields.size()));
-        for (const std::uint32_t kOffset : component.entityFields) {
-            writer.number(kOffset);
+        writer.number(static_cast<std::uint16_t>(component.fields.size()));
+        for (const SavedField& field : component.fields) {
+            writer.number(static_cast<std::uint8_t>(field.name.size()));
+            writer.bytes(std::as_bytes(std::span{field.name}));
+            writer.number(field.offset);
+            writer.number(static_cast<std::uint8_t>(field.kind));
         }
     }
 }
@@ -228,7 +291,7 @@ captureOf(world::World& world,
             }
             const auto* value = static_cast<const std::byte*>(world.getErased(entity, kResolved[index].runtime));
             std::vector<std::byte> bytes(value, value + kResolved[index].descriptor->size);
-            for (const std::uint32_t kOffset : declaration.components[index].entityFields) {
+            for (const std::uint32_t kOffset : kResolved[index].entities) {
                 world::EntityHandle named;
                 std::memcpy(&named, bytes.data() + kOffset, sizeof named);
                 std::memset(bytes.data() + kOffset, 0, sizeof named);
@@ -285,6 +348,175 @@ result::Result<std::vector<std::byte>> captureEntity(world::World& world,
     return captureOf(world, declaration, space, limits, {{as, entity}});
 }
 
+namespace {
+
+/// A component as a save was written: its declaration there, and what it
+/// becomes here.
+struct Written {
+    schema::ComponentTypeId id;
+    std::uint32_t size = 0;
+    std::vector<SavedField> fields;
+    std::vector<std::uint32_t> entities;
+    /// Its place in this declaration; none when it was dropped since.
+    std::optional<std::size_t> declared;
+    /// Whether it is laid out as this declaration lays it out.
+    bool same = false;
+};
+
+bool isSigned(FieldKind kind) noexcept {
+    return kind == FieldKind::I8 || kind == FieldKind::I16 || kind == FieldKind::I32 || kind == FieldKind::I64;
+}
+
+bool isUnsigned(FieldKind kind) noexcept {
+    return kind == FieldKind::U8 || kind == FieldKind::U16 || kind == FieldKind::U32 || kind == FieldKind::U64;
+}
+
+/// Whether a value of `from` becomes one of `to` exactly: the same kind, an
+/// integer into a wider one that holds every value, an integer into a real
+/// that holds every value, or a real into a wider real.
+bool widens(FieldKind from, FieldKind to) noexcept {
+    if (from == to) {
+        return true;
+    }
+    const std::size_t kFrom = widthOf(from);
+    const std::size_t kTo = widthOf(to);
+    if (isSigned(from)) {
+        return (isSigned(to) && kTo > kFrom) || (to == FieldKind::F32 && kFrom <= 2) ||
+               (to == FieldKind::F64 && kFrom <= 4);
+    }
+    if (isUnsigned(from)) {
+        return ((isUnsigned(to) || isSigned(to)) && kTo > kFrom) || (to == FieldKind::F32 && kFrom <= 2) ||
+               (to == FieldKind::F64 && kFrom <= 4);
+    }
+    return from == FieldKind::F32 && to == FieldKind::F64;
+}
+
+/// Writes the value of kind `from` at `in` as kind `to` at `out`; the kinds
+/// widen.
+void widen(const std::byte* in, FieldKind from, std::byte* out, FieldKind to) noexcept {
+    if (from == to) {
+        std::memcpy(out, in, widthOf(from));
+        return;
+    }
+    std::uint64_t bits = 0;
+    std::memcpy(&bits, in, widthOf(from));
+    double real = 0;
+    std::int64_t whole = 0;
+    if (from == FieldKind::F32) {
+        float single = 0;
+        std::memcpy(&single, in, sizeof single);
+        real = single;
+    } else if (isSigned(from)) {
+        const unsigned kShift = 64U - (8U * static_cast<unsigned>(widthOf(from)));
+        whole = static_cast<std::int64_t>(bits << kShift) >> kShift;
+        real = static_cast<double>(whole);
+    } else {
+        whole = static_cast<std::int64_t>(bits);
+        real = static_cast<double>(bits);
+    }
+    if (to == FieldKind::F64) {
+        std::memcpy(out, &real, sizeof real);
+    } else if (to == FieldKind::F32) {
+        const auto kSingle = static_cast<float>(real);
+        std::memcpy(out, &kSingle, sizeof kSingle);
+    } else {
+        std::memcpy(out, &whole, widthOf(to));
+    }
+}
+
+/// Reads one component of the declaration a save was written under.
+result::Result<Written>
+readComponent(Reader& reader, const SaveDeclaration& declaration, const std::vector<Resolved>& resolved) {
+    Written read;
+    RAWFRAME_TRY_ASSIGN(const base::Bits128 kId, reader.identity());
+    read.id = schema::ComponentTypeId{kId};
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kMark, reader.number<std::uint64_t>());
+    RAWFRAME_TRY_ASSIGN(read.size, reader.number<std::uint32_t>());
+    RAWFRAME_TRY_ASSIGN(const std::uint16_t kFields, reader.number<std::uint16_t>());
+    if (read.size == 0 || read.size > (std::uint32_t{1} << 20U) || kFields > kMaximumSavedFields) {
+        return malformed("a saved component is 1 byte to 1 MiB with at most 256 fields");
+    }
+    for (std::uint16_t index = 0; index < kFields; ++index) {
+        SavedField field;
+        RAWFRAME_TRY_ASSIGN(const std::uint8_t kLength, reader.number<std::uint8_t>());
+        RAWFRAME_TRY_ASSIGN(const auto kName, reader.bytes(kLength));
+        for (const std::byte kByte : kName) {
+            field.name.push_back(static_cast<char>(kByte));
+        }
+        RAWFRAME_TRY_ASSIGN(field.offset, reader.number<std::uint32_t>());
+        RAWFRAME_TRY_ASSIGN(const std::uint8_t kKind, reader.number<std::uint8_t>());
+        if (!knownKind(kKind)) {
+            return malformed("a saved field of no kind this engine knows");
+        }
+        field.kind = static_cast<FieldKind>(kKind);
+        read.fields.push_back(std::move(field));
+    }
+    if (!fieldsFit(read.fields, read.size)) {
+        return malformed("a saved component's fields overlap, repeat a name, or lie outside its value");
+    }
+    read.entities = entityOffsets(read.fields);
+    const auto kDeclared = std::ranges::find(declaration.components, read.id, &SavedComponent::id);
+    if (kDeclared == declaration.components.end()) {
+        return read;
+    }
+    const auto kPlace = static_cast<std::size_t>(kDeclared - declaration.components.begin());
+    read.declared = kPlace;
+    read.same =
+        kMark == kDeclared->mark && read.size == resolved[kPlace].descriptor->size && read.fields == kDeclared->fields;
+    if (read.same) {
+        return read;
+    }
+    // Migrated by field name: every field both have must widen, and a
+    // component without fields on either side cannot be.
+    bool fits = !read.fields.empty() && !kDeclared->fields.empty();
+    for (const SavedField& field : kDeclared->fields) {
+        const auto kWas = std::ranges::find(read.fields, field.name, &SavedField::name);
+        fits = fits && (kWas == read.fields.end() || widens(kWas->kind, field.kind));
+    }
+    if (!fits) {
+        return fail(result::ErrorClass::FailedPrecondition,
+                    SaveError::Mismatch,
+                    "a save's component changed in a way no migration covers: a field's kind narrowed, or it has no "
+                    "fields");
+    }
+    return read;
+}
+
+/// A written value, and what its entity fields name, as the declared
+/// component lays it out.
+void convert(const Written& from,
+             std::span<const std::byte> raw,
+             const std::vector<world::PersistentEntityId>& named,
+             const SavedComponent& to,
+             const schema::ComponentDescriptor& descriptor,
+             std::optional<std::vector<std::byte>>& value,
+             std::vector<world::PersistentEntityId>& references) {
+    if (from.same) {
+        value.emplace(raw.begin(), raw.end());
+        references = named;
+        return;
+    }
+    value.emplace(descriptor.size, std::byte{0});
+    references.clear();
+    for (const SavedField& field : to.fields) {
+        const auto kWas = std::ranges::find(from.fields, field.name, &SavedField::name);
+        if (field.kind == FieldKind::Entity) {
+            world::PersistentEntityId target;
+            if (kWas != from.fields.end()) {
+                const auto kAt = std::ranges::find(from.entities, kWas->offset) - from.entities.begin();
+                target = named[static_cast<std::size_t>(kAt)];
+            }
+            references.push_back(target);
+            continue;
+        }
+        if (kWas != from.fields.end()) {
+            widen(raw.data() + kWas->offset, kWas->kind, value->data() + field.offset, field.kind);
+        }
+    }
+}
+
+} // namespace
+
 result::Result<StagedSave> read(std::span<const std::byte> bytes,
                                 const SaveDeclaration& declaration,
                                 const schema::SchemaRegistry& registry,
@@ -315,15 +547,36 @@ result::Result<StagedSave> read(std::span<const std::byte> bytes,
     if (kFormat != kSaveFormat) {
         return malformed("a save of no format this engine knows");
     }
-    // What it says it is must be exactly what is asked for.
-    Writer expected;
-    writeHeader(expected, declaration, kResolved, space);
-    const auto kHeader = std::span{expected.out()}.subspan(kMagic.size() + sizeof(std::uint32_t));
-    RAWFRAME_TRY_ASSIGN(const auto kHeaderRead, reader.bytes(std::min(kHeader.size(), reader.remaining())));
-    if (!std::ranges::equal(kHeaderRead, kHeader)) {
-        return fail(result::ErrorClass::FailedPrecondition,
-                    SaveError::Mismatch,
-                    "a save of another namespace, document, or declaration");
+    RAWFRAME_TRY_ASSIGN(const base::Bits128 kSpace, reader.identity());
+    RAWFRAME_TRY_ASSIGN(const std::uint16_t kNameLength, reader.number<std::uint16_t>());
+    RAWFRAME_TRY_ASSIGN(const auto kName, reader.bytes(kNameLength));
+    if (kSpace != space || !std::ranges::equal(kName, std::as_bytes(std::span{declaration.document}))) {
+        return fail(
+            result::ErrorClass::FailedPrecondition, SaveError::Mismatch, "a save of another namespace or document");
+    }
+
+    // The declaration it was written under, and how each of its components
+    // becomes one of this declaration's.
+    RAWFRAME_TRY_ASSIGN(const std::uint32_t kComponents, reader.number<std::uint32_t>());
+    if (kComponents == 0 || kComponents > kMaximumSavedComponents) {
+        return malformed("a save keeps 1 to 64 components");
+    }
+    std::vector<Written> written;
+    bool migrated = false;
+    for (std::uint32_t index = 0; index < kComponents; ++index) {
+        RAWFRAME_TRY_ASSIGN(Written read, readComponent(reader, declaration, kResolved));
+        if (std::ranges::any_of(written, [&read](const Written& before) {
+                return before.id == read.id;
+            })) {
+            return malformed("a save keeps a component once");
+        }
+        migrated = migrated || !read.same;
+        written.push_back(std::move(read));
+    }
+    for (const SavedComponent& component : declaration.components) {
+        migrated = migrated || std::ranges::none_of(written, [&component](const Written& each) {
+                       return each.id == component.id;
+                   });
     }
 
     RAWFRAME_TRY_ASSIGN(const std::uint32_t kCount, reader.number<std::uint32_t>());
@@ -332,45 +585,65 @@ result::Result<StagedSave> read(std::span<const std::byte> bytes,
                     SaveError::LimitExceeded,
                     "a save holds more entities than its limit");
     }
-    StagedSave staged;
+    StagedSave staged{.entities = {}, .migrated = migrated};
     staged.entities.reserve(kCount);
+    world::PersistentEntityId last;
+    const std::uint64_t kWritten = written.size() == 64 ? ~std::uint64_t{0} : (std::uint64_t{1} << written.size()) - 1U;
     for (std::uint32_t index = 0; index < kCount; ++index) {
-        StagedSave::Entity& entity = staged.entities.emplace_back();
         RAWFRAME_TRY_ASSIGN(const base::Bits128 kId, reader.identity());
-        entity.id = world::PersistentEntityId{kId};
-        if (kId == base::Bits128{} || (index > 0 && !(staged.entities[index - 1].id < entity.id))) {
+        const world::PersistentEntityId kEntity{kId};
+        if (kId == base::Bits128{} || (index > 0 && !(last < kEntity))) {
             return malformed("a save's entities are named and in ascending identity");
         }
+        last = kEntity;
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kPresent, reader.number<std::uint64_t>());
-        const std::uint64_t kDeclared =
-            kResolved.size() == 64 ? ~std::uint64_t{0} : (std::uint64_t{1} << kResolved.size()) - 1U;
-        if (kPresent == 0 || (kPresent & ~kDeclared) != 0) {
+        if (kPresent == 0 || (kPresent & ~kWritten) != 0) {
             return malformed("a saved entity has some of its document's components and no others");
         }
-        entity.values.resize(kResolved.size());
-        entity.references.resize(kResolved.size());
-        for (std::size_t component = 0; component < kResolved.size(); ++component) {
+        std::vector<std::span<const std::byte>> raw(written.size());
+        for (std::size_t component = 0; component < written.size(); ++component) {
             if ((kPresent & (std::uint64_t{1} << component)) == 0) {
                 continue;
             }
-            RAWFRAME_TRY_ASSIGN(const auto kValue, reader.bytes(kResolved[component].descriptor->size));
-            entity.values[component].emplace(kValue.begin(), kValue.end());
-            for (const std::uint32_t kOffset : declaration.components[component].entityFields) {
-                if (std::ranges::any_of(kValue.subspan(kOffset, sizeof(world::EntityHandle)), [](std::byte held) {
-                        return held != std::byte{0};
-                    })) {
+            RAWFRAME_TRY_ASSIGN(raw[component], reader.bytes(written[component].size));
+            for (const std::uint32_t kOffset : written[component].entities) {
+                if (std::ranges::any_of(raw[component].subspan(kOffset, sizeof(world::EntityHandle)),
+                                        [](std::byte held) {
+                                            return held != std::byte{0};
+                                        })) {
                     return malformed("a saved value's entity field holds bytes of its own");
                 }
             }
         }
-        for (std::size_t component = 0; component < kResolved.size(); ++component) {
-            if (!entity.values[component].has_value()) {
+        std::vector<std::vector<world::PersistentEntityId>> named(written.size());
+        for (std::size_t component = 0; component < written.size(); ++component) {
+            for (std::size_t field = 0; !raw[component].empty() && field < written[component].entities.size();
+                 ++field) {
+                RAWFRAME_TRY_ASSIGN(const base::Bits128 kNamed, reader.identity());
+                named[component].push_back(world::PersistentEntityId{kNamed});
+            }
+        }
+        StagedSave::Entity entity{.id = kEntity, .values = {}, .references = {}};
+        entity.values.resize(kResolved.size());
+        entity.references.resize(kResolved.size());
+        bool kept = false;
+        for (std::size_t component = 0; component < written.size(); ++component) {
+            const Written& kFrom = written[component];
+            if (raw[component].empty() || !kFrom.declared.has_value()) {
                 continue;
             }
-            for (std::size_t field = 0; field < declaration.components[component].entityFields.size(); ++field) {
-                RAWFRAME_TRY_ASSIGN(const base::Bits128 kNamed, reader.identity());
-                entity.references[component].push_back(world::PersistentEntityId{kNamed});
-            }
+            convert(kFrom,
+                    raw[component],
+                    named[component],
+                    declaration.components[*kFrom.declared],
+                    *kResolved[*kFrom.declared].descriptor,
+                    entity.values[*kFrom.declared],
+                    entity.references[*kFrom.declared]);
+            kept = true;
+        }
+        // An entity whose every component was dropped is no longer kept.
+        if (kept) {
+            staged.entities.push_back(std::move(entity));
         }
     }
     if (reader.remaining() != 0) {
@@ -471,7 +744,7 @@ result::Result<Applied> applyWith(const StagedSave& staged,
                 continue;
             }
             std::vector<std::byte> value = *entity.values[component];
-            const std::vector<std::uint32_t>& fields = declaration.components[component].entityFields;
+            const std::vector<std::uint32_t>& fields = kResolved[component].entities;
             std::vector<std::size_t> offsets;
             for (std::size_t field = 0; field < fields.size(); ++field) {
                 const world::EntityHandle kNamed = kHandleOf(entity.references[component][field]);
