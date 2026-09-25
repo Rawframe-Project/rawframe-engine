@@ -3,7 +3,7 @@
 # ticks in the Host's run_worlds phase. Separate from rawframe.world because the
 # World must not depend on composition (SPEC-0007).
 rawframe_module(NAME world_runtime
-    SOURCES src/checkpoints.cpp src/saves.cpp src/world_runtime.cpp
+    SOURCES src/checkpoints.cpp src/players.cpp src/saves.cpp src/world_runtime.cpp
     DEPS world_save world_snapshot world composition schema execution diagnostics result base
 )
 

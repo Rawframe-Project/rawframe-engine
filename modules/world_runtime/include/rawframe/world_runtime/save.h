@@ -15,8 +15,11 @@ public:
     SavePlan& operator=(const SavePlan&) = delete;
     virtual ~SavePlan() = default;
 
-    /// The save document the game declares, or why it has none.
+    /// The World's save document, or why the game declares none.
     [[nodiscard]] virtual result::Result<const world_save::SaveDeclaration*> saveDeclaration() const = 0;
+    /// The document kept for each player, of the player's entity; null for
+    /// a game that keeps none.
+    [[nodiscard]] virtual const world_save::SaveDeclaration* playerSaveDeclaration() const noexcept = 0;
 };
 
 inline constexpr composition::Capability<SavePlan> kSavePlan{"rawframe.world.save_plan"};

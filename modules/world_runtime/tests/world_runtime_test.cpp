@@ -5,6 +5,7 @@
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
 #include "rawframe/world_runtime/errors.h"
+#include "rawframe/world_runtime/players.h"
 #include "rawframe/world_runtime/registrar.h"
 #include "rawframe/world_runtime/simulation.h"
 
@@ -172,4 +173,19 @@ RAWFRAME_TEST(BadWorldSettingsFailTheStart) {
         RAWFRAME_EXPECT(!composition.start().has_value());
     }
     movement = nullptr;
+}
+
+RAWFRAME_TEST(APlayersIdentityIsTheirSessions) {
+    const auto kBytes = [](std::string_view text) {
+        return std::as_bytes(std::span{text.data(), text.size()});
+    };
+    // A versioned derivation: this value, from SHA-256 of the label and
+    // "runner-0", is its identity.
+    const auto kRunner = world_runtime::playerIdentity(kBytes("runner-0"));
+    RAWFRAME_EXPECT(kRunner.has_value() && kRunner->value.high == 0x26ad4e77a953e78c &&
+                    kRunner->value.low == 0xf2efa79ded3521f7);
+    RAWFRAME_EXPECT(world_runtime::playerIdentity(kBytes("runner-0")) == kRunner &&
+                    world_runtime::playerIdentity(kBytes("runner-1")) != kRunner);
+    // Asking for no session is playing without one.
+    RAWFRAME_EXPECT(!world_runtime::playerIdentity({}).has_value());
 }
