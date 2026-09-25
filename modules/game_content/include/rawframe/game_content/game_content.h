@@ -9,6 +9,7 @@
 #include "rawframe/content/store.h"
 #include "rawframe/result/result.h"
 
+#include <optional>
 #include <span>
 
 namespace rawframe::game_content {
@@ -27,6 +28,9 @@ public:
     /// generation. A family admits before it asks for anything. Refused
     /// when the process has no cooked content.
     [[nodiscard]] virtual result::Status admit(std::span<const content::AdmittedRepresentation> representations) = 0;
+    /// The CompositionId of the Composition this content is, if it is one
+    /// (SPEC-0021): what peers must agree on before play (ADR-0023).
+    [[nodiscard]] virtual const std::optional<base::Sha256Digest>& compositionId() const noexcept = 0;
 };
 
 inline constexpr composition::Capability<GameContent> kGameContent{"rawframe.content.game"};

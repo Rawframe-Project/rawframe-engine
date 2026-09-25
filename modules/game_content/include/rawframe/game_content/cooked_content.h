@@ -56,8 +56,7 @@ public:
     /// The generation of the catalog last published; 0 before any.
     [[nodiscard]] std::uint64_t generation() const noexcept;
 
-    /// The CompositionId of the Composition this content is, if it is one.
-    [[nodiscard]] const std::optional<base::Sha256Digest>& compositionId() const noexcept;
+    [[nodiscard]] const std::optional<base::Sha256Digest>& compositionId() const noexcept override;
 
 private:
     CookedContent() = default;
