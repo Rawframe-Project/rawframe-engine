@@ -33,6 +33,8 @@ constexpr EventIdentity kStartFailed{"host", "start_failed"};
 constexpr EventIdentity kStarted{"host", "started"};
 constexpr EventIdentity kStopping{"host", "stopping"};
 constexpr EventIdentity kStopped{"host", "stopped"};
+constexpr EventIdentity kLifecycle{"host", "lifecycle"};
+constexpr EventIdentity kHealth{"host", "health"};
 
 // The sink's buffer, allocated once. At 120 iterations per second a drain
 // happens every 8 ms, so this holds far more than one iteration writes.
@@ -92,6 +94,7 @@ struct Settings {
     std::optional<std::size_t> cpuWorkers;
     std::size_t ioWorkers = execution::kDefaultBlockingIoWorkers;
     execution::MonotonicDuration shutdownBudget = execution::MonotonicDuration::fromSeconds(5);
+    execution::MonotonicDuration drain = execution::MonotonicDuration::fromSeconds(5);
     Severity minimumSeverity = Severity::Info;
 };
 
@@ -124,6 +127,11 @@ std::optional<std::string_view> readSettings(const composition::Configuration& c
         return "host.shutdown_budget_ms";
     }
     settings.shutdownBudget = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kBudget));
+    const auto kDrain = configuration.unsignedInteger("host.drain_ms", 5000);
+    if (!kDrain.has_value() || *kDrain > 600'000) {
+        return "host.drain_ms";
+    }
+    settings.drain = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kDrain));
     if (const auto kSeverity = configuration.text("diagnostics.minimum_severity")) {
         const auto kParsed = severityNamed(*kSeverity);
         if (!kParsed) {
@@ -169,15 +177,36 @@ HostExit runHost(const HostRequest& request) noexcept {
                                                            .wall = &wallNanoseconds},
                                kSinks};
     const diagnostics::Emitter kEmitter = router.emitter();
+
+    // SPEC-0012's lifecycle, each move logged. Participants read it through
+    // their context; only this thread moves it.
+    composition::HostLifecycle lifecycle;
+    const auto kEnter = [&](composition::HostState next, std::string_view reason) {
+        const composition::HostState kFrom = lifecycle.state();
+        if (lifecycle.enter(next)) {
+            kEmitter.log(Severity::Info,
+                         kLifecycle,
+                         "host lifecycle",
+                         {diagnostics::field("state", composition::describe(next)),
+                          diagnostics::field("from", composition::describe(kFrom)),
+                          diagnostics::field("reason", reason)});
+        }
+    };
+    kEmitter.log(Severity::Info,
+                 kLifecycle,
+                 "host lifecycle",
+                 {diagnostics::field("state", composition::describe(composition::HostState::Starting))});
     if (kBadKey) {
         kEmitter.log(Severity::Critical,
                      kBadConfiguration,
                      "a host setting is malformed or out of range",
                      {diagnostics::field("key", *kBadKey)});
+        kEnter(composition::HostState::Failed, "bad_configuration");
         kDrain();
         return HostExit::StartupFailed;
     }
 
+    kEnter(composition::HostState::Preparing, "configured");
     execution::Executor cpu{execution::ExecutorSettings{
         .kind = execution::ExecutorKind::Cpu, .workers = settings.cpuWorkers, .clock = &clock, .emitter = kEmitter}};
     execution::Executor io{execution::ExecutorSettings{.kind = execution::ExecutorKind::BlockingIo,
@@ -206,6 +235,7 @@ HostExit runHost(const HostRequest& request) noexcept {
                           diagnostics::field("subject", std::string_view{problem.subject})});
         }
         kEmitter.log(Severity::Critical, kPlanRefused, "the composition plan was refused");
+        kEnter(composition::HostState::Failed, "plan_refused");
         kShutDown();
         kDrain();
         return HostExit::StartupFailed;
@@ -217,12 +247,14 @@ HostExit runHost(const HostRequest& request) noexcept {
                                                                    .cpu = &cpu,
                                                                    .blockingIo = &io,
                                                                    .emitter = kEmitter,
-                                                                   .configuration = &configuration}};
+                                                                   .configuration = &configuration,
+                                                                   .lifecycle = &lifecycle}};
     if (auto started = composition.start(); !started.has_value()) {
         kEmitter.log(Severity::Critical,
                      kStartFailed,
                      started.error().description(),
                      {diagnostics::field("errorClass", result::describe(started.error().errorClass()))});
+        kEnter(composition::HostState::Failed, "start_failed");
         kShutDown();
         kDrain();
         return HostExit::StartupFailed;
@@ -232,14 +264,40 @@ HostExit runHost(const HostRequest& request) noexcept {
                  "host started",
                  {diagnostics::field("participants", plan->participants().size()),
                   diagnostics::field("cpuWorkers", cpu.workerCount())});
+    kEnter(composition::HostState::Ready, "started");
+    // Immediate activation, the only policy until a supervised one is
+    // accepted: admission opens as soon as the Host is ready.
+    kEnter(composition::HostState::Active, "immediate");
 
     // The Host schedule. The host thread is not a CPU worker, so pacing by
     // sleeping here blocks no pool.
     const execution::MonotonicDuration kPeriod{static_cast<std::int64_t>(1'000'000'000 / settings.iterationRate)};
     execution::MonotonicInstant next = clock.now();
     std::uint64_t iteration = 0;
-    while ((request.stopRequested == nullptr || !request.stopRequested->load(std::memory_order_acquire)) &&
-           (settings.maximumIterations == 0 || iteration < settings.maximumIterations)) {
+    HostExit exit = HostExit::Stopped;
+    composition::HealthReport health;
+    execution::MonotonicInstant drainStart = clock.now();
+    const auto kDrainFrom = [&](std::string_view reason) {
+        drainStart = clock.now();
+        kEnter(composition::HostState::Draining, reason);
+    };
+    // A stop request, or an unhealthy report, drains: admission closes and
+    // play goes on until no participant serves a connection or the drain's
+    // time is up. Repeated requests change nothing. The iteration bound ends
+    // the run where it falls, draining or not.
+    while (settings.maximumIterations == 0 || iteration < settings.maximumIterations) {
+        if (lifecycle.state() == composition::HostState::Active) {
+            if (request.stopRequested != nullptr && request.stopRequested->load(std::memory_order_acquire)) {
+                kDrainFrom("stop_requested");
+            } else if (health.health == composition::Health::Unhealthy) {
+                exit = HostExit::Unhealthy;
+                kDrainFrom("unhealthy");
+            }
+        }
+        if (lifecycle.state() == composition::HostState::Draining &&
+            (composition.connections() == 0 || clock.now() - drainStart >= settings.drain)) {
+            break;
+        }
         const composition::HostFrame kFrame{.iteration = iteration, .now = clock.now()};
         for (std::size_t phase = 0; phase < composition::kHostPhaseCount; ++phase) {
             composition.runHostPhase(static_cast<composition::HostPhase>(phase), kFrame);
@@ -248,6 +306,15 @@ HostExit runHost(const HostRequest& request) noexcept {
             }
         }
         ++iteration;
+        if (const composition::HealthReport kReport = composition.health(); kReport.health != health.health) {
+            health = kReport;
+            kEmitter.log(health.health == composition::Health::Healthy ? Severity::Info : Severity::Warning,
+                         kHealth,
+                         "host health",
+                         {diagnostics::field("health", composition::describe(health.health)),
+                          diagnostics::field("reason", health.reason),
+                          diagnostics::field("participant", health.participant)});
+        }
         next = next + kPeriod;
         const execution::MonotonicInstant kNow = clock.now();
         if (kNow < next) {
@@ -259,13 +326,28 @@ HostExit runHost(const HostRequest& request) noexcept {
         }
     }
 
-    kEmitter.log(Severity::Info, kStopping, "host stopping", {diagnostics::field("iterations", iteration)});
+    if (lifecycle.state() == composition::HostState::Active) {
+        kDrainFrom("iteration_bound");
+    }
+    const std::size_t kConnections = composition.connections();
+    kEnter(composition::HostState::Stopping, kConnections == 0 ? "drained" : "drain_ended");
+    kEmitter.log(Severity::Info,
+                 kStopping,
+                 "host stopping",
+                 {diagnostics::field("iterations", iteration),
+                  diagnostics::field("drainMs", (clock.now() - drainStart).nanoseconds / 1'000'000),
+                  diagnostics::field("connections", kConnections)});
     composition.stop();
     kShutDown();
-    kEmitter.log(Severity::Info, kStopped, "host stopped");
+    kEnter(composition::HostState::Stopped, "stopped");
+    kEmitter.log(Severity::Info,
+                 kStopped,
+                 "host stopped",
+                 {diagnostics::field("health", composition::describe(health.health)),
+                  diagnostics::field("exit", static_cast<std::uint64_t>(exit))});
     router.stop();
     kDrain();
-    return HostExit::Stopped;
+    return exit;
 }
 
 } // namespace rawframe::host

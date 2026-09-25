@@ -2,6 +2,7 @@
 
 #include "rawframe/composition/configuration.h"
 #include "rawframe/composition/errors.h"
+#include "rawframe/composition/host_lifecycle.h"
 #include "rawframe/composition/participant.h"
 #include "rawframe/composition/plan.h"
 #include "rawframe/diagnostics/emitter.h"
@@ -31,6 +32,16 @@ struct HostServices {
     diagnostics::Emitter emitter;
     /// The Runtime's configuration snapshot; null reads as empty.
     const Configuration* configuration = nullptr;
+    /// The Host's lifecycle; without one, admission is open while running.
+    const HostLifecycle* lifecycle = nullptr;
+};
+
+/// The worst health a participant reported, and why.
+struct HealthReport {
+    Health health = Health::Healthy;
+    /// A fixed category, such as `tick_failed`; empty while healthy.
+    std::string_view reason;
+    std::string_view participant;
 };
 
 /// What a participant's factory and `start` receive: its own identity, scope,
@@ -77,6 +88,15 @@ public:
     /// The Runtime's configuration snapshot, empty if the host gave none.
     [[nodiscard]] const Configuration& configuration() const noexcept;
 
+    /// Whether gameplay admission is open: the Host is active (SPEC-0012).
+    [[nodiscard]] bool admitting() const noexcept;
+    /// Evidence for the Host, reported from the Host thread, each replacing
+    /// this participant's last: the admitted connections it still serves (a
+    /// drain ends early once no participant serves any), and its health,
+    /// with `reason` a fixed category that outlives the participant.
+    void reportConnections(std::size_t connections) noexcept;
+    void reportHealth(Health health, std::string_view reason) noexcept;
+
 private:
     [[nodiscard]] result::Result<CapabilityObject> resolve(std::string_view capability) noexcept;
 
@@ -120,6 +140,11 @@ public:
     void runHostPhase(HostPhase phase, const HostFrame& frame) noexcept;
     [[nodiscard]] ParticipantState state(std::string_view identity) const noexcept;
 
+    /// The evidence participants reported: connections served, all
+    /// together, and the worst health, the first reporter's on a tie.
+    [[nodiscard]] std::size_t connections() const noexcept;
+    [[nodiscard]] HealthReport health() const noexcept;
+
     /// Stable owner identity for a participant: FNV-1a over its identity.
     [[nodiscard]] static execution::OwnerId ownerFor(std::string_view identity) noexcept;
 
@@ -143,6 +168,9 @@ private:
         ParticipantOwner object;
         bool cpuAdmitted = false;
         bool blockingIoAdmitted = false;
+        std::size_t connections = 0;
+        Health health = Health::Healthy;
+        std::string_view healthReason;
     };
 
     /// Undoes a partial or complete start: quiesce and stop the first

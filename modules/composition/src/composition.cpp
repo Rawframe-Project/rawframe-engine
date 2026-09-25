@@ -70,6 +70,21 @@ const Configuration& ParticipantContext::configuration() const noexcept {
     return configuration != nullptr ? *configuration : kEmpty;
 }
 
+bool ParticipantContext::admitting() const noexcept {
+    const HostLifecycle* lifecycle = composition_->services_.lifecycle;
+    return lifecycle != nullptr ? lifecycle->admitting() : composition_->running_;
+}
+
+void ParticipantContext::reportConnections(std::size_t connections) noexcept {
+    composition_->slots_[index_].connections = connections;
+}
+
+void ParticipantContext::reportHealth(Health health, std::string_view reason) noexcept {
+    Composition::Slot& slot = composition_->slots_[index_];
+    slot.health = health;
+    slot.healthReason = health == Health::Healthy ? std::string_view{} : reason;
+}
+
 result::Result<CapabilityObject> ParticipantContext::resolve(std::string_view capability) noexcept {
     for (const auto& resolved : composition_->slots_[index_].planned->capabilities) {
         if (resolved.capability != capability) {
@@ -251,6 +266,25 @@ ParticipantState Composition::state(std::string_view identity) const noexcept {
         }
     }
     return ParticipantState::Destroyed;
+}
+
+std::size_t Composition::connections() const noexcept {
+    std::size_t total = 0;
+    for (const Slot& slot : slots_) {
+        total += slot.connections;
+    }
+    return total;
+}
+
+HealthReport Composition::health() const noexcept {
+    HealthReport worst;
+    for (const Slot& slot : slots_) {
+        if (slot.planned != nullptr && slot.health > worst.health) {
+            worst =
+                HealthReport{.health = slot.health, .reason = slot.healthReason, .participant = slot.planned->identity};
+        }
+    }
+    return worst;
 }
 
 } // namespace rawframe::composition

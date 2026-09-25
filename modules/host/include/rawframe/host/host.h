@@ -20,6 +20,9 @@ enum class HostExit : std::uint8_t {
     /// The configuration, plan, or a participant's start was refused. Nothing
     /// ran; everything that started was rolled back.
     StartupFailed = 1,
+    /// A participant reported the Host unhealthy: it drained and stopped in
+    /// order, and a supervisor should not count the run a success.
+    Unhealthy = 2,
 };
 
 /// Where diagnostics go: a writer for finished NDJSON bytes, called on the
@@ -36,21 +39,24 @@ struct HostRequest {
     const composition::Configuration* configuration = nullptr;
     LogDestination log;
     /// Set from any thread (a signal handler included) to ask for an orderly
-    /// stop at the end of the current iteration.
+    /// stop: the Host drains, then stops. Setting it again changes nothing.
     const std::atomic<bool>* stopRequested = nullptr;
 };
 
 /// Runs one Host: owns the monotonic clock, diagnostic routing and its NDJSON
 /// sink, the CPU and blocking-I/O executors, and the root cancellation scope;
 /// composes the plan; starts it; runs the Host schedule until asked to stop;
-/// then stops the composition, the executors, and drains the sink, in that
-/// order (SPEC-0005 Host). Configuration keys:
+/// drains; then stops the composition, the executors, and drains the sink,
+/// in that order (SPEC-0005 Host). It moves through SPEC-0012's lifecycle,
+/// logging each state, activates at once, and drains on a stop request or an
+/// unhealthy report. Configuration keys:
 ///
 ///   host.iteration_rate        iterations per second (120)
 ///   host.maximum_iterations    stop after this many; 0 runs until stopped (0)
 ///   host.cpu_workers           explicit CPU worker count (derived)
 ///   host.io_workers            blocking-I/O workers (2)
 ///   host.shutdown_budget_ms    the composition's stop budget (5000)
+///   host.drain_ms              longest a drain waits for connections (5000)
 ///   diagnostics.minimum_severity  trace, debug, info, warning, error, critical (info)
 [[nodiscard]] HostExit runHost(const HostRequest& request) noexcept;
 
