@@ -19,6 +19,9 @@
 //   set_reference     an entity-valued field, likewise
 //   set_mark          the layout mark the scene's schema records for a
 //                     component, with no entity (document metadata, D153)
+//   set_override      one entry of an instance's patch: what it does to
+//                     one component of one of the instance's entities, or,
+//                     with no component, the entity's removal (D154)
 //
 // Applying a delta forward requires the slot to hold its `before` and
 // leaves it holding its `after`; backward, the other way about. A slot
@@ -29,8 +32,8 @@
 // transaction's to check, once, after its journal.
 //
 // SPEC-0040's `reparent` waits for a document hierarchy: children are
-// attachments, components like any other (D120). Instances and their
-// patches are not yet authored by delta.
+// attachments, components like any other (D120). Adding and removing a
+// whole instance waits for a tool that resolves source scenes.
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
@@ -55,6 +58,7 @@ enum class DeltaKind : std::uint8_t {
     SetField,
     SetReference,
     SetMark,
+    SetOverride,
 };
 
 /// A component as a delta carries it: its layout mark and its fields.
@@ -76,11 +80,22 @@ struct NodeRecord {
     friend bool operator==(const NodeRecord&, const NodeRecord&) = default;
 };
 
+/// A patch entry as a delta carries it: its kind, the component's layout
+/// mark (none for the entity's removal), and its fields.
+struct PatchRecord {
+    scene::Override::Kind kind = scene::Override::Kind::Set;
+    std::optional<std::uint64_t> mark;
+    std::vector<scene::SceneField> fields;
+
+    friend bool operator==(const PatchRecord&, const PatchRecord&) = default;
+};
+
 /// One slot's value. Which member holds it follows the kind: `node` for
 /// create_node and destroy_node, `place` for reorder, `name` for set_name,
 /// `component` for add_component and remove_component, `field` for
-/// set_field and set_reference, `mark` for set_mark. None of them is the
-/// slot empty: no entity, no component, or a field at its default.
+/// set_field and set_reference, `mark` for set_mark, `patch` for
+/// set_override. None of them is the slot empty: no entity, no component,
+/// a field at its default, or no patch entry.
 struct SlotValue {
     std::optional<NodeRecord> node;
     std::optional<std::size_t> place;
@@ -88,6 +103,7 @@ struct SlotValue {
     std::optional<ComponentRecord> component;
     std::optional<scene::FieldValue> field;
     std::optional<std::uint64_t> mark;
+    std::optional<PatchRecord> patch;
 
     friend bool operator==(const SlotValue&, const SlotValue&) = default;
 };
@@ -96,7 +112,8 @@ struct Delta {
     DeltaKind kind = DeltaKind::CreateNode;
     /// The entity, by its SourceEntityId; none for set_mark.
     base::Bits128 entity{};
-    /// For component, field, and mark kinds.
+    /// For component, field, and mark kinds; for set_override, empty for
+    /// the entity's removal.
     std::string component;
     /// For field kinds.
     std::string field;

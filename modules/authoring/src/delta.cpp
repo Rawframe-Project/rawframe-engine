@@ -8,6 +8,7 @@
 #include <array>
 #include <charconv>
 #include <set>
+#include <tuple>
 
 namespace rawframe::authoring {
 
@@ -24,15 +25,17 @@ std::unexpected<result::Error> mismatch(std::string_view why) {
         result::ErrorClass::FailedPrecondition, kAuthoringDomain, code(AuthoringError::DeltaMismatch), why);
 }
 
-constexpr std::array<std::string_view, 9> kKindNames = {"create_node",
-                                                        "destroy_node",
-                                                        "reorder",
-                                                        "set_name",
-                                                        "add_component",
-                                                        "remove_component",
-                                                        "set_field",
-                                                        "set_reference",
-                                                        "set_mark"};
+constexpr std::array<std::string_view, 10> kKindNames = {"create_node",
+                                                         "destroy_node",
+                                                         "reorder",
+                                                         "set_name",
+                                                         "add_component",
+                                                         "remove_component",
+                                                         "set_field",
+                                                         "set_reference",
+                                                         "set_mark",
+                                                         "set_override"};
+constexpr std::array<std::string_view, 3> kPatchKindNames = {"set", "add", "remove"};
 
 bool componentKind(DeltaKind kind) {
     return kind == DeltaKind::AddComponent || kind == DeltaKind::RemoveComponent || kind == DeltaKind::SetField ||
@@ -49,7 +52,20 @@ bool holdsOnly(const SlotValue& slot, DeltaKind kind) {
     const bool kComponent = kind == DeltaKind::AddComponent || kind == DeltaKind::RemoveComponent;
     return (kNode || !slot.node.has_value()) && (kind == DeltaKind::Reorder || !slot.place.has_value()) &&
            (kind == DeltaKind::SetName || !slot.name.has_value()) && (kComponent || !slot.component.has_value()) &&
-           (fieldKind(kind) || !slot.field.has_value()) && (kind == DeltaKind::SetMark || !slot.mark.has_value());
+           (fieldKind(kind) || !slot.field.has_value()) && (kind == DeltaKind::SetMark || !slot.mark.has_value()) &&
+           (kind == DeltaKind::SetOverride || !slot.patch.has_value());
+}
+
+/// A patch entry in its kind's form for the slot: the entity's removal has
+/// no mark and no fields; a component's entry has its mark.
+bool patchShaped(const std::optional<PatchRecord>& patch, bool whole) {
+    if (!patch.has_value()) {
+        return true;
+    }
+    if (whole) {
+        return patch->kind == scene::Override::Kind::Remove && !patch->mark.has_value() && patch->fields.empty();
+    }
+    return patch->mark.has_value() && (patch->kind != scene::Override::Kind::Remove || patch->fields.empty());
 }
 
 bool fieldOfKind(const std::optional<scene::FieldValue>& value, bool reference) {
@@ -64,7 +80,8 @@ bool fieldOfKind(const std::optional<scene::FieldValue>& value, bool reference) 
 bool shaped(const Delta& delta) {
     if ((delta.entity == base::Bits128{}) != (delta.kind == DeltaKind::SetMark) ||
         !holdsOnly(delta.before, delta.kind) || !holdsOnly(delta.after, delta.kind) ||
-        componentKind(delta.kind) == delta.component.empty() || fieldKind(delta.kind) == delta.field.empty()) {
+        (delta.kind != DeltaKind::SetOverride && componentKind(delta.kind) == delta.component.empty()) ||
+        fieldKind(delta.kind) == delta.field.empty()) {
         return false;
     }
     const SlotValue& before = delta.before;
@@ -90,8 +107,20 @@ bool shaped(const Delta& delta) {
     }
     case DeltaKind::SetMark:
         return before.mark.has_value() && after.mark.has_value();
+    case DeltaKind::SetOverride:
+        return (before.patch.has_value() || after.patch.has_value()) &&
+               patchShaped(before.patch, delta.component.empty()) && patchShaped(after.patch, delta.component.empty());
     }
     return false;
+}
+
+/// Where the instance that maps `entity` stands, if one does.
+std::optional<std::size_t> instanceOf(const scene::Scene& scene, base::Bits128 entity) {
+    const auto kFound = std::ranges::find_if(scene.instances, [entity](const scene::SceneInstance& instance) {
+        return std::ranges::contains(instance.entities, entity, &scene::IdentityMapping::instance);
+    });
+    return kFound != scene.instances.end() ? std::optional{static_cast<std::size_t>(kFound - scene.instances.begin())}
+                                           : std::nullopt;
 }
 
 std::optional<std::size_t> placeOf(const scene::Scene& scene, base::Bits128 entity) {
@@ -151,6 +180,24 @@ std::optional<SlotValue> slotOf(const scene::Scene& scene, const Delta& delta) {
             return std::nullopt;
         }
         slot.mark = kFound->mark;
+        return slot;
+    }
+    if (delta.kind == DeltaKind::SetOverride) {
+        const std::optional<std::size_t> kInstance = instanceOf(scene, delta.entity);
+        if (!kInstance.has_value()) {
+            return std::nullopt;
+        }
+        const std::vector<scene::Override>& overrides = scene.instances[*kInstance].overrides;
+        const auto kFound = std::ranges::find_if(overrides, [&delta](const scene::Override& each) {
+            return each.entity == delta.entity && each.component == delta.component;
+        });
+        if (kFound != overrides.end()) {
+            slot.patch =
+                PatchRecord{.kind = kFound->kind,
+                            .mark = delta.component.empty() ? std::nullopt
+                                                            : std::optional{markOf(scene, delta.component).value_or(0)},
+                            .fields = kFound->fields};
+        }
         return slot;
     }
     const std::optional<std::size_t> kPlace = placeOf(scene, delta.entity);
@@ -265,6 +312,27 @@ result::Status writeSlot(scene::Scene& scene, const Delta& delta, const SlotValu
     case DeltaKind::SetMark:
         std::ranges::find(scene.schema, delta.component, &scene::SchemaMark::component)->mark = *to.mark;
         return {};
+    case DeltaKind::SetOverride: {
+        std::vector<scene::Override>& overrides = scene.instances[*instanceOf(scene, delta.entity)].overrides;
+        std::erase_if(overrides, [&delta](const scene::Override& each) {
+            return each.entity == delta.entity && each.component == delta.component;
+        });
+        if (to.patch.has_value()) {
+            if (to.patch->mark.has_value() && !useMark(scene, delta.component, *to.patch->mark)) {
+                return mismatch("a component's mark is the one the scene's schema holds");
+            }
+            const auto kAt = std::ranges::find_if(overrides, [&delta](const scene::Override& each) {
+                return std::tie(delta.entity, delta.component) < std::tie(each.entity, each.component);
+            });
+            overrides.insert(kAt,
+                             scene::Override{.entity = delta.entity,
+                                             .component = delta.component,
+                                             .kind = to.patch->kind,
+                                             .fields = to.patch->fields});
+        }
+        dropUnusedMarks(scene);
+        return {};
+    }
     }
     return invalid("a delta's kind is one of the closed set");
 }
@@ -375,6 +443,15 @@ Value slotValue(const SlotValue& slot) {
     if (slot.mark.has_value()) {
         return Value::string(markText(*slot.mark));
     }
+    if (slot.patch.has_value()) {
+        Value made = Value::object();
+        made.add("fields", fieldsValue(slot.patch->fields));
+        made.add("kind", Value::string(std::string{kPatchKindNames[static_cast<std::size_t>(slot.patch->kind)]}));
+        if (slot.patch->mark.has_value()) {
+            made.add("mark", Value::string(markText(*slot.patch->mark)));
+        }
+        return made;
+    }
     return {};
 }
 
@@ -421,27 +498,56 @@ std::optional<scene::FieldValue> fieldOf(const Value& value) {
     return std::nullopt;
 }
 
-std::optional<ComponentRecord> componentOf(const Value& value) {
-    const std::string* name = textOf(value.find("name"));
-    const std::string* mark = textOf(value.find("mark"));
-    const Value* fields = value.find("fields");
-    if (!hasMembers(value, {"fields", "mark", "name"}) || name == nullptr || mark == nullptr || mark->size() != 16 ||
-        fields->kind() != Value::Kind::Object) {
+std::optional<std::uint64_t> markOf(const Value* value) {
+    const std::string* text = textOf(value);
+    std::uint64_t mark = 0;
+    if (text == nullptr || text->size() != 16 ||
+        std::from_chars(text->data(), text->data() + text->size(), mark, 16).ptr != text->data() + 16 ||
+        markText(mark) != *text) {
         return std::nullopt;
     }
-    ComponentRecord made{.name = *name, .mark = 0, .fields = {}};
-    const auto kParsed = std::from_chars(mark->data(), mark->data() + mark->size(), made.mark, 16);
-    if (kParsed.ec != std::errc{} || kParsed.ptr != mark->data() + mark->size() || markText(made.mark) != *mark) {
+    return mark;
+}
+
+std::optional<std::vector<scene::SceneField>> fieldsOf(const Value* fields) {
+    if (fields == nullptr || fields->kind() != Value::Kind::Object) {
         return std::nullopt;
     }
+    std::vector<scene::SceneField> made;
     for (std::size_t at = 0; at < fields->names().size(); ++at) {
         const std::optional<scene::FieldValue> kValue = fieldOf(fields->items()[at]);
         if (!kValue.has_value()) {
             return std::nullopt;
         }
-        made.fields.push_back(scene::SceneField{.name = fields->names()[at], .value = *kValue});
+        made.push_back(scene::SceneField{.name = fields->names()[at], .value = *kValue});
     }
     return made;
+}
+
+std::optional<PatchRecord> patchOf(const Value& value) {
+    const bool kMarked = value.find("mark") != nullptr;
+    const std::string* kind = textOf(value.find("kind"));
+    const auto kKind = kind != nullptr ? std::ranges::find(kPatchKindNames, *kind) : kPatchKindNames.end();
+    std::optional<std::vector<scene::SceneField>> fields = fieldsOf(value.find("fields"));
+    const std::optional<std::uint64_t> kMark = kMarked ? markOf(value.find("mark")) : std::nullopt;
+    if (!(kMarked ? hasMembers(value, {"fields", "kind", "mark"}) : hasMembers(value, {"fields", "kind"})) ||
+        kKind == kPatchKindNames.end() || !fields.has_value() || (kMarked && !kMark.has_value())) {
+        return std::nullopt;
+    }
+    return PatchRecord{.kind = static_cast<scene::Override::Kind>(kKind - kPatchKindNames.begin()),
+                       .mark = kMark,
+                       .fields = std::move(*fields)};
+}
+
+std::optional<ComponentRecord> componentOf(const Value& value) {
+    const std::string* name = textOf(value.find("name"));
+    const std::optional<std::uint64_t> kMark = markOf(value.find("mark"));
+    std::optional<std::vector<scene::SceneField>> fields = fieldsOf(value.find("fields"));
+    if (!hasMembers(value, {"fields", "mark", "name"}) || name == nullptr || !kMark.has_value() ||
+        !fields.has_value()) {
+        return std::nullopt;
+    }
+    return ComponentRecord{.name = *name, .mark = *kMark, .fields = std::move(*fields)};
 }
 
 std::optional<SlotValue> slotOf(const Value& value, DeltaKind kind) {
@@ -487,17 +593,12 @@ std::optional<SlotValue> slotOf(const Value& value, DeltaKind kind) {
     case DeltaKind::SetReference:
         slot.field = fieldOf(value);
         return slot.field.has_value() ? std::optional{slot} : std::nullopt;
-    case DeltaKind::SetMark: {
-        const std::string* text = textOf(&value);
-        std::uint64_t mark = 0;
-        if (text == nullptr || text->size() != 16 ||
-            std::from_chars(text->data(), text->data() + text->size(), mark, 16).ptr != text->data() + 16 ||
-            markText(mark) != *text) {
-            return std::nullopt;
-        }
-        slot.mark = mark;
-        return slot;
-    }
+    case DeltaKind::SetMark:
+        slot.mark = markOf(&value);
+        return slot.mark.has_value() ? std::optional{slot} : std::nullopt;
+    case DeltaKind::SetOverride:
+        slot.patch = patchOf(value);
+        return slot.patch.has_value() ? std::optional{slot} : std::nullopt;
     }
     return std::nullopt;
 }
@@ -513,7 +614,7 @@ result::Result<std::string> writeJournal(const Journal& journal) {
         Value made = Value::object();
         made.add("after", slotValue(delta.after));
         made.add("before", slotValue(delta.before));
-        if (componentKind(delta.kind)) {
+        if (componentKind(delta.kind) || delta.kind == DeltaKind::SetOverride) {
             made.add("component", Value::string(delta.component));
         }
         if (delta.kind != DeltaKind::SetMark) {
@@ -556,7 +657,7 @@ result::Result<Journal> readJournal(std::string_view bytes) {
             return invalid("a delta's kind is one of the closed set");
         }
         Delta delta{.kind = static_cast<DeltaKind>(kKind - kKindNames.begin())};
-        const bool kComponent = componentKind(delta.kind);
+        const bool kComponent = componentKind(delta.kind) || delta.kind == DeltaKind::SetOverride;
         const bool kField = fieldKind(delta.kind);
         const bool kMark = delta.kind == DeltaKind::SetMark;
         const bool kShape = kMark        ? hasMembers(each, {"after", "before", "component", "kind"})

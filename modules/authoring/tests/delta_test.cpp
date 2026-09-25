@@ -24,6 +24,8 @@ bool refusedWith(const auto& outcome, AuthoringError error) {
 const base::Bits128 kSpawn{1, 1};
 const base::Bits128 kDoor{1, 2};
 const base::Bits128 kLamp{1, 3};
+const base::Bits128 kCrate{1, 4};
+const base::Bits128 kShelf{1, 5};
 
 scene::FieldValue number(std::string_view text) {
     return scene::FieldValue{.kind = scene::FieldValue::Kind::Number, .number = std::string{text}};
@@ -33,7 +35,8 @@ scene::FieldValue to(base::Bits128 entity) {
     return scene::FieldValue{.kind = scene::FieldValue::Kind::Entity, .entity = entity};
 }
 
-/// A spawn point at (1, 2), and a door linked to it.
+/// A spawn point at (1, 2), a door linked to it, and an instance of a
+/// storeroom whose crate stands at x 0.
 scene::Scene level() {
     return scene::Scene{
         .schema = {{.component = "game.link", .mark = 0xb2}, {.component = "game.position", .mark = 0xa1}},
@@ -45,7 +48,17 @@ scene::Scene level() {
                      {.id = kDoor,
                       .name = {},
                       .components = {{.name = "game.link", .fields = {{.name = "target", .value = to(kSpawn)}}}}}},
-        .instances = {}};
+        .instances = {{.scene = base::Bits128{9, 1},
+                       .entities = {{.source = base::Bits128{7, 1}, .instance = kCrate},
+                                    {.source = base::Bits128{7, 2}, .instance = kShelf}},
+                       .overrides = {{.entity = kCrate,
+                                      .component = "game.position",
+                                      .kind = scene::Override::Kind::Set,
+                                      .fields = {{.name = "x", .value = number("0")}}}}}}};
+}
+
+PatchRecord crateAt(std::vector<scene::SceneField> fields) {
+    return PatchRecord{.kind = scene::Override::Kind::Set, .mark = 0xa1, .fields = std::move(fields)};
 }
 
 std::string bytes(const scene::Scene& scene) {
@@ -114,6 +127,25 @@ std::vector<Delta> everyKind() {
               .component = "game.position",
               .before = {.mark = 0xa1},
               .after = {.mark = 0xa9}},
+        Delta{.kind = DeltaKind::SetOverride,
+              .entity = kCrate,
+              .component = "game.position",
+              .before = {.patch = crateAt({{.name = "x", .value = number("0")}})},
+              .after = {.patch = crateAt({{.name = "x", .value = number("0")}, {.name = "y", .value = number("3")}})}},
+        Delta{.kind = DeltaKind::SetOverride,
+              .entity = kShelf,
+              .component = "game.light",
+              .after = {.patch =
+                            PatchRecord{.kind = scene::Override::Kind::Add,
+                                        .mark = 0xc3,
+                                        .fields = {{.name = "on", .value = {.kind = scene::FieldValue::Kind::True}}}}}},
+        Delta{.kind = DeltaKind::SetOverride,
+              .entity = kShelf,
+              .after = {.patch = PatchRecord{.kind = scene::Override::Kind::Remove, .mark = {}, .fields = {}}}},
+        Delta{.kind = DeltaKind::SetOverride,
+              .entity = kCrate,
+              .component = "game.position",
+              .before = {.patch = crateAt({{.name = "x", .value = number("0")}})}},
     };
 }
 
@@ -142,6 +174,11 @@ RAWFRAME_TEST(SchemaMarksFollowTheComponentsUsed) {
     RAWFRAME_EXPECT(scene.schema.size() == 3 && scene.schema[0].component == "game.light" &&
                     scene.schema[0].mark == 0xc3);
     RAWFRAME_EXPECT(apply(scene, makeLamp(), false).has_value() && scene.schema.size() == 2);
+    // A patch entry's component is a use: the shelf's added light keeps
+    // its mark, and the lamp's leaving then does not drop it.
+    RAWFRAME_EXPECT(apply(scene, everyKind()[11], true).has_value() && apply(scene, makeLamp(), true).has_value() &&
+                    apply(scene, makeLamp(), false).has_value() && scene.schema.size() == 3);
+    RAWFRAME_EXPECT(apply(scene, everyKind()[11], false).has_value() && scene.schema.size() == 2);
     // The door's link is the last use of game.link.
     const Delta kUnlink = everyKind()[1];
     RAWFRAME_EXPECT(apply(scene, kUnlink, true).has_value() && scene.schema.size() == 1 &&
@@ -179,6 +216,20 @@ RAWFRAME_TEST(ADeltaLandsOnlyWhereItWasMade) {
     Delta wrongValue = everyKind()[8];
     wrongValue.after.field = number("1");
     RAWFRAME_EXPECT(refusedWith(apply(scene, wrongValue, true), AuthoringError::DeltaInvalid));
+    // A patch entry of an entity no instance maps, an entry that moved on,
+    // an entity's removal with a mark, and an entry from none to none.
+    Delta unmapped = everyKind()[11];
+    unmapped.entity = kDoor;
+    RAWFRAME_EXPECT(refusedWith(apply(scene, unmapped, true), AuthoringError::DeltaMismatch));
+    Delta movedOn = everyKind()[10];
+    movedOn.before.patch->fields[0].value = number("5");
+    RAWFRAME_EXPECT(refusedWith(apply(scene, movedOn, true), AuthoringError::DeltaMismatch));
+    Delta markedRemoval = everyKind()[12];
+    markedRemoval.after.patch->mark = 0xa1;
+    RAWFRAME_EXPECT(refusedWith(apply(scene, markedRemoval, true), AuthoringError::DeltaInvalid));
+    Delta nothing = everyKind()[13];
+    nothing.before.patch.reset();
+    RAWFRAME_EXPECT(refusedWith(apply(scene, nothing, true), AuthoringError::DeltaInvalid));
     // A journal is all or none.
     scene::Scene whole = level();
     const Journal kHalfGood = {everyKind()[6], stale};
@@ -189,7 +240,7 @@ RAWFRAME_TEST(ADeltaLandsOnlyWhereItWasMade) {
 RAWFRAME_TEST(AJournalRoundTripsAndAppliesBothWays) {
     // Every kind that can follow the one before it, in one journal.
     const std::vector<Delta> kAll = everyKind();
-    const Journal kJournal = {kAll[0], kAll[3], kAll[6], kAll[7], kAll[8], kAll[2], kAll[4]};
+    const Journal kJournal = {kAll[0], kAll[3], kAll[6], kAll[7], kAll[8], kAll[2], kAll[4], kAll[10], kAll[11]};
     scene::Scene scene = level();
     RAWFRAME_EXPECT(apply(scene, kJournal, true).has_value());
     RAWFRAME_EXPECT(apply(scene, kJournal, false).has_value() && bytes(scene) == bytes(level()));
