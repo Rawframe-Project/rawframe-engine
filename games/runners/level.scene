@@ -1,0 +1,157 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "rawframe.physics2d.body": "593035e6aa3af5e7",
+    "rawframe.physics2d.pose": "5c5cb2726bb85776",
+    "rawframe.physics2d.velocity": "63c49a3a472d1997"
+  },
+  "entities": [
+    {
+      "id": "c5400cf8-4b07-4d16-84c2-951852c66b40",
+      "name": "ground",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 0.5,
+          "shape": 1,
+          "width": 40
+        },
+        "rawframe.physics2d.pose": {},
+        "rawframe.physics2d.velocity": {}
+      }
+    },
+    {
+      "id": "87e4430f-6ec1-4301-be72-ce8187494c34",
+      "name": "west wall",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 10,
+          "shape": 1,
+          "width": 0.5
+        },
+        "rawframe.physics2d.pose": {
+          "x": -40,
+          "y": 10
+        },
+        "rawframe.physics2d.velocity": {}
+      }
+    },
+    {
+      "id": "0d077e42-123c-4358-b7e3-02e08c02e876",
+      "name": "east wall",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 10,
+          "shape": 1,
+          "width": 0.5
+        },
+        "rawframe.physics2d.pose": {
+          "x": 40,
+          "y": 10
+        },
+        "rawframe.physics2d.velocity": {}
+      }
+    },
+    {
+      "id": "b4560e55-e4e2-467a-ab08-e91b7119397f",
+      "name": "west platform",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 0.25,
+          "shape": 1,
+          "width": 3
+        },
+        "rawframe.physics2d.pose": {
+          "x": -15,
+          "y": 3
+        },
+        "rawframe.physics2d.velocity": {}
+      }
+    },
+    {
+      "id": "70d54325-4d2f-414f-8bcf-d81fce71cc73",
+      "name": "middle platform",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 0.25,
+          "shape": 1,
+          "width": 3
+        },
+        "rawframe.physics2d.pose": {
+          "y": 5
+        },
+        "rawframe.physics2d.velocity": {}
+      }
+    },
+    {
+      "id": "6a496ddc-6ad7-4a55-95b7-7e000ca304f2",
+      "name": "east platform",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 0.25,
+          "shape": 1,
+          "width": 3
+        },
+        "rawframe.physics2d.pose": {
+          "x": 15,
+          "y": 3
+        },
+        "rawframe.physics2d.velocity": {}
+      }
+    },
+    {
+      "id": "cd2187dc-b405-477c-b51d-0fa593416c10",
+      "name": "west slope",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 0.5,
+          "shape": 1,
+          "width": 4
+        },
+        "rawframe.physics2d.pose": {
+          "c": 0.9397,
+          "s": -0.342,
+          "x": -28,
+          "y": 1
+        },
+        "rawframe.physics2d.velocity": {}
+      }
+    },
+    {
+      "id": "8a392b1c-05d6-46e8-a33e-686ac443c0fb",
+      "name": "east slope",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 0.5,
+          "shape": 1,
+          "width": 4
+        },
+        "rawframe.physics2d.pose": {
+          "c": 0.9397,
+          "s": 0.342,
+          "x": 28,
+          "y": 1
+        },
+        "rawframe.physics2d.velocity": {}
+      }
+    },
+    {
+      "id": "39cde4f3-b964-4564-bd74-0faa39061e96",
+      "name": "steep slope",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 0.5,
+          "shape": 1,
+          "width": 2
+        },
+        "rawframe.physics2d.pose": {
+          "c": 0.5736,
+          "s": 0.8192,
+          "x": 34,
+          "y": 1.5
+        },
+        "rawframe.physics2d.velocity": {}
+      }
+    }
+  ]
+}

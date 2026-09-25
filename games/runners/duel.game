@@ -19,20 +19,10 @@ system runners.hurt simulation hurt write runners.score read runners.hit entitie
 
 input runners.stick perceived
 
-# The ground, eighty meters wide, and walls at its ends.
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=40 height=0.5 rawframe.physics2d.pose rawframe.physics2d.velocity
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=0.5 height=10 rawframe.physics2d.pose x=-40 y=10 rawframe.physics2d.velocity
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=0.5 height=10 rawframe.physics2d.pose x=40 y=10 rawframe.physics2d.velocity
-
-# Platforms to jump up to.
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=3 height=0.25 rawframe.physics2d.pose x=-15 y=3 rawframe.physics2d.velocity
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=3 height=0.25 rawframe.physics2d.pose x=0 y=5 rawframe.physics2d.velocity
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=3 height=0.25 rawframe.physics2d.pose x=15 y=3 rawframe.physics2d.velocity
-
-# Slopes of 20 degrees at both ends, and one of 55 too steep to stand on.
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=4 height=0.5 rawframe.physics2d.pose x=-28 y=1 c=0.9397 s=-0.3420 rawframe.physics2d.velocity
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=4 height=0.5 rawframe.physics2d.pose x=28 y=1 c=0.9397 s=0.3420 rawframe.physics2d.velocity
-spawn 1 rawframe.physics2d.body motion=0 shape=1 width=2 height=0.5 rawframe.physics2d.pose x=34 y=1.5 c=0.5736 s=0.8192 rawframe.physics2d.velocity
+# The level (level.scene): the ground, eighty meters wide, walls at its
+# ends, three platforms to jump up to, slopes of 20 degrees at both ends,
+# and one of 55 too steep to stand on.
+scene level.scene
 
 # The shooter and its mark.
 spawn 1 rawframe.physics2d.body motion=1 shape=2 fixedRotation=true collisionClass=runner width=0.3 height=0.4 rawframe.physics2d.pose x=-5 y=1.2 c=1 rawframe.physics2d.velocity rawframe.physics2d.character groundNormal=0.7 snap=0.2 runners.stick fire=1 aimX=1 runners.score runners.emitter rawframe.replication.perception baseTick=1

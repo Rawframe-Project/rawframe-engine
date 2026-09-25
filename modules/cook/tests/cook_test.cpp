@@ -311,11 +311,12 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     if (!kGameRead.has_value()) {
         return;
     }
-    // The text as written; the three documents it names; both programs as
+    // The text as written; the four documents it names; both programs as
     // entries of the project's sources.
     RAWFRAME_EXPECT(kGameRead->text == readText(kGame / "runners.game"));
-    RAWFRAME_EXPECT(kGameRead->files.size() == 3 && kGameRead->file("runners.actions") != nullptr &&
-                    kGameRead->file("runners.mixer") != nullptr && kGameRead->file("shot.sound") != nullptr &&
+    RAWFRAME_EXPECT(kGameRead->files.size() == 4 && kGameRead->file("runners.actions") != nullptr &&
+                    kGameRead->file("level.scene") != nullptr && kGameRead->file("runners.mixer") != nullptr &&
+                    kGameRead->file("shot.sound") != nullptr &&
                     kGameRead->file("shot.sound")->text == readText(kGame / "shot.sound"));
     const base::Bits128 kSources = base::parseBits128Hex(kSourcesId).value;
     RAWFRAME_EXPECT(kGameRead->programs.size() == 2 && kGameRead->program("runners.kest") != nullptr &&
@@ -353,12 +354,12 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     RAWFRAME_EXPECT(kCook().failures.empty());
 
     // A scene it names is carried in it; one that does not read is refused.
-    writeText(kGame / "runners.game", readText(kGame / "runners.game") + "scene level.scene\n");
+    writeText(kGame / "runners.game", readText(kGame / "runners.game") + "scene extra.scene\n");
     writeText(
-        kGame / "level.scene",
+        kGame / "extra.scene",
         "{\n  \"kind\": \"rawframe.scene\",\n  \"formatVersion\": 1,\n  \"schema\": {},\n  \"entities\": []\n}\n");
-    RAWFRAME_EXPECT(kCook().failures.empty() && kCooked().has_value() && kCooked()->file("level.scene") != nullptr);
-    writeText(kGame / "level.scene", "{}\n");
+    RAWFRAME_EXPECT(kCook().failures.empty() && kCooked().has_value() && kCooked()->file("extra.scene") != nullptr);
+    writeText(kGame / "extra.scene", "{}\n");
     RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
 }
 
