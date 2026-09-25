@@ -182,6 +182,7 @@ public:
             layouts_.push_back(std::move(layout));
         }
         RAWFRAME_TRY(addScenes(files));
+        RAWFRAME_TRY(addModScenes(files));
         RAWFRAME_TRY(addPrefabs(files));
         RAWFRAME_TRY(planReplication(files.digest()));
         RAWFRAME_TRY(planPrediction(configuration));
@@ -769,16 +770,22 @@ private:
     };
 
     result::Result<SceneSpawns> sceneSpawns(const GameFiles& files, const std::string& path) const {
+        RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.scene(path));
+        return sceneSpawns(files, kText, path);
+    }
+
+    /// The same of a scene's text, named `path` in what refuses it.
+    result::Result<SceneSpawns>
+    sceneSpawns(const GameFiles& files, std::string_view sceneText, const std::string& path) const {
         const auto kRefuse = [&path](WorldKestError error, std::string_view why, std::string_view name) {
             return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument, error, why)
                                                       .error()
                                                       .withContext("scene", path)
                                                       .withContext("name", name)};
         };
-        RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.scene(path));
         // Its instances resolved: what spawns is the scene's entities and
         // every entity its instances bring.
-        auto read = scene::readScene(kText).and_then([&files](const scene::Scene& authored) {
+        auto read = scene::readScene(sceneText).and_then([&files](const scene::Scene& authored) {
             return scene::resolveInstances(authored, [&files](base::Bits128 source) {
                 return files.sceneById(source).and_then([](std::string_view text) {
                     return scene::readScene(text);
@@ -843,6 +850,34 @@ private:
                 references_.push_back(reference);
             }
             std::ranges::move(scene.spawns, std::back_inserter(game_.spawns));
+        }
+        return {};
+    }
+
+    /// Each scene a mod contributes (D180), after the game's own: every
+    /// entity one spawn holding the point's component and nothing else, so
+    /// a mod adds values and never a behavior, a reference, or a persistent
+    /// name.
+    result::Status addModScenes(const GameFiles& files) {
+        for (const GameModScene& contributed : files.modScenes()) {
+            const std::string kLabel = contributed.mod + ":" + contributed.point;
+            const auto kPoint = std::ranges::find(game_.mods.points, contributed.point, &GameExtensionPoint::name);
+            RAWFRAME_TRY_ASSIGN(const SceneSpawns kScene, sceneSpawns(files, contributed.text, kLabel));
+            const bool kOnlyThePoints =
+                kPoint != game_.mods.points.end() && kScene.references.empty() &&
+                std::ranges::all_of(kScene.spawns, [&kPoint](const GameSpawn& spawn) {
+                    return spawn.components.size() == 1 && spawn.components[0].component == kPoint->accepts;
+                });
+            if (!kOnlyThePoints) {
+                return std::unexpected<result::Error>{
+                    refuse(result::ErrorClass::InvalidArgument,
+                           WorldKestError::ModRefused,
+                           "every entity a mod contributes holds the point's component and nothing else")
+                        .error()
+                        .withContext("mod", contributed.mod)
+                        .withContext("point", contributed.point)};
+            }
+            std::ranges::copy(kScene.spawns, std::back_inserter(game_.spawns));
         }
         return {};
     }
