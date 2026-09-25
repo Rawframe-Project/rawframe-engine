@@ -15,6 +15,7 @@
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_kest/replication.h"
+#include "rawframe/world_kest/spawn_scene.h"
 #include "rawframe/world_runtime/registrar.h"
 #include "rawframe/world_runtime/simulation.h"
 
@@ -511,6 +512,34 @@ RAWFRAME_TEST(AScenesEntitiesNameEachOther) {
     // A reference only through a field the description declares holds one.
     RAWFRAME_EXPECT(kStart(kLinks, kGame + "scene links.scene\n").empty());
     std::filesystem::remove_all(kDirectory);
+}
+
+RAWFRAME_TEST(SpawnLinesBecomeAScene) {
+    auto files = world_kest::GameFiles::fromDirectory(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game");
+    const auto kProgram = files.has_value() ? files->compile("movers.kest") : std::unexpected{files.error().clone()};
+    RAWFRAME_EXPECT(kProgram.has_value());
+    if (!kProgram.has_value()) {
+        return;
+    }
+    std::uint64_t next = 0;
+    const auto kScene = world_kest::spawnsAsScene(files->description(), **kProgram, [&next] {
+        return base::Bits128{.high = 0, .low = ++next};
+    });
+    RAWFRAME_EXPECT(kScene.has_value());
+    if (!kScene.has_value()) {
+        return;
+    }
+    // Four entities, one for each spawned; each component's mark the
+    // program's; a field at nought left out; the form holds.
+    const base::Bits128 kFourth{.high = 0, .low = 4};
+    RAWFRAME_EXPECT(kScene->entities.size() == 4 && kScene->entities[3].id == kFourth);
+    RAWFRAME_EXPECT(kScene->schema.size() == 2 && kScene->schema[0].mark == (*kProgram)->layout("Position")->mark &&
+                    kScene->schema[1].mark == (*kProgram)->layout("Velocity")->mark);
+    RAWFRAME_EXPECT(kScene->entities[0].components[0].fields.empty() &&
+                    kScene->entities[0].components[1].fields.size() == 2 &&
+                    kScene->entities[3].components[0].fields.size() == 1 &&
+                    kScene->entities[3].components[0].fields[0].value.number == "99.5");
+    RAWFRAME_EXPECT(scene::writeScene(*kScene).has_value());
 }
 
 RAWFRAME_TEST(WithoutAGameNothingLoads) {

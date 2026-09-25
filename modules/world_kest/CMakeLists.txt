@@ -3,7 +3,7 @@
 # succeeds), and a participant that loads a game description. Separate from
 # rawframe.world and rawframe.kest because neither should know the other.
 rawframe_module(NAME world_kest
-    SOURCES src/cooked_game.cpp src/game.cpp src/game_files.cpp src/game_participant.cpp src/kest_systems.cpp src/physics_doors.cpp src/predictor.cpp src/replication.cpp
+    SOURCES src/cooked_game.cpp src/game.cpp src/game_files.cpp src/game_participant.cpp src/kest_systems.cpp src/layouts.cpp src/spawn_scene.cpp src/physics_doors.cpp src/predictor.cpp src/replication.cpp
     DEPS scene game_content content kest_library physics2d physics3d physics world_replication world_runtime world_snapshot kest network world composition schema execution diagnostics document result base
 )
 

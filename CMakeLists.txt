@@ -66,6 +66,7 @@ add_subdirectory(hosts/bots)
 add_subdirectory(hosts/import)
 add_subdirectory(hosts/cook)
 add_subdirectory(hosts/build)
+add_subdirectory(hosts/scene)
 
 # Scenarios: several modules and hosts together, the way a game uses them.
 if(RAWFRAME_BUILD_TESTS)

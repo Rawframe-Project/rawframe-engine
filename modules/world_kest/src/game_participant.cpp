@@ -13,6 +13,7 @@
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/kest_systems.h"
+#include "rawframe/world_kest/layouts.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_kest/replication.h"
 #include "rawframe/world_replication/perception.h"
@@ -150,7 +151,7 @@ public:
         program_ = std::move(*program);
 
         for (const GameComponent& component : game_.components) {
-            RAWFRAME_TRY_ASSIGN(kest::TypeLayout layout, layoutOf(component));
+            RAWFRAME_TRY_ASSIGN(kest::TypeLayout layout, componentLayout(game_, *program_, component));
             descriptors_.push_back(schema::ComponentDescriptor{.id = component.id,
                                                                .name = component.name,
                                                                .size = layout.size,
@@ -745,72 +746,6 @@ private:
             values.emplace_back(game_.components[kIndex].id, std::move(bytes));
         }
         return values;
-    }
-
-    /// A component's layout as the program has it. A program lays out only
-    /// the types it uses, so an engine physics component it never names is
-    /// laid out as the engine lays it out.
-    [[nodiscard]] result::Result<kest::TypeLayout> layoutOf(const GameComponent& component) const {
-        auto layout = program_->layout(component.kestType);
-        if (component.id == world_replication::Perception::kComponentTypeId) {
-            // Engine-made either way: the program's, if it names the type,
-            // must be the engine's.
-            const kest::TypeLayout kEngine = perceptionLayout();
-            if (layout.has_value() && !sameLayout(*layout, kEngine)) {
-                return refuse(result::ErrorClass::InvalidArgument,
-                              WorldKestError::BadGameLine,
-                              "the program's Perception is not laid out as the engine's; import rawframe.replication");
-            }
-            return kEngine;
-        }
-        if (layout.has_value() || !game_.physics.has_value()) {
-            return layout;
-        }
-        for (const physics::ComponentLayout& engine : physicsFacts(game_.physics->dimensions).components) {
-            if (engine.id != component.id) {
-                continue;
-            }
-            kest::TypeLayout made{.size = engine.size, .alignment = engine.alignment, .mark = 0, .fields = {}};
-            for (const physics::ComponentField& field : engine.fields) {
-                constexpr std::array<kest::FieldKind, 6> kKinds = {kest::FieldKind::U8,
-                                                                   kest::FieldKind::U32,
-                                                                   kest::FieldKind::U64,
-                                                                   kest::FieldKind::Bool,
-                                                                   kest::FieldKind::F32,
-                                                                   kest::FieldKind::F64};
-                made.fields.push_back(kest::Field{.name = std::string{field.name},
-                                                  .offset = field.offset,
-                                                  .kind = kKinds[static_cast<std::size_t>(field.type)]});
-            }
-            return made;
-        }
-        return layout;
-    }
-
-    [[nodiscard]] static kest::TypeLayout perceptionLayout() {
-        using world_replication::Perception;
-        return kest::TypeLayout{
-            .size = sizeof(Perception),
-            .alignment = alignof(Perception),
-            .mark = 0,
-            .fields = {
-                kest::Field{.name = "baseTick", .offset = offsetof(Perception, baseTick), .kind = kest::FieldKind::U64},
-                kest::Field{.name = "fraction", .offset = offsetof(Perception, fraction), .kind = kest::FieldKind::U16},
-                kest::Field{.name = "viewer", .offset = offsetof(Perception, viewer), .kind = kest::FieldKind::U32}}};
-    }
-
-    [[nodiscard]] static bool sameLayout(const kest::TypeLayout& left, const kest::TypeLayout& right) {
-        if (left.size != right.size || left.alignment != right.alignment || left.fields.size() != right.fields.size()) {
-            return false;
-        }
-        for (std::size_t index = 0; index < left.fields.size(); ++index) {
-            if (left.fields[index].name != right.fields[index].name ||
-                left.fields[index].offset != right.fields[index].offset ||
-                left.fields[index].kind != right.fields[index].kind) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /// Physics: the program's physics types must be laid out exactly as the
