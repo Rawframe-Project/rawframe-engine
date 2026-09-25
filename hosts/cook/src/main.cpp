@@ -11,6 +11,7 @@
 #include "rawframe/cook/game.h"
 #include "rawframe/cook/kest.h"
 #include "rawframe/cook/mesh.h"
+#include "rawframe/cook/mod.h"
 #include "rawframe/cook/scene.h"
 #include "rawframe/cook/text.h"
 
@@ -48,11 +49,12 @@ int main(int argc, char** argv) {
         std::fputs("rawframe-cook: cannot read its own executable\n", stderr);
         return 1;
     }
-    const std::array<rawframe::cook::Importer, 7> kImporters = {rawframe::cook::animationImporter(),
+    const std::array<rawframe::cook::Importer, 8> kImporters = {rawframe::cook::animationImporter(),
                                                                 rawframe::cook::audioImporter(),
                                                                 rawframe::cook::gameImporter(),
                                                                 rawframe::cook::kestImporter(),
                                                                 rawframe::cook::meshImporter(),
+                                                                rawframe::cook::modImporter(),
                                                                 rawframe::cook::sceneImporter(),
                                                                 rawframe::cook::textImporter()};
     rawframe::cook::CookRequest request{.sources = argv[1],

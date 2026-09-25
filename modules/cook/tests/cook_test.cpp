@@ -18,6 +18,7 @@
 #include "rawframe/cook/game.h"
 #include "rawframe/cook/kest.h"
 #include "rawframe/cook/mesh.h"
+#include "rawframe/cook/mod.h"
 #include "rawframe/cook/scene.h"
 #include "rawframe/cook/text.h"
 #include "rawframe/kest_library/library.h"
@@ -26,6 +27,7 @@
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/cooked_game.h"
+#include "rawframe/world_kest/cooked_mod.h"
 
 #include <algorithm>
 #include <atomic>
@@ -394,6 +396,60 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     RAWFRAME_EXPECT(kCook().failures.empty() && kCooked().has_value() && kCooked()->scene("extra.scene") != nullptr);
     writeText(kGame / "extra.scene", "{}\n");
     RAWFRAME_EXPECT(!kCook().failures.empty());
+}
+
+RAWFRAME_TEST(AModCooksWithTheScenesItContributes) {
+    const Project kProject;
+    const fs::path kMod = kProject.sources / "horde";
+    const std::string kScene =
+        "{\n  \"kind\": \"rawframe.scene\",\n  \"formatVersion\": 1,\n  \"schema\": {},\n  \"entities\": []\n}\n";
+    const std::string kText = "target acme/raid\nmodapi >=2 <4\ncontribute enemies wave.scene\n"
+                              "contribute bosses wave.scene\ncontribute enemies more.scene\n";
+    writeText(kMod / "horde.mod", kText);
+    writeText(kMod / "horde.mod.rfmeta", sidecar("000000000000000000000000000000b1", "", "rawframe.mod"));
+    writeText(kMod / "wave.scene", kScene);
+    writeText(kMod / "wave.scene.rfmeta", sidecar("000000000000000000000000000000b2", "", "rawframe.scene"));
+    writeText(kMod / "more.scene", kScene);
+    static const std::array<Importer, 3> kImporters = {audioImporter(), modImporter(), sceneImporter()};
+    const auto kCook = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+        RAWFRAME_EXPECT(report.has_value());
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    // A contributed scene without a sidecar is refused.
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    writeText(kMod / "more.scene.rfmeta", sidecar("000000000000000000000000000000b3", "", "rawframe.scene"));
+    const CookReport kFirst = kCook();
+    RAWFRAME_EXPECT(kFirst.failures.empty());
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value());
+    if (!kManifest.has_value()) {
+        return;
+    }
+    const auto kEntry = std::ranges::find(
+        *kManifest, content::ResourceTypeId{world_kest::kCookedModType}, &content::ManifestEntry::type);
+    RAWFRAME_EXPECT(kEntry != kManifest->end());
+    if (kEntry == kManifest->end()) {
+        return;
+    }
+    // Its text as written, and each scene once, by resource, whatever
+    // points it is given to.
+    const auto kRead = world_kest::readCookedMod(readText(kProject.output / kEntry->locator));
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->text == kText && kRead->scenes.size() == 2 &&
+                    kRead->scene("wave.scene") != nullptr &&
+                    kRead->scene("wave.scene")->scene ==
+                        base::parseBits128Hex("000000000000000000000000000000b2").value &&
+                    kRead->scene("more.scene") != nullptr);
+    // A scene cooked by something else, and a description that does not
+    // parse, are refused.
+    writeText(kMod / "more.scene.rfmeta", sidecar("000000000000000000000000000000b3", "", "rawframe.text"));
+    RAWFRAME_EXPECT(!kCook().failures.empty());
+    writeText(kMod / "more.scene.rfmeta", sidecar("000000000000000000000000000000b3", "", "rawframe.scene"));
+    writeText(kMod / "horde.mod", "target acme/raid\n");
+    RAWFRAME_EXPECT(!kCook().failures.empty());
+    writeText(kMod / "horde.mod", kText);
+    RAWFRAME_EXPECT(kCook().failures.empty());
 }
 
 RAWFRAME_TEST(NothingIsPublishedUnlessNothingFailed) {

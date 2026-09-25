@@ -1,8 +1,10 @@
 // A game's Mod API surface (SPEC-0042, D177): its policy, namespace and
 // version, the mods a curated game approves, and its data points; and each
-// way a description gets them wrong.
+// way a description gets them wrong; and a mod's description cooked with its
+// scenes (D178).
 
 #include "rawframe/test/test.h"
+#include "rawframe/world_kest/cooked_mod.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/mod.h"
@@ -97,4 +99,36 @@ RAWFRAME_TEST(AModDescribesItsTargetRangeAndContributions) {
           "target acme/raid\nmodapi 1\nreplace rules\n"}) {
         RAWFRAME_EXPECT(!world_kest::parseMod(kText).has_value());
     }
+}
+
+RAWFRAME_TEST(ACookedModReadsAsWritten) {
+    const base::Bits128 kWave = base::parseBits128Hex("000000000000000000000000000000b2").value;
+    const base::Bits128 kMore = base::parseBits128Hex("000000000000000000000000000000b3").value;
+    const world_kest::CookedMod kMod{
+        .text = "target acme/raid\nmodapi 3\n",
+        .scenes = {{.path = "wave.scene", .scene = kWave}, {.path = "more.scene", .scene = kMore}}};
+    const auto kWritten = world_kest::writeCookedMod(kMod);
+    RAWFRAME_EXPECT(kWritten.has_value());
+    if (!kWritten.has_value()) {
+        return;
+    }
+    // Scenes in path order, and the same bytes again.
+    const auto kRead = world_kest::readCookedMod(*kWritten);
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->text == kMod.text && kRead->scenes.size() == 2 &&
+                    kRead->scenes[0].path == "more.scene" && kRead->scene("wave.scene") != nullptr &&
+                    kRead->scene("wave.scene")->scene == kWave);
+    RAWFRAME_EXPECT(kRead.has_value() && world_kest::writeCookedMod(*kRead).value_or("") == *kWritten);
+    // A scene named twice or of no identity is not written; a record of
+    // another kind, a member too many, or a scene out of order is not read.
+    RAWFRAME_EXPECT(
+        !world_kest::writeCookedMod({.scenes = {{.path = "a", .scene = kWave}, {.path = "a", .scene = kMore}}})
+             .has_value());
+    RAWFRAME_EXPECT(!world_kest::writeCookedMod({.scenes = {{.path = "a", .scene = {}}}}).has_value());
+    std::string other = *kWritten;
+    other.replace(other.find("mod.description"), 15, "game.descriptio");
+    RAWFRAME_EXPECT(!world_kest::readCookedMod(other).has_value());
+    std::string swapped = *kWritten;
+    swapped.replace(swapped.find("more.scene"), 10, "zzzz.scene");
+    RAWFRAME_EXPECT(!world_kest::readCookedMod(swapped).has_value());
+    RAWFRAME_EXPECT(!world_kest::readCookedMod("{}").has_value());
 }
