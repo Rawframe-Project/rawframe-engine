@@ -20,7 +20,13 @@ namespace {
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
-    builder.add<Body3D>().add<Pose3D>().add<Velocity3D>().add<Impulse3D>().add<Contact3D>().add<Character3D>();
+    builder.add<Body3D>()
+        .add<Pose3D>()
+        .add<Velocity3D>()
+        .add<Impulse3D>()
+        .add<Contact3D>()
+        .add<Character3D>()
+        .add<Mesh3D>();
     return *builder.freeze();
 }
 
@@ -437,4 +443,105 @@ RAWFRAME_TEST(ASphereSweptAndASphereOverlappedFindTheirBodies) {
     scene.run(1);
     scene.physics->overlapSphere(24, 0, 2.2, 10, physics::kEveryClass, found);
     RAWFRAME_EXPECT(found.size() == 40);
+}
+
+namespace {
+
+/// A flat square `size` meters across on y = 0, of `cells` by `cells`
+/// quads, facing up.
+std::shared_ptr<const mesh::Mesh> grid(std::uint32_t cells, float size) {
+    mesh::Mesh out;
+    const float kStep = size / static_cast<float>(cells);
+    for (std::uint32_t z = 0; z <= cells; ++z) {
+        for (std::uint32_t x = 0; x <= cells; ++x) {
+            out.positions.push_back(
+                {(-size / 2) + (static_cast<float>(x) * kStep), 0.0F, (-size / 2) + (static_cast<float>(z) * kStep)});
+        }
+    }
+    for (std::uint32_t z = 0; z < cells; ++z) {
+        for (std::uint32_t x = 0; x < cells; ++x) {
+            const std::uint32_t kA = (z * (cells + 1)) + x;
+            const std::uint32_t kC = kA + cells + 1;
+            out.indices.insert(out.indices.end(), {kA, kC, kA + 1, kA + 1, kC, kC + 1});
+        }
+    }
+    out.parts.push_back({.firstIndex = 0, .indexCount = static_cast<std::uint32_t>(out.indices.size())});
+    return std::make_shared<const mesh::Mesh>(std::move(out));
+}
+
+constexpr std::uint64_t kFloorMesh = 0xF1;
+
+constexpr Body3D kMeshBody{.motion = static_cast<std::uint8_t>(Motion::Static),
+                           .shape = static_cast<std::uint8_t>(Shape::Mesh),
+                           .friction = 0.6F};
+
+world::EntityHandle meshBody(Scene& scene, const Pose3D& pose, std::uint64_t mesh, const Body3D& body = kMeshBody) {
+    const world::EntityHandle kEntity = scene.body(body, pose);
+    RAWFRAME_EXPECT(scene.world.insert(kEntity, *scene.schema->key<Mesh3D>(), Mesh3D{.mesh = mesh}).has_value());
+    return kEntity;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AMeshHoldsWhatFallsOnIt) {
+    const auto kPlay = [](Scene& scene) {
+        const world::EntityHandle kFloor = meshBody(scene, {.y = 1}, kFloorMesh);
+        const world::EntityHandle kBallEntity = scene.body(kBall, {.x = 0.3, .y = 4, .z = -0.2});
+        scene.run(240);
+        return std::tuple{kFloor, kBallEntity, scene.physics->digest()};
+    };
+    const Physics3DSettings kSettings{.meshes = {{.id = kFloorMesh, .mesh = grid(8, 10)}}};
+    Scene scene{kSettings};
+    const auto [kFloor, kBallEntity, kDigest] = kPlay(scene);
+    // At the body's pose, not the mesh's origin.
+    RAWFRAME_EXPECT(std::abs(scene.pose(kBallEntity).y - 1.25) < 0.02);
+    const RayHit3D kDown = scene.physics->castRay(2, 3, 2, 0, -5, 0, physics::kEveryClass);
+    RAWFRAME_EXPECT(kDown.hit && kDown.entity == kFloor && std::abs(kDown.y - 1) < 0.001 && kDown.normalY > 0.99F);
+    // From below, the back of the triangles: nothing.
+    RAWFRAME_EXPECT(!scene.physics->castRay(2, 0, 2, 0, 5, 0, physics::kEveryClass).hit);
+    RAWFRAME_EXPECT(scene.physics->statistics().bodiesMade == 2);
+    Scene again{kSettings};
+    RAWFRAME_EXPECT(std::get<2>(kPlay(again)) == kDigest);
+}
+
+RAWFRAME_TEST(AMeshPastOneShapeIsMadeOfPieces) {
+    // 80,000 triangles: more than Maul3D takes in one shape.
+    Scene scene{{.meshes = {{.id = kFloorMesh, .mesh = grid(200, 100)}}}};
+    const world::EntityHandle kFloor = meshBody(scene, {}, kFloorMesh);
+    const world::EntityHandle kNear = scene.body(kBall, {.x = -45, .y = 2, .z = -45});
+    const world::EntityHandle kFar = scene.body(kBall, {.x = 45, .y = 2, .z = 45});
+    scene.run(180);
+    RAWFRAME_EXPECT(std::abs(scene.pose(kNear).y - 0.25) < 0.02 && std::abs(scene.pose(kFar).y - 0.25) < 0.02);
+    // Beside each ball, down to the piece under it.
+    for (const double kAt : {-44.0, 44.0}) {
+        const RayHit3D kHit = scene.physics->castRayAt(kAt, 3, kAt, 0, -5, 0, {.base = 179}, physics::kEveryClass);
+        RAWFRAME_EXPECT(kHit.hit && kHit.entity == kFloor);
+    }
+}
+
+RAWFRAME_TEST(AMeshBodyIsStaticAndNamesAKnownMesh) {
+    Scene scene{{.meshes = {{.id = kFloorMesh, .mesh = grid(2, 4)}}}};
+    Body3D moving = kMeshBody;
+    moving.motion = static_cast<std::uint8_t>(Motion::Dynamic);
+    static_cast<void>(meshBody(scene, {}, kFloorMesh, moving));
+    const world::EntityHandle kUnknown = meshBody(scene, {}, 0xF2);
+    static_cast<void>(scene.body(kMeshBody, {}));
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().bodiesRefused == 3 && scene.physics->statistics().bodiesMade == 0);
+    // Named again, a mesh that is known: made.
+    scene.world.get(kUnknown, *scene.schema->key<Mesh3D>())->mesh = kFloorMesh;
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().bodiesMade == 1);
+
+    const auto kFlat = grid(2, 4);
+    mesh::Mesh broken = *kFlat;
+    broken.indices[0] = 99;
+    for (const std::vector<BodyMesh>& kMeshes :
+         {std::vector<BodyMesh>{{.id = 1, .mesh = kFlat}, {.id = 1, .mesh = kFlat}},
+          std::vector<BodyMesh>{{.id = 0, .mesh = kFlat}},
+          std::vector<BodyMesh>{{.id = 1, .mesh = nullptr}},
+          std::vector<BodyMesh>{{.id = 1, .mesh = std::make_shared<const mesh::Mesh>(broken)}}}) {
+        const auto kRefused = Physics3D::create({.meshes = kMeshes});
+        RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().code() == code(Physics3DError::InvalidSettings));
+    }
 }

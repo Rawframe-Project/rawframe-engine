@@ -119,13 +119,18 @@ constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const 
                            .fields = fields};
 }
 
-const std::array<ComponentLayout, 6> kLayouts = {
+constexpr std::array<ComponentField, 1> kMeshFields = {{
+    {"mesh", offsetof(Mesh3D, mesh), FieldType::U64},
+}};
+
+const std::array<ComponentLayout, 7> kLayouts = {
     layoutOf<Body3D>("Body3D", kBodyFields),
     layoutOf<Pose3D>("Pose3D", kPoseFields),
     layoutOf<Velocity3D>("Velocity3D", kMotionFields<Velocity3D>),
     layoutOf<Impulse3D>("Impulse3D", kMotionFields<Impulse3D>),
     layoutOf<Contact3D>("Contact3D", kContactFields),
     layoutOf<Character3D>("Character3D", kCharacterFields),
+    layoutOf<Mesh3D>("Mesh3D", kMeshFields),
 };
 
 } // namespace

@@ -71,23 +71,27 @@ constexpr std::int32_t kCylinderSides = 16;
     bool shaped = false;
     switch (static_cast<Shape>(body.shape)) {
     case Shape::Sphere:
-        shaped = true;
+        shaped = body.width > 0;
         break;
     case Shape::Box:
-        shaped = body.height > 0 && body.depth > 0;
+        shaped = body.width > 0 && body.height > 0 && body.depth > 0;
         break;
     case Shape::Capsule:
         // A capsule of no length is a sphere, which Maul3D wants made as one.
-        shaped = body.height > 0;
+        shaped = body.width > 0 && body.height > 0;
         break;
     case Shape::Cylinder:
-        shaped = body.height > 0;
+        shaped = body.width > 0 && body.height > 0;
+        break;
+    case Shape::Mesh:
+        // Triangles have no mass to move with, nor an inside to sense.
+        shaped = body.motion == static_cast<std::uint8_t>(physics::Motion::Static) && !body.sensor;
         break;
     }
-    return body.motion <= static_cast<std::uint8_t>(physics::Motion::Dynamic) && shaped && body.width > 0 &&
-           finite(body.width) && finite(body.height) && finite(body.depth) && body.density >= 0 &&
-           finite(body.density) && body.friction >= 0 && finite(body.friction) && body.restitution >= 0 &&
-           body.restitution <= 1 && body.linearDamping >= 0 && finite(body.linearDamping) && body.angularDamping >= 0 &&
+    return body.motion <= static_cast<std::uint8_t>(physics::Motion::Dynamic) && shaped && finite(body.width) &&
+           finite(body.height) && finite(body.depth) && body.density >= 0 && finite(body.density) &&
+           body.friction >= 0 && finite(body.friction) && body.restitution >= 0 && body.restitution <= 1 &&
+           body.linearDamping >= 0 && finite(body.linearDamping) && body.angularDamping >= 0 &&
            finite(body.angularDamping) && std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z) &&
            finite(pose.qx) && finite(pose.qy) && finite(pose.qz) && finite(pose.qw) && finite(velocity.x) &&
            finite(velocity.y) && finite(velocity.z) && finite(velocity.angularX) && finite(velocity.angularY) &&
@@ -156,8 +160,79 @@ struct Turned {
         return kWidth + kHeight;
     case Shape::Cylinder:
         return std::sqrt((kWidth * kWidth) + (kHeight * kHeight));
+    case Shape::Mesh:
+        break;
     }
     return 0;
+}
+
+/// The most vertices and triangles Maul3D takes in one mesh shape.
+constexpr std::size_t kPieceMost = 65'535;
+
+/// A mesh as Maul3D takes it: pieces of at most kPieceMost vertices and
+/// triangles, and how far from its origin any of it reaches.
+struct PreparedMesh {
+    struct Piece {
+        std::vector<m3Vec3> vertices;
+        std::vector<std::uint16_t> indices;
+    };
+    std::vector<Piece> pieces;
+    double reach = 0;
+};
+
+/// Triangles in order, a piece closed when the next might not fit. A
+/// triangle of no area touches nothing and is left out, since Maul3D's
+/// contacts need a face's normal.
+[[nodiscard]] PreparedMesh prepare(const mesh::Mesh& source) {
+    PreparedMesh out;
+    std::vector<std::int32_t> local(source.positions.size(), -1);
+    std::vector<std::uint32_t> used;
+    PreparedMesh::Piece piece;
+    const auto kClose = [&] {
+        if (!piece.indices.empty()) {
+            out.pieces.push_back(std::move(piece));
+        }
+        piece = {};
+        for (const std::uint32_t kGlobal : used) {
+            local[kGlobal] = -1;
+        }
+        used.clear();
+    };
+    for (std::size_t first = 0; first < source.indices.size(); first += 3) {
+        const std::array<std::uint32_t, 3> kCorners = {
+            source.indices[first], source.indices[first + 1], source.indices[first + 2]};
+        const mesh::Vector3& kA = source.positions[kCorners[0]];
+        const mesh::Vector3& kB = source.positions[kCorners[1]];
+        const mesh::Vector3& kC = source.positions[kCorners[2]];
+        const Turned kAb{double{kB[0]} - kA[0], double{kB[1]} - kA[1], double{kB[2]} - kA[2]};
+        const Turned kAc{double{kC[0]} - kA[0], double{kC[1]} - kA[1], double{kC[2]} - kA[2]};
+        const Turned kCross{
+            (kAb.y * kAc.z) - (kAb.z * kAc.y), (kAb.z * kAc.x) - (kAb.x * kAc.z), (kAb.x * kAc.y) - (kAb.y * kAc.x)};
+        if (kCross.x == 0 && kCross.y == 0 && kCross.z == 0) {
+            continue;
+        }
+        // Three new vertices at most: closing a little early is harmless.
+        if (piece.vertices.size() + 3 > kPieceMost || piece.indices.size() / 3 == kPieceMost) {
+            kClose();
+        }
+        for (const std::uint32_t kGlobal : kCorners) {
+            if (local[kGlobal] < 0) {
+                local[kGlobal] = static_cast<std::int32_t>(piece.vertices.size());
+                used.push_back(kGlobal);
+                const mesh::Vector3& kPoint = source.positions[kGlobal];
+                piece.vertices.push_back(m3Vec3{kPoint[0], kPoint[1], kPoint[2]});
+            }
+            piece.indices.push_back(static_cast<std::uint16_t>(local[kGlobal]));
+        }
+    }
+    kClose();
+    for (const mesh::Vector3& kPoint : source.positions) {
+        const double kX = kPoint[0];
+        const double kY = kPoint[1];
+        const double kZ = kPoint[2];
+        out.reach = std::max(out.reach, std::sqrt((kX * kX) + (kY * kY) + (kZ * kZ)));
+    }
+    return out;
 }
 
 /// Whether the segment from `origin` along `toward` passes within `reach` of
@@ -179,6 +254,11 @@ struct Turned {
 struct Mapped {
     m3BodyId body{};
     m3ShapeId shape{};
+    /// A mesh's shapes past its first.
+    std::vector<m3ShapeId> pieces;
+    /// The mesh it was made of, and how far from its origin it reaches.
+    std::uint64_t mesh = 0;
+    double reach = 0;
     /// The sensor twin of a body whose class triggers with another.
     m3ShapeId trigger{};
     /// Its pose after each of the last steps, by tick modulo the history's
@@ -199,7 +279,14 @@ struct Row {
     Pose3D* pose = nullptr;
     Velocity3D* velocity = nullptr;
     Character3D* character = nullptr;
+    const Mesh3D* mesh = nullptr;
 };
+
+/// The mesh a row's body is made of: its Mesh3D's for a mesh body, else
+/// none.
+[[nodiscard]] std::uint64_t meshOf(const Row& row) noexcept {
+    return row.body->shape == static_cast<std::uint8_t>(Shape::Mesh) && row.mesh != nullptr ? row.mesh->mesh : 0;
+}
 
 [[nodiscard]] bool sameShape(m3ShapeId left, m3ShapeId right) noexcept {
     return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
@@ -229,6 +316,8 @@ struct Physics3D::State {
     std::optional<schema::ComponentRuntimeId> impulse;
     std::optional<schema::ComponentRuntimeId> contact;
     std::optional<schema::ComponentRuntimeId> character;
+    std::optional<schema::ComponentRuntimeId> meshShape;
+    std::map<std::uint64_t, PreparedMesh> meshes;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
     std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
@@ -253,10 +342,20 @@ struct Physics3D::State {
         into.body = {};
         into.shape = {};
         into.trigger = {};
+        into.pieces.clear();
+        into.mesh = meshOf(row);
+        into.reach = reachOf(body);
         into.since.reset();
         into.character = row.character != nullptr;
         const auto kClass = filters.classIndex(body.collisionClass);
-        into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value();
+        const PreparedMesh* kMesh = nullptr;
+        if (body.shape == static_cast<std::uint8_t>(Shape::Mesh)) {
+            const auto kFound = meshes.find(into.mesh);
+            kMesh = kFound != meshes.end() && !kFound->second.pieces.empty() ? &kFound->second : nullptr;
+            into.reach = kMesh != nullptr ? kMesh->reach : 0;
+        }
+        into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value() ||
+                       (body.shape == static_cast<std::uint8_t>(Shape::Mesh) && kMesh == nullptr);
         if (into.refused) {
             ++statistics.bodiesRefused;
             return false;
@@ -316,9 +415,14 @@ struct Physics3D::State {
                     .point1 = {0, -body.height, 0}, .point2 = {0, body.height, 0}, .radius = body.width};
                 return m3CreateCylinderShape(kBody, &definitionOf, &kCylinder, kCylinderSides);
             }
+            case Shape::Mesh:
+                break;
             }
             return m3ShapeId{};
         };
+        if (kMesh != nullptr) {
+            return makeMesh(row.entity, *kMesh, kBody, shape, into);
+        }
         const m3ShapeId kMade = kShape(shape);
         m3ShapeId twin{};
         if (kMade.index1 != 0 && !body.sensor && filter.triggerMask != 0) {
@@ -343,6 +447,39 @@ struct Physics3D::State {
         owners[kMade.index1] = {kMade.generation, row.entity};
         if (twin.index1 != 0) {
             owners[twin.index1] = {twin.generation, row.entity};
+        }
+        ++statistics.bodiesMade;
+        return true;
+    }
+
+    /// A mesh body's shapes, one a piece. A mesh never triggers: it has no
+    /// twin.
+    [[nodiscard]] bool makeMesh(world::EntityHandle entity,
+                                const PreparedMesh& prepared,
+                                m3BodyId body,
+                                const m3ShapeDef& shape,
+                                Mapped& into) {
+        std::vector<m3ShapeId> made;
+        for (const PreparedMesh::Piece& kPiece : prepared.pieces) {
+            const m3ShapeId kMade = m3CreateMeshShape(body,
+                                                      &shape,
+                                                      kPiece.vertices.data(),
+                                                      static_cast<std::int32_t>(kPiece.vertices.size()),
+                                                      kPiece.indices.data(),
+                                                      static_cast<std::int32_t>(kPiece.indices.size() / 3));
+            if (kMade.index1 == 0) {
+                m3DestroyBody(body);
+                into.refused = true;
+                ++statistics.bodiesRefused;
+                return false;
+            }
+            made.push_back(kMade);
+        }
+        into.body = body;
+        into.shape = made.front();
+        into.pieces.assign(made.begin() + 1, made.end());
+        for (const m3ShapeId kMade : made) {
+            owners[kMade.index1] = {kMade.generation, entity};
         }
         ++statistics.bodiesMade;
         return true;
@@ -505,6 +642,9 @@ struct Physics3D::State {
         if (!entry.refused) {
             owners.erase(entry.shape.index1);
             owners.erase(entry.trigger.index1);
+            for (const m3ShapeId kPiece : entry.pieces) {
+                owners.erase(kPiece.index1);
+            }
             m3DestroyBody(entry.body);
             ++statistics.bodiesRemoved;
         }
@@ -522,6 +662,7 @@ struct Physics3D::State {
                         });
         for (Row& row : rows) {
             row.character = static_cast<Character3D*>(world.getErased(row.entity, *character));
+            row.mesh = static_cast<const Mesh3D*>(world.getErased(row.entity, *meshShape));
         }
         std::sort(rows.begin(), rows.end(), [](const Row& left, const Row& right) {
             return left.entity < right.entity;
@@ -544,7 +685,8 @@ struct Physics3D::State {
         for (const Row& row : rows) {
             const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
             Mapped& entry = kEntry->second;
-            if (kNew || !same(entry.made, *row.body) || entry.character != (row.character != nullptr)) {
+            if (kNew || !same(entry.made, *row.body) || entry.character != (row.character != nullptr) ||
+                entry.mesh != meshOf(row)) {
                 if (!kNew) {
                     remove(row.entity, entry);
                 }
@@ -707,7 +849,8 @@ result::Result<std::unique_ptr<Physics3D>> Physics3D::create(const Physics3DSett
     if (!std::isfinite(settings.gravityX) || !std::isfinite(settings.gravityY) || !std::isfinite(settings.gravityZ) ||
         settings.substeps == 0 || settings.substeps > 64 || settings.bodyCapacity == 0 ||
         settings.bodyCapacity > kMost || settings.shapeCapacity == 0 || settings.shapeCapacity > kMost ||
-        settings.jointCapacity == 0 || settings.jointCapacity > kMost) {
+        settings.jointCapacity == 0 || settings.jointCapacity > kMost || settings.meshCapacity == 0 ||
+        settings.meshCapacity > kMost) {
         return refuse(result::ErrorClass::InvalidArgument,
                       Physics3DError::InvalidSettings,
                       "physics settings: finite gravity, 1 to 64 substeps, and capacities of 1 to 2^20");
@@ -720,11 +863,22 @@ result::Result<std::unique_ptr<Physics3D>> Physics3D::create(const Physics3DSett
     auto state = std::make_unique<State>();
     state->settings = settings;
     RAWFRAME_TRY_ASSIGN(state->filters, physics::CollisionFilters::make(settings.collision));
+    for (const BodyMesh& each : settings.meshes) {
+        // Nought is a Mesh3D's name for none.
+        if (each.id == 0 || each.mesh == nullptr || !mesh::validate(*each.mesh).has_value() ||
+            state->meshes.contains(each.id)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          Physics3DError::InvalidSettings,
+                          "physics settings: every mesh valid, each identity once and not nought");
+        }
+        state->meshes.emplace(each.id, prepare(*each.mesh));
+    }
     m3WorldDef definition = m3DefaultWorldDef();
     definition.gravity = m3Vec3{settings.gravityX, settings.gravityY, settings.gravityZ};
     definition.bodyCapacity = static_cast<std::int32_t>(settings.bodyCapacity);
     definition.shapeCapacity = static_cast<std::int32_t>(settings.shapeCapacity);
     definition.jointCapacity = static_cast<std::int32_t>(settings.jointCapacity);
+    definition.meshCapacity = static_cast<std::int32_t>(settings.meshCapacity);
     definition.enableSleeping = settings.sleeping;
     // Every hit is told, however slow: Contact3D says how hard.
     definition.hitEventThreshold = 0;
@@ -757,7 +911,9 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character3D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.meshShape, registry.find(Mesh3D::kComponentTypeId));
     state.reads = state.bodies->reads();
+    state.reads.push_back(*state.meshShape);
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);
@@ -902,7 +1058,7 @@ RayHit3D Physics3D::castRayAt(double originX,
             }
             then = transformOf(at);
         }
-        if (!passesNear(kOrigin, kToward, Turned{then.p.x, then.p.y, then.p.z}, reachOf(entry.made))) {
+        if (!passesNear(kOrigin, kToward, Turned{then.p.x, then.p.y, then.p.z}, entry.reach)) {
             continue;
         }
         // The ray in the body's frame then is the ray in its frame now; the
@@ -926,7 +1082,10 @@ RayHit3D Physics3D::castRayAt(double originX,
         const auto kEnd = state.rayHits.begin() + std::min<std::ptrdiff_t>(total, std::ssize(state.rayHits));
         const auto kHit = std::find_if(state.rayHits.begin(), kEnd, [&entry](const m3RayHit& hit) {
             return sameShape(hit.shapeId, entry.shape) ||
-                   (entry.trigger.index1 != 0 && sameShape(hit.shapeId, entry.trigger));
+                   (entry.trigger.index1 != 0 && sameShape(hit.shapeId, entry.trigger)) ||
+                   std::ranges::any_of(entry.pieces, [&hit](m3ShapeId piece) {
+                       return sameShape(hit.shapeId, piece);
+                   });
         });
         if (kHit == kEnd || (closest.hit && kHit->fraction >= closest.fraction)) {
             continue;

@@ -19,11 +19,13 @@ const DYNAMIC: u8 = 2
 // Body3D.shape: a sphere of radius `width`; a box of half sides `width`,
 // `height`, and `depth`; an upright capsule of radius `width` whose two
 // centers are `height` above and below the origin; an upright cylinder of
-// radius `width` and half height `height`.
+// radius `width` and half height `height`; the triangles of the mesh the
+// entity's Mesh3D names, for a static body only.
 const SPHERE: u8 = 0
 const BOX: u8 = 1
 const CAPSULE: u8 = 2
 const CYLINDER: u8 = 3
+const MESH: u8 = 4
 
 // How the body is made; changing it makes the body again where it is.
 struct Body3D {
@@ -120,6 +122,12 @@ struct Character3D {
     groundNormalX: f32
     groundNormalY: f32
     groundNormalZ: f32
+}
+
+// Which of the game's meshes a body of shape MESH is, by the identity its
+// `mesh` line gives it; changing it makes the body again.
+struct Mesh3D {
+    mesh: u64
 }
 
 // What a ray or a sweep found: the closest body along it, where, the

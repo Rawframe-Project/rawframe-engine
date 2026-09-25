@@ -36,6 +36,10 @@ enum class Shape : std::uint8_t {
     /// Upright: `width` is the radius and `height` half the height; a prism
     /// of sixteen sides.
     Cylinder = 3,
+    /// Static only: the triangles of the mesh its entity's Mesh3D names, at
+    /// the body's pose, facing out counter-clockwise. `width`, `height`,
+    /// and `depth` are unused, and it is never a sensor.
+    Mesh = 4,
 };
 
 /// How the body is made. Changing any of it makes the body again, from the
@@ -187,8 +191,18 @@ struct Character3D {
     float groundNormalZ = 0;
 };
 
-/// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, and Character3D, in
-/// that order. An entity field appears as its two parts, `<name>.slot` and
+/// Which of the physics settings' meshes a body of Shape::Mesh is made of,
+/// by the identity the game gives it. Changing it makes the body again.
+struct Mesh3D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("d8f9e868-d5ee-4230-9379-0abeab4018b7");
+    static constexpr std::string_view kComponentName = "rawframe.physics3d.mesh";
+
+    std::uint64_t mesh = 0;
+};
+
+/// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, Character3D, and
+/// Mesh3D, in that order. An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;
 

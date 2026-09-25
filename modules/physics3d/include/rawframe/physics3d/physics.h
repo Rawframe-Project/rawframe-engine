@@ -23,6 +23,7 @@
 // same components and the same writes give the same bits on every machine.
 
 #include "rawframe/composition/participant.h"
+#include "rawframe/mesh/mesh.h"
 #include "rawframe/physics/collision.h"
 #include "rawframe/physics/rewind.h"
 #include "rawframe/physics3d/components.h"
@@ -38,6 +39,13 @@
 
 namespace rawframe::physics3d {
 
+/// A mesh bodies may be made of: the identity a Mesh3D names it by, and its
+/// triangles, shared with whatever else reads them.
+struct BodyMesh {
+    std::uint64_t id = 0;
+    std::shared_ptr<const mesh::Mesh> mesh;
+};
+
 struct Physics3DSettings {
     /// Meters a second squared.
     float gravityX = 0;
@@ -48,6 +56,11 @@ struct Physics3DSettings {
     std::uint32_t bodyCapacity = 4096;
     std::uint32_t shapeCapacity = 4096;
     std::uint32_t jointCapacity = 1024;
+    /// Mesh shapes at once. Maul3D takes at most 65,535 vertices and
+    /// 65,535 triangles in one, so a larger mesh's body is made of several.
+    std::uint32_t meshCapacity = 64;
+    /// Every mesh a body may be made of, each identity once.
+    std::vector<BodyMesh> meshes;
     bool sleeping = true;
     /// Ticks of every body's pose kept for casting back in time
     /// (SPEC-0041's compensation window); nought keeps none.
@@ -134,15 +147,15 @@ public:
 
 class Physics3D final : public world_runtime::SystemContributor, public Physics3DQueries {
 public:
-    /// Refuses settings out of range (`invalid_settings`), a collision
-    /// document that is not well formed (rawframe.physics's
-    /// `invalid_document`), a processor that cannot run the build's kernels
-    /// (`unsupported`), and a process with no room for another physics world
-    /// (`capacity`; Maul3D keeps 64).
+    /// Refuses settings out of range or meshes named twice or not valid
+    /// (`invalid_settings`), a collision document that is not well formed
+    /// (rawframe.physics's `invalid_document`), a processor that cannot run
+    /// the build's kernels (`unsupported`), and a process with no room for
+    /// another physics world (`capacity`; Maul3D keeps 64).
     [[nodiscard]] static result::Result<std::unique_ptr<Physics3D>> create(const Physics3DSettings& settings);
     ~Physics3D() override;
 
-    /// Contributes kStepSystem. The registry must hold the six physics
+    /// Contributes kStepSystem. The registry must hold the seven physics
     /// components at the engine's sizes.
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;
