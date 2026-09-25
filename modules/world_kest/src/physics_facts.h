@@ -4,9 +4,9 @@
 // game gains, the values queries answer with, and where in a body its motion and collision
 // class are. Everything else about the two is the same (rawframe.physics).
 
-#include "rawframe/physics/layout.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics3d/components.h"
+#include "rawframe/schema/layout.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -16,9 +16,9 @@
 namespace rawframe::world_kest {
 
 struct PhysicsFacts {
-    std::span<const physics::ComponentLayout> components;
+    std::span<const schema::ComponentLayout> components;
     /// The values queries answer with (a ray's hit, an overlap).
-    std::span<const physics::ComponentLayout> answers;
+    std::span<const schema::ComponentLayout> answers;
     schema::ComponentTypeId body;
     std::size_t motion = 0;
     std::size_t collisionClass = 0;

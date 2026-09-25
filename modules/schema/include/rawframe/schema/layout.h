@@ -1,8 +1,8 @@
 #pragma once
 
-// How a physics component is laid out, field by field, for a script that
-// must declare the same struct: the engine's tables in physics2d and
-// physics3d are checked against the script's declarations.
+// How an engine component is laid out, field by field, for a script that
+// must declare the same struct: each module's table of its components is
+// checked against the script's declarations.
 
 #include "rawframe/schema/stable_id.h"
 
@@ -11,7 +11,7 @@
 #include <span>
 #include <string_view>
 
-namespace rawframe::physics {
+namespace rawframe::schema {
 
 enum class FieldType : std::uint8_t {
     U8,
@@ -28,7 +28,7 @@ struct ComponentField {
     FieldType type = FieldType::U8;
 };
 
-/// One physics component as a script must declare it.
+/// One engine component as a script must declare it.
 struct ComponentLayout {
     schema::ComponentTypeId id;
     std::string_view name;
@@ -39,4 +39,4 @@ struct ComponentLayout {
     std::span<const ComponentField> fields;
 };
 
-} // namespace rawframe::physics
+} // namespace rawframe::schema

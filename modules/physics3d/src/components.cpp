@@ -6,9 +6,9 @@ namespace rawframe::physics3d {
 
 namespace {
 
-using physics::ComponentField;
-using physics::ComponentLayout;
-using physics::FieldType;
+using schema::ComponentField;
+using schema::ComponentLayout;
+using schema::FieldType;
 
 constexpr std::array<ComponentField, 14> kBodyFields = {{
     {"motion", offsetof(Body3D, motion), FieldType::U8},

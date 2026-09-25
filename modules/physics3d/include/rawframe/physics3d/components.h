@@ -15,8 +15,8 @@
 // a matching declaration holds.
 
 #include "rawframe/physics/joint.h"
-#include "rawframe/physics/layout.h"
 #include "rawframe/physics/motion.h"
+#include "rawframe/schema/layout.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/entity.h"
 
@@ -290,7 +290,7 @@ struct Attach3D {
 /// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, Character3D, Mesh3D,
 /// Joint3D, and Attach3D, in that order. An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
-[[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;
+[[nodiscard]] std::span<const schema::ComponentLayout> componentLayouts() noexcept;
 
 /// What an overlap query found: how many bodies overlap the shape asked
 /// about, and the one at the asked index among them in entity order (the
@@ -302,6 +302,6 @@ struct Overlap3D {
 
 /// RayHit3D and Overlap3D as a script must declare them; their identities
 /// are none.
-[[nodiscard]] std::span<const physics::ComponentLayout> answerLayouts() noexcept;
+[[nodiscard]] std::span<const schema::ComponentLayout> answerLayouts() noexcept;
 
 } // namespace rawframe::physics3d

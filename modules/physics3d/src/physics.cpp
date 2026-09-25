@@ -924,7 +924,7 @@ result::Result<std::unique_ptr<Physics3D>> Physics3D::create(const Physics3DSett
 result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
                                          std::vector<world::SystemDeclaration>& systems) noexcept {
     State& state = *state_;
-    for (const physics::ComponentLayout& layout : componentLayouts()) {
+    for (const schema::ComponentLayout& layout : componentLayouts()) {
         const auto kId = registry.find(layout.id);
         if (!kId.has_value() || registry.descriptor(*kId).size != layout.size || !registry.descriptor(*kId).plainData) {
             return refuse(result::ErrorClass::InvalidArgument,

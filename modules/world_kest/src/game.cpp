@@ -328,7 +328,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                "`physics3d [gravity <x> <y> <z>] [substeps <n>]`");
             }
             const PhysicsFacts kFacts = physicsFacts(physics.dimensions);
-            for (const physics::ComponentLayout& layout : kFacts.components) {
+            for (const schema::ComponentLayout& layout : kFacts.components) {
                 game.components.push_back(GameComponent{
                     .id = layout.id, .name = std::string{layout.name}, .kestType = std::string{layout.scriptType}});
             }

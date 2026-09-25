@@ -40,7 +40,7 @@ kest::TypeLayout persistentLayout() {
 }
 
 /// The engine's layout of a physics component.
-kest::TypeLayout physicsLayout(const physics::ComponentLayout& engine) {
+kest::TypeLayout physicsLayout(const schema::ComponentLayout& engine) {
     constexpr std::array<kest::FieldKind, 6> kKinds = {kest::FieldKind::U8,
                                                        kest::FieldKind::U32,
                                                        kest::FieldKind::U64,
@@ -48,7 +48,7 @@ kest::TypeLayout physicsLayout(const physics::ComponentLayout& engine) {
                                                        kest::FieldKind::F32,
                                                        kest::FieldKind::F64};
     kest::TypeLayout made{.size = engine.size, .alignment = engine.alignment, .mark = 0, .fields = {}};
-    for (const physics::ComponentField& field : engine.fields) {
+    for (const schema::ComponentField& field : engine.fields) {
         made.fields.push_back(kest::Field{.name = std::string{field.name},
                                           .offset = field.offset,
                                           .kind = kKinds[static_cast<std::size_t>(field.type)]});
@@ -109,7 +109,7 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
     } else if (component.id == world::Persistent::kComponentTypeId) {
         engine = persistentLayout();
     } else if (game.physics.has_value()) {
-        for (const physics::ComponentLayout& owned : physicsFacts(game.physics->dimensions).components) {
+        for (const schema::ComponentLayout& owned : physicsFacts(game.physics->dimensions).components) {
             if (owned.id == component.id) {
                 engine = physicsLayout(owned);
             }

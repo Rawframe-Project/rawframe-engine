@@ -914,37 +914,37 @@ private:
             return {};
         }
         const PhysicsFacts kFacts = physicsFacts(game_.physics->dimensions);
-        const auto kType = [](kest::FieldKind kind) -> std::optional<physics::FieldType> {
+        const auto kType = [](kest::FieldKind kind) -> std::optional<schema::FieldType> {
             switch (kind) {
             case kest::FieldKind::U8:
-                return physics::FieldType::U8;
+                return schema::FieldType::U8;
             case kest::FieldKind::U32:
-                return physics::FieldType::U32;
+                return schema::FieldType::U32;
             case kest::FieldKind::U64:
-                return physics::FieldType::U64;
+                return schema::FieldType::U64;
             case kest::FieldKind::Bool:
-                return physics::FieldType::Bool;
+                return schema::FieldType::Bool;
             case kest::FieldKind::F32:
-                return physics::FieldType::F32;
+                return schema::FieldType::F32;
             case kest::FieldKind::F64:
-                return physics::FieldType::F64;
+                return schema::FieldType::F64;
             default:
                 return std::nullopt;
             }
         };
-        std::vector<std::pair<const physics::ComponentLayout*, kest::TypeLayout>> checked;
-        for (const physics::ComponentLayout& engine : kFacts.components) {
+        std::vector<std::pair<const schema::ComponentLayout*, kest::TypeLayout>> checked;
+        for (const schema::ComponentLayout& engine : kFacts.components) {
             const GameComponent& component = *componentNamed(engine.name);
             checked.emplace_back(&engine, layouts_[static_cast<std::size_t>(&component - game_.components.data())]);
         }
         // The queries' answers, those the program uses.
-        for (const physics::ComponentLayout& answer : kFacts.answers) {
+        for (const schema::ComponentLayout& answer : kFacts.answers) {
             if (auto layout = program_->layout(answer.scriptType)) {
                 checked.emplace_back(&answer, std::move(*layout));
             }
         }
         for (const auto& [kEngine, layout] : checked) {
-            const physics::ComponentLayout& engine = *kEngine;
+            const schema::ComponentLayout& engine = *kEngine;
             bool same = layout.size == engine.size && layout.alignment == engine.alignment &&
                         layout.fields.size() == engine.fields.size();
             for (std::size_t index = 0; same && index < layout.fields.size(); ++index) {
