@@ -19,17 +19,41 @@
 
 namespace rawframe::host {
 
-/// How a Host run ended, for the process's exit code.
+/// Why a Host run ended: SPEC-0012's exit reasons that a Host tells apart
+/// (D184). The process exits with `exitCode`, the reason's portable category;
+/// the reason itself, more precise, is logged once as the run ends.
 enum class HostExit : std::uint8_t {
     /// Stopped on request, or after `host.maximum_iterations`, in order.
     Stopped = 0,
-    /// The configuration, plan, or a participant's start was refused. Nothing
-    /// ran; everything that started was rolled back.
-    StartupFailed = 1,
+    /// The process was invoked wrongly: an unknown argument, a missing file.
+    InvalidInvocation,
+    /// A setting was malformed or out of range, the Host's own or a
+    /// participant's.
+    InvalidLaunchDescriptor,
+    /// Content the process was given did not verify or read as what it
+    /// claims: a Build, a Composition, a signature.
+    IncompatibleArtifact,
+    /// Something the start needs could not be had: a file, a resource, a
+    /// listener, a secret.
+    ResourceUnavailable,
+    /// Valid, but not what this process runs: a plan its registrars refuse,
+    /// a precondition its configuration leaves unmet.
+    UnsupportedConfiguration,
+    /// The start was refused for any other reason. Nothing ran; everything
+    /// that started was rolled back.
+    StartupFailure,
     /// A participant reported the Host unhealthy: it drained and stopped in
     /// order, and a supervisor should not count the run a success.
-    Unhealthy = 2,
+    RuntimeFailure,
 };
+
+/// The reason's SPEC-0012 name, such as `invalid_launch_descriptor`.
+[[nodiscard]] std::string_view describe(HostExit exit) noexcept;
+/// The reason's portable OS category: 0 success, 64 invocation, 65 data,
+/// 69 unavailable, 70 software, 78 configuration.
+[[nodiscard]] int exitCode(HostExit exit) noexcept;
+/// The reason a start refused with `errorClass` ended for.
+[[nodiscard]] HostExit startupExit(result::ErrorClass errorClass) noexcept;
 
 /// Where diagnostics go: a writer for finished NDJSON bytes, called on the
 /// Host thread in the `maintenance` phase and at shutdown.

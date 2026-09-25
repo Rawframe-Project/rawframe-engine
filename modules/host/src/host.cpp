@@ -38,6 +38,7 @@ constexpr EventIdentity kStartFailed{"host", "start_failed"};
 constexpr EventIdentity kStarted{"host", "started"};
 constexpr EventIdentity kStopping{"host", "stopping"};
 constexpr EventIdentity kStopped{"host", "stopped"};
+constexpr EventIdentity kNotStarted{"host", "not_started"};
 constexpr EventIdentity kLifecycle{"host", "lifecycle"};
 constexpr EventIdentity kHealth{"host", "health"};
 
@@ -271,6 +272,15 @@ struct Host::State {
         cpu->stop();
     }
 
+    /// The one record of why a refused start ends the run (SPEC-0012).
+    void logExit(HostExit reason) noexcept {
+        emitter.log(Severity::Critical,
+                    kNotStarted,
+                    "the host did not start",
+                    {diagnostics::field("exit", describe(reason)),
+                     diagnostics::field("exitCode", static_cast<std::uint64_t>(exitCode(reason)))});
+    }
+
     void drainFrom(std::string_view reason) noexcept {
         drainStart = clock.now();
         enter(composition::HostState::Draining, reason);
@@ -289,6 +299,8 @@ struct Host::State {
                         kBadConfiguration,
                         "a host setting is malformed or out of range",
                         {diagnostics::field("key", *badKey)});
+            startExit = HostExit::InvalidLaunchDescriptor;
+            logExit(startExit);
             enter(composition::HostState::Failed, "bad_configuration");
             drainLog();
             return false;
@@ -318,6 +330,8 @@ struct Host::State {
                              diagnostics::field("subject", std::string_view{problem.subject})});
             }
             emitter.log(Severity::Critical, kPlanRefused, "the composition plan was refused");
+            startExit = HostExit::UnsupportedConfiguration;
+            logExit(startExit);
             enter(composition::HostState::Failed, "plan_refused");
             shutDown();
             drainLog();
@@ -349,6 +363,8 @@ struct Host::State {
                         started.error().description(),
                         {diagnostics::field("errorClass", result::describe(started.error().errorClass())),
                          diagnostics::field("context", std::string_view{context})});
+            startExit = startupExit(started.error().errorClass());
+            logExit(startExit);
             enter(composition::HostState::Failed, "start_failed");
             composition.reset();
             shutDown();
@@ -384,7 +400,7 @@ struct Host::State {
             if (request.stopRequested != nullptr && request.stopRequested->load(std::memory_order_acquire)) {
                 drainFrom("stop_requested");
             } else if (health.health == composition::Health::Unhealthy) {
-                exit = HostExit::Unhealthy;
+                exit = HostExit::RuntimeFailure;
                 drainFrom("unhealthy");
             }
         }
@@ -476,7 +492,8 @@ struct Host::State {
                     kStopped,
                     "host stopped",
                     {diagnostics::field("health", composition::describe(health.health)),
-                     diagnostics::field("exit", static_cast<std::uint64_t>(exit)),
+                     diagnostics::field("exit", describe(exit)),
+                     diagnostics::field("exitCode", static_cast<std::uint64_t>(exitCode(exit))),
                      diagnostics::field("shutdownMs", (clock.now() - drainStart).nanoseconds / 1'000'000)});
         router.stop();
         drainLog();
@@ -506,15 +523,83 @@ struct Host::State {
     execution::MonotonicInstant next{};
     std::uint64_t iteration = 0;
     HostExit exit = HostExit::Stopped;
+    /// Why the start was refused, when it was.
+    HostExit startExit = HostExit::StartupFailure;
     composition::HealthReport health;
     StallWatch cpuWatch;
     StallWatch ioWatch;
     execution::MonotonicInstant drainStart;
 };
 
+std::string_view describe(HostExit exit) noexcept {
+    switch (exit) {
+    case HostExit::Stopped:
+        return "clean_stop";
+    case HostExit::InvalidInvocation:
+        return "invalid_invocation";
+    case HostExit::InvalidLaunchDescriptor:
+        return "invalid_launch_descriptor";
+    case HostExit::IncompatibleArtifact:
+        return "incompatible_artifact";
+    case HostExit::ResourceUnavailable:
+        return "required_resource_unavailable";
+    case HostExit::UnsupportedConfiguration:
+        return "unsupported_configuration";
+    case HostExit::StartupFailure:
+        return "startup_failure";
+    case HostExit::RuntimeFailure:
+        return "runtime_failure";
+    }
+    return "startup_failure";
+}
+
+int exitCode(HostExit exit) noexcept {
+    switch (exit) {
+    case HostExit::Stopped:
+        return 0;
+    case HostExit::InvalidInvocation:
+        return 64;
+    case HostExit::InvalidLaunchDescriptor:
+    case HostExit::IncompatibleArtifact:
+        return 65;
+    case HostExit::ResourceUnavailable:
+        return 69;
+    case HostExit::UnsupportedConfiguration:
+        return 78;
+    case HostExit::StartupFailure:
+    case HostExit::RuntimeFailure:
+        return 70;
+    }
+    return 70;
+}
+
+HostExit startupExit(result::ErrorClass errorClass) noexcept {
+    switch (errorClass) {
+    case result::ErrorClass::InvalidArgument:
+    case result::ErrorClass::OutOfRange:
+        return HostExit::InvalidLaunchDescriptor;
+    case result::ErrorClass::DataLoss:
+    case result::ErrorClass::Unauthenticated:
+    case result::ErrorClass::PermissionDenied:
+        return HostExit::IncompatibleArtifact;
+    case result::ErrorClass::NotFound:
+    case result::ErrorClass::AlreadyExists:
+    case result::ErrorClass::ResourceExhausted:
+    case result::ErrorClass::Unavailable:
+        return HostExit::ResourceUnavailable;
+    case result::ErrorClass::FailedPrecondition:
+    case result::ErrorClass::Unsupported:
+        return HostExit::UnsupportedConfiguration;
+    case result::ErrorClass::Conflict:
+    case result::ErrorClass::Internal:
+        return HostExit::StartupFailure;
+    }
+    return HostExit::StartupFailure;
+}
+
 Host::Host(const HostRequest& request) : state_(std::make_unique<State>(request)) {
     if (!state_->start()) {
-        ended_ = HostExit::StartupFailed;
+        ended_ = state_->startExit;
     }
 }
 

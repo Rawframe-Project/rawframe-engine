@@ -260,7 +260,7 @@ RAWFRAME_TEST(AStalledExecutorIsDegradedThenUnhealthy) {
     // finishes. The observer lets the worker go once the Host is unhealthy.
     const auto kExit = run(
         "host.iteration_rate = 1000\nhost.cpu_workers = 1\nhost.stall_ms = 100\nhost.maximum_iterations = 100000", log);
-    RAWFRAME_EXPECT(kExit == host::HostExit::Unhealthy);
+    RAWFRAME_EXPECT(kExit == host::HostExit::RuntimeFailure);
     std::vector<composition::Health> seen;
     for (const host::HostStatus& kStatus : counts.statuses) {
         if (seen.empty() || seen.back() != kStatus.health) {
@@ -293,13 +293,14 @@ RAWFRAME_TEST(AnUnhealthyReportDrainsAndEndsTheRunUnhealthy) {
     std::string log;
     counts.unhealthyAt = 3;
     const auto kExit = run("host.iteration_rate = 1000\nhost.maximum_iterations = 1000", log);
-    RAWFRAME_EXPECT(kExit == host::HostExit::Unhealthy);
+    RAWFRAME_EXPECT(kExit == host::HostExit::RuntimeFailure);
     // Reported in the third iteration, drained at the top of the fourth,
     // with nothing connected.
     RAWFRAME_EXPECT(counts.admitting == 3 && counts.closed == 0);
     RAWFRAME_EXPECT(mentions(log, "\"code\":\"health\"") && mentions(log, "\"reason\":\"test_failure\"") &&
                     mentions(log, "\"participant\":\"test.counting\""));
-    RAWFRAME_EXPECT(mentions(log, "\"reason\":\"unhealthy\"") && mentions(log, "\"exit\":2"));
+    RAWFRAME_EXPECT(mentions(log, "\"reason\":\"unhealthy\"") &&
+                    mentions(log, "\"exit\":\"runtime_failure\",\"exitCode\":70"));
 }
 
 RAWFRAME_TEST(AStopRequestEndsAnUnboundedRun) {
@@ -324,17 +325,20 @@ RAWFRAME_TEST(AStopRequestEndsAnUnboundedRun) {
 RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {
     reset();
     std::string log;
-    RAWFRAME_EXPECT(run("host.iteration_rate = 0", log) == host::HostExit::StartupFailed);
+    RAWFRAME_EXPECT(run("host.iteration_rate = 0", log) == host::HostExit::InvalidLaunchDescriptor);
     RAWFRAME_EXPECT(mentions(log, "\"code\":\"bad_configuration\"") && mentions(log, "host.iteration_rate"));
+    // Why, once, with the process's exit code (SPEC-0012, D184).
+    RAWFRAME_EXPECT(mentions(log, "\"code\":\"not_started\"") &&
+                    mentions(log, "\"exit\":\"invalid_launch_descriptor\",\"exitCode\":65"));
     RAWFRAME_EXPECT(movesThrough(log, {"starting", "failed"}) && !mentions(log, "\"state\":\"preparing\""));
 
     log.clear();
-    RAWFRAME_EXPECT(run("diagnostics.minimum_severity = loud", log) == host::HostExit::StartupFailed);
+    RAWFRAME_EXPECT(run("diagnostics.minimum_severity = loud", log) == host::HostExit::InvalidLaunchDescriptor);
 
     // A supervisor's grace too short for the drain, the shutdown budget, and
     // the executors' budgets (5 + 5 + 6 seconds) and a tenth of it.
     log.clear();
-    RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 17000", log) == host::HostExit::StartupFailed);
+    RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 17000", log) == host::HostExit::InvalidLaunchDescriptor);
     RAWFRAME_EXPECT(mentions(log, "host.supervisor_grace_ms"));
     log.clear();
     RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 18000\nhost.maximum_iterations = 1", log) ==
@@ -344,8 +348,9 @@ RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {
     log.clear();
     reset();
     requireMissing = true;
-    RAWFRAME_EXPECT(run("host.maximum_iterations = 3", log) == host::HostExit::StartupFailed);
+    RAWFRAME_EXPECT(run("host.maximum_iterations = 3", log) == host::HostExit::UnsupportedConfiguration);
     RAWFRAME_EXPECT(mentions(log, "\"code\":\"plan_problem\"") && mentions(log, "missing_provider"));
+    RAWFRAME_EXPECT(mentions(log, "\"exit\":\"unsupported_configuration\",\"exitCode\":78"));
     RAWFRAME_EXPECT(counts.started == 0 && counts.runWorlds == 0);
     RAWFRAME_EXPECT(movesThrough(log, {"starting", "preparing", "failed"}) && !mentions(log, "\"state\":\"ready\""));
 }
@@ -380,6 +385,28 @@ RAWFRAME_TEST(AHostIsDrivenAnIterationAtATime) {
                                          .registrars = kRegistrars,
                                          .configuration = &*kBad,
                                          .log = {.write = &collect, .context = &log}}};
-    RAWFRAME_EXPECT(!refused.iterate() && refused.stop() == host::HostExit::StartupFailed);
+    RAWFRAME_EXPECT(!refused.iterate() && refused.stop() == host::HostExit::InvalidLaunchDescriptor);
     RAWFRAME_EXPECT(mentions(log, "\"code\":\"bad_configuration\""));
+}
+
+RAWFRAME_TEST(EachExitReasonHasItsPortableCategory) {
+    // SPEC-0012's table: a supervisor retries what may pass and fixes what
+    // will not.
+    RAWFRAME_EXPECT(
+        host::exitCode(host::HostExit::Stopped) == 0 && host::exitCode(host::HostExit::InvalidInvocation) == 64 &&
+        host::exitCode(host::HostExit::InvalidLaunchDescriptor) == 65 &&
+        host::exitCode(host::HostExit::IncompatibleArtifact) == 65 &&
+        host::exitCode(host::HostExit::ResourceUnavailable) == 69 &&
+        host::exitCode(host::HostExit::StartupFailure) == 70 && host::exitCode(host::HostExit::RuntimeFailure) == 70 &&
+        host::exitCode(host::HostExit::UnsupportedConfiguration) == 78);
+    // A participant's refusal is sorted by its error's class.
+    using result::ErrorClass;
+    RAWFRAME_EXPECT(host::startupExit(ErrorClass::InvalidArgument) == host::HostExit::InvalidLaunchDescriptor &&
+                    host::startupExit(ErrorClass::DataLoss) == host::HostExit::IncompatibleArtifact &&
+                    host::startupExit(ErrorClass::Unauthenticated) == host::HostExit::IncompatibleArtifact &&
+                    host::startupExit(ErrorClass::NotFound) == host::HostExit::ResourceUnavailable &&
+                    host::startupExit(ErrorClass::Unavailable) == host::HostExit::ResourceUnavailable &&
+                    host::startupExit(ErrorClass::FailedPrecondition) == host::HostExit::UnsupportedConfiguration &&
+                    host::startupExit(ErrorClass::Internal) == host::HostExit::StartupFailure);
+    RAWFRAME_EXPECT(host::describe(host::HostExit::ResourceUnavailable) == "required_resource_unavailable");
 }

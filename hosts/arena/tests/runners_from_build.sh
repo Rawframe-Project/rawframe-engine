@@ -46,12 +46,15 @@ CONF
 }
 
 # A record that names version 0.2.0 of the same root: refused before any
-# World runs.
+# World runs, with the data category's exit code.
 sed 's/"version":"0.1.0"/"version":"0.2.0"/' "$work/runners.composition" >"$work/other.composition"
-if run "$work/other.composition"; then
-    echo "a Composition naming another version was run" >&2
+status=0
+run "$work/other.composition" || status=$?
+if [ "$status" -ne 65 ]; then
+    echo "a Composition naming another version exited $status, not 65 (SPEC-0012's data category)" >&2
     exit 1
 fi
+grep -q '"code":"not_started".*"exitCode":65' "$work/log.ndjson"
 
 run "$work/runners.composition"
 grep -q '"code":"composition_opened"' "$work/log.ndjson"

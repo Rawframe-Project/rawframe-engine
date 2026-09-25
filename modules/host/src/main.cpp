@@ -41,8 +41,6 @@ bool writeStandardOutput(void*, std::span<const char> bytes) noexcept {
     return std::fflush(stdout) == 0 && kWritten;
 }
 
-constexpr int kUsageExit = 64;
-
 bool readFile(const char* path, std::string& text) {
     std::FILE* file = std::fopen(path, "rb");
     if (file == nullptr) {
@@ -68,11 +66,11 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
         if (kArgument == "--config" && index + 1 < argc) {
             if (!readFile(argv[++index], configurationText)) {
                 std::fprintf(stderr, "%.*s: cannot read the configuration file\n", kName, entry.name.data());
-                return kUsageExit;
+                return exitCode(HostExit::InvalidInvocation);
             }
         } else {
             std::fprintf(stderr, "usage: %.*s [--config <file>]\n", kName, entry.name.data());
-            return kUsageExit;
+            return exitCode(HostExit::InvalidInvocation);
         }
     }
     const auto kConfiguration = composition::Configuration::parse(configurationText);
@@ -83,7 +81,7 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
                      entry.name.data(),
                      static_cast<int>(kConfiguration.error().description().size()),
                      kConfiguration.error().description().data());
-        return kUsageExit;
+        return exitCode(HostExit::InvalidLaunchDescriptor);
     }
     installStopBridge();
     const HostExit kExit = runHost(HostRequest{
@@ -93,7 +91,7 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
         .log = {.write = &writeStandardOutput, .context = nullptr},
         .stopRequested = &stopRequested,
     });
-    return static_cast<int>(kExit);
+    return exitCode(kExit);
 }
 
 } // namespace rawframe::host

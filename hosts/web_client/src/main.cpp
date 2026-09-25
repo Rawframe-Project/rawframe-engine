@@ -10,9 +10,9 @@
 //
 //   rawframe_client_create() -> client
 //   rawframe_client_hold(client, path, path_length, bytes, length) -> 0 or 1
-//   rawframe_client_start(client, configuration, length) -> 0 or a HostExit
+//   rawframe_client_start(client, configuration, length) -> 0 or an exit code
 //   rawframe_client_frame(client) -> 1 while running, 0 once ended
-//   rawframe_client_stop(client) -> HostExit
+//   rawframe_client_stop(client) -> an exit code (host::exitCode)
 //   rawframe_client_destroy(client)
 //   rawframe_allocate(size) -> memory the page writes into; rawframe_release
 
@@ -110,12 +110,12 @@ __attribute__((export_name("rawframe_client_hold"))) int rawframeClientHold(
 __attribute__((export_name("rawframe_client_start"))) int
 rawframeClientStart(Client* client, const char* configuration, std::size_t length) {
     if (client == nullptr || client->host != nullptr) {
-        return static_cast<int>(host::HostExit::StartupFailed);
+        return host::exitCode(host::HostExit::InvalidInvocation);
     }
     auto held = composition::HeldFiles::of(std::move(client->fetched));
     auto parsed = composition::Configuration::parse(std::string_view{configuration, length});
     if (!held.has_value() || !parsed.has_value()) {
-        return static_cast<int>(host::HostExit::StartupFailed);
+        return host::exitCode(host::HostExit::InvalidLaunchDescriptor);
     }
     client->files = std::move(*held);
     client->configuration = std::move(*parsed);
@@ -127,7 +127,7 @@ rawframeClientStart(Client* client, const char* configuration, std::size_t lengt
                                                                   .files = &client->files});
     // A refused start has ended already; its first iteration says so.
     client->running = client->host->iterate();
-    return client->running ? 0 : static_cast<int>(client->host->stop());
+    return client->running ? 0 : host::exitCode(client->host->stop());
 }
 
 /// One frame of the page: every iteration due, up to a few. 1 while the
@@ -147,10 +147,10 @@ __attribute__((export_name("rawframe_client_frame"))) int rawframeClientFrame(Cl
 
 __attribute__((export_name("rawframe_client_stop"))) int rawframeClientStop(Client* client) {
     if (client == nullptr || client->host == nullptr) {
-        return static_cast<int>(host::HostExit::StartupFailed);
+        return host::exitCode(host::HostExit::InvalidInvocation);
     }
     client->running = false;
-    return static_cast<int>(client->host->stop());
+    return host::exitCode(client->host->stop());
 }
 
 __attribute__((export_name("rawframe_client_destroy"))) void rawframeClientDestroy(Client* client) {
