@@ -1,0 +1,12 @@
+# Two bodies dropped on a floor in three dimensions, and a probe on each that
+# casts down from its center, through itself, to find what it stands on.
+program towers.kest
+physics3d gravity 0 -10 0
+
+component 478adedf-3aad-4510-8073-dc421516ce7e towers.probe Probe
+
+system towers.probe simulation probe read rawframe.physics3d.pose write towers.probe after rawframe.physics3d.step
+
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=10 height=0.5 depth=10 rawframe.physics3d.pose rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.5 height=0.5 depth=0.5 density=1 rawframe.physics3d.pose x=-2 y=3 rawframe.physics3d.velocity towers.probe
+spawn 1 rawframe.physics3d.body motion=2 shape=0 width=0.4 density=1 rawframe.physics3d.pose x=2 y=5 z=1 rawframe.physics3d.velocity towers.probe

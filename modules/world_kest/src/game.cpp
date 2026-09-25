@@ -1,6 +1,6 @@
 #include "rawframe/world_kest/game.h"
 
-#include "rawframe/physics2d/components.h"
+#include "physics_facts.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_replication/perception.h"
 
@@ -193,10 +193,11 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     GameEntityField{.component = std::string{kWords[1]}, .field = std::string{kWords[at]}});
             }
             uses.emplace_back(number, std::string{kWords[1]});
-        } else if (kKeyword == "physics2d") {
+        } else if (kKeyword == "physics2d" || kKeyword == "physics3d") {
             // physics2d [gravity <x> <y>] [substeps <n>]
-            GamePhysics2D physics;
-            bool shaped = !game.physics2d.has_value();
+            // physics3d [gravity <x> <y> <z>] [substeps <n>]
+            GamePhysics physics{.dimensions = static_cast<std::uint8_t>(kKeyword == "physics3d" ? 3 : 2)};
+            bool shaped = !game.physics.has_value();
             std::size_t at = 1;
             const auto kNumber = [&](auto& into) {
                 const std::string_view kWord = at < kWords.size() ? kWords[at++] : std::string_view{};
@@ -209,6 +210,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 if (kWhat == "gravity") {
                     kNumber(physics.gravityX);
                     kNumber(physics.gravityY);
+                    if (physics.dimensions == 3) {
+                        kNumber(physics.gravityZ);
+                    }
                 } else if (kWhat == "substeps") {
                     kNumber(physics.substeps);
                 } else {
@@ -218,18 +222,20 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             if (!shaped) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
-                               "a game has at most one physics line, `physics2d [gravity <x> <y>] [substeps <n>]`");
+                               "a game has at most one physics line, `physics2d [gravity <x> <y>] [substeps <n>]` or "
+                               "`physics3d [gravity <x> <y> <z>] [substeps <n>]`");
             }
-            for (const physics::ComponentLayout& layout : physics2d::componentLayouts()) {
+            const PhysicsFacts kFacts = physicsFacts(physics.dimensions);
+            for (const physics::ComponentLayout& layout : kFacts.components) {
                 game.components.push_back(GameComponent{
                     .id = layout.id, .name = std::string{layout.name}, .kestType = std::string{layout.scriptType}});
             }
             // A contact's entities are references, for checkpoints.
             for (const std::string_view kField : {"hit", "visitor"}) {
-                game.entityFields.push_back(GameEntityField{
-                    .component = std::string{physics2d::Contact2D::kComponentName}, .field = std::string{kField}});
+                game.entityFields.push_back(
+                    GameEntityField{.component = std::string{kFacts.contact}, .field = std::string{kField}});
             }
-            game.physics2d = physics;
+            game.physics = physics;
         } else if (kKeyword == "collision") {
             const auto kRule = [](std::string_view word) -> std::optional<physics::CollisionRule> {
                 if (word == "collide") {
@@ -354,8 +360,8 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 line, WorldKestError::UnknownName, "a collision rule names a class the game does not declare");
         }
     }
-    if ((!game.collision.classes.empty() || haveDefault) && !game.physics2d.has_value()) {
-        return badLine(number, WorldKestError::BadGameLine, "collision lines need a physics2d line");
+    if ((!game.collision.classes.empty() || haveDefault) && !game.physics.has_value()) {
+        return badLine(number, WorldKestError::BadGameLine, "collision lines need a physics line");
     }
     return game;
 }

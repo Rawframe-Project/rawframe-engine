@@ -56,10 +56,16 @@
 //
 //   physics2d gravity 0 -10 substeps 4
 //
+// A `physics3d` line does the same in three dimensions (D44), with
+// `rawframe.physics3d` components and step, three numbers of gravity, and
+// y up. A game has one physics line at most.
+//
+//   physics3d gravity 0 -9.8 0
+//
 // `collision` lines are SPEC-0037's collision document: classes, each a name
 // and a durable identity of sixteen hex digits; rules between two classes,
 // `collide`, `trigger`, or `ignore`; and the rule for every pair not ruled
-// (`collide` unless said). A Body2D's `collisionClass` in a spawn line may be
+// (`collide` unless said). A body's `collisionClass` in a spawn line may be
 // written as the class's name:
 //
 //   collision class player 7a31c0de00000001
@@ -74,7 +80,6 @@
 //   entity game.target who
 
 #include "rawframe/physics/collision.h"
-#include "rawframe/physics2d/physics.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/column_query.h"
@@ -147,10 +152,13 @@ struct GameCollisionRule {
     physics::CollisionRule rule = physics::CollisionRule::Collide;
 };
 
-/// 2D physics, and how the world is set up.
-struct GamePhysics2D {
+/// The game's physics, in two dimensions or three, and how its world is set
+/// up.
+struct GamePhysics {
+    std::uint8_t dimensions = 2;
     float gravityX = 0;
     float gravityY = -10;
+    float gravityZ = 0;
     std::uint32_t substeps = 4;
 };
 
@@ -197,7 +205,7 @@ struct GameDescription {
     std::vector<std::string> interpolated;
     std::vector<GameEntityField> entityFields;
     std::optional<GameInterest> interest;
-    std::optional<GamePhysics2D> physics2d;
+    std::optional<GamePhysics> physics;
     GameCollision collision;
 };
 

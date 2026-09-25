@@ -1,0 +1,156 @@
+module rawframe.physics3d
+
+// The components of 3D physics (SPEC-0037, D44), as the engine lays them out:
+// a game with a `physics3d` line has them, and a program that reads or
+// writes them imports this module. An entity with a Body3D, a Pose3D, and a
+// Velocity3D has a body. Systems before `rawframe.physics3d.step` push bodies
+// (write an Impulse3D, or set a Pose3D or a Velocity3D outright); systems
+// after it read where they went. An entity that also has a Contact3D is told
+// what its body touched. Meters, seconds, kilograms, radians; y is up.
+
+import rawframe.replication
+import rawframe.world
+
+// Body3D.motion
+const STATIC: u8 = 0
+const KINEMATIC: u8 = 1
+const DYNAMIC: u8 = 2
+
+// Body3D.shape: a sphere of radius `width`; a box of half sides `width`,
+// `height`, and `depth`; an upright capsule of radius `width` whose two
+// centers are `height` above and below the origin; an upright cylinder of
+// radius `width` and half height `height`.
+const SPHERE: u8 = 0
+const BOX: u8 = 1
+const CAPSULE: u8 = 2
+const CYLINDER: u8 = 3
+
+// How the body is made; changing it makes the body again where it is.
+struct Body3D {
+    motion: u8
+    shape: u8
+    // Turns about no axis.
+    fixedRotation: bool
+    bullet: bool
+    // Detects what overlaps it and pushes nothing: a trigger zone.
+    sensor: bool
+    // Its collision class's identity, as the game's collision lines declare
+    // it; nought is none.
+    collisionClass: u64
+    width: f32
+    height: f32
+    depth: f32
+    // Kilograms a cubic meter; nought is one.
+    density: f32
+    friction: f32
+    restitution: f32
+    linearDamping: f32
+    angularDamping: f32
+}
+
+// The origin, and the rotation as a unit quaternion. All noughts is no
+// rotation.
+struct Pose3D {
+    x: f64
+    y: f64
+    z: f64
+    qx: f32
+    qy: f32
+    qz: f32
+    qw: f32
+}
+
+struct Velocity3D {
+    x: f32
+    y: f32
+    z: f32
+    angularX: f32
+    angularY: f32
+    angularZ: f32
+}
+
+// Applied once by the next step, then cleared.
+struct Impulse3D {
+    x: f32
+    y: f32
+    z: f32
+    angularX: f32
+    angularY: f32
+    angularZ: f32
+}
+
+// Written by every step. Counts of the contacts touching now, begun, and
+// ended this step, and likewise of overlaps with sensors (on the sensor and
+// on what is inside it); the other body of the hardest hit this step, its
+// closing speed, and the normal from this body toward it; and the first
+// body that began to overlap this one this step. An Entity is the null one
+// when nothing began.
+struct Contact3D {
+    touching: u32
+    began: u32
+    ended: u32
+    overlapping: u32
+    entered: u32
+    exited: u32
+    hit: world.Entity
+    hitSpeed: f32
+    hitNormalX: f32
+    hitNormalY: f32
+    hitNormalZ: f32
+    visitor: world.Entity
+}
+
+// What a ray found: the closest body along it, where, the surface's normal
+// there, and how far along the ray (0 at its origin, 1 at its end). A ray
+// meets only surfaces it comes to from outside. A ray cast back in time hits
+// a body `discontinuous` when the body has no unbroken trail back to then,
+// and so was tried where it is now.
+struct RayHit3D {
+    hit: bool
+    discontinuous: bool
+    entity: world.Entity
+    x: f64
+    y: f64
+    z: f64
+    normalX: f32
+    normalY: f32
+    normalZ: f32
+    fraction: f32
+}
+
+extern fn Physics3D.castRay(originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32,
+                            towardZ: f32) -> RayHit3D
+
+// The closest body along the ray from the origin to the origin plus
+// `toward`, where bodies were after the last step; sensors included.
+fn castRay(originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32, towardZ: f32) -> RayHit3D {
+    return Physics3D.castRay(originX, originY, originZ, towardX, towardY, towardZ)
+}
+
+extern fn Physics3D.castRayAt(originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32,
+                              towardZ: f32, seen: replication.Perception) -> RayHit3D
+
+// The same ray against every body where it was at the moment a player saw
+// (SPEC-0041 lag compensation), taking back only what the player was sent.
+fn castRayAt(originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32, towardZ: f32,
+             seen: replication.Perception) -> RayHit3D {
+    return Physics3D.castRayAt(originX, originY, originZ, towardX, towardY, towardZ, seen)
+}
+
+extern fn Physics3D.castRayAmong(among: u64, originX: f64, originY: f64, originZ: f64, towardX: f32,
+                                 towardY: f32, towardZ: f32) -> RayHit3D
+
+// The same ray meeting only bodies of one collision class, by its identity.
+fn castRayAmong(among: u64, originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32,
+                towardZ: f32) -> RayHit3D {
+    return Physics3D.castRayAmong(among, originX, originY, originZ, towardX, towardY, towardZ)
+}
+
+extern fn Physics3D.castRayAtAmong(among: u64, originX: f64, originY: f64, originZ: f64, towardX: f32,
+                                   towardY: f32, towardZ: f32, seen: replication.Perception) -> RayHit3D
+
+// castRayAt, meeting only bodies of one collision class.
+fn castRayAtAmong(among: u64, originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32,
+                  towardZ: f32, seen: replication.Perception) -> RayHit3D {
+    return Physics3D.castRayAtAmong(among, originX, originY, originZ, towardX, towardY, towardZ, seen)
+}

@@ -22,8 +22,14 @@ constexpr std::array<kest::Parameter, 6> kRayAtAmongTakes = {kClass, kReal, kRea
 constexpr std::array<kest::Parameter, 1> kRayGives = {
     kest::Parameter{kest::Slot::Value, "rawframe.physics2d.RayHit2D"}};
 
-/// A ray door: `Among` doors take the class first; `At` doors take the
-/// moment seen last.
+constexpr std::array<kest::Parameter, 6> kRay3Takes = {kReal, kReal, kReal, kFloat, kFloat, kFloat};
+constexpr std::array<kest::Parameter, 7> kRay3AtTakes = {kReal, kReal, kReal, kFloat, kFloat, kFloat, kSeen};
+constexpr std::array<kest::Parameter, 7> kRay3AmongTakes = {kClass, kReal, kReal, kReal, kFloat, kFloat, kFloat};
+constexpr std::array<kest::Parameter, 8> kRay3AtAmongTakes = {
+    kClass, kReal, kReal, kReal, kFloat, kFloat, kFloat, kSeen};
+constexpr std::array<kest::Parameter, 1> kRay3Gives = {
+    kest::Parameter{kest::Slot::Value, "rawframe.physics3d.RayHit3D"}};
+
 /// Takes back what one connection was sent, no further than it was sent.
 class SentGate final : public physics::RewindGate {
 public:
@@ -40,6 +46,32 @@ private:
     std::uint64_t tick_;
 };
 
+/// The moment a Perception names, gated by what its connection was sent
+/// when a connection claimed it and the doors know who was sent what.
+struct Seen {
+    physics::Moment moment;
+    std::optional<SentGate> gate;
+};
+
+/// Reads the Perception argument into `seen`; false if it is not the
+/// engine's.
+[[nodiscard]] bool readSeen(kest::DoorCall& call, std::size_t argument, const PhysicsDoorContext& doors, Seen& seen) {
+    world_replication::Perception perception;
+    if (!call.value(argument, std::as_writable_bytes(std::span{&perception, 1}))) {
+        call.fail("the program's Perception is not the engine's");
+        return false;
+    }
+    if (doors.interest != nullptr && perception.viewer != 0) {
+        seen.gate.emplace(*doors.interest, perception.viewer, perception.baseTick);
+    }
+    seen.moment = physics::Moment{.base = perception.baseTick,
+                                  .fraction = perception.fraction,
+                                  .gate = seen.gate.has_value() ? &*seen.gate : nullptr};
+    return true;
+}
+
+/// A 2D ray door: `Among` doors take the class first; `At` doors take the
+/// moment seen last.
 template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context) noexcept {
     const PhysicsDoorContext& doors = *static_cast<const PhysicsDoorContext*>(context);
     const physics2d::Physics2DQueries* const kQueries = doors.queries;
@@ -51,23 +83,15 @@ template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context)
     const std::uint64_t kAmong = Among ? static_cast<std::uint64_t>(call.integer(0)) : physics::kEveryClass;
     physics2d::RayHit2D hit;
     if constexpr (At) {
-        world_replication::Perception seen;
-        if (!call.value(kFirst + 4, std::as_writable_bytes(std::span{&seen, 1}))) {
-            call.fail("the program's Perception is not the engine's");
+        Seen seen;
+        if (!readSeen(call, kFirst + 4, doors, seen)) {
             return;
-        }
-        // A moment a connection claimed rewinds only what it was sent.
-        std::optional<SentGate> gate;
-        if (doors.interest != nullptr && seen.viewer != 0) {
-            gate.emplace(*doors.interest, seen.viewer, seen.baseTick);
         }
         hit = kQueries->castRayAt(call.real(kFirst),
                                   call.real(kFirst + 1),
                                   static_cast<float>(call.real(kFirst + 2)),
                                   static_cast<float>(call.real(kFirst + 3)),
-                                  physics::Moment{.base = seen.baseTick,
-                                                  .fraction = seen.fraction,
-                                                  .gate = gate.has_value() ? &*gate : nullptr},
+                                  seen.moment,
                                   kAmong);
     } else {
         hit = kQueries->castRay(call.real(kFirst),
@@ -81,10 +105,70 @@ template <bool Among, bool At> void rayDoor(kest::DoorCall& call, void* context)
     }
 }
 
+/// The same in three dimensions.
+template <bool Among, bool At> void ray3Door(kest::DoorCall& call, void* context) noexcept {
+    const PhysicsDoorContext& doors = *static_cast<const PhysicsDoorContext*>(context);
+    const physics3d::Physics3DQueries* const kQueries = doors.queries3d;
+    if (kQueries == nullptr) {
+        call.fail("this World has no physics to ask");
+        return;
+    }
+    constexpr std::size_t kFirst = Among ? 1 : 0;
+    const std::uint64_t kAmong = Among ? static_cast<std::uint64_t>(call.integer(0)) : physics::kEveryClass;
+    physics3d::RayHit3D hit;
+    if constexpr (At) {
+        Seen seen;
+        if (!readSeen(call, kFirst + 6, doors, seen)) {
+            return;
+        }
+        hit = kQueries->castRayAt(call.real(kFirst),
+                                  call.real(kFirst + 1),
+                                  call.real(kFirst + 2),
+                                  static_cast<float>(call.real(kFirst + 3)),
+                                  static_cast<float>(call.real(kFirst + 4)),
+                                  static_cast<float>(call.real(kFirst + 5)),
+                                  seen.moment,
+                                  kAmong);
+    } else {
+        hit = kQueries->castRay(call.real(kFirst),
+                                call.real(kFirst + 1),
+                                call.real(kFirst + 2),
+                                static_cast<float>(call.real(kFirst + 3)),
+                                static_cast<float>(call.real(kFirst + 4)),
+                                static_cast<float>(call.real(kFirst + 5)),
+                                kAmong);
+    }
+    if (!call.answerValue(std::as_bytes(std::span{&hit, 1}))) {
+        call.fail("the program's RayHit3D is not the engine's");
+    }
+}
+
 } // namespace
 
-result::Status addPhysicsDoors(kest::DoorTable& doors, const PhysicsDoorContext* context) {
+result::Status addPhysicsDoors(kest::DoorTable& doors, std::uint8_t dimensions, const PhysicsDoorContext* context) {
     auto* const kContext = const_cast<PhysicsDoorContext*>(context);
+    if (dimensions == 3) {
+        RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics3D.castRay",
+                                          .function = &ray3Door<false, false>,
+                                          .context = kContext,
+                                          .takes = kRay3Takes,
+                                          .gives = kRay3Gives}));
+        RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics3D.castRayAt",
+                                          .function = &ray3Door<false, true>,
+                                          .context = kContext,
+                                          .takes = kRay3AtTakes,
+                                          .gives = kRay3Gives}));
+        RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics3D.castRayAmong",
+                                          .function = &ray3Door<true, false>,
+                                          .context = kContext,
+                                          .takes = kRay3AmongTakes,
+                                          .gives = kRay3Gives}));
+        return doors.add(kest::Door{.name = "Physics3D.castRayAtAmong",
+                                    .function = &ray3Door<true, true>,
+                                    .context = kContext,
+                                    .takes = kRay3AtAmongTakes,
+                                    .gives = kRay3Gives});
+    }
     RAWFRAME_TRY(doors.add(kest::Door{.name = "Physics2D.castRay",
                                       .function = &rayDoor<false, false>,
                                       .context = kContext,

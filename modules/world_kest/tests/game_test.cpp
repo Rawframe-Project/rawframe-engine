@@ -4,6 +4,8 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/registrar.h"
+#include "rawframe/physics3d/components.h"
+#include "rawframe/physics3d/registrar.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/query.h"
@@ -117,20 +119,29 @@ RAWFRAME_TEST(InterestIsDeclaredByLine) {
 RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     auto game = parseGame("program p.kest\nphysics2d gravity 0.5 -9.8 substeps 8\n"
                           "spawn 1 rawframe.physics2d.body width=1 rawframe.physics2d.pose y=2\n");
-    RAWFRAME_EXPECT(game.has_value() && game->physics2d.has_value());
-    if (!game.has_value() || !game->physics2d.has_value()) {
+    RAWFRAME_EXPECT(game.has_value() && game->physics.has_value());
+    if (!game.has_value() || !game->physics.has_value()) {
         return;
     }
-    RAWFRAME_EXPECT(game->physics2d->gravityX == 0.5F && game->physics2d->gravityY == -9.8F &&
-                    game->physics2d->substeps == 8);
+    RAWFRAME_EXPECT(game->physics->dimensions == 2 && game->physics->gravityX == 0.5F &&
+                    game->physics->gravityY == -9.8F && game->physics->substeps == 8);
     // The engine's six components, under their engine names.
     RAWFRAME_EXPECT(game->components.size() == 6 && game->components[0].name == "rawframe.physics2d.body" &&
                     game->components[1].kestType == "Pose2D");
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
-    RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics2d->gravityY == -10.0F &&
-                    kDefaults->physics2d->substeps == 4);
-    for (const std::string_view kLine :
-         {"physics2d gravity 1\n", "physics2d spin 3\n", "physics2d substeps four\n", "physics2d\nphysics2d\n"}) {
+    RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics->gravityY == -10.0F &&
+                    kDefaults->physics->substeps == 4);
+    // In three dimensions: three numbers of gravity, and the five 3D
+    // components.
+    const auto kThree = parseGame("program p.kest\nphysics3d gravity 0 -9.8 1.5\n");
+    RAWFRAME_EXPECT(kThree.has_value() && kThree->physics->dimensions == 3 && kThree->physics->gravityZ == 1.5F &&
+                    kThree->components.size() == 5 && kThree->components[1].name == "rawframe.physics3d.pose");
+    for (const std::string_view kLine : {"physics2d gravity 1\n",
+                                         "physics2d spin 3\n",
+                                         "physics2d substeps four\n",
+                                         "physics2d\nphysics2d\n",
+                                         "physics3d gravity 0 -10\n",
+                                         "physics2d\nphysics3d\n"}) {
         const std::string kText = "program p.kest\n" + std::string{kLine};
         RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "2") ||
                         refusedAt(kText, WorldKestError::BadGameLine, "3"));
@@ -371,10 +382,11 @@ RAWFRAME_TEST(KestSystemsCreateAndDestroyEntities) {
 
 namespace {
 
-const std::array<composition::RegistrarEntry, 4> kWithPhysics = {
+const std::array<composition::RegistrarEntry, 5> kWithPhysics = {
     kRegistrars[0],
     kRegistrars[1],
     composition::RegistrarEntry{"physics2d", &physics2d::registerParticipants, physics2d::kScopes},
+    composition::RegistrarEntry{"physics3d", &physics3d::registerParticipants, physics3d::kScopes},
     composition::RegistrarEntry{"test", &registerWatcher, world_runtime::kScopes}};
 
 /// Every body's pose and velocity, in entity order, after each of `ticks`
@@ -501,6 +513,58 @@ RAWFRAME_TEST(AKestSystemShootsBackInTime) {
         std::memcpy(&hits, chunk.columns[0] + 8, sizeof hits);
     });
     RAWFRAME_EXPECT(hits >= 59 && hits <= 66);
+    composition.stop();
+    simulation = nullptr;
+}
+
+RAWFRAME_TEST(AKestSystemAsksThreeDimensionalPhysics) {
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWithPhysics,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "towers.game\n" +
+                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 60\n" +
+                              "world.maximum_ticks_per_iteration = 1\n";
+    const auto kConfiguration = composition::Configuration::parse(kText);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    auto started = composition.start();
+    RAWFRAME_EXPECT(started.has_value());
+    if (!started.has_value()) {
+        return;
+    }
+    for (std::uint64_t tick = 0; tick < 120; ++tick) {
+        clock.advance(execution::MonotonicDuration{16'666'667});
+        composition.runHostPhase(composition::HostPhase::RunWorlds,
+                                 composition::HostFrame{.iteration = tick, .now = clock.now()});
+    }
+    // Both have fallen onto the floor, whose top is half a meter up, and
+    // the probe under each found it on every tick after a step.
+    world::World& world = *simulation->world();
+    const auto kProbe =
+        world.registry().find(schema::ComponentTypeId::fromText("478adedf-3aad-4510-8073-dc421516ce7e"));
+    auto query = *world::Query<world::Read<physics3d::Pose3D>>::resolve(world.registry());
+    const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kProbe, world::Access::Read}};
+    auto probes = world::ColumnQuery::resolve(kTerms, world.registry());
+    int resting = 0;
+    query.forEach(world, [&resting](world::EntityHandle, const physics3d::Pose3D& pose) {
+        resting += pose.y > 0.8 && pose.y < 1.05 ? 1 : 0;
+    });
+    RAWFRAME_EXPECT(resting == 2);
+    int found = 0;
+    probes->forEachChunk(world, [&found](const world::ColumnChunk& chunk) {
+        for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+            double floor = 0;
+            std::int32_t ticks = 0;
+            std::memcpy(&floor, chunk.columns[0] + (row * 16), sizeof floor);
+            std::memcpy(&ticks, chunk.columns[0] + (row * 16) + 8, sizeof ticks);
+            found += std::abs(floor - 0.5) < 1e-4 && ticks == 120 ? 1 : 0;
+        }
+    });
+    RAWFRAME_EXPECT(found == 2);
     composition.stop();
     simulation = nullptr;
 }

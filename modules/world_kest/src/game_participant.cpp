@@ -1,10 +1,12 @@
 #include "physics_doors.h"
+#include "physics_facts.h"
 #include "predictor.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/kest/errors.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/physics.h"
+#include "rawframe/physics3d/physics.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/kest_systems.h"
@@ -29,8 +31,10 @@ namespace {
 
 constexpr std::string_view kIdentity = "rawframe.world_kest.game";
 constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
-constexpr std::string_view kProvides[] = {
-    world_replication::kReplicationPlan.name, world_runtime::kCheckpointPlan.name, physics2d::kPhysics2DPlan.name};
+constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.name,
+                                          world_runtime::kCheckpointPlan.name,
+                                          physics2d::kPhysics2DPlan.name,
+                                          physics3d::kPhysics3DPlan.name};
 constexpr std::size_t kMaximumGameFileBytes = std::size_t{1} << 20U;
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
@@ -138,7 +142,8 @@ bool writeField(kest::FieldKind kind, std::string_view text, std::byte* into) {
 class GameParticipant final : public composition::Participant,
                               public world_replication::ReplicationPlan,
                               public world_runtime::CheckpointPlan,
-                              public physics2d::Physics2DPlan {
+                              public physics2d::Physics2DPlan,
+                              public physics3d::Physics3DPlan {
 public:
     GameParticipant() noexcept = default;
 
@@ -240,8 +245,8 @@ public:
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
-        if (game_.physics2d.has_value()) {
-            RAWFRAME_TRY(addPhysicsDoors(doors, &doorContext_));
+        if (game_.physics.has_value()) {
+            RAWFRAME_TRY(addPhysicsDoors(doors, game_.physics->dimensions, &doorContext_));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap, configuration.unsignedInteger("kest.heap_bytes", 64U << 20U));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kFuel,
@@ -364,6 +369,12 @@ public:
     void attach(const physics2d::Physics2DQueries* queries) noexcept override {
         doorContext_.queries = queries;
     }
+    const std::optional<physics3d::Physics3DSettings>& physics3d() const noexcept override {
+        return physics3d_;
+    }
+    void attach(const physics3d::Physics3DQueries* queries) noexcept override {
+        doorContext_.queries3d = queries;
+    }
     void attach(const world_replication::InterestHistory* history) noexcept override {
         doorContext_.interest = history;
     }
@@ -392,6 +403,9 @@ public:
         }
         if (capability == physics2d::kPhysics2DPlan.name) {
             return composition::provideAs<physics2d::Physics2DPlan>(*this);
+        }
+        if (capability == physics3d::kPhysics3DPlan.name) {
+            return composition::provideAs<physics3d::Physics3DPlan>(*this);
         }
         return {};
     }
@@ -480,15 +494,17 @@ private:
         }
         // A predicting client steps its player's body among the level's
         // static bodies; everything that moves besides it is the server's.
-        if (game_.physics2d.has_value()) {
+        if (game_.physics.has_value() && game_.physics->dimensions == 3) {
+            return kRefuse("a game with 3D physics predicts nothing yet: its predictor has no 3D physics", "predict");
+        }
+        if (game_.physics.has_value()) {
             predictedPhysics_ = physicsSettings();
+            const PhysicsFacts kFacts = physicsFacts(game_.physics->dimensions);
             for (const GameSpawn& spawn : game_.spawns) {
                 RAWFRAME_TRY_ASSIGN(SpawnValues values, spawnValues(spawn));
-                const auto kBody =
-                    std::ranges::find(values, physics2d::Body2D::kComponentTypeId, &SpawnValues::value_type::first);
-                if (kBody == values.end() ||
-                    static_cast<std::uint8_t>(kBody->second[offsetof(physics2d::Body2D, motion)]) !=
-                        static_cast<std::uint8_t>(physics::Motion::Static)) {
+                const auto kBody = std::ranges::find(values, kFacts.body, &SpawnValues::value_type::first);
+                if (kBody == values.end() || static_cast<std::uint8_t>(kBody->second[kFacts.motion]) !=
+                                                 static_cast<std::uint8_t>(physics::Motion::Static)) {
                     continue;
                 }
                 for (std::uint32_t made = 0; made < spawn.count; ++made) {
@@ -540,23 +556,38 @@ private:
         return {};
     }
 
-    /// The physics the game describes: its world and its collision document.
-    [[nodiscard]] physics2d::Physics2DSettings physicsSettings() const {
-        physics2d::Physics2DSettings settings{.gravityX = game_.physics2d->gravityX,
-                                              .gravityY = game_.physics2d->gravityY,
-                                              .substeps = game_.physics2d->substeps};
+    /// The game's collision document, by identity.
+    [[nodiscard]] physics::CollisionDocument collisionDocument() const {
+        physics::CollisionDocument document;
         const auto kId = [this](const std::string& name) {
             return std::ranges::find(game_.collision.classes, name, &GameCollisionClass::name)->id;
         };
         for (const GameCollisionClass& declared : game_.collision.classes) {
-            settings.collision.classes.push_back({.id = declared.id, .name = declared.name});
+            document.classes.push_back({.id = declared.id, .name = declared.name});
         }
         for (const GameCollisionRule& rule : game_.collision.rules) {
-            settings.collision.rules.push_back(
-                {.first = kId(rule.first), .second = kId(rule.second), .rule = rule.rule});
+            document.rules.push_back({.first = kId(rule.first), .second = kId(rule.second), .rule = rule.rule});
         }
-        settings.collision.fallback = game_.collision.fallback;
-        return settings;
+        document.fallback = game_.collision.fallback;
+        return document;
+    }
+
+    /// The 2D physics the game describes: its world and its collision
+    /// document.
+    [[nodiscard]] physics2d::Physics2DSettings physicsSettings() const {
+        return physics2d::Physics2DSettings{.gravityX = game_.physics->gravityX,
+                                            .gravityY = game_.physics->gravityY,
+                                            .substeps = game_.physics->substeps,
+                                            .collision = collisionDocument()};
+    }
+
+    /// The same in three dimensions.
+    [[nodiscard]] physics3d::Physics3DSettings physics3dSettings() const {
+        return physics3d::Physics3DSettings{.gravityX = game_.physics->gravityX,
+                                            .gravityY = game_.physics->gravityY,
+                                            .gravityZ = game_.physics->gravityZ,
+                                            .substeps = game_.physics->substeps,
+                                            .collision = collisionDocument()};
     }
 
     using SpawnValues = std::vector<std::pair<schema::ComponentTypeId, std::vector<std::byte>>>;
@@ -572,7 +603,8 @@ private:
             for (GameFieldValue value : part.fields) {
                 // A body's collision class, by name.
                 const auto kClass = std::ranges::find(game_.collision.classes, value.value, &GameCollisionClass::name);
-                if (game_.components[kIndex].id == physics2d::Body2D::kComponentTypeId &&
+                if (game_.physics.has_value() &&
+                    game_.components[kIndex].id == physicsFacts(game_.physics->dimensions).body &&
                     value.field == "collisionClass" && kClass != game_.collision.classes.end()) {
                     value.value = std::to_string(kClass->id);
                 }
@@ -610,10 +642,10 @@ private:
             }
             return kEngine;
         }
-        if (layout.has_value() || !game_.physics2d.has_value()) {
+        if (layout.has_value() || !game_.physics.has_value()) {
             return layout;
         }
-        for (const physics::ComponentLayout& engine : physics2d::componentLayouts()) {
+        for (const physics::ComponentLayout& engine : physicsFacts(game_.physics->dimensions).components) {
             if (engine.id != component.id) {
                 continue;
             }
@@ -660,13 +692,14 @@ private:
         return true;
     }
 
-    /// 2D physics: the program's physics types must be laid out exactly as
-    /// the engine's components are, field by field. A process that plays
-    /// the game elsewhere runs no physics.
+    /// Physics: the program's physics types must be laid out exactly as the
+    /// engine's components are, field by field. A process that plays the
+    /// game elsewhere runs no physics.
     result::Status planPhysics() {
-        if (!game_.physics2d.has_value()) {
+        if (!game_.physics.has_value()) {
             return {};
         }
+        const PhysicsFacts kFacts = physicsFacts(game_.physics->dimensions);
         const auto kType = [](kest::FieldKind kind) -> std::optional<physics::FieldType> {
             switch (kind) {
             case kest::FieldKind::U8:
@@ -686,13 +719,13 @@ private:
             }
         };
         std::vector<std::pair<const physics::ComponentLayout*, kest::TypeLayout>> checked;
-        for (const physics::ComponentLayout& engine : physics2d::componentLayouts()) {
+        for (const physics::ComponentLayout& engine : kFacts.components) {
             const GameComponent& component = *componentNamed(engine.name);
             checked.emplace_back(&engine, layouts_[static_cast<std::size_t>(&component - game_.components.data())]);
         }
         // The ray's answer, if the program uses it.
-        if (auto rayHit = program_->layout(physics2d::rayHitLayout().scriptType)) {
-            checked.emplace_back(&physics2d::rayHitLayout(), std::move(*rayHit));
+        if (auto rayHit = program_->layout(kFacts.rayHit->scriptType)) {
+            checked.emplace_back(kFacts.rayHit, std::move(*rayHit));
         }
         for (const auto& [kEngine, layout] : checked) {
             const physics::ComponentLayout& engine = *kEngine;
@@ -708,12 +741,15 @@ private:
                     refuse(result::ErrorClass::InvalidArgument,
                            WorldKestError::BadGameLine,
                            "the program's physics type is not laid out as the engine's component; import "
-                           "rawframe.physics2d rather than declaring it")
+                           "the engine's physics module rather than declaring it")
                         .error()
-                        .withContext("type", engine.scriptType)};
+                        .withContext("type", engine.scriptType)
+                        .withContext("module", kFacts.module)};
             }
         }
-        if (!planOnly_) {
+        if (!planOnly_ && game_.physics->dimensions == 3) {
+            physics3d_ = physics3dSettings();
+        } else if (!planOnly_) {
             physics2d_ = physicsSettings();
         }
         return {};
@@ -836,6 +872,7 @@ private:
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;
     std::optional<physics2d::Physics2DSettings> physics2d_;
+    std::optional<physics3d::Physics3DSettings> physics3d_;
     PhysicsDoorContext doorContext_;
     world_snapshot::SnapshotProjection projection_;
     /// A field no checkpoint can write, which refuses checkpoints of this game.

@@ -85,7 +85,7 @@ public:
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
         if (settings.physics.has_value()) {
-            RAWFRAME_TRY(addPhysicsDoors(doors, &doorContext_));
+            RAWFRAME_TRY(addPhysicsDoors(doors, 2, &doorContext_));
         }
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{.program = settings.program,

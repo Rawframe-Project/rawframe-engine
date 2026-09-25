@@ -1,0 +1,25 @@
+module towers
+
+// A probe on a body: after each step, a ray from the body's center straight
+// down, which passes out of the body unaware and meets what is under it.
+
+import rawframe.physics3d
+
+struct Probe {
+    // How high the surface under the body is, and on how many ticks a
+    // surface was found.
+    floor: f64
+    found: i32
+}
+
+fn probe(count: i32, poses: [physics3d.Pose3D], probes: [Probe]) {
+    let i = 0
+    while i < count {
+        let hit = physics3d.castRay(poses[i].x, poses[i].y, poses[i].z, 0.0, -10.0, 0.0)
+        if hit.hit {
+            probes[i].floor = hit.y
+            probes[i].found = probes[i].found + 1
+        }
+        i = i + 1
+    }
+}

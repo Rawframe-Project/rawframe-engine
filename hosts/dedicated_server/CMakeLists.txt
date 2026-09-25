@@ -2,7 +2,7 @@
 # the server closure's registrars (ADR-0017, SPEC-0012).
 rawframe_host(NAME dedicated_server OUTPUT rawframe-server
     SOURCES src/main.cpp
-    DEPS host network_quic physics2d world_replication world_kest world_runtime composition diagnostics result base
+    DEPS host network_quic physics2d physics3d world_replication world_kest world_runtime composition diagnostics result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
