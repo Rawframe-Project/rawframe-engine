@@ -53,6 +53,8 @@ struct EvaluationLimits {
     /// Transitions one state machine takes in one advance, instant ones
     /// chaining into the next.
     std::size_t maximumHops = 4;
+    /// Transition requests one instance holds until its next advance.
+    std::size_t maximumRequests = 8;
 };
 
 class CompiledGraph {
@@ -118,6 +120,8 @@ public:
     /// One node as it plays: a clip, a blend of earlier nodes, or a state
     /// machine over them.
     struct Step {
+        /// The graph node it plays, by its id.
+        std::uint64_t node = 0;
         /// A clip node's clip; none for a blend.
         std::optional<BoundClip> clip;
         Loop loop = Loop::Clamp;
@@ -133,6 +137,10 @@ public:
         /// A state machine's own; none for a clip or a blend.
         std::optional<Machine> machine;
     };
+
+    /// The step playing the node of id `node`; none for a node the output
+    /// does not reach, or no node.
+    [[nodiscard]] std::optional<std::size_t> step(std::uint64_t node) const noexcept;
 
     /// Steps in evaluation order, inputs first; the last is the output's.
     [[nodiscard]] std::span<const Step> steps() const noexcept {
@@ -178,6 +186,14 @@ public:
         return values_[parameter.value];
     }
 
+    /// Asks the graph's state machines for a transition on `event`
+    /// (SPEC-0035's runtime transition request): during the next advance an
+    /// event condition on it holds in every state, as one on an event the
+    /// state's clips cross does, and the request is gone after it, taken or
+    /// not. False when the limit's worth were already held and the oldest
+    /// was dropped for it.
+    bool request(std::uint64_t event);
+
     /// Moves every playhead by `delta` seconds of the World's time and
     /// appends the events crossed. False when more were crossed than the
     /// limits report.
@@ -217,6 +233,12 @@ private:
                              const CompiledGraph::Machine& machine,
                              std::size_t state,
                              std::span<const std::pair<std::size_t, std::uint64_t>> heard) const;
+    /// Whether `event` is heard in `state`: crossed by one of its clips, or
+    /// requested.
+    [[nodiscard]] bool heardIn(std::uint64_t event,
+                               const CompiledGraph::Machine& machine,
+                               std::size_t state,
+                               std::span<const std::pair<std::size_t, std::uint64_t>> heard) const;
     [[nodiscard]] std::size_t leader(const CompiledGraph::Machine& machine, std::size_t state) const;
 
     std::shared_ptr<const CompiledGraph> graph_;
@@ -229,6 +251,8 @@ private:
     /// Each clip step's speed at the last advance.
     std::vector<double> speeds_;
     std::vector<MachineState> machines_;
+    /// Transition requests for the next advance, oldest first.
+    std::vector<std::uint64_t> requests_;
 };
 
 /// The pose phase's working memory, one per thread that poses.

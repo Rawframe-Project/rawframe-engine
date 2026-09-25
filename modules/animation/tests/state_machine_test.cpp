@@ -236,3 +236,30 @@ RAWFRAME_TEST(InstantTransitionsChainOnlySoFar) {
     player.x(0.0);
     RAWFRAME_EXPECT(player.instance.state(player.machine()) == 0);
 }
+
+RAWFRAME_TEST(GameplayRequestsTransitionsForOneAdvance) {
+    constexpr std::uint64_t kGo = 0x7e00000000000001ULL;
+    constexpr std::uint64_t kStop = 0x7e00000000000002ULL;
+    Graph asked = mover();
+    auto& machine = std::get<StateMachineNode>(asked.nodes[3].node);
+    machine.transitions = {Transition{.from = "idle", .to = "walk", .conditions = {EventCondition{kGo}}},
+                           Transition{.from = "walk", .to = "idle", .conditions = {EventCondition{kStop}}}};
+    Player player{asked, {.maximumRequests = 2}};
+    RAWFRAME_EXPECT(player.instance.graph().step(kMachine) == player.machine());
+    player.x(0.1);
+    // A request no transition from here takes is gone after the advance:
+    // it does not wait for the state that would take it.
+    RAWFRAME_EXPECT(player.instance.request(kStop));
+    player.x(0.1);
+    RAWFRAME_EXPECT(player.instance.state(player.machine()) == 0);
+    RAWFRAME_EXPECT(player.instance.request(kGo));
+    player.x(0.1);
+    RAWFRAME_EXPECT(player.instance.state(player.machine()) == 2);
+    // Past the limit the oldest is dropped, and says so.
+    RAWFRAME_EXPECT(player.instance.request(kStop) && player.instance.request(kGo) && !player.instance.request(kGo));
+    player.x(0.1);
+    RAWFRAME_EXPECT(player.instance.state(player.machine()) == 2);
+    RAWFRAME_EXPECT(player.instance.request(kStop));
+    player.x(0.1);
+    RAWFRAME_EXPECT(player.instance.state(player.machine()) == 0);
+}

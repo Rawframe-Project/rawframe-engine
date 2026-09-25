@@ -213,6 +213,7 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
             }
             step.machine = std::move(machineStep);
         }
+        step.node = node->id;
         steps.emplace(node->id, made->steps_.size());
         made->steps_.push_back(std::move(step));
     }
@@ -332,6 +333,27 @@ void GraphInstance::weigh() {
     }
 }
 
+std::optional<std::size_t> CompiledGraph::step(std::uint64_t node) const noexcept {
+    const auto kFound = std::ranges::find(steps_, node, &Step::node);
+    if (kFound == steps_.end()) {
+        return std::nullopt;
+    }
+    return static_cast<std::size_t>(kFound - steps_.begin());
+}
+
+bool GraphInstance::request(std::uint64_t event) {
+    const std::size_t kLimit = graph_->limits().maximumRequests;
+    if (kLimit == 0) {
+        return false;
+    }
+    const bool kKept = requests_.size() < kLimit;
+    if (!kKept) {
+        requests_.erase(requests_.begin());
+    }
+    requests_.push_back(event);
+    return kKept;
+}
+
 bool GraphInstance::advance(double delta, std::vector<GraphEvent>& events) {
     const std::span<const CompiledGraph::Step> kSteps = graph_->steps();
     const EvaluationLimits& limits = graph_->limits();
@@ -372,6 +394,7 @@ bool GraphInstance::advance(double delta, std::vector<GraphEvent>& events) {
             runMachine(at, delta, heard);
         }
     }
+    requests_.clear();
     weigh();
     return whole;
 }
@@ -435,6 +458,16 @@ void GraphInstance::runMachine(std::size_t step,
     }
 }
 
+bool GraphInstance::heardIn(std::uint64_t event,
+                            const CompiledGraph::Machine& machine,
+                            std::size_t state,
+                            std::span<const std::pair<std::size_t, std::uint64_t>> heard) const {
+    return std::ranges::contains(requests_, event) ||
+           std::ranges::any_of(heard, [&](const std::pair<std::size_t, std::uint64_t>& each) {
+               return each.second == event && std::ranges::contains(machine.clips[state], each.first);
+           });
+}
+
 std::size_t GraphInstance::leader(const CompiledGraph::Machine& machine, std::size_t state) const {
     // The clip that counts most in the state, the first of equals.
     const std::vector<std::size_t>& clips = machine.clips[state];
@@ -455,9 +488,7 @@ bool GraphInstance::holds(const CompiledGraph::Test& test,
         return compared(kCompared->comparison, values_[test.parameter.value][0], kCompared->value);
     }
     if (const auto* kEvent = std::get_if<EventCondition>(&test.condition)) {
-        return std::ranges::any_of(heard, [&](const std::pair<std::size_t, std::uint64_t>& each) {
-            return each.second == kEvent->event && std::ranges::contains(machine.clips[state], each.first);
-        });
+        return heardIn(kEvent->event, machine, state, heard);
     }
     if (machine.clips[state].empty()) {
         // A state with no clip has no phase to reach and nothing to finish.
