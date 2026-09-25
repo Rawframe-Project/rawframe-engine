@@ -13,6 +13,8 @@
 #include <unistd.h>
 #endif
 
+#if RAWFRAME_FILE_SYSTEM
+
 namespace rawframe::world_save {
 
 namespace {
@@ -127,3 +129,5 @@ result::Status DirectorySaveStore::keep(std::string_view slot, std::span<const s
 }
 
 } // namespace rawframe::world_save
+
+#endif

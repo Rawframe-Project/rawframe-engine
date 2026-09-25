@@ -42,6 +42,16 @@
 #define RAWFRAME_THREADS 1
 #endif
 
+// Whether the target reads and writes files: 1 everywhere but WebAssembly,
+// where a client's content arrives over the network and nothing it keeps is
+// the engine's to write (ADR-0084). A provider over directories exists only
+// where this is 1; code above providers never asks.
+#if defined(RAWFRAME_ARCH_WASM32)
+#define RAWFRAME_FILE_SYSTEM 0
+#else
+#define RAWFRAME_FILE_SYSTEM 1
+#endif
+
 /// Traps to an attached debugger. Not a termination primitive: callers only use
 /// it when a debugger is known to be attached.
 #if defined(RAWFRAME_COMPILER_MSVC)

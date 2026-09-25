@@ -7,13 +7,17 @@
 // whole. Calls block, so they belong on a blocking-I/O worker or the Host
 // thread, never a CPU worker.
 
+#include "rawframe/base/platform.h"
 #include "rawframe/result/result.h"
 
 #include <cstddef>
-#include <filesystem>
 #include <span>
 #include <string_view>
 #include <vector>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <filesystem>
+#endif
 
 namespace rawframe::world_save {
 
@@ -33,6 +37,7 @@ public:
     [[nodiscard]] virtual result::Status keep(std::string_view slot, std::span<const std::byte> bytes) = 0;
 };
 
+#if RAWFRAME_FILE_SYSTEM
 /// The first-party store: one file per slot in a directory the operator
 /// names, `<slot>.rfsave`. A save is written beside its file, flushed to
 /// the disk, and renamed over it, so a crash leaves the old save or the new
@@ -48,5 +53,6 @@ public:
 private:
     std::filesystem::path directory_;
 };
+#endif
 
 } // namespace rawframe::world_save

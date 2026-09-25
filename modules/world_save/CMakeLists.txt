@@ -6,4 +6,10 @@ rawframe_module(NAME world_save
     DEPS world schema execution diagnostics result base
 )
 
-rawframe_module_tests(NAME world_save SOURCES tests/save_test.cpp tests/store_test.cpp)
+# The directory store is where there are files (RAWFRAME_FILE_SYSTEM); the
+# web build has none.
+if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
+    rawframe_module_tests(NAME world_save SOURCES tests/save_test.cpp)
+else()
+    rawframe_module_tests(NAME world_save SOURCES tests/save_test.cpp tests/store_test.cpp)
+endif()

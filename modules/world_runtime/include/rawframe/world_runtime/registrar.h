@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rawframe/base/platform.h"
 #include "rawframe/composition/registrar.h"
 
 namespace rawframe::world_runtime {
@@ -24,6 +25,7 @@ namespace rawframe::world_runtime {
 ///   checkpoint.capture_prefix  a capture at tick T is written to <prefix>T.rfsn
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
+#if RAWFRAME_FILE_SYSTEM
 /// Contributes `rawframe.world_runtime.saves` (ADR-0057), for a host whose
 /// World keeps a game's save: it loads the slot when the World starts and
 /// keeps it at the declared points, writing on the blocking-I/O executor,
@@ -39,6 +41,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
 /// is not given its save: the checkpoint is the whole World, and the next
 /// keep writes it.
 void registerSaves(composition::ParticipantRegistrar& registrar) noexcept;
+#endif
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);
 

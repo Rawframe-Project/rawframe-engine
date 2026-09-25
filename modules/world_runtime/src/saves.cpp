@@ -15,8 +15,14 @@
 #include <optional>
 #include <set>
 #include <string>
-#include <thread>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
+
+// Saves are kept in a directory, so only where there are files.
+#if RAWFRAME_FILE_SYSTEM
 
 namespace rawframe::world_runtime {
 
@@ -145,8 +151,16 @@ public:
         if (declaration_ != nullptr) {
             keepWorld();
         }
+        // Helping: the write runs here if no worker has taken it.
         while (writing_.load(std::memory_order_acquire)) {
+            if (io_ != nullptr && io_->runOne()) {
+                continue;
+            }
+#if RAWFRAME_THREADS
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
+#else
+            RAWFRAME_PANIC("a save being written that nothing here can finish");
+#endif
         }
         drain();
         report();
@@ -388,3 +402,5 @@ void registerSaves(composition::ParticipantRegistrar& registrar) noexcept {
 }
 
 } // namespace rawframe::world_runtime
+
+#endif
