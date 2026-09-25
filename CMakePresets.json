@@ -30,6 +30,11 @@
       "cacheVariables": { "RAWFRAME_SANITIZE": "address" }
     },
     {
+      "name": "wasm-development",
+      "inherits": ["base", "development"],
+      "toolchainFile": "${sourceDir}/cmake/wasm32-wasi.cmake"
+    },
+    {
       "name": "clang-thread",
       "inherits": ["clang", "development"],
       "cacheVariables": { "RAWFRAME_SANITIZE": "thread" }

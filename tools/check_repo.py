@@ -88,6 +88,19 @@ def check_server_closure(allowed, findings):
         findings.append(f"tools/modules.txt: the dedicated server's closure reaches module '{module}', which it may not")
 
 
+def check_web_closure(allowed, findings):
+    """Every module the web build holds is known, and so is each dependency."""
+    lines = (ROOT / "tools" / "web_modules.txt").read_text().splitlines()
+    web = {name for line in lines if line and not line.startswith("#") for name in line.split()}
+    for module in sorted(web):
+        if module not in allowed:
+            findings.append(f"tools/web_modules.txt: '{module}' is not a module in tools/modules.txt")
+            continue
+        for dependency in sorted(set(allowed[module]) - web):
+            findings.append(f"tools/web_modules.txt: '{module}' builds for the web but its dependency "
+                            f"'{dependency}' does not")
+
+
 def check_providers(files, findings):
     for path in files:
         relative = path.relative_to(ROOT)
@@ -158,6 +171,7 @@ def main():
     modules = read_modules()
     check_boundaries(files, modules, findings)
     check_server_closure(modules, findings)
+    check_web_closure(modules, findings)
     check_providers(files, findings)
     check_value_calls(files, findings)
     check_bounds_literals(files, findings)

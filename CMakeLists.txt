@@ -17,6 +17,18 @@ if(RAWFRAME_BUILD_TESTS)
     add_subdirectory(tests/harness)
 endif()
 
+# The web build (cmake/wasm32-wasi.cmake) is the modules tools/web_modules.txt
+# lists, and nothing else: no hosts and no third-party code yet.
+if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
+    file(STRINGS "${PROJECT_SOURCE_DIR}/tools/web_modules.txt" rawframe_web_lines REGEX "^[a-z]")
+    string(JOIN " " rawframe_web_modules ${rawframe_web_lines})
+    separate_arguments(rawframe_web_modules)
+    foreach(module IN LISTS rawframe_web_modules)
+        add_subdirectory(modules/${module})
+    endforeach()
+    return()
+endif()
+
 # Every module is listed here and in tools/modules.txt. A module is never
 # discovered from the directory tree.
 add_subdirectory(third_party/cgltf)

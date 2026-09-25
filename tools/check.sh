@@ -3,8 +3,9 @@
 #
 #   tools/check.sh fast   repository rules, format, one incremental build, tests
 #   tools/check.sh        the above plus GCC and Clang in every configuration,
-#                         the address and thread sanitizers, and the tick
-#                         budget (tools/bench.sh check) once all of them pass
+#                         the address and thread sanitizers, the web build
+#                         (wasm32 without threads, tests under Node), and the
+#                         tick budget (tools/bench.sh check) once all pass
 #
 # Build trees live under out/ and are reused, so a second run only rebuilds
 # what changed.
@@ -49,7 +50,7 @@ if [ "$tier" = "fast" ]; then
     build_and_test clang-development
 else
     # Independent build trees, so they build in parallel.
-    presets=(gcc-debug gcc-shipping clang-development clang-shipping clang-sanitize clang-thread)
+    presets=(gcc-debug gcc-shipping clang-development clang-shipping clang-sanitize clang-thread wasm-development)
     pids=()
     for preset in "${presets[@]}"; do
         ( build_and_test "$preset" ) >"out/$preset.check.log" 2>&1 &

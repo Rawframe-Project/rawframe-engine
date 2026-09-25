@@ -3,9 +3,16 @@
 # SHA-256 for fingerprints, and the operating system's secure random source.
 rawframe_module(NAME base SOURCES src/fatal.cpp src/secure_random.cpp src/sha256.cpp)
 
+# The fatal path ends the process, which is watched from a forked parent;
+# a WebAssembly module has neither.
+set(rawframe_base_process_tests tests/fatal_test.cpp)
+if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
+    set(rawframe_base_process_tests "")
+endif()
+
 rawframe_module_tests(NAME base SOURCES
     tests/bits128_test.cpp
-    tests/fatal_test.cpp
+    ${rawframe_base_process_tests}
     tests/secure_random_test.cpp
     tests/sha256_test.cpp
 )

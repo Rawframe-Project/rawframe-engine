@@ -5,6 +5,9 @@
 #include <sys/random.h>
 #elif defined(__APPLE__)
 #include <stdlib.h>
+#elif defined(__wasi__)
+#include <algorithm>
+#include <unistd.h>
 #endif
 
 namespace rawframe::base {
@@ -26,6 +29,14 @@ bool fillSecureRandom(std::span<std::byte> into) noexcept {
     return true;
 #elif defined(__APPLE__)
     ::arc4random_buf(into.data(), into.size());
+    return true;
+#elif defined(__wasi__)
+    // The host's random_get, at most 256 bytes a call.
+    for (std::size_t filled = 0; filled < into.size(); filled += 256) {
+        if (::getentropy(into.data() + filled, std::min<std::size_t>(256, into.size() - filled)) != 0) {
+            return false;
+        }
+    }
     return true;
 #else
     static_cast<void>(into);
