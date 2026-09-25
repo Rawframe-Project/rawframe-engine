@@ -10,6 +10,10 @@
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/mod.h"
 
+#include <array>
+#include <cstdint>
+#include <cstdio>
+#include <span>
 #include <string>
 
 using namespace rawframe;
@@ -279,4 +283,133 @@ RAWFRAME_TEST(AnEventPointTakesHandlersAfterASystem) {
                                 {modOf("fan/horde", "target acme/raid\nmodapi 1\nprogram h.kest\nhandle rule a\n"),
                                  modOf("fan/more", "target acme/raid\nmodapi 1\nprogram m.kest\nhandle rule b\n")},
                                 "fan/horde:a fan/more:b"));
+}
+
+namespace {
+
+/// Xorshift, seeded: the same mutations on every run and every target.
+struct Mutations {
+    std::uint64_t state = 0x9E3779B97F4A7C15ULL;
+
+    std::uint64_t next() noexcept {
+        state ^= state << 13U;
+        state ^= state >> 7U;
+        state ^= state << 17U;
+        return state;
+    }
+
+    /// `seed` with one to four edits: a byte replaced, a run erased, a
+    /// character inserted, or a whole line from `lines` inserted.
+    std::string mutate(std::string_view seed, std::string_view inserted, std::span<const std::string_view> lines) {
+        std::string text{seed};
+        const int kEdits = 1 + static_cast<int>(next() % 4);
+        for (int edit = 0; edit < kEdits && !text.empty(); ++edit) {
+            const std::size_t kAt = next() % text.size();
+            switch (next() % 4) {
+            case 0:
+                text[kAt] = static_cast<char>(next() & 0xFFU);
+                break;
+            case 1:
+                text.erase(kAt, 1 + (next() % 8));
+                break;
+            case 2:
+                text.insert(kAt, 1, inserted[next() % inserted.size()]);
+                break;
+            default:
+                text.insert(text.find('\n', kAt) == std::string::npos ? text.size() : text.find('\n', kAt) + 1,
+                            lines[next() % lines.size()]);
+                break;
+            }
+        }
+        return text;
+    }
+};
+
+} // namespace
+
+RAWFRAME_TEST(HostileModDescriptionsAreReadOrRefusedNeverHalfRead) {
+    // A mod description is an untrusted author's text (SPEC-0042, D183):
+    // whatever parses keeps every rule a description has, and a game checks
+    // it without harm.
+    const std::string kSeed = "# A mod.\ntarget acme/raid\nmodapi >=2 <4\ncontribute spawned wave.scene\n"
+                              "program horde.kest\nhandle hits bounty\n";
+    constexpr std::string_view kInserted = " \t\r\n#<>=/.-_aZ9\xC3\x80";
+    constexpr std::array<std::string_view, 8> kLines = {"handle hits tally\n",
+                                                        "program other.kest\n",
+                                                        "modapi <3\n",
+                                                        "target acme/siege\n",
+                                                        "contribute rule r.scene\n",
+                                                        "handle rule a\n",
+                                                        "contribute spawned wave.scene\n",
+                                                        "replace rules\n"};
+    const auto kGame = parseGame(kBase + "system raid.fight simulation fight write raid.enemy\nmods open\n"
+                                         "modapi raid 3\nextension spawned data raid.enemy multi\n"
+                                         "extension hits event raid.enemy after raid.fight write raid.rules multi\n"
+                                         "extension rule event raid.rules after raid.fight exclusive required\n");
+    RAWFRAME_EXPECT(kGame.has_value());
+    if (!kGame.has_value()) {
+        return;
+    }
+    Mutations mutations;
+    int accepted = 0;
+    int taken = 0;
+    for (int round = 0; round < 20'000; ++round) {
+        const std::string kText = mutations.mutate(kSeed, kInserted, kLines);
+        const auto kMod = world_kest::parseMod(kText);
+        if (!kMod.has_value()) {
+            RAWFRAME_EXPECT(kMod.error().domain() == world_kest::kWorldKestDomain);
+            continue;
+        }
+        ++accepted;
+        // Some version satisfies the range: one beside a bound, if any.
+        bool satisfiable = false;
+        for (const world_kest::ModApiBound& bound : kMod->modApi) {
+            for (const std::uint32_t kVersion : {bound.version - 1, bound.version, bound.version + 1}) {
+                satisfiable = satisfiable || (kVersion != 0 && world_kest::accepts(kMod->modApi, kVersion));
+            }
+        }
+        RAWFRAME_EXPECT(!kMod->target.empty() && !kMod->modApi.empty() && kMod->modApi.size() <= 2 && satisfiable &&
+                        kMod->handlers.empty() == kMod->program.empty());
+        const std::array<world_kest::ComposedMod, 1> kMods = {
+            world_kest::ComposedMod{.subject = "fan/horde", .description = *kMod}};
+        const auto kChecked = world_kest::checkMods(*kGame, "acme/raid", kMods, {});
+        RAWFRAME_EXPECT(kChecked.has_value() ||
+                        kChecked.error().code() == code(world_kest::WorldKestError::ModRefused));
+        taken += kChecked.has_value() ? 1 : 0;
+    }
+    // Some mutations land in names and ranges and stay descriptions; some
+    // of those the game still takes.
+    std::printf("  %d of 20000 read, %d taken\n", accepted, taken);
+    RAWFRAME_EXPECT(accepted > 500 && taken > 50);
+}
+
+RAWFRAME_TEST(HostileCookedModsReadOnlyAsTheyWrite) {
+    // A cooked mod comes from a Build its publisher signed, not the game's:
+    // whatever the reader accepts writes back to the very same bytes.
+    const world_kest::CookedMod kMod{
+        .text = "target acme/raid\nmodapi 3\nprogram horde.kest\nhandle hits bounty\n",
+        .scenes = {{.path = "wave.scene", .scene = base::parseBits128Hex("000000000000000000000000000000b2").value}},
+        .programs = {{.path = "horde.kest",
+                      .sources = base::parseBits128Hex("000000000000000000000000000000b3").value,
+                      .entry = "horde.kest"}}};
+    const auto kSeed = world_kest::writeCookedMod(kMod);
+    RAWFRAME_EXPECT(kSeed.has_value());
+    if (!kSeed.has_value()) {
+        return;
+    }
+    constexpr std::string_view kInserted = "{}[]\",:\\0123456789abcdef";
+    constexpr std::array<std::string_view, 1> kNoLines = {""};
+    Mutations mutations;
+    int accepted = 0;
+    for (int round = 0; round < 20'000; ++round) {
+        const std::string kText = mutations.mutate(*kSeed, kInserted, kNoLines);
+        const auto kRead = world_kest::readCookedMod(kText);
+        if (!kRead.has_value()) {
+            continue;
+        }
+        ++accepted;
+        RAWFRAME_EXPECT(world_kest::writeCookedMod(*kRead).value_or("") == kText);
+    }
+    std::printf("  %d of 20000 read\n", accepted);
+    RAWFRAME_EXPECT(accepted > 0);
 }
