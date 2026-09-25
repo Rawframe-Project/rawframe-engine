@@ -35,7 +35,9 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
 ///   save.every_seconds  keep every this often; 0 keeps only at stop (0)
 ///
 /// A kept save that does not read stops the start, so the next keep cannot
-/// overwrite it.
+/// overwrite it. A World restored from a checkpoint (`checkpoint.restore`)
+/// is not given its save: the checkpoint is the whole World, and the next
+/// keep writes it.
 void registerSaves(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);

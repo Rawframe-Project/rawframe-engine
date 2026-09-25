@@ -29,10 +29,14 @@ constexpr EventIdentity kKept{"world_runtime", "save_kept"};
 constexpr EventIdentity kKeepFailed{"world_runtime", "save_keep_failed"};
 constexpr EventIdentity kPlayerLoaded{"world_runtime", "player_save_loaded"};
 constexpr EventIdentity kPlayerRefused{"world_runtime", "player_save_refused"};
+constexpr EventIdentity kSuperseded{"world_runtime", "save_superseded"};
 
 constexpr std::string_view kNeeds[] = {kSimulation.name};
 constexpr std::string_view kMaybe[] = {kSavePlan.name};
 constexpr std::string_view kProvides[] = {kPlayerPresence.name};
+// After the checkpoints participant, so a restore has replaced the World
+// before the World's save would be applied to it.
+constexpr std::string_view kAfter[] = {"rawframe.world_runtime.checkpoints"};
 
 std::unexpected<result::Error> misconfigured(std::string_view why) {
     return result::fail(
@@ -71,6 +75,7 @@ public:
             return misconfigured("save.directory needs a game that declares a save");
         }
         slot_ = std::string{configuration.text("save.slot").value_or("world")};
+        restoring_ = configuration.text("checkpoint.restore").has_value();
         const base::Bits128Parse kParsed = base::parseBits128Hex(configuration.text("save.namespace").value_or(""));
         if (!kParsed.parsed || kParsed.value == base::Bits128{}) {
             return misconfigured("save.namespace is the persistence namespace, 32 lowercase hex digits, not nought");
@@ -101,7 +106,14 @@ public:
         io_ = context.blockingIoExecutor();
         owner_ = context.owner();
         lastKept_ = context.clock().now();
-        if (declaration_ != nullptr) {
+        if (declaration_ != nullptr && restoring_) {
+            // The checkpoint is the whole World, and the operator chose it.
+            emitter_.log(diagnostics::Severity::Warning,
+                         kSuperseded,
+                         "the World was restored from a checkpoint, so its save is not applied; the next keep "
+                         "writes the restored World",
+                         {diagnostics::field("slot", std::string_view{slot_})});
+        } else if (declaration_ != nullptr) {
             RAWFRAME_TRY(loadWorld());
         }
         started_ = true;
@@ -339,6 +351,8 @@ private:
     /// Whether the World's slot was loaded, or found absent: only then is
     /// keeping safe.
     bool started_ = false;
+    /// Whether a checkpoint restore brings the World instead.
+    bool restoring_ = false;
     /// Players whose kept save did not apply.
     std::set<PlayerIdentity> unkept_;
     std::mutex mutex_;
@@ -363,6 +377,7 @@ void registerSaves(composition::ParticipantRegistrar& registrar) noexcept {
         .providedCapabilities = kProvides,
         .requiredCapabilities = kNeeds,
         .optionalCapabilities = kMaybe,
+        .requiredParticipants = kAfter,
         .executor = {.cpu = false, .blockingIo = true, .quota = {.maximumPendingTasks = 1}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(1000)},
         .observabilityIdentity = "world_runtime.saves",

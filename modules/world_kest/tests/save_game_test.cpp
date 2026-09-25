@@ -81,6 +81,8 @@ struct Run {
 
     std::string program{kProgram};
 
+    std::string extra;
+
     result::Status start(const std::filesystem::path& directory, std::string_view spawn) {
         writeText(directory / "tally.kest", program);
         writeText(directory / "tally.game", std::string{kGame} + std::string{spawn});
@@ -94,7 +96,7 @@ struct Run {
         configuration = *composition::Configuration::parse(
             "kest.game = " + (directory / "tally.game").string() +
             "\nworld.tick_rate = 10\nsave.directory = " + (directory / "saves").string() +
-            "\nsave.namespace = 7a11700000000000000000000000000a\nsave.every_seconds = 1\n");
+            "\nsave.namespace = 7a11700000000000000000000000000a\nsave.every_seconds = 1\n" + extra);
         composition.emplace(*plan,
                             composition::HostServices{
                                 .clock = &clock, .scope = &root, .blockingIo = &io, .configuration = &*configuration});
@@ -213,6 +215,35 @@ RAWFRAME_TEST(ASaveOutlivesAChangeToItsComponent) {
         });
         RAWFRAME_EXPECT(found.size() == 1 && std::get<0>(found[0]) == kept && std::get<1>(found[0]) == 0 &&
                         std::get<2>(found[0]) == 3);
+    }
+    std::filesystem::remove_all(kDirectory);
+}
+
+RAWFRAME_TEST(ACheckpointRestoreIsTheWorldItsSaveIsNot) {
+    // A checkpoint at tick 2, a save at tick 5: restored from the
+    // checkpoint, the World counts from 2, and the save is not applied over
+    // it.
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-save-restore-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory);
+    {
+        Run run;
+        run.extra = "checkpoint.capture_ticks = 2\ncheckpoint.capture_prefix = " + (kDirectory / "at").string() + "\n";
+        RAWFRAME_EXPECT(run.start(kDirectory, "spawn 1 tally.count\n").has_value());
+        run.ticks(2);
+        run.composition->runHostPhase(composition::HostPhase::Maintenance,
+                                      composition::HostFrame{.iteration = 0, .now = run.clock.now()});
+        run.ticks(3);
+        RAWFRAME_EXPECT(counts().size() == 1 && counts()[0].second == 5);
+        run.composition->stop();
+        run.composition.reset();
+    }
+    RAWFRAME_EXPECT(std::filesystem::exists(kDirectory / "at2.rfsn"));
+    {
+        Run run;
+        run.extra = "checkpoint.restore = " + (kDirectory / "at2.rfsn").string() + "\n";
+        RAWFRAME_EXPECT(run.start(kDirectory, "spawn 1 tally.count\n").has_value());
+        RAWFRAME_EXPECT(counts().size() == 1 && counts()[0].second == 2);
     }
     std::filesystem::remove_all(kDirectory);
 }
