@@ -45,6 +45,7 @@ struct WorldAudio::State {
     std::optional<schema::ComponentRuntimeId> pose2d;
     std::optional<schema::ComponentRuntimeId> pose3d;
     std::map<world::EntityHandle, Tracked> followed;
+    std::optional<world::EntityHandle> bound;
 
     [[nodiscard]] std::optional<std::size_t> soundOf(std::uint64_t id) const noexcept {
         const auto kFound = std::ranges::find(settings.sounds, id, &std::pair<std::uint64_t, std::size_t>::first);
@@ -91,18 +92,22 @@ struct WorldAudio::State {
     }
 
     void update(world::World& world, float seconds) {
-        // The one active listener, or none.
+        // The bound listener, or the one active listener, or none.
         std::optional<audio::Listener> heard;
         std::size_t active = 0;
-        listeners->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            const auto* values = reinterpret_cast<const Listener*>(chunk.columns[0]);
-            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                if (values[row].active) {
-                    ++active;
-                    heard = placeOf(world, chunk.entities[row]).value_or(audio::Listener{});
+        if (bound) {
+            heard = world.alive(*bound) ? placeOf(world, *bound) : std::nullopt;
+        } else {
+            listeners->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+                const auto* values = reinterpret_cast<const Listener*>(chunk.columns[0]);
+                for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                    if (values[row].active) {
+                        ++active;
+                        heard = placeOf(world, chunk.entities[row]).value_or(audio::Listener{});
+                    }
                 }
-            }
-        });
+            });
+        }
         if (active > 1) {
             ++statistics.listenerConflicts;
             heard.reset();
@@ -121,26 +126,31 @@ struct WorldAudio::State {
             }
         });
         for (const auto& [kEntity, kEmitter] : present) {
-            const auto kSound = soundOf(kEmitter.sound);
-            if (!kSound) {
-                ++statistics.unknownSounds;
-                continue;
-            }
-            // An emitter without a pose sounds where the listener is.
-            const auto kPlace = placeOf(world, kEntity);
-            const std::optional<audio::Position> kAt =
-                kPlace ? std::optional{kPlace->position} : (heard ? std::optional{heard->position} : std::nullopt);
             const auto [kFound, kNew] = followed.try_emplace(kEntity);
             Tracked& follow = kFound->second;
             follow.seen = true;
             follow.despawn = kEmitter.despawn;
-            follow.sound = *kSound;
-            // What the cue counted before it was first seen is history.
+            // What the cue counted before it was first seen is history, and
+            // it counts whether or not the emitter names a sound yet.
             if (kNew) {
                 follow.lastCue = kEmitter.cue;
             }
             const std::uint32_t kCues = kEmitter.cue - follow.lastCue;
             follow.lastCue = kEmitter.cue;
+            // Sound nought is none: an emitter that is quiet for now.
+            if (kEmitter.sound == 0) {
+                continue;
+            }
+            const auto kSound = soundOf(kEmitter.sound);
+            if (!kSound) {
+                ++statistics.unknownSounds;
+                continue;
+            }
+            follow.sound = *kSound;
+            // An emitter without a pose sounds where the listener is.
+            const auto kPlace = placeOf(world, kEntity);
+            const std::optional<audio::Position> kAt =
+                kPlace ? std::optional{kPlace->position} : (heard ? std::optional{heard->position} : std::nullopt);
             if (kCues != 0) {
                 if (sounds->declaration(*kSound)->loop) {
                     statistics.loopingCues += kCues;
@@ -228,6 +238,10 @@ WorldAudio::create(const schema::SchemaRegistry& registry, audio::Sounds& sounds
         state->pose3d = *kPose;
     }
     return std::unique_ptr<WorldAudio>{new WorldAudio{std::move(state)}};
+}
+
+void WorldAudio::bindListener(std::optional<world::EntityHandle> entity) {
+    state_->bound = entity;
 }
 
 void WorldAudio::update(world::World& world, float seconds) {

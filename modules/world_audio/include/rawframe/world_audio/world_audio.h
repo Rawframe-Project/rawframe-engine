@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -72,6 +73,12 @@ public:
     WorldAudio(const WorldAudio&) = delete;
     WorldAudio& operator=(const WorldAudio&) = delete;
     ~WorldAudio();
+
+    /// Binds the listener to an entity explicitly (SPEC-0036's typed
+    /// binding): a networked client hears from its own player, which only it
+    /// knows. While bound, `Listener` components are not read; an entity
+    /// that is gone, or has no pose, hears from nowhere.
+    void bindListener(std::optional<world::EntityHandle> entity);
 
     /// Once a frame, on the owner's thread: the listener, every emitter's
     /// continuous sound and new cues, what despawned, then the Sounds.

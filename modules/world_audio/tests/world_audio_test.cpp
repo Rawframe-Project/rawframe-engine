@@ -187,6 +187,29 @@ RAWFRAME_TEST(TwoActiveListenersHearNothing) {
     RAWFRAME_EXPECT(rig.frame().first > 0);
 }
 
+RAWFRAME_TEST(AQuietEmitterCountsItsCuesAndABoundListenerHears) {
+    Rig rig;
+    // Two active listener components, which alone hear nothing; bound to an
+    // entity, the binding hears.
+    rig.spawn(std::nullopt, Listener{.active = true}, 0);
+    rig.spawn(std::nullopt, Listener{.active = true}, 0);
+    const auto kOwn = rig.spawn(std::nullopt, std::nullopt, 0);
+    rig.heard->bindListener(kOwn);
+    // Named no sound yet, first seen at cue nought: its first cue, with the
+    // sound it names, plays.
+    const auto kShooter = rig.spawn(Emitter{}, std::nullopt, 0);
+    static_cast<void>(rig.frame());
+    rig.emitterOf(kShooter) = Emitter{.sound = kClick, .cue = 1};
+    const auto [kLeft, kRight] = rig.frame();
+    RAWFRAME_EXPECT(near(kLeft, 0.1F / std::sqrt(2.0F)) && rig.heard->statistics().cues == 1 &&
+                    rig.heard->statistics().unknownSounds == 0 && rig.heard->statistics().listenerConflicts == 0);
+    // Bound to an entity that is gone: nothing spatial is heard.
+    RAWFRAME_EXPECT(rig.world.destroy(kOwn).has_value());
+    rig.emitterOf(kShooter).cue = 2;
+    static_cast<void>(rig.frame());
+    RAWFRAME_EXPECT(rig.frame() == std::pair(0.0F, 0.0F));
+}
+
 RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
     const std::filesystem::path kDirectory =
         std::filesystem::temp_directory_path() / ("rawframe-world-audio-" + std::to_string(::getpid()));
