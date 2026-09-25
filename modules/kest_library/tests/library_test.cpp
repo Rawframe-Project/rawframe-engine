@@ -4,12 +4,10 @@
 
 #include "rawframe/kest/errors.h"
 #include "rawframe/kest_library/library.h"
+#include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -17,23 +15,12 @@ using namespace rawframe;
 
 namespace {
 
-namespace fs = std::filesystem;
-
-std::string readText(const fs::path& path) {
-    std::ifstream file{path, std::ios::binary};
-    return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
-}
-
 /// Every `.kest` file under a directory, by its path relative to it.
-std::vector<kest::SourceFile> kestFilesUnder(const fs::path& directory) {
+std::vector<kest::SourceFile> kestFilesUnder(const std::string& directory) {
     std::vector<kest::SourceFile> made;
-    for (const auto& entry : fs::recursive_directory_iterator{directory}) {
-        if (entry.is_regular_file() && entry.path().extension() == ".kest") {
-            made.push_back(kest::SourceFile{.path = entry.path().lexically_relative(directory).generic_string(),
-                                            .text = readText(entry.path())});
-        }
+    for (const std::string& path : test::filesUnder(directory, ".kest")) {
+        made.push_back(kest::SourceFile{.path = path, .text = test::readFile(directory + "/" + path)});
     }
-    std::ranges::sort(made, {}, &kest::SourceFile::path);
     return made;
 }
 
@@ -61,7 +48,7 @@ RAWFRAME_TEST(TheLibraryIsTheTreesFilesExactly) {
 RAWFRAME_TEST(AGamesProgramCompilesFromItsOwnFiles) {
     // Runners imports std, rawframe.world, .physics2d, .random,
     // .replication, .sound, and .input, and its own `controls`.
-    const std::vector<kest::SourceFile> kGame = kestFilesUnder(fs::path{RAWFRAME_SAMPLE_GAMES} / "runners");
+    const std::vector<kest::SourceFile> kGame = kestFilesUnder(std::string{RAWFRAME_SAMPLE_GAMES} + "runners");
     std::string report;
     const auto kProgram = kest_library::compile("runners.kest", kGame, {}, &report);
     RAWFRAME_EXPECT(kProgram.has_value());
@@ -77,7 +64,7 @@ RAWFRAME_TEST(AGamesProgramCompilesFromItsOwnFiles) {
 }
 
 RAWFRAME_TEST(AGamesFilesAreItsOwnAndPlain) {
-    const std::vector<kest::SourceFile> kGame = kestFilesUnder(fs::path{RAWFRAME_SAMPLE_GAMES} / "runners");
+    const std::vector<kest::SourceFile> kGame = kestFilesUnder(std::string{RAWFRAME_SAMPLE_GAMES} + "runners");
     const auto kRefused = [](const auto& outcome) {
         return !outcome.has_value() && outcome.error().code() == code(kest::KestError::DoesNotCompile);
     };

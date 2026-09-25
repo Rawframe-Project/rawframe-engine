@@ -1,19 +1,22 @@
 // Kest programs compiled from handed files, bound to typed doors, and run on
 // machines whose every call has a fuel budget and a heap ceiling.
 
+#include "rawframe/base/platform.h"
 #include "rawframe/kest/errors.h"
 #include "rawframe/kest/machine.h"
+#include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <fstream>
 #include <iterator>
-#include <sstream>
 #include <string>
-#include <thread>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
 
 using namespace rawframe;
 using kest::Door;
@@ -166,10 +169,7 @@ RAWFRAME_TEST(WhatDoesNotCompileIsReported) {
 
 RAWFRAME_TEST(TheStandardLibraryIsHandedLikeAnyFile) {
     const auto kRead = [](const std::string& path) {
-        std::ifstream in{path};
-        std::stringstream text;
-        text << in.rdbuf();
-        return text.str();
+        return rawframe::test::readFile(path);
     };
     const std::string kLibrary = RAWFRAME_KEST_LIBRARY;
     const std::array<SourceFile, 3> kFiles = {
@@ -344,6 +344,7 @@ RAWFRAME_TEST(CancellationIsNotAnError) {
     RAWFRAME_EXPECT(kOutcome.isCancelled() && kOutcome.cancelReason() == execution::CancelReason::OwnerStopping);
 }
 
+#if RAWFRAME_THREADS
 RAWFRAME_TEST(ARunningMachineStopsWhenCancelledFromAnotherThread) {
     const auto kProgram = compile(kAdd);
     auto machine = Machine::start(kProgram, {}, Trust::Trusted, {.heapBytes = 1U << 20U, .fuelPerCall = ~0ULL >> 1U});
@@ -363,6 +364,7 @@ RAWFRAME_TEST(ARunningMachineStopsWhenCancelledFromAnotherThread) {
     canceller.join();
     RAWFRAME_EXPECT(kOutcome.isCancelled() && kOutcome.cancelReason() == execution::CancelReason::DeadlineReached);
 }
+#endif
 
 namespace {
 
