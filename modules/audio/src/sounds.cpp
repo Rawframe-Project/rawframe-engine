@@ -62,6 +62,10 @@ struct Sounds::State {
     std::vector<bool> complete;
     std::vector<bool> asked;
     std::vector<std::size_t> wanted;
+    /// Per sound: seconds since an instance of it last lived; the on-demand
+    /// sounds let go since last taken.
+    std::vector<float> idle;
+    std::vector<std::size_t> idled;
     std::vector<Live> instances;
     std::uint64_t serial = 0;
     std::optional<Listener> listener;
@@ -339,6 +343,7 @@ result::Result<std::size_t> Sounds::add(LoadedSound sound) {
     state_->lastVariant.emplace_back();
     state_->complete.push_back(complete);
     state_->asked.push_back(false);
+    state_->idle.push_back(0);
     return state_->sounds.size() - 1;
 }
 
@@ -381,6 +386,10 @@ std::vector<std::size_t> Sounds::takeWanted() {
     return std::exchange(state_->wanted, {});
 }
 
+std::vector<std::size_t> Sounds::takeIdle() {
+    return std::exchange(state_->idled, {});
+}
+
 result::Result<Instance> Sounds::play(std::size_t sound, std::optional<Position> at) {
     State& state = *state_;
     if (sound >= state.sounds.size()) {
@@ -417,6 +426,7 @@ result::Result<Instance> Sounds::play(std::size_t sound, std::optional<Position>
                 .gain = gainOf(state.draw(declaration.volumeMinimum, declaration.volumeMaximum)),
                 .pitch = state.draw(declaration.pitchMinimum, declaration.pitchMaximum),
                 .started = ++state.serial};
+    state.idle[sound] = 0;
     const auto [kAudible, kPan] = state.placement(live);
     live.audible = kAudible;
     const bool kInRange = !declaration.attenuation || kAudible > 0;
@@ -497,6 +507,29 @@ void Sounds::update(float seconds) {
         } else if (live.state == InstanceState::Virtual && kInRange && state.voice(live, kAudible, kPan)) {
             ++state.statistics.revived;
         }
+    }
+    // An on-demand sound nothing has played for long enough is let go: an
+    // instance still living, virtual or stopping, keeps it.
+    for (std::size_t sound = 0; sound < state.sounds.size(); ++sound) {
+        state.idle[sound] += seconds;
+    }
+    for (const Live& live : state.instances) {
+        if (live.used) {
+            state.idle[live.sound] = 0;
+        }
+    }
+    for (std::size_t sound = 0; sound < state.sounds.size(); ++sound) {
+        LoadedSound& loaded = state.sounds[sound];
+        if (loaded.declaration.loading != Loading::OnDemand || !state.complete[sound] ||
+            state.idle[sound] < state.settings.onDemandIdleSeconds) {
+            continue;
+        }
+        std::ranges::fill(loaded.clips, nullptr);
+        std::ranges::fill(state.lengths[sound], std::pair<std::uint64_t, std::uint32_t>{0, 0});
+        state.complete[sound] = false;
+        state.asked[sound] = false;
+        state.idled.push_back(sound);
+        ++state.statistics.idled;
     }
 }
 

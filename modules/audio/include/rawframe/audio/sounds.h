@@ -68,6 +68,9 @@ struct SoundsSettings {
     Streamer* streamer = nullptr;
     /// Each playing stream's ring, in frames.
     std::size_t streamBufferFrames = 48'000;
+    /// How long an on-demand sound plays nothing before its variants are
+    /// let go, to be asked for again at its next play.
+    float onDemandIdleSeconds = 30;
 };
 
 struct SoundsStatistics {
@@ -81,6 +84,8 @@ struct SoundsStatistics {
     std::uint64_t culled = 0;
     /// Plays of an on-demand sound before its variants were all in.
     std::uint64_t notLoaded = 0;
+    /// On-demand sounds let go for playing nothing.
+    std::uint64_t idled = 0;
 };
 
 class Sounds {
@@ -110,6 +115,11 @@ public:
     /// were not all in, each named once ever: whoever reads them supplies
     /// them.
     [[nodiscard]] std::vector<std::size_t> takeWanted();
+    /// The on-demand sounds let go since last asked, for playing nothing
+    /// for `onDemandIdleSeconds`: their variants are dropped here, and
+    /// whoever supplied them may let them go too. Each is wanted again at
+    /// its next play.
+    [[nodiscard]] std::vector<std::size_t> takeIdle();
 
     /// Plays sound `sound`, at `at` if it is spatial. Refuses a play its
     /// full concurrency set turns away, one without a voice that may not go
@@ -122,7 +132,8 @@ public:
     void setListener(std::optional<Listener> listener);
     /// Once a frame: takes what the mixer finished, keeps virtual positions,
     /// sets each spatial instance's gain and pan, goes virtual out of range,
-    /// comes back in, and has streams decoded ahead.
+    /// comes back in, has streams decoded ahead, and lets idle on-demand
+    /// sounds go.
     void update(float seconds);
 
     [[nodiscard]] InstanceState state(Instance instance) const noexcept;

@@ -2,7 +2,7 @@
 // resolved by their rule, distance and pan from the listener, virtual
 // instances that come back where they would be, streamed sounds playing
 // as their preloaded selves, and on-demand sounds that miss their first
-// play and ask for their variants.
+// play, ask for their variants, and are let go when idle.
 
 #include "rawframe/audio/errors.h"
 #include "rawframe/audio/sounds.h"
@@ -383,4 +383,38 @@ RAWFRAME_TEST(AReplacedVariantPlaysFromTheNextPlayOn) {
     RAWFRAME_EXPECT(!sounds->supply(kSound, 0, clipOf(0.3F, 0)).has_value());
     RAWFRAME_EXPECT(sounds->play(kSound).has_value());
     RAWFRAME_EXPECT(std::abs(heard(*mixer).first - (0.3F * kCentre)) < 1e-5F);
+}
+
+RAWFRAME_TEST(AnIdleOnDemandSoundIsLetGoAndAskedForAgain) {
+    auto mixer = *Mixer::create(layout(), {});
+    auto sounds = *Sounds::create(*mixer, layout(), {.onDemandIdleSeconds = 1});
+    LoadedSound rare = declared({0.1F}, SoundDeclaration{.bus = kSfx, .loading = Loading::OnDemand});
+    rare.clips = {nullptr};
+    const std::size_t kRare = *sounds->add(std::move(rare));
+    LoadedSound hum = declared({0.2F}, SoundDeclaration{.loop = true, .bus = kSfx, .loading = Loading::OnDemand});
+    hum.clips = {nullptr};
+    const std::size_t kHum = *sounds->add(std::move(hum));
+    RAWFRAME_EXPECT(sounds->supply(kRare, 0, clipOf(0.1F, 4'800)).has_value());
+    RAWFRAME_EXPECT(sounds->supply(kHum, 0, clipOf(0.2F)).has_value());
+    // The rare one plays its tenth of a second; the hum loops on.
+    RAWFRAME_EXPECT(sounds->play(kRare).has_value() && sounds->play(kHum).has_value());
+    std::vector<float> out(960);
+    for (int frame = 0; frame < 50; ++frame) {
+        mixer->render(out);
+        sounds->update(0.01F);
+    }
+    // Half a second: not yet idle long enough.
+    RAWFRAME_EXPECT(sounds->takeIdle().empty() && sounds->play(kRare).has_value());
+    for (int frame = 0; frame < 120; ++frame) {
+        mixer->render(out);
+        sounds->update(0.01F);
+    }
+    // Idle past a second since its last play ended: let go, and asked for
+    // again when next played. The looping hum is never idle.
+    RAWFRAME_EXPECT(sounds->takeIdle() == std::vector<std::size_t>{kRare} && sounds->takeIdle().empty());
+    RAWFRAME_EXPECT(sounds->statistics().idled == 1);
+    const auto kMissed = sounds->play(kRare);
+    RAWFRAME_EXPECT(!kMissed.has_value() && kMissed.error().code() == code(AudioError::NotLoaded));
+    RAWFRAME_EXPECT(sounds->takeWanted() == std::vector<std::size_t>{kRare});
+    RAWFRAME_EXPECT(sounds->supply(kRare, 0, clipOf(0.1F, 4'800)).has_value() && sounds->play(kRare).has_value());
 }
