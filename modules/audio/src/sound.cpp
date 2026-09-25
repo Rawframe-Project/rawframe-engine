@@ -181,11 +181,18 @@ result::Result<SoundDeclaration> readSound(std::string_view text, const Layout& 
     if (kLoading == "preload") {
         return document::notCanonical(kRecord.pathOf("loading"), "a field at its default is omitted");
     }
-    if (kLoading == "stream" || kLoading == "on_demand") {
-        return invalid(kRecord.pathOf("loading"), "only preloading is done yet");
+    if (kLoading == "on_demand") {
+        return invalid(kRecord.pathOf("loading"), "on_demand loading waits for asset residency");
+    }
+    if (kLoading && kLoading != "stream") {
+        return invalid(kRecord.pathOf("loading"), "loading is preload, stream, or on_demand");
     }
     if (kLoading) {
-        return invalid(kRecord.pathOf("loading"), "loading is preload, stream, or on_demand");
+        // A stream loops whole: it has one decoder, which starts over.
+        if (sound.loopStart) {
+            return invalid(kRecord.pathOf("loading"), "a streamed sound loops whole, without loop points");
+        }
+        sound.loading = Loading::Stream;
     }
 
     RAWFRAME_TRY_ASSIGN(const Value* attenuation, kRecord.optional("attenuation", Value::Kind::Object));

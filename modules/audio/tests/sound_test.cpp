@@ -115,7 +115,15 @@ RAWFRAME_TEST(ASoundDeclarationReads) {
                   "\"click.wav\"\n    }\n  ],\n  \"bus\": \"0000000000000001\"\n}\n",
                   layout());
     RAWFRAME_EXPECT(kLeast.has_value() && !kLeast->loop && !kLeast->attenuation && kLeast->pitchMinimum == 1 &&
-                    kLeast->selection == Selection::Sequential && kLeast->bus == 0 && !kLeast->concurrency);
+                    kLeast->selection == Selection::Sequential && kLeast->bus == 0 && !kLeast->concurrency &&
+                    kLeast->loading == Loading::Preload);
+    // Music streamed, looping whole.
+    const auto kMusic =
+        readSound("{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      \"clip\": "
+                  "\"theme.rfopus\"\n    }\n  ],\n  \"loop\": {},\n  \"bus\": \"0000000000000001\",\n  \"loading\": "
+                  "\"stream\"\n}\n",
+                  layout());
+    RAWFRAME_EXPECT(kMusic.has_value() && kMusic->loop && !kMusic->loopStart && kMusic->loading == Loading::Stream);
 }
 
 RAWFRAME_TEST(EverySoundRuleIsRefusedAtItsField) {
@@ -140,7 +148,10 @@ RAWFRAME_TEST(EverySoundRuleIsRefusedAtItsField) {
         {"\"00000000000000a2\"", "\"00000000000000a3\"", DocumentError::Invalid, "$.bus"},
         {"\"concurrency\": \"steps\"", "\"concurrency\": \"shots\"", DocumentError::Invalid, "$.concurrency"},
         {"\"priority\": 5", "\"priority\": 5000", DocumentError::Invalid, "$.priority"},
+        {"\"priority\": 5,", "\"priority\": 5,\n  \"loading\": \"on_demand\",", DocumentError::Invalid, "$.loading"},
+        // A stream loops whole, and this sound has loop points.
         {"\"priority\": 5,", "\"priority\": 5,\n  \"loading\": \"stream\",", DocumentError::Invalid, "$.loading"},
+        {"\"priority\": 5,", "\"priority\": 5,\n  \"loading\": \"tape\",", DocumentError::Invalid, "$.loading"},
         {"\"priority\": 5,", "\"priority\": 5,\n  \"loading\": \"preload\",", DocumentError::NotCanonical, "$.loading"},
         {"\"maximumDistance\": 40", "\"maximumDistance\": 2", DocumentError::Invalid, "$.attenuation"},
         {"\"falloff\": \"linear\"", "\"falloff\": \"inverse\"", DocumentError::NotCanonical, "$.attenuation.falloff"},

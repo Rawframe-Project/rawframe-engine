@@ -41,6 +41,10 @@ struct Hearing {
     const world_replication::ClientWorlds* clients = nullptr;
     std::uint64_t client = 0;
     std::unique_ptr<audio::Mixer> mixer;
+    /// Keeps streamed sounds decoded ahead: on the participant's CPU
+    /// executor when it plays live, on the frame's own thread when it
+    /// renders there.
+    std::unique_ptr<audio::Streamer> streamer;
     std::unique_ptr<audio::Sounds> sounds;
     std::size_t master = 0;
     WorldAudioSettings settings;
@@ -48,8 +52,9 @@ struct Hearing {
     std::optional<execution::MonotonicInstant> last;
 
     /// Loads the game's audio for a mixer at `rate`. `key` names the
-    /// configuration that asked, for the refusal.
-    result::Status load(composition::ParticipantContext& context, std::string_view key, std::uint32_t rate) {
+    /// configuration that asked, for the refusal; `live` decodes streams on
+    /// the executor.
+    result::Status load(composition::ParticipantContext& context, std::string_view key, std::uint32_t rate, bool live) {
         const composition::Configuration& configuration = context.configuration();
         const auto kGame = configuration.text("kest.game");
         if (!kGame.has_value() || !context.has(world_replication::kClientWorlds.name)) {
@@ -82,7 +87,10 @@ struct Hearing {
         const auto kMaster = std::ranges::find(loaded.layout.buses, audio::Role::Master, &audio::Bus::role);
         master = static_cast<std::size_t>(kMaster - loaded.layout.buses.begin());
         RAWFRAME_TRY_ASSIGN(mixer, audio::Mixer::create(loaded.layout, {.rate = rate}));
-        RAWFRAME_TRY_ASSIGN(sounds, audio::Sounds::create(*mixer, loaded.layout, {}));
+        execution::Executor* const kExecutor = live ? context.cpuExecutor() : nullptr;
+        streamer = kExecutor != nullptr ? std::make_unique<audio::Streamer>(*kExecutor, context.owner())
+                                        : std::make_unique<audio::Streamer>();
+        RAWFRAME_TRY_ASSIGN(sounds, audio::Sounds::create(*mixer, loaded.layout, {.streamer = streamer.get()}));
         for (auto& [kId, sound] : loaded.sounds) {
             RAWFRAME_TRY_ASSIGN(const std::size_t kIndex, sounds->add(std::move(sound)));
             settings.sounds.emplace_back(kId, kIndex);
@@ -136,7 +144,7 @@ public:
         path_ = std::string{*kPath};
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kSeconds, configuration.unsignedInteger("audio.record_seconds", 60));
         limitFrames_ = kSeconds * kRecordingRate;
-        return hearing_.load(context, "audio.record", kRecordingRate);
+        return hearing_.load(context, "audio.record", kRecordingRate, false);
     }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
@@ -231,7 +239,7 @@ public:
             return {};
         }
         output_ = std::move(*output);
-        RAWFRAME_TRY(hearing_.load(context, "audio.play", output_->rate()));
+        RAWFRAME_TRY(hearing_.load(context, "audio.play", output_->rate(), true));
         return output_->start(*hearing_.mixer);
     }
 
@@ -321,6 +329,8 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .factory = &make<Player>,
         .scope = composition::LifetimeScope::World,
         .optionalCapabilities = kMaybe,
+        // Streamed sounds decode ahead on the CPU executor, a task a stream.
+        .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(500)},
         .observabilityIdentity = "world_audio.player",
         .budgetOwner = "audio",

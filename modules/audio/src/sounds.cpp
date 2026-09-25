@@ -38,6 +38,9 @@ float distanceBetween(Position from, Position to) noexcept {
     return std::hypot(to.x - from.x, to.y - from.y, to.z - from.z);
 }
 
+/// What a streamed play decodes before it starts: 40 ms.
+constexpr std::size_t kPrimedFrames = 1'920;
+
 /// One instance, as the owner keeps it.
 struct Live {
     std::uint32_t generation = 0;
@@ -69,10 +72,20 @@ result::Result<LoadedSound> loadSound(const std::string& path, const Layout& lay
     if (!declaration.has_value()) {
         return std::unexpected<result::Error>{std::move(declaration).error().withContext("path", path)};
     }
-    LoadedSound loaded{.declaration = std::move(*declaration), .clips = {}};
+    LoadedSound loaded{.declaration = std::move(*declaration), .clips = {}, .cooked = {}};
     for (const Variant& variant : loaded.declaration.variants) {
         const std::filesystem::path kClip = kPath.parent_path() / variant.clip;
-        RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes, readBytes(kClip));
+        RAWFRAME_TRY_ASSIGN(std::vector<std::byte> bytes, readBytes(kClip));
+        if (loaded.declaration.loading == Loading::Stream) {
+            auto cooked = std::make_shared<const std::vector<std::byte>>(std::move(bytes));
+            auto checked = Stream::open(cooked, {}, limits);
+            if (!checked.has_value()) {
+                return std::unexpected<result::Error>{std::move(checked).error().withContext("path", kClip.string())};
+            }
+            loaded.cooked.push_back(std::move(cooked));
+            continue;
+        }
+        const std::vector<std::byte> kBytes = std::move(bytes);
         auto clip = decodeCooked(kBytes, limits);
         if (!clip.has_value()) {
             return std::unexpected<result::Error>{std::move(clip).error().withContext("path", kClip.string())};
@@ -89,6 +102,8 @@ struct Sounds::State {
     SoundsStatistics statistics;
     world::Pcg32 random = world::deriveStream(world::RootSeed{0}, "rawframe.audio", "sounds");
     std::vector<LoadedSound> sounds;
+    /// Per sound and variant: its length in frames and its rate.
+    std::vector<std::vector<std::pair<std::uint64_t, std::uint32_t>>> lengths;
     /// Per sound: the next variant in sequence, and the last one picked.
     std::vector<std::size_t> nextVariant;
     std::vector<std::optional<std::size_t>> lastVariant;
@@ -163,12 +178,35 @@ struct Sounds::State {
     bool voice(Live& live, float audible, float pan) {
         const LoadedSound& sound = sounds[live.sound];
         const SoundDeclaration& declaration = sound.declaration;
-        const Clip& clip = *sound.clips[live.variant];
         PlayParameters parameters{.bus = declaration.bus,
                                   .volume = 20.0F * std::log10(std::max(live.gain * audible, 1e-6F)),
                                   .pitch = live.pitch,
-                                  .pan = pan,
-                                  .loop = declaration.loop};
+                                  .pan = pan};
+        if (declaration.loading == Loading::Stream) {
+            // A stream of its own for each play, begun where the instance is
+            // and primed with 40 ms so it sounds at once; the streamer keeps
+            // it ahead from then on.
+            auto stream = Stream::open(sound.cooked[live.variant],
+                                       {.bufferFrames = settings.streamBufferFrames,
+                                        .loop = declaration.loop,
+                                        .startFrame = static_cast<std::uint64_t>(live.frame)});
+            if (!stream.has_value()) {
+                return false;
+            }
+            while ((*stream)->available() < kPrimedFrames && !(*stream)->ended()) {
+                (*stream)->decodeAhead(1);
+            }
+            settings.streamer->add(*stream);
+            auto playback = mixer->play(std::move(*stream), parameters);
+            if (!playback.has_value()) {
+                return false;
+            }
+            live.playback = *playback;
+            live.state = InstanceState::Playing;
+            return true;
+        }
+        const Clip& clip = *sound.clips[live.variant];
+        parameters.loop = declaration.loop;
         if (declaration.loop && declaration.loopStart) {
             parameters.loopStart = static_cast<std::uint32_t>(*declaration.loopStart * static_cast<float>(clip.rate));
             parameters.loopEnd = static_cast<std::uint32_t>(*declaration.loopEnd * static_cast<float>(clip.rate));
@@ -205,14 +243,14 @@ struct Sounds::State {
     /// does not loop has run out.
     bool advance(Live& live, float seconds) noexcept {
         const LoadedSound& sound = sounds[live.sound];
-        const Clip& clip = *sound.clips[live.variant];
-        live.frame += static_cast<double>(seconds) * clip.rate * live.pitch;
-        const auto kLength = static_cast<double>(clip.frames());
+        const auto [kFrames, kRate] = lengths[live.sound][live.variant];
+        live.frame += static_cast<double>(seconds) * kRate * live.pitch;
+        const auto kLength = static_cast<double>(kFrames);
         if (!sound.declaration.loop) {
             return live.frame < kLength;
         }
-        const double kStart = sound.declaration.loopStart ? *sound.declaration.loopStart * clip.rate : 0.0;
-        const double kEnd = sound.declaration.loopEnd ? *sound.declaration.loopEnd * clip.rate : kLength;
+        const double kStart = sound.declaration.loopStart ? *sound.declaration.loopStart * kRate : 0.0;
+        const double kEnd = sound.declaration.loopEnd ? *sound.declaration.loopEnd * kRate : kLength;
         if (live.frame >= kEnd) {
             live.frame = kStart + std::fmod(live.frame - kStart, kEnd - kStart);
         }
@@ -295,10 +333,28 @@ Sounds::create(Mixer& mixer, const Layout& layout, const SoundsSettings& setting
 
 result::Result<std::size_t> Sounds::add(LoadedSound sound) {
     const SoundDeclaration& declaration = sound.declaration;
-    if (sound.clips.size() != declaration.variants.size() || declaration.bus >= state_->layout.buses.size()) {
-        return refuse(result::ErrorClass::InvalidArgument, AudioError::BadPlay, "a sound needs a clip a variant");
+    const bool kStreamed = declaration.loading == Loading::Stream;
+    const std::size_t kHeld = kStreamed ? sound.cooked.size() : sound.clips.size();
+    if (kHeld != declaration.variants.size() || (kStreamed ? !sound.clips.empty() : !sound.cooked.empty()) ||
+        declaration.bus >= state_->layout.buses.size()) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      AudioError::BadPlay,
+                      "a sound needs a clip a variant, or cooked Opus a variant if it streams");
     }
-    for (const std::shared_ptr<const Clip>& clip : sound.clips) {
+    if (kStreamed && state_->settings.streamer == nullptr) {
+        return refuse(result::ErrorClass::FailedPrecondition, AudioError::BadPlay, "a streamed sound needs a streamer");
+    }
+    std::vector<std::pair<std::uint64_t, std::uint32_t>> lengths;
+    for (std::size_t variant = 0; variant < kHeld; ++variant) {
+        if (kStreamed) {
+            auto stream = Stream::open(sound.cooked[variant]);
+            if (!stream.has_value()) {
+                return std::unexpected<result::Error>{std::move(stream).error()};
+            }
+            lengths.emplace_back((*stream)->frames(), (*stream)->rate());
+            continue;
+        }
+        const std::shared_ptr<const Clip>& clip = sound.clips[variant];
         const double kLength =
             clip == nullptr || clip->rate == 0 ? 0 : static_cast<double>(clip->frames()) / clip->rate;
         if (kLength == 0 || (declaration.loopEnd && *declaration.loopEnd > kLength)) {
@@ -306,8 +362,10 @@ result::Result<std::size_t> Sounds::add(LoadedSound sound) {
                           AudioError::BadPlay,
                           "a loop ends past a variant's end, or a variant is empty");
         }
+        lengths.emplace_back(clip->frames(), clip->rate);
     }
     state_->sounds.push_back(std::move(sound));
+    state_->lengths.push_back(std::move(lengths));
     state_->nextVariant.push_back(0);
     state_->lastVariant.emplace_back();
     return state_->sounds.size() - 1;
@@ -382,6 +440,9 @@ void Sounds::setListener(std::optional<Listener> listener) {
 void Sounds::update(float seconds) {
     State& state = *state_;
     state.mixer->collect();
+    if (state.settings.streamer != nullptr) {
+        state.settings.streamer->update();
+    }
     for (Live& live : state.instances) {
         if (!live.used) {
             continue;

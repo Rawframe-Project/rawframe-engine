@@ -45,6 +45,14 @@ enum class Virtualization : std::uint8_t {
     Restart
 };
 
+/// How a sound's variants are held (SPEC-0036's loading policy): decoded
+/// whole when the sound loads, or kept cooked and decoded as they play.
+/// `on_demand` waits for asset residency.
+enum class Loading : std::uint8_t {
+    Preload,
+    Stream
+};
+
 /// What becomes of a playing sound whose owner goes away.
 enum class Despawn : std::uint8_t {
     Stop,
@@ -82,6 +90,7 @@ struct SoundDeclaration {
     /// The concurrency set it counts in, by index, if any.
     std::optional<std::size_t> concurrency;
     std::int32_t priority = 0;
+    Loading loading = Loading::Preload;
     /// Absent for a flat sound: spatial ones attenuate.
     std::optional<Attenuation> attenuation;
     Virtualization virtualization = Virtualization::Disabled;

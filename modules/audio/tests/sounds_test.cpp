@@ -1,16 +1,19 @@
 // Declared sounds playing: variants picked as declared, concurrency sets
 // resolved by their rule, distance and pan from the listener, virtual
-// instances that come back where they would be, and a sound loaded from
-// its files.
+// instances that come back where they would be, sounds loaded from their
+// files, and streamed sounds playing as their preloaded selves.
 
 #include "rawframe/audio/errors.h"
 #include "rawframe/audio/sounds.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <span>
 #include <unistd.h>
 #include <vector>
 
@@ -37,7 +40,7 @@ std::shared_ptr<const Clip> clipOf(float value, std::size_t frames = 48'000) {
 }
 
 LoadedSound declared(std::vector<float> values, SoundDeclaration declaration) {
-    LoadedSound sound{.declaration = std::move(declaration), .clips = {}};
+    LoadedSound sound{.declaration = std::move(declaration), .clips = {}, .cooked = {}};
     for (const float kValue : values) {
         sound.declaration.variants.push_back(Variant{.clip = "x.wav"});
         sound.clips.push_back(clipOf(kValue));
@@ -227,4 +230,122 @@ RAWFRAME_TEST(ASoundLoadsFromItsFiles) {
     const auto kMissing = loadSound((kDirectory / "none.sound").string(), layout());
     RAWFRAME_EXPECT(!kMissing.has_value());
     std::filesystem::remove_all(kDirectory);
+}
+
+namespace {
+
+std::shared_ptr<const std::vector<std::byte>> cookedFixture() {
+    std::ifstream file{std::string{RAWFRAME_AUDIO_DATA} + "tones.rfopus", std::ios::binary};
+    const std::vector<char> kRead{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    auto bytes = std::make_shared<std::vector<std::byte>>(kRead.size());
+    std::ranges::transform(kRead, bytes->begin(), [](char each) {
+        return static_cast<std::byte>(each);
+    });
+    return bytes;
+}
+
+/// What a sound declared as `declaration` plays over `frames` frames, from
+/// its variant held as `loading` asks.
+std::vector<float> playedAs(Loading loading, SoundDeclaration declaration, std::size_t frames) {
+    Streamer streamer;
+    auto mixer = *Mixer::create(layout(), {});
+    auto sounds = *Sounds::create(*mixer, layout(), {.streamer = &streamer});
+    declaration.loading = loading;
+    declaration.variants = {Variant{.clip = "tones.rfopus"}};
+    LoadedSound sound{.declaration = declaration, .clips = {}, .cooked = {}};
+    if (loading == Loading::Stream) {
+        sound.cooked.push_back(cookedFixture());
+    } else {
+        sound.clips.push_back(std::make_shared<const Clip>(*decodeCookedOpus(*cookedFixture())));
+    }
+    const std::size_t kSound = *sounds->add(std::move(sound));
+    static_cast<void>(sounds->play(kSound));
+    std::vector<float> out(frames * 2);
+    for (std::size_t at = 0; at < frames; at += 256) {
+        sounds->update(256.0F / 48'000.0F);
+        mixer->render(std::span{out}.subspan(at * 2, std::min<std::size_t>(256, frames - at) * 2));
+    }
+    return out;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AStreamedSoundPlaysAsItsPreloadedSelf) {
+    const SoundDeclaration kOnce{.bus = kSfx};
+    RAWFRAME_EXPECT(playedAs(Loading::Stream, kOnce, 80'000) == playedAs(Loading::Preload, kOnce, 80'000));
+    const SoundDeclaration kLooped{.loop = true, .bus = kSfx};
+    RAWFRAME_EXPECT(playedAs(Loading::Stream, kLooped, 160'000) == playedAs(Loading::Preload, kLooped, 160'000));
+
+    // Streamed sounds need a streamer, and cooked variants.
+    auto mixer = *Mixer::create(layout(), {});
+    auto unstreamed = *Sounds::create(*mixer, layout(), {});
+    LoadedSound streamed{.declaration = SoundDeclaration{.bus = kSfx, .loading = Loading::Stream},
+                         .clips = {},
+                         .cooked = {cookedFixture()}};
+    streamed.declaration.variants = {Variant{.clip = "tones.rfopus"}};
+    RAWFRAME_EXPECT(!unstreamed->add(streamed).has_value());
+    Streamer streamer;
+    auto withStreamer = *Sounds::create(*mixer, layout(), {.streamer = &streamer});
+    RAWFRAME_EXPECT(withStreamer->add(streamed).has_value());
+    streamed.clips.push_back(clipOf(0.5F));
+    RAWFRAME_EXPECT(!withStreamer->add(streamed).has_value());
+}
+
+namespace {
+
+/// A spatial sound, held as `loading` asks, heard near, then out of range
+/// for half a second (virtual), then near again: what the last 0.2 s hold.
+std::vector<float> revivedAs(Loading loading) {
+    Streamer streamer;
+    auto mixer = *Mixer::create(layout(), {});
+    auto sounds = *Sounds::create(*mixer, layout(), {.streamer = &streamer});
+    SoundDeclaration declaration{.bus = kSfx,
+                                 .loading = loading,
+                                 .attenuation = Attenuation{.minimumDistance = 1, .maximumDistance = 10},
+                                 .virtualization = Virtualization::TrackPosition};
+    declaration.variants = {Variant{.clip = "tones.rfopus"}};
+    LoadedSound sound{.declaration = declaration, .clips = {}, .cooked = {}};
+    if (loading == Loading::Stream) {
+        sound.cooked.push_back(cookedFixture());
+    } else {
+        sound.clips.push_back(std::make_shared<const Clip>(*decodeCookedOpus(*cookedFixture())));
+    }
+    const std::size_t kSound = *sounds->add(std::move(sound));
+    sounds->setListener(Listener{});
+    const auto kInstance = sounds->play(kSound, Position{});
+    std::vector<float> out(512);
+    const auto kRun = [&](std::size_t blocks) {
+        for (std::size_t block = 0; block < blocks; ++block) {
+            sounds->update(256.0F / 48'000.0F);
+            mixer->render(out);
+        }
+    };
+    kRun(20);
+    sounds->setListener(Listener{.position = {.x = 100, .y = 0, .z = 0}});
+    kRun(94);
+    RAWFRAME_EXPECT(kInstance.has_value() && sounds->state(*kInstance) == InstanceState::Virtual);
+    sounds->setListener(Listener{});
+    kRun(2);
+    RAWFRAME_EXPECT(kInstance.has_value() && sounds->state(*kInstance) == InstanceState::Playing);
+    std::vector<float> after;
+    for (int block = 0; block < 37; ++block) {
+        sounds->update(256.0F / 48'000.0F);
+        mixer->render(out);
+        after.insert(after.end(), out.begin(), out.end());
+    }
+    return after;
+}
+
+} // namespace
+
+RAWFRAME_TEST(AVirtualStreamComesBackWhereItWouldBe) {
+    const std::vector<float> kStreamed = revivedAs(Loading::Stream);
+    const std::vector<float> kPreloaded = revivedAs(Loading::Preload);
+    double signal = 0;
+    double error = 0;
+    for (std::size_t index = 0; index < kPreloaded.size(); ++index) {
+        signal += static_cast<double>(kPreloaded[index]) * kPreloaded[index];
+        error += static_cast<double>(kStreamed[index] - kPreloaded[index]) * (kStreamed[index] - kPreloaded[index]);
+    }
+    RAWFRAME_EXPECT(signal > 0 && 10.0 * std::log10(error / signal) < -50);
 }

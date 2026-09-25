@@ -9,6 +9,7 @@
 #include "rawframe/audio/decode.h"
 #include "rawframe/audio/mixer.h"
 #include "rawframe/audio/sound.h"
+#include "rawframe/audio/stream.h"
 #include "rawframe/result/result.h"
 
 #include <cstddef>
@@ -48,14 +49,17 @@ enum class InstanceState : std::uint8_t {
     Finished,
 };
 
-/// A declaration with its variants' clips, in its variants' order.
+/// A declaration with its variants, in their order: decoded clips for a
+/// preloaded sound, cooked Opus for a streamed one.
 struct LoadedSound {
     SoundDeclaration declaration;
     std::vector<std::shared_ptr<const Clip>> clips;
+    std::vector<std::shared_ptr<const std::vector<std::byte>>> cooked;
 };
 
-/// Reads the declaration at `path` against `layout` and decodes its
-/// variants (WAVE, beside it).
+/// Reads the declaration at `path` against `layout` and its variants,
+/// beside it: decoded for a preloaded sound, checked and kept cooked for a
+/// streamed one.
 [[nodiscard]] result::Result<LoadedSound>
 loadSound(const std::string& path, const Layout& layout, const DecodeLimits& limits = {});
 
@@ -63,6 +67,11 @@ struct SoundsSettings {
     /// Where variant choices and drawn volumes and pitches come from.
     std::uint64_t seed = 0;
     std::size_t maximumInstances = 256;
+    /// What keeps streamed sounds decoded ahead; a Sounds without one
+    /// refuses them.
+    Streamer* streamer = nullptr;
+    /// Each playing stream's ring, in frames.
+    std::size_t streamBufferFrames = 48'000;
 };
 
 struct SoundsStatistics {
@@ -85,8 +94,9 @@ public:
     Sounds& operator=(const Sounds&) = delete;
     ~Sounds();
 
-    /// Adds a sound; its index plays it. Refuses clips that are not one a
-    /// variant, and loop points past a clip's end.
+    /// Adds a sound; its index plays it. Refuses clips or cooked variants
+    /// that are not one a variant or not what its loading asks, loop points
+    /// past a clip's end, and a streamed sound without a streamer.
     [[nodiscard]] result::Result<std::size_t> add(LoadedSound sound);
 
     /// Plays sound `sound`, at `at` if it is spatial. Refuses a play its
@@ -99,7 +109,7 @@ public:
     void setListener(std::optional<Listener> listener);
     /// Once a frame: takes what the mixer finished, keeps virtual positions,
     /// sets each spatial instance's gain and pan, goes virtual out of range,
-    /// and comes back in.
+    /// comes back in, and has streams decoded ahead.
     void update(float seconds);
 
     [[nodiscard]] InstanceState state(Instance instance) const noexcept;
