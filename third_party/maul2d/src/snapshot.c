@@ -1,0 +1,302 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sirac Ozmen
+//
+// Snapshots and hashing: the block walk that sizes, writes and restores
+// the world state, and the world hashes built on the same walk.
+
+#include "snapshot.h"
+
+#include "world_state.h"
+
+#include "joint.h"
+#include "journal.h"
+#include "world.h"
+#include "world_internal.h"
+
+#include "maul2d/base.h"
+
+#include <string.h>
+
+#define M2_SNAPSHOT_MAGIC 0x4D32534Eu // 'M2SN'
+
+#define M2_SNAPSHOT_VERSION 1u
+
+// --- Snapshot -------------------------------------------------------------------
+
+// The header says which build and which world shape wrote the bytes;
+// everything else, pool cursors included, is the state table's.
+typedef struct m2SnapshotHeader
+{
+    uint32_t magic;
+    uint32_t formatVersion;
+    uint64_t configHash;
+    int32_t capacities[6];
+} m2SnapshotHeader;
+
+_Static_assert(sizeof(m2SnapshotHeader) == 40, "snapshot header must be padding-free");
+
+static void WorldCapacities(const m2World* world, int32_t capacities[6])
+{
+    capacities[0] = world->bodies.bodyCapacity;
+    capacities[1] = world->shapes.shapeCapacity;
+    capacities[2] = world->joints.jointCapacity;
+    capacities[3] = world->particles.particleCapacity;
+    capacities[4] = world->volumes.fvCapacity;
+    capacities[5] = world->contacts.pairCapacity;
+}
+
+static uint64_t ConfigHash(void)
+{
+    // Everything that changes what the serialized bytes MEAN, and
+    // nothing that does not (SIMD backend and worker count are
+    // deliberately absent: the format is portable across them).
+    uint64_t h = 0xCBF29CE484222325ull;
+    int32_t version = m2GetVersion();
+    int32_t realSize = (int32_t)sizeof(float);
+    int32_t posSize = (int32_t)sizeof(double);
+    const char* fpPolicy = "contract-off;no-fast-math;explicit-fma";
+    h = m2Hash64(h, &version, 4);
+    h = m2Hash64(h, &realSize, 4);
+    h = m2Hash64(h, &posSize, 4);
+    h = m2Hash64(h, fpPolicy, (int32_t)strlen(fpPolicy));
+    return h;
+}
+
+// Single source of truth: the size IS the walk (measure mode). The
+// duplicated byte formula died here after its third drift (assert-caught
+// every time; root cause now removed).
+static int32_t BlockBytes(const m2World* world)
+{
+    return m2StateWalk((m2World*)world, NULL, NULL, 2);
+}
+
+int32_t m2World_SnapshotSize(m2WorldId worldId)
+{
+    m2World* world = m2GetWorld(worldId);
+    if (world == NULL)
+    {
+        return 0;
+    }
+    return (int32_t)sizeof(m2SnapshotHeader) + BlockBytes(world);
+}
+
+// The block walk is shared by Snapshot and Restore so the layouts can
+// never drift apart (direction 0 = write, 1 = read).
+
+int32_t m2World_Snapshot(m2WorldId worldId, void* buffer, int32_t capacity)
+{
+    m2World* world = m2GetWorld(worldId);
+    int32_t size = m2World_SnapshotSize(worldId);
+    if (world == NULL || buffer == NULL || capacity < size)
+    {
+        return 0;
+    }
+
+    m2SnapshotHeader header;
+    memset(&header, 0, sizeof(header));
+    header.magic = M2_SNAPSHOT_MAGIC;
+    header.formatVersion = M2_SNAPSHOT_VERSION;
+    header.configHash = ConfigHash();
+    WorldCapacities(world, header.capacities);
+
+    uint8_t* out = buffer;
+    memcpy(out, &header, sizeof(header));
+    int32_t cursor = (int32_t)sizeof(header) + m2StateWalk(world, out + sizeof(header), NULL, 0);
+    M2_ASSERT(cursor == size);
+    return cursor;
+}
+
+bool m2World_Restore(m2WorldId worldId, const void* buffer, int32_t size)
+{
+    m2World* world = m2GetWorld(worldId);
+    if (world == NULL || buffer == NULL || size < (int32_t)sizeof(m2SnapshotHeader))
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return false;
+    }
+    m2SnapshotHeader header;
+    memcpy(&header, buffer, sizeof(header));
+    int32_t capacities[6];
+    WorldCapacities(world, capacities);
+    if (header.magic != M2_SNAPSHOT_MAGIC || header.formatVersion != M2_SNAPSHOT_VERSION ||
+        header.configHash != ConfigHash() ||
+        memcmp(header.capacities, capacities, sizeof(capacities)) != 0)
+    {
+        m2Refuse(world, m2_errorConfig); // another build or another world shape
+        return false;
+    }
+    // Hostile bytes are checked before any of them land: every row the
+    // table describes, cursors included.
+    const uint8_t* in = buffer;
+    if (size != (int32_t)sizeof(header) + BlockBytes(world) ||
+        !m2StateValidate(world, in + sizeof(header)))
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return false;
+    }
+
+    int32_t cursor = (int32_t)sizeof(header) + m2StateWalk(world, NULL, in + sizeof(header), 1);
+    M2_ASSERT(cursor == size);
+    (void)cursor;
+    m2RebuildJointEdges(world);
+
+    // Restores are first-class journal citizens: the tape carries the
+    // snapshot itself, so rollback-heavy sessions replay bit-exactly.
+    // The price is tape size, and that is the caller's tradeoff.
+    m2JournalRecordRestore(world, buffer, size);
+
+    // Events are an observer stream from an abandoned timeline: cleared
+    // on restore, re-emitted by re-simulation.
+    world->events.beginEventCount = 0;
+    world->events.endEventCount = 0;
+    world->events.pendingEndCount = 0;
+    world->events.sensorBeginCount = 0;
+    world->events.sensorEndCount = 0;
+    world->events.pendingSensorEndCount = 0;
+    world->events.jointBreakEventCount = 0;
+    return true;
+}
+
+// The hashed slices of the world, each folded into a running hash.
+static uint64_t HashHeader(const m2World* world, uint64_t h)
+{
+    h = m2Hash64(h, &world->stepCount, (int32_t)sizeof(world->stepCount));
+    h = m2Hash64(h, &world->gravity, (int32_t)sizeof(world->gravity));
+    return h;
+}
+
+static uint64_t HashBodies(const m2World* world, uint64_t h)
+{
+    for (int32_t i = 0; i < world->bodies.maxBodyIndex; ++i)
+    {
+        if (world->bodies.alive[i] == 0)
+        {
+            continue;
+        }
+        h = m2Hash64(h, &world->bodies.transforms[i], (int32_t)sizeof(m2Transform));
+        h = m2Hash64(h, &world->bodies.linearVelocities[i], (int32_t)sizeof(m2Vec2));
+        h = m2Hash64(h, &world->bodies.angularVelocities[i], (int32_t)sizeof(float));
+        h = m2Hash64(h, &world->bodies.invMass[i], (int32_t)sizeof(float));
+        h = m2Hash64(h, &world->bodies.invInertia[i], (int32_t)sizeof(float));
+        h = m2Hash64(h, &world->bodies.localCenters[i], (int32_t)sizeof(m2Vec2));
+        h = m2Hash64(h, &world->bodies.types[i], (int32_t)sizeof(uint8_t));
+        h = m2Hash64(h, &world->bodies.asleep[i], (int32_t)sizeof(uint8_t));
+        h = m2Hash64(h, &world->bodies.sleepTimes[i], (int32_t)sizeof(float));
+        h = m2Hash64(h, &world->bodies.sleepStreak[i], 1);
+        h = m2Hash64(h, &world->bodies.bullets[i], (int32_t)sizeof(uint8_t));
+    }
+    return h;
+}
+
+static uint64_t HashContacts(const m2World* world, uint64_t h)
+{
+    h = m2Hash64(h, world->contacts.pairKeys,
+                 world->contacts.pairCount * (int32_t)sizeof(uint64_t));
+    h = m2Hash64(h, world->contacts.manifolds,
+                 world->contacts.pairCount * (int32_t)sizeof(m2Manifold));
+    return h;
+}
+
+static uint64_t HashJoints(const m2World* world, uint64_t h)
+{
+    for (int32_t i = 0; i < world->joints.maxJointIndex; ++i)
+    {
+        if (world->joints.jointAlive[i] == 0)
+        {
+            continue;
+        }
+        h = m2Hash64(h, &world->joints.jointImpulse[i], (int32_t)sizeof(m2Vec2));
+        h = m2Hash64(h, &world->joints.jointMotorImpulse[i], (int32_t)sizeof(float));
+        h = m2Hash64(h, &world->joints.jointLowerImpulse[i], (int32_t)sizeof(float));
+        h = m2Hash64(h, &world->joints.jointUpperImpulse[i], (int32_t)sizeof(float));
+        h = m2Hash64(h, &world->joints.jointSpringImpulse[i], (int32_t)sizeof(float));
+    }
+    return h;
+}
+
+static uint64_t HashVolumes(const m2World* world, uint64_t h)
+{
+    if (world->volumes.fvCapacity > 0)
+    {
+        for (int32_t i = 0; i < world->volumes.maxFvIndex; ++i)
+        {
+            h = m2Hash64(h, &world->volumes.fvAlive[i], 1);
+            if (world->volumes.fvAlive[i] == 0)
+            {
+                continue;
+            }
+            h = m2Hash64(h, &world->volumes.fvSurface[i], (int32_t)sizeof(double));
+        }
+    }
+    return h;
+}
+
+static uint64_t HashParticles(const m2World* world, uint64_t h)
+{
+    if (world->particles.particleCapacity > 0)
+    {
+        h = m2Hash64(h, &world->particles.particleCount, (int32_t)sizeof(int32_t));
+        for (int32_t i = 0; i < world->particles.maxParticleIndex; ++i)
+        {
+            h = m2Hash64(h, &world->particles.particleAlive[i], 1);
+            if (world->particles.particleAlive[i] == 0)
+            {
+                continue;
+            }
+            h = m2Hash64(h, &world->particles.particlePositions[i], (int32_t)sizeof(m2Pos2));
+            h = m2Hash64(h, &world->particles.particleVelocities[i], (int32_t)sizeof(m2Vec2));
+            h = m2Hash64(h, &world->particles.particleFlags[i], (int32_t)sizeof(uint32_t));
+            h = m2Hash64(h, &world->particles.particleLifetime[i], (int32_t)sizeof(float));
+            h = m2Hash64(h, &world->particles.particleUserData[i], (int32_t)sizeof(uint64_t));
+        }
+        h = m2Hash64(h, &world->particles.particleSpringCount, (int32_t)sizeof(int32_t));
+        h = m2Hash64(h, world->particles.particleSpringA,
+                     world->particles.particleSpringCount * (int32_t)sizeof(int32_t));
+        h = m2Hash64(h, world->particles.particleSpringB,
+                     world->particles.particleSpringCount * (int32_t)sizeof(int32_t));
+        h = m2Hash64(h, world->particles.particleSpringRest,
+                     world->particles.particleSpringCount * (int32_t)sizeof(float));
+        h = m2Hash64(h, &world->particles.particleTriadCount, (int32_t)sizeof(int32_t));
+        h = m2Hash64(h, world->particles.particleTriadA,
+                     world->particles.particleTriadCount * (int32_t)sizeof(int32_t));
+        h = m2Hash64(h, world->particles.particleTriadB,
+                     world->particles.particleTriadCount * (int32_t)sizeof(int32_t));
+        h = m2Hash64(h, world->particles.particleTriadC,
+                     world->particles.particleTriadCount * (int32_t)sizeof(int32_t));
+    }
+    return h;
+}
+
+uint64_t m2World_Hash(m2WorldId worldId)
+{
+    m2World* world = m2GetWorld(worldId);
+    if (world == NULL)
+    {
+        return 0;
+    }
+    uint64_t h = HashHeader(world, M2_HASH_INIT);
+    h = HashBodies(world, h);
+    h = HashContacts(world, h);
+    h = HashJoints(world, h);
+    h = HashVolumes(world, h);
+    return HashParticles(world, h);
+}
+
+// Subsystem hashes: independent seeds on purpose (the total is not
+// a function of the parts).
+m2WorldHashParts m2World_GetHashParts(m2WorldId worldId)
+{
+    m2WorldHashParts parts;
+    memset(&parts, 0, sizeof(parts));
+    m2World* world = m2GetWorld(worldId);
+    if (world == NULL)
+    {
+        return parts;
+    }
+    parts.world = HashHeader(world, M2_HASH_INIT);
+    parts.bodies = HashBodies(world, M2_HASH_INIT);
+    parts.contacts = HashContacts(world, M2_HASH_INIT);
+    parts.joints = HashJoints(world, M2_HASH_INIT);
+    parts.particles = HashParticles(world, M2_HASH_INIT);
+    return parts;
+}

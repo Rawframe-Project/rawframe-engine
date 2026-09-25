@@ -20,6 +20,7 @@ endif()
 # Every module is listed here and in tools/modules.txt. A module is never
 # discovered from the directory tree.
 add_subdirectory(third_party/kest)
+add_subdirectory(third_party/maul2d)
 include(third_party/quic.cmake)
 add_subdirectory(modules/base)
 add_subdirectory(modules/result)
