@@ -33,7 +33,7 @@ BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
 BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
 # Vendored providers stay behind their module (ADR-0005, ADR-0038): no public
 # header includes one.
-PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/)', re.MULTILINE)
+PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h)', re.MULTILINE)
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 
 
