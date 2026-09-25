@@ -7,11 +7,14 @@
 #include "rawframe/document/json.h"
 #include "rawframe/signature/errors.h"
 
+#include <map>
+
+#if RAWFRAME_FILE_SYSTEM
 #include <cerrno>
 #include <fcntl.h>
-#include <map>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace rawframe::content {
 
@@ -46,6 +49,7 @@ private:
     std::map<std::string, std::vector<std::byte>, std::less<>> files_;
 };
 
+#if RAWFRAME_FILE_SYSTEM
 /// A file descriptor closed when it goes.
 class Descriptor {
 public:
@@ -154,6 +158,7 @@ private:
     Descriptor root_;
     dev_t device_;
 };
+#endif
 
 /// SPEC-0021's chunk, as the manifest lists it: a `raw` blob is its
 /// content, a `zstd` blob one Zstandard frame of it.
@@ -173,7 +178,8 @@ constexpr std::uint64_t kMaximumChunkSize = std::uint64_t{4} * 1024 * 1024;
 
 class BuildSource final : public ContentSource::Implementation {
 public:
-    BuildSource(DirectorySource blobs, std::map<std::string, std::vector<Chunk>, std::less<>> chunks) noexcept
+    BuildSource(std::shared_ptr<const ContentSource::Implementation> blobs,
+                std::map<std::string, std::vector<Chunk>, std::less<>> chunks) noexcept
         : blobs_(std::move(blobs)), chunks_(std::move(chunks)) {
     }
 
@@ -188,7 +194,7 @@ public:
             // it holds (SPEC-0021's verification order, steps 2 and 3).
             const std::string kHex = chunk.blob.text().substr(7);
             RAWFRAME_TRY_ASSIGN(std::vector<std::byte> blob,
-                                blobs_.read("sha256/" + kHex.substr(0, 2) + "/" + kHex.substr(2), chunk.blobSize));
+                                blobs_->read("sha256/" + kHex.substr(0, 2) + "/" + kHex.substr(2), chunk.blobSize));
             if (!sameDigest(ContentDigest::of(blob), chunk.blob)) {
                 return refuse(
                     ContentError::DigestMismatch, result::ErrorClass::DataLoss, "a blob is not what the Build says");
@@ -211,7 +217,7 @@ public:
     }
 
 private:
-    DirectorySource blobs_;
+    std::shared_ptr<const ContentSource::Implementation> blobs_;
     std::map<std::string, std::vector<Chunk>, std::less<>> chunks_;
 };
 
@@ -283,6 +289,7 @@ result::Result<ContentSource> ContentSource::memory(std::vector<std::pair<std::s
     return ContentSource{std::make_shared<const MemorySource>(std::move(held))};
 }
 
+#if RAWFRAME_FILE_SYSTEM
 result::Result<ContentSource> ContentSource::directory(const std::filesystem::path& root) {
     Descriptor opened{::open(root.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC)};
     struct stat status{};
@@ -292,42 +299,22 @@ result::Result<ContentSource> ContentSource::directory(const std::filesystem::pa
     }
     return ContentSource{std::make_shared<const DirectorySource>(std::move(opened), status.st_dev)};
 }
+#endif
 
-result::Result<BuildContent> ContentSource::build(const std::filesystem::path& root,
-                                                  const base::Sha256Digest& expectedRoot,
-                                                  const signature::PublisherKeySet& publisher) {
-    Descriptor directory{::open(root.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC)};
-    struct stat status{};
-    if (directory.get() < 0 || ::fstat(directory.get(), &status) != 0) {
-        return refuse(
-            ContentError::SourceUnavailable, result::ErrorClass::Unavailable, "the Build is not a readable directory");
-    }
-    DirectorySource files{std::move(directory), status.st_dev};
-    struct stat manifestStatus{};
-    if (::stat((root / "build.manifest").c_str(), &manifestStatus) != 0 || !S_ISREG(manifestStatus.st_mode) ||
-        static_cast<std::uint64_t>(manifestStatus.st_size) > kMaximumBuildManifest) {
-        return refuse(ContentError::SourceUnavailable,
-                      result::ErrorClass::Unavailable,
-                      "the Build has no manifest within its ceiling");
-    }
-    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes,
-                        files.read("build.manifest", static_cast<std::uint64_t>(manifestStatus.st_size)));
-    // SPEC-0021's first step: the exact bytes, signed by the publisher,
-    // before a byte of them is parsed.
-    struct stat signatureStatus{};
-    if (::stat((root / "build.manifest.sig").c_str(), &signatureStatus) != 0 || !S_ISREG(signatureStatus.st_mode) ||
-        signatureStatus.st_size > 1024) {
-        return refuse(ContentError::SourceUnavailable, result::ErrorClass::Unavailable, "the Build is not signed");
-    }
-    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kSigned,
-                        files.read("build.manifest.sig", static_cast<std::uint64_t>(signatureStatus.st_size)));
-    RAWFRAME_TRY_ASSIGN(
-        const signature::Envelope kEnvelope,
-        signature::readEnvelope(std::string_view{reinterpret_cast<const char*>(kSigned.data()), kSigned.size()}));
-    RAWFRAME_TRY(signature::verifyPublished(publisher, kBytes, kEnvelope));
-    auto parsed =
-        document::parseCanonicalRecord(std::string_view{reinterpret_cast<const char*>(kBytes.data()), kBytes.size()},
-                                       document::ReadLimits{.maximumBytes = kMaximumBuildManifest});
+// The manifest's exact bytes signed by the publisher before a byte of them
+// is parsed, then what the Build is, then its resources.
+result::Result<BuildContent> ContentSource::openBuild(std::shared_ptr<const Implementation> files,
+                                                      std::span<const std::byte> manifest,
+                                                      std::span<const std::byte> signedBytes,
+                                                      const base::Sha256Digest& expectedRoot,
+                                                      const signature::PublisherKeySet& publisher) {
+    RAWFRAME_TRY_ASSIGN(const signature::Envelope kEnvelope,
+                        signature::readEnvelope(
+                            std::string_view{reinterpret_cast<const char*>(signedBytes.data()), signedBytes.size()}));
+    RAWFRAME_TRY(signature::verifyPublished(publisher, manifest, kEnvelope));
+    auto parsed = document::parseCanonicalRecord(
+        std::string_view{reinterpret_cast<const char*>(manifest.data()), manifest.size()},
+        document::ReadLimits{.maximumBytes = kMaximumBuildManifest});
     if (!parsed.has_value()) {
         return std::unexpected<result::Error>{
             std::move(parsed).error().mappedTo(result::ErrorClass::InvalidArgument,
@@ -335,11 +322,11 @@ result::Result<BuildContent> ContentSource::build(const std::filesystem::path& r
                                                code(ContentError::ManifestInvalid),
                                                "the Build manifest is not a canonical record")};
     }
-    const document::Value& manifest = *parsed;
-    const document::Value* schema = manifest.find("schema");
-    const document::Value* identity = manifest.find("identity");
-    const document::Value* chunks = manifest.find("chunks");
-    if (manifest.names().size() != 3 || schema == nullptr || schema->integer() != 1 || identity == nullptr ||
+    const document::Value& record = *parsed;
+    const document::Value* schema = record.find("schema");
+    const document::Value* identity = record.find("identity");
+    const document::Value* chunks = record.find("chunks");
+    if (record.names().size() != 3 || schema == nullptr || schema->integer() != 1 || identity == nullptr ||
         identity->kind() != document::Value::Kind::Object || chunks == nullptr ||
         chunks->kind() != document::Value::Kind::Object) {
         return invalidBuild("a Build manifest is {schema: 1, identity, chunks}");
@@ -405,6 +392,62 @@ result::Result<BuildContent> ContentSource::build(const std::filesystem::path& r
     }
     opened.source = ContentSource{std::make_shared<const BuildSource>(std::move(files), std::move(lists))};
     return opened;
+}
+
+#if RAWFRAME_FILE_SYSTEM
+result::Result<BuildContent> ContentSource::build(const std::filesystem::path& root,
+                                                  const base::Sha256Digest& expectedRoot,
+                                                  const signature::PublisherKeySet& publisher) {
+    Descriptor directory{::open(root.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC)};
+    struct stat status{};
+    if (directory.get() < 0 || ::fstat(directory.get(), &status) != 0) {
+        return refuse(
+            ContentError::SourceUnavailable, result::ErrorClass::Unavailable, "the Build is not a readable directory");
+    }
+    auto files = std::make_shared<const DirectorySource>(std::move(directory), status.st_dev);
+    struct stat manifestStatus{};
+    if (::stat((root / "build.manifest").c_str(), &manifestStatus) != 0 || !S_ISREG(manifestStatus.st_mode) ||
+        static_cast<std::uint64_t>(manifestStatus.st_size) > kMaximumBuildManifest) {
+        return refuse(ContentError::SourceUnavailable,
+                      result::ErrorClass::Unavailable,
+                      "the Build has no manifest within its ceiling");
+    }
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes,
+                        files->read("build.manifest", static_cast<std::uint64_t>(manifestStatus.st_size)));
+    struct stat signatureStatus{};
+    if (::stat((root / "build.manifest.sig").c_str(), &signatureStatus) != 0 || !S_ISREG(signatureStatus.st_mode) ||
+        signatureStatus.st_size > 1024) {
+        return refuse(ContentError::SourceUnavailable, result::ErrorClass::Unavailable, "the Build is not signed");
+    }
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kSigned,
+                        files->read("build.manifest.sig", static_cast<std::uint64_t>(signatureStatus.st_size)));
+    return openBuild(std::move(files), kBytes, kSigned, expectedRoot, publisher);
+}
+#endif
+
+result::Result<BuildContent> ContentSource::build(std::vector<std::pair<std::string, std::vector<std::byte>>> files,
+                                                  const base::Sha256Digest& expectedRoot,
+                                                  const signature::PublisherKeySet& publisher) {
+    std::map<std::string, std::vector<std::byte>, std::less<>> held;
+    for (auto& [locator, bytes] : files) {
+        if (!validLocator(locator)) {
+            return refuse(ContentError::InvalidLocator, result::ErrorClass::InvalidArgument, "not a valid locator");
+        }
+        held.insert_or_assign(std::move(locator), std::move(bytes));
+    }
+    const auto kManifest = held.find("build.manifest");
+    if (kManifest == held.end() || kManifest->second.size() > kMaximumBuildManifest) {
+        return refuse(ContentError::SourceUnavailable,
+                      result::ErrorClass::Unavailable,
+                      "the Build has no manifest within its ceiling");
+    }
+    const auto kSignature = held.find("build.manifest.sig");
+    if (kSignature == held.end() || kSignature->second.size() > 1024) {
+        return refuse(ContentError::SourceUnavailable, result::ErrorClass::Unavailable, "the Build is not signed");
+    }
+    const std::vector<std::byte> kBytes = kManifest->second;
+    const std::vector<std::byte> kSigned = kSignature->second;
+    return openBuild(std::make_shared<const MemorySource>(std::move(held)), kBytes, kSigned, expectedRoot, publisher);
 }
 
 } // namespace rawframe::content

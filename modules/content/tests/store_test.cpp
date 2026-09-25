@@ -4,21 +4,28 @@
 // source no link can lead out of, reads that finish in the generation they
 // began in, and cancellation and deadlines that stop publication.
 
+#include "rawframe/base/platform.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/store.h"
 #include "rawframe/document/json.h"
 #include "rawframe/signature/errors.h"
+#include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
 
-#include <filesystem>
-#include <fstream>
 #include <iterator>
-#include <openssl/evp.h>
 #include <string>
 #include <tuple>
-#include <unistd.h>
 #include <vector>
+
+// Directories and Builds on disk, where there are files; the web build runs
+// the store over memory sources alone.
+#if RAWFRAME_FILE_SYSTEM
+#include <filesystem>
+#include <fstream>
+#include <openssl/evp.h>
+#include <unistd.h>
 #include <zstd.h>
+#endif
 
 using namespace rawframe;
 using namespace rawframe::content;
@@ -93,9 +100,11 @@ std::pair<std::uint32_t, std::string> outcomeOf(result::Result<execution::AsyncH
     return {0, std::string{reinterpret_cast<const char*>(kBytes.data()), kBytes.size()}};
 }
 
+#if RAWFRAME_FILE_SYSTEM
 std::pair<std::uint32_t, std::string> read(std::string_view bytes) {
     return {0, std::string{bytes}};
 }
+#endif
 
 std::pair<std::uint32_t, std::string> failure(ContentError error, std::string_view how) {
     return {code(error).value, std::string{how}};
@@ -151,6 +160,7 @@ RAWFRAME_TEST(AReadReturnsExactlyTheDeclaredBytes) {
     RAWFRAME_EXPECT(!ContentSource::memory({{"../up", {}}}).has_value());
 }
 
+#if RAWFRAME_FILE_SYSTEM
 RAWFRAME_TEST(ADirectorySourceReadsOnlyWithinItsRoot) {
     const std::filesystem::path kBase =
         std::filesystem::temp_directory_path() / ("rawframe-content-" + std::to_string(::getpid()));
@@ -185,6 +195,7 @@ RAWFRAME_TEST(ADirectorySourceReadsOnlyWithinItsRoot) {
     RAWFRAME_EXPECT(!ContentSource::directory(kBase / "nowhere").has_value());
     std::filesystem::remove_all(kBase);
 }
+#endif
 
 RAWFRAME_TEST(AReadFinishesInTheGenerationItBeganIn) {
     Fixture fixture{std::move(*ContentSource::memory({{"a.rfopus", bytesOf("one")}, {"b.rfopus", bytesOf("two")}}))};
@@ -235,6 +246,7 @@ RAWFRAME_TEST(CancellationAndDeadlinesStopPublication) {
     RAWFRAME_EXPECT(kCancelled.first != 0);
 }
 
+#if RAWFRAME_FILE_SYSTEM
 namespace {
 
 /// The test publisher's key: a fixed seed, and the key set that lists it.
@@ -413,6 +425,52 @@ RAWFRAME_TEST(ABuildIsReadInItsVerificationOrder) {
     }
 }
 
+RAWFRAME_TEST(ABuildHeldInMemoryIsReadAsOneOnDisk) {
+    const BuildOnDisk kBuild;
+    // Every file of the Build, as a web client holds what it fetched.
+    const auto kHeld = [&kBuild] {
+        std::vector<std::pair<std::string, std::vector<std::byte>>> files;
+        for (const std::string& path : test::filesUnder(kBuild.root.string(), "")) {
+            files.emplace_back(path, bytesOf(test::readFile((kBuild.root / path).string())));
+        }
+        return files;
+    };
+    auto opened = ContentSource::build(kHeld(), kBuild.rootHash, kBuild.publisher.keys);
+    RAWFRAME_EXPECT(opened.has_value() && opened->entries.size() == 2 && opened->root == kBuild.rootHash);
+    std::vector<BoundManifest> manifests = {BoundManifest{.entries = opened->entries, .source = 0}};
+    const std::vector<AdmittedRepresentation> kAdmitted = {
+        {.type = kSoundType, .representation = *RepresentationId::parse("rawframe.audio.opus")}};
+    Fixture fixture{std::move(opened->source)};
+    fixture.store->publish(*ContentCatalog::build(manifests, kAdmitted, 1, 1));
+    RAWFRAME_EXPECT(outcomeOf(fixture.store->read(ResourceRef{.id = idOf(2), .type = kSoundType})) == read("abcdefgh"));
+
+    // A blob changed in memory is refused before it is used; so is a Build
+    // without its signature, and a path that is no locator.
+    auto changed = kHeld();
+    const std::string kBlob = kBuild.blobOf("abcd").lexically_relative(kBuild.root).generic_string();
+    for (auto& [path, bytes] : changed) {
+        if (path == kBlob) {
+            bytes = bytesOf("abce");
+        }
+    }
+    auto tampered = ContentSource::build(std::move(changed), kBuild.rootHash, kBuild.publisher.keys);
+    Fixture second{std::move(tampered->source)};
+    second.store->publish(*ContentCatalog::build(
+        std::vector<BoundManifest>{BoundManifest{.entries = tampered->entries, .source = 0}}, kAdmitted, 2, 1));
+    RAWFRAME_EXPECT(outcomeOf(second.store->read(ResourceRef{.id = idOf(2), .type = kSoundType})) ==
+                    failure(ContentError::DigestMismatch, "failed"));
+    auto unsigned_ = kHeld();
+    std::erase_if(unsigned_, [](const auto& file) {
+        return file.first == "build.manifest.sig";
+    });
+    const auto kUnsigned = ContentSource::build(std::move(unsigned_), kBuild.rootHash, kBuild.publisher.keys);
+    RAWFRAME_EXPECT(!kUnsigned.has_value() && kUnsigned.error().code() == code(ContentError::SourceUnavailable));
+    auto escaping = kHeld();
+    escaping.emplace_back("../outside", bytesOf("x"));
+    const auto kEscaping = ContentSource::build(std::move(escaping), kBuild.rootHash, kBuild.publisher.keys);
+    RAWFRAME_EXPECT(!kEscaping.has_value() && kEscaping.error().code() == code(ContentError::InvalidLocator));
+}
+
 namespace {
 
 /// A Build of one resource, 3, of `text`, in one chunk whose blob is
@@ -565,3 +623,4 @@ RAWFRAME_TEST(OnlyAPublishersSignedBuildIsRead) {
     const auto kUnsigned = ContentSource::build(build.root, build.rootHash, build.publisher.keys);
     RAWFRAME_EXPECT(!kUnsigned.has_value() && kUnsigned.error().code() == code(ContentError::SourceUnavailable));
 }
+#endif
