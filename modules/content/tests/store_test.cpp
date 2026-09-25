@@ -6,11 +6,13 @@
 
 #include "rawframe/content/errors.h"
 #include "rawframe/content/store.h"
+#include "rawframe/document/json.h"
 #include "rawframe/test/test.h"
 
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <tuple>
 #include <unistd.h>
 #include <vector>
 
@@ -227,4 +229,136 @@ RAWFRAME_TEST(CancellationAndDeadlinesStopPublication) {
     fixture.root.cancel(execution::CancelReason::Requested);
     const auto kCancelled = outcomeOf(store.read(ResourceRef{.id = idOf(1), .type = kSoundType}));
     RAWFRAME_EXPECT(kCancelled.first != 0);
+}
+
+namespace {
+
+/// A Build on disk as SPEC-0021 lays it out: resource 1 "bang" in one raw
+/// chunk, resource 2 "abcdefgh" in two ("abcd", "efgh"). `chunksOf2`
+/// overrides resource 2's chunk texts in the manifest, `codec` every
+/// chunk's codec.
+struct BuildOnDisk {
+    std::filesystem::path root =
+        std::filesystem::temp_directory_path() / ("rawframe-content-build-" + std::to_string(::getpid()));
+    base::Sha256Digest rootHash{};
+
+    explicit BuildOnDisk(std::vector<std::string> chunksOf2 = {"abcd", "efgh"}, std::string_view codec = "raw") {
+        std::filesystem::remove_all(root);
+        for (const std::string_view kText : {"bang", "abcd", "efgh"}) {
+            write(kText);
+        }
+        const auto kChunkList = [codec](const std::vector<std::string>& texts) {
+            document::Value list = document::Value::array();
+            for (const std::string& text : texts) {
+                const std::string kDigest = ContentDigest::of(bytesOf(text)).text();
+                document::Value chunk = document::Value::object();
+                chunk.add("content", document::Value::string(kDigest));
+                chunk.add("size", document::Value::integer(static_cast<std::int64_t>(text.size())));
+                chunk.add("blob", document::Value::string(kDigest));
+                chunk.add("blob_size", document::Value::integer(static_cast<std::int64_t>(text.size())));
+                chunk.add("codec", document::Value::string(std::string{codec}));
+                list.push(std::move(chunk));
+            }
+            return list;
+        };
+        document::Value resources = document::Value::array();
+        document::Value chunks = document::Value::object();
+        for (const auto& [kId, kText, kParts] : {std::tuple{1, std::string{"bang"}, std::vector<std::string>{"bang"}},
+                                                 std::tuple{2, std::string{"abcdefgh"}, chunksOf2}}) {
+            std::array<char, 32> hex{};
+            base::formatBits128Hex(idOf(static_cast<std::uint64_t>(kId)).value, hex);
+            const std::string kHex{hex.data(), hex.size()};
+            std::array<char, 32> type{};
+            base::formatBits128Hex(kSoundType.value, type);
+            document::Value resource = document::Value::object();
+            resource.add("resource", document::Value::string(kHex));
+            resource.add("type", document::Value::string(std::string{type.data(), type.size()}));
+            resource.add("representation", document::Value::string("rawframe.audio.opus"));
+            resource.add("digest", document::Value::string(ContentDigest::of(bytesOf(kText)).text()));
+            resource.add("size", document::Value::integer(static_cast<std::int64_t>(kText.size())));
+            resources.push(std::move(resource));
+            chunks.add(kHex, kChunkList(kParts));
+        }
+        document::Value identity = document::Value::object();
+        identity.add("subject", document::Value::string("rawframe/test"));
+        identity.add("version", document::Value::string("1.0.0"));
+        identity.add("resources", std::move(resources));
+        rootHash = base::sha256(*document::writeCanonicalRecord(identity));
+        document::Value manifest = document::Value::object();
+        manifest.add("schema", document::Value::integer(1));
+        manifest.add("identity", std::move(identity));
+        manifest.add("chunks", std::move(chunks));
+        std::ofstream{root / "build.manifest", std::ios::binary} << *document::writeCanonicalRecord(manifest);
+    }
+    ~BuildOnDisk() {
+        std::filesystem::remove_all(root);
+    }
+    BuildOnDisk(const BuildOnDisk&) = delete;
+    BuildOnDisk& operator=(const BuildOnDisk&) = delete;
+
+    [[nodiscard]] std::filesystem::path blobOf(std::string_view text) const {
+        const std::string kHex = ContentDigest::of(bytesOf(text)).text().substr(7);
+        return root / "sha256" / kHex.substr(0, 2) / kHex.substr(2);
+    }
+    void write(std::string_view text) const {
+        std::filesystem::create_directories(blobOf(text).parent_path());
+        std::ofstream{blobOf(text), std::ios::binary} << text;
+    }
+};
+
+std::pair<std::uint32_t, std::string> readOfBuild(const BuildOnDisk& build, std::uint64_t id) {
+    auto opened = ContentSource::build(build.root, build.rootHash);
+    if (!opened.has_value()) {
+        return {opened.error().code().value, "refused"};
+    }
+    std::vector<BoundManifest> manifests = {BoundManifest{.entries = opened->entries, .source = 0}};
+    const std::vector<AdmittedRepresentation> kAdmitted = {
+        {.type = kSoundType, .representation = *RepresentationId::parse("rawframe.audio.opus")}};
+    Fixture fixture{std::move(opened->source)};
+    fixture.store->publish(*ContentCatalog::build(manifests, kAdmitted, 1, 1));
+    return outcomeOf(fixture.store->read(ResourceRef{.id = idOf(id), .type = kSoundType}));
+}
+
+} // namespace
+
+RAWFRAME_TEST(ABuildIsReadInItsVerificationOrder) {
+    {
+        const BuildOnDisk kBuild;
+        const auto kOpened = ContentSource::build(kBuild.root, kBuild.rootHash);
+        RAWFRAME_EXPECT(kOpened.has_value() && kOpened->subject == "rawframe/test" && kOpened->version == "1.0.0" &&
+                        kOpened->entries.size() == 2 && kOpened->root == kBuild.rootHash);
+        // Whole resources from their chunks, verified.
+        RAWFRAME_EXPECT(readOfBuild(kBuild, 1) == read("bang") && readOfBuild(kBuild, 2) == read("abcdefgh"));
+        // Not the Build that was named.
+        base::Sha256Digest other = kBuild.rootHash;
+        other[0] ^= std::byte{1};
+        const auto kOther = ContentSource::build(kBuild.root, other);
+        RAWFRAME_EXPECT(!kOther.has_value() && kOther.error().code() == code(ContentError::DigestMismatch));
+        // A blob changed on disk: refused before its bytes are used.
+        std::ofstream{kBuild.blobOf("abcd"), std::ios::binary} << "abce";
+        RAWFRAME_EXPECT(readOfBuild(kBuild, 2) == failure(ContentError::DigestMismatch, "failed"));
+        // A blob gone.
+        std::filesystem::remove(kBuild.blobOf("bang"));
+        RAWFRAME_EXPECT(readOfBuild(kBuild, 1).first == code(ContentError::ReadFailed).value);
+    }
+    {
+        // Chunk lists are outside the root hash: swapped, each chunk is
+        // itself, but the whole is not, and the whole is checked.
+        const BuildOnDisk kSwapped{{"efgh", "abcd"}};
+        RAWFRAME_EXPECT(readOfBuild(kSwapped, 2) == failure(ContentError::DigestMismatch, "failed"));
+    }
+    {
+        // Chunks that do not cover the resource, and a codec this reader
+        // does not take, are refused when the Build is opened.
+        const BuildOnDisk kShort{{"abcd"}};
+        RAWFRAME_EXPECT(readOfBuild(kShort, 2).first == code(ContentError::ManifestInvalid).value);
+        const BuildOnDisk kZstd{{"abcd", "efgh"}, "zstd"};
+        RAWFRAME_EXPECT(readOfBuild(kZstd, 1).first == code(ContentError::ManifestInvalid).value);
+    }
+    {
+        // A manifest that is not a canonical record.
+        const BuildOnDisk kBuild;
+        std::ofstream{kBuild.root / "build.manifest", std::ios::app} << "\n";
+        RAWFRAME_EXPECT(readOfBuild(kBuild, 1).first == code(ContentError::ManifestInvalid).value);
+    }
 }
