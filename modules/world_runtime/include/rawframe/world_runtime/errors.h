@@ -19,6 +19,8 @@ enum class WorldRuntimeError : std::uint32_t {
     NotStarted = 3,
     /// A checkpoint could not be read, written, or published.
     CheckpointFailed = 4,
+    /// Save settings that do not fit together, or a game with no save.
+    SaveMisconfigured = 5,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(WorldRuntimeError error) noexcept {

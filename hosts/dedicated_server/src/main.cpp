@@ -19,8 +19,8 @@
 namespace {
 
 // The server closure: QUIC, the World, a Kest game, 2D physics, and
-// replication.
-constexpr std::array<rawframe::composition::RegistrarEntry, 7> kRegistrars = {
+// replication, and the World's saves.
+constexpr std::array<rawframe::composition::RegistrarEntry, 8> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -35,6 +35,8 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 7> kRegistrars = {
         "world_replication", &rawframe::world_replication::registerParticipants, rawframe::world_replication::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_runtime", &rawframe::world_runtime::registerParticipants, rawframe::world_runtime::kScopes},
+    rawframe::composition::RegistrarEntry{
+        "world_runtime.saves", &rawframe::world_runtime::registerSaves, rawframe::world_runtime::kScopes},
 };
 
 } // namespace
