@@ -52,6 +52,11 @@
 //
 //   interest game.position x y within 40
 //
+// A `save <document> <component>...` line declares the game's save: the
+// components it keeps of every persistent entity (world/persistent.h), a
+// scene's entity carrying `rawframe.world.persistent` or one a program
+// persists. Where and when it is kept is the operator's (`save.*`).
+//
 // An `admission <function>` line names the game's own admission rule, a
 // function of the program the server asks about each client it would admit
 // (rawframe.admission says its shape and answers); a game without one
@@ -225,6 +230,13 @@ struct GamePrefab {
     std::string path;
 };
 
+/// A save document (ADR-0057): its name and the components it keeps of the
+/// game's persistent entities.
+struct GameSave {
+    std::string document;
+    std::vector<std::string> components;
+};
+
 struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
@@ -264,6 +276,9 @@ struct GameDescription {
     /// The program's admission rule, from an `admission <function>` line;
     /// empty admits every client the engine does.
     std::string admission;
+    /// What a save keeps, from a `save <document> <component>...` line;
+    /// no document, no save.
+    GameSave save;
 };
 
 /// Parses a description. Refuses (`invalid_argument`, with the line number as

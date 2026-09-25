@@ -22,6 +22,7 @@
 #include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_runtime/checkpoint.h"
+#include "rawframe/world_runtime/save.h"
 
 #include <algorithm>
 #include <charconv>
@@ -40,6 +41,7 @@ constexpr std::string_view kIdentity = "rawframe.world_kest.game";
 constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name, kGameFiles.name};
 constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.name,
                                           world_runtime::kCheckpointPlan.name,
+                                          world_runtime::kSavePlan.name,
                                           physics2d::kPhysics2DPlan.name,
                                           physics3d::kPhysics3DPlan.name};
 
@@ -126,6 +128,7 @@ bool writeField(kest::FieldKind kind, std::string_view text, std::byte* into) {
 class GameParticipant final : public composition::Participant,
                               public world_replication::ReplicationPlan,
                               public world_runtime::CheckpointPlan,
+                              public world_runtime::SavePlan,
                               public physics2d::Physics2DPlan,
                               public physics3d::Physics3DPlan {
 public:
@@ -184,6 +187,7 @@ public:
             interpolated_.push_back(componentNamed(name)->id);
         }
         RAWFRAME_TRY(planCheckpoints());
+        RAWFRAME_TRY(planSave());
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
             // not the game running here.
@@ -449,12 +453,24 @@ public:
         return world_snapshot::CheckpointIdentity{.schema = fingerprint_.bytes};
     }
 
+    result::Result<const world_save::SaveDeclaration*> saveDeclaration() const override {
+        if (game_.save.document.empty()) {
+            return std::unexpected<result::Error>{
+                refuse(result::ErrorClass::FailedPrecondition, WorldKestError::BadGameLine, "the game declares no save")
+                    .error()};
+        }
+        return &save_;
+    }
+
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
         if (capability == world_replication::kReplicationPlan.name) {
             return composition::provideAs<world_replication::ReplicationPlan>(*this);
         }
         if (capability == world_runtime::kCheckpointPlan.name) {
             return composition::provideAs<world_runtime::CheckpointPlan>(*this);
+        }
+        if (capability == world_runtime::kSavePlan.name) {
+            return composition::provideAs<world_runtime::SavePlan>(*this);
         }
         if (capability == physics2d::kPhysics2DPlan.name) {
             return composition::provideAs<physics2d::Physics2DPlan>(*this);
@@ -961,6 +977,26 @@ private:
     /// Kest layout, with the `entity` lines' fields as references. A game
     /// with a field a checkpoint cannot write (text, a tagged union) loads
     /// and runs; only checkpoints of it are refused, with the reason.
+    /// The save line as a document: each component with the program's mark
+    /// for its layout and the slot offset of each entity field an `entity`
+    /// line names, where a program's Entity starts.
+    result::Status planSave() {
+        save_.document = game_.save.document;
+        for (const std::string& name : game_.save.components) {
+            const GameComponent& component = *componentNamed(name);
+            const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(&component - game_.components.data())];
+            world_save::SavedComponent& saved =
+                save_.components.emplace_back(world_save::SavedComponent{.id = component.id, .mark = layout.mark});
+            for (const GameEntityField& field : game_.entityFields) {
+                const auto kSlot = std::ranges::find(layout.fields, field.field + ".slot", &kest::Field::name);
+                if (field.component == component.name && kSlot != layout.fields.end()) {
+                    saved.entityFields.push_back(static_cast<std::uint32_t>(kSlot->offset));
+                }
+            }
+        }
+        return {};
+    }
+
     result::Status planCheckpoints() {
         for (const GameEntityField& field : game_.entityFields) {
             const GameComponent& component = *componentNamed(field.component);
@@ -1069,6 +1105,7 @@ private:
     std::vector<schema::ComponentTypeId> nearby_;
     kest::MachineLimits predictionLimits_;
     kest::MachineLimits admissionLimits_;
+    world_save::SaveDeclaration save_;
     std::unique_ptr<KestAdmission> admission_;
     std::optional<physics2d::Physics2DSettings> predictedPhysics_;
     std::optional<physics3d::Physics3DSettings> predictedPhysics3d_;

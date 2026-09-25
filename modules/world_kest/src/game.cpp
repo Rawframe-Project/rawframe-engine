@@ -126,6 +126,19 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.program = kWords[1];
             haveProgram = true;
+        } else if (kKeyword == "save") {
+            if (!game.save.document.empty() || kWords.size() < 3) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a game declares one save, `save <document> <component>...`");
+            }
+            game.save.document = kWords[1];
+            for (std::size_t index = 2; index < kWords.size(); ++index) {
+                if (std::ranges::contains(game.save.components, kWords[index])) {
+                    return badLine(number, WorldKestError::BadGameLine, "a save keeps a component once");
+                }
+                game.save.components.emplace_back(kWords[index]);
+                uses.emplace_back(number, std::string{kWords[index]});
+            }
         } else if (kKeyword == "admission") {
             if (admissionLine != 0 || kWords.size() != 2) {
                 return badLine(
