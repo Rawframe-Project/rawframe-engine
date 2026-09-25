@@ -85,6 +85,10 @@ struct Mapped {
     m2ShapeId shape{};
     /// The sensor twin of a body whose class triggers with another.
     m2ShapeId trigger{};
+    /// Its pose after each of the last steps, by tick modulo the history's
+    /// length, and the first tick of its unbroken trail.
+    std::vector<Pose2D> history;
+    std::optional<std::uint64_t> since;
     bool refused = false;
     Body2D made;
     Pose2D pose;
@@ -126,6 +130,11 @@ struct Physics2D::State {
     std::vector<std::pair<world::EntityHandle, world::EntityHandle>> toldEntered;
     std::vector<std::pair<world::EntityHandle, world::EntityHandle>> toldExited;
     std::vector<std::pair<world::EntityHandle, world::EntityHandle>> toldInside;
+    /// The last tick stepped.
+    std::uint64_t lastTick = 0;
+    bool stepped = false;
+    mutable std::uint64_t raysRewound = 0;
+    mutable std::uint64_t rewindsClamped = 0;
     m2WorldId physics{};
     Physics2DStatistics statistics;
     std::map<world::EntityHandle, Mapped> mapped;
@@ -218,6 +227,7 @@ struct Physics2D::State {
         into.body = {};
         into.shape = {};
         into.trigger = {};
+        into.since.reset();
         const auto kClass = classIndex(body.collisionClass);
         into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value();
         if (into.refused) {
@@ -448,7 +458,7 @@ struct Physics2D::State {
         }
     }
 
-    result::Status step(world::World& world, world::TickRate rate) {
+    result::Status step(world::World& world, world::TickRate rate, world::TickIndex tick) {
         rows.clear();
         bodies->forEach(world,
                         [this](world::EntityHandle entity, const Body2D& body, Pose2D& pose, Velocity2D& velocity) {
@@ -541,7 +551,14 @@ struct Physics2D::State {
                 Velocity2D{.x = kLinear.x, .y = kLinear.y, .angular = m2Body_GetAngularVelocity(entry.body)};
             entry.pose = *row.pose;
             entry.velocity = *row.velocity;
+            if (settings.historyTicks != 0) {
+                entry.history.resize(settings.historyTicks);
+                entry.history[tick.value % settings.historyTicks] = entry.pose;
+                entry.since = entry.since.value_or(tick.value);
+            }
         }
+        lastTick = tick.value;
+        stepped = true;
         return {};
     }
 };
@@ -553,7 +570,7 @@ public:
     explicit Step(Physics2D::State& state) noexcept : state_(&state) {
     }
     result::Status run(world::SystemContext& context) noexcept override {
-        return state_->step(context.world, context.rate);
+        return state_->step(context.world, context.rate, context.tick);
     }
 
 private:
@@ -569,6 +586,11 @@ Physics2D::~Physics2D() = default;
 
 result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSettings& settings) {
     constexpr std::uint32_t kMost = 1U << 20U;
+    if (settings.historyTicks > 1024) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      Physics2DError::InvalidSettings,
+                      "physics settings: at most 1024 ticks of history");
+    }
     if (!std::isfinite(settings.gravityX) || !std::isfinite(settings.gravityY) || settings.substeps == 0 ||
         settings.substeps > 64 || settings.bodyCapacity == 0 || settings.bodyCapacity > kMost ||
         settings.shapeCapacity == 0 || settings.shapeCapacity > kMost || settings.jointCapacity == 0 ||
@@ -650,8 +672,107 @@ RayHit2D Physics2D::castRay(double originX, double originY, float towardX, float
                     .fraction = kResult.fraction};
 }
 
+namespace {
+
+/// A pose as a rotation that is a unit complex number: what presentation
+/// shows of a blended one.
+[[nodiscard]] m2Transform transformOf(const Pose2D& pose) noexcept {
+    const double kLength = std::sqrt((double{pose.c} * pose.c) + (double{pose.s} * pose.s));
+    if (!(kLength > 0)) {
+        return m2Transform{.p = {pose.x, pose.y}, .q = {1, 0}};
+    }
+    return m2Transform{.p = {pose.x, pose.y},
+                       .q = {static_cast<float>(pose.c / kLength), static_cast<float>(pose.s / kLength)}};
+}
+
+/// Where a pose's frame puts a world point or direction, and back.
+[[nodiscard]] m2Pos2 toLocal(const m2Transform& frame, m2Pos2 point) noexcept {
+    const double kX = point.x - frame.p.x;
+    const double kY = point.y - frame.p.y;
+    return m2Pos2{(frame.q.c * kX) + (frame.q.s * kY), (-frame.q.s * kX) + (frame.q.c * kY)};
+}
+[[nodiscard]] m2Pos2 toWorld(const m2Transform& frame, m2Pos2 local) noexcept {
+    return m2Pos2{frame.p.x + (frame.q.c * local.x) - (frame.q.s * local.y),
+                  frame.p.y + (frame.q.s * local.x) + (frame.q.c * local.y)};
+}
+[[nodiscard]] m2Vec2 turnToLocal(const m2Transform& frame, m2Vec2 vector) noexcept {
+    return m2Vec2{(frame.q.c * vector.x) + (frame.q.s * vector.y), (-frame.q.s * vector.x) + (frame.q.c * vector.y)};
+}
+[[nodiscard]] m2Vec2 turnToWorld(const m2Transform& frame, m2Vec2 vector) noexcept {
+    return m2Vec2{(frame.q.c * vector.x) - (frame.q.s * vector.y), (frame.q.s * vector.x) + (frame.q.c * vector.y)};
+}
+
+} // namespace
+
+RayHit2D Physics2D::castRayAt(double originX,
+                              double originY,
+                              float towardX,
+                              float towardY,
+                              std::uint64_t base,
+                              std::uint16_t fraction) const noexcept {
+    const State& state = *state_;
+    const std::uint32_t kKept = state.settings.historyTicks;
+    if (!state.stepped || kKept == 0) {
+        return castRay(originX, originY, towardX, towardY);
+    }
+    ++state.raysRewound;
+    const std::uint64_t kOldest = state.lastTick + 1 >= kKept ? state.lastTick + 1 - kKept : 0;
+    if (base < kOldest || base > state.lastTick || (base == state.lastTick && fraction != 0)) {
+        ++state.rewindsClamped;
+    }
+    const std::uint64_t kBase = std::clamp(base, kOldest, state.lastTick);
+    const std::uint16_t kFraction = kBase == state.lastTick ? std::uint16_t{0} : fraction;
+    const double kAlong = kFraction / 65536.0;
+
+    RayHit2D closest;
+    const m2Vec2 kToward{towardX, towardY};
+    for (const auto& [entity, entry] : state.mapped) {
+        if (entry.refused) {
+            continue;
+        }
+        const m2Transform kNow = m2Body_GetTransform(entry.body);
+        const bool kTrail = entry.since.has_value() && *entry.since <= kBase;
+        m2Transform then = kNow;
+        if (kTrail) {
+            const Pose2D& from = entry.history[kBase % kKept];
+            Pose2D at = from;
+            if (kFraction != 0) {
+                // The client's blend of two states (interpolation.cpp).
+                const Pose2D& to = entry.history[(kBase + 1) % kKept];
+                at.x = from.x + ((to.x - from.x) * kAlong);
+                at.y = from.y + ((to.y - from.y) * kAlong);
+                at.c = static_cast<float>(from.c + ((static_cast<double>(to.c) - from.c) * kAlong));
+                at.s = static_cast<float>(from.s + ((static_cast<double>(to.s) - from.s) * kAlong));
+            }
+            then = transformOf(at);
+        }
+        // The ray in the body's frame then is the ray in its frame now.
+        const m2Pos2 kOrigin = toWorld(kNow, toLocal(then, m2Pos2{originX, originY}));
+        const m2Vec2 kDirection = turnToWorld(kNow, turnToLocal(then, kToward));
+        const m2RayCastResult kResult = m2Shape_CastRay(entry.shape, kOrigin, kDirection);
+        if (!kResult.hit || (closest.hit && kResult.fraction >= closest.fraction)) {
+            continue;
+        }
+        const m2Pos2 kPoint = toWorld(then, toLocal(kNow, kResult.point));
+        const m2Vec2 kNormal = turnToWorld(then, turnToLocal(kNow, kResult.normal));
+        closest = RayHit2D{.hit = true,
+                           .inside = kResult.normal.x == 0 && kResult.normal.y == 0,
+                           .discontinuous = !kTrail,
+                           .entity = entity,
+                           .x = kPoint.x,
+                           .y = kPoint.y,
+                           .normalX = kNormal.x,
+                           .normalY = kNormal.y,
+                           .fraction = kResult.fraction};
+    }
+    return closest;
+}
+
 Physics2DStatistics Physics2D::statistics() const noexcept {
-    return state_->statistics;
+    Physics2DStatistics statistics = state_->statistics;
+    statistics.raysRewound = state_->raysRewound;
+    statistics.rewindsClamped = state_->rewindsClamped;
+    return statistics;
 }
 
 std::uint64_t Physics2D::digest() const noexcept {

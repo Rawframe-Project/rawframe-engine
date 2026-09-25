@@ -318,6 +318,37 @@ RAWFRAME_TEST(CollisionClassesDecideWhatMeets) {
     RAWFRAME_EXPECT(!Physics2D::create({.collision = crowded}).has_value());
 }
 
+RAWFRAME_TEST(ARayCastBackInTimeFindsWhereBodiesWere) {
+    Scene scene{{.gravityY = 0, .historyTicks = 16}};
+    const world::EntityHandle kTarget = scene.body(kCrate, {.x = 0, .y = 0}, {.x = 6});
+    std::vector<double> xAt;
+    for (int tick = 0; tick < 30; ++tick) {
+        scene.run(1);
+        xAt.push_back(scene.pose(kTarget).x);
+    }
+    const double kThen = xAt[20];
+    // Where it was at tick 20 it is no longer: a ray there now misses, and
+    // cast back to tick 20 it hits, with the hit where the body was.
+    RAWFRAME_EXPECT(!scene.physics->castRay(kThen, 5, 0, -10).hit);
+    const RayHit2D kBack = scene.physics->castRayAt(kThen, 5, 0, -10, 20, 0);
+    RAWFRAME_EXPECT(kBack.hit && kBack.entity == kTarget && !kBack.discontinuous);
+    RAWFRAME_EXPECT(std::abs(kBack.x - kThen) < 1e-9 && std::abs(kBack.y - 0.5) < 1e-6 && kBack.normalY > 0.99F);
+    // Between two ticks, as a client shows it: half way from 20 to 21, a
+    // ray just past the right edge at 20 hits, and at 20 itself misses.
+    const double kEdge = ((xAt[20] + xAt[21]) / 2) + 0.49;
+    RAWFRAME_EXPECT(scene.physics->castRayAt(kEdge, 5, 0, -10, 20, 32768).hit);
+    RAWFRAME_EXPECT(!scene.physics->castRayAt(kEdge, 5, 0, -10, 20, 0).hit);
+    // Older than the history keeps: clamped to its oldest tick, and counted.
+    const RayHit2D kOld = scene.physics->castRayAt(xAt[29 - 15], 5, 0, -10, 2, 0);
+    RAWFRAME_EXPECT(kOld.hit && kOld.entity == kTarget);
+    RAWFRAME_EXPECT(scene.physics->statistics().rewindsClamped == 1 && scene.physics->statistics().raysRewound == 4);
+    // A body made since has no trail back: tried where it is, and marked.
+    const world::EntityHandle kLate = scene.body(kBall, {.x = -5, .y = 0});
+    scene.run(1);
+    const RayHit2D kNew = scene.physics->castRayAt(-5, 5, 0, -10, 20, 0);
+    RAWFRAME_EXPECT(kNew.hit && kNew.entity == kLate && kNew.discontinuous);
+}
+
 RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {
     for (const Physics2DSettings& kSettings : {Physics2DSettings{.substeps = 0},
                                                Physics2DSettings{.bodyCapacity = 0},

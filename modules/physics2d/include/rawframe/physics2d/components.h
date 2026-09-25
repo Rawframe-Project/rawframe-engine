@@ -128,10 +128,13 @@ struct Contact2D {
 /// What a ray found: the closest body along it, where, the surface's normal
 /// there, and how far along the ray (0 at its origin, 1 at its end). A ray
 /// that starts inside a body hits it `inside`, at its origin, with no normal.
-/// Not a component: a value a query answers.
+/// A ray cast back in time hits a body `discontinuous` when the body has no
+/// unbroken trail back to then (made or teleported since), and so was tried
+/// where it is now. Not a component: a value a query answers.
 struct RayHit2D {
     bool hit = false;
     bool inside = false;
+    bool discontinuous = false;
     world::EntityHandle entity;
     double x = 0;
     double y = 0;

@@ -87,9 +87,12 @@ struct Contact2D {
 // What a ray found: the closest body along it, where, the surface's normal
 // there, and how far along the ray (0 at its origin, 1 at its end). A ray
 // that starts inside a body hits it `inside`, at its origin, with no normal.
+// A ray cast back in time hits a body `discontinuous` when the body has no
+// unbroken trail back to then, and so was tried where it is now.
 struct RayHit2D {
     hit: bool
     inside: bool
+    discontinuous: bool
     entity: world.Entity
     x: f64
     y: f64

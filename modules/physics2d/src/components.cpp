@@ -57,9 +57,10 @@ constexpr std::array<ComponentField, 13> kContactFields = {{
     {"visitor.generation", offsetof(Contact2D, visitor) + offsetof(world::EntityHandle, generation), FieldType::U32},
 }};
 
-constexpr std::array<ComponentField, 9> kRayHitFields = {{
+constexpr std::array<ComponentField, 10> kRayHitFields = {{
     {"hit", offsetof(RayHit2D, hit), FieldType::Bool},
     {"inside", offsetof(RayHit2D, inside), FieldType::Bool},
+    {"discontinuous", offsetof(RayHit2D, discontinuous), FieldType::Bool},
     {"entity.slot", offsetof(RayHit2D, entity) + offsetof(world::EntityHandle, slot), FieldType::U32},
     {"entity.generation", offsetof(RayHit2D, entity) + offsetof(world::EntityHandle, generation), FieldType::U32},
     {"x", offsetof(RayHit2D, x), FieldType::F64},

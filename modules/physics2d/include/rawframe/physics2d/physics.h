@@ -81,6 +81,9 @@ struct Physics2DSettings {
     std::uint32_t shapeCapacity = 4096;
     std::uint32_t jointCapacity = 1024;
     bool sleeping = true;
+    /// Ticks of every body's pose kept for casting back in time
+    /// (SPEC-0041's compensation window); nought keeps none.
+    std::uint32_t historyTicks = 64;
     CollisionDocument collision;
 };
 
@@ -97,6 +100,9 @@ struct Physics2DStatistics {
     /// Contacts and sensor overlaps that began.
     std::uint64_t contactsBegun = 0;
     std::uint64_t overlapsBegun = 0;
+    /// Rays cast back in time, and those whose moment had to be clamped.
+    std::uint64_t raysRewound = 0;
+    std::uint64_t rewindsClamped = 0;
 };
 
 inline constexpr std::string_view kStepSystem = "rawframe.physics2d.step";
@@ -115,6 +121,18 @@ public:
     /// `toward`; sensors included.
     [[nodiscard]] virtual RayHit2D
     castRay(double originX, double originY, float towardX, float towardY) const noexcept = 0;
+    /// The same ray against every body where it was at an earlier moment
+    /// (SPEC-0041 lag compensation): `fraction` 65536ths of the way from
+    /// the pose committed at tick `base` to the next, as a client shows it
+    /// between states. The moment is clamped into the kept history, and
+    /// never past the last step; a body without a trail back to it is tried
+    /// where it is and its hit marked discontinuous. Nothing moves.
+    [[nodiscard]] virtual RayHit2D castRayAt(double originX,
+                                             double originY,
+                                             float towardX,
+                                             float towardY,
+                                             std::uint64_t base,
+                                             std::uint16_t fraction) const noexcept = 0;
 };
 
 class Physics2D final : public world_runtime::SystemContributor, public Physics2DQueries {
@@ -140,6 +158,12 @@ public:
 
     [[nodiscard]] RayHit2D
     castRay(double originX, double originY, float towardX, float towardY) const noexcept override;
+    [[nodiscard]] RayHit2D castRayAt(double originX,
+                                     double originY,
+                                     float towardX,
+                                     float towardY,
+                                     std::uint64_t base,
+                                     std::uint16_t fraction) const noexcept override;
 
     struct State;
     explicit Physics2D(std::unique_ptr<State> state) noexcept;
