@@ -52,6 +52,9 @@ struct KestColumn {
 struct KestComponent {
     schema::ComponentTypeId component;
     std::string_view kestType;
+    /// Where its value holds entities: an inserted value naming an entity
+    /// the same run creates names the entity the barrier creates (D97).
+    std::span<const std::size_t> entityFields;
 };
 
 struct KestSystemDeclaration {

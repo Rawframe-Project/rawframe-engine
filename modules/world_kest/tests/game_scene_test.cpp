@@ -316,3 +316,63 @@ RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
     RAWFRAME_EXPECT(!world_kest::GameFiles::fromDirectory(kDirectory / "movers.game").has_value());
     std::filesystem::remove_all(kDirectory);
 }
+
+RAWFRAME_TEST(AProgramLinksEntitiesItCreatesInOneRun) {
+    // A seed plants a pair of links naming each other, both created in the
+    // same run: each names the entity the barrier made for the other.
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-pairs-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory);
+    writeText(kDirectory / "pairs.kest",
+              "module pairs\n\nimport rawframe.world\n\nstruct Seed {\n    planted: i32\n}\n\nstruct Link {\n"
+              "    next: world.Entity\n    hops: i32\n}\n\nextern fn Link.insert(entity: world.Entity, value: Link)\n\n"
+              "fn plant(count: i32, seeds: [Seed]) {\n    let i = 0\n    while i < count {\n"
+              "        if seeds[i].planted == 0 {\n            let a = world.create()\n"
+              "            let b = world.create()\n            Link.insert(a, Link(b, 1))\n"
+              "            Link.insert(b, Link(a, 2))\n            seeds[i].planted = 1\n        }\n"
+              "        i = i + 1\n    }\n}\n");
+    writeText(kDirectory / "pairs.game",
+              "program pairs.kest\ncomponent 6d2e8f14-3b7a-4c95-a1e0-9f5c7b3d2a86 pairs.seed Seed\n"
+              "component 5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84 pairs.link Link\nentity pairs.link next\n"
+              "system pairs.plant simulation plant write pairs.seed\nspawn 1 pairs.seed\n");
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const auto kConfiguration =
+        composition::Configuration::parse("kest.game = " + (kDirectory / "pairs.game").string() +
+                                          "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    const auto kStarted = composition.start();
+    RAWFRAME_EXPECT(kStarted.has_value());
+    if (!kStarted.has_value()) {
+        return;
+    }
+    clock.advance(execution::MonotonicDuration::fromMilliseconds(300));
+    composition.runHostPhase(composition::HostPhase::RunWorlds,
+                             composition::HostFrame{.iteration = 0, .now = clock.now()});
+    world::World& world = *simulation->world();
+    const auto kId = world.registry().find(schema::ComponentTypeId::fromText("5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84"));
+    const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
+    auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+    std::vector<std::pair<world::EntityHandle, world::EntityHandle>> links;
+    query->forEachChunk(world, [&links](const world::ColumnChunk& chunk) {
+        for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+            world::EntityHandle next;
+            std::memcpy(&next, chunk.columns[0] + (row * 12), sizeof next);
+            links.emplace_back(chunk.entities[row], next);
+        }
+    });
+    // One pair, planted once, each naming the other.
+    RAWFRAME_EXPECT(links.size() == 2);
+    if (links.size() == 2) {
+        RAWFRAME_EXPECT(links[0].second == links[1].first && links[1].second == links[0].first);
+    }
+    composition.stop();
+    simulation = nullptr;
+    std::filesystem::remove_all(kDirectory);
+}

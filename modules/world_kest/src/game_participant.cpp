@@ -213,10 +213,21 @@ public:
                                                          .before = before_[index],
                                                          .randomStreams = streams_[index]});
         }
+        entityOffsets_.reserve(game_.components.size());
         for (const GameComponent& component : game_.components) {
             // What the program never names it cannot insert or remove.
             if (program_->layout(component.kestType).has_value()) {
-                components_.push_back(KestComponent{.component = component.id, .kestType = component.kestType});
+                const kest::TypeLayout& layout =
+                    layouts_[static_cast<std::size_t>(&component - game_.components.data())];
+                std::vector<std::size_t>& offsets = entityOffsets_.emplace_back();
+                for (const GameEntityField& field : game_.entityFields) {
+                    const auto kSlot = std::ranges::find(layout.fields, field.field + ".slot", &kest::Field::name);
+                    if (field.component == component.name && kSlot != layout.fields.end()) {
+                        offsets.push_back(kSlot->offset);
+                    }
+                }
+                components_.push_back(
+                    KestComponent{.component = component.id, .kestType = component.kestType, .entityFields = offsets});
             }
         }
         kest::DoorTable doors;
@@ -937,6 +948,8 @@ private:
     std::optional<physics3d::Physics3DSettings> predictedPhysics3d_;
     std::vector<SpawnValues> level_;
     std::vector<SceneReference> references_;
+    /// Each Kest component's entity fields, which its declaration views.
+    std::vector<std::vector<std::size_t>> entityOffsets_;
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;
     std::optional<physics2d::Physics2DSettings> physics2d_;

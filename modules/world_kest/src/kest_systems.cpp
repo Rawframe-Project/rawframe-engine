@@ -52,6 +52,7 @@ struct KestSystems::Doorway {
         schema::ComponentRuntimeId runtime;
         const schema::ComponentDescriptor* descriptor = nullptr;
         std::vector<std::byte> scratch;
+        std::vector<std::size_t> entityFields;
     };
 
     world::SystemContext* context = nullptr;
@@ -175,9 +176,25 @@ void insertDoor(kest::DoorCall& call, void* context) noexcept {
         call.fail("a component value did not cross as its type");
         return;
     }
-    if (!doorway.context->commands.insertBytes(*kTarget, component.runtime, *component.descriptor, component.scratch)
+    // An entity this run creates, held in the value, as the buffer names it.
+    for (const std::size_t kOffset : component.entityFields) {
+        world::EntityHandle held;
+        std::memcpy(&held, component.scratch.data() + kOffset, sizeof held);
+        if (!held.isNull() || held.slot == 0) {
+            continue;
+        }
+        const std::uint32_t kIndex = held.slot & kPendingIndexMask;
+        if (kIndex == 0 || (held.slot >> kPendingIndexBits) != (doorway.run & kRunMask)) {
+            call.fail("a value holds an entity created by another system run and kept");
+            return;
+        }
+        const world::EntityHandle kPending = world::pendingReference(world::PendingEntity{kIndex - 1U});
+        std::memcpy(component.scratch.data() + kOffset, &kPending, sizeof kPending);
+    }
+    if (!doorway.context->commands
+             .insertBytes(*kTarget, component.runtime, *component.descriptor, component.scratch, component.entityFields)
              .has_value()) {
-        call.fail("the system's command buffer is full");
+        call.fail("the system's command buffer is full, or a value names an entity the run has not created");
     }
 }
 
@@ -474,6 +491,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         added.doorway = doorway.get();
         added.id = component.component;
         added.kestType = std::string{component.kestType};
+        added.entityFields.assign(component.entityFields.begin(), component.entityFields.end());
         added.insertName = added.kestType + ".insert";
         added.removeName = added.kestType + ".remove";
     }
