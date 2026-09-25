@@ -4,10 +4,9 @@
 #include "rawframe/audio/sounds.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
-#include "rawframe/content/catalog.h"
-#include "rawframe/content/manifest.h"
 #include "rawframe/content/source.h"
 #include "rawframe/content/store.h"
+#include "rawframe/game_content/game_content.h"
 #include "rawframe/world_audio/errors.h"
 #include "rawframe/world_audio/registrar.h"
 #include "rawframe/world_audio/sound_loader.h"
@@ -37,9 +36,7 @@ constexpr EventIdentity kUnread{"audio", "sounds_unavailable"};
 constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
 constexpr EventIdentity kSoundReloaded{"audio", "sound_reloaded"};
 constexpr EventIdentity kSoundNotReloaded{"audio", "sound_reload_failed"};
-constexpr EventIdentity kContentReloaded{"content", "content_reloaded"};
-constexpr EventIdentity kContentRefused{"content", "content_reload_refused"};
-constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name};
+constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name, game_content::kGameContent.name};
 constexpr std::uint32_t kRecordingRate = 48'000;
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldAudioError error, std::string_view why) {
@@ -61,36 +58,28 @@ struct Hearing {
     WorldAudioSettings settings;
     std::unique_ptr<WorldAudio> heard;
     std::optional<execution::MonotonicInstant> last;
-    /// The game's cooked content, and its sounds read from it by identity;
-    /// the loader goes first, the store after it.
-    std::unique_ptr<content::ContentStore> store;
+    /// The game's sounds, read by identity from the Runtime's cooked
+    /// content, which outlives them.
     std::unique_ptr<SoundLoader> loader;
     bool loaded = false;
     /// Set once its sounds could not be read: the World goes unheard.
     bool failed = false;
     std::uint64_t tick = 0;
     diagnostics::Emitter emitter;
-    /// Every this many Host iterations, the manifest is read again and a
-    /// changed one published as the next catalog; none when zero.
-    std::uint64_t reloadEvery = 0;
-    std::filesystem::path root;
-    std::string manifestRead;
-    std::uint64_t catalogGeneration = 1;
 
     /// Loads the game's audio for a mixer at `rate` and starts reading its
-    /// sounds from the cooked content at `content.root`. `key` names the
+    /// sounds from the Runtime's cooked content (`rawframe.content.game`). `key` names the
     /// configuration that asked, for the refusal; `live` decodes streams on
     /// the executor.
     result::Status load(composition::ParticipantContext& context, std::string_view key, std::uint32_t rate, bool live) {
         const composition::Configuration& configuration = context.configuration();
         const auto kGame = configuration.text("kest.game");
-        const auto kContent = configuration.text("content.root");
-        if (!kGame.has_value() || !kContent.has_value() || !context.has(world_replication::kClientWorlds.name) ||
-            context.cpuExecutor() == nullptr || context.blockingIoExecutor() == nullptr) {
+        if (!kGame.has_value() || !context.has(world_replication::kClientWorlds.name) ||
+            !context.has(game_content::kGameContent.name) || context.cpuExecutor() == nullptr) {
             return std::unexpected<result::Error>{
                 refuse(result::ErrorClass::FailedPrecondition,
                        WorldAudioError::NoAudio,
-                       "hearing a World needs a game, its cooked content, executors, and a process with clients")
+                       "hearing a World needs a game, its cooked content, a CPU executor, and a process with clients")
                     .error()
                     .withContext("key", std::string{key})};
         }
@@ -124,75 +113,18 @@ struct Hearing {
         settings.emitter = game.emitter;
         settings.listener = game.listener;
 
-        // The cooked content: its manifest is the catalog, its directory the
-        // one source.
-        root = std::filesystem::path{std::string{*kContent}};
-        RAWFRAME_TRY_ASSIGN(reloadEvery, configuration.unsignedInteger("content.reload_every", 0));
-        RAWFRAME_TRY_ASSIGN(content::ContentSource source, content::ContentSource::directory(root));
-        std::vector<content::ContentSource> sources;
-        sources.push_back(std::move(source));
-        RAWFRAME_TRY_ASSIGN(
-            store,
-            content::ContentStore::create(
-                *context.blockingIoExecutor(), context.owner(), context.scope(), context.clock(), std::move(sources)));
-        manifestRead = readManifestText();
-        RAWFRAME_TRY_ASSIGN(auto catalog, catalogOf(manifestRead, catalogGeneration));
-        store->publish(std::move(catalog));
+        // The game's cooked content, admitting sound clips.
+        RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
+        const std::vector<content::AdmittedRepresentation> kSounds = soundRepresentations();
+        RAWFRAME_TRY(content->admit(kSounds));
         RAWFRAME_TRY_ASSIGN(loader,
-                            SoundLoader::create(*store,
+                            SoundLoader::create(content->store(),
                                                 *context.cpuExecutor(),
                                                 context.owner(),
                                                 context.scope(),
                                                 context.clock(),
                                                 std::move(game.sounds)));
         return {};
-    }
-
-    [[nodiscard]] std::string readManifestText() const {
-        std::ifstream file{root / "content.manifest", std::ios::binary};
-        std::ostringstream text;
-        text << file.rdbuf();
-        return text.str();
-    }
-
-    [[nodiscard]] result::Result<std::shared_ptr<const content::ContentCatalog>>
-    catalogOf(std::string_view text, std::uint64_t generation) const {
-        auto manifest = content::readManifest(text);
-        if (!manifest.has_value()) {
-            return std::unexpected<result::Error>{
-                std::move(manifest).error().withContext("path", (root / "content.manifest").string())};
-        }
-        const std::vector<content::BoundManifest> kManifests = {{.entries = std::move(*manifest), .source = 0}};
-        return content::ContentCatalog::build(kManifests, soundRepresentations(), generation, generation);
-    }
-
-    /// Every `reloadEvery` Host iterations: a manifest that changed since
-    /// it was last read becomes the next catalog, and the asset sets
-    /// replace what changed; one that does not read is refused and the
-    /// running catalog stays.
-    void watch(std::uint64_t iteration) noexcept {
-        if (reloadEvery == 0 || iteration % reloadEvery != 0 || store == nullptr) {
-            return;
-        }
-        std::string text = readManifestText();
-        if (text == manifestRead) {
-            return;
-        }
-        manifestRead = std::move(text);
-        auto catalog = catalogOf(manifestRead, catalogGeneration + 1);
-        if (!catalog.has_value()) {
-            emitter.log(diagnostics::Severity::Warning,
-                        kContentRefused,
-                        "a changed manifest was not published; the running catalog stays",
-                        {diagnostics::field("reason", std::string{catalog.error().description()})});
-            return;
-        }
-        ++catalogGeneration;
-        store->publish(std::move(*catalog));
-        emitter.log(diagnostics::Severity::Info,
-                    kContentReloaded,
-                    "a changed manifest was published as the next catalog",
-                    {diagnostics::field("generation", catalogGeneration)});
     }
 
     /// Reads the sounds until those not on demand are all there, then
@@ -266,7 +198,6 @@ struct Hearing {
     /// frame heard, or none before its World exists and its sounds are read.
     std::optional<double> hear(const composition::HostFrame& frame) noexcept {
         ++tick;
-        watch(frame.iteration);
         if (clients == nullptr || !ready()) {
             return std::nullopt;
         }
@@ -485,8 +416,8 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .factory = &make<Recorder>,
         .scope = composition::LifetimeScope::World,
         .optionalCapabilities = kMaybe,
-        // Sounds are read on the blocking-I/O executor, decoded on the CPU.
-        .executor = {.cpu = true, .blockingIo = true, .quota = {.maximumPendingTasks = 64}},
+        // Sounds are decoded on the CPU executor.
+        .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(500)},
         .observabilityIdentity = "world_audio.recorder",
         .budgetOwner = "audio",
@@ -497,9 +428,9 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .factory = &make<Player>,
         .scope = composition::LifetimeScope::World,
         .optionalCapabilities = kMaybe,
-        // Sounds are read on the blocking-I/O executor and decoded on the
-        // CPU one, where streamed sounds also decode ahead, a task a stream.
-        .executor = {.cpu = true, .blockingIo = true, .quota = {.maximumPendingTasks = 64}},
+        // Sounds are decoded on the CPU executor, where streamed sounds also
+        // decode ahead, a task a stream.
+        .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(500)},
         .observabilityIdentity = "world_audio.player",
         .budgetOwner = "audio",

@@ -7,6 +7,7 @@
 #include "rawframe/host/main.h"
 
 #include "rawframe/composition/registrar.h"
+#include "rawframe/game_content/registrar.h"
 #include "rawframe/input_kest/registrar.h"
 #include "rawframe/network_loopback/registrar.h"
 #include "rawframe/physics2d/registrar.h"
@@ -20,7 +21,9 @@
 
 namespace {
 
-constexpr std::array<rawframe::composition::RegistrarEntry, 8> kRegistrars = {
+constexpr std::array<rawframe::composition::RegistrarEntry, 9> kRegistrars = {
+    rawframe::composition::RegistrarEntry{
+        "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
         "network_loopback", &rawframe::network_loopback::registerParticipants, rawframe::network_loopback::kScopes},
     rawframe::composition::RegistrarEntry{

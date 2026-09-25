@@ -1,7 +1,7 @@
 # Headless bots against a server in another process over QUIC (Tool role).
 rawframe_host(NAME bots OUTPUT rawframe-bots
     SOURCES src/main.cpp
-    DEPS host input_kest world_audio network_quic world_replication world_kest world_runtime composition diagnostics result base
+    DEPS host game_content input_kest world_audio network_quic world_replication world_kest world_runtime composition diagnostics result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
