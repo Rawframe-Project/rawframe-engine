@@ -347,6 +347,7 @@ public:
                                                .descriptors = descriptors_,
                                                .limits = predictionLimits_,
                                                .physics = predictedPhysics_,
+                                               .physics3d = predictedPhysics3d_,
                                                .level = level_});
     }
 
@@ -494,11 +495,12 @@ private:
         }
         // A predicting client steps its player's body among the level's
         // static bodies; everything that moves besides it is the server's.
-        if (game_.physics.has_value() && game_.physics->dimensions == 3) {
-            return kRefuse("a game with 3D physics predicts nothing yet: its predictor has no 3D physics", "predict");
-        }
         if (game_.physics.has_value()) {
-            predictedPhysics_ = physicsSettings();
+            if (game_.physics->dimensions == 3) {
+                predictedPhysics3d_ = physics3dSettings();
+            } else {
+                predictedPhysics_ = physicsSettings();
+            }
             const PhysicsFacts kFacts = physicsFacts(game_.physics->dimensions);
             for (const GameSpawn& spawn : game_.spawns) {
                 RAWFRAME_TRY_ASSIGN(SpawnValues values, spawnValues(spawn));
@@ -868,6 +870,7 @@ private:
     std::vector<schema::ComponentTypeId> nearby_;
     kest::MachineLimits predictionLimits_;
     std::optional<physics2d::Physics2DSettings> predictedPhysics_;
+    std::optional<physics3d::Physics3DSettings> predictedPhysics3d_;
     std::vector<SpawnValues> level_;
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;

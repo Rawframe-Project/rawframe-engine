@@ -1,0 +1,57 @@
+module plaza
+
+// The sample 3D game: players are characters (rawframe.physics3d's
+// Character3D) that run and jump about the plaza.
+
+import rawframe.physics3d
+import rawframe.random
+
+// The walkers' collision class (plaza.game).
+const WALKER: u64 = 0x5f23859a6c00ebba
+
+// What a player asks for, each -1 to 1: to run along x and z, and to jump
+// (above a half).
+struct Stick {
+    runX: f32
+    runZ: f32
+    jump: f32
+}
+
+// A player's entity arrives with its components zeroed: here it becomes a
+// walker standing somewhere on the plaza.
+fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], characters: [physics3d.Character3D]) {
+    let i = 0
+    while i < count {
+        if bodies[i].width == 0.0 {
+            bodies[i] = physics3d.Body3D(physics3d.KINEMATIC, physics3d.CAPSULE, true, false, false, WALKER, 0.3,
+                                         0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            poses[i] = physics3d.Pose3D(random.unit(0) * 30.0 - 15.0, 1.3, random.unit(0) * 30.0 - 15.0, 0.0, 0.0,
+                                        0.0, 1.0)
+            characters[i] = physics3d.Character3D(0.7, 0.3, physics3d.AIRBORNE, 0.0, 0.0, 0.0)
+        }
+        i = i + 1
+    }
+}
+
+// Five meters a second across the ground; on ground, a jump when asked, and
+// in the air, a fall that quickens to twenty meters a second.
+fn walk(count: i32, sticks: [Stick], characters: [physics3d.Character3D], velocities: [physics3d.Velocity3D]) {
+    let i = 0
+    while i < count {
+        velocities[i].x = sticks[i].runX * 5.0
+        velocities[i].z = sticks[i].runZ * 5.0
+        let grounded = characters[i].ground == physics3d.GROUNDED
+        let fall = velocities[i].y - 0.5
+        if grounded {
+            fall = 0.0
+        }
+        if grounded && sticks[i].jump > 0.5 {
+            fall = 8.0
+        }
+        if fall < -20.0 {
+            fall = -20.0
+        }
+        velocities[i].y = fall
+        i = i + 1
+    }
+}

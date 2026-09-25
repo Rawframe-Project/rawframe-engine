@@ -1,6 +1,7 @@
 #include "predictor.h"
 
 #include "physics_doors.h"
+#include "physics_facts.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/errors.h"
@@ -84,8 +85,9 @@ public:
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
-        if (settings.physics.has_value()) {
-            RAWFRAME_TRY(addPhysicsDoors(doors, 2, &doorContext_));
+        dimensions_ = settings.physics3d.has_value() ? 3 : settings.physics.has_value() ? 2 : 0;
+        if (dimensions_ != 0) {
+            RAWFRAME_TRY(addPhysicsDoors(doors, dimensions_, &doorContext_));
         }
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{.program = settings.program,
@@ -99,6 +101,13 @@ public:
             RAWFRAME_TRY_ASSIGN(physics_, physics2d::Physics2D::create(*settings.physics));
             RAWFRAME_TRY(physics_->declareSystems(*registry_, scheduled));
             doorContext_.queries = physics_.get();
+        }
+        if (settings.physics3d.has_value()) {
+            RAWFRAME_TRY_ASSIGN(physics3d_, physics3d::Physics3D::create(*settings.physics3d));
+            RAWFRAME_TRY(physics3d_->declareSystems(*registry_, scheduled));
+            doorContext_.queries3d = physics3d_.get();
+        }
+        if (dimensions_ != 0) {
             for (const auto& entity : settings.level) {
                 RAWFRAME_TRY_ASSIGN(const world::EntityHandle kMade, world_->create());
                 for (const auto& [kComponent, kBytes] : entity) {
@@ -142,10 +151,10 @@ public:
 
     result::Status place(std::span<const world_replication::NeighborValue> values) override {
         // Static bodies are the level's already.
-        const auto kStatic = [](const world_replication::NeighborValue& value) {
-            return value.component == physics2d::Body2D::kComponentTypeId &&
-                   value.value.size() == sizeof(physics2d::Body2D) &&
-                   std::to_integer<std::uint8_t>(value.value[offsetof(physics2d::Body2D, motion)]) ==
+        const PhysicsFacts kFacts = physicsFacts(dimensions_);
+        const auto kStatic = [&kFacts, this](const world_replication::NeighborValue& value) {
+            return dimensions_ != 0 && value.component == kFacts.body && value.value.size() > kFacts.motion &&
+                   std::to_integer<std::uint8_t>(value.value[kFacts.motion]) ==
                        static_cast<std::uint8_t>(physics::Motion::Static);
         };
         std::map<std::uint32_t, world::EntityHandle> kept;
@@ -225,7 +234,10 @@ private:
     std::vector<KestComponent> components_;
     std::vector<Declared> declared_;
     std::unique_ptr<KestSystems> systems_;
+    /// The game's physics dimensions, nought for none, and its physics.
+    std::uint8_t dimensions_ = 0;
     std::unique_ptr<physics2d::Physics2D> physics_;
+    std::unique_ptr<physics3d::Physics3D> physics3d_;
     /// A client knows no one's interest but its own: nothing is gated.
     PhysicsDoorContext doorContext_;
     std::optional<world::Schedule> schedule_;

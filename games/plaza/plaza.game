@@ -1,0 +1,35 @@
+# The sample 3D game: players are characters running and jumping about a
+# square plaza with a ramp, a raised terrace, and pillars, all of it Maul3D.
+# A client predicts its own character exactly, is sent what is within 30
+# meters on the ground plane, and sees the others between states.
+program plaza.kest
+physics3d gravity 0 -10 0
+
+collision class walker 5f23859a6c00ebba
+
+component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
+
+system plaza.join simulation join write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.character with plaza.stick random spawn before rawframe.physics3d.step
+system plaza.walk simulation walk read plaza.stick read rawframe.physics3d.character write rawframe.physics3d.velocity before rawframe.physics3d.step predicted
+
+# The plaza, eighty meters square, and walls around it.
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=40 height=0.5 depth=40 rawframe.physics3d.pose rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=0.5 height=5 depth=40 rawframe.physics3d.pose x=-40 y=5 rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=0.5 height=5 depth=40 rawframe.physics3d.pose x=40 y=5 rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=40 height=5 depth=0.5 rawframe.physics3d.pose z=-40 y=5 rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=40 height=5 depth=0.5 rawframe.physics3d.pose z=40 y=5 rawframe.physics3d.velocity
+
+# A terrace 2.7 meters up, a ramp of 20 degrees rising to it along x, and
+# pillars.
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=6 height=1.37 depth=6 rawframe.physics3d.pose x=24 y=1.87 z=0 rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=4 height=0.5 depth=3 rawframe.physics3d.pose x=14.4 y=1.4 qz=0.1736 qw=0.9848 rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=-10 y=3.5 z=-10 rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=10 y=3.5 z=-10 rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=3 width=1 height=3 rawframe.physics3d.pose x=-10 y=3.5 z=10 rawframe.physics3d.velocity
+
+replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick
+player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
+input plaza.stick
+interest rawframe.physics3d.pose x z within 30
+interpolate rawframe.physics3d.pose
+predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick
