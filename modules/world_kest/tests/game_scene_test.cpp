@@ -19,6 +19,14 @@
 using namespace rawframe;
 using namespace rawframe::game_test;
 
+namespace {
+
+/// A scene of nothing, standing in while a test reads the program's marks.
+constexpr std::string_view kEmptyScene =
+    "{\n  \"kind\": \"rawframe.scene\",\n  \"formatVersion\": 1,\n  \"schema\": {},\n  \"entities\": []\n}\n";
+
+} // namespace
+
 RAWFRAME_TEST(AGameStartsWithItsScenes) {
     // Movers with their starting entities in a scene, not spawn lines: two
     // at rest where the scene puts them, one moving, and one spawn line.
@@ -32,7 +40,7 @@ RAWFRAME_TEST(AGameStartsWithItsScenes) {
     writeText(kDirectory / "movers.game", game);
 
     // The marks the scene is authored against: the program's layouts.
-    writeText(kDirectory / "start.scene", "");
+    writeText(kDirectory / "start.scene", kEmptyScene);
     auto files = world_kest::GameFiles::fromDirectory(kDirectory / "movers.game");
     RAWFRAME_EXPECT(files.has_value());
     const auto kProgram = files.has_value() ? files->compile("movers.kest") : std::unexpected{files.error().clone()};
@@ -120,7 +128,7 @@ RAWFRAME_TEST(AScenesEntitiesNameEachOther) {
     writeText(kDirectory / "linked.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "linked.kest"));
     const std::string kGame = "program linked.kest\ncomponent 5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84 linked.link Link\n";
     writeText(kDirectory / "linked.game", kGame + "entity linked.link next\nscene links.scene\n");
-    writeText(kDirectory / "links.scene", "");
+    writeText(kDirectory / "links.scene", kEmptyScene);
     auto files = world_kest::GameFiles::fromDirectory(kDirectory / "linked.game");
     const auto kProgram = files.has_value() ? files->compile("linked.kest") : std::unexpected{files.error().clone()};
     RAWFRAME_EXPECT(kProgram.has_value());
@@ -220,4 +228,91 @@ RAWFRAME_TEST(SpawnLinesBecomeAScene) {
                     kScene->entities[3].components[0].fields.size() == 1 &&
                     kScene->entities[3].components[0].fields[0].value.number == "99.5");
     RAWFRAME_EXPECT(scene::writeScene(*kScene).has_value());
+}
+
+RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
+    // Movers whose start scene instances a two-mover prefab twice, found by
+    // its sidecar: one copy as authored, one moved and slowed.
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-instances-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory / "prefabs");
+    writeText(kDirectory / "movers.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest"));
+    std::string game = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game");
+    writeText(kDirectory / "movers.game", game.substr(0, game.find("spawn 3")) + "scene start.scene\n");
+    writeText(kDirectory / "start.scene", kEmptyScene);
+    auto files = world_kest::GameFiles::fromDirectory(kDirectory / "movers.game");
+    const auto kProgram = files.has_value() ? files->compile("movers.kest") : std::unexpected{files.error().clone()};
+    RAWFRAME_EXPECT(kProgram.has_value());
+    if (!kProgram.has_value()) {
+        return;
+    }
+    const std::vector<scene::SchemaMark> kSchema = {
+        {.component = "movers.position", .mark = (*kProgram)->layout("Position")->mark},
+        {.component = "movers.velocity", .mark = (*kProgram)->layout("Velocity")->mark}};
+    const auto kNumber = [](std::string text) {
+        return scene::FieldValue{.kind = scene::FieldValue::Kind::Number, .number = std::move(text)};
+    };
+    const auto kId = [](std::uint64_t low) {
+        return base::Bits128{.high = 0x2000, .low = low};
+    };
+    const scene::Scene kPair{
+        .schema = kSchema,
+        .entities = {{.id = kId(1),
+                      .components = {{.name = "movers.position", .fields = {{.name = "x", .value = kNumber("1")}}},
+                                     {.name = "movers.velocity", .fields = {{.name = "dx", .value = kNumber("1")}}}}},
+                     {.id = kId(2),
+                      .components = {{.name = "movers.position", .fields = {{.name = "x", .value = kNumber("2")}}},
+                                     {.name = "movers.velocity", .fields = {}}}}}};
+    const base::Bits128 kPairScene = base::parseBits128Hex("6a0e3f1c2b4d5e6f7a8b9c0d1e2f3a4b").value;
+    writeText(kDirectory / "prefabs" / "pair.scene", *scene::writeScene(kPair));
+    writeText(kDirectory / "prefabs" / "pair.scene.rfmeta",
+              "{\n  \"schema\": 1,\n  \"resourceId\": \"6a0e3f1c2b4d5e6f7a8b9c0d1e2f3a4b\",\n  \"importer\": "
+              "\"rawframe.scene\"\n}\n");
+    scene::Scene start{.schema = kSchema, .entities = {}};
+    start.instances.push_back(
+        {.scene = kPairScene,
+         .entities = {{.source = kId(1), .instance = kId(11)}, {.source = kId(2), .instance = kId(12)}},
+         .overrides = {}});
+    start.instances.push_back(
+        {.scene = kPairScene,
+         .entities = {{.source = kId(1), .instance = kId(21)}, {.source = kId(2), .instance = kId(22)}},
+         .overrides = {{.entity = kId(21),
+                        .component = "movers.position",
+                        .kind = scene::Override::Kind::Set,
+                        .fields = {{.name = "y", .value = kNumber("50")}}},
+                       {.entity = kId(21),
+                        .component = "movers.velocity",
+                        .kind = scene::Override::Kind::Set,
+                        .fields = {{.name = "dx", .value = kNumber("0")}}}}});
+    writeText(kDirectory / "start.scene", *scene::writeScene(start));
+
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const auto kConfiguration = composition::Configuration::parse(
+        "kest.game = " + (kDirectory / "movers.game").string() + "\nworld.tick_rate = 10\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    if (simulation != nullptr) {
+        auto found = positions();
+        std::ranges::sort(found);
+        // Both copies' movers; the second copy's first moved up, and at
+        // rest.
+        const std::vector<std::pair<float, float>> kExpected = {
+            {1.0F, 0.0F}, {1.0F, 50.0F}, {2.0F, 0.0F}, {2.0F, 0.0F}};
+        RAWFRAME_EXPECT(found == kExpected);
+        composition.stop();
+    }
+    simulation = nullptr;
+
+    // Without the prefab's sidecar the instance names nothing, and the game
+    // does not load.
+    std::filesystem::remove(kDirectory / "prefabs" / "pair.scene.rfmeta");
+    RAWFRAME_EXPECT(!world_kest::GameFiles::fromDirectory(kDirectory / "movers.game").has_value());
+    std::filesystem::remove_all(kDirectory);
 }

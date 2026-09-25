@@ -8,6 +8,7 @@
 // They come from a directory in development, or from the Runtime's content
 // as the cook made them (D88, D90), and are the same game either way.
 
+#include "rawframe/base/bits128.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/participant.h"
 #include "rawframe/content/identity.h"
@@ -17,6 +18,7 @@
 #include "rawframe/world_kest/game.h"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,8 +33,10 @@ public:
     GameFiles() = default;
 
     /// The game whose description is at `path`, in development: the
-    /// documents it names read beside it, and its Kest files every `.kest`
-    /// file under the description's directory. Programs compile from the
+    /// documents and scenes it names read beside it, a scene an instance
+    /// names found by the sidecar under the description's directory that
+    /// names it, and its Kest files every `.kest` file under that
+    /// directory. Programs compile from the
     /// files as they are when asked, so a changed file is seen.
     [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path);
     /// The game whose cooked description is `description` in `content`
@@ -60,11 +64,17 @@ public:
     /// The scene the description names `name` (a `scene` line), its text;
     /// refused (`unreadable_file`) for a name it does not use.
     [[nodiscard]] result::Result<std::string_view> scene(std::string_view name) const;
+    /// The scene of resource identity `scene` that an instance names (D96),
+    /// its text: one of the scenes the game's scenes instance, however far
+    /// down, all read when the files were. Refused (`unreadable_file`) for
+    /// any other.
+    [[nodiscard]] result::Result<std::string_view> sceneById(base::Bits128 scene) const;
     /// Compiles the program the description names `name`.
     [[nodiscard]] result::Result<std::shared_ptr<const kest::Program>>
     compile(std::string_view name, const kest::CompileSettings& settings = {}, std::string* report = nullptr) const;
     /// Everything the game is, as one digest: the description, each
-    /// document, each scene, and each Kest file, as they were read.
+    /// document, each scene, each scene instanced, and each Kest file, as
+    /// they were read.
     [[nodiscard]] const base::Sha256Digest& digest() const noexcept {
         return digest_;
     }
@@ -87,6 +97,9 @@ private:
         std::size_t sources = 0;
     };
 
+    /// Reads every scene the game's scenes instance, however far down,
+    /// with `read`.
+    result::Status readInstanced(const std::function<result::Result<std::string>(base::Bits128)>& read);
     /// The digest of what has been read, set last.
     void seal();
 
@@ -95,6 +108,8 @@ private:
     GameDescription description_;
     std::vector<Named> documents_;
     std::vector<Named> scenes_;
+    /// Every scene an instance names, by identity, in identity order.
+    std::vector<std::pair<base::Bits128, std::string>> instanced_;
     std::vector<Program> programs_;
     /// Each set of Kest files a program compiles from: one read from a
     /// directory, or one for each Kest sources resource named.

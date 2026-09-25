@@ -2,6 +2,7 @@
 
 #include "game_files_participant.h"
 #include "rawframe/composition/composition.h"
+#include "rawframe/content/sidecar.h"
 #include "rawframe/kest_library/library.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/cooked_game.h"
@@ -140,6 +141,12 @@ void GameFiles::seal() {
         field(digest, scene.name);
         field(digest, scene.text);
     }
+    for (const auto& [kId, kText] : instanced_) {
+        std::array<char, base::kBits128HexDigits> digits{};
+        base::formatBits128Hex(kId, digits);
+        field(digest, std::string_view{digits.data(), digits.size()});
+        field(digest, kText);
+    }
     for (const std::vector<kest::SourceFile>& files : sources_) {
         for (const kest::SourceFile& file : files) {
             field(digest, file.path);
@@ -147,6 +154,36 @@ void GameFiles::seal() {
         }
     }
     digest_ = digest.finish();
+}
+
+result::Status GameFiles::readInstanced(const std::function<result::Result<std::string>(base::Bits128)>& read) {
+    // Breadth first over every scene's instances; each scene once.
+    std::vector<std::string_view> pending;
+    for (const Named& scene : scenes_) {
+        pending.push_back(scene.text);
+    }
+    // Reserved whole, so the texts `pending` views never move.
+    std::vector<std::pair<base::Bits128, std::string>> found;
+    found.reserve(scene::kMaximumInstances);
+    while (!pending.empty()) {
+        const std::string_view kText = pending.back();
+        pending.pop_back();
+        RAWFRAME_TRY_ASSIGN(const scene::Scene kScene, scene::readScene(kText));
+        for (const scene::SceneInstance& instance : kScene.instances) {
+            if (std::ranges::contains(found, instance.scene, &std::pair<base::Bits128, std::string>::first)) {
+                continue;
+            }
+            if (found.size() == scene::kMaximumInstances) {
+                return unreadable("a game's scenes instance more than 4,096 scenes", "");
+            }
+            RAWFRAME_TRY_ASSIGN(std::string text, read(instance.scene));
+            found.emplace_back(instance.scene, std::move(text));
+            pending.push_back(found.back().second);
+        }
+    }
+    std::ranges::sort(found, {}, &std::pair<base::Bits128, std::string>::first);
+    instanced_ = std::move(found);
+    return {};
 }
 
 result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& path) {
@@ -163,6 +200,25 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
         RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / name));
         game.scenes_.push_back(Named{.name = name, .text = std::move(text)});
     }
+    // A scene an instance names, by the sidecar that names it.
+    RAWFRAME_TRY(game.readInstanced([&kDirectory](base::Bits128 scene) -> result::Result<std::string> {
+        std::error_code error;
+        for (auto entry = std::filesystem::recursive_directory_iterator{kDirectory, error};
+             !error && entry != std::filesystem::recursive_directory_iterator{};
+             entry.increment(error)) {
+            const std::string kName = entry->path().filename().string();
+            if (!entry->is_regular_file() || !kName.ends_with(content::kSidecarSuffix)) {
+                continue;
+            }
+            RAWFRAME_TRY_ASSIGN(const std::string kText, readText(entry->path()));
+            const auto kSidecar = content::readSidecar(kText);
+            if (kSidecar.has_value() && kSidecar->importer == "rawframe.scene" && kSidecar->id.value == scene) {
+                const std::string kSource = entry->path().string();
+                return readText(kSource.substr(0, kSource.size() - content::kSidecarSuffix.size()));
+            }
+        }
+        return unreadable("no scene beside the game has the identity an instance names", "");
+    }));
     RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesUnder(kDirectory));
     game.sources_.push_back(std::move(files));
     for (std::string& name : programNames(game.description_)) {
@@ -212,6 +268,10 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
                          content::ResourceRef{.id = content::ResourceId{kScene->scene}, .type = kSceneType}));
         game.scenes_.push_back(Named{.name = name, .text = std::move(text)});
     }
+    RAWFRAME_TRY(game.readInstanced([&content, &kSceneType](base::Bits128 scene) {
+        return readResource(content.store(),
+                            content::ResourceRef{.id = content::ResourceId{scene}, .type = kSceneType});
+    }));
     // Each Kest sources resource once, however many programs it holds.
     std::vector<base::Bits128> read;
     for (std::string& name : programNames(game.description_)) {
@@ -252,6 +312,14 @@ result::Result<std::string_view> GameFiles::scene(std::string_view name) const {
         return unreadable("the description names no such scene", name);
     }
     return std::string_view{kFound->text};
+}
+
+result::Result<std::string_view> GameFiles::sceneById(base::Bits128 scene) const {
+    const auto kFound = std::ranges::lower_bound(instanced_, scene, {}, &std::pair<base::Bits128, std::string>::first);
+    if (kFound == instanced_.end() || kFound->first != scene) {
+        return unreadable("no scene of the game's has that identity", "");
+    }
+    return std::string_view{kFound->second};
 }
 
 result::Result<std::shared_ptr<const kest::Program>>

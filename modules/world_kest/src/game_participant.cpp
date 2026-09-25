@@ -8,6 +8,7 @@
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/physics.h"
 #include "rawframe/physics3d/physics.h"
+#include "rawframe/scene/resolve.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
@@ -661,7 +662,15 @@ private:
             };
         for (const std::string& path : game_.scenes) {
             RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.scene(path));
-            auto read = scene::readScene(kText);
+            // Its instances resolved: what spawns is the scene's entities and
+            // every entity its instances bring.
+            auto read = scene::readScene(kText).and_then([&files](const scene::Scene& authored) {
+                return scene::resolveInstances(authored, [&files](base::Bits128 source) {
+                    return files.sceneById(source).and_then([](std::string_view text) {
+                        return scene::readScene(text);
+                    });
+                });
+            });
             if (!read.has_value()) {
                 return std::unexpected<result::Error>{std::move(read).error().withContext("scene", path)};
             }
