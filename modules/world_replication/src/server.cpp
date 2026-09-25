@@ -24,6 +24,12 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Replication
 /// What one connection was sent of one entity's component. The value the
 /// client holds is `lastSent` once it acknowledges any datagram from
 /// `changedAt` on: every record from then carries it.
+/// Byte for byte, as one memcmp: std::ranges::equal compares std::byte one
+/// at a time, and publish compares every value for every connection.
+[[nodiscard]] bool sameBytes(std::span<const std::byte> left, std::span<const std::byte> right) noexcept {
+    return left.size() == right.size() && (left.empty() || std::memcmp(left.data(), right.data(), left.size()) == 0);
+}
+
 struct Replica {
     std::vector<std::byte> lastSent;
     bool sent = false;
@@ -34,8 +40,7 @@ struct Replica {
     std::uint64_t priority = 0;
 
     [[nodiscard]] bool held(std::span<const std::byte> value) const noexcept {
-        return sent && acknowledgedAt.has_value() && *acknowledgedAt >= changedAt &&
-               std::ranges::equal(lastSent, value);
+        return sent && acknowledgedAt.has_value() && *acknowledgedAt >= changedAt && sameBytes(lastSent, value);
     }
 };
 
@@ -523,7 +528,7 @@ struct ReplicationServer::State {
                 continue;
             }
             if (replica.sent && tick.value - replica.sentAt < settings.resendAfter &&
-                std::ranges::equal(replica.lastSent, kValue)) {
+                sameBytes(replica.lastSent, kValue)) {
                 continue;
             }
             replica.priority += value.entity == peer.player ? kOwnedPriority : 1;
@@ -556,7 +561,7 @@ struct ReplicationServer::State {
                 inDatagram.clear();
                 continue;
             }
-            if (!replica.sent || !std::ranges::equal(replica.lastSent, kValue)) {
+            if (!replica.sent || !sameBytes(replica.lastSent, kValue)) {
                 replica.lastSent.assign(kValue.begin(), kValue.end());
                 replica.changedAt = tick.value;
                 replica.sent = true;

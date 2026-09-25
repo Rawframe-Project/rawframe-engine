@@ -107,9 +107,13 @@ void Interpolation::show(world::World& world,
         return;
     }
     const double kAt = *kPerceived;
+    // Both by ID: one walk along the mirrored entities.
+    auto entity = mirrored.begin();
     for (auto& [key, states] : states_) {
-        const auto kEntity = mirrored.find(key.first);
-        if (kEntity == mirrored.end() || states.empty()) {
+        while (entity != mirrored.end() && entity->first < key.first) {
+            ++entity;
+        }
+        if (entity == mirrored.end() || entity->first != key.first || states.empty()) {
             continue;
         }
         const ComponentCodec& codec = table_[key.second];
@@ -133,11 +137,11 @@ void Interpolation::show(world::World& world,
             blend(codec, from, to, std::clamp(kFraction, 0.0, 1.0));
             ++statistics_.blended;
         }
-        void* const kInto = world.getErased(kEntity->second, table[key.second]);
+        void* const kInto = world.getErased(entity->second, table[key.second]);
         if (kInto != nullptr) {
             std::memcpy(kInto, shown_.data(), codec.size);
         } else {
-            static_cast<void>(world.insertErased(kEntity->second, table[key.second], shown_.data()));
+            static_cast<void>(world.insertErased(entity->second, table[key.second], shown_.data()));
         }
     }
 }
