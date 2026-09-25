@@ -89,6 +89,7 @@ public:
     [[nodiscard]] result::Status insertErased(EntityHandle entity, schema::ComponentRuntimeId component, void* value);
     [[nodiscard]] result::Status removeErased(EntityHandle entity, schema::ComponentRuntimeId component);
     [[nodiscard]] void* getErased(EntityHandle entity, schema::ComponentRuntimeId component) noexcept;
+    [[nodiscard]] const void* getErased(EntityHandle entity, schema::ComponentRuntimeId component) const noexcept;
     [[nodiscard]] bool hasErased(EntityHandle entity, schema::ComponentRuntimeId component) const noexcept;
 
     [[nodiscard]] RootSeed rootSeed() const noexcept {
@@ -99,6 +100,16 @@ public:
     /// seed on first use. Its state is World state: it advances only through
     /// its owner's draws.
     [[nodiscard]] Pcg32& randomStream(std::string_view owner, std::string_view name);
+
+    /// Every stream drawn from so far, by owner then name: World state a
+    /// checkpoint carries.
+    [[nodiscard]] const std::map<std::pair<std::string, std::string>, Pcg32, std::less<>>&
+    randomStreams() const noexcept {
+        return randomStreams_;
+    }
+    /// Sets a stream's state, as a checkpoint restore does before the World
+    /// is published.
+    void restoreRandomStream(std::string owner, std::string name, Pcg32 state);
 
     /// Applies a command buffer in recording order and clears it. All or
     /// nothing on capacity: if the World cannot fit every entity the buffer

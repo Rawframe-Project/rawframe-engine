@@ -258,6 +258,20 @@ void* World::getErased(EntityHandle entity, schema::ComponentRuntimeId component
     return kColumn < 0 ? nullptr : archetype.column(kColumn).at(record.row);
 }
 
+const void* World::getErased(EntityHandle entity, schema::ComponentRuntimeId component) const noexcept {
+    if (!alive(entity)) {
+        return nullptr;
+    }
+    const EntityRecord& record = records_[entity.slot];
+    detail::Archetype& archetype = *archetypes_[record.archetype];
+    const int kColumn = archetype.columnIndex(component);
+    return kColumn < 0 ? nullptr : archetype.column(kColumn).at(record.row);
+}
+
+void World::restoreRandomStream(std::string owner, std::string name, Pcg32 state) {
+    randomStreams_.insert_or_assign(std::pair{std::move(owner), std::move(name)}, state);
+}
+
 bool World::hasErased(EntityHandle entity, schema::ComponentRuntimeId component) const noexcept {
     return alive(entity) && archetypes_[records_[entity.slot].archetype]->has(component);
 }
