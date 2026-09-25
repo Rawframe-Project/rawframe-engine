@@ -182,7 +182,7 @@ RAWFRAME_TEST(AValueMayNameAnEntityTheBufferCreates) {
     }
     const auto kHeld = [&world, &kKeys](EntityHandle entity) {
         EntityHandle held;
-        std::memcpy(&held, world.get(entity, kKeys.position), sizeof held);
+        std::memcpy(static_cast<void*>(&held), world.get(entity, kKeys.position), sizeof held);
         return held;
     };
     RAWFRAME_EXPECT(kHeld(kReport->created[0]) == kReport->created[1] &&
