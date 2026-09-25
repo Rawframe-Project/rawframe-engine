@@ -8,25 +8,29 @@
 //                  <architecture> <side> <configuration> <profile> [<key>]
 //   rawframe-build key <publisher> <directory>
 //   rawframe-build install <build> <library>
-//   rawframe-build compose <library> <game root> <profile> <record>
+//   rawframe-build compose <library> <game root> <profile> <record> [<package root>...]
 //
 // `key` writes `<kid>.key`, the secret, readable by its owner only, and
 // `<publisher>.keys`, the publisher key set that readers pin. `install`
 // copies a Build into a library as `builds/<root>/`; `compose` writes the
-// CompositionRecord of the library's Build of that root as the Game, and
-// prints its CompositionId.
+// CompositionRecord of the library's Build of that root as the Game, with
+// the library's Builds of any package roots as its Packages, and prints its
+// CompositionId.
 
 #include "rawframe/build/build.h"
 #include "rawframe/content/composition_record.h"
 #include "rawframe/document/json.h"
 #include "rawframe/signature/signature.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <span>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -120,24 +124,47 @@ int install(const std::filesystem::path& build, const std::filesystem::path& lib
     return 0;
 }
 
-int compose(const std::filesystem::path& library,
-            std::string_view root,
-            std::string_view profile,
-            const std::filesystem::path& record) {
+/// The library's Build of `root`, as a Composition names it, or none.
+std::optional<rawframe::content::BuildReference> referenceTo(const std::filesystem::path& library,
+                                                             std::string_view root) {
     const auto kRoot = rawframe::content::ContentDigest::parse(root);
     const auto kIdentity = kRoot.has_value() ? identityOf(library / "builds" / kRoot->text().substr(7)) : std::nullopt;
     const rawframe::document::Value* subject = kIdentity.has_value() ? kIdentity->find("subject") : nullptr;
     const rawframe::document::Value* version = kIdentity.has_value() ? kIdentity->find("version") : nullptr;
     if (subject == nullptr || version == nullptr || subject->text() == nullptr || version->text() == nullptr) {
+        return std::nullopt;
+    }
+    return rawframe::content::BuildReference{
+        .subject = *subject->text(), .version = *version->text(), .build = kRoot->bytes};
+}
+
+int compose(const std::filesystem::path& library,
+            std::string_view root,
+            std::string_view profile,
+            const std::filesystem::path& record,
+            std::span<char* const> packageRoots) {
+    const auto kGame = referenceTo(library, root);
+    std::vector<rawframe::content::BuildReference> packages;
+    for (const char* const kPackage : packageRoots) {
+        auto reference = referenceTo(library, kPackage);
+        if (!reference.has_value()) {
+            std::fputs("rawframe-build: compose: the library has no such Build\n", stderr);
+            return 1;
+        }
+        packages.push_back(std::move(*reference));
+    }
+    if (!kGame.has_value()) {
         std::fputs("rawframe-build: compose: the library has no such Build\n", stderr);
         return 1;
     }
-    const auto kText = rawframe::content::writeComposition(rawframe::content::CompositionRecord{
-        .game = {.subject = *subject->text(), .version = *version->text(), .build = kRoot->bytes},
-        .mods = {},
-        .packages = {},
-        .profile = std::string{profile},
-        .createdAt = unixNow()});
+    // A record lists its Packages in subject order (SPEC-0021).
+    std::ranges::sort(packages, {}, &rawframe::content::BuildReference::subject);
+    const auto kText =
+        rawframe::content::writeComposition(rawframe::content::CompositionRecord{.game = *kGame,
+                                                                                 .mods = {},
+                                                                                 .packages = std::move(packages),
+                                                                                 .profile = std::string{profile},
+                                                                                 .createdAt = unixNow()});
     if (!kText.has_value()) {
         print(kText.error());
         return 1;
@@ -157,15 +184,15 @@ int main(int argc, char** argv) {
     if (argc == 4 && std::string_view{argv[1]} == "install") {
         return install(argv[2], argv[3]);
     }
-    if (argc == 6 && std::string_view{argv[1]} == "compose") {
-        return compose(argv[2], argv[3], argv[4], argv[5]);
+    if (argc >= 6 && std::string_view{argv[1]} == "compose") {
+        return compose(argv[2], argv[3], argv[4], argv[5], std::span{argv + 6, argv + argc});
     }
     if (argc != 10 && argc != 11) {
         std::fputs("usage: rawframe-build <cooked> <output> <subject> <version> <platform> <architecture> <side> "
                    "<configuration> <profile> [<key>]\n"
                    "       rawframe-build key <publisher> <directory>\n"
                    "       rawframe-build install <build> <library>\n"
-                   "       rawframe-build compose <library> <game root> <profile> <record>\n",
+                   "       rawframe-build compose <library> <game root> <profile> <record> [<package root>...]\n",
                    stderr);
         return 2;
     }

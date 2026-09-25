@@ -58,6 +58,15 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_from_build PROPERTIES
                          FIXTURES_REQUIRED runners_content
                          PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+    # Runners composed of two Builds, the game and a Package holding its
+    # shot's recording, each cooked, packed, and signed apart: shots are
+    # heard with the Package, and without it nothing starts.
+    add_test(NAME runners_with_package
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_with_package.sh $<TARGET_FILE:rawframe_host_arena>
+                     $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_with_package)
+    set_tests_properties(runners_with_package PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
     # Eight bots play runners and the first one's World is heard: its shots
     # and the others' within range sound, and the recording is not silent.
     set(RECORD ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.wav)
