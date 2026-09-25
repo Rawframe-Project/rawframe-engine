@@ -1,14 +1,19 @@
 #pragma once
 
+#include "rawframe/base/platform.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/composition/declaration.h"
+#include "rawframe/composition/held_files.h"
 #include "rawframe/composition/host_lifecycle.h"
 #include "rawframe/composition/registrar.h"
 #include "rawframe/diagnostics/ndjson_sink.h"
+#include "rawframe/execution/time.h"
 #include "rawframe/result/result.h"
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -62,6 +67,39 @@ struct HostRequest {
     /// stop: the Host drains, then stops. Setting it again changes nothing.
     const std::atomic<bool>* stopRequested = nullptr;
     StatusObserver status;
+    /// The files the Host holds, from which every configured path is read
+    /// (D167); null where paths name the file system.
+    const composition::HeldFiles* files = nullptr;
+};
+
+/// One Host run, driven by its caller one iteration at a time: a process's
+/// loop (`runHost`), or a browser's event loop, which calls `iterate` from
+/// each frame and never sleeps (D168). Constructing it composes and starts;
+/// a refused start has already stopped and logged.
+class Host {
+public:
+    explicit Host(const HostRequest& request);
+    Host(const Host&) = delete;
+    Host& operator=(const Host&) = delete;
+    /// Stops if `stop` was not called.
+    ~Host();
+
+    /// Runs one iteration of the Host schedule. False once the run has
+    /// ended (a refused start, the iteration bound, or a drain over), after
+    /// which the Host has stopped. Without threads it also runs the work
+    /// its executors were given.
+    [[nodiscard]] bool iterate() noexcept;
+    /// When the next iteration is due, for a caller pacing the run; one
+    /// called early is allowed and runs at once.
+    [[nodiscard]] execution::MonotonicInstant due() const noexcept;
+    /// Ends the run where it is: drains, stops, and says how it ended.
+    /// Idempotent.
+    HostExit stop() noexcept;
+
+private:
+    struct State;
+    std::unique_ptr<State> state_;
+    std::optional<HostExit> ended_;
 };
 
 /// Runs one Host: owns the monotonic clock, diagnostic routing and its NDJSON
@@ -87,6 +125,10 @@ struct HostRequest {
 ///                              budgets together, plus a tenth of it (at least
 ///                              a second), must fit (none)
 ///   diagnostics.minimum_severity  trace, debug, info, warning, error, critical (info)
+///
+/// It paces by sleeping, so it exists only where there are threads.
+#if RAWFRAME_THREADS
 [[nodiscard]] HostExit runHost(const HostRequest& request) noexcept;
+#endif
 
 } // namespace rawframe::host

@@ -12,8 +12,11 @@
 #include <chrono>
 #include <initializer_list>
 #include <string>
-#include <thread>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
 
 using namespace rawframe;
 using composition::HostPhase;
@@ -80,6 +83,7 @@ private:
         if (counts.stop != nullptr && counts.runWorlds == counts.stopAt) {
             counts.stop->store(true, std::memory_order_release);
         }
+#if RAWFRAME_THREADS
         if (counts.runWorlds == counts.holdWorkerAt && context_->cpuExecutor() != nullptr) {
             static_cast<void>(
                 context_->cpuExecutor()->submit(context_->owner(), execution::Priority::Normal, []() noexcept {
@@ -88,6 +92,7 @@ private:
                     }
                 }));
         }
+#endif
         if (counts.unhealthyAt >= 0 && counts.runWorlds >= counts.unhealthyAt) {
             context_->reportHealth(composition::Health::Unhealthy, "test_failure");
         }
@@ -143,6 +148,7 @@ void reset() {
     requireMissing = false;
 }
 
+#if RAWFRAME_THREADS
 /// Keeps each status, and lets the held worker go once the Host is unhealthy.
 void observe(const host::HostStatus& status, void*) noexcept {
     counts.statuses.push_back(status);
@@ -162,10 +168,13 @@ host::HostExit run(std::string_view configurationText, std::string& log, const s
                                            .status = {.publish = &observe, .context = nullptr}});
 }
 
+#endif
+
 bool mentions(const std::string& log, std::string_view text) {
     return log.find(text) != std::string::npos;
 }
 
+#if RAWFRAME_THREADS
 /// Whether the log names these lifecycle states, in this order.
 bool movesThrough(const std::string& log, std::initializer_list<std::string_view> states) {
     std::size_t at = 0;
@@ -178,8 +187,12 @@ bool movesThrough(const std::string& log, std::initializer_list<std::string_view
     return true;
 }
 
+#endif
+
 } // namespace
 
+// A process run paces by sleeping, where there are threads.
+#if RAWFRAME_THREADS
 RAWFRAME_TEST(AHostRunsItsIterationsAndStopsInOrder) {
     reset();
     std::string log;
@@ -335,4 +348,38 @@ RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {
     RAWFRAME_EXPECT(mentions(log, "\"code\":\"plan_problem\"") && mentions(log, "missing_provider"));
     RAWFRAME_EXPECT(counts.started == 0 && counts.runWorlds == 0);
     RAWFRAME_EXPECT(movesThrough(log, {"starting", "preparing", "failed"}) && !mentions(log, "\"state\":\"ready\""));
+}
+
+#endif
+
+RAWFRAME_TEST(AHostIsDrivenAnIterationAtATime) {
+    // As a browser's event loop drives it (D168): one iteration a call, no
+    // sleeping, and a stop wherever the caller ends it.
+    reset();
+    std::string log;
+    const auto kConfiguration = composition::Configuration::parse("host.iteration_rate = 60");
+    {
+        host::Host driven{host::HostRequest{.role = composition::TargetRole::Test,
+                                            .registrars = kRegistrars,
+                                            .configuration = &*kConfiguration,
+                                            .log = {.write = &collect, .context = &log}}};
+        const execution::MonotonicInstant kFirst = driven.due();
+        RAWFRAME_EXPECT(driven.iterate() && driven.iterate() && driven.iterate());
+        // Each iteration is due a period after the last, called early or not.
+        RAWFRAME_EXPECT((driven.due() - kFirst).nanoseconds == 3 * (1'000'000'000 / 60));
+        RAWFRAME_EXPECT(counts.runWorlds == 3 && counts.stopped == 0);
+        RAWFRAME_EXPECT(driven.stop() == host::HostExit::Stopped && driven.stop() == host::HostExit::Stopped);
+        RAWFRAME_EXPECT(!driven.iterate() && counts.runWorlds == 3 && counts.stopped == 1);
+    }
+    RAWFRAME_EXPECT(mentions(log, "\"iterations\":3") && counts.stopped == 1);
+
+    // A refused start has ended before the first iteration.
+    log.clear();
+    const auto kBad = composition::Configuration::parse("host.iteration_rate = 0");
+    host::Host refused{host::HostRequest{.role = composition::TargetRole::Test,
+                                         .registrars = kRegistrars,
+                                         .configuration = &*kBad,
+                                         .log = {.write = &collect, .context = &log}}};
+    RAWFRAME_EXPECT(!refused.iterate() && refused.stop() == host::HostExit::StartupFailed);
+    RAWFRAME_EXPECT(mentions(log, "\"code\":\"bad_configuration\""));
 }

@@ -1,5 +1,7 @@
 #include "rawframe/host/main.h"
 
+#if RAWFRAME_THREADS && RAWFRAME_FILE_SYSTEM
+
 #include "rawframe/composition/configuration.h"
 #include "rawframe/host/host.h"
 
@@ -95,3 +97,4 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
 }
 
 } // namespace rawframe::host
+#endif
