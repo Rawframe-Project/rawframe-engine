@@ -2,6 +2,7 @@
 // domains kept, and the compatibility matrix with no downgrade.
 
 #include "rawframe/network/admission.h"
+#include "rawframe/network/close.h"
 #include "rawframe/network/errors.h"
 #include "rawframe/test/test.h"
 
@@ -142,4 +143,19 @@ RAWFRAME_TEST(CompatibilityIsExactWithNoDowngrade) {
     RAWFRAME_EXPECT(kWith([](Hello& h) {
                         h.requiredFeatures = 0b10;
                     }) == RejectReason::FeatureMissing);
+}
+
+RAWFRAME_TEST(AGracefulCloseSaysWhoIsLeaving) {
+    for (const CloseNotice kNotice : {CloseNotice::ServerStopping, CloseNotice::ClientLeaving}) {
+        std::vector<std::byte> bytes(8);
+        Writer writer{bytes};
+        RAWFRAME_EXPECT(encodeGracefulClose(writer, kNotice).has_value());
+        const auto kDecoded = decodeGracefulClose(writer.written());
+        RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == kNotice);
+    }
+    // No notice, one this generation does not know, and bytes after it.
+    RAWFRAME_EXPECT(failedWith(decodeGracefulClose(std::vector<std::byte>{std::byte{0}}), NetworkError::Malformed));
+    RAWFRAME_EXPECT(failedWith(decodeGracefulClose(std::vector<std::byte>{std::byte{3}}), NetworkError::Malformed));
+    RAWFRAME_EXPECT(!decodeGracefulClose(std::vector<std::byte>{std::byte{1}, std::byte{0}}).has_value());
+    RAWFRAME_EXPECT(!decodeGracefulClose({}).has_value());
 }
