@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rawframe web client</title>
+<style>
+  body { margin: 0; padding: 16px; font: 13px/1.4 ui-monospace, monospace; background: #111; color: #ddd; }
+  pre { white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<pre id="log"></pre>
+<script type="module">
+// The page: page.json names the client module, the files to fetch and hand
+// over, the configuration, and the server certificates it trusts by hash.
+import { WebClient } from './client.mjs';
+import { PageTransport } from './transport.mjs';
+
+const out = document.getElementById('log');
+const log = (line) => {
+    out.textContent += line + '\n';
+};
+const page = await (await fetch('page.json')).json();
+const transport = new PageTransport({ certificateHashes: page.certificateHashes ?? [] });
+const client = await WebClient.load(await (await fetch(page.module)).arrayBuffer(), { transport, log });
+for (const [path, url] of Object.entries(page.files)) {
+    client.hold(path, new Uint8Array(await (await fetch(url)).arrayBuffer()));
+}
+if (client.start(page.configuration) !== 0) {
+    log('the client did not start');
+} else {
+    const frame = () => {
+        if (client.frame()) {
+            requestAnimationFrame(frame);
+        } else {
+            log(`the client stopped with ${client.stop()}`);
+        }
+    };
+    requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>
