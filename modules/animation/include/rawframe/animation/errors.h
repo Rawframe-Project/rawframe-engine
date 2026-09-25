@@ -23,8 +23,13 @@ enum class AnimationError : std::uint32_t {
     /// A clip that does not fit the skeleton it is bound to: another
     /// skeleton, or a bone the skeleton lacks.
     BindingInvalid = 3,
-    /// More bones, tracks, keys, or events than the limits allow.
+    /// More bones, tracks, keys, events, nodes, or parameters than the
+    /// limits allow.
     OverLimit = 4,
+    /// A graph document that is not one, or not in its one form: a node id
+    /// twice, a connection to no node or round a cycle, a reference to no
+    /// `float` parameter, other than one output node.
+    GraphInvalid = 5,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(AnimationError error) noexcept {
