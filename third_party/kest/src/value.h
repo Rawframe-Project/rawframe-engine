@@ -438,6 +438,10 @@ typedef enum {
     KEST_CONST_INT,
     KEST_CONST_FLOAT,
     KEST_CONST_TEXT,
+    // Which function of the program a function value is: a number the machine
+    // calls through, which the verifier holds to being called with what that
+    // function takes. See D1242.
+    KEST_CONST_FN,
 } KestConstClass;
 
 // One name a body gave a slot. `kind` is what a layout piece is, so a

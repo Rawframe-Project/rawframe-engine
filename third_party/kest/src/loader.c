@@ -911,6 +911,10 @@ bool kest_load_many(KestArena *arena, KestDiags *diags, const char *library,
     }
     units->trees = kest_arena_new();
     if (units->trees == NULL) {
+        // Said, because nothing after this asks: a build that read nothing
+        // has nothing wrong with it, and a run of it answered nought having
+        // run nothing at all. See D1251.
+        kest_diags_starve(diags);
         return false;
     }
     const char *root = directory_of(arena, paths[0]);

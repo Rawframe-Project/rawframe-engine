@@ -7,7 +7,7 @@ apply to vendored files; the code is upstream's, not ours.
 
 | Name | Upstream | Revision | License | What is vendored |
 | --- | --- | --- | --- | --- |
-| Kest | `Rawframe-Project/kest` | `8a9311fb9ea0f9cff6f6814c6e28c6dfc9f3b68a` | MIT | `include/`, `src/` except `main.c`, `lib/`, `LICENSE` |
+| Kest | `Rawframe-Project/kest` | `8dfb947c667a7a738a5cde9659d1f9348eb1183d` | MIT | `include/`, `src/` except `main.c`, `lib/`, `LICENSE` |
 | Maul2D 0.0.1 | `Rawframe-Project/maul2d` | `42676bf8798be03b8436a040ca3c60bad4d13b8c` | MIT | `include/`, `src/`, `LICENSE` |
 | Maul3D 0.0.1 | `Rawframe-Project/maul3d` | `a8f590b6d38afcf75133dd3d63777d09ba984c7a` | MIT | `include/`, `src/`, `LICENSE` |
 | miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 (stb_vorbis v1.22: public domain or MIT) | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |

@@ -640,6 +640,53 @@ static bool add_primitive(KestProgram *program, const char *name,
     return register_type(program, type, name);
 }
 
+// Two, three and four `f32`s, which is what a position, a colour and a
+// direction are in every engine a program here is written beside. The language
+// has them rather than a library because it gives them operators, and it gives
+// only these operators: `+`, `-`, `*` and `/` a component at a time, and `*`
+// and `/` by one `f32` as well, the way a shading language does. A symbol
+// still means one thing -- the same arithmetic on each component -- and nothing
+// a program declares can give one another meaning. Each is a struct like any
+// other once it is made, laid out as a C struct of those floats, so a host
+// lends the bytes it already has and `std.vec`'s shapes are the same bytes.
+// See D1250.
+static bool add_vector(KestProgram *program, const char *name,
+                       uint16_t count) {
+    static const char *const AXES[4] = {"x", "y", "z", "w"};
+    // Out of what was registered rather than looked up by name: the index is
+    // what the build that checks itself holds to every name put in it, and
+    // this is asked while the primitives are still going in.
+    KestType *number = NULL;
+    for (uint32_t i = 0; i < program->type_count; i++) {
+        if (kest_is_narrow(program->types[i])) {
+            number = program->types[i];
+        }
+    }
+    KestType *type = new_type(program, KEST_T_STRUCT);
+    if (number == NULL || type == NULL) {
+        return false;
+    }
+    type->members = KEST_ARENA_ARRAY(program->arena, KestMember, count);
+    if (type->members == NULL) {
+        return false;
+    }
+    for (uint16_t i = 0; i < count; i++) {
+        memset(&type->members[i], 0, sizeof type->members[i]);
+        type->members[i].name = AXES[i];
+        type->members[i].type = number;
+        type->members[i].offset = i;
+        type->members[i].byte_offset = (uint16_t)(i * 4);
+    }
+    type->member_count = count;
+    type->slots = count;
+    type->byte_size = (uint16_t)(count * 4);
+    type->byte_align = 4;
+    type->vector = true;
+    // Nothing declared it, so nothing is told nothing names it.
+    type->named = true;
+    return register_type(program, type, name);
+}
+
 static bool add_primitives(KestProgram *program) {
     return add_primitive(program, "void", KEST_T_VOID, 0, false) &&
            add_primitive(program, "bool", KEST_T_BOOL, 1, false) &&
@@ -653,7 +700,9 @@ static bool add_primitives(KestProgram *program) {
            add_primitive(program, "u32", KEST_T_INT, 32, false) &&
            add_primitive(program, "u64", KEST_T_INT, 64, false) &&
            add_primitive(program, "f32", KEST_T_FLOAT, 32, false) &&
-           add_primitive(program, "f64", KEST_T_FLOAT, 64, false);
+           add_primitive(program, "f64", KEST_T_FLOAT, 64, false) &&
+           add_vector(program, "vec2", 2) && add_vector(program, "vec3", 3) &&
+           add_vector(program, "vec4", 4);
 }
 
 // Levenshtein distance, capped: anything past `limit` is not a suggestion
@@ -750,6 +799,11 @@ static const KestExpr *constant_written(KestProgram *program, const char *name,
 // `f32` rounds where `f64` does not, which is part of what the type means.
 bool kest_is_narrow(const KestType *type) {
     return type != NULL && type->tag == KEST_T_FLOAT && type->width == 32;
+}
+
+// Set on the three structs the language registers and on nothing else.
+bool kest_is_vector(const KestType *type) {
+    return type != NULL && type->vector;
 }
 
 bool kest_is_unsigned(const KestType *type) {
@@ -2169,7 +2223,13 @@ static KestType *resolve_named(KestProgram *program, const KestTypeRef *ref) {
     // unknown type and not a spelling to guess at. The same refusal the name
     // walk makes, about the same word, asked of the one place that knows what
     // a module is. See D739.
-    if (kest_module_named(program, name, length)) {
+    // Or a word the file imported, which is a module whatever has been
+    // registered under it yet: a signature is resolved before the functions
+    // of the modules it names are, so a module of functions and no types --
+    // `std.io`, and `std.vec` since D1251 -- was an unknown type here and a
+    // module in a body. See D1251.
+    if (kest_module_named(program, name, length) ||
+        kest_module_for(program, name, length) != NULL) {
         kest_diags_add(program->diags, KEST_SEVERITY_ERROR, "K0359", ref->name,
                        "`%.*s` is a module, and this wants a type", (int)length,
                        name);
@@ -2208,6 +2268,18 @@ static KestType *resolve_named(KestProgram *program, const KestTypeRef *ref) {
     kest_import_reached(program, name, length);
     kest_diags_add(program->diags, KEST_SEVERITY_ERROR, "K0301", ref->name,
                    "unknown type `%.*s`", (int)length, name);
+    // One the library had, which is not a spelling to guess at either: what
+    // took its place is known. See D1252.
+    const char *dot_at = memchr(name, '.', length);
+    const char *instead =
+        dot_at == NULL
+            ? NULL
+            : kest_retired(program, name, (size_t)(dot_at - name), dot_at + 1,
+                           length - (size_t)(dot_at - name) - 1);
+    if (instead != NULL) {
+        kest_diags_suggest(program->diags, "%s", instead);
+        return error_type(program);
+    }
     // And one this program has under a module this file has not asked for,
     // which is the same certainty a name of that kind is: not a spelling to
     // try, but the shape the reader has already written, in the file beside
@@ -2348,6 +2420,13 @@ KestType *kest_struct_of(KestProgram *program, KestType *shape, KestType **args,
     size_t room = strlen(shape->name) + 3;
     for (uint32_t i = 0; i < count; i++) {
         room += strlen(kest_type_name(program->arena, args[i])) + 2;
+    }
+    // And what writing it costs is counted, a unit a byte: a copy of a shape
+    // over two copies of the one before is a name twice as long, so the words
+    // that ask for twenty of them are a name of a million pieces, and the
+    // time it took was two seconds nothing counted. See D1248.
+    if (!kest_diags_work(program->diags, room)) {
+        return error_type(program);
     }
     char *written = kest_arena_alloc(program->arena, room, 1);
     if (written == NULL) {
@@ -2887,6 +2966,67 @@ const char *kest_type_name(KestArena *arena, const KestType *type) {
         return "?";
     }
     return buffer;
+}
+
+// What the library had and has not, and what a program writes instead. A name
+// that went is refused whatever happens -- what it was is not there to be
+// called -- and the refusal says what took its place, which is the promise a
+// break makes before there were editions to make it under. See D1252.
+typedef struct {
+    const char *module;
+    const char *name;
+    const char *instead;
+} Retired;
+
+static const Retired RETIRED[] = {
+    {"std.vec", "Vec2", "it is the language's own now: `vec2` is the same two "
+                        "`f32`s"},
+    {"std.vec", "Vec3", "it is the language's own now: `vec3` is the same "
+                        "three `f32`s"},
+    {"std.vec", "add", "the language adds vectors now: write `a + b`"},
+    {"std.vec", "sub", "the language takes vectors away now: write `a - b`"},
+    {"std.vec", "scale", "the language scales vectors now: write `v * k`"},
+};
+
+const char *kest_retired(KestProgram *program, const char *alias,
+                         size_t alias_length, const char *name,
+                         size_t length) {
+    const char *module = kest_module_for(program, alias, alias_length);
+    if (module == NULL) {
+        return NULL;
+    }
+    for (size_t i = 0; i < sizeof RETIRED / sizeof RETIRED[0]; i++) {
+        if (strcmp(RETIRED[i].module, module) == 0 &&
+            kest_word_same(RETIRED[i].name, name, length)) {
+            return RETIRED[i].instead;
+        }
+    }
+    return NULL;
+}
+
+// Named as far as a reader reads one. The name of a copy is as long as what it
+// was made from, and a copy that is too big is one that holds too much: the
+// first refused for it was named in a hundred and eighty megabytes, and a
+// message that long is one nobody reads and a tool is choked by. Cut where a
+// character starts, so what is said is still text. See D1248.
+#define NAMED_AS_FAR_AS 120
+
+const char *kest_type_name_read(KestArena *arena, const KestType *type) {
+    const char *name = kest_type_name(arena, type);
+    if (strlen(name) <= NAMED_AS_FAR_AS) {
+        return name;
+    }
+    size_t cut = NAMED_AS_FAR_AS;
+    while (cut > 0 && ((unsigned char)name[cut] & 0xc0) == 0x80) {
+        cut--;
+    }
+    char *shorter = kest_arena_alloc(arena, cut + 4, 1);
+    if (shorter == NULL) {
+        return "?";
+    }
+    memcpy(shorter, name, cut);
+    memcpy(shorter + cut, "...", 4);
+    return shorter;
 }
 
 // A name to a slot, one byte at a time. Every name here is a name somebody
@@ -3550,9 +3690,32 @@ static bool refuse_cycle(KestProgram *program, KestType *type) {
     return false;
 }
 
+// What a shape that came out bigger than a value may be is refused where it
+// is declared, and it is one word from then on, the way that many of something
+// too big is: the rest of the file is still checked against a type with a
+// size. The sums are taken wider than a layout says one is so that the one
+// that crossed is seen rather than wrapped: two fields of 64000 bytes each
+// were a struct of 62464, and eight shapes each holding two of the one before
+// were one that wrote its layout past the end of where it was being written.
+// See D1248.
+static bool within_a_value(KestProgram *program, KestType *type,
+                           uint32_t bytes, uint32_t slots) {
+    if (bytes <= UINT16_MAX && slots <= UINT16_MAX) {
+        return true;
+    }
+    if (sized_within(program, bytes, slots, type->declared_in, type->span,
+                     kest_type_name_read(program->arena, type))) {
+        return true;
+    }
+    type->slots = 1;
+    type->byte_size = 8;
+    type->byte_align = 8;
+    return false;
+}
+
 static bool measure_struct(KestProgram *program, KestType *type) {
-    uint16_t offset = 0;
-    uint16_t bytes = 0;
+    uint32_t offset = 0;
+    uint32_t bytes = 0;
     uint16_t align = 1;
 
     for (uint32_t i = 0; i < type->member_count; i++) {
@@ -3560,8 +3723,8 @@ static bool measure_struct(KestProgram *program, KestType *type) {
         if (!measure_held(program, member, type)) {
             return refuse_cycle(program, type);
         }
-        type->members[i].offset = offset;
-        offset = (uint16_t)(offset + (member == NULL ? 1 : member->slots));
+        type->members[i].offset = (uint16_t)offset;
+        offset += member == NULL ? 1 : member->slots;
 
         // The bytes are laid out the way a C compiler would, so an array of
         // these can be the array the host already has.
@@ -3569,33 +3732,35 @@ static bool measure_struct(KestProgram *program, KestType *type) {
         uint16_t member_align = member == NULL || member->byte_align == 0
                                     ? 8
                                     : member->byte_align;
-        bytes = (uint16_t)((bytes + member_align - 1) / member_align *
-                           member_align);
-        type->members[i].byte_offset = bytes;
+        bytes = (bytes + member_align - 1) / member_align * member_align;
+        type->members[i].byte_offset = (uint16_t)bytes;
         bytes += member_size;
         if (member_align > align) {
             align = member_align;
         }
     }
 
-    type->slots = offset == 0 ? 1 : offset;
+    uint32_t size = bytes == 0 ? 1 : (bytes + align - 1) / align * align;
+    if (!within_a_value(program, type, size, offset)) {
+        return true;
+    }
+    type->slots = (uint16_t)(offset == 0 ? 1 : offset);
     type->byte_align = align;
-    type->byte_size =
-        (uint16_t)(bytes == 0 ? 1 : (bytes + align - 1) / align * align);
+    type->byte_size = (uint16_t)size;
     return true;
 }
 
 // An enum is a tag and whichever case's payload is widest, which is what a
 // tagged union is and why every case can be read for its tag alone.
 static bool measure_enum(KestProgram *program, KestType *type) {
-    uint16_t payload_slots = 0;
-    uint16_t payload_bytes = 0;
+    uint32_t payload_slots = 0;
+    uint32_t payload_bytes = 0;
     uint16_t align = 4;
 
     for (uint32_t c = 0; c < type->case_count; c++) {
         KestVariantType *variant = &type->cases[c];
-        uint16_t slots = 0;
-        uint16_t bytes = 0;
+        uint32_t slots = 0;
+        uint32_t bytes = 0;
         for (uint32_t p = 0; p < variant->payload_count; p++) {
             KestType *held = variant->payload[p];
             if (!measure_held(program, held, type)) {
@@ -3607,12 +3772,11 @@ static bool measure_enum(KestProgram *program, KestType *type) {
             if (held_align > align) {
                 align = held_align;
             }
-            variant->offsets[p] = slots;
-            slots = (uint16_t)(slots + (held == NULL ? 1 : held->slots));
-            bytes = (uint16_t)((bytes + held_align - 1) / held_align *
-                               held_align);
-            variant->byte_offsets[p] = bytes;
-            bytes = (uint16_t)(bytes + (held == NULL ? 8 : held->byte_size));
+            variant->offsets[p] = (uint16_t)slots;
+            slots += held == NULL ? 1 : held->slots;
+            bytes = (bytes + held_align - 1) / held_align * held_align;
+            variant->byte_offsets[p] = (uint16_t)bytes;
+            bytes += held == NULL ? 8 : held->byte_size;
         }
         if (slots > payload_slots) {
             payload_slots = slots;
@@ -3625,6 +3789,12 @@ static bool measure_enum(KestProgram *program, KestType *type) {
     // The tag is a four byte integer, so the payload starts wherever its own
     // alignment puts it after that.
     uint16_t start = (uint16_t)((4 + align - 1) / align * align);
+    uint32_t whole = start + payload_bytes;
+    if (!within_a_value(program, type,
+                        (whole + align - 1) / align * align,
+                        payload_slots + 1)) {
+        return true;
+    }
     for (uint32_t c = 0; c < type->case_count; c++) {
         for (uint32_t p = 0; p < type->cases[c].payload_count; p++) {
             type->cases[c].offsets[p] =
@@ -3636,8 +3806,7 @@ static bool measure_enum(KestProgram *program, KestType *type) {
 
     type->slots = (uint16_t)(payload_slots + 1);
     type->byte_align = align;
-    uint16_t total = (uint16_t)(start + payload_bytes);
-    type->byte_size = (uint16_t)((total + align - 1) / align * align);
+    type->byte_size = (uint16_t)((whole + align - 1) / align * align);
     return true;
 }
 
@@ -5019,8 +5188,10 @@ bool kest_program_dump(const KestProgram *program, KestArena *arena,
     for (uint32_t i = 0; i < program->type_count; i++) {
         const KestType *type = program->types[i];
         // A shape is not a type and has no layout, and neither has a copy
-        // made with a name that is still standing for itself.
-        if (type->type_param_count > 0 || mentions_param(type)) {
+        // made with a name that is still standing for itself. A vector is the
+        // language's, the way a number is, and no file declared it.
+        if (type->type_param_count > 0 || mentions_param(type) ||
+            type->vector) {
             continue;
         }
         if (type->name != NULL &&

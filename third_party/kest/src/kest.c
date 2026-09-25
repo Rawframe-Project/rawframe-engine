@@ -7,6 +7,8 @@ typedef struct {
     const char *name;
     KestNative function;
     void *context;
+    // Whether the host said code nobody trusts may call it. See D1246.
+    bool open;
 } Binding;
 
 struct KestHost {
@@ -97,8 +99,34 @@ bool kest_host_bind(KestHost *host, const char *name, KestNative function,
     host->items[host->count].name = owned;
     host->items[host->count].function = function;
     host->items[host->count].context = context;
+    host->items[host->count].open = false;
     host->count++;
     return true;
+}
+
+bool kest_host_open(KestHost *host, const char *name) {
+    if (host == NULL || name == NULL) {
+        return false;
+    }
+    for (uint32_t i = 0; i < host->count; i++) {
+        if (strcmp(host->items[i].name, name) == 0) {
+            host->items[i].open = true;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool kest_host_opened(const KestHost *host, const char *name) {
+    if (host == NULL || name == NULL) {
+        return false;
+    }
+    for (uint32_t i = 0; i < host->count; i++) {
+        if (strcmp(host->items[i].name, name) == 0) {
+            return host->items[i].open;
+        }
+    }
+    return false;
 }
 
 KestNative kest_host_find(const KestHost *host, const char *name,

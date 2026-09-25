@@ -29,6 +29,11 @@ typedef struct {
     // Which deterministic profile it is written under, said as the name and
     // the number `kest_profile` answers with.
     const char *profile;
+    // Which edition of the language it is written in: `KEST_EDITION` for a
+    // project that says so and for one that says nothing, because a manifest
+    // written before there were editions was written against the first one.
+    // One this compiler does not know is refused. See D1252.
+    const char *edition;
     // Where its own modules are, and where the ones it depends on are. A
     // dependency here is a path and nothing else: there is no registry, so a
     // dependency is a directory somebody put there.

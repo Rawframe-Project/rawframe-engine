@@ -35,6 +35,23 @@ typedef struct KestArena KestArena;
 KestArena *kest_arena_new(void);
 void kest_arena_free(KestArena *arena);
 
+// An arena taken under another: what it holds is counted beside what the
+// other holds, against the other one's ceiling, for as long as it holds it. A
+// stage that works in memory of its own and throws it away -- the bodies a
+// backend writes, the verifier's tables -- is still inside what a host gave a
+// build. See D1247.
+KestArena *kest_arena_new_under(KestArena *under);
+
+// What an arena holds, with the most everything taken under it ever held at
+// once on top -- never less than the most the two held together: what a
+// ceiling has to be for the same work to fit inside it again, and a number
+// that still grows with what is asked of the arena after that work is done.
+size_t kest_arena_widest(const KestArena *arena);
+
+// The most the arenas taken under this one held at once: the part of what a
+// build cost that nothing is left holding.
+size_t kest_arena_most_beneath(const KestArena *arena);
+
 // Returns zeroed memory, or NULL when the host is out of it. Alignment must be
 // a power of two.
 void *kest_arena_alloc(KestArena *arena, size_t size, size_t align);
@@ -154,6 +171,10 @@ void kest_arena_forget_refusals(void);
 // would have crossed it, so what was handed out stops short of the ceiling by
 // this much: the two numbers are the same number said from either side.
 size_t kest_arena_refused(const KestArena *arena);
+
+// What the arena held, with what was taken under it, when a ceiling refused
+// it: the number a refusal says it had taken.
+size_t kest_arena_refused_holding(const KestArena *arena);
 
 // Whether this arena handed out the address: inside one of its blocks and
 // below what that block has given away. A machine asks it about a pointer it

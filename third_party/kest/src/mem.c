@@ -92,12 +92,28 @@ struct KestArena {
     // that and read nowhere else.
     size_t allocations;
     size_t ceiling;
+    // The arena this one is taken under, whose ceiling holds it too; what the
+    // arenas taken under this one hold now, which its ceiling counts beside
+    // its own; and the most this one and everything under it ever held at
+    // once, which is what a build given exactly what it cost has to have had
+    // room for. See D1247.
+    KestArena *under;
+    size_t beneath;
+    size_t widest;
+    // And the most the arenas under this one held at once, which is what a
+    // build needed on top of what it keeps: what it holds afterwards grows
+    // with what is asked of it, and this does not. See D1247.
+    size_t most_beneath;
     // What the last allocation this arena refused was asking for. A ceiling
     // stops a program at the allocation that would have crossed it, so what a
     // host reads afterwards is a total that stopped short — and the difference
     // between missing by eight bytes and missing by a megabyte is the whole of
     // what a host does about it. See D248.
     size_t refused;
+    // And what was held when a ceiling refused it, counting what was held
+    // under it then: what is held afterwards may be less, once a stage that
+    // worked in memory of its own has given it back. See D1247.
+    size_t refused_holding;
     // And which of the two refused it: the ceiling above, or the host with
     // nothing left. Read beside the number, because a refusal of nought bytes
     // is not a thing that happens. See D321.
@@ -196,7 +212,91 @@ static Block *block_new(size_t capacity) {
     return block;
 }
 
+// Whether any arena has refused anything since this build began, defined
+// with the rest of what refusals keep further down.
+static bool anybody_refused;
+
+// What an arena holds with what is taken under it, which is what its ceiling
+// is asked about.
+static size_t holding(const KestArena *arena) {
+    return arena->handed + arena->also + arena->beneath;
+}
+
+// Whether handing out `taking` more crosses a ceiling: this arena's own, or,
+// for one taken under another, the other's with what everything under it
+// holds. Said as a refusal by the ceiling where it is, and where the other
+// one is too, because what a host reads is the build's.
+static bool crosses(KestArena *arena, size_t taking) {
+    bool over = arena->ceiling != 0 && holding(arena) + taking > arena->ceiling;
+    KestArena *under = arena->under;
+    if (!over && under != NULL && under->ceiling != 0 &&
+        holding(under) + taking > under->ceiling) {
+        under->refused = taking;
+        under->refused_by_ceiling = true;
+        under->refused_holding = holding(under);
+        over = true;
+    }
+    if (over) {
+        arena->refused = taking;
+        arena->refused_by_ceiling = true;
+        arena->refused_holding = holding(arena);
+        anybody_refused = true;
+    }
+    return over;
+}
+
+static void widened(KestArena *arena) {
+    if (holding(arena) > arena->widest) {
+        arena->widest = holding(arena);
+    }
+}
+
+// What this arena holds went up by `by` or down by `lost`, which is what the
+// one it is taken under counts beneath it.
+static void grew(KestArena *arena, size_t by) {
+    widened(arena);
+    if (arena->under != NULL) {
+        arena->under->beneath += by;
+        if (arena->under->beneath > arena->under->most_beneath) {
+            arena->under->most_beneath = arena->under->beneath;
+        }
+        widened(arena->under);
+    }
+}
+
+static void shrank(KestArena *arena, size_t lost) {
+    if (arena->under != NULL) {
+        arena->under->beneath -= lost;
+    }
+}
+
+#if KEST_CHECKED
+// And one arena, counted apart: taking an arena is asking the host for its
+// first block, and the refusals above are aimed at what an arena hands out,
+// so every stage that takes an arena of its own -- the verifier, the bodies,
+// a machine -- had never been seen told no. `KEST_REFUSE_ARENA=n` refuses the
+// n-th, in the build that checks itself only. See D1251.
+static uint64_t arenas_so_far;
+
+static bool refuse_this_arena(void) {
+    static uint64_t refuse_arena_at;
+    static bool asked;
+    if (!asked) {
+        const char *said = getenv("KEST_REFUSE_ARENA");
+        refuse_arena_at = said == NULL ? 0 : strtoull(said, NULL, 10);
+        asked = true;
+    }
+    arenas_so_far++;
+    return refuse_arena_at != 0 && arenas_so_far == refuse_arena_at;
+}
+#endif
+
 KestArena *kest_arena_new(void) {
+#if KEST_CHECKED
+    if (refuse_this_arena()) {
+        return NULL;
+    }
+#endif
     KestArena *arena = calloc(1, sizeof(KestArena));
     if (arena == NULL) {
         return NULL;
@@ -214,10 +314,20 @@ KestArena *kest_arena_new(void) {
     return arena;
 }
 
+KestArena *kest_arena_new_under(KestArena *under) {
+    KestArena *arena = kest_arena_new();
+    if (arena != NULL) {
+        arena->under = under;
+    }
+    return arena;
+}
+
 void kest_arena_free(KestArena *arena) {
     if (arena == NULL) {
         return;
     }
+    // What it holds goes back from what the one it was under counts.
+    shrank(arena, arena->handed);
     Block *block = arena->head;
     while (block != NULL) {
         Block *next = block->next;
@@ -294,6 +404,7 @@ void kest_arena_reset(KestArena *arena) {
     arena->recent = first;
     arena->low = first->data;
     arena->high = first->data + first->capacity;
+    shrank(arena, arena->handed);
     arena->handed = 0;
     arena->allocations = 0;
     // A new heap has refused nobody.
@@ -335,6 +446,7 @@ void kest_arena_rewind(KestArena *arena, KestMark mark) {
     // The block that answered last may have been one of the ones just given
     // back, and a shortcut pointing at freed memory is worse than no shortcut.
     arena->recent = until;
+    shrank(arena, arena->handed - mark.handed);
     arena->handed = mark.handed;
     arena->allocations = mark.allocations;
     holds_together(arena, "a rewind");
@@ -371,6 +483,8 @@ static bool refuse_this_one(void) {
 // did. See D880.
 static bool anybody_refused;
 
+
+
 bool kest_arena_refused_anywhere(void) {
     return anybody_refused;
 }
@@ -397,11 +511,7 @@ void *kest_arena_alloc(KestArena *arena, size_t size, size_t align) {
     }
 #endif
     // Asked before a block is taken from the host, so a refusal costs nothing.
-    if (arena->ceiling != 0 &&
-        arena->handed + arena->also + taking > arena->ceiling) {
-        arena->refused = taking;
-        arena->refused_by_ceiling = true;
-        anybody_refused = true;
+    if (crosses(arena, taking)) {
         return NULL;
     }
     if (fresh) {
@@ -435,6 +545,7 @@ void *kest_arena_alloc(KestArena *arena, size_t size, size_t align) {
     arena->head->used = offset + size + KEPT_BACK;
     arena->handed += taking;
     arena->taken += taking;
+    grew(arena, taking);
     arena->allocations++;
     OPEN(result, size);
     arrives_as_nought(result, size, "an allocation");
@@ -457,17 +568,14 @@ void *kest_arena_extend(KestArena *arena, void *last, size_t was,
     }
     size_t offset = (size_t)((unsigned char *)last - block->data);
     size_t taking = want - was;
-    if (arena->ceiling != 0 &&
-        arena->handed + arena->also + taking > arena->ceiling) {
-        arena->refused = taking;
-        arena->refused_by_ceiling = true;
-        anybody_refused = true;
+    if (crosses(arena, taking)) {
         return NULL;
     }
     if (offset + want + KEPT_BACK <= block->capacity) {
         block->used = offset + want + KEPT_BACK;
         arena->handed += taking;
         arena->taken += taking;
+        grew(arena, taking);
         // What was the gap is now part of the thing, and the gap moves to the
         // end of it.
         OPEN(end, taking);
@@ -507,6 +615,7 @@ void *kest_arena_extend(KestArena *arena, void *last, size_t was,
     }
     arena->handed += taking;
     arena->taken += taking;
+    grew(arena, taking);
     POISON(bigger->data + want, KEPT_BACK);
     arrives_as_nought(bigger->data + was, want - was, "a block the host moved");
     // After what it was given is counted, and not before: a check of the two
@@ -553,6 +662,7 @@ size_t kest_arena_held(const KestArena *arena) {
 
 void kest_arena_charge(KestArena *arena, size_t bytes) {
     arena->also += bytes;
+    widened(arena);
 }
 
 void kest_arena_returned(KestArena *arena, size_t bytes) {
@@ -563,7 +673,7 @@ size_t kest_arena_ceiling_left(const KestArena *arena) {
     if (arena->ceiling == 0) {
         return 0;
     }
-    size_t used = arena->handed + arena->also;
+    size_t used = holding(arena);
     // One rather than nought for an arena already at its ceiling, because
     // nought is what an arena with no ceiling says and the two are not the
     // same thing: a scratch that may have nothing is not a scratch that may
@@ -584,3 +694,17 @@ char *kest_arena_strndup(KestArena *arena, const char *text, size_t len) {
     copy[len] = '\0';
     return copy;
 }
+
+size_t kest_arena_widest(const KestArena *arena) {
+    size_t kept = arena->handed + arena->also + arena->most_beneath;
+    return arena->widest > kept ? arena->widest : kept;
+}
+
+size_t kest_arena_refused_holding(const KestArena *arena) {
+    return arena->refused_holding;
+}
+
+size_t kest_arena_most_beneath(const KestArena *arena) {
+    return arena->most_beneath;
+}
+

@@ -97,6 +97,11 @@ struct KestBuild {
 KestBuild *kest_build_open(const char *library, char **paths, int count,
                            size_t room);
 
+// The same with a ceiling on the work compiling may do, which nought leaves
+// off. See `kest_build_within` and D1248.
+KestBuild *kest_build_open_within(const char *library, char **paths, int count,
+                                  size_t room, uint64_t work);
+
 // The name something lives under in the file that was named. A host does not
 // need this — `kest_entry` leaves the module off for it — but the command line
 // asks the program's own symbol table, which is registered qualified.

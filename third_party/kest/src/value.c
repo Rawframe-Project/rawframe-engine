@@ -2703,16 +2703,27 @@ static uint32_t disassemble_one(const KestModule *module,
         uint16_t operand = read_u16(chunk, offset + 1);
         if (op == KEST_OP_CONST) {
             KestValue value = chunk->constants[operand];
-            switch (chunk->constant_classes[operand]) {
+            switch ((KestConstClass)chunk->constant_classes[operand]) {
             case KEST_CONST_FLOAT:
                 fprintf(out, "%u  ; %g\n", operand, value.real);
                 break;
             case KEST_CONST_TEXT:
                 fprintf(out, "%u  ; \"%s\"\n", operand, value.text);
                 break;
-            default:
+            case KEST_CONST_FN:
+                if (module != NULL && value.integer >= 0 &&
+                    (uint64_t)value.integer < module->count) {
+                    fprintf(out, "%u  ; fn %s\n", operand,
+                            module->functions[value.integer]->name);
+                    break;
+                }
+                fprintf(out, "%u  ; fn %lld\n", operand,
+                        (long long)value.integer);
+                break;
+            case KEST_CONST_INT:
                 fprintf(out, "%u  ; %lld\n", operand,
                         (long long)value.integer);
+                break;
             }
         } else {
             fprintf(out, "%u\n", operand);

@@ -962,7 +962,9 @@ static void write_const_at(Walk *walk, const KestIrOp *op, uint32_t index) {
             say(c, out, "    { .real = %a },\n", value.real);
             continue;
         }
-        if (class != KEST_CONST_INT) {
+        // A function value is which function it is, the number the machine
+        // calls through as well.
+        if (class != KEST_CONST_INT && class != KEST_CONST_FN) {
             cannot(walk, "a value this backend has no spelling for");
             return;
         }
@@ -1055,7 +1057,7 @@ static void write_const(Walk *walk, const KestIrOp *op) {
                 value.real);
             continue;
         }
-        if (class != KEST_CONST_INT) {
+        if (class != KEST_CONST_INT && class != KEST_CONST_FN) {
             cannot(walk, "a value this backend has no spelling for");
             return;
         }
@@ -1911,22 +1913,25 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
         break;
     }
     case KEST_IR_TEXT_IN: {
-        // The one read in this language that does not ask, because the walk
-        // took the length before its first turn and the place is there. The
-        // machine asks anyway in the build that checks itself, where nothing
-        // else can; a file this writes is compiled by somebody else's
-        // compiler and has no such build, so what it writes is the read.
+        // The byte a walk over text is on. The walk took the length before
+        // its first turn, so the place is there -- which is the compiler's
+        // word, and the verifier's walk cannot prove a place, so it is asked
+        // here as the machine asks it, in its words. See D1245.
         Where held;
+        Where length;
         if (reads != 0 || leaves != 1) {
             cannot(walk, "a walk over something other than a piece of text");
             break;
         }
         at_stack(walk, first, base);
         at_frame(walk, held, op->imm[0]);
+        at_frame(walk, length, op->imm[0] + 1u);
         at_frame(walk, second, op->imm[1]);
         say(c, out,
-            "    %s.integer = (unsigned char)%s.text[%s.integer];\n",
-            first, held, second);
+            "    if (!kest_text_in(rt, %s.text, %s.integer, %s.integer, %u,\n"
+            "                      &%s.integer)) {\n        return false;\n"
+            "    }\n",
+            held, length, second, op->span.offset, first);
         break;
     }
     case KEST_IR_TEXT_SLICE:
@@ -3297,6 +3302,9 @@ const char *kest_emitc_done(KestEmitC *c, const char *entry,
         "                        const char *right, int64_t right_length,\n"
         "                        int64_t *read);\n"
         "bool kest_text_at(KestRuntime *runtime, const char *bytes,\n"
+        "                  int64_t length, int64_t index, uint32_t where,\n"
+        "                  int64_t *into);\n"
+        "bool kest_text_in(KestRuntime *runtime, const char *bytes,\n"
         "                  int64_t length, int64_t index, uint32_t where,\n"
         "                  int64_t *into);\n"
         "bool kest_text_cut(KestRuntime *runtime, const char *bytes,\n"

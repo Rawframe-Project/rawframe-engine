@@ -500,6 +500,27 @@ static bool is_error(const KestType *type) {
     return type == NULL || type->tag == KEST_T_ERROR;
 }
 
+// What `+`, `-`, `*` or `/` between these two gives when one of them is a
+// vector, and NULL when it gives nothing: a vector and one of its own width,
+// a component at a time, or a vector and an `f32` on either side of `*` and
+// `/`, which is every component and that one number. What a shading language
+// has, and nothing a program can add to. See D1250.
+static KestType *vector_answer(KestTokenKind op, KestType *left,
+                               KestType *right) {
+    bool scales = op == KEST_TOK_STAR || op == KEST_TOK_SLASH ||
+                  op == KEST_TOK_STAREQ || op == KEST_TOK_SLASHEQ;
+    if (kest_is_vector(left) && kest_type_equal(left, right)) {
+        return left;
+    }
+    if (scales && kest_is_vector(left) && kest_is_narrow(right)) {
+        return left;
+    }
+    if (scales && kest_is_narrow(left) && kest_is_vector(right)) {
+        return right;
+    }
+    return NULL;
+}
+
 // Whether a literal can take a type from its context rather than its default.
 // `let x: f64 = 1.5` and `let n: u8 = 200` both work because of this, and
 // nothing else in the language converts silently.
@@ -522,6 +543,22 @@ static const KestExpr *literal_of(const KestExpr *expr) {
 // of them moves. See D770.
 static bool is_literal(const KestExpr *expr) {
     return literal_of(expr) != NULL;
+}
+
+// A float written down beside a vector is one of its components, which are
+// `f32`, the way `2.0 * dt` is `dt`'s. The node is corrected as well as the
+// type, because the compiler reads which width to make it from there.
+static void as_component(Checker *checker, KestExpr *side, KestType **type) {
+    if (!is_literal(side) || *type == NULL || (*type)->tag != KEST_T_FLOAT ||
+        (*type)->width == 32) {
+        return;
+    }
+    KestType *number = kest_find_type(checker->program, "f32", 3);
+    *type = number;
+    side->type = number;
+    if (side->kind == KEST_EXPR_UNARY) {
+        side->unary.operand->type = number;
+    }
 }
 
 // A name that is several functions is one of them here, and which one is
@@ -1286,8 +1323,17 @@ static KestType *check_construction(Checker *checker, KestExpr *expr,
         report(checker, expr->span, "K0309",
                "`%s` has %u field%s, found %u", type->name, type->member_count,
                type->member_count == 1 ? "" : "s", expr->call.arg_count);
-        note_written(checker, expr, type->member_count, type->declared_in,
-                     type->span, member_span, type);
+        // A vector was declared by nobody, so there is nowhere to point at:
+        // what it is made of is said instead. See D1250.
+        if (kest_is_vector(type)) {
+            suggest(checker, "`%s` is made of `%s`", type->name,
+                    type->member_count == 2   ? "x` and `y"
+                    : type->member_count == 3 ? "x`, `y` and `z"
+                                              : "x`, `y`, `z` and `w");
+        } else {
+            note_written(checker, expr, type->member_count, type->declared_in,
+                         type->span, member_span, type);
+        }
     }
 
     uint32_t checked = expr->call.arg_count < type->member_count
@@ -2888,7 +2934,7 @@ static KestType *check_call(Checker *checker, KestExpr *expr,
         if (handled) {
             // And what else the file calls by that name, when the language's
             // own refused. A file may declare `len` or `get` — this tree does
-            // it eight times, in `table`, `vec` and two examples — and what a
+            // it six times, in `table` and two examples — and what a
             // name of that kind means is settled by what it is handed: the
             // file's one for the shapes it takes, the language's for the rest.
             // So a call that fits neither is told what the language wanted and
@@ -3465,9 +3511,17 @@ static KestType *check_field(Checker *checker, KestExpr *expr,
             report(checker, expr->field.name, "K0353",
                    "`%.*s` has nothing called `%.*s`", (int)owner.length,
                    module, (int)expr->field.name.length, member);
-            const char *nearest = nearest_under(checker, module, owner.length,
-                                                member, expr->field.name.length);
-            if (nearest != NULL) {
+            const char *instead =
+                kest_retired(checker->program, module, owner.length, member,
+                             expr->field.name.length);
+            const char *nearest =
+                instead != NULL ? NULL
+                                : nearest_under(checker, module, owner.length,
+                                                member,
+                                                expr->field.name.length);
+            if (instead != NULL) {
+                suggest(checker, "%s", instead);
+            } else if (nearest != NULL) {
                 suggest(checker, "did you mean `%s`?", nearest);
             }
             // And which `io` this is. A program read with a library that is
@@ -3797,6 +3851,34 @@ static KestType *check_binary(Checker *checker, KestExpr *expr,
         if (expr->binary.left->kind == KEST_EXPR_UNARY) {
             expr->binary.left->unary.operand->type = right;
         }
+    }
+
+    // A vector, which has four of these and no others. Asked before the rule
+    // that both sides are one type, because a vector and the number it is
+    // scaled by are two. See D1250.
+    bool arithmetic = op == KEST_TOK_PLUS || op == KEST_TOK_MINUS ||
+                      op == KEST_TOK_STAR || op == KEST_TOK_SLASH;
+    if (arithmetic && (kest_is_vector(left) || kest_is_vector(right))) {
+        if (kest_is_vector(left)) {
+            as_component(checker, expr->binary.right, &right);
+        } else {
+            as_component(checker, expr->binary.left, &left);
+        }
+        KestType *answer = vector_answer(op, left, right);
+        if (answer != NULL) {
+            return answer;
+        }
+        if (is_error(left) || is_error(right)) {
+            return error_type(checker);
+        }
+        report(checker, expr->span, "K0314",
+               "`%s` does not apply to `%s` and `%s`",
+               kest_token_bare(op, spelling, sizeof(spelling)),
+               type_name(checker, left), type_name(checker, right));
+        kest_diags_suggest(checker->program->diags,
+                           "a vector takes `+`, `-`, `*` and `/` with one of "
+                           "its own width, and `*` and `/` with an `f32`");
+        return error_type(checker);
     }
 
     if (!kest_type_equal(left, right)) {
@@ -4468,7 +4550,9 @@ static KestType *check_expr_kind(Checker *checker, KestExpr *expr,
         KestType *operand =
             check_expr(checker, expr->unary.operand, inside(expected));
         checker->negating = was_negating;
-        if (!is_error(operand) && !is_numeric(operand)) {
+        // A vector is turned round a component at a time. See D1250.
+        if (!is_error(operand) && !is_numeric(operand) &&
+            !kest_is_vector(operand)) {
             report(checker, expr->span, "K0314", "`-` does not apply to `%s`",
                    type_name(checker, operand));
             return error_type(checker);
@@ -4536,6 +4620,9 @@ static KestType *check_expr(Checker *checker, KestExpr *expr,
     if (expr == NULL) {
         return error_type(checker);
     }
+    // Every copy of a generic is checked again, so what copies cost is
+    // counted here too. See D1248.
+    kest_diags_work(checker->program->diags, 1);
     KestType *type = check_expr_kind(checker, expr, expected);
 
     // A value standing where an optional is wanted becomes one. It is the
@@ -4734,6 +4821,7 @@ static KestType *check_branch(Checker *checker, KestExpr *expr,
 }
 
 static void check_stmt(Checker *checker, KestStmt *stmt) {
+    kest_diags_work(checker->program->diags, 1);
     switch (stmt->kind) {
     case KEST_STMT_LET: {
         KestType *declared = NULL;
@@ -4879,12 +4967,21 @@ static void check_stmt(Checker *checker, KestStmt *stmt) {
                     span_text(checker, stmt->assign.target->span),
                     type_name(checker, target));
         }
-        if (!kest_type_equal(target, value)) {
+        // `+=` and its like on a vector, which are what the operators are:
+        // `*=` and `/=` scale it by an `f32`. See D1250.
+        bool vector_step = stmt->assign.op != KEST_TOK_EQ && kest_is_vector(target);
+        if (vector_step) {
+            as_component(checker, stmt->assign.value, &value);
+        }
+        if (vector_step && vector_answer(stmt->assign.op, target, value) ==
+                               target) {
+            // One of the four, with what it may take.
+        } else if (!kest_type_equal(target, value)) {
             expected_but(checker, stmt->assign.value->span, target, value,
                          "this assignment");
         }
         if (stmt->assign.op != KEST_TOK_EQ && !is_error(target) &&
-            !is_numeric(target)) {
+            !is_numeric(target) && !kest_is_vector(target)) {
             report(checker, stmt->span, "K0314", "`%s` does not apply to `%s`",
                    kest_token_bare(stmt->assign.op, spelling, sizeof(spelling)), type_name(checker, target));
         }
@@ -5641,8 +5738,8 @@ bool kest_check_bodies(KestProgram *program, KestUnits *units) {
             }
             for (uint32_t b = 0; b < instance->count; b++) {
                 room += strlen(instance->names[b]) +
-                        strlen(kest_type_name(program->arena,
-                                              instance->bindings[b])) +
+                        strlen(kest_type_name_read(program->arena,
+                                                   instance->bindings[b])) +
                         strlen("`` is ``, and ");
             }
             char *which = kest_arena_alloc(program->arena, room, 1);
@@ -5655,7 +5752,8 @@ bool kest_check_bodies(KestProgram *program, KestUnits *units) {
                     which + used, room - used, "%s`%s` is `%s`",
                     b == 0 ? "" : (b + 1 == instance->count ? " and " : ", "),
                     instance->names[b],
-                    kest_type_name(program->arena, instance->bindings[b]));
+                    kest_type_name_read(program->arena,
+                                        instance->bindings[b]));
             }
             for (uint32_t d = before;
                  instance->site.length > 0 && d < program->diags->count; d++) {

@@ -117,6 +117,14 @@ typedef struct {
     // until something is lost. See D848.
     char last_code[8];
     char last_words[192];
+    // How much compiling has done, and how much it was given to do: nought
+    // given is no ceiling. Bytes bound what compiling holds and not how long
+    // it takes, so this counts what it does -- a token read, a node made, an
+    // expression checked, an instruction written, a step proved -- and stops
+    // it at the same place on every machine. See D1248.
+    uint64_t work_done;
+    uint64_t work_given;
+    bool worked_out;
 } KestDiags;
 
 
@@ -265,6 +273,28 @@ void kest_diags_note_at(KestDiags *diags, uint32_t which,
 // written in two places is a sentence that comes apart. See D844.
 #define KEST_CRAMPED_START                                                     \
     "this was given %zu bytes, which is not enough to begin reading a program"
+
+// And the same run stopped by how much it was given to do rather than by how
+// much memory. See D1248.
+#define KEST_WORKED_CODE "K0666"
+#define KEST_WORKED_SAYS                                                       \
+    "compiling this took all %llu units of work it was given"
+
+// Counts `units` of what compiling does, and answers false once a ceiling on it
+// is passed -- having said so, and having taken the room of every stage after
+// it, so every stage stops the way it stops when memory runs out. A run with
+// no ceiling counts and never stops. See D1248.
+bool kest_diags_worked_out(KestDiags *diags);
+static inline bool kest_diags_work(KestDiags *diags, uint64_t units) {
+    if (diags == NULL) {
+        return true;
+    }
+    diags->work_done += units;
+    if (diags->work_given == 0 || diags->work_done <= diags->work_given) {
+        return true;
+    }
+    return kest_diags_worked_out(diags);
+}
 
 // Says that something could not be said for want of memory, which is the one
 // thing this can record without any. It counts as an error, because what a

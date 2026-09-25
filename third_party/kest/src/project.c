@@ -134,6 +134,7 @@ KestProject *kest_project_from(KestArena *arena, const char *where,
     project->entry = "";
     project->needs_kest = "";
     project->profile = "";
+    project->edition = KEST_EDITION_STRING;
     project->tests = "";
 
     char *at = text;
@@ -152,6 +153,15 @@ KestProject *kest_project_from(KestArena *arena, const char *where,
             project->needs_kest = value;
         } else if (strcmp(name, "profile") == 0) {
             project->profile = value;
+        } else if (strcmp(name, "edition") == 0) {
+            // Refused rather than read as the nearest one there is: a project
+            // written for an edition this compiler has not got is a project
+            // whose words may mean something here they did not mean there.
+            if (strcmp(value, KEST_EDITION_STRING) != 0) {
+                *why = "a project says an edition this does not know";
+                return NULL;
+            }
+            project->edition = value;
         } else if (strcmp(name, "tests") == 0) {
             project->tests = value;
         } else if (strcmp(name, "source") == 0) {
@@ -188,12 +198,15 @@ const char *kest_project_written(KestArena *arena, const char *name) {
         "# each of them and reads what it answered.\n"
         "tests tests\n"
         "\n"
-        "# What it was written against, and which deterministic profile it is\n"
-        "# written under.\n"
+        "# What it was written against, which deterministic profile it is\n"
+        "# written under, and which edition of the language: a change that\n"
+        "# would break a program is made under a new edition, and this line is\n"
+        "# the one it asks.\n"
         "kest %s\n"
-        "profile %s %u\n",
+        "profile %s %u\n"
+        "edition %s\n",
         name, KEST_VERSION_STRING, KEST_PROFILE_NAME,
-        (unsigned)KEST_PROFILE_VERSION);
+        (unsigned)KEST_PROFILE_VERSION, KEST_EDITION_STRING);
     if (written < 0 || (size_t)written >= sizeof(room)) {
         return NULL;
     }

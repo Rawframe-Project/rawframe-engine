@@ -756,6 +756,7 @@ static bool parse_block(Parser *parser, KestBlock *block);
 
 static KestExpr *new_expr(Parser *parser, KestExprKind kind, KestSpan span) {
     parser->nodes++;
+    kest_diags_work(parser->diags, 1);
     KestExpr *expr = KEST_ARENA_NEW(parser->arena, KestExpr);
     if (expr == NULL) {
         parser->out_of_memory = true;
@@ -1604,6 +1605,7 @@ static KestExpr *parse_expr(Parser *parser) {
 static bool parse_block(Parser *parser, KestBlock *block);
 
 static KestStmt *new_stmt(Parser *parser, KestStmtKind kind, KestSpan span) {
+    kest_diags_work(parser->diags, 1);
     KestStmt *stmt = (parser->nodes++, KEST_ARENA_NEW(parser->arena, KestStmt));
     if (stmt == NULL) {
         parser->out_of_memory = true;
@@ -1943,6 +1945,7 @@ static KestField *parse_field(Parser *parser) {
 }
 
 static KestDecl *new_decl(Parser *parser, KestDeclKind kind, KestSpan span) {
+    kest_diags_work(parser->diags, 1);
     KestDecl *decl = (parser->nodes++, KEST_ARENA_NEW(parser->arena, KestDecl));
     if (decl == NULL) {
         parser->out_of_memory = true;

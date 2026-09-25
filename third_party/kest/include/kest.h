@@ -51,6 +51,16 @@
 #define KEST_PROFILE_NAME "kest-det"
 #define KEST_PROFILE_VERSION 3
 
+// Which edition of the language a program is written in, which is a fifth
+// thing and the one a program chooses: a change that would stop a program
+// compiling, or make it mean something else, is made under a new edition, and
+// a project's `edition` line says which one it was written against. A project
+// that says none was written against the first, so what a manifest meant the
+// day it was written is what it means for good. This is the only edition
+// there is. See D1252.
+#define KEST_EDITION 2026
+#define KEST_EDITION_STRING "2026"
+
 // Every function declared here is called by one of the two hosts written
 // against it, so there is somewhere to look for each: `src/main.c` is a
 // command line — it compiles, runs, calls one function, ticks a program and
@@ -1730,6 +1740,16 @@ bool kest_host_bind(KestHost *host, const char *name, KestNative function,
 KestNative kest_host_find(const KestHost *host, const char *name,
                           void **context);
 
+// Says a door already bound may be called by code nobody trusts: a machine
+// started with `kest_start_untrusted` is refused a program that asks for any
+// door not said so, by name. What a door does with what it is handed is the
+// host's to get right -- this is the host saying it has. False for a name not
+// bound. See D1246.
+bool kest_host_open(KestHost *host, const char *name);
+
+// Whether a door is open to code nobody trusts.
+bool kest_host_opened(const KestHost *host, const char *name);
+
 // A compiled program, and everything it was compiled from. One of these is
 // what a host has instead of the stages there are.
 // Compiles a file and everything it imports. `library` is where `std` lives --
@@ -1755,6 +1775,25 @@ KestNative kest_host_find(const KestHost *host, const char *name,
 // raised by picking a bigger number and the other is not. See D843 and D844.
 KestBuild *kest_build(const char *path, const char *library, FILE *errors,
                       KestForm form, size_t room);
+
+// The same with a ceiling on the work compiling does as well as on the bytes
+// it asks for. `room` bounds how much a file can make this hold and `work`
+// bounds how long it can make it take: a unit is a word read, a piece of the
+// tree made or checked, an instruction laid down or walked over while it is
+// proved, so the count is the same on every machine and for every run of the
+// same files, and a ceiling that let one through lets it through again. Nought
+// is as much as it needs. A build that reaches the ceiling stops where it is
+// and is refused with K0666, which says how much it was given; the count one
+// that got through took is in `kest_build_work`. See D1248.
+KestBuild *kest_build_within(const char *path, const char *library,
+                             FILE *errors, KestForm form, size_t room,
+                             uint64_t work);
+
+// How many units of work compiling this took, whether it was given a ceiling
+// or not. The count is what `kest_build_within` is told, so a host that wants
+// a ceiling with room in it can measure what its own programs take and give
+// them a multiple.
+uint64_t kest_build_work(const KestBuild *build);
 
 // The same from files handed over rather than read: the first is the program
 // and the rest are what it imports, the library's among them, each where a
@@ -1952,6 +1991,18 @@ uint32_t kest_build_layout(const KestBuild *build, const char *name,
 // `kest_code_of`, D1071 and D1077.
 KestRuntime *kest_start(KestBuild *build, const KestHost *host,
                         const KestLimits *limits);
+
+// A machine for a program nobody trusts, which is `kest_start` with three
+// things more. Every door the program asks for has to be one the host opened
+// with `kest_host_open`. `limits` has to say how long it may run and how much
+// heap it may have -- nought for either is refused rather than read as no
+// ceiling. And it runs only what the verifier proved: a body the other backend
+// wrote as C and a host linked in is not entered, and the machine runs the
+// instructions it was proved from instead. Refused by name in the build's
+// report, like a door that is not bound. What this machine is to promise, and
+// how far each promise is kept, is SECURITY.md. See D1246.
+KestRuntime *kest_start_untrusted(KestBuild *build, const KestHost *host,
+                                  const KestLimits *limits);
 
 // After the call it was made for returns. A bound function that frees the
 // machine from inside one is refused and told, because the frames and the

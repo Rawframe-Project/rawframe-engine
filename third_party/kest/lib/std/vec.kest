@@ -2,57 +2,23 @@ module std.vec
 
 import std.math
 
-// Two and three components of `f32`, which is the working precision of the
-// workloads this language is for. Both are value structs (D006), so a `Vec3`
-// is three slots on the stack and twelve bytes in an array — the bytes a host
-// already has, which is why an engine can lend its positions rather than copy
-// them (D016).
-//
-// There is no operator overloading, so `vec.add(a, b)` and not `a + b`. That
-// is the language having one meaning per symbol rather than this module being
-// unfinished.
+// What is built on the language's `vec2`, `vec3` and `vec4`. The arithmetic is
+// the language's -- `a + b`, `v * k` -- a component at a time; what is here is
+// what is made of it: a dot product, a length, a distance, a direction. Every
+// one is one of those operations after another, so it answers the same bits in
+// the machine and in a release, and each that asks nothing of the host is
+// `deterministic`. See D1250 and D1251.
 
-struct Vec2 {
-    x: f32
-    y: f32
-}
-
-struct Vec3 {
-    x: f32
-    y: f32
-    z: f32
-}
-
-fn add(a: Vec2, b: Vec2) -> Vec2 no.alloc no.host deterministic {
-    return Vec2(a.x + b.x, a.y + b.y)
-}
-
-fn add(a: Vec3, b: Vec3) -> Vec3 no.alloc no.host deterministic {
-    return Vec3(a.x + b.x, a.y + b.y, a.z + b.z)
-}
-
-fn sub(a: Vec2, b: Vec2) -> Vec2 no.alloc no.host deterministic {
-    return Vec2(a.x - b.x, a.y - b.y)
-}
-
-fn sub(a: Vec3, b: Vec3) -> Vec3 no.alloc no.host deterministic {
-    return Vec3(a.x - b.x, a.y - b.y, a.z - b.z)
-}
-
-fn scale(v: Vec2, k: f32) -> Vec2 no.alloc no.host deterministic {
-    return Vec2(v.x * k, v.y * k)
-}
-
-fn scale(v: Vec3, k: f32) -> Vec3 no.alloc no.host deterministic {
-    return Vec3(v.x * k, v.y * k, v.z * k)
-}
-
-fn dot(a: Vec2, b: Vec2) -> f32 no.alloc no.host deterministic {
+fn dot(a: vec2, b: vec2) -> f32 no.alloc no.host deterministic {
     return a.x * b.x + a.y * b.y
 }
 
-fn dot(a: Vec3, b: Vec3) -> f32 no.alloc no.host deterministic {
+fn dot(a: vec3, b: vec3) -> f32 no.alloc no.host deterministic {
     return a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+fn dot(a: vec4, b: vec4) -> f32 no.alloc no.host deterministic {
+    return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
 }
 
 // The one that costs nothing, which is the one a frame budget reaches for:
@@ -61,11 +27,15 @@ fn dot(a: Vec3, b: Vec3) -> f32 no.alloc no.host deterministic {
 // end of the width where a square does — the square of 1e20 is infinity — and
 // comparing works up to the size where the squares stop fitting. `length` is
 // the one that answers for every vector this width holds an answer for.
-fn lengthSquared(v: Vec2) -> f32 no.alloc no.host deterministic {
+fn lengthSquared(v: vec2) -> f32 no.alloc no.host deterministic {
     return dot(v, v)
 }
 
-fn lengthSquared(v: Vec3) -> f32 no.alloc no.host deterministic {
+fn lengthSquared(v: vec3) -> f32 no.alloc no.host deterministic {
+    return dot(v, v)
+}
+
+fn lengthSquared(v: vec4) -> f32 no.alloc no.host deterministic {
     return dot(v, v)
 }
 
@@ -82,41 +52,59 @@ fn lengthSquared(v: Vec3) -> f32 no.alloc no.host deterministic {
 // A largest component that is not a number is the answer itself: the length of
 // a vector with an infinite component is infinite, and dividing by it would
 // make that nothing rather than everything. See D383.
-fn length(v: Vec2) -> f32 no.alloc deterministic {
+fn length(v: vec2) -> f32 no.alloc deterministic {
     let most = math.max(math.abs(v.x), math.abs(v.y))
     if most == 0.0 || !math.isNumber(most) {
         return most
     }
-    return most * math.sqrt(lengthSquared(Vec2(v.x / most, v.y / most)))
+    return most * math.sqrt(lengthSquared(v / most))
 }
 
-fn length(v: Vec3) -> f32 no.alloc deterministic {
+fn length(v: vec3) -> f32 no.alloc deterministic {
     let most = math.max(math.max(math.abs(v.x), math.abs(v.y)), math.abs(v.z))
     if most == 0.0 || !math.isNumber(most) {
         return most
     }
-    return most *
-        math.sqrt(lengthSquared(Vec3(v.x / most, v.y / most, v.z / most)))
+    return most * math.sqrt(lengthSquared(v / most))
+}
+
+fn length(v: vec4) -> f32 no.alloc deterministic {
+    let most = math.max(
+        math.max(math.abs(v.x), math.abs(v.y)),
+        math.max(math.abs(v.z), math.abs(v.w))
+    )
+    if most == 0.0 || !math.isNumber(most) {
+        return most
+    }
+    return most * math.sqrt(lengthSquared(v / most))
 }
 
 // And the one that costs nothing between two points, which is the question a
 // frame actually asks: what is nearest, and is it inside a radius. Both of
 // those order the same way without the square root, and `lengthSquared` was
 // here for that reason while the two-point form of it was not.
-fn distanceSquared(a: Vec2, b: Vec2) -> f32 no.alloc no.host deterministic {
-    return lengthSquared(sub(a, b))
+fn distanceSquared(a: vec2, b: vec2) -> f32 no.alloc no.host deterministic {
+    return lengthSquared(a - b)
 }
 
-fn distanceSquared(a: Vec3, b: Vec3) -> f32 no.alloc no.host deterministic {
-    return lengthSquared(sub(a, b))
+fn distanceSquared(a: vec3, b: vec3) -> f32 no.alloc no.host deterministic {
+    return lengthSquared(a - b)
 }
 
-fn distance(a: Vec2, b: Vec2) -> f32 no.alloc deterministic {
-    return length(sub(a, b))
+fn distanceSquared(a: vec4, b: vec4) -> f32 no.alloc no.host deterministic {
+    return lengthSquared(a - b)
 }
 
-fn distance(a: Vec3, b: Vec3) -> f32 no.alloc deterministic {
-    return length(sub(a, b))
+fn distance(a: vec2, b: vec2) -> f32 no.alloc deterministic {
+    return length(a - b)
+}
+
+fn distance(a: vec3, b: vec3) -> f32 no.alloc deterministic {
+    return length(a - b)
+}
+
+fn distance(a: vec4, b: vec4) -> f32 no.alloc deterministic {
+    return length(a - b)
 }
 
 // A vector of nought length points nowhere, and there is no direction to
@@ -130,12 +118,12 @@ fn distance(a: Vec3, b: Vec3) -> f32 no.alloc deterministic {
 // back a thousandth short of a length of one. Dividing first puts every
 // component between -1 and 1 with one of them at 1, so what is squared is
 // between 1 and 3 whatever it was handed. See D382.
-fn direction(v: Vec2) -> Vec2? no.alloc deterministic {
+fn direction(v: vec2) -> vec2? no.alloc deterministic {
     let most = math.max(math.abs(v.x), math.abs(v.y))
     if most == 0.0 {
         return none
     }
-    let even = Vec2(v.x / most, v.y / most)
+    let even = v / most
     // The square root of the square rather than `length`, which would divide
     // by the largest component again: that has been done, and it is 1.
     let size = math.sqrt(lengthSquared(even))
@@ -145,37 +133,57 @@ fn direction(v: Vec2) -> Vec2? no.alloc deterministic {
     if !math.isNumber(size) {
         return none
     }
-    return scale(even, 1.0 / size)
+    return even * (1.0 / size)
 }
 
-fn direction(v: Vec3) -> Vec3? no.alloc deterministic {
+fn direction(v: vec3) -> vec3? no.alloc deterministic {
     let most = math.max(math.max(math.abs(v.x), math.abs(v.y)), math.abs(v.z))
     if most == 0.0 {
         return none
     }
-    let even = Vec3(v.x / most, v.y / most, v.z / most)
+    let even = v / most
     let size = math.sqrt(lengthSquared(even))
     if !math.isNumber(size) {
         return none
     }
-    return scale(even, 1.0 / size)
+    return even * (1.0 / size)
 }
 
-fn lerp(a: Vec2, b: Vec2, amount: f32) -> Vec2 no.alloc no.host deterministic {
-    return add(a, scale(sub(b, a), amount))
+fn direction(v: vec4) -> vec4? no.alloc deterministic {
+    let most = math.max(
+        math.max(math.abs(v.x), math.abs(v.y)),
+        math.max(math.abs(v.z), math.abs(v.w))
+    )
+    if most == 0.0 {
+        return none
+    }
+    let even = v / most
+    let size = math.sqrt(lengthSquared(even))
+    if !math.isNumber(size) {
+        return none
+    }
+    return even * (1.0 / size)
 }
 
-fn lerp(a: Vec3, b: Vec3, amount: f32) -> Vec3 no.alloc no.host deterministic {
-    return add(a, scale(sub(b, a), amount))
+fn lerp(a: vec2, b: vec2, amount: f32) -> vec2 no.alloc no.host deterministic {
+    return a + (b - a) * amount
+}
+
+fn lerp(a: vec3, b: vec3, amount: f32) -> vec3 no.alloc no.host deterministic {
+    return a + (b - a) * amount
+}
+
+fn lerp(a: vec4, b: vec4, amount: f32) -> vec4 no.alloc no.host deterministic {
+    return a + (b - a) * amount
 }
 
 // Perpendicular in two, and the one perpendicular to both in three.
-fn perpendicular(v: Vec2) -> Vec2 no.alloc no.host deterministic {
-    return Vec2(0.0 - v.y, v.x)
+fn perpendicular(v: vec2) -> vec2 no.alloc no.host deterministic {
+    return vec2(0.0 - v.y, v.x)
 }
 
-fn cross(a: Vec3, b: Vec3) -> Vec3 no.alloc no.host deterministic {
-    return Vec3(
+fn cross(a: vec3, b: vec3) -> vec3 no.alloc no.host deterministic {
+    return vec3(
         a.y * b.z - a.z * b.y,
         a.z * b.x - a.x * b.z,
         a.x * b.y - a.y * b.x
@@ -189,6 +197,6 @@ fn cross(a: Vec3, b: Vec3) -> Vec3 no.alloc no.host deterministic {
 // negative the other, and nought when they lie along each other. It is `dot`
 // with one of them turned a quarter, which is the other thing this module
 // gives for two dimensions and did not put together.
-fn cross(a: Vec2, b: Vec2) -> f32 no.alloc no.host deterministic {
+fn cross(a: vec2, b: vec2) -> f32 no.alloc no.host deterministic {
     return a.x * b.y - a.y * b.x
 }

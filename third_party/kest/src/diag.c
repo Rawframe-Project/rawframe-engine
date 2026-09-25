@@ -205,8 +205,26 @@ void kest_diags_init(KestDiags *diags, KestArena *arena) {
     diags->held_back = false;
     diags->last_code[0] = '\0';
     diags->last_words[0] = '\0';
+    diags->work_done = 0;
+    diags->work_given = 0;
+    diags->worked_out = false;
 }
 
+bool kest_diags_worked_out(KestDiags *diags) {
+    if (!diags->worked_out) {
+        diags->worked_out = true;
+        // Every stage after this stops the way it stops when memory runs
+        // out, which each of them already does and says: nothing more is
+        // handed out of the arena they all work in, or of any under it.
+        kest_arena_cap(diags->arena, 1);
+        kest_diags_starve(diags);
+    }
+    // What it took is what it was given: the unit that crossed the ceiling
+    // was refused rather than done, and what a stage counts after it is work
+    // it did not get to do.
+    diags->work_done = diags->work_given;
+    return false;
+}
 
 // What a run was trying to say when it found it had nowhere to say it. Kept in
 // the list itself, which is the one place a run with no room left still has:
@@ -660,6 +678,9 @@ static void render_frame(const KestSource *source, KestSpan span,
 // the arena the list is kept in is the arena that ran out and it remembers.
 // See D843.
 static const char *starved_code(const KestDiags *diags) {
+    if (diags->worked_out) {
+        return KEST_WORKED_CODE;
+    }
     return kest_arena_refused_by_ceiling(diags->arena) ? KEST_CRAMPED_CODE
                                                        : KEST_STARVED_CODE;
 }
@@ -671,10 +692,20 @@ static const char *starved_code(const KestDiags *diags) {
 // Written into the caller's room because there is none here to make it in.
 static const char *starved_says(const KestDiags *diags, char *room,
                                 size_t space) {
+    if (diags->worked_out) {
+        snprintf(room, space, KEST_WORKED_SAYS,
+                 (unsigned long long)diags->work_given);
+        return room;
+    }
     if (!kest_arena_refused_by_ceiling(diags->arena)) {
         return KEST_STARVED_SAYS;
     }
-    size_t taken = kest_arena_used(diags->arena);
+    // What it held when it was refused, counting the stages that work in
+    // memory of their own under it, which may have given it back since.
+    size_t taken = kest_arena_refused_holding(diags->arena);
+    if (kest_arena_used(diags->arena) > taken) {
+        taken = kest_arena_used(diags->arena);
+    }
     size_t given = kest_arena_ceiling(diags->arena);
     // Reading a file happens in an arena of its own and is charged back in one
     // lump when it is done, so the charge that finishes a build can land above

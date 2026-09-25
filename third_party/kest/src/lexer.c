@@ -735,6 +735,7 @@ static void skip_blanks(KestLexer *lexer) {
 }
 
 static KestToken kest_lexer_next(KestLexer *lexer) {
+    kest_diags_work(lexer->diags, 1);
     while (true) {
         skip_blanks(lexer);
 
