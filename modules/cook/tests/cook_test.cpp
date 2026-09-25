@@ -294,7 +294,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
         return report.has_value() ? std::move(*report) : CookReport{};
     };
     const CookReport kFirst = kCook();
-    RAWFRAME_EXPECT(kFirst.cooked == 6 && kFirst.failures.empty());
+    RAWFRAME_EXPECT(kFirst.cooked == 7 && kFirst.failures.empty());
     const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
         const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
         if (!kManifest.has_value()) {

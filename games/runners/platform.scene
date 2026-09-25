@@ -1,0 +1,24 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "rawframe.physics2d.body": "593035e6aa3af5e7",
+    "rawframe.physics2d.pose": "5c5cb2726bb85776",
+    "rawframe.physics2d.velocity": "63c49a3a472d1997"
+  },
+  "entities": [
+    {
+      "id": "e48e0c63-5d86-4575-95b8-dfe21c096e88",
+      "name": "platform",
+      "components": {
+        "rawframe.physics2d.body": {
+          "height": 0.25,
+          "shape": 1,
+          "width": 3
+        },
+        "rawframe.physics2d.pose": {},
+        "rawframe.physics2d.velocity": {}
+      }
+    }
+  ]
+}
