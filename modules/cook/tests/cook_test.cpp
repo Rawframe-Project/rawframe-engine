@@ -19,7 +19,9 @@
 #include "rawframe/cook/kest.h"
 #include "rawframe/cook/mesh.h"
 #include "rawframe/cook/scene.h"
+#include "rawframe/cook/text.h"
 #include "rawframe/kest_library/library.h"
+#include "rawframe/localization/table.h"
 #include "rawframe/mesh/errors.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/test/test.h"
@@ -513,6 +515,57 @@ RAWFRAME_TEST(AnimationDocumentsCookIntoResourcesOfTheirKind) {
     // Not in its one form, or of no kind the importer knows: refused.
     writeText(kRig / "walk.rfanim", *animation::writeClip(kClip) + " ");
     writeText(kRig / "moves.rfanim", "{\"kind\": \"animation.pose\"}\n");
+    RAWFRAME_EXPECT(kCook().failures.size() == 2);
+}
+
+RAWFRAME_TEST(TextDocumentsCookIntoResourcesOfTheirKind) {
+    const Project kProject;
+    const fs::path kText = kProject.sources / "text";
+    localization::StringTable table{.sourceLocale = *localization::parseLocale("en"), .entries = {}};
+    table.entries["menu.play"] = localization::SourceEntry{.message = "Play", .description = {}};
+    localization::Translations turkish{
+        .table = base::Bits128{0, 0xc1}, .locale = *localization::parseLocale("tr"), .entries = {}};
+    turkish.entries["menu.play"] =
+        localization::TranslatedEntry{.message = "Oyna", .sourceHash = localization::sourceHashOf("Play")};
+    const std::string kTableText = *localization::writeStrings(table);
+    const std::string kTurkishText = *localization::writeTranslations(turkish);
+    writeText(kText / "menu.strings", kTableText);
+    writeText(kText / "menu.tr.translations", kTurkishText);
+    writeText(kText / "menu.strings.rfmeta", sidecar("000000000000000000000000000000c1", "", "rawframe.text"));
+    writeText(kText / "menu.tr.translations.rfmeta", sidecar("000000000000000000000000000000c2", "", "rawframe.text"));
+    static const std::array<Importer, 2> kImporters = {audioImporter(), textImporter()};
+    const auto kCook = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+        RAWFRAME_EXPECT(report.has_value());
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    RAWFRAME_EXPECT(kCook().cooked == 4);
+    // Each of its kind, its text as it was.
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value());
+    std::size_t kinds = 0;
+    for (const content::ManifestEntry& each : kManifest.value_or(std::vector<content::ManifestEntry>{})) {
+        if (each.id.value == base::Bits128{0, 0xc1}) {
+            ++kinds;
+            RAWFRAME_EXPECT(each.type.value == localization::kStringsType &&
+                            each.representation.text() == localization::kStringsRepresentation &&
+                            readText(kProject.output / each.locator) == kTableText);
+        }
+        if (each.id.value == base::Bits128{0, 0xc2}) {
+            ++kinds;
+            RAWFRAME_EXPECT(each.type.value == localization::kTranslationsType &&
+                            each.representation.text() == localization::kTranslationsRepresentation &&
+                            readText(kProject.output / each.locator) == kTurkishText);
+        }
+    }
+    RAWFRAME_EXPECT(kinds == 2);
+    // A message out of the subset, and a document of no kind the importer
+    // knows: refused.
+    std::string badMessage = kTurkishText;
+    badMessage.replace(badMessage.find("Oyna"), 4, "{$x");
+    writeText(kText / "menu.tr.translations", badMessage);
+    writeText(kText / "menu.strings", "{\"kind\": \"text.glossary\"}\n");
     RAWFRAME_EXPECT(kCook().failures.size() == 2);
 }
 
