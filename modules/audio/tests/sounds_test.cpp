@@ -1,7 +1,8 @@
 // Declared sounds playing: variants picked as declared, concurrency sets
 // resolved by their rule, distance and pan from the listener, virtual
-// instances that come back where they would be, and streamed sounds playing
-// as their preloaded selves.
+// instances that come back where they would be, streamed sounds playing
+// as their preloaded selves, and on-demand sounds that miss their first
+// play and ask for their variants.
 
 #include "rawframe/audio/errors.h"
 #include "rawframe/audio/sounds.h"
@@ -323,4 +324,38 @@ RAWFRAME_TEST(AVirtualStreamComesBackWhereItWouldBe) {
         error += static_cast<double>(kStreamed[index] - kPreloaded[index]) * (kStreamed[index] - kPreloaded[index]);
     }
     RAWFRAME_EXPECT(signal > 0 && 10.0 * std::log10(error / signal) < -50);
+}
+
+RAWFRAME_TEST(AnOnDemandSoundAsksForItsVariantsOnceAndPlaysWhenTheyAreIn) {
+    auto mixer = *Mixer::create(layout(), {});
+    auto sounds = *Sounds::create(*mixer, layout(), {});
+    LoadedSound rare = declared({0.1F, 0.3F}, SoundDeclaration{.bus = kSfx, .loading = Loading::OnDemand});
+    rare.clips = {nullptr, nullptr};
+    const std::size_t kRare = *sounds->add(std::move(rare));
+    RAWFRAME_EXPECT(sounds->takeWanted().empty());
+    // Missed, and asked for once however often it is played.
+    for (int play = 0; play < 3; ++play) {
+        const auto kMissed = sounds->play(kRare);
+        RAWFRAME_EXPECT(!kMissed.has_value() && kMissed.error().code() == code(AudioError::NotLoaded));
+    }
+    RAWFRAME_EXPECT(sounds->takeWanted() == std::vector<std::size_t>{kRare} && sounds->takeWanted().empty());
+    RAWFRAME_EXPECT(sounds->statistics().notLoaded == 3);
+    // Half in is not in.
+    RAWFRAME_EXPECT(sounds->supply(kRare, 0, clipOf(0.1F)).has_value());
+    RAWFRAME_EXPECT(!sounds->play(kRare).has_value());
+    // A variant that is no clip, one out of range, and a sound that is not
+    // on demand are refused.
+    RAWFRAME_EXPECT(!sounds->supply(kRare, 1, clipOf(0.3F, 0)).has_value());
+    RAWFRAME_EXPECT(!sounds->supply(kRare, 2, clipOf(0.3F)).has_value());
+    const std::size_t kPreloaded = *sounds->add(declared({0.2F}, SoundDeclaration{.bus = kSfx}));
+    RAWFRAME_EXPECT(!sounds->supply(kPreloaded, 0, clipOf(0.2F)).has_value());
+    // All in: it plays its variants in sequence, and is never asked for
+    // again.
+    RAWFRAME_EXPECT(sounds->supply(kRare, 1, clipOf(0.3F)).has_value());
+    const float kCentre = 1.0F / std::sqrt(2.0F);
+    RAWFRAME_EXPECT(sounds->play(kRare).has_value());
+    RAWFRAME_EXPECT(std::abs(heard(*mixer).first - (0.1F * kCentre)) < 1e-5F);
+    RAWFRAME_EXPECT(sounds->play(kRare).has_value());
+    RAWFRAME_EXPECT(std::abs(heard(*mixer).first - (0.4F * kCentre)) < 1e-5F);
+    RAWFRAME_EXPECT(sounds->takeWanted().empty() && sounds->statistics().notLoaded == 4);
 }

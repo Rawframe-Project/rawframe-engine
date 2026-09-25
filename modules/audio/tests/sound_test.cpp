@@ -125,6 +125,14 @@ RAWFRAME_TEST(ASoundDeclarationReads) {
         "\"stream\"\n}\n",
         layout());
     RAWFRAME_EXPECT(kMusic.has_value() && kMusic->loop && !kMusic->loopStart && kMusic->loading == Loading::Stream);
+    // A rare sound read when first played, loop points and all.
+    const auto kRare = readSound(
+        "{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      \"resource\": "
+        "\"000000000000000000000000000000c5\"\n    }\n  ],\n  \"loop\": {\n    \"start\": 0.5,\n    \"end\": 1\n  },\n "
+        " \"bus\": "
+        "\"0000000000000001\",\n  \"loading\": \"on_demand\"\n}\n",
+        layout());
+    RAWFRAME_EXPECT(kRare.has_value() && kRare->loopStart == 0.5F && kRare->loading == Loading::OnDemand);
 }
 
 RAWFRAME_TEST(EverySoundRuleIsRefusedAtItsField) {
@@ -152,7 +160,6 @@ RAWFRAME_TEST(EverySoundRuleIsRefusedAtItsField) {
         {"\"00000000000000a2\"", "\"00000000000000a3\"", DocumentError::Invalid, "$.bus"},
         {"\"concurrency\": \"steps\"", "\"concurrency\": \"shots\"", DocumentError::Invalid, "$.concurrency"},
         {"\"priority\": 5", "\"priority\": 5000", DocumentError::Invalid, "$.priority"},
-        {"\"priority\": 5,", "\"priority\": 5,\n  \"loading\": \"on_demand\",", DocumentError::Invalid, "$.loading"},
         // A stream loops whole, and this sound has loop points.
         {"\"priority\": 5,", "\"priority\": 5,\n  \"loading\": \"stream\",", DocumentError::Invalid, "$.loading"},
         {"\"priority\": 5,", "\"priority\": 5,\n  \"loading\": \"tape\",", DocumentError::Invalid, "$.loading"},

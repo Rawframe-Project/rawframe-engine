@@ -51,7 +51,8 @@ enum class InstanceState : std::uint8_t {
 
 /// A declaration with its variants, in their order: decoded clips for a
 /// preloaded sound, cooked Opus for a streamed one, as whoever read its
-/// resources made them.
+/// resources made them. An on-demand sound's clips may be null until
+/// supplied.
 struct LoadedSound {
     SoundDeclaration declaration;
     std::vector<std::shared_ptr<const Clip>> clips;
@@ -78,6 +79,8 @@ struct SoundsStatistics {
     std::uint64_t revived = 0;
     /// Instances stopped for being out of range, without virtualization.
     std::uint64_t culled = 0;
+    /// Plays of an on-demand sound before its variants were all in.
+    std::uint64_t notLoaded = 0;
 };
 
 class Sounds {
@@ -94,9 +97,18 @@ public:
     /// past a clip's end, and a streamed sound without a streamer.
     [[nodiscard]] result::Result<std::size_t> add(LoadedSound sound);
 
+    /// Supplies variant `variant` of on-demand sound `sound`, refused as
+    /// `add` refuses a clip, and for a sound that is not on demand.
+    [[nodiscard]] result::Status supply(std::size_t sound, std::size_t variant, std::shared_ptr<const Clip> clip);
+    /// The on-demand sounds played since last asked while their variants
+    /// were not all in, each named once ever: whoever reads them supplies
+    /// them.
+    [[nodiscard]] std::vector<std::size_t> takeWanted();
+
     /// Plays sound `sound`, at `at` if it is spatial. Refuses a play its
-    /// full concurrency set turns away, and one without a voice that may
-    /// not go virtual.
+    /// full concurrency set turns away, one without a voice that may not go
+    /// virtual, and one of an on-demand sound before its variants are all
+    /// in (`NotLoaded`).
     [[nodiscard]] result::Result<Instance> play(std::size_t sound, std::optional<Position> at = std::nullopt);
     void stop(Instance instance, float fade = 0);
     void move(Instance instance, Position at);

@@ -30,6 +30,8 @@ enum class AudioError : std::uint32_t {
     /// An effect parameter write to no such bus, effect, band, or
     /// parameter, or outside its range.
     BadParameter = 8,
+    /// A play of an on-demand sound whose variants are not all in yet.
+    NotLoaded = 9,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(AudioError error) noexcept {

@@ -47,11 +47,12 @@ enum class Virtualization : std::uint8_t {
 };
 
 /// How a sound's variants are held (SPEC-0036's loading policy): decoded
-/// whole when the sound loads, or kept cooked and decoded as they play.
-/// `on_demand` waits for asset residency.
+/// whole when the sound loads, kept cooked and decoded as they play, or
+/// decoded whole when the sound is first played, which it misses.
 enum class Loading : std::uint8_t {
     Preload,
-    Stream
+    Stream,
+    OnDemand
 };
 
 /// What becomes of a playing sound whose owner goes away.

@@ -57,6 +57,11 @@ struct Sounds::State {
     /// Per sound: the next variant in sequence, and the last one picked.
     std::vector<std::size_t> nextVariant;
     std::vector<std::optional<std::size_t>> lastVariant;
+    /// Per on-demand sound: whether its variants are all in, and whether it
+    /// was ever named wanted; the ones named since last taken.
+    std::vector<bool> complete;
+    std::vector<bool> asked;
+    std::vector<std::size_t> wanted;
     std::vector<Live> instances;
     std::uint64_t serial = 0;
     std::optional<Listener> listener;
@@ -96,6 +101,20 @@ struct Sounds::State {
         }
         lastVariant[sound] = picked;
         return picked;
+    }
+
+    /// A clip's length in frames and its rate, or why it cannot be one of
+    /// the declaration's variants.
+    static result::Result<std::pair<std::uint64_t, std::uint32_t>> lengthOf(const SoundDeclaration& declaration,
+                                                                            const Clip* clip) {
+        const double kLength =
+            clip == nullptr || clip->rate == 0 ? 0 : static_cast<double>(clip->frames()) / clip->rate;
+        if (kLength == 0 || (declaration.loopEnd && *declaration.loopEnd > kLength)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AudioError::BadPlay,
+                          "a loop ends past a variant's end, or a variant is empty");
+        }
+        return std::pair<std::uint64_t, std::uint32_t>{clip->frames(), clip->rate};
     }
 
     float draw(float minimum, float maximum) noexcept {
@@ -294,7 +313,9 @@ result::Result<std::size_t> Sounds::add(LoadedSound sound) {
     if (kStreamed && state_->settings.streamer == nullptr) {
         return refuse(result::ErrorClass::FailedPrecondition, AudioError::BadPlay, "a streamed sound needs a streamer");
     }
+    const bool kOnDemand = declaration.loading == Loading::OnDemand;
     std::vector<std::pair<std::uint64_t, std::uint32_t>> lengths;
+    bool complete = true;
     for (std::size_t variant = 0; variant < kHeld; ++variant) {
         if (kStreamed) {
             auto stream = Stream::open(sound.cooked[variant]);
@@ -304,21 +325,42 @@ result::Result<std::size_t> Sounds::add(LoadedSound sound) {
             lengths.emplace_back((*stream)->frames(), (*stream)->rate());
             continue;
         }
-        const std::shared_ptr<const Clip>& clip = sound.clips[variant];
-        const double kLength =
-            clip == nullptr || clip->rate == 0 ? 0 : static_cast<double>(clip->frames()) / clip->rate;
-        if (kLength == 0 || (declaration.loopEnd && *declaration.loopEnd > kLength)) {
-            return refuse(result::ErrorClass::InvalidArgument,
-                          AudioError::BadPlay,
-                          "a loop ends past a variant's end, or a variant is empty");
+        if (kOnDemand && sound.clips[variant] == nullptr) {
+            lengths.emplace_back(0, 0);
+            complete = false;
+            continue;
         }
-        lengths.emplace_back(clip->frames(), clip->rate);
+        RAWFRAME_TRY_ASSIGN(auto length, State::lengthOf(declaration, sound.clips[variant].get()));
+        lengths.push_back(length);
     }
     state_->sounds.push_back(std::move(sound));
     state_->lengths.push_back(std::move(lengths));
     state_->nextVariant.push_back(0);
     state_->lastVariant.emplace_back();
+    state_->complete.push_back(complete);
+    state_->asked.push_back(false);
     return state_->sounds.size() - 1;
+}
+
+result::Status Sounds::supply(std::size_t sound, std::size_t variant, std::shared_ptr<const Clip> clip) {
+    State& state = *state_;
+    if (sound >= state.sounds.size() || state.sounds[sound].declaration.loading != Loading::OnDemand ||
+        variant >= state.sounds[sound].clips.size()) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      AudioError::BadPlay,
+                      "only an on-demand sound's own variants are supplied");
+    }
+    LoadedSound& loaded = state.sounds[sound];
+    RAWFRAME_TRY_ASSIGN(state.lengths[sound][variant], State::lengthOf(loaded.declaration, clip.get()));
+    loaded.clips[variant] = std::move(clip);
+    state.complete[sound] = std::ranges::none_of(loaded.clips, [](const auto& each) {
+        return each == nullptr;
+    });
+    return {};
+}
+
+std::vector<std::size_t> Sounds::takeWanted() {
+    return std::exchange(state_->wanted, {});
 }
 
 result::Result<Instance> Sounds::play(std::size_t sound, std::optional<Position> at) {
@@ -327,6 +369,16 @@ result::Result<Instance> Sounds::play(std::size_t sound, std::optional<Position>
         return refuse(result::ErrorClass::NotFound, AudioError::BadPlay, "no such sound");
     }
     const SoundDeclaration& declaration = state.sounds[sound].declaration;
+    if (!state.complete[sound]) {
+        if (!state.asked[sound]) {
+            state.asked[sound] = true;
+            state.wanted.push_back(sound);
+        }
+        ++state.statistics.notLoaded;
+        return refuse(result::ErrorClass::Unavailable,
+                      AudioError::NotLoaded,
+                      "the on-demand sound's variants are not all in yet");
+    }
     if (declaration.concurrency && !state.makeRoom(*declaration.concurrency, sound, at)) {
         ++state.statistics.refusedByConcurrency;
         return refuse(result::ErrorClass::ResourceExhausted,
