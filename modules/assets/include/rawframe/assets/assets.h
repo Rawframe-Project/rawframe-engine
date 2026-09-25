@@ -3,8 +3,9 @@
 // Decoded assets (ADR-0025, SPEC-0027): requests for a resource that
 // coalesce into one load, readiness answered per requester, decoded forms
 // held while anyone is interested and evicted in a deterministic order when
-// a budget needs the room, and generation-checked handles that fail typed
-// once what they named is gone. One asset family per set; the family
+// a budget needs the room, generation-checked handles that fail typed once
+// what they named is gone, and content replaced in four phases when the
+// store publishes a new catalog. One asset family per set; the family
 // decodes, this module owns the lifecycle.
 
 #include "rawframe/content/store.h"
@@ -92,6 +93,27 @@ struct AssetStatistics {
     std::size_t loading = 0;
     std::size_t resident = 0;
     std::size_t evictable = 0;
+    /// Old revisions a consumer still holds, charged until let go.
+    std::size_t retiring = 0;
+    std::uint64_t reloads = 0;
+    std::uint64_t reloadFailures = 0;
+};
+
+enum class ReloadOutcome : std::uint8_t {
+    /// The new revision replaced the old for every requester.
+    Published,
+    /// The new revision could not be made; the old one stays.
+    Failed
+};
+
+/// SPEC-0027's reload record: `reload_published` or the reload failure.
+struct ReloadEvent {
+    ReloadOutcome outcome = ReloadOutcome::Published;
+    content::ResourceId id;
+    content::ContentDigest oldRevision;
+    /// Empty when the new catalog no longer holds the resource.
+    content::ContentDigest newRevision;
+    std::optional<result::Error> failure;
 };
 
 /// A resource still wanted when its set closed (SPEC-0027 survivor record).
@@ -146,8 +168,17 @@ public:
 
     /// At a schedule point on the owner's thread: takes finished reads to
     /// decoding and finished decodes to residency, fails requests past their
-    /// deadlines, and evicts in order while over budget.
+    /// deadlines, and evicts in order while over budget. When the store has
+    /// published a new catalog, replaces what changed in SPEC-0027's four
+    /// phases: candidates built beside the live forms, which stay
+    /// authoritative; every candidate settled; one publication moving every
+    /// requester to its new revision; old forms retiring, their handles
+    /// failing `RevisionRetired` and their bytes charged until no consumer
+    /// holds them. A catalog replaced again mid-reload starts over.
     void update(std::uint64_t tick);
+
+    /// The reload records since last taken, in the order they happened.
+    [[nodiscard]] std::vector<ReloadEvent> takeReloadEvents();
 
     [[nodiscard]] Residency residency(AssetHandle handle) const noexcept;
     [[nodiscard]] AssetStatistics statistics() const noexcept;

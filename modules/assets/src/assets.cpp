@@ -35,6 +35,11 @@ struct Entry {
     mutable std::uint64_t lastUse = 0;
     /// Why handles to this slot's earlier uses are stale.
     AssetError stale = AssetError::Evicted;
+    /// A reload's candidate for the live entry at `replaces` in its use
+    /// `replacesGeneration`: held apart from interest until publication.
+    bool candidate = false;
+    std::uint32_t replaces = 0;
+    std::uint32_t replacesGeneration = 0;
 };
 
 struct Requester {
@@ -70,6 +75,9 @@ struct AssetSet::State {
     AssetStatistics statistics;
     bool closed = false;
     result::Result<execution::OperationScope> operations;
+    /// The catalog generation what is live was reconciled against.
+    std::uint64_t reconciled = 0;
+    std::vector<ReloadEvent> events;
 
     [[nodiscard]] const Requester* requesterOf(RequesterId id) const noexcept {
         if (id.slot >= requesters.size()) {
@@ -85,9 +93,11 @@ struct AssetSet::State {
 
     /// Frees a slot for another use; handles to this one fail with `why`.
     void retire(Entry& entry, AssetError why) noexcept {
-        if (entry.residency == Residency::Resident || entry.residency == Residency::Evictable) {
+        if (entry.residency == Residency::Resident || entry.residency == Residency::Evictable ||
+            entry.residency == Residency::Retiring) {
             statistics.residentBytes -= entry.form.bytes;
         }
+        entry.candidate = false;
         entry.residency = Residency::Absent;
         entry.form = {};
         entry.reading.reset();
@@ -110,8 +120,9 @@ struct AssetSet::State {
                 entry.residency = Residency::Evictable;
             }
             // A failed load no one wants is forgotten with its failure; one
-            // still loading finishes and is discarded (update).
-            if (entry.residency == Residency::Absent && entry.failure.has_value()) {
+            // still loading finishes and is discarded (update). A reload's
+            // candidate waits for its publication either way.
+            if (entry.residency == Residency::Absent && entry.failure.has_value() && !entry.candidate) {
                 retire(entry, AssetError::Evicted);
             }
         }
@@ -145,20 +156,8 @@ struct AssetSet::State {
         if (found != entries.end()) {
             ++statistics.coalesced;
         } else {
-            found = std::ranges::find(entries, false, &Entry::used);
-            if (found == entries.end()) {
-                return refuse(AssetError::LimitExceeded, result::ErrorClass::ResourceExhausted, "every asset in use");
-            }
-            RAWFRAME_TRY_ASSIGN(
-                execution::AsyncHandle<content::VerifiedContent> reading,
-                store->read(content::PinnedResourceRef{.resource = {.id = descriptor.id, .type = descriptor.type},
-                                                       .digest = descriptor.digest}));
-            found->used = true;
-            found->id = descriptor.id;
-            found->revision = descriptor.digest;
-            found->residency = Residency::Loading;
-            found->reading.emplace(std::move(reading));
-            ++statistics.loads;
+            RAWFRAME_TRY_ASSIGN(Entry * started, startLoad(descriptor));
+            found = entries.begin() + (started - entries.data());
         }
         Entry& entry = *found;
         ++entry.interest;
@@ -175,6 +174,150 @@ struct AssetSet::State {
         requester.failure.reset();
         return RequesterId{.slot = static_cast<std::uint32_t>(kFreeRequester - requesters.begin()),
                            .generation = requester.generation};
+    }
+
+    /// Starts reading `descriptor` into a free slot.
+    result::Result<Entry*> startLoad(const content::ContentDescriptor& descriptor) {
+        const auto kFree = std::ranges::find(entries, false, &Entry::used);
+        if (kFree == entries.end()) {
+            return refuse(AssetError::LimitExceeded, result::ErrorClass::ResourceExhausted, "every asset in use");
+        }
+        RAWFRAME_TRY_ASSIGN(
+            execution::AsyncHandle<content::VerifiedContent> reading,
+            store->read(content::PinnedResourceRef{.resource = {.id = descriptor.id, .type = descriptor.type},
+                                                   .digest = descriptor.digest}));
+        kFree->used = true;
+        kFree->id = descriptor.id;
+        kFree->revision = descriptor.digest;
+        kFree->residency = Residency::Loading;
+        kFree->reading.emplace(std::move(reading));
+        ++statistics.loads;
+        return &*kFree;
+    }
+
+    void failed(const Entry& live, content::ContentDigest newRevision, result::Error why) {
+        events.push_back(ReloadEvent{.outcome = ReloadOutcome::Failed,
+                                     .id = live.id,
+                                     .oldRevision = live.revision,
+                                     .newRevision = newRevision,
+                                     .failure = std::move(why)});
+        ++statistics.reloadFailures;
+    }
+
+    /// Phase one against `catalog`: a candidate for every live entry whose
+    /// resource changed and that someone wants; a changed form no one wants
+    /// retires at once. Candidates of an earlier reload are abandoned.
+    void beginReload(const content::ContentCatalog& catalog) {
+        reconciled = catalog.generation();
+        for (Entry& entry : entries) {
+            if (entry.used && entry.candidate) {
+                entry.candidate = false;
+                if (entry.interest == 0 && entry.residency != Residency::Loading) {
+                    retire(entry, AssetError::RevisionRetired);
+                }
+            }
+        }
+        for (std::size_t slot = 0; slot < entries.size(); ++slot) {
+            Entry& live = entries[slot];
+            if (!live.used || live.candidate || live.residency == Residency::Retiring) {
+                continue;
+            }
+            auto resolved = catalog.resolve(content::ResourceRef{.id = live.id, .type = settings.type});
+            if (!resolved.has_value()) {
+                if (live.interest > 0) {
+                    failed(live, {}, std::move(resolved).error());
+                }
+                continue;
+            }
+            const content::ContentDescriptor& descriptor = **resolved;
+            if (content::sameDigest(descriptor.digest, live.revision)) {
+                continue;
+            }
+            if (live.interest == 0) {
+                if (live.residency == Residency::Evictable) {
+                    retire(live, AssetError::RevisionRetired);
+                }
+                continue;
+            }
+            // A load of the new revision someone already asked for is the
+            // candidate; otherwise one starts.
+            Entry* made = nullptr;
+            for (Entry& other : entries) {
+                if (other.used && !other.candidate && other.residency != Residency::Retiring && other.id == live.id &&
+                    content::sameDigest(other.revision, descriptor.digest)) {
+                    made = &other;
+                }
+            }
+            if (made == nullptr) {
+                auto started = startLoad(descriptor);
+                if (!started.has_value()) {
+                    failed(live, descriptor.digest, std::move(started).error());
+                    continue;
+                }
+                made = *started;
+            }
+            made->candidate = true;
+            made->replaces = static_cast<std::uint32_t>(slot);
+            made->replacesGeneration = live.generation;
+        }
+    }
+
+    /// Phases three and four, once no candidate is still loading: each
+    /// candidate that failed leaves its live entry as it was; each that
+    /// succeeded takes over its live entry's requesters, and the live
+    /// entry's form retires.
+    void publishReload() {
+        const bool kSettled = std::ranges::none_of(entries, [](const Entry& entry) {
+            return entry.used && entry.candidate && entry.residency == Residency::Loading;
+        });
+        if (!kSettled) {
+            return;
+        }
+        for (std::size_t slot = 0; slot < entries.size(); ++slot) {
+            Entry& made = entries[slot];
+            if (!made.used || !made.candidate) {
+                continue;
+            }
+            made.candidate = false;
+            Entry& live = entries[made.replaces];
+            const bool kLive = live.used && live.generation == made.replacesGeneration;
+            if (made.failure.has_value()) {
+                if (kLive) {
+                    failed(live, made.revision, made.failure->clone());
+                }
+                if (made.interest == 0) {
+                    retire(made, AssetError::RevisionRetired);
+                }
+                continue;
+            }
+            if (kLive) {
+                for (Requester& requester : requesters) {
+                    if (requester.used && requester.entry == made.replaces &&
+                        requester.entryGeneration == live.generation) {
+                        requester.entry = static_cast<std::uint32_t>(slot);
+                        requester.entryGeneration = made.generation;
+                    }
+                }
+                made.interest += live.interest;
+                events.push_back(ReloadEvent{.outcome = ReloadOutcome::Published,
+                                             .id = made.id,
+                                             .oldRevision = live.revision,
+                                             .newRevision = made.revision,
+                                             .failure = std::nullopt});
+                ++statistics.reloads;
+                // Handles to the old form fail from now; its bytes stay
+                // charged while a consumer still holds it.
+                live.interest = 0;
+                if (live.residency == Residency::Resident || live.residency == Residency::Evictable) {
+                    ++live.generation;
+                    live.stale = AssetError::RevisionRetired;
+                    live.residency = Residency::Retiring;
+                } else {
+                    retire(live, AssetError::RevisionRetired);
+                }
+            }
+            made.residency = made.interest == 0 ? Residency::Evictable : Residency::Resident;
+        }
     }
 
     /// A decoded form, charged to the budget after evicting what must go;
@@ -220,6 +363,9 @@ result::Result<std::unique_ptr<AssetSet>> AssetSet::create(content::ContentStore
     auto state = std::make_unique<State>(store, cpu, owner, parent, clock, settings);
     if (!state->operations.has_value()) {
         return std::unexpected<result::Error>{std::move(state->operations).error()};
+    }
+    if (const auto kCatalog = store.catalog()) {
+        state->reconciled = kCatalog->generation();
     }
     return std::unique_ptr<AssetSet>{new AssetSet{std::move(state)}};
 }
@@ -325,14 +471,23 @@ void AssetSet::update(std::uint64_t tick) {
     if (state.closed) {
         return;
     }
+    if (const auto kCatalog = state.store->catalog();
+        kCatalog != nullptr && kCatalog->generation() != state.reconciled) {
+        state.beginReload(*kCatalog);
+    }
     for (Entry& entry : state.entries) {
+        // An old revision retires once no consumer holds its form.
+        if (entry.used && entry.residency == Residency::Retiring && entry.form.value.use_count() <= 1) {
+            state.retire(entry, AssetError::RevisionRetired);
+            continue;
+        }
         if (!entry.used || entry.residency != Residency::Loading) {
             continue;
         }
         if (entry.reading.has_value() && entry.reading->ready()) {
             auto outcome = *entry.reading->take();
             entry.reading.reset();
-            if (entry.interest == 0 || outcome.isCancelled()) {
+            if ((entry.interest == 0 && !entry.candidate) || outcome.isCancelled()) {
                 state.retire(entry, AssetError::Evicted);
                 continue;
             }
@@ -368,7 +523,7 @@ void AssetSet::update(std::uint64_t tick) {
         if (entry.decoding.has_value() && entry.decoding->ready()) {
             auto outcome = *entry.decoding->take();
             entry.decoding.reset();
-            if (entry.interest == 0 || outcome.isCancelled()) {
+            if ((entry.interest == 0 && !entry.candidate) || outcome.isCancelled()) {
                 state.retire(entry, AssetError::Evicted);
                 continue;
             }
@@ -381,6 +536,7 @@ void AssetSet::update(std::uint64_t tick) {
             state.publish(entry, std::move(*outcome));
         }
     }
+    state.publishReload();
     // Requests past their deadlines fail on their own; the load goes on for
     // anyone else.
     const execution::MonotonicInstant kNow = state.clock->now();
@@ -411,8 +567,13 @@ AssetStatistics AssetSet::statistics() const noexcept {
         statistics.loading += entry.used && entry.residency == Residency::Loading ? 1 : 0;
         statistics.resident += entry.used && entry.residency == Residency::Resident ? 1 : 0;
         statistics.evictable += entry.used && entry.residency == Residency::Evictable ? 1 : 0;
+        statistics.retiring += entry.used && entry.residency == Residency::Retiring ? 1 : 0;
     }
     return statistics;
+}
+
+std::vector<ReloadEvent> AssetSet::takeReloadEvents() {
+    return std::exchange(state_->events, {});
 }
 
 std::vector<Survivor> AssetSet::close() {
