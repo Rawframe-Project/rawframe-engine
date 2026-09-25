@@ -15,12 +15,13 @@ namespace rawframe::game_content {
 ///                          objects it names
 ///   content.reload_every   every this many Host iterations, publish a
 ///                          changed manifest as the next catalog (0: never)
-///   content.build          a Build instead (SPEC-0021): its directory
-///   content.build_root     the Build's root hash, `sha256:` and 64 hex;
-///                          a Build of any other identity is refused
-///   content.build_keys     its publisher's key set (SPEC-0023), pinned:
-///                          an unsigned Build, or one signed by a key it
-///                          does not list or lists revoked, is refused
+///   content.composition    a Composition instead (SPEC-0021): its
+///                          CompositionRecord's file
+///   content.library        where its Builds are, `builds/<root>/`, and its
+///                          publishers' key sets, `keys/<publisher>.keys`,
+///                          pinned there: a Build unsigned, signed by a key
+///                          its publisher's set does not list or lists
+///                          revoked, or not the one named, is refused
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::Runtime);

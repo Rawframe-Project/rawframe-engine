@@ -2,8 +2,9 @@
 // process admits, a family's admission publishes the next generation, a
 // changed manifest is published and one that does not read is refused with
 // the running catalog kept, and a process without content refuses
-// admission.
+// admission. A CompositionRecord is its canonical record and nothing else.
 
+#include "rawframe/content/composition_record.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/game_content/cooked_content.h"
@@ -169,4 +170,63 @@ RAWFRAME_TEST(AProcessWithoutContentRefusesAdmission) {
     RAWFRAME_EXPECT(!kAdmitted.has_value() &&
                     kAdmitted.error().code() == code(content::ContentError::SourceUnavailable));
     RAWFRAME_EXPECT((*opened)->store().catalog() == nullptr && !*(*opened)->refresh());
+}
+
+RAWFRAME_TEST(ACompositionRecordIsItsCanonicalRecord) {
+    base::Sha256Digest root{};
+    root.fill(std::byte{0xab});
+    content::CompositionRecord record{.game = {.subject = "rawframe/runners", .version = "0.1.0", .build = root},
+                                      .mods = {},
+                                      .packages = {{.subject = "rawframe/sounds", .version = "1.0.0", .build = root},
+                                                   {.subject = "someone/ui", .version = "2.0.0-rc.1", .build = root}},
+                                      .profile = "community",
+                                      .createdAt = 1'790'000'000};
+    const auto kText = content::writeComposition(record);
+    RAWFRAME_EXPECT(kText.has_value());
+    if (!kText.has_value()) {
+        return;
+    }
+    const auto kRead = content::readComposition(*kText);
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->game.subject == "rawframe/runners" && kRead->game.build == root &&
+                    kRead->packages.size() == 2 && kRead->profile == "community");
+    // The identity is the digest of the exact bytes.
+    RAWFRAME_EXPECT(content::compositionIdOf(*kText) == base::sha256(*kText));
+
+    // Refused: packages out of subject order, a subject twice, a version
+    // outside Semantic Versioning, a subject outside its grammar, a profile
+    // too long, and a member added.
+    const auto kRefused = [](content::CompositionRecord changed) {
+        return !content::writeComposition(changed).has_value();
+    };
+    content::CompositionRecord swapped = record;
+    std::swap(swapped.packages[0], swapped.packages[1]);
+    RAWFRAME_EXPECT(kRefused(swapped));
+    content::CompositionRecord twice = record;
+    twice.packages[1].subject = twice.packages[0].subject;
+    RAWFRAME_EXPECT(kRefused(twice));
+    content::CompositionRecord version = record;
+    version.game.version = "1.0";
+    RAWFRAME_EXPECT(kRefused(version));
+    content::CompositionRecord subject = record;
+    subject.game.subject = "runners";
+    RAWFRAME_EXPECT(kRefused(subject));
+    content::CompositionRecord profile = record;
+    profile.profile = std::string(65, 'a');
+    RAWFRAME_EXPECT(kRefused(profile));
+    std::string added = *kText;
+    added.insert(1, "\"extra\":1,");
+    RAWFRAME_EXPECT(!content::readComposition(added).has_value());
+    // A record of mods opens nothing yet: mod policy does not exist.
+    content::CompositionRecord modded = record;
+    modded.mods = {{.subject = "fan/hats", .version = "1.0.0", .build = root}};
+    const auto kModded = content::writeComposition(modded);
+    RAWFRAME_EXPECT(kModded.has_value());
+    execution::ManualClock clock;
+    execution::CancellationScope scope{clock};
+    execution::Executor io{execution::ExecutorSettings{.kind = execution::ExecutorKind::BlockingIo, .workers = 1}};
+    RAWFRAME_EXPECT(io.admitOwner(execution::OwnerId{1}, {.maximumPendingTasks = 8}).has_value());
+    RAWFRAME_EXPECT(
+        !CookedContent::openComposition(io, execution::OwnerId{1}, scope, clock, kModded.value_or(""), "/nowhere")
+             .has_value());
+    io.stop();
 }

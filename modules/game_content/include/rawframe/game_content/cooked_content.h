@@ -2,7 +2,7 @@
 
 // A game's cooked content as a process's content: a cook's output directory,
 // its `content.manifest` read into catalogs that hold what the process
-// admits, or a Build (SPEC-0021) named by its root hash, read in its
+// admits, or a Composition (SPEC-0021) whose Builds are read in their
 // verification order.
 
 #include "rawframe/execution/cancellation.h"
@@ -29,17 +29,21 @@ public:
                                                                              const execution::MonotonicSource& clock,
                                                                              std::optional<std::filesystem::path> root);
 
-    /// The Build at `build` whose root hash is `root`, signed by a key of
-    /// `publisher`; refused as `ContentSource::build` refuses. A Build never
-    /// changes, so `refresh` finds nothing to publish.
+    /// The Composition whose canonical record is `record` (SPEC-0021): its
+    /// Game Build and Packages, each read from `library/builds/<root>/` (the
+    /// root's 64 hexadecimal digits) and verified against its publisher's
+    /// key set `library/keys/<publisher>.keys`, pinned there, and each the
+    /// subject and version the record names (`ManifestInvalid`). A resource
+    /// two of them hold is refused as a catalog refuses it. Mods are refused
+    /// until mod policy exists. Builds never change, so `refresh` finds
+    /// nothing to publish.
     [[nodiscard]] static result::Result<std::unique_ptr<CookedContent>>
-    openBuild(execution::Executor& blockingIo,
-              execution::OwnerId owner,
-              execution::CancellationScope& parent,
-              const execution::MonotonicSource& clock,
-              const std::filesystem::path& build,
-              const base::Sha256Digest& root,
-              const signature::PublisherKeySet& publisher);
+    openComposition(execution::Executor& blockingIo,
+                    execution::OwnerId owner,
+                    execution::CancellationScope& parent,
+                    const execution::MonotonicSource& clock,
+                    std::string_view record,
+                    const std::filesystem::path& library);
 
     [[nodiscard]] content::ContentStore& store() noexcept override;
     [[nodiscard]] result::Status admit(std::span<const content::AdmittedRepresentation> representations) override;
@@ -52,11 +56,14 @@ public:
     /// The generation of the catalog last published; 0 before any.
     [[nodiscard]] std::uint64_t generation() const noexcept;
 
+    /// The CompositionId of the Composition this content is, if it is one.
+    [[nodiscard]] const std::optional<base::Sha256Digest>& compositionId() const noexcept;
+
 private:
     CookedContent() = default;
-    /// The manifest's entries of admitted representations, published as
-    /// the next catalog.
-    result::Status publish(const std::vector<content::ManifestEntry>& entries);
+    /// Each source's entries of admitted representations, published as the
+    /// next catalog.
+    result::Status publish(const std::vector<std::vector<content::ManifestEntry>>& manifests);
 
     std::unique_ptr<content::ContentStore> store_;
     /// The cook's output to watch; none for a Build.
@@ -64,7 +71,9 @@ private:
     /// Whether there is content at all to admit into catalogs.
     bool held_ = false;
     std::string manifestText_;
-    std::vector<content::ManifestEntry> entries_;
+    /// Each source's manifest entries, by source index.
+    std::vector<std::vector<content::ManifestEntry>> manifests_;
+    std::optional<base::Sha256Digest> compositionId_;
     std::vector<content::AdmittedRepresentation> admitted_;
     std::uint64_t generation_ = 0;
 };

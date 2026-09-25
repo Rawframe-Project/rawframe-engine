@@ -14,6 +14,7 @@ namespace {
 
 constexpr diagnostics::EventIdentity kReloaded{"content", "content_reloaded"};
 constexpr diagnostics::EventIdentity kRefused{"content", "content_reload_refused"};
+constexpr diagnostics::EventIdentity kOpened{"content", "composition_opened"};
 constexpr std::string_view kProvided[] = {kGameContent.name};
 
 /// Holds the game's cooked content for the Runtime and, when asked to,
@@ -34,33 +35,27 @@ public:
                                                                "cooked content is read on the blocking-I/O executor")
                                                       .error()};
         }
-        // A Build, named by its root hash, or a cook's output, or nothing.
-        if (const auto kBuild = configuration.text("content.build")) {
-            const auto kRoot = configuration.text("content.build_root");
-            const auto kKeys = configuration.text("content.build_keys");
-            const auto kDigest = kRoot.has_value() ? content::ContentDigest::parse(*kRoot) : std::nullopt;
-            if (root.has_value() || !kDigest.has_value() || !kKeys.has_value()) {
+        // A Composition, or a cook's output, or nothing.
+        if (const auto kComposition = configuration.text("content.composition")) {
+            const auto kLibrary = configuration.text("content.library");
+            if (root.has_value() || !kLibrary.has_value()) {
                 return std::unexpected<result::Error>{
                     result::fail(result::ErrorClass::InvalidArgument,
                                  content::kContentDomain,
                                  code(content::ContentError::SourceUnavailable),
-                                 "a Build is named by content.build, its root hash content.build_root, and its "
-                                 "publisher's key set content.build_keys, without content.root")
+                                 "a Composition is named by content.composition and read from content.library, "
+                                 "without content.root")
                         .error()};
             }
-            // The publisher's key set, pinned by this configuration as a
-            // standalone export pins its key material (SPEC-0023).
-            std::ifstream file{std::string{*kKeys}, std::ios::binary};
-            const std::string kKeysText{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
-            RAWFRAME_TRY_ASSIGN(const signature::PublisherKeySet kPublisher, signature::readPublisherKeySet(kKeysText));
+            std::ifstream file{std::string{*kComposition}, std::ios::binary};
+            const std::string kRecord{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
             RAWFRAME_TRY_ASSIGN(content_,
-                                CookedContent::openBuild(*context.blockingIoExecutor(),
-                                                         context.owner(),
-                                                         context.scope(),
-                                                         context.clock(),
-                                                         std::filesystem::path{std::string{*kBuild}},
-                                                         kDigest->bytes,
-                                                         kPublisher));
+                                CookedContent::openComposition(*context.blockingIoExecutor(),
+                                                               context.owner(),
+                                                               context.scope(),
+                                                               context.clock(),
+                                                               kRecord,
+                                                               std::filesystem::path{std::string{*kLibrary}}));
             return {};
         }
         RAWFRAME_TRY_ASSIGN(
@@ -72,6 +67,12 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        if (const auto& kId = content_->compositionId()) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kOpened,
+                         "the Runtime's content is a Composition",
+                         {diagnostics::field("composition", content::ContentDigest{.bytes = *kId}.text())});
+        }
         return {};
     }
 
