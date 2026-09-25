@@ -61,14 +61,14 @@ std::string base64(std::span<const std::byte> bytes) {
 /// An arm: an armature node, turned a quarter about y and scaled by two, over
 /// a two-joint skin, the shoulder and the elbow a meter out along x from it.
 /// One animation raises the shoulder a meter and moves it a meter along x
-/// over a second (the key at the
-/// end repeating the first, as a loop does), turns the elbow a quarter
+/// over a second (the key at the end repeating the first, as a loop does,
+/// or `stride` meters on along x for a walk), turns the elbow a quarter
 /// about z, and moves the armature itself, which is no joint. Buffer: times
 /// (0, 0.5, 1), shoulder translations, elbow rotations (x, y, z, w).
-std::string arm(std::string_view skins = "", std::string_view required = "") {
+std::string arm(std::string_view skins = "", std::string_view required = "", float stride = 0.0F) {
     std::vector<std::byte> buffer;
     putFloats(buffer, {0.0F, 0.5F, 1.0F});
-    putFloats(buffer, {0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F});
+    putFloats(buffer, {0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 0.0F, stride, 0.0F, 0.0F});
     const float kHalf = std::sqrt(0.5F);
     putFloats(buffer, {0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, kHalf, kHalf, 0.0F, 0.0F, 0.0F, 1.0F});
     const std::string kSkins = skins.empty() ? std::string{R"("skins": [{"joints": [2, 1]}],)"} : std::string{skins};
@@ -164,7 +164,19 @@ RAWFRAME_TEST(AnAnimationBecomesAClipInTheSkeletonsFrame) {
     // Looped, the key at the end is the start's and goes.
     const auto kLooped = imported(arm(), true);
     RAWFRAME_EXPECT(kLooped.has_value() && kLooped->clips[0].clip.loop == animation::Loop::Loop &&
-                    kLooped->clips[0].clip.tracks[0].keys.size() == 2);
+                    kLooped->clips[0].clip.tracks[0].keys.size() == 2 &&
+                    !kLooped->clips[0].clip.tracks[0].drift.has_value());
+    // A root that ends a meter on drifts that meter a period, in the
+    // skeleton's frame: two back along -z.
+    const auto kWalked = imported(arm("", "", 1.0F), true);
+    RAWFRAME_EXPECT(kWalked.has_value());
+    if (kWalked.has_value()) {
+        const animation::Track& walked = kWalked->clips[0].clip.tracks[0];
+        RAWFRAME_EXPECT(walked.keys.size() == 2 && walked.drift.has_value() && near((*walked.drift)[0], 0.0) &&
+                        near((*walked.drift)[1], 0.0) && near((*walked.drift)[2], -2.0));
+        RAWFRAME_EXPECT(!kWalked->clips[0].clip.tracks[1].drift.has_value());
+        RAWFRAME_EXPECT(animation::writeClip(kWalked->clips[0].clip).has_value());
+    }
 }
 
 RAWFRAME_TEST(RigsASkeletonCannotHoldAreRefused) {

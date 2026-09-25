@@ -415,12 +415,28 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
             track.keys.front().time = 0.0;
         } else if (settings.loop) {
             // A glTF loop repeats its first key at its end, where a clip
-            // that loops comes back round by itself.
+            // that loops comes back round by itself. The root's end may be
+            // somewhere else, the ground a walk cycle covers: that becomes
+            // its drift (D134).
+            const animation::Key kEnd = track.keys.back();
             std::erase_if(track.keys, [&clip](const animation::Key& key) {
                 return key.time >= clip.duration;
             });
             if (track.keys.empty()) {
                 return badSource("a looped animation channel with keys only at its end");
+            }
+            const animation::Key& first = track.keys.front();
+            if (kRoot && kEnd.time >= clip.duration && kEnd.value != first.value) {
+                if (channel == animation::Channel::Translation) {
+                    track.drift = std::array<double, 4>{kEnd.value[0] - first.value[0],
+                                                        kEnd.value[1] - first.value[1],
+                                                        kEnd.value[2] - first.value[2],
+                                                        0.0};
+                } else if (channel == animation::Channel::Rotation) {
+                    // The turn that takes the first key to the end.
+                    track.drift = normalized(
+                        multiply(kEnd.value, {-first.value[0], -first.value[1], -first.value[2], first.value[3]}));
+                }
             }
         }
         clip.tracks.push_back(std::move(track));
