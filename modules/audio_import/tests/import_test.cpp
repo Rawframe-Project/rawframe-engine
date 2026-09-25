@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <numbers>
 #include <random>
 #include <string>
 #include <vector>
@@ -57,7 +58,7 @@ std::pair<std::size_t, float> tone(const audio::Clip& clip, std::uint32_t channe
     return {crossings, peak};
 }
 
-bool badSound(const result::Result<audio::Clip>& imported) {
+template <typename Value> bool badSound(const result::Result<Value>& imported) {
     return !imported.has_value() && imported.error().code() == code(audio::AudioError::BadSound);
 }
 
@@ -150,4 +151,109 @@ RAWFRAME_TEST(DamagedSourcesNeverDecodeOutOfBounds) {
         }
     }
     std::printf("  %zu of 600 damaged sources refused\n", refused);
+}
+
+namespace {
+
+audio::Clip sineClip(std::uint32_t channels, float seconds) {
+    audio::Clip clip;
+    clip.channels = channels;
+    clip.rate = audio::kOpusRate;
+    const auto kFrames = static_cast<std::size_t>(seconds * static_cast<float>(audio::kOpusRate));
+    for (std::size_t frame = 0; frame < kFrames; ++frame) {
+        for (std::uint32_t channel = 0; channel < channels; ++channel) {
+            const float kHertz = channel == 0 ? 440.0F : 660.0F;
+            clip.samples.push_back(0.5F * std::sin(2.0F * std::numbers::pi_v<float> * kHertz *
+                                                   static_cast<float>(frame) / static_cast<float>(audio::kOpusRate)));
+        }
+    }
+    return clip;
+}
+
+/// The error's power against the original's, in decibels, frame for frame
+/// with no shift: how well the decoded clip lines up with what was cooked.
+float alignedError(const audio::Clip& original, const audio::Clip& decoded) {
+    double signal = 0;
+    double error = 0;
+    for (std::size_t index = 0; index < original.samples.size(); ++index) {
+        signal += static_cast<double>(original.samples[index]) * original.samples[index];
+        const double kDifference = static_cast<double>(decoded.samples[index]) - original.samples[index];
+        error += kDifference * kDifference;
+    }
+    return static_cast<float>(10.0 * std::log10(error / signal));
+}
+
+} // namespace
+
+RAWFRAME_TEST(OpusCooksAndDecodesInLine) {
+    for (const std::uint32_t kChannels : {1U, 2U}) {
+        const audio::Clip kOriginal = sineClip(kChannels, 0.5F);
+        const auto kCooked = cookOpus(kOriginal);
+        RAWFRAME_EXPECT(kCooked.has_value());
+        if (!kCooked.has_value()) {
+            continue;
+        }
+        // Far smaller than the samples, and the same bytes every time.
+        RAWFRAME_EXPECT(kCooked->size() < kOriginal.samples.size() * 2 / 8);
+        RAWFRAME_EXPECT(*cookOpus(kOriginal) == *kCooked);
+        const auto kDecoded = audio::decodeCooked(*kCooked);
+        RAWFRAME_EXPECT(kDecoded.has_value());
+        if (!kDecoded.has_value()) {
+            continue;
+        }
+        RAWFRAME_EXPECT(kDecoded->channels == kChannels && kDecoded->rate == audio::kOpusRate &&
+                        kDecoded->frames() == kOriginal.frames());
+        const float kError = alignedError(kOriginal, *kDecoded);
+        RAWFRAME_EXPECT(kError < -20);
+        std::printf("  %u channels: %zu bytes cooked, error %.1f dB\n", kChannels, kCooked->size(), kError);
+    }
+    // A source at another rate is not resampled into Opus.
+    const auto kMp3 = importSound(fixture("tone.mp3"));
+    RAWFRAME_EXPECT(kMp3.has_value() && badSound(cookOpus(*kMp3)));
+}
+
+RAWFRAME_TEST(CookedOpusIsRefusedWhenItLies) {
+    const std::vector<std::byte> kCooked = *cookOpus(sineClip(1, 0.1F));
+    const auto kRefused = [](std::vector<std::byte> bytes) {
+        return badSound(audio::decodeCookedOpus(bytes));
+    };
+    const auto kWith = [&kCooked](std::size_t at, std::uint8_t value) {
+        std::vector<std::byte> changed = kCooked;
+        changed[at] = std::byte{value};
+        return changed;
+    };
+    RAWFRAME_EXPECT(audio::decodeCookedOpus(kCooked).has_value());
+    RAWFRAME_EXPECT(kRefused(kWith(0, 'X')));
+    RAWFRAME_EXPECT(kRefused(kWith(4, 2)));
+    RAWFRAME_EXPECT(kRefused(kWith(5, 3)));
+    RAWFRAME_EXPECT(kRefused(kWith(5, 0)));
+    // More frames than the packets hold, and fewer packets than there are.
+    RAWFRAME_EXPECT(kRefused(kWith(10, 0x7F)));
+    RAWFRAME_EXPECT(kRefused(kWith(12, 1)));
+    // A first packet longer than Opus allows, or empty.
+    RAWFRAME_EXPECT(kRefused(kWith(17, 0x10)));
+    std::vector<std::byte> empty = kWith(16, 0);
+    empty[17] = std::byte{0};
+    RAWFRAME_EXPECT(kRefused(empty));
+    std::vector<std::byte> trailing = kCooked;
+    trailing.push_back(std::byte{0});
+    RAWFRAME_EXPECT(kRefused(trailing));
+    std::vector<std::byte> cut = kCooked;
+    cut.resize(cut.size() - 1);
+    RAWFRAME_EXPECT(kRefused(cut));
+    RAWFRAME_EXPECT(badSound(audio::decodeCookedOpus(kCooked, {.maximumFrames = 100})));
+    RAWFRAME_EXPECT(badSound(audio::decodeCookedOpus(kCooked, {.maximumBytes = 100})));
+
+    // Damaged packets decode or are refused, never out of bounds;
+    // AddressSanitizer watches this in the full check.
+    std::mt19937 random{0x0b05};
+    std::size_t refused = 0;
+    for (int round = 0; round < 500; ++round) {
+        std::vector<std::byte> damaged = kCooked;
+        for (std::uint32_t change = 0; change < 1 + (random() % 6); ++change) {
+            damaged[16 + (random() % (damaged.size() - 16))] = static_cast<std::byte>(random());
+        }
+        refused += audio::decodeCookedOpus(damaged).has_value() ? 0 : 1;
+    }
+    std::printf("  %zu of 500 damaged cooked sounds refused\n", refused);
 }

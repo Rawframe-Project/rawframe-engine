@@ -73,7 +73,7 @@ result::Result<LoadedSound> loadSound(const std::string& path, const Layout& lay
     for (const Variant& variant : loaded.declaration.variants) {
         const std::filesystem::path kClip = kPath.parent_path() / variant.clip;
         RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes, readBytes(kClip));
-        auto clip = decodeWav(kBytes, limits);
+        auto clip = decodeCooked(kBytes, limits);
         if (!clip.has_value()) {
             return std::unexpected<result::Error>{std::move(clip).error().withContext("path", kClip.string())};
         }

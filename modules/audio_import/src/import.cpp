@@ -4,7 +4,10 @@
 #include "rawframe/audio/errors.h"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
+#include <memory>
+#include <opus.h>
 #include <string>
 
 namespace rawframe::audio_import {
@@ -100,6 +103,76 @@ result::Result<audio::Clip> importSound(std::span<const std::byte> bytes, const 
 
 std::vector<std::byte> cook(const audio::Clip& clip) {
     return audio::encodeWav(clip);
+}
+
+namespace {
+
+constexpr int kPacketFrames = 960;
+
+void putLittle(std::vector<std::byte>& out, std::uint32_t value, std::size_t width) {
+    for (std::size_t index = 0; index < width; ++index) {
+        out.push_back(static_cast<std::byte>((value >> (8 * index)) & 0xFFU));
+    }
+}
+
+struct EncoderRelease {
+    void operator()(OpusEncoder* encoder) const noexcept {
+        opus_encoder_destroy(encoder);
+    }
+};
+
+} // namespace
+
+result::Result<std::vector<std::byte>> cookOpus(const audio::Clip& clip, const OpusSettings& settings) {
+    if (clip.rate != audio::kOpusRate || clip.channels < 1 || clip.channels > 2 || clip.frames() == 0 ||
+        clip.frames() > 0xFFFF'FFFFU) {
+        return refuse("cooked Opus holds one or two channels at 48 kHz");
+    }
+    const auto kChannels = static_cast<int>(clip.channels);
+    int status = OPUS_OK;
+    const std::unique_ptr<OpusEncoder, EncoderRelease> kEncoder{
+        opus_encoder_create(static_cast<opus_int32>(audio::kOpusRate), kChannels, OPUS_APPLICATION_AUDIO, &status)};
+    if (status != OPUS_OK || kEncoder == nullptr) {
+        return refuse("the Opus encoder could not be made");
+    }
+    opus_encoder_ctl(kEncoder.get(),
+                     OPUS_SET_BITRATE(settings.bitrate == 0 ? OPUS_AUTO : static_cast<opus_int32>(settings.bitrate)));
+    opus_encoder_ctl(kEncoder.get(), OPUS_SET_COMPLEXITY(static_cast<opus_int32>(std::min(settings.complexity, 10U))));
+    opus_int32 preSkip = 0;
+    opus_encoder_ctl(kEncoder.get(), OPUS_GET_LOOKAHEAD(&preSkip));
+
+    // The clip, then silence enough to push its end out past the lookahead,
+    // in whole packets.
+    const std::size_t kNeeded = clip.frames() + static_cast<std::size_t>(preSkip);
+    const std::size_t kPackets = (kNeeded + kPacketFrames - 1) / kPacketFrames;
+    std::vector<float> input(kPackets * kPacketFrames * clip.channels, 0.0F);
+    std::ranges::copy(clip.samples, input.begin());
+
+    std::vector<std::byte> out;
+    out.insert(out.end(),
+               reinterpret_cast<const std::byte*>(audio::kCookedOpusSignature.data()),
+               reinterpret_cast<const std::byte*>(audio::kCookedOpusSignature.data()) + 4);
+    putLittle(out, audio::kCookedOpusVersion, 1);
+    putLittle(out, clip.channels, 1);
+    putLittle(out, static_cast<std::uint32_t>(preSkip), 2);
+    putLittle(out, static_cast<std::uint32_t>(clip.frames()), 4);
+    putLittle(out, static_cast<std::uint32_t>(kPackets), 4);
+    std::array<unsigned char, audio::kLargestOpusPacket> packet{};
+    for (std::size_t index = 0; index < kPackets; ++index) {
+        const opus_int32 kLength = opus_encode_float(kEncoder.get(),
+                                                     input.data() + (index * kPacketFrames * clip.channels),
+                                                     kPacketFrames,
+                                                     packet.data(),
+                                                     static_cast<opus_int32>(packet.size()));
+        if (kLength <= 0) {
+            return refuse("the Opus encoder refused a packet");
+        }
+        putLittle(out, static_cast<std::uint32_t>(kLength), 2);
+        out.insert(out.end(),
+                   reinterpret_cast<const std::byte*>(packet.data()),
+                   reinterpret_cast<const std::byte*>(packet.data()) + kLength);
+    }
+    return out;
 }
 
 } // namespace rawframe::audio_import

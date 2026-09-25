@@ -11,7 +11,7 @@ rawframe_module(NAME audio_import
 add_library(rawframe_audio_import_decoders STATIC src/decoders.c)
 set_target_properties(rawframe_audio_import_decoders PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(rawframe_audio_import_decoders PRIVATE rawframe_miniaudio_source)
-target_link_libraries(rawframe_audio_import PRIVATE rawframe_audio_import_decoders)
+target_link_libraries(rawframe_audio_import PRIVATE rawframe_audio_import_decoders rawframe_opus_vendor)
 
 rawframe_module_tests(NAME audio_import SOURCES tests/import_test.cpp)
 if(TARGET rawframe_audio_import_tests)

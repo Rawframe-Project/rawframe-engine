@@ -12,6 +12,12 @@ if(RAWFRAME_BUILD_TESTS)
                      ${CMAKE_CURRENT_BINARY_DIR}/tone.wav)
     set_tests_properties(import_vorbis PROPERTIES
                          PASS_REGULAR_EXPRESSION "imported vorbis: 2 channels at 48000 Hz, [0-9]+ frames")
+    # The Vorbis source's 48 kHz cooked into Opus.
+    add_test(NAME import_opus
+             COMMAND rawframe_host_import ${PROJECT_SOURCE_DIR}/modules/audio_import/tests/data/tone.ogg
+                     ${CMAKE_CURRENT_BINARY_DIR}/tone.rfopus)
+    set_tests_properties(import_opus PROPERTIES
+                         PASS_REGULAR_EXPRESSION "imported vorbis: 2 channels at 48000 Hz, 12000 frames, [0-9]+ bytes")
     # A bad argument is a usage error, not a crash.
     add_test(NAME import_usage COMMAND rawframe_host_import)
     set_tests_properties(import_usage PROPERTIES WILL_FAIL TRUE)

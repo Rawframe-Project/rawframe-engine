@@ -39,4 +39,17 @@ enum class SourceForm : std::uint8_t {
 /// The clip in the runtime's short-form tier, 16-bit PCM WAVE.
 [[nodiscard]] std::vector<std::byte> cook(const audio::Clip& clip);
 
+struct OpusSettings {
+    /// Bits a second; nought lets the encoder choose for the channels.
+    std::uint32_t bitrate = 0;
+    /// The encoder's effort, 0 to 10.
+    std::uint32_t complexity = 10;
+};
+
+/// The clip in the lossy tier, cooked Opus (`audio::decodeCookedOpus` reads
+/// it), in packets of 20 ms. Refuses (`BadSound`) a clip not at 48 kHz, the
+/// one rate cooked Opus holds: import resamples nothing.
+[[nodiscard]] result::Result<std::vector<std::byte>> cookOpus(const audio::Clip& clip,
+                                                              const OpusSettings& settings = {});
+
 } // namespace rawframe::audio_import
