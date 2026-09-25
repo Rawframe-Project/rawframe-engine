@@ -220,7 +220,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                WorldKestError::BadGameLine,
                                "a game has at most one physics line, `physics2d [gravity <x> <y>] [substeps <n>]`");
             }
-            for (const physics2d::ComponentLayout& layout : physics2d::componentLayouts()) {
+            for (const physics::ComponentLayout& layout : physics2d::componentLayouts()) {
                 game.components.push_back(GameComponent{
                     .id = layout.id, .name = std::string{layout.name}, .kestType = std::string{layout.scriptType}});
             }

@@ -111,7 +111,7 @@ public:
 class Physics2D final : public world_runtime::SystemContributor, public Physics2DQueries {
 public:
     /// Refuses settings out of range (`invalid_settings`), a collision
-    /// document that is not well formed (rawframe.collision's `invalid_document`),
+    /// document that is not well formed (rawframe.physics's `invalid_document`),
     /// a processor that cannot run the build's kernels (`unsupported`), and
     /// a process with no room for another physics world (`capacity`).
     [[nodiscard]] static result::Result<std::unique_ptr<Physics2D>> create(const Physics2DSettings& settings);

@@ -6,6 +6,10 @@ namespace rawframe::physics2d {
 
 namespace {
 
+using physics::ComponentField;
+using physics::ComponentLayout;
+using physics::FieldType;
+
 constexpr std::array<ComponentField, 13> kBodyFields = {{
     {"motion", offsetof(Body2D, motion), FieldType::U8},
     {"shape", offsetof(Body2D, shape), FieldType::U8},

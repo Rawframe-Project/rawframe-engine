@@ -613,12 +613,12 @@ private:
         if (layout.has_value() || !game_.physics2d.has_value()) {
             return layout;
         }
-        for (const physics2d::ComponentLayout& engine : physics2d::componentLayouts()) {
+        for (const physics::ComponentLayout& engine : physics2d::componentLayouts()) {
             if (engine.id != component.id) {
                 continue;
             }
             kest::TypeLayout made{.size = engine.size, .alignment = engine.alignment, .mark = 0, .fields = {}};
-            for (const physics2d::ComponentField& field : engine.fields) {
+            for (const physics::ComponentField& field : engine.fields) {
                 constexpr std::array<kest::FieldKind, 6> kKinds = {kest::FieldKind::U8,
                                                                    kest::FieldKind::U32,
                                                                    kest::FieldKind::U64,
@@ -667,26 +667,26 @@ private:
         if (!game_.physics2d.has_value()) {
             return {};
         }
-        const auto kType = [](kest::FieldKind kind) -> std::optional<physics2d::FieldType> {
+        const auto kType = [](kest::FieldKind kind) -> std::optional<physics::FieldType> {
             switch (kind) {
             case kest::FieldKind::U8:
-                return physics2d::FieldType::U8;
+                return physics::FieldType::U8;
             case kest::FieldKind::U32:
-                return physics2d::FieldType::U32;
+                return physics::FieldType::U32;
             case kest::FieldKind::U64:
-                return physics2d::FieldType::U64;
+                return physics::FieldType::U64;
             case kest::FieldKind::Bool:
-                return physics2d::FieldType::Bool;
+                return physics::FieldType::Bool;
             case kest::FieldKind::F32:
-                return physics2d::FieldType::F32;
+                return physics::FieldType::F32;
             case kest::FieldKind::F64:
-                return physics2d::FieldType::F64;
+                return physics::FieldType::F64;
             default:
                 return std::nullopt;
             }
         };
-        std::vector<std::pair<const physics2d::ComponentLayout*, kest::TypeLayout>> checked;
-        for (const physics2d::ComponentLayout& engine : physics2d::componentLayouts()) {
+        std::vector<std::pair<const physics::ComponentLayout*, kest::TypeLayout>> checked;
+        for (const physics::ComponentLayout& engine : physics2d::componentLayouts()) {
             const GameComponent& component = *componentNamed(engine.name);
             checked.emplace_back(&engine, layouts_[static_cast<std::size_t>(&component - game_.components.data())]);
         }
@@ -695,7 +695,7 @@ private:
             checked.emplace_back(&physics2d::rayHitLayout(), std::move(*rayHit));
         }
         for (const auto& [kEngine, layout] : checked) {
-            const physics2d::ComponentLayout& engine = *kEngine;
+            const physics::ComponentLayout& engine = *kEngine;
             bool same = layout.size == engine.size && layout.alignment == engine.alignment &&
                         layout.fields.size() == engine.fields.size();
             for (std::size_t index = 0; same && index < layout.fields.size(); ++index) {
