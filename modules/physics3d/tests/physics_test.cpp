@@ -1,4 +1,5 @@
 #include "rawframe/physics/errors.h"
+#include "rawframe/physics/ground.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/errors.h"
 #include "rawframe/physics3d/physics.h"
@@ -19,7 +20,7 @@ namespace {
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
-    builder.add<Body3D>().add<Pose3D>().add<Velocity3D>().add<Impulse3D>().add<Contact3D>();
+    builder.add<Body3D>().add<Pose3D>().add<Velocity3D>().add<Impulse3D>().add<Contact3D>().add<Character3D>();
     return *builder.freeze();
 }
 
@@ -46,6 +47,32 @@ struct Scene {
         RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Impulse3D>(), Impulse3D{}).has_value());
         RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Contact3D>(), Contact3D{}).has_value());
         return kEntity;
+    }
+
+    world::EntityHandle character(const Pose3D& pose, float snap = 0) {
+        const world::EntityHandle kEntity = body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
+                                                        .shape = static_cast<std::uint8_t>(Shape::Capsule),
+                                                        .fixedRotation = true,
+                                                        .width = 0.3F,
+                                                        .height = 0.4F},
+                                                 pose);
+        RAWFRAME_EXPECT(
+            world.insert(kEntity, *schema->key<Character3D>(), Character3D{.groundNormal = 0.7F, .snap = snap})
+                .has_value());
+        return kEntity;
+    }
+
+    /// A platformer's gameplay for one tick: run at `run` meters a second
+    /// along x, and fall under gravity unless on ground.
+    void walk(world::EntityHandle entity, float run) {
+        Velocity3D& wanted = velocity(entity);
+        const bool kGrounded = characterOf(entity).ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
+        wanted = Velocity3D{.x = run, .y = kGrounded ? 0 : wanted.y - (20.0F / 60)};
+        this->run(1);
+    }
+
+    Character3D& characterOf(world::EntityHandle entity) {
+        return *world.get(entity, *schema->key<Character3D>());
     }
 
     void run(int ticks) {
@@ -273,4 +300,105 @@ RAWFRAME_TEST(SettingsAndDocumentsAreChecked) {
     RAWFRAME_EXPECT(!Physics3D::create({.historyTicks = 2048}).has_value());
     const auto kBad = Physics3D::create({.collision = {.classes = {{0x1, "one"}, {0x1, "again"}}}});
     RAWFRAME_EXPECT(!kBad.has_value() && kBad.error().code() == physics::code(physics::PhysicsError::InvalidDocument));
+}
+
+namespace {
+
+/// A static box tilted about z by `degrees`, rising toward +x.
+Pose3D tilted(double x, float degrees) {
+    const float kHalf = degrees * 3.14159265F / 360;
+    return Pose3D{.x = x, .qz = std::sin(kHalf), .qw = std::cos(kHalf)};
+}
+
+constexpr Body3D kSlab{.motion = static_cast<std::uint8_t>(Motion::Static),
+                       .shape = static_cast<std::uint8_t>(Shape::Box),
+                       .width = 5,
+                       .height = 0.5F,
+                       .depth = 5};
+
+} // namespace
+
+RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
+    Scene scene;
+    scene.body(kGround, {});
+    scene.body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                      .shape = static_cast<std::uint8_t>(Shape::Box),
+                      .width = 0.5F,
+                      .height = 2,
+                      .depth = 5},
+               {.x = 3, .y = 2.5});
+    const world::EntityHandle kRunner = scene.character({.y = 2.2});
+    bool landed = false;
+    for (int tick = 0; tick < 120; ++tick) {
+        scene.walk(kRunner, 4);
+        landed = landed || scene.characterOf(kRunner).ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
+        RAWFRAME_EXPECT(scene.pose(kRunner).y > 1.2 - 0.001 && scene.pose(kRunner).x < 2.2 + 0.001);
+    }
+    RAWFRAME_EXPECT(landed);
+    const Pose3D& kAt = scene.pose(kRunner);
+    RAWFRAME_EXPECT(std::abs(kAt.x - 2.2) < 0.02 && std::abs(kAt.y - 1.2) < 0.02 && std::abs(kAt.z) < 0.001);
+    const Character3D& kOn = scene.characterOf(kRunner);
+    RAWFRAME_EXPECT(kOn.ground == static_cast<std::uint8_t>(physics::Ground::Grounded) && kOn.groundNormalY > 0.99F);
+    RAWFRAME_EXPECT(std::abs(scene.velocity(kRunner).x) < 0.05F && std::abs(scene.velocity(kRunner).y) < 0.05F);
+    RAWFRAME_EXPECT(scene.physics->statistics().characterMoves == 120);
+}
+
+RAWFRAME_TEST(ACharacterSlidesDownASteepSlopeAndStandsOnAGentleOne) {
+    Scene steep;
+    steep.body(kSlab, tilted(0, 60));
+    const world::EntityHandle kSlider = steep.character({.x = -0.5, .y = 2.5});
+    bool slid = false;
+    for (int tick = 0; tick < 60; ++tick) {
+        steep.walk(kSlider, 0);
+        slid = slid || steep.characterOf(kSlider).ground == static_cast<std::uint8_t>(physics::Ground::Sliding);
+        RAWFRAME_EXPECT(steep.characterOf(kSlider).ground != static_cast<std::uint8_t>(physics::Ground::Grounded));
+    }
+    RAWFRAME_EXPECT(slid && steep.pose(kSlider).x < -1);
+    RAWFRAME_EXPECT(steep.characterOf(kSlider).groundNormalX < -0.8F);
+
+    Scene gentle;
+    gentle.body(kSlab, tilted(0, 20));
+    const world::EntityHandle kStander = gentle.character({.y = 2});
+    for (int tick = 0; tick < 60; ++tick) {
+        gentle.walk(kStander, 0);
+    }
+    const Pose3D kStood = gentle.pose(kStander);
+    gentle.walk(kStander, 0);
+    RAWFRAME_EXPECT(gentle.characterOf(kStander).ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
+    RAWFRAME_EXPECT(std::abs(gentle.pose(kStander).x - kStood.x) < 1e-6);
+}
+
+RAWFRAME_TEST(ACharacterRunningDownhillSnapsToTheSlope) {
+    const auto kRun = [](float snap) {
+        Scene scene;
+        Body3D slope = kSlab;
+        slope.width = 8;
+        scene.body(slope, tilted(0, 20));
+        const world::EntityHandle kRunner = scene.character({.x = 4, .y = 3.5}, snap);
+        for (int tick = 0; tick < 60; ++tick) {
+            scene.walk(kRunner, 0);
+        }
+        int airborne = 0;
+        for (int tick = 0; tick < 40; ++tick) {
+            scene.walk(kRunner, -6);
+            airborne +=
+                scene.characterOf(kRunner).ground == static_cast<std::uint8_t>(physics::Ground::Airborne) ? 1 : 0;
+        }
+        return airborne;
+    };
+    RAWFRAME_EXPECT(kRun(0.2F) == 0);
+    RAWFRAME_EXPECT(kRun(0) > 5);
+}
+
+RAWFRAME_TEST(CharactersPassThroughEachOther) {
+    Scene scene;
+    scene.body(kGround, {});
+    const world::EntityHandle kLeft = scene.character({.x = -2, .y = 1.2});
+    const world::EntityHandle kRight = scene.character({.x = 2, .y = 1.2});
+    for (int tick = 0; tick < 90; ++tick) {
+        scene.velocity(kRight) = Velocity3D{.x = -3};
+        scene.walk(kLeft, 3);
+    }
+    RAWFRAME_EXPECT(scene.pose(kLeft).x > 2 && scene.pose(kRight).x < -2);
+    RAWFRAME_EXPECT(scene.characterOf(kRight).ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
 }

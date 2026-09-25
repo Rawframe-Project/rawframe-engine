@@ -69,6 +69,7 @@ public:
                       diagnostics::field("teleports", kStatistics.teleports),
                       diagnostics::field("velocitiesSet", kStatistics.velocitiesSet),
                       diagnostics::field("impulses", kStatistics.impulses),
+                      diagnostics::field("characterMoves", kStatistics.characterMoves),
                       diagnostics::field("contactsBegun", kStatistics.contactsBegun),
                       diagnostics::field("overlapsBegun", kStatistics.overlapsBegun),
                       diagnostics::field("raysRewound", kStatistics.raysRewound),

@@ -12,7 +12,7 @@ namespace rawframe::physics2d {
 /// Where a character's move took it, and what it ended on.
 struct CharacterMove {
     m2Vec2 translation{0, 0};
-    Ground ground = Ground::Airborne;
+    physics::Ground ground = physics::Ground::Airborne;
     m2Vec2 normal{0, 0};
 };
 

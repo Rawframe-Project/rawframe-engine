@@ -14,6 +14,7 @@
 // Kest ones are rawframe.physics2d's) and each field table below says what
 // a matching declaration holds.
 
+#include "rawframe/physics/ground.h"
 #include "rawframe/physics/layout.h"
 #include "rawframe/physics/motion.h"
 #include "rawframe/schema/stable_id.h"
@@ -137,15 +138,6 @@ struct RayHit2D {
     float normalX = 0;
     float normalY = 0;
     float fraction = 0;
-};
-
-/// What a character is standing on, after a step.
-enum class Ground : std::uint8_t {
-    Airborne = 0,
-    /// On a surface no steeper than `groundNormal` allows.
-    Grounded = 1,
-    /// Pressed against a surface too steep to stand on.
-    Sliding = 2,
 };
 
 /// SPEC-0037's character controller: an entity with a Body2D (kinematic,

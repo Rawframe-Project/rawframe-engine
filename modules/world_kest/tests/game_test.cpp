@@ -131,11 +131,11 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
     RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics->gravityY == -10.0F &&
                     kDefaults->physics->substeps == 4);
-    // In three dimensions: three numbers of gravity, and the five 3D
+    // In three dimensions: three numbers of gravity, and the six 3D
     // components.
     const auto kThree = parseGame("program p.kest\nphysics3d gravity 0 -9.8 1.5\n");
     RAWFRAME_EXPECT(kThree.has_value() && kThree->physics->dimensions == 3 && kThree->physics->gravityZ == 1.5F &&
-                    kThree->components.size() == 5 && kThree->components[1].name == "rawframe.physics3d.pose");
+                    kThree->components.size() == 6 && kThree->components[1].name == "rawframe.physics3d.pose");
     for (const std::string_view kLine : {"physics2d gravity 1\n",
                                          "physics2d spin 3\n",
                                          "physics2d substeps four\n",

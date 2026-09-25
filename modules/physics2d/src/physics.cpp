@@ -378,8 +378,8 @@ struct Physics2D::State {
     /// and moves as its body would.
     void moveCharacter(const Row& row, const Mapped& entry, float seconds) {
         Character2D& controlled = *row.character;
-        const bool kWasGrounded = controlled.ground == static_cast<std::uint8_t>(Ground::Grounded);
-        controlled.ground = static_cast<std::uint8_t>(Ground::Airborne);
+        const bool kWasGrounded = controlled.ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
+        controlled.ground = static_cast<std::uint8_t>(physics::Ground::Airborne);
         controlled.groundNormalX = 0;
         controlled.groundNormalY = 0;
         const Body2D& body = entry.made;

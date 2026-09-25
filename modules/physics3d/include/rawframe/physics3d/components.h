@@ -156,8 +156,36 @@ struct RayHit3D {
     float fraction = 0;
 };
 
-/// Body3D, Pose3D, Velocity3D, Impulse3D, and Contact3D, in that order. An
-/// entity field appears as its two parts, `<name>.slot` and
+/// SPEC-0037's character controller in three dimensions, as physics2d's
+/// Character2D in two: an entity with a Body3D (kinematic, an upright
+/// capsule) and a Character3D is moved by trace and slide. Gameplay writes
+/// the Velocity3D it wants this tick, gravity and all; the step moves the
+/// body as far along it as the world allows, sliding along what it meets,
+/// and leaves in Velocity3D the velocity it moved with. The world's solid
+/// bodies stop it, by its Body3D's collision class; other characters never
+/// do. Numbers only, so it replicates and a client predicts it; a ray down
+/// finds the entity underfoot. Its layout has padding after `ground`.
+struct Character3D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("86a75d11-95b0-42d6-af49-cabc15fdf340");
+    static constexpr std::string_view kComponentName = "rawframe.physics3d.character";
+
+    /// The least upward a surface's normal may be and still be ground: its
+    /// y, from 0 to 1 (0.7 stands on slopes up to about 45 degrees).
+    float groundNormal = 0;
+    /// A character that was on ground and now is not is stepped down to
+    /// ground within this far below it; nought never.
+    float snap = 0;
+    /// Written by every step: the physics::Ground it is on, and the normal of
+    /// what it stands on or slides along (nought in the air).
+    std::uint8_t ground = 0;
+    float groundNormalX = 0;
+    float groundNormalY = 0;
+    float groundNormalZ = 0;
+};
+
+/// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, and Character3D, in
+/// that order. An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const physics::ComponentLayout> componentLayouts() noexcept;
 

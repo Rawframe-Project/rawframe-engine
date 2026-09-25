@@ -1,5 +1,6 @@
 #include "rawframe/physics3d/physics.h"
 
+#include "characters.h"
 #include "rawframe/physics/filters.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/errors.h"
@@ -185,6 +186,8 @@ struct Mapped {
     std::vector<Pose3D> history;
     std::optional<std::uint64_t> since;
     bool refused = false;
+    /// Made as a character's, which character queries do not see.
+    bool character = false;
     Body3D made;
     Pose3D pose;
     Velocity3D velocity;
@@ -195,6 +198,7 @@ struct Row {
     const Body3D* body = nullptr;
     Pose3D* pose = nullptr;
     Velocity3D* velocity = nullptr;
+    Character3D* character = nullptr;
 };
 
 [[nodiscard]] bool sameShape(m3ShapeId left, m3ShapeId right) noexcept {
@@ -223,6 +227,7 @@ struct Physics3D::State {
     std::optional<world::Query<world::Read<Body3D>, world::Write<Pose3D>, world::Write<Velocity3D>>> bodies;
     std::optional<schema::ComponentRuntimeId> impulse;
     std::optional<schema::ComponentRuntimeId> contact;
+    std::optional<schema::ComponentRuntimeId> character;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
     std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
@@ -248,6 +253,7 @@ struct Physics3D::State {
         into.shape = {};
         into.trigger = {};
         into.since.reset();
+        into.character = row.character != nullptr;
         const auto kClass = filters.classIndex(body.collisionClass);
         into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value();
         if (into.refused) {
@@ -288,6 +294,9 @@ struct Physics3D::State {
         shape.categoryBits =
             body.sensor ? physics::CollisionFilters::sensorBit(*kClass) : physics::CollisionFilters::solidBit(*kClass);
         shape.maskBits = body.sensor ? filter.sensorMask : filter.solidMask;
+        if (into.character) {
+            shape.maskBits &= ~physics::kCharacterQuery;
+        }
         const auto kShape = [&](const m3ShapeDef& definitionOf) {
             switch (static_cast<Shape>(body.shape)) {
             case Shape::Sphere: {
@@ -451,6 +460,46 @@ struct Physics3D::State {
         }
     }
 
+    /// A character's move this tick, as the velocity its kinematic body
+    /// steps with; one that is not a made kinematic capsule stays Airborne
+    /// and moves as its body would.
+    void moveCharacter(const Row& row, const Mapped& entry, float seconds) {
+        Character3D& controlled = *row.character;
+        const bool kWasGrounded = controlled.ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
+        controlled.ground = static_cast<std::uint8_t>(physics::Ground::Airborne);
+        controlled.groundNormalX = 0;
+        controlled.groundNormalY = 0;
+        controlled.groundNormalZ = 0;
+        const Body3D& body = entry.made;
+        if (entry.refused || body.motion != static_cast<std::uint8_t>(physics::Motion::Kinematic) ||
+            body.shape != static_cast<std::uint8_t>(Shape::Capsule) || body.sensor ||
+            !finite(controlled.groundNormal) || !finite(controlled.snap) || !(seconds > 0)) {
+            return;
+        }
+        const m3Vec3 kWish = m3Body_GetLinearVelocity(entry.body);
+        const m3QueryFilter kFilter{.categoryBits = physics::kCharacterQuery,
+                                    .maskBits = filters.filter(*filters.classIndex(body.collisionClass)).solidMask &
+                                                physics::kSolids};
+        const CharacterMove kMove =
+            physics3d::moveCharacter(physics,
+                                     body.width,
+                                     body.height,
+                                     m3Body_GetPosition(entry.body),
+                                     m3Vec3{kWish.x * seconds, kWish.y * seconds, kWish.z * seconds},
+                                     controlled,
+                                     kWasGrounded,
+                                     kFilter);
+        m3Body_SetLinearVelocity(
+            entry.body,
+            m3Vec3{kMove.translation.x / seconds, kMove.translation.y / seconds, kMove.translation.z / seconds});
+        m3Body_SetAngularVelocity(entry.body, m3Vec3{0, 0, 0});
+        controlled.ground = static_cast<std::uint8_t>(kMove.ground);
+        controlled.groundNormalX = kMove.normal.x;
+        controlled.groundNormalY = kMove.normal.y;
+        controlled.groundNormalZ = kMove.normal.z;
+        ++statistics.characterMoves;
+    }
+
     void remove(world::EntityHandle entity, Mapped& entry) {
         if (!entry.refused) {
             owners.erase(entry.shape.index1);
@@ -470,6 +519,9 @@ struct Physics3D::State {
                         [this](world::EntityHandle entity, const Body3D& body, Pose3D& pose, Velocity3D& velocity) {
                             rows.push_back(Row{.entity = entity, .body = &body, .pose = &pose, .velocity = &velocity});
                         });
+        for (Row& row : rows) {
+            row.character = static_cast<Character3D*>(world.getErased(row.entity, *character));
+        }
         std::sort(rows.begin(), rows.end(), [](const Row& left, const Row& right) {
             return left.entity < right.entity;
         });
@@ -491,7 +543,7 @@ struct Physics3D::State {
         for (const Row& row : rows) {
             const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
             Mapped& entry = kEntry->second;
-            if (kNew || !same(entry.made, *row.body)) {
+            if (kNew || !same(entry.made, *row.body) || entry.character != (row.character != nullptr)) {
                 if (!kNew) {
                     remove(row.entity, entry);
                 }
@@ -542,8 +594,15 @@ struct Physics3D::State {
             }
         }
 
-        // 3. One step of the tick's length.
+        // 3. Characters find their moves, in entity order and each against
+        // the world as the last step left it; then one step of the tick's
+        // length.
         const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
+        for (const Row& row : rows) {
+            if (row.character != nullptr) {
+                moveCharacter(row, mapped.find(row.entity)->second, kSeconds);
+            }
+        }
         m3World_Step(physics, kSeconds, static_cast<std::int32_t>(settings.substeps));
         ++statistics.steps;
 
@@ -679,10 +738,12 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
         (world::Query<world::Read<Body3D>, world::Write<Pose3D>, world::Write<Velocity3D>>::resolve(registry)));
     RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact3D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character3D::kComponentTypeId));
     state.reads = state.bodies->reads();
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.contact);
+    state.writes.push_back(*state.character);
     state.system = std::make_unique<Step>(state);
     systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
                                                .phase = world::Phase::Simulation,

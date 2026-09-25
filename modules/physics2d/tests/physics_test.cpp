@@ -67,7 +67,7 @@ struct Scene {
     /// and fall under gravity unless on ground.
     void walk(world::EntityHandle entity, float run) {
         Velocity2D& wanted = velocity(entity);
-        const bool kGrounded = character(entity).ground == static_cast<std::uint8_t>(Ground::Grounded);
+        const bool kGrounded = character(entity).ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
         wanted = Velocity2D{.x = run, .y = kGrounded ? 0 : wanted.y - (20.0F / 60)};
         this->run(1);
     }
@@ -393,7 +393,7 @@ RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
     bool landed = false;
     for (int tick = 0; tick < 120; ++tick) {
         scene.walk(kRunner, 4);
-        landed = landed || scene.character(kRunner).ground == static_cast<std::uint8_t>(Ground::Grounded);
+        landed = landed || scene.character(kRunner).ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
         // Never into the floor or the wall.
         RAWFRAME_EXPECT(scene.pose(kRunner).y > 1.2 - 0.001 && scene.pose(kRunner).x < 2.2 + 0.001);
     }
@@ -402,7 +402,7 @@ RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
     const Pose2D& kAt = scene.pose(kRunner);
     RAWFRAME_EXPECT(std::abs(kAt.x - 2.2) < 0.02 && std::abs(kAt.y - 1.2) < 0.02);
     const Character2D& kOn = scene.character(kRunner);
-    RAWFRAME_EXPECT(kOn.ground == static_cast<std::uint8_t>(Ground::Grounded));
+    RAWFRAME_EXPECT(kOn.ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
     RAWFRAME_EXPECT(scene.physics->castRay(kAt.x, kAt.y - 0.75, 0, -1, kEveryClass).entity == kFloor);
     RAWFRAME_EXPECT(kOn.groundNormalY > 0.99F);
     RAWFRAME_EXPECT(std::abs(scene.velocity(kRunner).x) < 0.05F && std::abs(scene.velocity(kRunner).y) < 0.05F);
@@ -425,8 +425,8 @@ RAWFRAME_TEST(ACharacterSlidesDownASteepSlopeAndStandsOnAGentleOne) {
     bool slid = false;
     for (int tick = 0; tick < 60; ++tick) {
         steep.walk(kSlider, 0);
-        slid = slid || steep.character(kSlider).ground == static_cast<std::uint8_t>(Ground::Sliding);
-        RAWFRAME_EXPECT(steep.character(kSlider).ground != static_cast<std::uint8_t>(Ground::Grounded));
+        slid = slid || steep.character(kSlider).ground == static_cast<std::uint8_t>(physics::Ground::Sliding);
+        RAWFRAME_EXPECT(steep.character(kSlider).ground != static_cast<std::uint8_t>(physics::Ground::Grounded));
     }
     // Down the slope, which pushes it left and up.
     RAWFRAME_EXPECT(slid && steep.pose(kSlider).x < -1);
@@ -440,7 +440,7 @@ RAWFRAME_TEST(ACharacterSlidesDownASteepSlopeAndStandsOnAGentleOne) {
     }
     const Pose2D kStood = gentle.pose(kStander);
     gentle.walk(kStander, 0);
-    RAWFRAME_EXPECT(gentle.character(kStander).ground == static_cast<std::uint8_t>(Ground::Grounded));
+    RAWFRAME_EXPECT(gentle.character(kStander).ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
     RAWFRAME_EXPECT(std::abs(gentle.pose(kStander).x - kStood.x) < 1e-6);
 }
 
@@ -462,7 +462,7 @@ RAWFRAME_TEST(ACharacterRunningDownhillSnapsToTheSlope) {
         int airborne = 0;
         for (int tick = 0; tick < 40; ++tick) {
             scene.walk(kRunner, -6);
-            airborne += scene.character(kRunner).ground == static_cast<std::uint8_t>(Ground::Airborne) ? 1 : 0;
+            airborne += scene.character(kRunner).ground == static_cast<std::uint8_t>(physics::Ground::Airborne) ? 1 : 0;
         }
         return airborne;
     };
@@ -481,7 +481,7 @@ RAWFRAME_TEST(CharactersPassThroughEachOtherAndBlockNothingOfTheirOwn) {
         scene.walk(kLeft, 3);
     }
     RAWFRAME_EXPECT(scene.pose(kLeft).x > 2 && scene.pose(kRight).x < -2);
-    RAWFRAME_EXPECT(scene.character(kRight).ground == static_cast<std::uint8_t>(Ground::Grounded));
+    RAWFRAME_EXPECT(scene.character(kRight).ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
 }
 
 RAWFRAME_TEST(ARayAmongOneClassSeesThroughTheRest) {

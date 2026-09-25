@@ -85,6 +85,15 @@ const ComponentLayout kRayHitLayout{.id = {},
                                     .alignment = alignof(RayHit3D),
                                     .fields = kRayHitFields};
 
+constexpr std::array<ComponentField, 6> kCharacterFields = {{
+    {"groundNormal", offsetof(Character3D, groundNormal), FieldType::F32},
+    {"snap", offsetof(Character3D, snap), FieldType::F32},
+    {"ground", offsetof(Character3D, ground), FieldType::U8},
+    {"groundNormalX", offsetof(Character3D, groundNormalX), FieldType::F32},
+    {"groundNormalY", offsetof(Character3D, groundNormalY), FieldType::F32},
+    {"groundNormalZ", offsetof(Character3D, groundNormalZ), FieldType::F32},
+}};
+
 template <typename T>
 constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const ComponentField> fields) noexcept {
     return ComponentLayout{.id = T::kComponentTypeId,
@@ -95,12 +104,13 @@ constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const 
                            .fields = fields};
 }
 
-const std::array<ComponentLayout, 5> kLayouts = {
+const std::array<ComponentLayout, 6> kLayouts = {
     layoutOf<Body3D>("Body3D", kBodyFields),
     layoutOf<Pose3D>("Pose3D", kPoseFields),
     layoutOf<Velocity3D>("Velocity3D", kMotionFields<Velocity3D>),
     layoutOf<Impulse3D>("Impulse3D", kMotionFields<Impulse3D>),
     layoutOf<Contact3D>("Contact3D", kContactFields),
+    layoutOf<Character3D>("Character3D", kCharacterFields),
 };
 
 } // namespace

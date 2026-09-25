@@ -90,9 +90,10 @@ CharacterMove moveCharacter(m2WorldId world,
         for (std::int32_t index = 0; index < kCount; ++index) {
             const m2MoverPlane& plane = planes[static_cast<std::size_t>(index)];
             if (plane.separation <= kTouching && plane.normal.y > kSlope &&
-                (found.ground == Ground::Airborne || plane.normal.y > found.normal.y)) {
+                (found.ground == physics::Ground::Airborne || plane.normal.y > found.normal.y)) {
                 found.normal = plane.normal;
-                found.ground = plane.normal.y >= character.groundNormal ? Ground::Grounded : Ground::Sliding;
+                found.ground =
+                    plane.normal.y >= character.groundNormal ? physics::Ground::Grounded : physics::Ground::Sliding;
             }
         }
         return found;
@@ -101,7 +102,7 @@ CharacterMove moveCharacter(m2WorldId world,
 
     // Walked off ground it stood on, and not rising: down to ground within
     // the snap below, if there is any.
-    if (on.ground != Ground::Grounded && wasGrounded && character.snap > 0 && wish.y <= 0) {
+    if (on.ground != physics::Ground::Grounded && wasGrounded && character.snap > 0 && wish.y <= 0) {
         const m2Vec2 kDown{0, -(character.snap + kSkin)};
         const m2RayCastResult kHit = m2World_CastCapsuleClosest(world, &kThinner, at, kDown, filter);
         if (kHit.hit && kHit.normal.y >= character.groundNormal) {
