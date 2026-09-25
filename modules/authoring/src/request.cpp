@@ -25,8 +25,16 @@ constexpr std::array<std::string_view, 10> kCodeNames = {"validation_failed",
                                                          "delta_invalid",
                                                          "delta_mismatch"};
 
-constexpr std::array<std::string_view, 8> kInputTypeNames = {
-    "entity", "component", "field", "text", "place", "optional_place", "value", "optional_entity"};
+constexpr std::array<std::string_view, 10> kInputTypeNames = {"entity",
+                                                              "component",
+                                                              "field",
+                                                              "text",
+                                                              "place",
+                                                              "optional_place",
+                                                              "value",
+                                                              "optional_entity",
+                                                              "resource",
+                                                              "identity"};
 constexpr std::array<std::string_view, 4> kHistoryNames = {
     "undoable", "non_dirtying", "bulk_non_undoable", "read_only"};
 
@@ -152,6 +160,15 @@ result::Result<Operation> operationOf(const Value& value) {
     const auto kBad = [] {
         return malformed("an operation's inputs are of their declared types");
     };
+    if (kIndex == 12) {
+        const std::string* scene = textOf(value.find("scene"));
+        const base::Bits128Parse kScene = scene != nullptr ? base::parseBits128Hex(*scene) : base::Bits128Parse{};
+        const auto kInstance = idOf(value.find("instance"));
+        if (!kScene.parsed || !kInstance.has_value()) {
+            return kBad();
+        }
+        return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
+    }
     if (kIndex == 8) {
         if (!kComponent.has_value()) {
             return kBad();
@@ -221,6 +238,8 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{RevertComponent{.entity = *kEntity, .component = {*kComponent}}};
     case 11:
         return Operation{RestoreEntity{.entity = *kEntity}};
+    case 13:
+        return Operation{RemoveInstance{.entity = *kEntity}};
     default:
         return kBad();
     }

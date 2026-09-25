@@ -55,6 +55,9 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
         onLink("scene.revert_field", R"(, "field": "target")"),
         onLink("scene.revert_component", ""),
         operation("scene.restore_entity", ""),
+        R"({"operation": "scene.add_instance", "scene": "8d1a709be7c6f665a9d32c2c07e122c3", "instance": ")" +
+            std::string{kDoor} + "\"}",
+        operation("scene.remove_instance", ""),
     };
     std::string joined;
     for (const std::string& each : kAll) {
@@ -74,6 +77,13 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
                     std::holds_alternative<RestoreEntity>(kRead->operations[16]));
     RAWFRAME_EXPECT(
         refusedWith(readRequest(request(onLink("scene.revert_field", ""))), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(std::get<AddInstance>(kRead->operations[17]).scene ==
+                        base::parseBits128Hex("8d1a709be7c6f665a9d32c2c07e122c3").value &&
+                    std::holds_alternative<RemoveInstance>(kRead->operations[18]));
+    RAWFRAME_EXPECT(
+        refusedWith(readRequest(request(R"({"operation": "scene.add_instance", "scene": ")" + std::string{kDoor} +
+                                        R"(", "instance": ")" + std::string{kDoor} + "\"}")),
+                    AuthoringError::ValidationFailed));
     const auto kRemark =
         readRequest(request(R"({"operation": "scene.remark_component", "component": ")" + std::string{kLink} + "\"}"));
     RAWFRAME_EXPECT(kRemark.has_value() && std::holds_alternative<RemarkComponent>(kRemark->operations[0]));

@@ -367,3 +367,86 @@ RAWFRAME_TEST(AnInstancesEntitiesChangeThroughItsPatch) {
     RAWFRAME_EXPECT(refusedWith(kRun(RestoreEntity{.entity = kShelf}), AuthoringError::TargetNotFound));
     RAWFRAME_EXPECT(scene::readScene(room.text()).has_value());
 }
+
+RAWFRAME_TEST(AnInstanceIsAddedAndRemovedWhole) {
+    // A storeroom of a crate at x 1 and a shelf; a nest of one egg and a
+    // storeroom; and a loop, which instances the scene being authored.
+    const scene::Scene kStoreroom{
+        .schema = {{.component = "game.position", .mark = 0xa1}},
+        .entities = {{.id = base::Bits128{7, 1},
+                      .name = "crate",
+                      .components = {{.name = "game.position",
+                                      .fields = {{.name = "x",
+                                                  .value = {.kind = scene::FieldValue::Kind::Number,
+                                                            .number = "1"}}}}}},
+                     {.id = base::Bits128{7, 2}, .name = "shelf", .components = {}}},
+        .instances = {}};
+    const scene::Scene kNest{
+        .schema = {},
+        .entities = {{.id = base::Bits128{7, 3}, .name = "egg", .components = {}}},
+        .instances = {{.scene = base::Bits128{9, 1},
+                       .entities = {{.source = base::Bits128{7, 1}, .instance = base::Bits128{7, 11}},
+                                    {.source = base::Bits128{7, 2}, .instance = base::Bits128{7, 12}}},
+                       .overrides = {}}}};
+    const scene::Scene kLoop{
+        .schema = {}, .entities = {}, .instances = {{.scene = base::Bits128{7, 7}, .entities = {}, .overrides = {}}}};
+    const scene::SceneSource kSources = [&](base::Bits128 id) -> result::Result<scene::Scene> {
+        if (id == base::Bits128{9, 1}) {
+            return kStoreroom;
+        }
+        if (id == base::Bits128{9, 2}) {
+            return kNest;
+        }
+        if (id == base::Bits128{9, 4}) {
+            return kLoop;
+        }
+        return result::fail(
+            result::ErrorClass::NotFound, kAuthoringDomain, code(AuthoringError::TargetNotFound), "none");
+    };
+    const auto kRoom = empty();
+    AuthoredScene& room = *kRoom;
+    const ComponentCatalog kCatalog = catalog();
+    const auto kRun = [&](const Operation& operation) {
+        return execute(room, room.generation(), operation, kCatalog, Mode::Execute, &kSources);
+    };
+    RAWFRAME_EXPECT(kRun(CreateEntity{.entity = kSpawn, .name = "spawn"}));
+
+    // Every entity the source holds, each with an id of its own here.
+    const Operation kStore = AddInstance{.scene = base::Bits128{9, 1}, .instance = base::Bits128{5, 5}};
+    const auto kAdded = kRun(kStore);
+    RAWFRAME_EXPECT(kAdded.has_value() && kAdded->deltas == 1 && room.scene().instances.size() == 1);
+    const base::Bits128 kCrate = instanceEntityId(base::Bits128{5, 5}, base::Bits128{7, 1});
+    const scene::SceneInstance& added = room.scene().instances[0];
+    RAWFRAME_EXPECT(added.entities.size() == 2 && added.entities[0].instance == kCrate &&
+                    added.entities[1].instance == instanceEntityId(base::Bits128{5, 5}, base::Bits128{7, 2}));
+    RAWFRAME_EXPECT(((kCrate.high >> 12U) & 0xFU) == 8 && (kCrate.low >> 62U) == 2 &&
+                    kCrate != instanceEntityId(base::Bits128{5, 6}, base::Bits128{7, 1}));
+    // The same request again would take the same ids.
+    RAWFRAME_EXPECT(refusedWith(kRun(kStore), AuthoringError::Conflict));
+    // A source's own instances' entities are its entities too.
+    RAWFRAME_EXPECT(kRun(AddInstance{.scene = base::Bits128{9, 2}, .instance = base::Bits128{5, 6}}));
+    RAWFRAME_EXPECT(room.scene().instances[1].entities.size() == 3);
+    RAWFRAME_EXPECT(refusedWith(kRun(AddInstance{.scene = base::Bits128{9, 4}, .instance = base::Bits128{5, 7}}),
+                                AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(kRun(AddInstance{.scene = base::Bits128{9, 9}, .instance = base::Bits128{5, 7}}),
+                                AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(refusedWith(execute(room,
+                                        room.generation(),
+                                        AddInstance{.scene = base::Bits128{9, 1}, .instance = base::Bits128{5, 8}},
+                                        kCatalog),
+                                AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(scene::resolveInstances(room.scene(), kSources).has_value());
+
+    // Removed whole, its patch with it; undone byte for byte; not while
+    // another names what it brings.
+    RAWFRAME_EXPECT(kRun(SetField{.entity = kCrate, .component = kPosition, .field = "x", .value = real(4.0)}));
+    const std::string kPatched = room.text();
+    const auto kRemoved = kRun(RemoveInstance{.entity = kCrate});
+    RAWFRAME_EXPECT(kRemoved.has_value() && room.scene().instances.size() == 1 && room.scene().schema.empty());
+    RAWFRAME_EXPECT(room.undo(room.generation()).has_value() && room.text() == kPatched);
+    RAWFRAME_EXPECT(kRun(AddComponent{.entity = kSpawn, .component = kLink}));
+    RAWFRAME_EXPECT(kRun(SetReference{.entity = kSpawn, .component = kLink, .field = "target", .target = kCrate}));
+    RAWFRAME_EXPECT(refusedWith(kRun(RemoveInstance{.entity = kCrate}), AuthoringError::Conflict));
+    RAWFRAME_EXPECT(refusedWith(kRun(RemoveInstance{.entity = kSpawn}), AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(scene::readScene(room.text()).has_value());
+}

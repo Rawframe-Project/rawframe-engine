@@ -37,7 +37,10 @@ constexpr std::array<InputDeclaration, 1> kRemarkInputs = {{{"component", InputT
 constexpr std::array<InputDeclaration, 3> kRevertFieldInputs = {
     {{"entity", InputType::Entity}, {"component", InputType::Component}, {"field", InputType::Field}}};
 
-constexpr std::array<OperationDeclaration, 14> kDeclarations = {{
+constexpr std::array<InputDeclaration, 2> kAddInstanceInputs = {
+    {{"scene", InputType::Resource}, {"instance", InputType::Identity}}};
+
+constexpr std::array<OperationDeclaration, 16> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -50,6 +53,8 @@ constexpr std::array<OperationDeclaration, 14> kDeclarations = {{
     {.name = "scene.revert_field", .targets = "rawframe.scene field", .inputs = kRevertFieldInputs},
     {.name = "scene.revert_component", .targets = "rawframe.scene component", .inputs = kComponentInputs},
     {.name = "scene.restore_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
+    {.name = "scene.add_instance", .targets = "rawframe.scene instance", .inputs = kAddInstanceInputs},
+    {.name = "scene.remove_instance", .targets = "rawframe.scene instance", .inputs = kEntityInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,
@@ -148,7 +153,14 @@ std::vector<std::string> residualOf(const scene::Scene& scene, const ComponentSc
 
 /// Validates `operation` against `scene` and derives its deltas, touching
 /// nothing.
-result::Result<Journal> derive(const scene::Scene& scene, const Operation& operation, const ComponentCatalog& catalog) {
+result::Result<Journal> derive(const scene::Scene& scene,
+                               const Operation& operation,
+                               const ComponentCatalog& catalog,
+                               const scene::SceneSource* sources,
+                               base::Bits128 document) {
+    if (std::holds_alternative<AddInstance>(operation) || std::holds_alternative<RemoveInstance>(operation)) {
+        return deriveInstance(scene, operation, sources, document);
+    }
     const std::optional<base::Bits128> kNamed = std::visit(
         [](const auto& each) -> std::optional<base::Bits128> {
             if constexpr (requires { each.entity; }) {
@@ -499,9 +511,10 @@ result::Result<Committed> execute(AuthoredScene& scene,
                                   std::uint64_t generation,
                                   const Operation& operation,
                                   const ComponentCatalog& catalog,
-                                  Mode mode) {
+                                  Mode mode,
+                                  const scene::SceneSource* sources) {
     // Addressing, then staleness, then meaning, then staging.
-    auto journal = derive(scene.scene(), operation, catalog);
+    auto journal = derive(scene.scene(), operation, catalog, sources, scene.identity());
     if (!journal.has_value() && journal.error().code() == code(AuthoringError::TargetNotFound)) {
         return std::unexpected<result::Error>{std::move(journal).error()};
     }
@@ -517,8 +530,11 @@ result::Result<Committed> execute(AuthoredScene& scene,
     return transaction.commit();
 }
 
-result::Status stage(Transaction& transaction, const Operation& operation, const ComponentCatalog& catalog) {
-    auto journal = derive(transaction.staged(), operation, catalog);
+result::Status stage(Transaction& transaction,
+                     const Operation& operation,
+                     const ComponentCatalog& catalog,
+                     const scene::SceneSource* sources) {
+    auto journal = derive(transaction.staged(), operation, catalog, sources, transaction.document());
     if (!journal.has_value()) {
         transaction.cancel();
         return std::unexpected<result::Error>{std::move(journal).error()};
@@ -532,7 +548,8 @@ result::Status stage(Transaction& transaction, const Operation& operation, const
 result::Result<Committed> executeAtomic(AuthoredScene& scene,
                                         std::uint64_t generation,
                                         std::span<const Operation> operations,
-                                        const ComponentCatalog& catalog) {
+                                        const ComponentCatalog& catalog,
+                                        const scene::SceneSource* sources) {
     if (operations.size() > kMaximumBatchOperations) {
         return result::fail(result::ErrorClass::ResourceExhausted,
                             kAuthoringDomain,
@@ -541,7 +558,7 @@ result::Result<Committed> executeAtomic(AuthoredScene& scene,
     }
     RAWFRAME_TRY_ASSIGN(Transaction transaction, scene.begin(generation));
     for (std::size_t at = 0; at < operations.size(); ++at) {
-        auto staged = stage(transaction, operations[at], catalog);
+        auto staged = stage(transaction, operations[at], catalog, sources);
         if (!staged.has_value()) {
             return std::unexpected<result::Error>{std::move(staged).error().withContext("index", std::to_string(at))};
         }
@@ -553,7 +570,8 @@ IndependentOutcome executeIndependent(AuthoredScene& scene,
                                       std::uint64_t generation,
                                       std::span<const Operation> operations,
                                       const ComponentCatalog& catalog,
-                                      OnFailure onFailure) {
+                                      OnFailure onFailure,
+                                      const scene::SceneSource* sources) {
     IndependentOutcome made;
     if (operations.size() > kMaximumBatchOperations) {
         made.outcomes.emplace_back(result::fail(result::ErrorClass::ResourceExhausted,
@@ -565,7 +583,7 @@ IndependentOutcome executeIndependent(AuthoredScene& scene,
     }
     std::uint64_t now = generation;
     for (std::size_t at = 0; at < operations.size(); ++at) {
-        auto outcome = execute(scene, now, operations[at], catalog);
+        auto outcome = execute(scene, now, operations[at], catalog, Mode::Execute, sources);
         const bool kFailed = !outcome.has_value();
         if (!kFailed) {
             now = outcome->generation;

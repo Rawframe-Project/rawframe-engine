@@ -64,6 +64,10 @@ const scene::Scene& Transaction::staged() const noexcept {
     return scene_ != nullptr ? scene_->scene_ : kNone;
 }
 
+base::Bits128 Transaction::document() const noexcept {
+    return scene_ != nullptr ? scene_->identity_ : base::Bits128{};
+}
+
 result::Status Transaction::stage(const Delta& delta) {
     if (!live()) {
         return closed();

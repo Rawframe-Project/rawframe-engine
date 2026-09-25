@@ -31,6 +31,7 @@
 #include "rawframe/authoring/delta.h"
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
+#include "rawframe/scene/resolve.h"
 #include "rawframe/schema/stable_id.h"
 
 #include <cstddef>
@@ -171,6 +172,25 @@ struct RestoreEntity {
     base::Bits128 entity{};
 };
 
+/// Instances the scene of resource identity `scene` after the scene's
+/// instances, in SPEC-0006's two passes: every entity the source holds once
+/// resolved is given an id (`instanceEntityId`) from `instance`, a fresh
+/// identity the caller makes as it makes an entity's, and the entity's id
+/// in the source. So one request always makes the same ids, and two
+/// instantiations never share one. It needs the scenes at hand.
+struct AddInstance {
+    base::Bits128 scene{};
+    base::Bits128 instance{};
+};
+/// Removes the instance that brings `entity`, its patch with it.
+struct RemoveInstance {
+    base::Bits128 entity{};
+};
+
+/// The id an instantiation named `instance` gives the source's entity
+/// `source`: a version 8 UUID from their SHA-256 (D156).
+[[nodiscard]] base::Bits128 instanceEntityId(base::Bits128 instance, base::Bits128 source) noexcept;
+
 using Operation = std::variant<CreateEntity,
                                DestroyEntity,
                                RenameEntity,
@@ -182,7 +202,9 @@ using Operation = std::variant<CreateEntity,
                                RemarkComponent,
                                RevertField,
                                RevertComponent,
-                               RestoreEntity>;
+                               RestoreEntity,
+                               AddInstance,
+                               RemoveInstance>;
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
 /// scene holds, and one entity whole.
@@ -211,6 +233,10 @@ enum class InputType : std::uint8_t {
     OptionalPlace,
     Value,
     OptionalEntity,
+    /// A resource identity, as 32 hex digits.
+    Resource,
+    /// A fresh identity the caller makes, as UUID text.
+    Identity,
 };
 
 struct InputDeclaration {
@@ -243,23 +269,29 @@ enum class Mode : std::uint8_t {
 /// One operation in its own transaction against `generation`. With
 /// `DryRun`, the same validation and nothing staged: the answer is the
 /// generation it was checked against and no deltas.
+/// `sources` gives the scenes an instance may name; without it, an
+/// operation that needs one refuses (`TargetNotFound`).
 [[nodiscard]] result::Result<Committed> execute(AuthoredScene& scene,
                                                 std::uint64_t generation,
                                                 const Operation& operation,
                                                 const ComponentCatalog& catalog,
-                                                Mode mode = Mode::Execute);
+                                                Mode mode = Mode::Execute,
+                                                const scene::SceneSource* sources = nullptr);
 
 /// One operation staged in an open transaction, validated against what it
 /// has staged so far; a failure fails the transaction.
-[[nodiscard]] result::Status
-stage(Transaction& transaction, const Operation& operation, const ComponentCatalog& catalog);
+[[nodiscard]] result::Status stage(Transaction& transaction,
+                                   const Operation& operation,
+                                   const ComponentCatalog& catalog,
+                                   const scene::SceneSource* sources = nullptr);
 
 /// SPEC-0040's AtomicBatch: every operation in order in one transaction;
 /// any failure keeps nothing.
 [[nodiscard]] result::Result<Committed> executeAtomic(AuthoredScene& scene,
                                                       std::uint64_t generation,
                                                       std::span<const Operation> operations,
-                                                      const ComponentCatalog& catalog);
+                                                      const ComponentCatalog& catalog,
+                                                      const scene::SceneSource* sources = nullptr);
 
 enum class OnFailure : std::uint8_t {
     ContinuePerItem,
@@ -277,6 +309,7 @@ struct IndependentOutcome {
                                                     std::uint64_t generation,
                                                     std::span<const Operation> operations,
                                                     const ComponentCatalog& catalog,
-                                                    OnFailure onFailure);
+                                                    OnFailure onFailure,
+                                                    const scene::SceneSource* sources = nullptr);
 
 } // namespace rawframe::authoring

@@ -77,6 +77,9 @@ public:
     /// The scene as the transaction has staged it so far; once it has
     /// closed, the document's scene, or an empty one if the token let go.
     [[nodiscard]] const scene::Scene& staged() const noexcept;
+    /// The resource identity of the document it changes; nought once it
+    /// let go.
+    [[nodiscard]] base::Bits128 document() const noexcept;
     /// Stages one delta onto the staged scene. A delta that does not apply,
     /// or passes the journal's limits (`LimitExceeded`), fails the whole
     /// transaction.

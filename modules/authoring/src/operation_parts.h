@@ -50,4 +50,10 @@ valueOf(const Operation& operation, const FieldInput& input, FieldKind kind);
                                                   const scene::SceneInstance& instance,
                                                   base::Bits128 entity);
 
+/// The deltas of adding or removing a whole instance.
+[[nodiscard]] result::Result<Journal> deriveInstance(const scene::Scene& scene,
+                                                     const Operation& operation,
+                                                     const scene::SceneSource* sources,
+                                                     base::Bits128 document);
+
 } // namespace rawframe::authoring
