@@ -218,6 +218,11 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 game.components.push_back(GameComponent{
                     .id = layout.id, .name = std::string{layout.name}, .kestType = std::string{layout.scriptType}});
             }
+            // A contact's entities are references, for checkpoints.
+            for (const std::string_view kField : {"hit", "visitor"}) {
+                game.entityFields.push_back(GameEntityField{
+                    .component = std::string{physics2d::Contact2D::kComponentName}, .field = std::string{kField}});
+            }
             game.physics2d = physics;
         } else if (kKeyword == "interest") {
             // interest <component> <field>... within <radius>

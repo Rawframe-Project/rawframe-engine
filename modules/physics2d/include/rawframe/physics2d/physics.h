@@ -11,7 +11,8 @@
 //      not what the last step wrote is a teleport, a Velocity2D likewise a
 //      new velocity, and an Impulse2D is applied and cleared;
 //   3. the world steps once, with the settings' substeps;
-//   4. every body's pose and velocity are written back.
+//   4. every Contact2D is written from the step's contact and overlap
+//      streams, and every body's pose and velocity are written back.
 //
 // Gameplay systems that push bodies run before the step (`before
 // rawframe.physics2d.step`); those that read where bodies went, after. The
@@ -53,6 +54,9 @@ struct Physics2DStatistics {
     std::uint64_t teleports = 0;
     std::uint64_t velocitiesSet = 0;
     std::uint64_t impulses = 0;
+    /// Contacts and sensor overlaps that began.
+    std::uint64_t contactsBegun = 0;
+    std::uint64_t overlapsBegun = 0;
 };
 
 inline constexpr std::string_view kStepSystem = "rawframe.physics2d.step";
@@ -65,7 +69,7 @@ public:
     [[nodiscard]] static result::Result<std::unique_ptr<Physics2D>> create(const Physics2DSettings& settings);
     ~Physics2D() override;
 
-    /// Contributes kStepSystem. The registry must hold the four physics
+    /// Contributes kStepSystem. The registry must hold the five physics
     /// components at the engine's sizes.
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;

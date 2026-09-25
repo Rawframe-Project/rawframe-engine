@@ -5,7 +5,10 @@ module rawframe.physics2d
 // writes them imports this module. An entity with a Body2D, a Pose2D, and a
 // Velocity2D has a body. Systems before `rawframe.physics2d.step` push bodies
 // (write an Impulse2D, or set a Pose2D or a Velocity2D outright); systems
-// after it read where they went. Meters, seconds, kilograms, radians.
+// after it read where they went. An entity that also has a Contact2D is told
+// what its body touched. Meters, seconds, kilograms, radians.
+
+import rawframe.world
 
 // Body2D.motion
 const STATIC: u8 = 0
@@ -25,6 +28,8 @@ struct Body2D {
     shape: u8
     fixedRotation: bool
     bullet: bool
+    // Detects what overlaps it and pushes nothing: a trigger zone.
+    sensor: bool
     width: f32
     height: f32
     density: f32
@@ -54,4 +59,24 @@ struct Impulse2D {
     x: f32
     y: f32
     angular: f32
+}
+
+// Written by every step. Counts of the contacts touching now, begun, and
+// ended this step, and likewise of overlaps with sensors (on the sensor and
+// on what is inside it); the other body of the hardest contact begun this
+// step, its closing speed, and the normal from this body toward it; and the
+// first body that began to overlap this one this step. An Entity is the
+// null one when nothing began.
+struct Contact2D {
+    touching: u32
+    began: u32
+    ended: u32
+    overlapping: u32
+    entered: u32
+    exited: u32
+    hit: world.Entity
+    hitSpeed: f32
+    hitNormalX: f32
+    hitNormalY: f32
+    visitor: world.Entity
 }

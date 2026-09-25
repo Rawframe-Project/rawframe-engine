@@ -169,7 +169,7 @@ public:
         program_ = std::move(*program);
 
         for (const GameComponent& component : game_.components) {
-            RAWFRAME_TRY_ASSIGN(kest::TypeLayout layout, program_->layout(component.kestType));
+            RAWFRAME_TRY_ASSIGN(kest::TypeLayout layout, layoutOf(component));
             descriptors_.push_back(schema::ComponentDescriptor{.id = component.id,
                                                                .name = component.name,
                                                                .size = layout.size,
@@ -230,7 +230,10 @@ public:
                                                          .randomStreams = streams_[index]});
         }
         for (const GameComponent& component : game_.components) {
-            components_.push_back(KestComponent{.component = component.id, .kestType = component.kestType});
+            // What the program never names it cannot insert or remove.
+            if (program_->layout(component.kestType).has_value()) {
+                components_.push_back(KestComponent{.component = component.id, .kestType = component.kestType});
+            }
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
@@ -504,6 +507,34 @@ private:
         return {};
     }
 
+    /// A component's layout as the program has it. A program lays out only
+    /// the types it uses, so an engine physics component it never names is
+    /// laid out as the engine lays it out.
+    [[nodiscard]] result::Result<kest::TypeLayout> layoutOf(const GameComponent& component) const {
+        auto layout = program_->layout(component.kestType);
+        if (layout.has_value() || !game_.physics2d.has_value()) {
+            return layout;
+        }
+        for (const physics2d::ComponentLayout& engine : physics2d::componentLayouts()) {
+            if (engine.id != component.id) {
+                continue;
+            }
+            kest::TypeLayout made{.size = engine.size, .alignment = engine.alignment, .mark = 0, .fields = {}};
+            for (const physics2d::ComponentField& field : engine.fields) {
+                constexpr std::array<kest::FieldKind, 5> kKinds = {kest::FieldKind::U8,
+                                                                   kest::FieldKind::U32,
+                                                                   kest::FieldKind::Bool,
+                                                                   kest::FieldKind::F32,
+                                                                   kest::FieldKind::F64};
+                made.fields.push_back(kest::Field{.name = std::string{field.name},
+                                                  .offset = field.offset,
+                                                  .kind = kKinds[static_cast<std::size_t>(field.type)]});
+            }
+            return made;
+        }
+        return layout;
+    }
+
     /// 2D physics: the program's physics types must be laid out exactly as
     /// the engine's components are, field by field. A process that plays
     /// the game elsewhere runs no physics.
@@ -515,6 +546,8 @@ private:
             switch (kind) {
             case kest::FieldKind::U8:
                 return physics2d::FieldType::U8;
+            case kest::FieldKind::U32:
+                return physics2d::FieldType::U32;
             case kest::FieldKind::Bool:
                 return physics2d::FieldType::Bool;
             case kest::FieldKind::F32:

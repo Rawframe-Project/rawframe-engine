@@ -11,6 +11,8 @@
 #include <map>
 #include <maul2d/maul2d.h>
 #include <mutex>
+#include <tuple>
+#include <utility>
 
 namespace rawframe::physics2d {
 
@@ -60,6 +62,7 @@ template <typename T> [[nodiscard]] bool same(const T& left, const T& right) noe
 /// writes from its own.
 struct Mapped {
     m2BodyId body{};
+    m2ShapeId shape{};
     bool refused = false;
     Body2D made;
     Pose2D pose;
@@ -82,6 +85,14 @@ struct Physics2D::State {
     std::map<world::EntityHandle, Mapped> mapped;
     std::optional<world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>> bodies;
     std::optional<schema::ComponentRuntimeId> impulse;
+    std::optional<schema::ComponentRuntimeId> contact;
+    /// Whose each live shape is, by its index; the generation tells a
+    /// reused index from the shape an event names.
+    std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
+    /// Live sensor shapes, in entity order.
+    std::vector<m2ShapeId> sensors;
+    std::vector<m2ShapeId> overlaps;
+    std::vector<m2ContactData> touching;
     std::vector<schema::ComponentRuntimeId> reads;
     std::vector<schema::ComponentRuntimeId> writes;
     std::unique_ptr<world::System> system;
@@ -126,6 +137,7 @@ struct Physics2D::State {
         shape.density = body.density;
         shape.friction = body.friction;
         shape.restitution = body.restitution;
+        shape.isSensor = body.sensor;
         m2ShapeId made{};
         if (body.shape == static_cast<std::uint8_t>(Shape::Circle)) {
             const m2Circle kCircle{.center = {0, 0}, .radius = body.width};
@@ -144,12 +156,123 @@ struct Physics2D::State {
             return false;
         }
         into.body = kBody;
+        into.shape = made;
+        owners[made.index1] = {made.generation, row.entity};
         ++statistics.bodiesMade;
         return true;
     }
 
+    /// The entity whose body a shape is, or the null entity for a shape
+    /// already gone.
+    [[nodiscard]] world::EntityHandle ownerOf(m2ShapeId shape) const {
+        const auto kOwner = owners.find(shape.index1);
+        return kOwner != owners.end() && kOwner->second.first == shape.generation ? kOwner->second.second
+                                                                                  : world::EntityHandle{};
+    }
+
+    [[nodiscard]] Contact2D* contactOf(world::World& world, world::EntityHandle entity) const {
+        return entity.isNull() ? nullptr : static_cast<Contact2D*>(world.getErased(entity, *contact));
+    }
+
+    /// Every Contact2D of a body, from this step's event streams and what
+    /// touches and overlaps now, all in Maul2D's canonical order.
+    void report(world::World& world) {
+        sensors.clear();
+        for (const Row& row : rows) {
+            Contact2D* const kContact = contactOf(world, row.entity);
+            if (kContact != nullptr) {
+                *kContact = Contact2D{};
+            }
+            const Mapped& entry = mapped.find(row.entity)->second;
+            if (!entry.refused && entry.made.sensor) {
+                sensors.push_back(entry.shape);
+            }
+        }
+        const m2ContactEvents kContacts = m2World_GetContactEvents(physics);
+        for (std::int32_t index = 0; index < kContacts.beginCount; ++index) {
+            const m2ContactBeginEvent& event = kContacts.beginEvents[index];
+            const world::EntityHandle kA = ownerOf(event.shapeIdA);
+            const world::EntityHandle kB = ownerOf(event.shapeIdB);
+            ++statistics.contactsBegun;
+            for (const auto& [kSelf, kOther, kSign] : {std::tuple{kA, kB, 1.0F}, std::tuple{kB, kA, -1.0F}}) {
+                Contact2D* const kContact = contactOf(world, kSelf);
+                if (kContact == nullptr) {
+                    continue;
+                }
+                ++kContact->began;
+                if (kContact->hit.isNull() || event.approachSpeed > kContact->hitSpeed) {
+                    kContact->hit = kOther;
+                    kContact->hitSpeed = event.approachSpeed;
+                    kContact->hitNormalX = event.normal.x * kSign;
+                    kContact->hitNormalY = event.normal.y * kSign;
+                }
+            }
+        }
+        for (std::int32_t index = 0; index < kContacts.endCount; ++index) {
+            for (const m2ShapeId kShape : {kContacts.endEvents[index].shapeIdA, kContacts.endEvents[index].shapeIdB}) {
+                if (Contact2D* const kContact = contactOf(world, ownerOf(kShape))) {
+                    ++kContact->ended;
+                }
+            }
+        }
+        const m2SensorEvents kOverlaps = m2World_GetSensorEvents(physics);
+        for (std::int32_t index = 0; index < kOverlaps.beginCount; ++index) {
+            const world::EntityHandle kA = ownerOf(kOverlaps.beginEvents[index].shapeIdA);
+            const world::EntityHandle kB = ownerOf(kOverlaps.beginEvents[index].shapeIdB);
+            ++statistics.overlapsBegun;
+            for (const auto& [kSelf, kOther] : {std::pair{kA, kB}, std::pair{kB, kA}}) {
+                if (Contact2D* const kContact = contactOf(world, kSelf)) {
+                    ++kContact->entered;
+                    kContact->visitor = kContact->visitor.isNull() ? kOther : kContact->visitor;
+                }
+            }
+        }
+        for (std::int32_t index = 0; index < kOverlaps.endCount; ++index) {
+            for (const m2ShapeId kShape : {kOverlaps.endEvents[index].shapeIdA, kOverlaps.endEvents[index].shapeIdB}) {
+                if (Contact2D* const kContact = contactOf(world, ownerOf(kShape))) {
+                    ++kContact->exited;
+                }
+            }
+        }
+        // What touches and overlaps now.
+        touching.resize(std::max<std::size_t>(touching.size(), 64));
+        std::int32_t total =
+            m2World_GetContactData(physics, touching.data(), static_cast<std::int32_t>(touching.size()));
+        if (static_cast<std::size_t>(total) > touching.size()) {
+            touching.resize(static_cast<std::size_t>(total));
+            total = m2World_GetContactData(physics, touching.data(), total);
+        }
+        for (std::int32_t index = 0; index < total; ++index) {
+            for (const m2ShapeId kShape : {touching[static_cast<std::size_t>(index)].shapeIdA,
+                                           touching[static_cast<std::size_t>(index)].shapeIdB}) {
+                if (Contact2D* const kContact = contactOf(world, ownerOf(kShape))) {
+                    ++kContact->touching;
+                }
+            }
+        }
+        for (const m2ShapeId kSensor : sensors) {
+            overlaps.resize(std::max<std::size_t>(overlaps.size(), 16));
+            std::int32_t inside =
+                m2Shape_GetSensorOverlaps(kSensor, overlaps.data(), static_cast<std::int32_t>(overlaps.size()));
+            if (static_cast<std::size_t>(inside) > overlaps.size()) {
+                overlaps.resize(static_cast<std::size_t>(inside));
+                inside = m2Shape_GetSensorOverlaps(kSensor, overlaps.data(), inside);
+            }
+            Contact2D* const kSensorContact = contactOf(world, ownerOf(kSensor));
+            for (std::int32_t index = 0; index < inside; ++index) {
+                if (kSensorContact != nullptr) {
+                    ++kSensorContact->overlapping;
+                }
+                if (Contact2D* const kContact = contactOf(world, ownerOf(overlaps[static_cast<std::size_t>(index)]))) {
+                    ++kContact->overlapping;
+                }
+            }
+        }
+    }
+
     void remove(Mapped& entry) {
         if (!entry.refused) {
+            owners.erase(entry.shape.index1);
             m2DestroyBody(entry.body);
             ++statistics.bodiesRemoved;
         }
@@ -232,6 +355,8 @@ struct Physics2D::State {
         const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
         m2World_Step(physics, kSeconds, static_cast<std::int32_t>(settings.substeps));
         ++statistics.steps;
+
+        report(world);
 
         // 4. Every body's pose and velocity back into the World.
         for (const Row& row : rows) {
@@ -322,9 +447,11 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
         state.bodies,
         (world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>::resolve(registry)));
     RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse2D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact2D::kComponentTypeId));
     state.reads = state.bodies->reads();
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
+    state.writes.push_back(*state.contact);
     state.system = std::make_unique<Step>(state);
     systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
                                                .phase = world::Phase::Simulation,

@@ -57,6 +57,8 @@ public:
                       diagnostics::field("teleports", kStatistics.teleports),
                       diagnostics::field("velocitiesSet", kStatistics.velocitiesSet),
                       diagnostics::field("impulses", kStatistics.impulses),
+                      diagnostics::field("contactsBegun", kStatistics.contactsBegun),
+                      diagnostics::field("overlapsBegun", kStatistics.overlapsBegun),
                       diagnostics::field("digest", std::string_view{digest.data(), digest.size()})});
     }
 

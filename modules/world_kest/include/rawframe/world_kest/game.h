@@ -40,9 +40,10 @@
 //
 // A `physics2d` line gives the World 2D physics (D33): the game gains the
 // engine's physics components, named `rawframe.physics2d.body`, `.pose`,
-// `.velocity`, and `.impulse`, whose Kest types are rawframe.physics2d's,
-// and a step in the simulation phase, `rawframe.physics2d.step`, that
-// systems order themselves around with `before` and `after`:
+// `.velocity`, `.impulse`, and `.contact`, whose Kest types are
+// rawframe.physics2d's, and a step in the simulation phase,
+// `rawframe.physics2d.step`, that systems order themselves around with
+// `before` and `after`:
 //
 //   physics2d gravity 0 -10 substeps 4
 //

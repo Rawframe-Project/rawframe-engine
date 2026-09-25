@@ -5,6 +5,7 @@
 #include "rawframe/world/schedule.h"
 #include "rawframe/world/world.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <optional>
@@ -17,7 +18,7 @@ namespace {
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
-    builder.add<Body2D>().add<Pose2D>().add<Velocity2D>().add<Impulse2D>();
+    builder.add<Body2D>().add<Pose2D>().add<Velocity2D>().add<Impulse2D>().add<Contact2D>();
     return *builder.freeze();
 }
 
@@ -42,6 +43,7 @@ struct Scene {
         RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Pose2D>(), pose).has_value());
         RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Velocity2D>(), velocity).has_value());
         RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Impulse2D>(), Impulse2D{}).has_value());
+        RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Contact2D>(), Contact2D{}).has_value());
         return kEntity;
     }
 
@@ -56,6 +58,9 @@ struct Scene {
     }
     Velocity2D& velocity(world::EntityHandle entity) {
         return *world.get(entity, *schema->key<Velocity2D>());
+    }
+    Contact2D& contact(world::EntityHandle entity) {
+        return *world.get(entity, *schema->key<Contact2D>());
     }
 };
 
@@ -177,6 +182,56 @@ RAWFRAME_TEST(BodiesFollowTheirEntities) {
     RAWFRAME_EXPECT(scene.world.destroy(kFirst).has_value());
     scene.run(1);
     RAWFRAME_EXPECT(scene.physics->statistics().bodiesRemoved == 2);
+}
+
+RAWFRAME_TEST(ABodyIsToldWhatItTouches) {
+    Scene scene;
+    const world::EntityHandle kGroundEntity = scene.body(kGround, {.x = 0, .y = 0});
+    const world::EntityHandle kBallEntity = scene.body(kBall, {.x = 0, .y = 2});
+    int landed = -1;
+    for (int tick = 0; tick < 120 && landed < 0; ++tick) {
+        scene.run(1);
+        landed = scene.contact(kBallEntity).began == 1 ? tick : -1;
+    }
+    RAWFRAME_EXPECT(landed > 0);
+    // Both sides are told, each of the other, with the normal from itself
+    // toward the other: the ball's points down, the ground's up.
+    const Contact2D kBallContact = scene.contact(kBallEntity);
+    const Contact2D kGroundContact = scene.contact(kGroundEntity);
+    RAWFRAME_EXPECT(kBallContact.hit == kGroundEntity && kGroundContact.hit == kBallEntity);
+    RAWFRAME_EXPECT(kBallContact.hitSpeed > 1 && kBallContact.hitNormalY < -0.99F && kGroundContact.hitNormalY > 0.99F);
+    RAWFRAME_EXPECT(kBallContact.touching == 1 && kGroundContact.touching == 1);
+    // A step later nothing new began, and they still touch (or the ball has
+    // bounced off and the end is counted).
+    scene.run(1);
+    const Contact2D kAfter = scene.contact(kBallEntity);
+    RAWFRAME_EXPECT(kAfter.began == 0 && kAfter.hit.isNull() && kAfter.touching + kAfter.ended == 1);
+    RAWFRAME_EXPECT(scene.physics->statistics().contactsBegun >= 1);
+}
+
+RAWFRAME_TEST(ASensorIsToldWhatPassesThroughIt) {
+    Scene scene;
+    Body2D zone = kGround;
+    zone.sensor = true;
+    zone.height = 1;
+    const world::EntityHandle kZone = scene.body(zone, {.x = 0, .y = 5});
+    const world::EntityHandle kBallEntity = scene.body(kBall, {.x = 0, .y = 8});
+    std::uint32_t entered = 0;
+    std::uint32_t exited = 0;
+    std::uint32_t mostInside = 0;
+    world::EntityHandle visitor;
+    for (int tick = 0; tick < 120; ++tick) {
+        scene.run(1);
+        const Contact2D& zoneContact = scene.contact(kZone);
+        entered += zoneContact.entered;
+        exited += zoneContact.exited;
+        mostInside = std::max(mostInside, zoneContact.overlapping);
+        visitor = zoneContact.visitor.isNull() ? visitor : zoneContact.visitor;
+    }
+    // The ball fell through untouched: one entry, one exit, told to both.
+    RAWFRAME_EXPECT(entered == 1 && exited == 1 && mostInside == 1 && visitor == kBallEntity);
+    RAWFRAME_EXPECT(scene.pose(kBallEntity).y < 0);
+    RAWFRAME_EXPECT(scene.physics->statistics().overlapsBegun == 1 && scene.physics->statistics().contactsBegun == 0);
 }
 
 RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {

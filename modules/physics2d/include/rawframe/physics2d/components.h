@@ -4,14 +4,17 @@
 // Body2D, a Pose2D, and a Velocity2D has a body in the physics world; gameplay
 // reads the committed pose and velocity, and changes the body by writing
 // them, which the next step takes as a teleport or a new velocity, or by
-// writing an Impulse2D, which the next step applies once and clears. Units
-// are meters, seconds, kilograms, and radians (SPEC-0037's 2D meter).
+// writing an Impulse2D, which the next step applies once and clears. A body
+// whose entity also has a Contact2D is told after each step what it touches
+// and what overlaps it (SPEC-0037's per-body opt-in). Units are meters,
+// seconds, kilograms, and radians (SPEC-0037's 2D meter).
 //
 // Layouts are fixed and plain, so a script declares the same structs (the
 // Kest ones are rawframe.physics2d's) and each field table below says what
 // a matching declaration holds.
 
 #include "rawframe/schema/stable_id.h"
+#include "rawframe/world/entity.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -48,6 +51,8 @@ struct Body2D {
     bool fixedRotation = false;
     /// Continuous collision against other bodies, for the fast.
     bool bullet = false;
+    /// Detects what overlaps it and pushes nothing (a trigger zone).
+    bool sensor = false;
     float width = 0;
     float height = 0;
     float density = 0;
@@ -93,8 +98,33 @@ struct Impulse2D {
     float angular = 0;
 };
 
+/// What a body touched and what overlapped it, written by every step: counts
+/// now and for this step, the other body of the hardest contact begun this
+/// step (its closing speed, and the normal from this body toward it), and
+/// the first body that began to overlap it this step. An entity field is
+/// the null entity when nothing began. Overlaps are counted on both sides:
+/// on the sensor and on what is inside it.
+struct Contact2D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("1f84d21a-eff7-400e-95f0-a45d96deaa07");
+    static constexpr std::string_view kComponentName = "rawframe.physics2d.contact";
+
+    std::uint32_t touching = 0;
+    std::uint32_t began = 0;
+    std::uint32_t ended = 0;
+    std::uint32_t overlapping = 0;
+    std::uint32_t entered = 0;
+    std::uint32_t exited = 0;
+    world::EntityHandle hit;
+    float hitSpeed = 0;
+    float hitNormalX = 0;
+    float hitNormalY = 0;
+    world::EntityHandle visitor;
+};
+
 enum class FieldType : std::uint8_t {
     U8,
+    U32,
     Bool,
     F32,
     F64,
@@ -117,7 +147,9 @@ struct ComponentLayout {
     std::span<const ComponentField> fields;
 };
 
-/// Body2D, Pose2D, Velocity2D, and Impulse2D, in that order.
+/// Body2D, Pose2D, Velocity2D, Impulse2D, and Contact2D, in that order.
+/// An entity field appears as its two parts, `<name>.slot` and
+/// `<name>.generation`.
 [[nodiscard]] std::span<const ComponentLayout> componentLayouts() noexcept;
 
 } // namespace rawframe::physics2d
