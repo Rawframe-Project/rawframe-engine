@@ -15,6 +15,7 @@ apply to vendored files; the code is upstream's, not ours.
 | Opus 1.5.2 | `xiph/opus` | `ddbe48383984d56acd9e1ab6a090c54ca6b735a6` | BSD-3-Clause | `include/`, `src/`, `celt/`, `silk/`, the three source lists, `COPYING` |
 | Zstandard 1.5.7 | `facebook/zstd` | `f8745da6ff1ad1e7bab384bd1f9d742439278e99` | BSD-3-Clause (dual-licensed; the BSD license is the one taken) | `lib/common`, `lib/compress`, `lib/decompress`, `lib/zstd.h`, `lib/zstd_errors.h`, `LICENSE` |
 | cgltf 1.15 | `jkuhlmann/cgltf` | `360db1a95480fe102ae9c69b27c5d101167ff5ba` | MIT | `cgltf.h`, `LICENSE`; the implementation unit `cgltf.c` is ours |
+| CLDR 48.1.0 (JSON) | `unicode-org/cldr-json` | `d2988851207ba643d9ccc4c2e895e5ca1f4fbaf3` | Unicode-3.0 | `LICENSE`; `cldr-core`'s `plurals`, `ordinals`, `likelySubtags`, `parentLocales`, `aliases`, and `numberingSystems` supplements and `coverageLevels.json`; `cldr-numbers-full`'s `numbers.json` of every locale of modern coverage |
 | OpenSSL 3.5 | `openssl/openssl` | `453eaaa9e6bb1304730abacfbb73d51868cb6ab9` | Apache-2.0 | everything but `test/`, `demos/`, the programs' sample keys, and the documentation and fuzzers other than their `build.info` files |
 
 To move the Kest pin, run `tools/update_kest.sh <kest checkout> <revision>`,
@@ -54,3 +55,8 @@ To move the Zstandard pin, run `tools/update_zstd.sh <checkout> <revision>` and
 proceed as for Kest. SPEC-0021's canonical packing pins the exact revision and
 parameters: a new revision may change blob bytes, so it is a new packer
 generation, never a silent change. Runtimes link the decoder only.
+
+To move the CLDR pin, run `tools/update_cldr.sh <cldr-json commit>`, then
+`tools/generate_cldr.py`, which remakes the localization module's generated
+tables from it, and proceed as for Kest. Data, not code: no CLDR file is
+compiled or read at run time; the tables are made ahead of time (ADR-0050).
