@@ -77,6 +77,7 @@ add_subdirectory(hosts/import)
 add_subdirectory(hosts/cook)
 add_subdirectory(hosts/build)
 add_subdirectory(hosts/scene_tool)
+add_subdirectory(hosts/author)
 add_subdirectory(hosts/animation_tool)
 
 # Scenarios: several modules and hosts together, the way a game uses them.

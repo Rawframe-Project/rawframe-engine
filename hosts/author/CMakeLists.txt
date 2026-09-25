@@ -1,0 +1,19 @@
+# The authoring tool (ADR-0032, SPEC-0040): the operation surface from a
+# command line. Tooling only; no client or server closure contains it.
+rawframe_host(NAME author OUTPUT rawframe-author
+    SOURCES src/main.cpp
+    DEPS authoring world_kest kest scene schema document result base
+)
+
+if(RAWFRAME_BUILD_TESTS)
+    # A bad argument is a usage error, not a crash.
+    add_test(NAME author_usage COMMAND rawframe_host_author)
+    set_tests_properties(author_usage PROPERTIES WILL_FAIL TRUE)
+    # A scene of the runners game changed through requests: a new entity
+    # with a body at a place, stale and failing requests refused whole, and
+    # a dry run that writes nothing.
+    add_test(NAME author_runners
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_runners.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_runners)
+    set_tests_properties(author_runners PROPERTIES PASS_REGULAR_EXPRESSION "authored runners")
+endif()
