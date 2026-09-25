@@ -15,6 +15,8 @@
 #include "rawframe/world_replication/client_worlds.h"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -38,6 +40,16 @@ constexpr EventIdentity kSoundReloaded{"audio", "sound_reloaded"};
 constexpr EventIdentity kSoundNotReloaded{"audio", "sound_reload_failed"};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name, game_content::kGameContent.name};
 constexpr std::uint32_t kRecordingRate = 48'000;
+
+/// A sound's identity as its game writes it, 16 lowercase hexadecimal
+/// digits: a log's integers are signed, and JSON readers round past 2^53.
+std::string identityText(std::uint64_t id) {
+    std::array<char, 16> digits{};
+    const char* const kEnd = std::to_chars(digits.data(), digits.data() + digits.size(), id, 16).ptr;
+    std::string text(digits.size() - static_cast<std::size_t>(kEnd - digits.data()), '0');
+    text.append(std::string_view{digits.data(), kEnd});
+    return text;
+}
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldAudioError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kWorldAudioDomain, code(error), why).error()};
@@ -167,20 +179,20 @@ struct Hearing {
             emitter.log(diagnostics::Severity::Warning,
                         kUnreadSound,
                         "an on-demand sound could not be read: it goes unheard",
-                        {diagnostics::field("sound", settings.sounds[kSound].first),
+                        {diagnostics::field("sound", identityText(settings.sounds[kSound].first)),
                          diagnostics::field("reason", std::string{kError.description()})});
         }
         for (const std::size_t kSound : kServed.reloaded) {
             emitter.log(diagnostics::Severity::Info,
                         kSoundReloaded,
                         "a sound's variant was replaced by its new revision",
-                        {diagnostics::field("sound", settings.sounds[kSound].first)});
+                        {diagnostics::field("sound", identityText(settings.sounds[kSound].first))});
         }
         for (const auto& [kSound, kError] : kServed.notReloaded) {
             emitter.log(diagnostics::Severity::Warning,
                         kSoundNotReloaded,
                         "a sound's new revision could not be used: the old one plays on",
-                        {diagnostics::field("sound", settings.sounds[kSound].first),
+                        {diagnostics::field("sound", identityText(settings.sounds[kSound].first)),
                          diagnostics::field("reason", std::string{kError.description()})});
         }
     }
