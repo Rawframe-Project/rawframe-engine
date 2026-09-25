@@ -3,15 +3,12 @@
 #include "rawframe/input/actions.h"
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/world/random.h"
-#include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/game_files.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 #include <iterator>
-#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -21,19 +18,6 @@ namespace {
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, InputKestError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kInputKestDomain, code(error), why).error()};
-}
-
-result::Result<std::string> readFile(const std::filesystem::path& path) {
-    std::ifstream file{path, std::ios::binary};
-    if (!file) {
-        return std::unexpected<result::Error>{
-            refuse(result::ErrorClass::NotFound, InputKestError::BadSample, "a file the game names cannot be read")
-                .error()
-                .withContext("path", path.string())};
-    }
-    std::ostringstream text;
-    text << file.rdbuf();
-    return text.str();
 }
 
 // The doors: one player's committed actions, by action identity.
@@ -294,27 +278,25 @@ result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* con
 }
 
 result::Result<std::unique_ptr<world_replication::InputSourcePlan>> makeInputSources(const SourceSettings& settings) {
-    const std::filesystem::path kGamePath{settings.game};
-    RAWFRAME_TRY_ASSIGN(const std::string kText, readFile(kGamePath));
-    RAWFRAME_TRY_ASSIGN(const world_kest::GameDescription kGame, world_kest::parseGame(kText));
+    if (settings.game == nullptr || !settings.game->named()) {
+        return refuse(result::ErrorClass::NotFound, InputKestError::NoControls, "no game is named");
+    }
+    const world_kest::GameDescription& kGame = settings.game->description();
     if (!kGame.controls) {
         return refuse(result::ErrorClass::NotFound, InputKestError::NoControls, "the game declares no controls");
     }
-    const std::filesystem::path kBeside = kGamePath.parent_path();
     Shared shared;
-    RAWFRAME_TRY_ASSIGN(const std::string kActions, readFile(kBeside / kGame.controls->actions));
+    RAWFRAME_TRY_ASSIGN(const std::string_view kActions, settings.game->document(kGame.controls->actions));
     auto actions = input::readActionSet(kActions);
     if (!actions.has_value()) {
-        return std::unexpected<result::Error>{
-            std::move(actions).error().withContext("path", (kBeside / kGame.controls->actions).string())};
+        return std::unexpected<result::Error>{std::move(actions).error().withContext("name", kGame.controls->actions)};
     }
     shared.actions = std::move(*actions);
-    const std::string kProgram = (kBeside / kGame.controls->program).string();
     std::string report;
-    auto program = kest::Program::compileFile(kProgram, settings.compile, &report);
+    auto program = settings.game->compile(kGame.controls->program, settings.compile, &report);
     if (!program.has_value()) {
         return std::unexpected<result::Error>{
-            std::move(program).error().withContext("path", kProgram).withContext("report", report)};
+            std::move(program).error().withContext("program", kGame.controls->program).withContext("report", report)};
     }
     shared.program = std::move(*program);
     const auto kInput = std::ranges::find(kGame.components, kGame.input, &world_kest::GameComponent::name);

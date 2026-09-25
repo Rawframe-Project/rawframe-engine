@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -21,11 +22,17 @@ namespace {
 /// runners.Stick: run, jump, aimX, aimY, fire.
 using Stick = std::array<float, 5>;
 
+const world_kest::GameFiles& gameAt(std::string_view path) {
+    static std::vector<std::unique_ptr<world_kest::GameFiles>> read;
+    auto files = world_kest::GameFiles::fromDirectory(std::string{RAWFRAME_SAMPLE_GAMES} + std::string{path});
+    RAWFRAME_EXPECT(files.has_value());
+    read.push_back(
+        std::make_unique<world_kest::GameFiles>(files.has_value() ? std::move(*files) : world_kest::GameFiles{}));
+    return *read.back();
+}
+
 SourceSettings runners(std::size_t inputSize = sizeof(Stick)) {
-    SourceSettings settings{.game = std::string{RAWFRAME_SAMPLE_GAMES} + "runners/runners.game",
-                            .inputSize = inputSize};
-    settings.compile.library = RAWFRAME_KEST_LIBRARY;
-    return settings;
+    return SourceSettings{.game = &gameAt("runners/runners.game"), .inputSize = inputSize};
 }
 
 std::vector<Stick> play(world_replication::InputSource& source, int ticks) {
@@ -84,7 +91,7 @@ RAWFRAME_TEST(ABotPlaysThroughTheGamesActionsAndSample) {
 
 RAWFRAME_TEST(GamesWithoutControlsOrWithAMisfitSampleAreRefused) {
     SourceSettings crates = runners();
-    crates.game = std::string{RAWFRAME_SAMPLE_GAMES} + "crates/crates.game";
+    crates.game = &gameAt("crates/crates.game");
     const auto kCrates = makeInputSources(crates);
     RAWFRAME_EXPECT(!kCrates.has_value() && kCrates.error().code() == code(InputKestError::NoControls) &&
                     kCrates.error().errorClass() == result::ErrorClass::NotFound);

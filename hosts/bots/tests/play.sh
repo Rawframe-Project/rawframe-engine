@@ -33,7 +33,6 @@ cat >"$work/server.conf" <<CONF
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = $game
-kest.library = third_party/kest/lib/
 network.quic.self_signed = true
 network.quic.fingerprint_file = $work/fingerprint
 replication.endpoint = 127.0.0.1:$port
@@ -43,7 +42,6 @@ cat >"$work/bots.conf" <<CONF
 host.maximum_iterations = $bots_iterations
 host.iteration_rate = 120
 kest.game = $game
-kest.library = third_party/kest/lib/
 kest.plan_only = true
 network.quic.pin_file = $work/fingerprint
 bots.count = $count

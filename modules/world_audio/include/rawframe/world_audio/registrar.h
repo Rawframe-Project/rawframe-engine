@@ -24,10 +24,11 @@ namespace rawframe::world_audio {
 ///   audio.play             `device`, or `null` for a device that plays nothing
 ///   audio.play_period      the device's buffer in frames (256)
 ///   audio.client           which of the process's clients to hear (0)
-///   kest.game, kest.library  the game whose `mixer` and `sound` lines it plays
 ///
-/// Sounds are read by identity from `rawframe.content.game`, which the
-/// Runtime provides (`rawframe.game_content`).
+/// The game is the Runtime's game files (`rawframe.world_kest.game_files`),
+/// whose `mixer` and `sound` lines it plays. Sounds are read by identity from
+/// `rawframe.content.game`, which the Runtime provides
+/// (`rawframe.game_content`).
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);

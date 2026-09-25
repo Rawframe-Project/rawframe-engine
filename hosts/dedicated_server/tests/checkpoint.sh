@@ -15,8 +15,7 @@ common="host.maximum_iterations = 400
 host.iteration_rate = 1000
 world.tick_rate = 1000
 world.root_seed = 7
-kest.game = modules/world_kest/tests/game/shooter.game
-kest.library = third_party/kest/lib/"
+kest.game = modules/world_kest/tests/game/shooter.game"
 
 printf '%s\ncheckpoint.capture_ticks = 50 100\ncheckpoint.capture_prefix = %s/a-\n' "$common" "$work" >"$work/a.conf"
 printf '%s\ncheckpoint.restore = %s/a-50.rfsn\ncheckpoint.capture_ticks = 100\ncheckpoint.capture_prefix = %s/b-\n' \

@@ -1,3 +1,4 @@
+#include "game_files_participant.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "predictor.h"
@@ -9,6 +10,7 @@
 #include "rawframe/physics3d/physics.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/kest_systems.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_kest/replication.h"
@@ -30,12 +32,11 @@ namespace rawframe::world_kest {
 namespace {
 
 constexpr std::string_view kIdentity = "rawframe.world_kest.game";
-constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
+constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name, kGameFiles.name};
 constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.name,
                                           world_runtime::kCheckpointPlan.name,
                                           physics2d::kPhysics2DPlan.name,
                                           physics3d::kPhysics3DPlan.name};
-constexpr std::size_t kMaximumGameFileBytes = std::size_t{1} << 20U;
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
 constexpr diagnostics::EventIdentity kGameReloaded{"world_kest", "game_reloaded"};
@@ -64,29 +65,6 @@ std::optional<std::filesystem::file_time_type> newestSource(const std::filesyste
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldKestError error, std::string_view why) {
     return result::fail(errorClass, kWorldKestDomain, code(error), why);
-}
-
-result::Result<std::string> readFile(const std::string& path) {
-    std::FILE* const kFile = std::fopen(path.c_str(), "rb");
-    if (kFile == nullptr) {
-        return std::unexpected<result::Error>{
-            refuse(result::ErrorClass::NotFound, WorldKestError::UnreadableFile, "a game file could not be opened")
-                .error()
-                .withContext("path", path)};
-    }
-    std::string text;
-    char chunk[4096];
-    std::size_t got = 0;
-    while ((got = std::fread(chunk, 1, sizeof chunk, kFile)) != 0 && text.size() <= kMaximumGameFileBytes) {
-        text.append(chunk, got);
-    }
-    std::fclose(kFile);
-    if (text.size() > kMaximumGameFileBytes) {
-        return refuse(result::ErrorClass::ResourceExhausted,
-                      WorldKestError::UnreadableFile,
-                      "a game description is larger than 1 MiB");
-    }
-    return text;
 }
 
 /// Writes `text` as a value of `kind` at `into`. False when it does not parse
@@ -147,19 +125,11 @@ class GameParticipant final : public composition::Participant,
 public:
     GameParticipant() noexcept = default;
 
-    result::Status load(composition::ParticipantContext& context, const std::string& path) {
+    result::Status load(composition::ParticipantContext& context, const GameFiles& files) {
         const composition::Configuration& configuration = context.configuration();
         RAWFRAME_TRY_ASSIGN(simulation_, context.capability(world_runtime::kSimulation));
-        RAWFRAME_TRY_ASSIGN(const std::string kText, readFile(path));
-        RAWFRAME_TRY_ASSIGN(game_, parseGame(kText));
-
-        kest::CompileSettings compile;
-        if (const auto kLibrary = configuration.text("kest.library")) {
-            compile.library = std::string{*kLibrary};
-        }
-        const std::string kProgram = (std::filesystem::path{path}.parent_path() / game_.program).string();
-        programPath_ = kProgram;
-        compile_ = compile;
+        files_ = &files;
+        game_ = files.description();
         RAWFRAME_TRY_ASSIGN(reloadEvery_, configuration.unsignedInteger("kest.reload_every", 0));
         const auto kPlanOnly = configuration.text("kest.plan_only");
         if (kPlanOnly.has_value() && *kPlanOnly != "true" && *kPlanOnly != "false") {
@@ -167,12 +137,14 @@ public:
                 result::ErrorClass::InvalidArgument, WorldKestError::UnknownName, "kest.plan_only is true or false");
         }
         planOnly_ = kPlanOnly == "true";
-        sourcesWritten_ = newestSource(std::filesystem::path{kProgram}.parent_path());
+        if (files.directory()) {
+            sourcesWritten_ = newestSource(*files.directory());
+        }
         std::string report;
-        auto program = kest::Program::compileFile(kProgram, compile, &report);
+        auto program = files.compile(game_.program, {}, &report);
         if (!program.has_value()) {
             return std::unexpected<result::Error>{
-                std::move(program).error().withContext("path", kProgram).withContext("report", report)};
+                std::move(program).error().withContext("program", game_.program).withContext("report", report)};
         }
         program_ = std::move(*program);
 
@@ -189,7 +161,7 @@ public:
             }
             layouts_.push_back(std::move(layout));
         }
-        RAWFRAME_TRY(planReplication(kText, kProgram));
+        RAWFRAME_TRY(planReplication(files.digest()));
         RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planInterest());
         RAWFRAME_TRY(planPhysics());
@@ -298,13 +270,16 @@ public:
         if (systems_ == nullptr || reloadEvery_ == 0 || frame.iteration % reloadEvery_ != 0) {
             return;
         }
-        const auto kWritten = newestSource(std::filesystem::path{programPath_}.parent_path());
+        if (!files_->directory()) {
+            return;
+        }
+        const auto kWritten = newestSource(*files_->directory());
         if (!kWritten || kWritten == sourcesWritten_) {
             return;
         }
         sourcesWritten_ = kWritten;
         std::string report;
-        auto program = kest::Program::compileFile(programPath_, compile_, &report);
+        auto program = files_->compile(game_.program, {}, &report);
         result::Status reloaded = program.has_value()
                                       ? systems_->reload(*program)
                                       : result::Status{std::unexpected<result::Error>{std::move(program).error()}};
@@ -414,7 +389,7 @@ public:
 private:
     /// What replicates, from the description; and the game's identity: the
     /// description and its program, hashed together.
-    result::Status planReplication(std::string_view description, const std::string& programPath) {
+    result::Status planReplication(const base::Sha256Digest& game) {
         const auto kCodec = [this](std::string_view name) -> result::Result<world_replication::ComponentCodec> {
             const GameComponent& component = *componentNamed(name);
             const std::size_t kIndex = static_cast<std::size_t>(&component - game_.components.data());
@@ -442,12 +417,10 @@ private:
         if (!game_.input.empty()) {
             RAWFRAME_TRY_ASSIGN(input_, kCodec(game_.input));
         }
-        RAWFRAME_TRY_ASSIGN(const std::string kProgramText, readFile(programPath));
+        // The game is everything its files are, as peers must share it.
         base::Sha256 hasher;
-        hasher.update("rawframe.world_kest.game.v1");
-        hasher.update(description);
-        hasher.update(std::string_view{"\0", 1});
-        hasher.update(kProgramText);
+        hasher.update("rawframe.world_kest.game.v2");
+        hasher.update(game);
         fingerprint_.bytes = hasher.finish();
         return {};
     }
@@ -875,8 +848,7 @@ private:
 
     world_runtime::Simulation* simulation_ = nullptr;
     diagnostics::Emitter emitter_;
-    std::string programPath_;
-    kest::CompileSettings compile_;
+    const GameFiles* files_ = nullptr;
     std::uint64_t reloadEvery_ = 0;
     bool planOnly_ = false;
     std::optional<std::filesystem::file_time_type> sourcesWritten_;
@@ -912,8 +884,9 @@ private:
 
 result::Result<composition::ParticipantOwner> makeGame(composition::ParticipantContext& context) noexcept {
     auto game = std::make_unique<GameParticipant>();
-    if (const auto kPath = context.configuration().text("kest.game")) {
-        RAWFRAME_TRY(game->load(context, std::string{*kPath}));
+    RAWFRAME_TRY_ASSIGN(const GameFiles* files, context.capability(kGameFiles));
+    if (files->named()) {
+        RAWFRAME_TRY(game->load(context, *files));
     }
     return composition::ParticipantOwner{game.release()};
 }
@@ -921,6 +894,7 @@ result::Result<composition::ParticipantOwner> makeGame(composition::ParticipantC
 } // namespace
 
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
+    registerGameFiles(registrar);
     registrar.submit(composition::ParticipantDeclaration{
         .identity = kIdentity,
         .factory = &makeGame,

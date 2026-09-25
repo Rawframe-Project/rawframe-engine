@@ -285,8 +285,7 @@ RAWFRAME_TEST(AKestGameRunsInTheWorld) {
         problems);
     RAWFRAME_EXPECT(plan.has_value());
     const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "movers.game\n" +
-                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 10\n" +
-                              "world.maximum_ticks_per_iteration = 100\n";
+                              "world.tick_rate = 10\n" + "world.maximum_ticks_per_iteration = 100\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     RAWFRAME_EXPECT(kConfiguration.has_value());
     execution::ManualClock clock;
@@ -361,9 +360,8 @@ RAWFRAME_TEST(AReplicatedComponentMayNameEntities) {
         problems);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    const auto kConfiguration =
-        composition::Configuration::parse(std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
-                                          "sharedlinks.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n");
+    const auto kConfiguration = composition::Configuration::parse(std::string{"kest.game = "} +
+                                                                  RAWFRAME_WORLD_KEST_GAMES + "sharedlinks.game\n");
     composition::Composition composition{
         *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
@@ -380,12 +378,9 @@ RAWFRAME_TEST(AGameThatDoesNotLoadFailsTheStart) {
     execution::CancellationScope root{clock};
     for (const std::string& kText : {std::string{"kest.game = /nonexistent/x.game\n"},
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "broken.game\n",
-                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
-                                         "mispredicted.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n",
-                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
-                                         "misinterested.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n",
-                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
-                                         "mislinked.game\nkest.library = " + RAWFRAME_KEST_LIBRARY + "\n"}) {
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "mispredicted.game\n",
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "misinterested.game\n",
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "mislinked.game\n"}) {
         const auto kConfiguration = composition::Configuration::parse(kText);
         composition::Composition composition{
             *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
@@ -420,8 +415,7 @@ RAWFRAME_TEST(KestSystemsCreateAndDestroyEntities) {
                                         .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
         problems);
     const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "shooter.game\n" +
-                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 10\n" +
-                              "world.maximum_ticks_per_iteration = 1\n";
+                              "world.tick_rate = 10\n" + "world.maximum_ticks_per_iteration = 1\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
@@ -469,8 +463,7 @@ std::vector<std::vector<std::pair<physics2d::Pose2D, physics2d::Velocity2D>>> pl
         problems);
     RAWFRAME_EXPECT(plan.has_value());
     const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "crates.game\n" +
-                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 60\n" +
-                              "world.maximum_ticks_per_iteration = 1\n";
+                              "world.tick_rate = 60\n" + "world.maximum_ticks_per_iteration = 1\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
@@ -552,8 +545,7 @@ RAWFRAME_TEST(AKestSystemShootsBackInTime) {
                                         .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
         problems);
     const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "sniper.game\n" +
-                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 60\n" +
-                              "world.maximum_ticks_per_iteration = 1\n";
+                              "world.tick_rate = 60\n" + "world.maximum_ticks_per_iteration = 1\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
@@ -594,8 +586,7 @@ RAWFRAME_TEST(AKestSystemAsksThreeDimensionalPhysics) {
                                         .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
         problems);
     const std::string kText = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "towers.game\n" +
-                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 60\n" +
-                              "world.maximum_ticks_per_iteration = 1\n";
+                              "world.tick_rate = 60\n" + "world.maximum_ticks_per_iteration = 1\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
@@ -649,8 +640,7 @@ RAWFRAME_TEST(ARunnerHitIsToldSo) {
                                         .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
         problems);
     const std::string kText = std::string{"kest.game = "} + RAWFRAME_SAMPLE_GAMES + "runners/duel.game\n" +
-                              "kest.library = " + RAWFRAME_KEST_LIBRARY + "\n" + "world.tick_rate = 60\n" +
-                              "world.maximum_ticks_per_iteration = 1\n";
+                              "world.tick_rate = 60\n" + "world.maximum_ticks_per_iteration = 1\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
@@ -744,9 +734,8 @@ RAWFRAME_TEST(AChangedProgramReloadsBetweenTicks) {
         composition::CompositionRequest{.registrars = kWatched,
                                         .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
         problems);
-    const std::string kText = "kest.game = " + (kDirectory / "movers.game").string() +
-                              "\nkest.library = " + RAWFRAME_KEST_LIBRARY +
-                              "\nkest.reload_every = 1\nworld.tick_rate = 10\n";
+    const std::string kText =
+        "kest.game = " + (kDirectory / "movers.game").string() + "\nkest.reload_every = 1\nworld.tick_rate = 10\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
@@ -820,8 +809,7 @@ RAWFRAME_TEST(CheckpointsCarryEntityReferences) {
         std::filesystem::temp_directory_path() / ("rawframe-checkpoint-" + std::to_string(::getpid()));
     std::filesystem::create_directories(kDirectory);
     const std::string kGame = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
-                              "linked.game\nkest.library = " + RAWFRAME_KEST_LIBRARY +
-                              "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n";
+                              "linked.game\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n";
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(
         composition::CompositionRequest{.registrars = kWatched,

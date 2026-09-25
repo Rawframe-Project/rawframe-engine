@@ -30,7 +30,6 @@ host.maximum_iterations = 360
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = games/runners/runners.game
-kest.library = third_party/kest/lib/
 content.composition = $1
 content.library = $library
 network.loopback.latency_ms = 10

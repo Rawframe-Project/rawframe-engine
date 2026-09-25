@@ -3,6 +3,7 @@
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/registrar.h"
 #include "rawframe/input_kest/sources.h"
+#include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/plan.h"
 
 #include <string>
@@ -13,7 +14,7 @@ namespace rawframe::input_kest {
 namespace {
 
 constexpr std::string_view kProvides[] = {world_replication::kInputSourcePlan.name};
-constexpr std::string_view kNeeds[] = {world_replication::kReplicationPlan.name};
+constexpr std::string_view kNeeds[] = {world_replication::kReplicationPlan.name, world_kest::kGameFiles.name};
 
 /// Sources for a game without controls: every one refuses, and bots steer
 /// at random.
@@ -31,17 +32,14 @@ class SourcesParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
         const composition::Configuration& configuration = context.configuration();
-        const auto kGame = configuration.text("kest.game");
+        RAWFRAME_TRY_ASSIGN(const world_kest::GameFiles* game, context.capability(world_kest::kGameFiles));
         RAWFRAME_TRY_ASSIGN(const world_replication::ReplicationPlan* plan,
                             context.capability(world_replication::kReplicationPlan));
-        if (!kGame.has_value() || !plan->input().has_value()) {
+        if (!game->named() || !plan->input().has_value()) {
             sources_ = std::make_unique<NoSources>();
             return {};
         }
-        SourceSettings settings{.game = std::string{*kGame}, .inputSize = plan->input()->size};
-        if (const auto kLibrary = configuration.text("kest.library")) {
-            settings.compile.library = std::string{*kLibrary};
-        }
+        SourceSettings settings{.game = game, .inputSize = plan->input()->size};
         RAWFRAME_TRY_ASSIGN(settings.limits.heapBytes,
                             configuration.unsignedInteger("kest.sample_heap_bytes", settings.limits.heapBytes));
         RAWFRAME_TRY_ASSIGN(settings.limits.fuelPerCall,

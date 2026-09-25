@@ -9,6 +9,7 @@
 #include "rawframe/kest/machine.h"
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
+#include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/input_source.h"
 
 #include <cstddef>
@@ -30,8 +31,9 @@ struct InputDoorContext {
 [[nodiscard]] result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* context);
 
 struct SourceSettings {
-    /// The game description; its `actions` and `sample` files are beside it.
-    std::string game;
+    /// The game, whose description names its actions and sample program;
+    /// outlives the call.
+    const world_kest::GameFiles* game = nullptr;
     kest::CompileSettings compile;
     kest::MachineLimits limits{.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 1'000'000};
     /// The size of the game's input component, which the sample fills.

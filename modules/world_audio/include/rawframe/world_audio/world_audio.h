@@ -11,6 +11,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
 #include "rawframe/world/world.h"
+#include "rawframe/world_kest/game_files.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -103,11 +104,11 @@ struct GameAudio {
     std::optional<schema::ComponentTypeId> listener;
 };
 
-/// Reads the game description at `game` and the mixer layout and sound
-/// declarations its `mixer` and `sound` lines name, and finds its
+/// Reads the mixer layout and sound declarations the game's `mixer` and
+/// `sound` lines name, from its files, and finds its
 /// components of `rawframe.sound`'s types (an emitter, and a listener if it
 /// has one), whose layouts in `program` must be what this module reads.
 /// Refuses (`NotFound`) a game with no mixer line.
-[[nodiscard]] result::Result<GameAudio> loadGameAudio(const std::string& game, const kest::Program& program);
+[[nodiscard]] result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const kest::Program& program);
 
 } // namespace rawframe::world_audio

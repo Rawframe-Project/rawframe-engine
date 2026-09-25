@@ -10,11 +10,8 @@
 #include <array>
 #include <cmath>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
 #include <map>
 #include <optional>
-#include <sstream>
 
 namespace rawframe::world_audio {
 
@@ -259,19 +256,6 @@ const WorldAudioStatistics& WorldAudio::statistics() const noexcept {
 
 namespace {
 
-result::Result<std::string> readText(const std::filesystem::path& path) {
-    std::ifstream file{path, std::ios::binary};
-    if (!file) {
-        return std::unexpected<result::Error>{
-            refuse(result::ErrorClass::NotFound, WorldAudioError::NoAudio, "a file the game names cannot be read")
-                .error()
-                .withContext("path", path.string())};
-    }
-    std::ostringstream text;
-    text << file.rdbuf();
-    return text.str();
-}
-
 /// Whether the program lays `type` out as this module reads it.
 bool laidOut(const kest::Program& program,
              std::string_view type,
@@ -293,10 +277,8 @@ bool laidOut(const kest::Program& program,
 
 } // namespace
 
-result::Result<GameAudio> loadGameAudio(const std::string& game, const kest::Program& program) {
-    const std::filesystem::path kGame{game};
-    RAWFRAME_TRY_ASSIGN(const std::string kText, readText(kGame));
-    RAWFRAME_TRY_ASSIGN(const world_kest::GameDescription kDescription, world_kest::parseGame(kText));
+result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const kest::Program& program) {
+    const world_kest::GameDescription& kDescription = game.description();
     if (!kDescription.audio) {
         return refuse(result::ErrorClass::NotFound, WorldAudioError::NoAudio, "the game declares no mixer");
     }
@@ -329,20 +311,17 @@ result::Result<GameAudio> loadGameAudio(const std::string& game, const kest::Pro
     }
     loaded.emitter = *emitter;
     loaded.listener = listener;
-    const std::filesystem::path kBeside = kGame.parent_path();
-    RAWFRAME_TRY_ASSIGN(const std::string kMixer, readText(kBeside / kDescription.audio->mixer));
+    RAWFRAME_TRY_ASSIGN(const std::string_view kMixer, game.document(kDescription.audio->mixer));
     auto layout = audio::readLayout(kMixer);
     if (!layout.has_value()) {
-        return std::unexpected<result::Error>{
-            std::move(layout).error().withContext("path", (kBeside / kDescription.audio->mixer).string())};
+        return std::unexpected<result::Error>{std::move(layout).error().withContext("name", kDescription.audio->mixer)};
     }
     loaded.layout = std::move(*layout);
     for (const world_kest::GameSound& sound : kDescription.audio->sounds) {
-        const std::filesystem::path kPath = kBeside / sound.path;
-        RAWFRAME_TRY_ASSIGN(const std::string kDeclared, readText(kPath));
+        RAWFRAME_TRY_ASSIGN(const std::string_view kDeclared, game.document(sound.path));
         auto declaration = audio::readSound(kDeclared, loaded.layout);
         if (!declaration.has_value()) {
-            return std::unexpected<result::Error>{std::move(declaration).error().withContext("path", kPath.string())};
+            return std::unexpected<result::Error>{std::move(declaration).error().withContext("name", sound.path)};
         }
         loaded.sounds.emplace_back(sound.id, std::move(*declaration));
     }

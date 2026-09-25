@@ -229,10 +229,6 @@ RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
         std::ofstream file{kDirectory / name, std::ios::binary};
         file << text;
     };
-    // A project's sources are relative to it.
-    kWrite("kest.project",
-           "project heard\nsource .\nsource " +
-               std::filesystem::relative(RAWFRAME_WORLD_AUDIO_MODULES, kDirectory).string() + "\n");
     kWrite("heard.kest",
            "module heard\n\nimport rawframe.sound\n\n// A Kest type is laid out when a function uses it.\nfn "
            "hear(count: i32, emitters: [sound.Emitter], listeners: [sound.Listener]) {\n}\n");
@@ -247,13 +243,17 @@ RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
     kWrite("click.sound",
            "{\n  \"kind\": \"audio.sound\",\n  \"formatVersion\": 1,\n  \"variants\": [\n    {\n      "
            "\"resource\": \"000000000000000000000000000000c1\"\n    }\n  ],\n  \"bus\": \"0000000000000001\"\n}\n");
-    kest::CompileSettings compile;
-    compile.library = RAWFRAME_KEST_LIBRARY;
+    const auto kFiles = world_kest::GameFiles::fromDirectory(kDirectory / "heard.game");
+    RAWFRAME_EXPECT(kFiles.has_value());
+    if (!kFiles.has_value()) {
+        std::filesystem::remove_all(kDirectory);
+        return;
+    }
     std::string report;
-    const auto kProgram = kest::Program::compileFile((kDirectory / "heard.kest").string(), compile, &report);
+    const auto kProgram = kFiles->compile("heard.kest", {}, &report);
     RAWFRAME_EXPECT(kProgram.has_value());
     if (kProgram.has_value()) {
-        const auto kAudio = loadGameAudio((kDirectory / "heard.game").string(), **kProgram);
+        const auto kAudio = loadGameAudio(*kFiles, **kProgram);
         RAWFRAME_EXPECT(kAudio.has_value() && kAudio->emitter == kEmitterId && kAudio->listener == kListenerId &&
                         kAudio->sounds.size() == 1 && kAudio->sounds[0].first == kClick &&
                         kAudio->sounds[0].second.variants.size() == 1 &&

@@ -11,17 +11,15 @@
 #include "rawframe/world_audio/registrar.h"
 #include "rawframe/world_audio/sound_loader.h"
 #include "rawframe/world_audio/world_audio.h"
-#include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/client_worlds.h"
 
 #include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
-#include <filesystem>
 #include <fstream>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -38,7 +36,8 @@ constexpr EventIdentity kUnread{"audio", "sounds_unavailable"};
 constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
 constexpr EventIdentity kSoundReloaded{"audio", "sound_reloaded"};
 constexpr EventIdentity kSoundNotReloaded{"audio", "sound_reload_failed"};
-constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name, game_content::kGameContent.name};
+constexpr std::string_view kMaybe[] = {
+    world_replication::kClientWorlds.name, game_content::kGameContent.name, world_kest::kGameFiles.name};
 constexpr std::uint32_t kRecordingRate = 48'000;
 
 /// A sound's identity as its game writes it, 16 lowercase hexadecimal
@@ -85,8 +84,11 @@ struct Hearing {
     /// the executor.
     result::Status load(composition::ParticipantContext& context, std::string_view key, std::uint32_t rate, bool live) {
         const composition::Configuration& configuration = context.configuration();
-        const auto kGame = configuration.text("kest.game");
-        if (!kGame.has_value() || !context.has(world_replication::kClientWorlds.name) ||
+        const world_kest::GameFiles* files = nullptr;
+        if (context.has(world_kest::kGameFiles.name)) {
+            RAWFRAME_TRY_ASSIGN(files, context.capability(world_kest::kGameFiles));
+        }
+        if (files == nullptr || !files->named() || !context.has(world_replication::kClientWorlds.name) ||
             !context.has(game_content::kGameContent.name) || context.cpuExecutor() == nullptr) {
             return std::unexpected<result::Error>{
                 refuse(result::ErrorClass::FailedPrecondition,
@@ -99,22 +101,15 @@ struct Hearing {
         RAWFRAME_TRY_ASSIGN(client, configuration.unsignedInteger("audio.client", 0));
 
         // The game's program, for the layout check, and its audio.
-        std::ifstream file{std::string{*kGame}, std::ios::binary};
-        std::ostringstream text;
-        text << file.rdbuf();
-        RAWFRAME_TRY_ASSIGN(const world_kest::GameDescription kDescription, world_kest::parseGame(text.str()));
-        kest::CompileSettings compile;
-        if (const auto kLibrary = configuration.text("kest.library")) {
-            compile.library = std::string{*kLibrary};
-        }
-        const std::string kProgram = (std::filesystem::path{*kGame}.parent_path() / kDescription.program).string();
         std::string report;
-        auto program = kest::Program::compileFile(kProgram, compile, &report);
+        auto program = files->compile(files->description().program, {}, &report);
         if (!program.has_value()) {
-            return std::unexpected<result::Error>{
-                std::move(program).error().withContext("path", kProgram).withContext("report", report)};
+            return std::unexpected<result::Error>{std::move(program)
+                                                      .error()
+                                                      .withContext("program", files->description().program)
+                                                      .withContext("report", report)};
         }
-        RAWFRAME_TRY_ASSIGN(GameAudio game, loadGameAudio(std::string{*kGame}, **program));
+        RAWFRAME_TRY_ASSIGN(GameAudio game, loadGameAudio(*files, **program));
         const auto kMaster = std::ranges::find(game.layout.buses, audio::Role::Master, &audio::Bus::role);
         master = static_cast<std::size_t>(kMaster - game.layout.buses.begin());
         RAWFRAME_TRY_ASSIGN(mixer, audio::Mixer::create(game.layout, {.rate = rate}));

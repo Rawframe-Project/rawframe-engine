@@ -7,8 +7,3 @@ rawframe_module(NAME world_audio
 )
 
 rawframe_module_tests(NAME world_audio SOURCES tests/world_audio_test.cpp)
-if(TARGET rawframe_world_audio_tests)
-    target_compile_definitions(rawframe_world_audio_tests PRIVATE
-        RAWFRAME_KEST_LIBRARY="${RAWFRAME_KEST_LIBRARY}"
-        RAWFRAME_WORLD_AUDIO_MODULES="${PROJECT_SOURCE_DIR}/modules/kest_library/kest/")
-endif()
