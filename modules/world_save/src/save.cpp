@@ -186,8 +186,17 @@ void writeHeader(Writer& writer,
 
 } // namespace
 
+namespace {
+
+/// The document of `kept`, each entity saved under the identity paired
+/// with it, in ascending identity; references name what the World's
+/// persistent entities are named.
 result::Result<std::vector<std::byte>>
-capture(world::World& world, const SaveDeclaration& declaration, base::Bits128 space, const SaveLimits& limits) {
+captureOf(world::World& world,
+          const SaveDeclaration& declaration,
+          base::Bits128 space,
+          const SaveLimits& limits,
+          const std::map<world::PersistentEntityId, world::EntityHandle>& kKept) {
     RAWFRAME_TRY_ASSIGN(const std::vector<Resolved> kResolved, resolve(declaration, world.registry()));
     RAWFRAME_TRY_ASSIGN(const auto kHeld, persistentEntities(world));
     std::map<world::EntityHandle, world::PersistentEntityId> names;
@@ -197,7 +206,7 @@ capture(world::World& world, const SaveDeclaration& declaration, base::Bits128 s
 
     Writer body;
     std::uint32_t kept = 0;
-    for (const auto& [id, entity] : kHeld) {
+    for (const auto& [id, entity] : kKept) {
         std::uint64_t present = 0;
         for (std::size_t index = 0; index < kResolved.size(); ++index) {
             present |= world.hasErased(entity, kResolved[index].runtime) ? std::uint64_t{1} << index : 0U;
@@ -252,6 +261,28 @@ capture(world::World& world, const SaveDeclaration& declaration, base::Bits128 s
         return fail(result::ErrorClass::ResourceExhausted, SaveError::LimitExceeded, "a save is larger than its limit");
     }
     return std::move(out.out());
+}
+
+} // namespace
+
+result::Result<std::vector<std::byte>>
+capture(world::World& world, const SaveDeclaration& declaration, base::Bits128 space, const SaveLimits& limits) {
+    RAWFRAME_TRY_ASSIGN(const auto kHeld, persistentEntities(world));
+    return captureOf(world, declaration, space, limits, kHeld);
+}
+
+result::Result<std::vector<std::byte>> captureEntity(world::World& world,
+                                                     const SaveDeclaration& declaration,
+                                                     base::Bits128 space,
+                                                     world::EntityHandle entity,
+                                                     world::PersistentEntityId as,
+                                                     const SaveLimits& limits) {
+    if (!world.alive(entity) || as.value == base::Bits128{}) {
+        return fail(result::ErrorClass::InvalidArgument,
+                    SaveError::InvalidDeclaration,
+                    "an entity saved alone is alive and saved under an identity");
+    }
+    return captureOf(world, declaration, space, limits, {{as, entity}});
 }
 
 result::Result<StagedSave> read(std::span<const std::byte> bytes,
@@ -348,7 +379,14 @@ result::Result<StagedSave> read(std::span<const std::byte> bytes,
     return staged;
 }
 
-result::Result<Applied> apply(const StagedSave& staged, const SaveDeclaration& declaration, world::World& world) {
+namespace {
+
+/// Applies `staged`, with `bound`'s identity, if any, standing for its
+/// entity.
+result::Result<Applied> applyWith(const StagedSave& staged,
+                                  const SaveDeclaration& declaration,
+                                  world::World& world,
+                                  std::optional<std::pair<world::PersistentEntityId, world::EntityHandle>> bound) {
     RAWFRAME_TRY_ASSIGN(const std::vector<Resolved> kResolved, resolve(declaration, world.registry()));
     const auto kPersistent = world.registry().find(world::Persistent::kComponentTypeId);
     if (!kPersistent.has_value()) {
@@ -356,7 +394,13 @@ result::Result<Applied> apply(const StagedSave& staged, const SaveDeclaration& d
                     SaveError::InvalidDeclaration,
                     "a World without persistent identities cannot take a save");
     }
-    RAWFRAME_TRY_ASSIGN(const auto kHeld, persistentEntities(world));
+    RAWFRAME_TRY_ASSIGN(auto held, persistentEntities(world));
+    if (bound.has_value() && !held.emplace(bound->first, bound->second).second) {
+        return fail(result::ErrorClass::FailedPrecondition,
+                    SaveError::DuplicateIdentity,
+                    "an entity of the World already holds the identity a save is applied under");
+    }
+    const auto& kHeld = held;
     std::map<world::PersistentEntityId, std::size_t> saved;
     for (std::size_t index = 0; index < staged.entities.size(); ++index) {
         saved.emplace(staged.entities[index].id, index);
@@ -440,6 +484,26 @@ result::Result<Applied> apply(const StagedSave& staged, const SaveDeclaration& d
     }
     RAWFRAME_TRY(world.apply(buffer));
     return applied;
+}
+
+} // namespace
+
+result::Result<Applied> apply(const StagedSave& staged, const SaveDeclaration& declaration, world::World& world) {
+    return applyWith(staged, declaration, world, std::nullopt);
+}
+
+result::Result<Applied> applyTo(const StagedSave& staged,
+                                const SaveDeclaration& declaration,
+                                world::World& world,
+                                world::EntityHandle entity,
+                                world::PersistentEntityId as) {
+    if (!world.alive(entity) || staged.entities.size() > 1 ||
+        (!staged.entities.empty() && staged.entities[0].id != as)) {
+        return fail(result::ErrorClass::FailedPrecondition,
+                    SaveError::Mismatch,
+                    "a save applied to one entity holds that entity alone, under the identity asked for");
+    }
+    return applyWith(staged, declaration, world, std::pair{as, entity});
 }
 
 } // namespace rawframe::world_save

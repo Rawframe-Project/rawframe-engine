@@ -219,3 +219,37 @@ RAWFRAME_TEST(WhatCannotBeSavedOrAppliedIsRefused) {
     twice.components[1] = twice.components[0];
     RAWFRAME_EXPECT(refusedWith(capture(world, twice, kSpace), SaveError::InvalidDeclaration));
 }
+
+RAWFRAME_TEST(OneEntityIsSavedAndAppliedUnderAnIdentityItNeedNotCarry) {
+    const auto kRegistry = registry();
+    const Keys kKeys = keysOf(*kRegistry);
+    const world::PersistentEntityId kPlayer{base::Bits128{.high = 0x9, .low = 0x9}};
+    // A player, not persistent, holding a door that names a persistent key.
+    world::World played{kRegistry};
+    const world::EntityHandle kKey = *played.create();
+    RAWFRAME_EXPECT(played.insert(kKey, kKeys.persistent, kKeyName).has_value());
+    const world::EntityHandle kHero = *played.create();
+    RAWFRAME_EXPECT(played.insert(kHero, kKeys.door, Door{.open = 4, .key = kKey}).has_value());
+    const auto kBytes = captureEntity(played, declaration(), kSpace, kHero, kPlayer);
+    RAWFRAME_EXPECT(kBytes.has_value());
+    if (!kBytes.has_value()) {
+        return;
+    }
+    const auto kStaged = read(*kBytes, declaration(), *kRegistry, kSpace);
+    RAWFRAME_EXPECT(kStaged.has_value() && kStaged->entities.size() == 1 && kStaged->entities[0].id == kPlayer);
+
+    // The player joins another World holding the key: the door is theirs
+    // again, naming this World's key, and nothing else is made.
+    world::World joined{kRegistry};
+    const world::EntityHandle kHereKey = *joined.create();
+    RAWFRAME_EXPECT(joined.insert(kHereKey, kKeys.persistent, kKeyName).has_value());
+    const world::EntityHandle kNewcomer = *joined.create();
+    const auto kApplied = applyTo(*kStaged, declaration(), joined, kNewcomer, kPlayer);
+    RAWFRAME_EXPECT(kApplied.has_value() && kApplied->updated == 1 && kApplied->created == 0);
+    const Door* door = joined.get(kNewcomer, kKeys.door);
+    RAWFRAME_EXPECT(door != nullptr && door->open == 4 && door->key == kHereKey);
+    RAWFRAME_EXPECT(!joined.has(kNewcomer, kKeys.persistent) && joined.entityCount() == 2);
+    // Under another identity, it is not this player's.
+    RAWFRAME_EXPECT(
+        refusedWith(applyTo(*kStaged, declaration(), joined, kNewcomer, kDoorName.id()), SaveError::Mismatch));
+}

@@ -69,6 +69,17 @@ struct SaveLimits {
 [[nodiscard]] result::Result<std::vector<std::byte>>
 capture(world::World& world, const SaveDeclaration& declaration, base::Bits128 space, const SaveLimits& limits = {});
 
+/// Captures `declaration`'s components of the one entity `entity`, saved
+/// under the identity `as`, which it need not carry: a player's document,
+/// kept under the player's identity. References name the World's persistent
+/// entities, as in `capture`.
+[[nodiscard]] result::Result<std::vector<std::byte>> captureEntity(world::World& world,
+                                                                   const SaveDeclaration& declaration,
+                                                                   base::Bits128 space,
+                                                                   world::EntityHandle entity,
+                                                                   world::PersistentEntityId as,
+                                                                   const SaveLimits& limits = {});
+
 /// A read save: every value checked, waiting to be applied.
 struct StagedSave {
     struct Entity {
@@ -107,5 +118,15 @@ struct Applied {
 /// one command buffer.
 [[nodiscard]] result::Result<Applied>
 apply(const StagedSave& staged, const SaveDeclaration& declaration, world::World& world);
+
+/// Applies a save of one entity, captured by `captureEntity` under `as`, to
+/// the live `entity`, which takes its values as `apply` would have an entity
+/// holding `as`. Refused (`mismatch`) for a save holding another entity or
+/// more than one.
+[[nodiscard]] result::Result<Applied> applyTo(const StagedSave& staged,
+                                              const SaveDeclaration& declaration,
+                                              world::World& world,
+                                              world::EntityHandle entity,
+                                              world::PersistentEntityId as);
 
 } // namespace rawframe::world_save
