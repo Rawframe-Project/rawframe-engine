@@ -34,15 +34,18 @@ def take(n):
     at += n
     return body[at - n:at]
 assert take(8) == b"RFSAVE\0\0"
-assert struct.unpack("<I", take(4))[0] == 1
+assert struct.unpack("<I", take(4))[0] == 2
 high, low = struct.unpack("<QQ", take(16))
 assert (high, low) == (0x72756E6E65727300, 1), "namespace"
 name = take(struct.unpack("<H", take(2))[0])
 assert name == b"hall", name
 assert struct.unpack("<I", take(4))[0] == 1
 take(16 + 8)
-size, fields = struct.unpack("<II", take(8))
-assert (size, fields) == (8, 0)
+size, fields = struct.unpack("<IH", take(6))
+assert (size, fields) == (8, 1)
+name = take(take(1)[0])
+offset, kind = struct.unpack("<IB", take(5))
+assert (name, offset, kind) == (b"ticks", 0, 8), "the age's one field, a u64"
 assert struct.unpack("<I", take(4))[0] == 1, "one entity"
 high, low, present = struct.unpack("<QQQ", take(24))
 # The hall's identity: from hall.scene's resource and its entity's id.

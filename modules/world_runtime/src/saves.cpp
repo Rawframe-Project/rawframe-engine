@@ -227,7 +227,8 @@ private:
                      "the World took its save",
                      {diagnostics::field("slot", std::string_view{slot_}),
                       diagnostics::field("updated", kApplied.updated),
-                      diagnostics::field("created", kApplied.created)});
+                      diagnostics::field("created", kApplied.created),
+                      diagnostics::field("migrated", kStaged.migrated)});
         return {};
     }
 

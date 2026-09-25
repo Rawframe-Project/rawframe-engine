@@ -37,15 +37,24 @@ for n in range(2):
     data = open("%s/p-%s.rfsave" % (sys.argv[1], identity.hex()), "rb").read()
     body, digest = data[:-32], data[-32:]
     assert hashlib.sha256(body).digest() == digest, "digest"
+    assert struct.unpack_from("<I", body, 8)[0] == 2
     at = 8 + 4 + 16
     length = struct.unpack_from("<H", body, at)[0]
     assert body[at + 2:at + 2 + length] == b"runner"
     at += 2 + length
     assert struct.unpack_from("<I", body, at)[0] == 1
     at += 4 + 16 + 8
-    size, fields = struct.unpack_from("<II", body, at)
-    assert (size, fields) == (16, 0)
-    at += 8
+    size, fields = struct.unpack_from("<IH", body, at)
+    assert (size, fields) == (16, 4)
+    at += 6
+    described = []
+    for _ in range(fields):
+        length = body[at]
+        name = body[at + 1:at + 1 + length]
+        offset, kind = struct.unpack_from("<IB", body, at + 1 + length)
+        described.append((name, offset, kind))
+        at += 1 + length + 5
+    assert described == [(b"shots", 0, 3), (b"hits", 4, 3), (b"cooldown", 8, 3), (b"taken", 12, 3)], described
     assert struct.unpack_from("<I", body, at)[0] == 1
     at += 4
     assert body[at:at + 16] == struct.pack("<QQ", *struct.unpack(">QQ", identity)), "identity"

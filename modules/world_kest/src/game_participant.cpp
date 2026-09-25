@@ -994,15 +994,70 @@ private:
         for (const std::string& name : line.components) {
             const GameComponent& component = *componentNamed(name);
             const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(&component - game_.components.data())];
-            world_save::SavedComponent& saved =
-                save.components.emplace_back(world_save::SavedComponent{.id = component.id, .mark = layout.mark});
-            for (const GameEntityField& field : game_.entityFields) {
-                const auto kSlot = std::ranges::find(layout.fields, field.field + ".slot", &kest::Field::name);
-                if (field.component == component.name && kSlot != layout.fields.end()) {
-                    saved.entityFields.push_back(static_cast<std::uint32_t>(kSlot->offset));
-                }
-            }
+            save.components.push_back(world_save::SavedComponent{
+                .id = component.id, .mark = layout.mark, .fields = savedFields(component, layout)});
         }
+    }
+
+    /// A component's fields as a save names them, which a later layout is
+    /// migrated by: each scalar by its Kest path, and each entity field an
+    /// `entity` line names as one entity field in place of its slot and
+    /// generation. None, and so no migration, for a layout with a field a
+    /// save cannot name.
+    std::vector<world_save::SavedField> savedFields(const GameComponent& component,
+                                                    const kest::TypeLayout& layout) const {
+        std::vector<world_save::SavedField> fields;
+        for (const kest::Field& field : layout.fields) {
+            const auto kEntity = std::ranges::find_if(game_.entityFields, [&](const GameEntityField& entity) {
+                return entity.component == component.name &&
+                       (field.name == entity.field + ".slot" || field.name == entity.field + ".generation");
+            });
+            if (kEntity != game_.entityFields.end()) {
+                if (field.name.ends_with(".slot")) {
+                    fields.push_back(world_save::SavedField{.name = kEntity->field,
+                                                            .offset = static_cast<std::uint32_t>(field.offset),
+                                                            .kind = world_save::FieldKind::Entity});
+                }
+                continue;
+            }
+            const auto kKind = savedKind(field.kind);
+            if (!kKind.has_value()) {
+                return {};
+            }
+            fields.push_back(world_save::SavedField{
+                .name = field.name, .offset = static_cast<std::uint32_t>(field.offset), .kind = *kKind});
+        }
+        return fields;
+    }
+
+    static std::optional<world_save::FieldKind> savedKind(kest::FieldKind kind) noexcept {
+        switch (kind) {
+        case kest::FieldKind::I8:
+            return world_save::FieldKind::I8;
+        case kest::FieldKind::I16:
+            return world_save::FieldKind::I16;
+        case kest::FieldKind::I32:
+            return world_save::FieldKind::I32;
+        case kest::FieldKind::I64:
+            return world_save::FieldKind::I64;
+        case kest::FieldKind::U8:
+            return world_save::FieldKind::U8;
+        case kest::FieldKind::U16:
+            return world_save::FieldKind::U16;
+        case kest::FieldKind::U32:
+            return world_save::FieldKind::U32;
+        case kest::FieldKind::U64:
+            return world_save::FieldKind::U64;
+        case kest::FieldKind::F32:
+            return world_save::FieldKind::F32;
+        case kest::FieldKind::F64:
+            return world_save::FieldKind::F64;
+        case kest::FieldKind::Bool:
+            return world_save::FieldKind::Bool;
+        case kest::FieldKind::Other:
+            return std::nullopt;
+        }
+        return std::nullopt;
     }
 
     result::Status planCheckpoints() {

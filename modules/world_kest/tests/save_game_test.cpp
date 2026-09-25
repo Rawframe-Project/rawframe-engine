@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <unistd.h>
 #include <vector>
 
@@ -78,8 +79,10 @@ struct Run {
         simulation = nullptr;
     }
 
+    std::string program{kProgram};
+
     result::Status start(const std::filesystem::path& directory, std::string_view spawn) {
-        writeText(directory / "tally.kest", kProgram);
+        writeText(directory / "tally.kest", program);
         writeText(directory / "tally.game", std::string{kGame} + std::string{spawn});
         std::vector<composition::Problem> problems;
         auto made = composition::compose(
@@ -164,6 +167,53 @@ RAWFRAME_TEST(AGamesSaveBringsItsStateBack) {
         run.composition.reset();
     }
     RAWFRAME_EXPECT(readText(kSave) == bytes);
+    std::filesystem::remove_all(kDirectory);
+}
+
+RAWFRAME_TEST(ASaveOutlivesAChangeToItsComponent) {
+    // The count kept as an i32, then the game widens it to an i64 and adds
+    // a field: the save is migrated as it is read, the ticks carried over.
+    const std::filesystem::path kDirectory =
+        std::filesystem::temp_directory_path() / ("rawframe-save-migrate-" + std::to_string(::getpid()));
+    std::filesystem::create_directories(kDirectory);
+    world::PersistentEntityId kept;
+    {
+        Run run;
+        RAWFRAME_EXPECT(run.start(kDirectory, "spawn 1 tally.count\n").has_value());
+        run.ticks(3);
+        kept = counts().at(0).first;
+        run.composition->stop();
+        run.composition.reset();
+    }
+    std::string program{kProgram};
+    program.replace(program.find("ticks: i32"), 10, "best: i32\n    ticks: i64");
+    program.replace(program.find("counts[i].ticks + 1"), 19, "counts[i].ticks + i64(1)");
+    {
+        Run run;
+        run.program = program;
+        RAWFRAME_EXPECT(run.start(kDirectory, "").has_value());
+        world::World& world = *simulation->world();
+        const auto kCount =
+            world.registry().find(schema::ComponentTypeId::fromText("3e9b1d74-6a28-4f05-9c83-2b7e5d1a0f96"));
+        const auto kPersistent = world.registry().find(world::Persistent::kComponentTypeId);
+        const std::array<world::ColumnTerm, 2> kTerms = {world::ColumnTerm{*kPersistent, world::Access::Read},
+                                                         world::ColumnTerm{*kCount, world::Access::Read}};
+        auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+        std::vector<std::tuple<world::PersistentEntityId, std::int32_t, std::int64_t>> found;
+        query->forEachChunk(world, [&found](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                world::Persistent name;
+                std::int32_t best = 0;
+                std::int64_t ticks = 0;
+                std::memcpy(static_cast<void*>(&name), chunk.columns[0] + (row * sizeof name), sizeof name);
+                std::memcpy(&best, chunk.columns[1] + (row * 16), sizeof best);
+                std::memcpy(&ticks, chunk.columns[1] + (row * 16) + 8, sizeof ticks);
+                found.emplace_back(name.id(), best, ticks);
+            }
+        });
+        RAWFRAME_EXPECT(found.size() == 1 && std::get<0>(found[0]) == kept && std::get<1>(found[0]) == 0 &&
+                        std::get<2>(found[0]) == 3);
+    }
     std::filesystem::remove_all(kDirectory);
 }
 
