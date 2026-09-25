@@ -252,6 +252,7 @@ struct Physics3D::State {
     std::map<world::EntityHandle, Mapped> mapped;
     std::optional<world::Query<world::Read<Body3D>, world::Write<Pose3D>, world::Write<Velocity3D>>> bodies;
     std::optional<schema::ComponentRuntimeId> impulse;
+    std::optional<schema::ComponentRuntimeId> target;
     std::optional<schema::ComponentRuntimeId> contact;
     std::optional<schema::ComponentRuntimeId> character;
     std::optional<schema::ComponentRuntimeId> meshShape;
@@ -756,6 +757,25 @@ struct Physics3D::State {
                     *kImpulse = Impulse3D{};
                 }
             }
+            if (target) {
+                auto* const kTarget = static_cast<Target3D*>(world.getErased(row.entity, *target));
+                if (kTarget != nullptr && kTarget->set) {
+                    const Pose3D kGoal{.x = kTarget->x,
+                                       .y = kTarget->y,
+                                       .z = kTarget->z,
+                                       .qx = kTarget->qx,
+                                       .qy = kTarget->qy,
+                                       .qz = kTarget->qz,
+                                       .qw = kTarget->qw};
+                    if (entry.made.motion == static_cast<std::uint8_t>(physics::Motion::Kinematic) &&
+                        std::isfinite(kGoal.x) && std::isfinite(kGoal.y) && std::isfinite(kGoal.z) &&
+                        finite(kGoal.qx) && finite(kGoal.qy) && finite(kGoal.qz) && finite(kGoal.qw)) {
+                        m3Body_SetTargetTransform(entry.body, m3Pos3{kGoal.x, kGoal.y, kGoal.z}, rotationOf(kGoal));
+                        ++statistics.targets;
+                    }
+                    kTarget->set = false;
+                }
+            }
         }
 
         followJoints(world);
@@ -936,6 +956,7 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
         state.bodies,
         (world::Query<world::Read<Body3D>, world::Write<Pose3D>, world::Write<Velocity3D>>::resolve(registry)));
     RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse3D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.target, registry.find(Target3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character3D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.meshShape, registry.find(Mesh3D::kComponentTypeId));
@@ -947,6 +968,7 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
     state.reads.insert(state.reads.end(), kAttachReads.begin(), kAttachReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
+    state.writes.push_back(*state.target);
     state.writes.push_back(*state.contact);
     state.writes.push_back(*state.character);
     const std::vector<schema::ComponentRuntimeId> kJointWrites = state.jointQuery->writes();

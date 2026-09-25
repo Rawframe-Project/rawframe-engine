@@ -69,6 +69,7 @@ public:
                       diagnostics::field("teleports", kStatistics.teleports),
                       diagnostics::field("velocitiesSet", kStatistics.velocitiesSet),
                       diagnostics::field("impulses", kStatistics.impulses),
+                      diagnostics::field("targets", kStatistics.targets),
                       diagnostics::field("characterMoves", kStatistics.characterMoves),
                       diagnostics::field("jointsMade", kStatistics.jointsMade),
                       diagnostics::field("jointsRemoved", kStatistics.jointsRemoved),

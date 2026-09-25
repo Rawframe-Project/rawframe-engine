@@ -25,6 +25,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<Pose2D>()
         .add<Velocity2D>()
         .add<Impulse2D>()
+        .add<Target2D>()
         .add<Contact2D>()
         .add<Character2D>()
         .add<Joint2D>()
@@ -121,6 +122,43 @@ constexpr Body2D kBall{.motion = static_cast<std::uint8_t>(physics::Motion::Dyna
                        .restitution = 0.5F};
 
 } // namespace
+
+RAWFRAME_TEST(AKinematicBodyIsCarriedToItsTargetPushingWhatItMeets) {
+    Scene scene{{.gravityY = 0}};
+    const world::EntityHandle kPaddle =
+        scene.body(Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Kinematic),
+                          .shape = static_cast<std::uint8_t>(Shape::Box),
+                          .width = 0.5F,
+                          .height = 0.5F},
+                   {.c = 1});
+    const world::EntityHandle kBallEntity = scene.body(kBall, {.x = 2});
+    for (const world::EntityHandle kEntity : {kPaddle, kBallEntity}) {
+        RAWFRAME_EXPECT(scene.world.insert(kEntity, *scene.schema->key<Target2D>(), Target2D{}).has_value());
+    }
+    const auto kTarget = [&scene](world::EntityHandle entity) -> Target2D& {
+        return *scene.world.get(entity, *scene.schema->key<Target2D>());
+    };
+    scene.run(1);
+    // A tenth of a meter a tick along x for half a second: the paddle lands
+    // on each target, which the step clears, and the ball it meets on the
+    // way is pushed ahead of it, where teleports would pass through.
+    for (int tick = 1; tick <= 30; ++tick) {
+        kTarget(kPaddle) = Target2D{.x = tick * 0.1, .c = 1, .set = true};
+        scene.run(1);
+        RAWFRAME_EXPECT(std::abs(scene.pose(kPaddle).x - (tick * 0.1)) < 1e-4 && !kTarget(kPaddle).set);
+    }
+    RAWFRAME_EXPECT(scene.pose(kBallEntity).x > scene.pose(kPaddle).x + 0.7 && scene.velocity(kBallEntity).x > 1);
+    // Turned a quarter, as the target is.
+    kTarget(kPaddle) = Target2D{.x = 3, .c = 0, .s = 1, .set = true};
+    scene.run(1);
+    RAWFRAME_EXPECT(std::abs(scene.pose(kPaddle).s - 1) < 1e-3F && std::abs(scene.pose(kPaddle).c) < 1e-3F);
+    // A body that is not kinematic ignores its target, which is cleared.
+    kTarget(kBallEntity) = Target2D{.x = -5, .c = 1, .set = true};
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.pose(kBallEntity).x > 2 && !kTarget(kBallEntity).set);
+    const Physics2DStatistics kStatistics = scene.physics->statistics();
+    RAWFRAME_EXPECT(kStatistics.targets == 31 && kStatistics.teleports == 0);
+}
 
 RAWFRAME_TEST(ACrateFallsAndRestsOnTheGround) {
     Scene scene;

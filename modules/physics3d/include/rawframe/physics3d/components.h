@@ -4,8 +4,9 @@
 // for 2D: an entity with a Body3D, a Pose3D, and a Velocity3D has a body in
 // the physics world; gameplay reads the committed pose and velocity, and
 // changes the body by writing them, which the next step takes as a teleport
-// (the body made again there) or a new velocity, or by writing an
-// Impulse3D, which the next step applies once and clears. A body whose
+// (the body made again there) or a new velocity; by writing an Impulse3D,
+// which the next step applies once and clears; or, for a kinematic body, by
+// setting a Target3D, which the next step moves it to. A body whose
 // entity also has a Contact3D is told after each step what it touches and
 // what overlaps it. Meters, seconds, kilograms, and radians; y is up
 // (ADR-0046).
@@ -115,6 +116,26 @@ struct Impulse3D {
     float angularX = 0;
     float angularY = 0;
     float angularZ = 0;
+};
+
+/// Where a kinematic body is to be after the next step (SPEC-0037's
+/// kinematic target): the step chooses the velocities that carry it there,
+/// so what it meets on the way is pushed, never jumped over as a teleport
+/// would. Applied once while `set`, which the step clears; a body that is
+/// not kinematic ignores it. A rotation of all noughts is none.
+struct Target3D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("b024f026-ac70-420e-9296-b28a86618962");
+    static constexpr std::string_view kComponentName = "rawframe.physics3d.target";
+
+    double x = 0;
+    double y = 0;
+    double z = 0;
+    float qx = 0;
+    float qy = 0;
+    float qz = 0;
+    float qw = 0;
+    bool set = false;
 };
 
 /// What a body touched and what overlapped it, written by every step: counts
@@ -287,8 +308,8 @@ struct Attach3D {
     float qw = 0;
 };
 
-/// Body3D, Pose3D, Velocity3D, Impulse3D, Contact3D, Character3D, Mesh3D,
-/// Joint3D, and Attach3D, in that order. An entity field appears as its two parts, `<name>.slot` and
+/// Body3D, Pose3D, Velocity3D, Impulse3D, Target3D, Contact3D, Character3D,
+/// Mesh3D, Joint3D, and Attach3D, in that order. An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const schema::ComponentLayout> componentLayouts() noexcept;
 

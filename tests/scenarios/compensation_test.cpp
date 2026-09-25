@@ -54,6 +54,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<Pose2D>()
         .add<physics2d::Velocity2D>()
         .add<physics2d::Impulse2D>()
+        .add<physics2d::Target2D>()
         .add<physics2d::Contact2D>()
         .add<physics2d::Character2D>()
         .add<physics2d::Joint2D>()

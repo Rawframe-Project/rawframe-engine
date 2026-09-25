@@ -82,6 +82,8 @@ struct Physics3DStatistics {
     std::uint64_t teleports = 0;
     std::uint64_t velocitiesSet = 0;
     std::uint64_t impulses = 0;
+    /// Kinematic targets carried out.
+    std::uint64_t targets = 0;
     /// Character moves made (components.h's Character3D).
     std::uint64_t characterMoves = 0;
     /// Joints made, taken away with their entities, and refused (a body

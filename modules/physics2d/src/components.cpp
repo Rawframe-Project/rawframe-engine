@@ -151,11 +151,20 @@ constexpr std::array<ComponentField, 6> kAttachFields = {{
     {"s", offsetof(Attach2D, s), FieldType::F32},
 }};
 
-const std::array<ComponentLayout, 8> kLayouts = {
+constexpr std::array<ComponentField, 5> kTargetFields = {{
+    {"x", offsetof(Target2D, x), FieldType::F64},
+    {"y", offsetof(Target2D, y), FieldType::F64},
+    {"c", offsetof(Target2D, c), FieldType::F32},
+    {"s", offsetof(Target2D, s), FieldType::F32},
+    {"set", offsetof(Target2D, set), FieldType::Bool},
+}};
+
+const std::array<ComponentLayout, 9> kLayouts = {
     layoutOf<Body2D>("Body2D", kBodyFields),
     layoutOf<Pose2D>("Pose2D", kPoseFields),
     layoutOf<Velocity2D>("Velocity2D", kVelocityFields),
     layoutOf<Impulse2D>("Impulse2D", kImpulseFields),
+    layoutOf<Target2D>("Target2D", kTargetFields),
     layoutOf<Contact2D>("Contact2D", kContactFields),
     layoutOf<Character2D>("Character2D", kCharacterFields),
     layoutOf<Joint2D>("Joint2D", kJointFields),

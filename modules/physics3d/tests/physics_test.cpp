@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <numbers>
 #include <optional>
 #include <vector>
 
@@ -24,6 +25,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<Pose3D>()
         .add<Velocity3D>()
         .add<Impulse3D>()
+        .add<Target3D>()
         .add<Contact3D>()
         .add<Character3D>()
         .add<Mesh3D>()
@@ -206,6 +208,49 @@ RAWFRAME_TEST(GameplayWritesAreCommands) {
     scene.run(1);
     // The crate, made again by its teleport, and now this one.
     RAWFRAME_EXPECT(scene.physics->statistics().bodiesMade == 3);
+}
+
+RAWFRAME_TEST(AKinematicBodyIsCarriedToItsTargetPushingWhatItMeets) {
+    Scene scene{{.gravityY = 0}};
+    const world::EntityHandle kPaddle = scene.body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
+                                                          .shape = static_cast<std::uint8_t>(Shape::Box),
+                                                          .width = 0.5F,
+                                                          .height = 0.5F,
+                                                          .depth = 0.5F},
+                                                   {.qw = 1});
+    const world::EntityHandle kBallEntity = scene.body(kBall, {.x = 2});
+    for (const world::EntityHandle kEntity : {kPaddle, kBallEntity}) {
+        RAWFRAME_EXPECT(scene.world.insert(kEntity, *scene.schema->key<Target3D>(), Target3D{}).has_value());
+    }
+    const auto kTarget = [&scene](world::EntityHandle entity) -> Target3D& {
+        return *scene.world.get(entity, *scene.schema->key<Target3D>());
+    };
+    scene.run(1);
+    // A tenth of a meter a tick along x for half a second: the paddle lands
+    // on each target, which the step clears, and the ball it meets on the
+    // way is pushed ahead of it, where teleports would pass through.
+    for (int tick = 1; tick <= 30; ++tick) {
+        kTarget(kPaddle) = Target3D{.x = tick * 0.1, .qw = 1, .set = true};
+        scene.run(1);
+        RAWFRAME_EXPECT(std::abs(scene.pose(kPaddle).x - (tick * 0.1)) < 1e-4 && !kTarget(kPaddle).set);
+    }
+    RAWFRAME_EXPECT(scene.pose(kBallEntity).x > scene.pose(kPaddle).x + 0.7 && scene.velocity(kBallEntity).x > 1);
+    // Turned about y three degrees a tick, as the targets are.
+    for (int tick = 1; tick <= 30; ++tick) {
+        const double kAngle = tick * 3.0 * std::numbers::pi / 180;
+        const auto kSin = static_cast<float>(std::sin(kAngle / 2));
+        const auto kCos = static_cast<float>(std::cos(kAngle / 2));
+        kTarget(kPaddle) = Target3D{.x = 3, .qy = kSin, .qw = kCos, .set = true};
+        scene.run(1);
+        RAWFRAME_EXPECT(std::abs(scene.pose(kPaddle).qy - kSin) < 1e-4F &&
+                        std::abs(scene.pose(kPaddle).qw - kCos) < 1e-4F);
+    }
+    // A body that is not kinematic ignores its target, which is cleared.
+    kTarget(kBallEntity) = Target3D{.x = -5, .qw = 1, .set = true};
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.pose(kBallEntity).x > 2 && !kTarget(kBallEntity).set);
+    const Physics3DStatistics kStatistics = scene.physics->statistics();
+    RAWFRAME_EXPECT(kStatistics.targets == 60 && kStatistics.teleports == 0);
 }
 
 RAWFRAME_TEST(ABallThatLandsIsToldWhatItHit) {

@@ -4,9 +4,10 @@ module rawframe.physics3d
 // a game with a `physics3d` line has them, and a program that reads or
 // writes them imports this module. An entity with a Body3D, a Pose3D, and a
 // Velocity3D has a body. Systems before `rawframe.physics3d.step` push bodies
-// (write an Impulse3D, or set a Pose3D or a Velocity3D outright); systems
-// after it read where they went. An entity that also has a Contact3D is told
-// what its body touched. Meters, seconds, kilograms, radians; y is up.
+// (write an Impulse3D, set a Pose3D or a Velocity3D outright, or set a
+// kinematic body's Target3D); systems after it read where they went. An
+// entity that also has a Contact3D is told what its body touched. Meters,
+// seconds, kilograms, radians; y is up.
 
 import rawframe.replication
 import rawframe.world
@@ -79,6 +80,21 @@ struct Impulse3D {
     angularX: f32
     angularY: f32
     angularZ: f32
+}
+
+// Where a KINEMATIC body is to be after the next step: the step moves it
+// there, pushing what it meets on the way, where writing its Pose3D would
+// teleport it. Applied once while `set`, which the step clears. A rotation
+// of all noughts is none.
+struct Target3D {
+    x: f64
+    y: f64
+    z: f64
+    qx: f32
+    qy: f32
+    qz: f32
+    qw: f32
+    set: bool
 }
 
 // Written by every step. Counts of the contacts touching now, begun, and

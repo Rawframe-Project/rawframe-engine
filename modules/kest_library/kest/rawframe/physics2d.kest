@@ -4,9 +4,10 @@ module rawframe.physics2d
 // a game with a `physics2d` line has them, and a program that reads or
 // writes them imports this module. An entity with a Body2D, a Pose2D, and a
 // Velocity2D has a body. Systems before `rawframe.physics2d.step` push bodies
-// (write an Impulse2D, or set a Pose2D or a Velocity2D outright); systems
-// after it read where they went. An entity that also has a Contact2D is told
-// what its body touched. Meters, seconds, kilograms, radians.
+// (write an Impulse2D, set a Pose2D or a Velocity2D outright, or set a
+// kinematic body's Target2D); systems after it read where they went. An
+// entity that also has a Contact2D is told what its body touched. Meters,
+// seconds, kilograms, radians.
 
 import rawframe.replication
 import rawframe.world
@@ -63,6 +64,17 @@ struct Impulse2D {
     x: f32
     y: f32
     angular: f32
+}
+
+// Where a KINEMATIC body is to be after the next step: the step moves it
+// there, pushing what it meets on the way, where writing its Pose2D would
+// teleport it. Applied once while `set`, which the step clears.
+struct Target2D {
+    x: f64
+    y: f64
+    c: f32
+    s: f32
+    set: bool
 }
 
 // Written by every step. Counts of the contacts touching now, begun, and

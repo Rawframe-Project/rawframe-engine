@@ -37,6 +37,17 @@ constexpr std::array<ComponentField, 7> kPoseFields = {{
     {"qw", offsetof(Pose3D, qw), FieldType::F32},
 }};
 
+constexpr std::array<ComponentField, 8> kTargetFields = {{
+    {"x", offsetof(Target3D, x), FieldType::F64},
+    {"y", offsetof(Target3D, y), FieldType::F64},
+    {"z", offsetof(Target3D, z), FieldType::F64},
+    {"qx", offsetof(Target3D, qx), FieldType::F32},
+    {"qy", offsetof(Target3D, qy), FieldType::F32},
+    {"qz", offsetof(Target3D, qz), FieldType::F32},
+    {"qw", offsetof(Target3D, qw), FieldType::F32},
+    {"set", offsetof(Target3D, set), FieldType::Bool},
+}};
+
 template <typename T>
 constexpr std::array<ComponentField, 6> kMotionFields = {{
     {"x", offsetof(T, x), FieldType::F32},
@@ -179,11 +190,12 @@ constexpr std::array<ComponentField, 9> kAttachFields = {{
     {"qw", offsetof(Attach3D, qw), FieldType::F32},
 }};
 
-const std::array<ComponentLayout, 9> kLayouts = {
+const std::array<ComponentLayout, 10> kLayouts = {
     layoutOf<Body3D>("Body3D", kBodyFields),
     layoutOf<Pose3D>("Pose3D", kPoseFields),
     layoutOf<Velocity3D>("Velocity3D", kMotionFields<Velocity3D>),
     layoutOf<Impulse3D>("Impulse3D", kMotionFields<Impulse3D>),
+    layoutOf<Target3D>("Target3D", kTargetFields),
     layoutOf<Contact3D>("Contact3D", kContactFields),
     layoutOf<Character3D>("Character3D", kCharacterFields),
     layoutOf<Mesh3D>("Mesh3D", kMeshFields),

@@ -4,8 +4,9 @@
 // Body2D, a Pose2D, and a Velocity2D has a body in the physics world; gameplay
 // reads the committed pose and velocity, and changes the body by writing
 // them, which the next step takes as a teleport (the body made again there)
-// or a new velocity, or by
-// writing an Impulse2D, which the next step applies once and clears. A body
+// or a new velocity; by writing an Impulse2D, which the next step applies
+// once and clears; or, for a kinematic body, by setting a Target2D, which
+// the next step moves it to. A body
 // whose entity also has a Contact2D is told after each step what it touches
 // and what overlaps it (SPEC-0037's per-body opt-in). Units are meters,
 // seconds, kilograms, and radians (SPEC-0037's 2D meter).
@@ -97,6 +98,23 @@ struct Impulse2D {
     float x = 0;
     float y = 0;
     float angular = 0;
+};
+
+/// Where a kinematic body is to be after the next step (SPEC-0037's
+/// kinematic target): the step chooses the velocities that carry it there,
+/// so what it meets on the way is pushed, never jumped over as a teleport
+/// would. Applied once while `set`, which the step clears; a body that is
+/// not kinematic ignores it. A rotation of two noughts is none.
+struct Target2D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("3c4ab1c1-49f4-4d96-8b26-ebe3e62e5271");
+    static constexpr std::string_view kComponentName = "rawframe.physics2d.target";
+
+    double x = 0;
+    double y = 0;
+    float c = 0;
+    float s = 0;
+    bool set = false;
 };
 
 /// What a body touched and what overlapped it, written by every step: counts

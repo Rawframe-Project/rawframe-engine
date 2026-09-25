@@ -247,6 +247,7 @@ struct Physics2D::State {
     std::map<world::EntityHandle, Mapped> mapped;
     std::optional<world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>> bodies;
     std::optional<schema::ComponentRuntimeId> impulse;
+    std::optional<schema::ComponentRuntimeId> target;
     std::optional<schema::ComponentRuntimeId> contact;
     std::optional<schema::ComponentRuntimeId> character;
     std::optional<world::Query<world::Write<Joint2D>>> jointQuery;
@@ -676,6 +677,8 @@ struct Physics2D::State {
             remove(entry->second);
             entry = mapped.erase(entry);
         }
+        // The tick's length, which a kinematic target is reached over.
+        const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
         for (const Row& row : rows) {
             const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
             Mapped& entry = kEntry->second;
@@ -723,6 +726,18 @@ struct Physics2D::State {
                     *kImpulse = Impulse2D{};
                 }
             }
+            if (target) {
+                auto* const kTarget = static_cast<Target2D*>(world.getErased(row.entity, *target));
+                if (kTarget != nullptr && kTarget->set) {
+                    const Pose2D kGoal{.x = kTarget->x, .y = kTarget->y, .c = kTarget->c, .s = kTarget->s};
+                    if (entry.made.motion == static_cast<std::uint8_t>(physics::Motion::Kinematic) &&
+                        std::isfinite(kGoal.x) && std::isfinite(kGoal.y) && finite(kGoal.c) && finite(kGoal.s)) {
+                        m2Body_SetTargetTransform(entry.body, m2Pos2{kGoal.x, kGoal.y}, rotationOf(kGoal), kSeconds);
+                        ++statistics.targets;
+                    }
+                    kTarget->set = false;
+                }
+            }
         }
 
         followJoints(world);
@@ -730,7 +745,6 @@ struct Physics2D::State {
         // 4. Characters find their moves, in entity order and each against
         // the world as the last step left it; then one step of the tick's
         // length.
-        const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
         for (const Row& row : rows) {
             if (row.character != nullptr) {
                 moveCharacter(row, mapped.find(row.entity)->second, kSeconds);
@@ -846,6 +860,7 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
         state.bodies,
         (world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>::resolve(registry)));
     RAWFRAME_TRY_ASSIGN(state.impulse, registry.find(Impulse2D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.target, registry.find(Target2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Write<Joint2D>>::resolve(registry)));
@@ -855,6 +870,7 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
     state.reads.insert(state.reads.end(), kAttachReads.begin(), kAttachReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
+    state.writes.push_back(*state.target);
     state.writes.push_back(*state.contact);
     state.writes.push_back(*state.character);
     const std::vector<schema::ComponentRuntimeId> kJointWrites = state.jointQuery->writes();
