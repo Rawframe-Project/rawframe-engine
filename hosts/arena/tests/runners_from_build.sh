@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Runners heard from a Build: its cooked content is packed into a Build,
-# and a client reads its sounds from the Build named by the root hash the
-# packer printed, verified chunk by chunk.
+# Runners heard from a Build: a publisher key is made, runners' cooked
+# content is packed into a Build signed with it, and a client reads its
+# sounds from the Build named by the root hash the packer printed, its
+# signature checked against the pinned publisher key set and its chunks
+# verified one by one.
 #
 # usage: runners_from_build.sh <rawframe-arena> <rawframe-build> <repository> <cooked content> <work directory>
 set -euo pipefail
@@ -14,7 +16,9 @@ work=$5
 
 rm -rf "$work"
 mkdir -p "$work"
-packed=$("$build" "$cooked" "$work/build" rawframe/runners 0.1.0 linux x86_64 client build.development tool)
+kid=$("$build" key rawframe "$work/keys" | cut -d' ' -f2)
+packed=$("$build" "$cooked" "$work/build" rawframe/runners 0.1.0 linux x86_64 client build.development tool \
+    "$work/keys/$kid.key")
 root=$(printf '%s\n' "$packed" | grep -o '^build sha256:[0-9a-f]\{64\}' | cut -d' ' -f2)
 
 cat >"$work/arena.conf" <<CONF
@@ -25,6 +29,7 @@ kest.game = games/runners/runners.game
 kest.library = third_party/kest/lib/
 content.build = $work/build
 content.build_root = $root
+content.build_keys = $work/keys/rawframe.keys
 network.loopback.latency_ms = 10
 replication.endpoint = arena
 bots.count = 4
