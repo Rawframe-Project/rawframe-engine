@@ -141,6 +141,12 @@ public:
     [[nodiscard]] bool running() const noexcept {
         return running_;
     }
+    /// Whether the last stop, from the first quiesce until everything was
+    /// destroyed, took longer than the plan's shutdown budget: SPEC-0012's
+    /// shutdown timeout, which a Host reports as how its run ended (D185).
+    [[nodiscard]] bool overran() const noexcept {
+        return overran_;
+    }
 
     /// Runs one Host phase: every running participant that declared it, in
     /// plan order. Does nothing unless running.
@@ -189,6 +195,7 @@ private:
     HostServices services_;
     std::vector<Slot> slots_;
     bool running_ = false;
+    bool overran_ = false;
 };
 
 } // namespace rawframe::composition

@@ -194,7 +194,9 @@ void Composition::stop() noexcept {
         return;
     }
     running_ = false;
+    const execution::MonotonicInstant kBegin = services_.clock->now();
     unwind(slots_.size());
+    overran_ = services_.clock->now() - kBegin > plan_->shutdownBudget();
 }
 
 void Composition::unwind(std::size_t started) noexcept {
