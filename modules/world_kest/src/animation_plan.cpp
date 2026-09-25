@@ -52,6 +52,25 @@ std::optional<schema::FieldType> carried(kest::FieldKind kind, animation::Parame
     return std::nullopt;
 }
 
+/// The field's type as the World writes it, when a track of `channel` may
+/// play it: a number of either width for `float`, and a u8, u32, or u64
+/// for `discrete`.
+std::optional<schema::FieldType> played(kest::FieldKind kind, animation::Channel channel) {
+    if (channel == animation::Channel::Float) {
+        return carried(kind, animation::ParameterType::Float);
+    }
+    switch (kind) {
+    case kest::FieldKind::U8:
+        return schema::FieldType::U8;
+    case kest::FieldKind::U32:
+        return schema::FieldType::U32;
+    case kest::FieldKind::U64:
+        return schema::FieldType::U64;
+    default:
+        return std::nullopt;
+    }
+}
+
 result::Result<world_animation::AnimatorSettings>
 animatorSettings(const GameFiles& files, std::span<const kest::TypeLayout> layouts, const GameAnimator& animator) {
     const GameDescription& game = files.description();
@@ -76,13 +95,14 @@ animatorSettings(const GameFiles& files, std::span<const kest::TypeLayout> layou
         }
         clips.push_back(animation::NamedClip{.id = kClip, .clip = std::make_shared<const animation::Clip>(*clip)});
     }
-    if (!skeletonId.has_value()) {
-        return refuse("an animator's clips animate a skeleton", animator.path);
-    }
-    RAWFRAME_TRY_ASSIGN(const std::string_view kSkeletonText, files.animationDocument(*skeletonId));
-    auto skeleton = animation::readSkeleton(kSkeletonText);
-    if (!skeleton.has_value()) {
-        return within(std::move(skeleton).error(), animator.path);
+    // A graph of property clips alone (D139) poses no bone.
+    result::Result<animation::Skeleton> skeleton = animation::Skeleton{};
+    if (skeletonId.has_value()) {
+        RAWFRAME_TRY_ASSIGN(const std::string_view kSkeletonText, files.animationDocument(*skeletonId));
+        skeleton = animation::readSkeleton(kSkeletonText);
+        if (!skeleton.has_value()) {
+            return within(std::move(skeleton).error(), animator.path);
+        }
     }
     std::vector<animation::NamedMask> masks;
     for (const base::Bits128 kMask : animation::masksOf(*graph)) {
@@ -93,12 +113,36 @@ animatorSettings(const GameFiles& files, std::span<const kest::TypeLayout> layou
         }
         masks.push_back(animation::NamedMask{.id = kMask, .mask = std::make_shared<const animation::Mask>(*mask)});
     }
-    auto compiled = animation::CompiledGraph::compile(*graph, *skeleton, *skeletonId, clips, masks);
+    auto compiled =
+        animation::CompiledGraph::compile(*graph, *skeleton, skeletonId.value_or(base::Bits128{}), clips, masks);
     if (!compiled.has_value()) {
         return within(std::move(compiled).error(), animator.path);
     }
 
     world_animation::AnimatorSettings settings{.id = animator.id, .graph = std::move(*compiled)};
+    // Each field the clips animate: a game component's, by its identity,
+    // and a field of the kind its track plays, by its name.
+    for (const animation::CompiledGraph::Property& property : settings.graph->properties()) {
+        const auto kComponent =
+            std::ranges::find(game.components, schema::ComponentTypeId{property.binding.component}, &GameComponent::id);
+        const kest::TypeLayout* layout = kComponent != game.components.end()
+                                             ? &layouts[static_cast<std::size_t>(kComponent - game.components.begin())]
+                                             : nullptr;
+        const auto kField = layout != nullptr
+                                ? std::ranges::find(layout->fields, property.binding.field, &kest::Field::name)
+                                : std::vector<kest::Field>::const_iterator{};
+        const std::optional<schema::FieldType> kType =
+            layout != nullptr && kField != layout->fields.end() ? played(kField->kind, property.channel) : std::nullopt;
+        if (!kType.has_value()) {
+            return std::unexpected<result::Error>{
+                refuse("a field an animator's clips animate is a game component's, of a kind its track plays",
+                       animator.path)
+                    .error()
+                    .withContext("field", property.binding.field)};
+        }
+        settings.properties.push_back(
+            world_animation::PropertyField{.component = kComponent->id, .offset = kField->offset, .type = *kType});
+    }
     if (animator.subset.has_value()) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kSubsetText, files.animationDocument(*animator.subset));
         auto mask = animation::readMask(kSubsetText);

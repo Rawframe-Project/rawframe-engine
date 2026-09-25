@@ -38,6 +38,41 @@ std::size_t sizeOf(schema::FieldType type) noexcept {
     return 8;
 }
 
+/// A property's value written into its field, a whole number held within
+/// the field's range.
+void write(std::byte* data, const PropertyField& field, double value) noexcept {
+    std::byte* at = data + field.offset;
+    const auto kWhole = [value](double most) {
+        return std::clamp(std::trunc(value), 0.0, most);
+    };
+    switch (field.type) {
+    case schema::FieldType::U8:
+    case schema::FieldType::Bool: {
+        const auto kMade = static_cast<std::uint8_t>(kWhole(255.0));
+        std::memcpy(at, &kMade, sizeof kMade);
+        return;
+    }
+    case schema::FieldType::U32: {
+        const auto kMade = static_cast<std::uint32_t>(kWhole(4294967295.0));
+        std::memcpy(at, &kMade, sizeof kMade);
+        return;
+    }
+    case schema::FieldType::U64: {
+        const auto kMade = static_cast<std::uint64_t>(kWhole(4294967295.0));
+        std::memcpy(at, &kMade, sizeof kMade);
+        return;
+    }
+    case schema::FieldType::F32: {
+        const auto kMade = static_cast<float>(value);
+        std::memcpy(at, &kMade, sizeof kMade);
+        return;
+    }
+    case schema::FieldType::F64:
+        std::memcpy(at, &value, sizeof value);
+        return;
+    }
+}
+
 /// A field's value as a parameter lane takes it.
 double read(const std::byte* data, const ParameterField& field) noexcept {
     const std::byte* at = data + field.offset;
@@ -84,6 +119,9 @@ struct WorldAnimation::State {
     std::optional<world::Query<world::Write<Animator>>> query;
     /// None in a World without root motion.
     std::optional<schema::ComponentKey<RootMotion>> rootMotion;
+    /// Each animator's property components, beside its properties.
+    std::vector<std::vector<schema::ComponentRuntimeId>> properties;
+    std::vector<std::optional<double>> values;
     std::unique_ptr<world::System> system;
 
     struct Playing {
@@ -169,6 +207,7 @@ struct WorldAnimation::State {
             // The graph's stages, on the pose where the entity is; a server
             // runs only the simulation's.
             evaluator.modify(played->instance, local, settings.simulationOnly);
+            writeProperties(stepped, kEntity, *played);
             animation::toModelSpace(played->instance.graph().parents(), local, played->pose);
             for (const animation::Transform& bone : played->pose.bones) {
                 digested.update(std::as_bytes(std::span{bone.translation}));
@@ -185,6 +224,23 @@ struct WorldAnimation::State {
             digest = (digest << 8U) | std::to_integer<std::uint64_t>(kDigest[at]);
         }
         return {};
+    }
+
+    /// The fields the instance's clips animate, onto the entity's
+    /// components that have them.
+    void writeProperties(world::World& stepped, world::EntityHandle entity, const Playing& played) {
+        const std::vector<schema::ComponentRuntimeId>& components = properties[played.settings];
+        if (components.empty()) {
+            return;
+        }
+        evaluator.evaluateProperties(played.instance, values);
+        const std::vector<PropertyField>& fields = settings.animators[played.settings].properties;
+        for (std::size_t at = 0; at < values.size(); ++at) {
+            auto* data = static_cast<std::byte*>(stepped.getErased(entity, components[at]));
+            if (values[at].has_value() && data != nullptr) {
+                write(data, fields[at], *values[at]);
+            }
+        }
     }
 
     /// A step's move onto its entity's RootMotion, and onto the whole.
@@ -306,6 +362,20 @@ result::Result<std::unique_ptr<WorldAnimation>> WorldAnimation::create(Animation
         if (!animator.subset.empty() && animator.subset.size() != animator.graph->bindPose().bones.size()) {
             return invalid("animation settings: a subset has a byte for each bone");
         }
+        const std::span<const animation::CompiledGraph::Property> kProperties = animator.graph->properties();
+        if (animator.properties.size() != kProperties.size()) {
+            return invalid("animation settings: a field for each of the graph's properties");
+        }
+        for (std::size_t property = 0; property < kProperties.size(); ++property) {
+            const schema::FieldType kType = animator.properties[property].type;
+            const bool kFloat = kType == schema::FieldType::F32 || kType == schema::FieldType::F64;
+            const bool kWhole =
+                kType == schema::FieldType::U8 || kType == schema::FieldType::U32 || kType == schema::FieldType::U64;
+            if (kProperties[property].channel == animation::Channel::Float ? !kFloat : !kWhole) {
+                return invalid("animation settings: a float property in an f32 or f64 field, and a discrete one in a "
+                               "u8, u32, or u64");
+            }
+        }
         std::ranges::sort(animator.fields, {}, [](const ParameterField& field) {
             return std::tuple{field.parameter, field.lane};
         });
@@ -358,6 +428,25 @@ result::Status WorldAnimation::declareSystems(const schema::SchemaRegistry& regi
         }
     }
     state.writes = {state.animatorComponent};
+    state.properties.clear();
+    for (const AnimatorSettings& animator : state.settings.animators) {
+        std::vector<schema::ComponentRuntimeId>& components = state.properties.emplace_back();
+        for (const PropertyField& field : animator.properties) {
+            const auto kComponent = registry.find(field.component);
+            if (!kComponent.has_value() || !registry.descriptor(*kComponent).plainData ||
+                field.offset + sizeOf(field.type) > registry.descriptor(*kComponent).size) {
+                return invalid("the World does not hold a component an animator's clips animate, or its field");
+            }
+            components.push_back(*kComponent);
+            if (!std::ranges::contains(state.writes, *kComponent)) {
+                state.writes.push_back(*kComponent);
+            }
+        }
+    }
+    // What the step writes it may read too.
+    std::erase_if(state.reads, [&state](schema::ComponentRuntimeId component) {
+        return std::ranges::contains(state.writes, component);
+    });
     state.rootMotion.reset();
     if (const auto kMotion = registry.find(RootMotion::kComponentTypeId)) {
         RAWFRAME_TRY_ASSIGN(state.rootMotion, registry.key<RootMotion>());

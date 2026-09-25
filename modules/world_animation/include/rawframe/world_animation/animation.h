@@ -16,7 +16,8 @@
 //   3. it advances by the tick (SPEC-0035's parameter and state phase),
 //      and its Animator's `events` is written with the events it fired;
 //   4. it is posed, and the pose kept in model space for the game's
-//      queries until the next step.
+//      queries until the next step; the fields its clips animate (D139)
+//      are written onto the entity's components that have them.
 //
 // A dedicated server plays only animators whose relevance is `Simulation`
 // (SPEC-0035's typed server subset); the rest have no instance there.
@@ -52,6 +53,15 @@ struct ParameterField {
 
 /// One of the game's animators: a compiled graph, and where its parameters
 /// come from.
+/// Where one of a graph's properties is written: a field of a component on
+/// the entity, an f32 or f64 for a `float` property and a u8, u32, or u64
+/// for a `discrete` one, which is held within the field's range.
+struct PropertyField {
+    schema::ComponentTypeId component;
+    std::size_t offset = 0;
+    schema::FieldType type = schema::FieldType::F32;
+};
+
 struct AnimatorSettings {
     std::uint64_t id = 0;
     std::shared_ptr<const animation::CompiledGraph> graph;
@@ -59,6 +69,8 @@ struct AnimatorSettings {
     /// that plays on its defaults.
     std::optional<schema::ComponentTypeId> parameters;
     std::vector<ParameterField> fields;
+    /// Beside the graph's properties, each once.
+    std::vector<PropertyField> properties;
     /// What a dedicated server poses: a byte for each bone of the graph's
     /// skeleton, nonzero for a bone it poses (SPEC-0035), the rest left at
     /// their bind; empty for every bone. A client poses them all.

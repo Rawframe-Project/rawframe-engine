@@ -269,3 +269,39 @@ RAWFRAME_TEST(AGamesRootMotionMovesItsEntityNotItsPose) {
     }
     std::filesystem::remove_all(kGame);
 }
+
+RAWFRAME_TEST(AGamesClipsAnimateItsComponentsFields) {
+    // The swing's clip also steps the gait's strays to seven at a quarter
+    // second: half a second in, each swing playing has it, and the one at
+    // rest has not reached it.
+    const std::filesystem::path kGame = writeGame("tallied", "speed: f32");
+    const auto kWithField = [&kGame](std::string_view field, animation::Channel channel) {
+        animation::Clip swing = *animation::readClip(readText(kGame / "rig" / "swing.rfanim"));
+        swing.tracks.push_back(animation::Track{
+            .channel = channel,
+            .keys = {animation::Key{.value = {}, .interpolation = animation::Interpolation::Step},
+                     animation::Key{
+                         .time = 0.25, .value = {7, 0, 0, 0}, .interpolation = animation::Interpolation::Step}},
+            .property = animation::PropertyBinding{
+                .component = schema::ComponentTypeId::fromText("1c0ffee0-0000-4000-8000-00000000a001").value,
+                .field = std::string{field}}});
+        writeText(kGame / "rig" / "swing.rfanim", *animation::writeClip(swing));
+    };
+    const std::string kSwing = readText(kGame / "rig" / "swing.rfanim");
+    kWithField("strays", animation::Channel::Discrete);
+    const auto kPlayed = play(kGame, composition::TargetRole::Client, 30);
+    RAWFRAME_EXPECT(kPlayed.has_value() && kPlayed->size() == 3);
+    if (kPlayed.has_value() && kPlayed->size() == 3) {
+        RAWFRAME_EXPECT((*kPlayed)[0].gait.strays == 7 && (*kPlayed)[1].gait.strays == 7);
+        RAWFRAME_EXPECT((*kPlayed)[2].gait.strays == 0);
+    }
+    // A field the component lacks, or one of a kind the track cannot play,
+    // and the game does not start.
+    for (const auto& [kField, kChannel] : std::vector<std::pair<std::string_view, animation::Channel>>{
+             {"stray", animation::Channel::Discrete}, {"reach", animation::Channel::Discrete}}) {
+        writeText(kGame / "rig" / "swing.rfanim", kSwing);
+        kWithField(kField, kChannel);
+        RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::Client, 1).has_value());
+    }
+    std::filesystem::remove_all(kGame);
+}

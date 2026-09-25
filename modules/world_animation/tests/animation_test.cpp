@@ -319,6 +319,51 @@ RAWFRAME_TEST(StagesTurnThePoseWhereItIsDrawn) {
     RAWFRAME_EXPECT(kArmAt(true) == (std::array<double, 3>{1, 0, 0}));
 }
 
+RAWFRAME_TEST(ClipsAnimateTheGamesFields) {
+    // A clip easing the stride's aim from nought to two over a second and
+    // stepping it armed at the half: written onto the entity each step.
+    using namespace animation;
+    const PropertyBinding kAim{.component = Stride::kComponentTypeId.value, .field = "aim_x"};
+    const PropertyBinding kArmed{.component = Stride::kComponentTypeId.value, .field = "armed"};
+    const auto kReady = std::make_shared<const Clip>(
+        Clip{.duration = 1.0,
+             .loop = Loop::Clamp,
+             .tracks = {Track{.channel = Channel::Float,
+                              .keys = {Key{.value = {}}, Key{.time = 1.0, .value = {2, 0, 0, 0}}},
+                              .property = kAim},
+                        Track{.channel = Channel::Discrete,
+                              .keys = {Key{.value = {}, .interpolation = Interpolation::Step},
+                                       Key{.time = 0.5, .value = {1, 0, 0, 0}, .interpolation = Interpolation::Step}},
+                              .property = kArmed}}});
+    const Graph kGraph{.parameters = {},
+                       .nodes = {GraphNode{.id = 1, .node = ClipNode{.clip = kWalkId}},
+                                 GraphNode{.id = 2, .node = OutputNode{.pose = {.node = 1}}}},
+                       .presentation = {}};
+    const std::vector<NamedClip> kClips{{kWalkId, kReady}};
+    AnimatorSettings animator{.id = kLocomotion,
+                              .graph = *CompiledGraph::compile(kGraph, rig(), kSkeletonId, kClips),
+                              .properties = {PropertyField{.component = Stride::kComponentTypeId,
+                                                           .offset = offsetof(Stride, aimX),
+                                                           .type = schema::FieldType::F32},
+                                             PropertyField{.component = Stride::kComponentTypeId,
+                                                           .offset = offsetof(Stride, armed),
+                                                           .type = schema::FieldType::U8}}};
+    Stage stage{AnimationSettings{.animators = {animator}}};
+    const world::EntityHandle kEntity = stage.walker(0.0F);
+    stage.run(15);
+    RAWFRAME_EXPECT(std::abs(stage.stride(kEntity).aimX - 0.5F) < 1e-6F && stage.stride(kEntity).armed == 0);
+    stage.run(30);
+    RAWFRAME_EXPECT(std::abs(stage.stride(kEntity).aimX - 1.5F) < 1e-6F && stage.stride(kEntity).armed == 1);
+    // A field of the wrong kind, or one short, is refused.
+    AnimatorSettings wrong = animator;
+    wrong.properties[1].type = schema::FieldType::F32;
+    AnimatorSettings shortOne = animator;
+    shortOne.properties.pop_back();
+    for (const AnimatorSettings& kSettings : {wrong, shortOne}) {
+        RAWFRAME_EXPECT(!WorldAnimation::create(AnimationSettings{.animators = {kSettings}}).has_value());
+    }
+}
+
 RAWFRAME_TEST(ParametersNotOfTheirTypeAreRefused) {
     Stage stage;
     const world::EntityHandle kWalker = stage.walker(1.0F);
