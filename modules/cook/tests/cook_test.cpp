@@ -157,6 +157,77 @@ RAWFRAME_TEST(TheCacheIsKeyedOnEveryInputAndVerified) {
     RAWFRAME_EXPECT(kCorrupt.cooked == 2 && kCorrupt.reused == 0 && kCorrupt.failures.empty());
 }
 
+namespace {
+
+/// An importer whose source names a directory: it gathers every `.part`
+/// file under it, each read through the cook, into one artifact.
+result::Result<Artifact> gather(std::span<const std::byte> source, std::string_view, Reads& reads) {
+    const std::string kDirectory{reinterpret_cast<const char*>(source.data()), source.size()};
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::string> kNames, reads.files(kDirectory, ".part"));
+    std::vector<std::byte> bytes;
+    for (const std::string& name : kNames) {
+        RAWFRAME_TRY_ASSIGN(const std::span<const std::byte> kPart, reads.file(kDirectory + "/" + name));
+        bytes.insert(bytes.end(), kPart.begin(), kPart.end());
+    }
+    return Artifact{.type = kSoundClipType,
+                    .representation = *content::RepresentationId::parse("rawframe.audio.wave"),
+                    .bytes = std::move(bytes)};
+}
+
+CookReport cookGathered(const Project& project) {
+    static const std::array<Importer, 2> kImporters = {
+        audioImporter(),
+        Importer{.identity = "test.gather",
+                 .normalize = [](const document::Value*) -> result::Result<std::string> {
+                     return std::string{};
+                 },
+                 .cook = &gather}};
+    auto report = cookSources(CookRequest{
+        .sources = project.sources, .output = project.output, .cache = project.cache, .importers = kImporters});
+    RAWFRAME_EXPECT(report.has_value());
+    return report.has_value() ? std::move(*report) : CookReport{};
+}
+
+} // namespace
+
+RAWFRAME_TEST(WhatAnImporterReadsIsAnInputToo) {
+    const Project kProject;
+    writeText(kProject.sources / "bundle" / "bundle.txt", "parts");
+    writeText(kProject.sources / "bundle" / "bundle.txt.rfmeta",
+              sidecar("000000000000000000000000000000a3", "", "test.gather"));
+    writeText(kProject.sources / "bundle" / "parts" / "a.part", "one");
+    writeText(kProject.sources / "bundle" / "parts" / "b.part", "two");
+    const CookReport kFirst = cookGathered(kProject);
+    RAWFRAME_EXPECT(kFirst.cooked == 3 && kFirst.failures.empty());
+    // The receipt names each read: the listing and both files.
+    const std::string kReceipt = readText(kProject.output / "cook.receipt");
+    RAWFRAME_EXPECT(kReceipt.find("\"path\": \"bundle/parts/a.part\"") != std::string::npos &&
+                    kReceipt.find("\"path\": \"bundle/parts/b.part\"") != std::string::npos &&
+                    kReceipt.find("\"suffix\": \".part\"") != std::string::npos);
+    RAWFRAME_EXPECT(cookGathered(kProject).reused == 3);
+
+    // A part read changed: the bundle again, the sounds reused.
+    writeText(kProject.sources / "bundle" / "parts" / "a.part", "uno");
+    const CookReport kEdited = cookGathered(kProject);
+    RAWFRAME_EXPECT(kEdited.cooked == 1 && kEdited.reused == 2);
+    // A part added deeper changes the listing: again.
+    writeText(kProject.sources / "bundle" / "parts" / "more" / "c.part", "three");
+    RAWFRAME_EXPECT(cookGathered(kProject).cooked == 1);
+    // A file the listing does not take changes nothing.
+    writeText(kProject.sources / "bundle" / "parts" / "notes.txt", "unread");
+    RAWFRAME_EXPECT(cookGathered(kProject).reused == 3);
+    // A part removed: again, from what is there.
+    fs::remove(kProject.sources / "bundle" / "parts" / "b.part");
+    RAWFRAME_EXPECT(cookGathered(kProject).cooked == 1);
+
+    // Nothing outside the sources is read, by `..` or from the root.
+    for (const std::string_view kOutside : {"../..", "/tmp", ""}) {
+        writeText(kProject.sources / "bundle" / "bundle.txt", kOutside);
+        const CookReport kRefused = cookGathered(kProject);
+        RAWFRAME_EXPECT(failedWith(kRefused, CookError::BadRead));
+    }
+}
+
 RAWFRAME_TEST(NothingIsPublishedUnlessNothingFailed) {
     const Project kProject;
     writeText(kProject.sources / "a.wav.rfmeta", sidecar("000000000000000000000000000000b1"));
@@ -185,7 +256,7 @@ RAWFRAME_TEST(ANondeterministicImporterIsCaught) {
                  .normalize = [](const document::Value*) -> result::Result<std::string> {
                      return std::string{"x"};
                  },
-                 .cook = [](std::span<const std::byte>, std::string_view) -> result::Result<Artifact> {
+                 .cook = [](std::span<const std::byte>, std::string_view, Reads&) -> result::Result<Artifact> {
                      return Artifact{.type = kSoundClipType,
                                      .representation = *content::RepresentationId::parse("rawframe.audio.wave"),
                                      .bytes = {static_cast<std::byte>(calls.fetch_add(1))}};

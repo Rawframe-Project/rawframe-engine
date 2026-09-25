@@ -26,6 +26,8 @@ enum class CookError : std::uint32_t {
     Nondeterministic = 6,
     /// Writing the output failed.
     WriteFailed = 7,
+    /// An importer's read: outside the sources, or of what cannot be read.
+    BadRead = 8,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(CookError error) noexcept {

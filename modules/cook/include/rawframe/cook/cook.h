@@ -14,10 +14,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rawframe::cook {
@@ -29,6 +31,53 @@ struct Artifact {
     std::vector<std::byte> bytes;
 };
 
+/// What one cook reads besides its source: other files under the sources,
+/// named relative to the source's directory, and the files a directory
+/// holds. Every read is recorded with a digest of what it saw; a cached
+/// artifact is reused only while every read would see the same again
+/// (ADR-0024: the key is every input, and these are inputs the importer
+/// found). Nothing outside the sources is read, and a read is the same bytes
+/// every time it is asked, so the two cooks of one source see one input.
+class Reads {
+public:
+    /// One read as recorded: a file's path, or a directory's with the
+    /// suffix it was listed for, relative to the sources, and the digest of
+    /// the bytes or the listing.
+    struct Read {
+        std::string path;
+        /// Empty for a file; for a listing, the suffix listed.
+        std::string suffix;
+        bool listing = false;
+        base::Sha256Digest digest{};
+    };
+
+    /// `sources` is canonical; `directory` is the source's, relative to it.
+    Reads(std::filesystem::path sources, std::filesystem::path directory);
+
+    /// The bytes of the file at `path`, relative to the source's directory.
+    /// Refused (`BadRead`) when it is absolute, lies outside the sources, or
+    /// cannot be read.
+    [[nodiscard]] result::Result<std::span<const std::byte>> file(std::string_view path);
+    /// Every regular file under the directory at `path`, at any depth, whose
+    /// name ends in `suffix`: paths relative to that directory, with `/`,
+    /// sorted. Refused as `file` is.
+    [[nodiscard]] result::Result<std::vector<std::string>> files(std::string_view path, std::string_view suffix);
+
+    /// Every read so far, in path order.
+    [[nodiscard]] std::vector<Read> reads() const;
+
+    /// The digest of a listing: each name and a line feed, in order.
+    [[nodiscard]] static base::Sha256Digest digestOfListing(std::span<const std::string> names);
+
+private:
+    [[nodiscard]] result::Result<std::filesystem::path> resolve(std::string_view path) const;
+
+    std::filesystem::path sources_;
+    std::filesystem::path directory_;
+    std::map<std::string, std::vector<std::byte>> files_;
+    std::map<std::pair<std::string, std::string>, std::vector<std::string>> listings_;
+};
+
 /// One registered importer: who it is, what settings it takes, and how it
 /// cooks. Selection is by the sidecar's `importer`, never by extension.
 struct Importer {
@@ -36,9 +85,12 @@ struct Importer {
     /// The settings in the one form that enters the cook key, defaults
     /// written out; refused when they are not this importer's.
     result::Result<std::string> (*normalize)(const document::Value* settings) = nullptr;
-    /// Cooks the source's bytes under normalized settings. Must give the same
-    /// bytes for the same inputs: every cook is done twice and compared.
-    result::Result<Artifact> (*cook)(std::span<const std::byte> source, std::string_view settings) = nullptr;
+    /// Cooks the source's bytes under normalized settings, reading anything
+    /// else it needs through `reads`. Must give the same bytes for the same
+    /// inputs: every cook is done twice and compared.
+    result::Result<Artifact> (*cook)(std::span<const std::byte> source,
+                                     std::string_view settings,
+                                     Reads& reads) = nullptr;
 };
 
 struct CookRequest {
@@ -66,7 +118,7 @@ struct CookReport {
 
 /// Scans `sources` for sidecars (`<source file>.rfmeta`) in path order,
 /// cooks each source with its importer (twice, compared) or takes its
-/// artifact from the cache after verifying it, writes each artifact to
+/// artifact from the cache after verifying it and every read that made it, writes each artifact to
 /// `objects/<digest>` under the output, and, only if nothing failed,
 /// publishes `content.manifest` and `cook.receipt` there. Errors are the
 /// request's own (an unreadable sources directory, an output inside it);

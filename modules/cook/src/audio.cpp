@@ -48,7 +48,7 @@ result::Result<std::string> normalize(const Value* settings) {
     return "tier=opus;bitrate=" + std::to_string(kBitrate);
 }
 
-result::Result<Artifact> cookSound(std::span<const std::byte> source, std::string_view settings) {
+result::Result<Artifact> cookSound(std::span<const std::byte> source, std::string_view settings, Reads& /*reads*/) {
     RAWFRAME_TRY_ASSIGN(const audio::Clip kClip, audio_import::importSound(source));
     if (settings == "tier=wave") {
         return Artifact{.type = kSoundClipType,

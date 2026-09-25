@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iterator>
 #include <system_error>
+#include <tuple>
 
 namespace rawframe::cook {
 
@@ -80,6 +81,61 @@ bool writeText(const std::filesystem::path& path, std::string_view text) {
     return writeAtomically(path, std::as_bytes(std::span{text.data(), text.size()}));
 }
 
+/// A read as a cache record or a receipt writes it.
+Value valueOf(const Reads::Read& read) {
+    Value made = Value::object();
+    made.add("path", Value::string(read.path));
+    if (read.listing) {
+        made.add("suffix", Value::string(read.suffix));
+    }
+    made.add("digest", Value::string("sha256:" + hexOf(read.digest)));
+    return made;
+}
+
+Value valueOf(std::span<const Reads::Read> reads) {
+    Value made = Value::array();
+    for (const Reads::Read& read : reads) {
+        made.push(valueOf(read));
+    }
+    return made;
+}
+
+/// Every read a cache record names, done again, if each sees what it saw:
+/// none when one would not, or is not a read at all.
+std::optional<std::vector<Reads::Read>> readAgain(const std::filesystem::path& sources, const Value* reads) {
+    if (reads == nullptr || reads->kind() != Value::Kind::Array) {
+        return std::nullopt;
+    }
+    Reads again{sources, {}};
+    for (const Value& read : reads->items()) {
+        const Value* path = read.find("path");
+        const Value* suffix = read.find("suffix");
+        const Value* digest = read.find("digest");
+        if (path == nullptr || path->text() == nullptr || digest == nullptr || digest->text() == nullptr ||
+            (suffix != nullptr && suffix->text() == nullptr)) {
+            return std::nullopt;
+        }
+        base::Sha256Digest seen{};
+        if (suffix != nullptr) {
+            const auto kNames = again.files(*path->text(), *suffix->text());
+            if (!kNames.has_value()) {
+                return std::nullopt;
+            }
+            seen = Reads::digestOfListing(*kNames);
+        } else {
+            const auto kBytes = again.file(*path->text());
+            if (!kBytes.has_value()) {
+                return std::nullopt;
+            }
+            seen = base::sha256(*kBytes);
+        }
+        if (*digest->text() != "sha256:" + hexOf(seen)) {
+            return std::nullopt;
+        }
+    }
+    return again.reads();
+}
+
 /// One source, read and ready to cook.
 struct Planned {
     std::string source;
@@ -114,8 +170,15 @@ base::Sha256Digest keyOf(const CookRequest& request, const Planned& planned) {
 }
 
 /// A cached artifact, if the cache has one for this key that verifies: the
-/// key names a digest, and the object under it has that digest.
-std::optional<Artifact> fromCache(const std::filesystem::path& cache, const std::string& key) {
+/// key names a digest, the object under it has that digest, and every read
+/// that made it would read the same now.
+struct Cached {
+    Artifact artifact;
+    std::vector<Reads::Read> reads;
+};
+
+std::optional<Cached>
+fromCache(const std::filesystem::path& sources, const std::filesystem::path& cache, const std::string& key) {
     const auto kRecord = readFile(cache / "keys" / key);
     if (!kRecord.has_value()) {
         return std::nullopt;
@@ -138,20 +201,30 @@ std::optional<Artifact> fromCache(const std::filesystem::path& cache, const std:
     if (!kDigest.has_value() || !kRepresentation.has_value() || !kType.parsed) {
         return std::nullopt;
     }
+    auto reads = readAgain(sources, parsed->find("reads"));
+    if (!reads.has_value()) {
+        return std::nullopt;
+    }
     auto bytes = readFile(cache / "objects" / hexOf(kDigest->bytes));
     if (!bytes.has_value() || !content::sameDigest(content::ContentDigest::of(*bytes), *kDigest)) {
         return std::nullopt;
     }
-    return Artifact{
-        .type = content::ResourceTypeId{kType.value}, .representation = *kRepresentation, .bytes = std::move(*bytes)};
+    return Cached{.artifact = Artifact{.type = content::ResourceTypeId{kType.value},
+                                       .representation = *kRepresentation,
+                                       .bytes = std::move(*bytes)},
+                  .reads = std::move(*reads)};
 }
 
-void toCache(const std::filesystem::path& cache, const std::string& key, const Artifact& artifact) {
+void toCache(const std::filesystem::path& cache,
+             const std::string& key,
+             const Artifact& artifact,
+             std::span<const Reads::Read> reads) {
     const content::ContentDigest kDigest = content::ContentDigest::of(artifact.bytes);
     Value record = Value::object();
     record.add("type", Value::string(hexOf(artifact.type.value)));
     record.add("representation", Value::string(std::string{artifact.representation.text()}));
     record.add("digest", Value::string(kDigest.text()));
+    record.add("reads", valueOf(reads));
     // A cache is only ever a saving: failing to fill it fails nothing.
     if (writeAtomically(cache / "objects" / hexOf(kDigest.bytes), artifact.bytes)) {
         static_cast<void>(writeText(cache / "keys" / key, document::write(record)));
@@ -166,6 +239,90 @@ result::Result<base::Sha256Digest> digestOfFile(const std::filesystem::path& pat
         return std::unexpected<result::Error>{failure(CookError::BadRequest, "the file cannot be read", "")};
     }
     return base::sha256(*kBytes);
+}
+
+Reads::Reads(std::filesystem::path sources, std::filesystem::path directory)
+    : sources_(std::move(sources)), directory_(std::move(directory)) {
+}
+
+result::Result<std::filesystem::path> Reads::resolve(std::string_view path) const {
+    const std::filesystem::path kAsked{path};
+    std::error_code error;
+    const std::filesystem::path kResolved =
+        kAsked.is_absolute() ? std::filesystem::path{}
+                             : std::filesystem::weakly_canonical(sources_ / directory_ / kAsked, error);
+    const std::filesystem::path kRelative = kResolved.lexically_relative(sources_);
+    if (path.empty() || kResolved.empty() || error || kRelative.empty() || *kRelative.begin() == "..") {
+        return std::unexpected<result::Error>{failure(CookError::BadRead, "a read outside the sources", path)};
+    }
+    return kRelative;
+}
+
+result::Result<std::span<const std::byte>> Reads::file(std::string_view path) {
+    RAWFRAME_TRY_ASSIGN(const std::filesystem::path kRelative, resolve(path));
+    const std::string kKey = kRelative.generic_string();
+    auto found = files_.find(kKey);
+    if (found == files_.end()) {
+        auto bytes = readFile(sources_ / kRelative);
+        if (!bytes.has_value()) {
+            return std::unexpected<result::Error>{failure(CookError::BadRead, "a read of what cannot be read", kKey)};
+        }
+        found = files_.emplace(kKey, std::move(*bytes)).first;
+    }
+    return std::span<const std::byte>{found->second};
+}
+
+result::Result<std::vector<std::string>> Reads::files(std::string_view path, std::string_view suffix) {
+    RAWFRAME_TRY_ASSIGN(const std::filesystem::path kRelative, resolve(path));
+    std::pair<std::string, std::string> key{kRelative.generic_string(), std::string{suffix}};
+    auto found = listings_.find(key);
+    if (found == listings_.end()) {
+        const std::filesystem::path kDirectory = sources_ / kRelative;
+        std::error_code error;
+        std::vector<std::string> names;
+        if (!std::filesystem::is_directory(kDirectory, error)) {
+            return std::unexpected<result::Error>{
+                failure(CookError::BadRead, "a listing of what is not a directory", key.first)};
+        }
+        for (auto entry = std::filesystem::recursive_directory_iterator{kDirectory, error};
+             !error && entry != std::filesystem::recursive_directory_iterator{};
+             entry.increment(error)) {
+            if (entry->is_regular_file() && entry->path().filename().string().ends_with(suffix)) {
+                names.push_back(entry->path().lexically_relative(kDirectory).generic_string());
+            }
+        }
+        if (error) {
+            return std::unexpected<result::Error>{
+                failure(CookError::BadRead, "a directory that cannot be listed", key.first)};
+        }
+        std::ranges::sort(names);
+        found = listings_.emplace(std::move(key), std::move(names)).first;
+    }
+    return found->second;
+}
+
+std::vector<Reads::Read> Reads::reads() const {
+    std::vector<Read> made;
+    for (const auto& [kPath, kBytes] : files_) {
+        made.push_back(Read{.path = kPath, .digest = base::sha256(kBytes)});
+    }
+    for (const auto& [kKey, kNames] : listings_) {
+        made.push_back(
+            Read{.path = kKey.first, .suffix = kKey.second, .listing = true, .digest = digestOfListing(kNames)});
+    }
+    std::ranges::sort(made, [](const Read& left, const Read& right) {
+        return std::tie(left.path, left.listing, left.suffix) < std::tie(right.path, right.listing, right.suffix);
+    });
+    return made;
+}
+
+base::Sha256Digest Reads::digestOfListing(std::span<const std::string> names) {
+    base::Sha256 digest;
+    for (const std::string& name : names) {
+        digest.update(name);
+        digest.update("\n");
+    }
+    return digest.finish();
 }
 
 result::Result<CookReport> cookSources(const CookRequest& request) {
@@ -273,24 +430,32 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
     Value artifacts = Value::array();
     for (const Planned& planned : plan) {
         const std::string kKey = hexOf(keyOf(request, planned));
-        std::optional<Artifact> artifact = request.cache ? fromCache(*request.cache, kKey) : std::nullopt;
-        const bool kReused = artifact.has_value();
-        if (!kReused) {
-            // Twice, and the same both times, or it is not published.
-            auto first = planned.importer->cook(planned.bytes, planned.settings);
+        std::optional<Cached> cached = request.cache ? fromCache(kSources, *request.cache, kKey) : std::nullopt;
+        const bool kReused = cached.has_value();
+        std::optional<Artifact> artifact;
+        std::vector<Reads::Read> readsMade;
+        if (kReused) {
+            artifact = std::move(cached->artifact);
+            readsMade = std::move(cached->reads);
+        } else {
+            // Twice, and the same both times, or it is not published. One
+            // Reads for both, so both see one input.
+            Reads reads{kSources, std::filesystem::path{planned.source}.parent_path()};
+            auto first = planned.importer->cook(planned.bytes, planned.settings, reads);
             if (!first.has_value()) {
                 report.failures.push_back(std::move(first).error().withContext("path", planned.source));
                 continue;
             }
-            const auto kSecond = planned.importer->cook(planned.bytes, planned.settings);
+            const auto kSecond = planned.importer->cook(planned.bytes, planned.settings, reads);
             if (!kSecond.has_value() || kSecond->bytes != first->bytes) {
                 report.failures.push_back(
                     failure(CookError::Nondeterministic, "two cooks of one source differ", planned.source));
                 continue;
             }
             artifact = std::move(*first);
+            readsMade = reads.reads();
             if (request.cache) {
-                toCache(*request.cache, kKey, *artifact);
+                toCache(*request.cache, kKey, *artifact, readsMade);
             }
         }
         const content::ContentDigest kDigest = content::ContentDigest::of(artifact->bytes);
@@ -314,6 +479,7 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
         input.add("source", Value::string(planned.source));
         input.add("importer", Value::string(std::string{planned.importer->identity}));
         input.add("sourceDigest", Value::string("sha256:" + hexOf(planned.digest)));
+        input.add("reads", valueOf(readsMade));
         input.add("key", Value::string("sha256:" + kKey));
         input.add("reused", Value::boolean(kReused));
         inputs.push(std::move(input));
