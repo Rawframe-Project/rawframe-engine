@@ -76,7 +76,10 @@ bool apart(const std::array<Plane, 3>& a, const std::array<Plane, 3>& b) {
     return kSeparates(a, b) || kSeparates(b, a);
 }
 
-result::Status pointsInForm(std::span<const BlendSpacePoint> points, const GraphLimits& limits, std::size_t least) {
+result::Status pointsInForm(std::span<const BlendSpacePoint> points,
+                            const std::optional<PhaseSync>& sync,
+                            const GraphLimits& limits,
+                            std::size_t least) {
     if (points.size() > limits.maximumInputs) {
         return graphOverLimit("a blend space has more points than its limit");
     }
@@ -95,7 +98,11 @@ result::Status pointsInForm(std::span<const BlendSpacePoint> points, const Graph
             }
         }
     }
-    return {};
+    std::vector<std::string_view> names;
+    for (const BlendSpacePoint& point : points) {
+        names.emplace_back(point.name);
+    }
+    return phaseSyncInForm(sync, names);
 }
 
 } // namespace
@@ -106,6 +113,7 @@ double turn(const Plane& a, const Plane& b, const Plane& c) noexcept {
 
 Value blendSpaceParams(const BlendSpace1DNode& node) {
     Value made = Value::object();
+    addPhaseSync(node.phaseSync, made);
     made.add("points", pointsValue(node.points, false));
     if (node.position != Scalar{0.0}) {
         made.add("position", scalarValue(node.position));
@@ -115,6 +123,7 @@ Value blendSpaceParams(const BlendSpace1DNode& node) {
 
 Value blendSpaceParams(const BlendSpace2DNode& node) {
     Value made = Value::object();
+    addPhaseSync(node.phaseSync, made);
     made.add("points", pointsValue(node.points, true));
     if (const auto* kLiteral = std::get_if<Plane>(&node.position)) {
         if (*kLiteral != Plane{}) {
@@ -149,11 +158,13 @@ result::Result<BlendSpace1DNode> blendSpace1DOf(const Value& params, const Value
     const Value* position = params.find("position");
     auto points = pointsOf(params, inputs, false);
     const std::optional<Scalar> kPosition = position != nullptr ? scalarOf(*position) : std::optional{Scalar{0.0}};
-    if (params.names().size() != (position != nullptr ? 2U : 1U) || !points.has_value() || !kPosition.has_value()) {
+    RAWFRAME_TRY_ASSIGN(const auto kSync, phaseSyncOf(params));
+    if (params.names().size() != (position != nullptr ? 2U : 1U) + kSync.second || !points.has_value() ||
+        !kPosition.has_value()) {
         return graphInvalid("a line blend space's params are its points, a number for each input, and optionally "
-                            "its position");
+                            "its position and phase sync");
     }
-    return BlendSpace1DNode{.position = *kPosition, .points = std::move(*points)};
+    return BlendSpace1DNode{.position = *kPosition, .points = std::move(*points), .phaseSync = kSync.first};
 }
 
 result::Result<BlendSpace2DNode> blendSpace2DOf(const Value& params, const Value& inputs) {
@@ -169,12 +180,14 @@ result::Result<BlendSpace2DNode> blendSpace2DOf(const Value& params, const Value
             hasMembers(*position, {"parameter"}) ? bits64Of(position->find("parameter")) : std::nullopt;
         kPosition = kId.has_value() ? std::optional{Point{ParameterRef{*kId}}} : std::nullopt;
     }
-    if (params.names().size() != (position != nullptr ? 3U : 2U) || !points.has_value() || !kPosition.has_value() ||
-        triangles == nullptr || triangles->kind() != Value::Kind::Array) {
+    RAWFRAME_TRY_ASSIGN(const auto kSync, phaseSyncOf(params));
+    if (params.names().size() != (position != nullptr ? 3U : 2U) + kSync.second || !points.has_value() ||
+        !kPosition.has_value() || triangles == nullptr || triangles->kind() != Value::Kind::Array) {
         return graphInvalid("a plane blend space's params are its points, a place for each input, its triangles, "
-                            "and optionally its position");
+                            "and optionally its position and phase sync");
     }
-    BlendSpace2DNode made{.position = *kPosition, .points = std::move(*points), .triangles = {}};
+    BlendSpace2DNode made{
+        .position = *kPosition, .points = std::move(*points), .triangles = {}, .phaseSync = kSync.first};
     for (const Value& triangle : triangles->items()) {
         if (triangle.kind() != Value::Kind::Array || triangle.items().size() != 3 ||
             !std::ranges::all_of(triangle.items(), [](const Value& name) {
@@ -189,7 +202,7 @@ result::Result<BlendSpace2DNode> blendSpace2DOf(const Value& params, const Value
 }
 
 result::Status blendSpaceInForm(const Graph& graph, const BlendSpace1DNode& node, const GraphLimits& limits) {
-    RAWFRAME_TRY(pointsInForm(node.points, limits, 1));
+    RAWFRAME_TRY(pointsInForm(node.points, node.phaseSync, limits, 1));
     if (!scalarInForm(graph, node.position, true)) {
         return graphInvalid("a line blend space's position is a number or a float parameter");
     }
@@ -197,7 +210,7 @@ result::Status blendSpaceInForm(const Graph& graph, const BlendSpace1DNode& node
 }
 
 result::Status blendSpaceInForm(const Graph& graph, const BlendSpace2DNode& node, const GraphLimits& limits) {
-    RAWFRAME_TRY(pointsInForm(node.points, limits, 3));
+    RAWFRAME_TRY(pointsInForm(node.points, node.phaseSync, limits, 3));
     if (const auto* kRef = std::get_if<ParameterRef>(&node.position)) {
         const Parameter* declared = parameterOf(graph, kRef->parameter);
         if (declared == nullptr || declared->type != ParameterType::Vec2) {

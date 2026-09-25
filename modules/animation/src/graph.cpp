@@ -326,6 +326,7 @@ Value nodeValue(const Graph& graph, const GraphNode& node) {
         }
     } else if (const auto* kBlend = std::get_if<BlendNode>(&node.node)) {
         type = kBlendType;
+        addPhaseSync(kBlend->phaseSync, params);
         Value weights = Value::object();
         for (const BlendInput& input : kBlend->inputs) {
             inputs.add(input.name, connectionValue(input.from));
@@ -385,11 +386,13 @@ result::Result<ClipNode> clipNodeOf(const Value& params, const Value& inputs) {
 
 result::Result<BlendNode> blendNodeOf(const Value& params, const Value& inputs) {
     const Value* weights = params.find("weights");
-    if (params.names().size() != (weights != nullptr ? 1U : 0U) ||
+    RAWFRAME_TRY_ASSIGN(const auto kSync, phaseSyncOf(params));
+    if (params.names().size() != (weights != nullptr ? 1U : 0U) + kSync.second ||
         (weights != nullptr && weights->kind() != Value::Kind::Object)) {
-        return graphInvalid("a blend node's one param is its weights");
+        return graphInvalid("a blend node's params are its weights and its phase sync");
     }
     BlendNode made;
+    made.phaseSync = kSync.first;
     for (std::size_t at = 0; at < inputs.names().size(); ++at) {
         const std::optional<Connection> kFrom = connectionOf(inputs.items()[at]);
         if (!kFrom.has_value()) {
@@ -515,6 +518,11 @@ result::Status validate(const Graph& graph, const GraphLimits& limits) {
                         "or more or by a float parameter");
                 }
             }
+            std::vector<std::string_view> names;
+            for (const BlendInput& input : kBlend->inputs) {
+                names.emplace_back(input.name);
+            }
+            RAWFRAME_TRY(phaseSyncInForm(kBlend->phaseSync, names));
         } else if (const auto* kMachine = std::get_if<StateMachineNode>(&node.node)) {
             RAWFRAME_TRY(stateMachineInForm(graph, *kMachine, limits));
         } else if (const auto* kMask = std::get_if<MaskNode>(&node.node)) {

@@ -7,10 +7,12 @@
 #include "rawframe/document/json.h"
 #include "rawframe/result/result.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
 #include <string_view>
+#include <utility>
 
 namespace rawframe::animation {
 
@@ -45,6 +47,17 @@ inline constexpr double kIntLimit = 2147483648.0;
 /// Refuses (`GraphInvalid`, `OverLimit`) a state machine out of its rules.
 [[nodiscard]] result::Status
 stateMachineInForm(const Graph& graph, const StateMachineNode& node, const GraphLimits& limits);
+
+/// A node's phase sync as its params hold it: `phaseSync`, and `leader`
+/// for a declared one; nothing for none.
+void addPhaseSync(const std::optional<PhaseSync>& sync, document::Value& params);
+/// The phase sync `params` declare, and how many params that took;
+/// refuses (`GraphInvalid`) one out of its form.
+[[nodiscard]] result::Result<std::pair<std::optional<PhaseSync>, std::size_t>>
+phaseSyncOf(const document::Value& params);
+/// Refuses (`GraphInvalid`) a declared leader that is none of `inputs`.
+[[nodiscard]] result::Status phaseSyncInForm(const std::optional<PhaseSync>& sync,
+                                             std::span<const std::string_view> inputs);
 
 /// A blend space node's params, and its inputs: one a point.
 [[nodiscard]] document::Value blendSpaceParams(const BlendSpace1DNode& node);

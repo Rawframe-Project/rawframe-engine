@@ -95,6 +95,19 @@ double blended(BlendCurve curve, double at) {
     return curve == BlendCurve::Linear ? at : at * at * (3.0 - (2.0 * at));
 }
 
+/// A blend space's phase sync onto its step, a declared leader by its
+/// point's place.
+void syncOf(const std::optional<PhaseSync>& sync, std::span<const BlendSpacePoint> points, CompiledGraph::Step& step) {
+    if (!sync.has_value()) {
+        return;
+    }
+    step.phaseSync = true;
+    if (sync->leader == PhaseLeader::Declared) {
+        step.leader =
+            static_cast<std::size_t>(std::ranges::find(points, sync->input, &BlendSpacePoint::name) - points.begin());
+    }
+}
+
 bool compared(Comparison comparison, double value, double with) {
     switch (comparison) {
     case Comparison::Equal:
@@ -188,6 +201,14 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
                 step.weights.push_back(kLiteral(input.weight));
                 step.weightParameters.push_back(kParameter(input.weight));
             }
+            if (kBlend->phaseSync.has_value()) {
+                step.phaseSync = true;
+                if (kBlend->phaseSync->leader == PhaseLeader::Declared) {
+                    step.leader = static_cast<std::size_t>(
+                        std::ranges::find(kBlend->inputs, kBlend->phaseSync->input, &BlendInput::name) -
+                        kBlend->inputs.begin());
+                }
+            }
         } else if (const auto* kLine = std::get_if<BlendSpace1DNode>(&node->node)) {
             for (const BlendSpacePoint& point : kLine->points) {
                 step.inputs.push_back(steps.at(point.from.node));
@@ -195,6 +216,7 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
             }
             step.position = {kLiteral(kLine->position), 0.0};
             step.positionParameter = kParameter(kLine->position);
+            syncOf(kLine->phaseSync, kLine->points, step);
         } else if (const auto* kPlane = std::get_if<BlendSpace2DNode>(&node->node)) {
             for (const BlendSpacePoint& point : kPlane->points) {
                 step.inputs.push_back(steps.at(point.from.node));
@@ -214,6 +236,7 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
             } else {
                 step.positionParameter = kParameter(std::get<ParameterRef>(kPlane->position));
             }
+            syncOf(kPlane->phaseSync, kPlane->points, step);
         } else if (const auto* kMask = std::get_if<MaskNode>(&node->node)) {
             const auto kNamed = std::ranges::find(masks, kMask->mask, &NamedMask::id);
             if (kNamed == masks.end() || kNamed->mask == nullptr) {
@@ -273,9 +296,25 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
             }
             step.machine = std::move(machineStep);
         }
+        if (step.leader.has_value() && !made->steps_[step.inputs[*step.leader]].clip.has_value()) {
+            return invalid("a declared phase leader is a clip node");
+        }
         step.node = node->id;
         steps.emplace(node->id, made->steps_.size());
         made->steps_.push_back(std::move(step));
+    }
+    // Each clip follows the first synced node that takes it, in evaluation
+    // order.
+    for (std::size_t at = 0; at < made->steps_.size(); ++at) {
+        if (!made->steps_[at].phaseSync) {
+            continue;
+        }
+        for (const std::size_t kInput : made->steps_[at].inputs) {
+            Step& input = made->steps_[kInput];
+            if (input.clip.has_value() && !input.syncedBy.has_value()) {
+                input.syncedBy = at;
+            }
+        }
     }
     return std::shared_ptr<const CompiledGraph>{std::move(made)};
 }
@@ -299,6 +338,7 @@ std::optional<ParameterIndex> CompiledGraph::parameter(std::uint64_t id) const n
 GraphInstance::GraphInstance(std::shared_ptr<const CompiledGraph> graph)
     : graph_{std::move(graph)}, playheads_(graph_->steps().size(), 0.0), weights_(graph_->steps().size(), 0.0),
       shares_(graph_->steps().size()), speeds_(graph_->steps().size(), 0.0), machines_(graph_->steps().size()),
+      leaders_(graph_->steps().size(), 0), before_(graph_->steps().size(), 0.0),
       motions_(graph_->rootMotion().has_value() ? graph_->steps().size() : 0) {
     for (std::size_t at = 0; at < graph_->parameterCount(); ++at) {
         values_.push_back(graph_->declaration(ParameterIndex{static_cast<std::uint32_t>(at)}).initial);
@@ -431,6 +471,8 @@ bool GraphInstance::advance(double delta, std::vector<GraphEvent>& events) {
     const EvaluationLimits& limits = graph_->limits();
     delta = std::isfinite(delta) ? delta : 0.0;
     weigh();
+    lead();
+    before_ = playheads_;
     // Every playhead moves, weighed or not, so a clip blended back in is
     // where its time says; only weighed ones fire.
     bool whole = true;
@@ -446,6 +488,16 @@ bool GraphInstance::advance(double delta, std::vector<GraphEvent>& events) {
         crossed.clear();
         const Clip& clip = step.clip->clip();
         speeds_[at] = valueOf(values_, step.speed, step.speedParameter);
+        const std::size_t kLeader = step.syncedBy.has_value() ? leaders_[*step.syncedBy] : at;
+        if (kLeader != at) {
+            // A follower: at its leader's phase as the advance began (a seek,
+            // firing nothing), moving through its clip as far as the leader
+            // through its own.
+            const CompiledGraph::Step& leading = kSteps[kLeader];
+            const double kLength = leading.clip->clip().duration;
+            playheads_[at] = before_[kLeader] / kLength * clip.duration;
+            speeds_[at] = valueOf(values_, leading.speed, leading.speedParameter) * clip.duration / kLength;
+        }
         const Advance kMoved = animation::advance(clip, playheads_[at], delta * speeds_[at], crossed, kRoom);
         if (!motions_.empty()) {
             const RootTracks kTracks{
@@ -482,6 +534,30 @@ bool GraphInstance::advance(double delta, std::vector<GraphEvent>& events) {
     weigh();
     blendRootMotion();
     return whole;
+}
+
+void GraphInstance::lead() {
+    // A declared leader leads; otherwise the clip input weighed most, the
+    // first of equals.
+    const std::span<const CompiledGraph::Step> kSteps = graph_->steps();
+    for (std::size_t at = 0; at < kSteps.size(); ++at) {
+        const CompiledGraph::Step& step = kSteps[at];
+        if (!step.phaseSync) {
+            continue;
+        }
+        if (step.leader.has_value()) {
+            leaders_[at] = step.inputs[*step.leader];
+            continue;
+        }
+        std::optional<std::size_t> best;
+        for (std::size_t input = 0; input < step.inputs.size(); ++input) {
+            if (kSteps[step.inputs[input]].clip.has_value() &&
+                (!best.has_value() || shares_[at][input] > shares_[at][*best])) {
+                best = input;
+            }
+        }
+        leaders_[at] = best.has_value() ? step.inputs[*best] : at;
+    }
 }
 
 void GraphInstance::blendRootMotion() {

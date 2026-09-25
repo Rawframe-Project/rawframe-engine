@@ -112,6 +112,16 @@ RAWFRAME_TEST(BlendSpacesHaveOneText) {
                                                          "{\n        \"points\": {\n          \"idle\": 0,"));
     const auto kPlane = writeGraph(plane());
     RAWFRAME_EXPECT(kPlane.has_value() && kPlane->contains("\"triangles\": [\n          [\n            \"back\","));
+    // Either may sync its clips' phases.
+    Graph synced = line();
+    std::get<BlendSpace1DNode>(synced.nodes[3].node).phaseSync =
+        PhaseSync{.leader = PhaseLeader::Declared, .input = "walk"};
+    Graph weighed = plane();
+    std::get<BlendSpace2DNode>(weighed.nodes[4].node).phaseSync = PhaseSync{};
+    for (const Graph& kGraph : {synced, weighed}) {
+        const auto kText = writeGraph(kGraph);
+        RAWFRAME_EXPECT(kText.has_value() && kText->contains("\"phaseSync\"") && readGraph(*kText) == kGraph);
+    }
     // At its default, the position is left out.
     Graph still = line();
     std::get<BlendSpace1DNode>(still.nodes[3].node).position = 0.0;

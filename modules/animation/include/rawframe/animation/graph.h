@@ -75,6 +75,14 @@
 //                        parameter; default `[0, 0]`) within the first
 //                        triangle holding it, or at the nearest point of
 //                        the nearest triangle when none does (D135)
+//
+// A blend or a blend space may declare `phaseSync` (D136): its inputs that
+// are clip nodes play at one phase, a leader's, `weight_leader` taking the
+// one weighed most (the first of equals) and `declared_leader` the input
+// its `leader` names, which must be a clip node. A follower moves as far
+// through its clip as the leader through its own, at the leader's speed,
+// and fires the events it crosses; a clip following two nodes follows the
+// first in evaluation order.
 //   `rawframe/state_machine@1`
 //                        one of its inputs, each a state, at a time,
 //                        starting at `entry` and moving by `transitions`
@@ -176,6 +184,20 @@ struct ClipNode {
     friend bool operator==(const ClipNode&, const ClipNode&) = default;
 };
 
+enum class PhaseLeader : std::uint8_t {
+    Weight,
+    Declared,
+};
+
+/// SPEC-0035's declared phase synchronization.
+struct PhaseSync {
+    PhaseLeader leader = PhaseLeader::Weight;
+    /// A declared leader's input, by name; empty for a weighed one.
+    std::string input;
+
+    friend bool operator==(const PhaseSync&, const PhaseSync&) = default;
+};
+
 struct BlendInput {
     std::string name;
     Connection from;
@@ -186,6 +208,7 @@ struct BlendInput {
 
 struct BlendNode {
     std::vector<BlendInput> inputs;
+    std::optional<PhaseSync> phaseSync;
 
     friend bool operator==(const BlendNode&, const BlendNode&) = default;
 };
@@ -214,6 +237,7 @@ struct BlendSpace1DNode {
     Scalar position = 0.0;
     /// In name order.
     std::vector<BlendSpacePoint> points;
+    std::optional<PhaseSync> phaseSync;
 
     friend bool operator==(const BlendSpace1DNode&, const BlendSpace1DNode&) = default;
 };
@@ -226,6 +250,7 @@ struct BlendSpace2DNode {
     std::vector<BlendSpacePoint> points;
     /// Each three points by name, in name order; the triangles in order.
     std::vector<std::array<std::string, 3>> triangles;
+    std::optional<PhaseSync> phaseSync;
 
     friend bool operator==(const BlendSpace2DNode&, const BlendSpace2DNode&) = default;
 };

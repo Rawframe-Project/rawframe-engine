@@ -166,6 +166,12 @@ public:
         std::vector<std::array<std::size_t, 3>> triangles;
         std::array<double, 2> position{};
         std::optional<ParameterIndex> positionParameter;
+        /// A blend's or blend space's phase sync, with a declared leader by
+        /// its place among the inputs; a weighed one names none.
+        bool phaseSync = false;
+        std::optional<std::size_t> leader;
+        /// A clip following a phase: the step whose sync it follows.
+        std::optional<std::size_t> syncedBy;
         /// A clip's root translation and rotation tracks, by their place
         /// in it, when the skeleton declares root motion.
         std::optional<std::size_t> rootTranslation;
@@ -269,6 +275,8 @@ private:
     };
 
     void weigh();
+    /// Each synced step's leader, from the shares the advance began with.
+    void lead();
     /// Each blend's and machine's root motion from its inputs', as the
     /// last weigh shares them.
     void blendRootMotion();
@@ -297,6 +305,10 @@ private:
     std::vector<MachineState> machines_;
     /// Transition requests for the next advance, oldest first.
     std::vector<std::uint64_t> requests_;
+    /// Each synced step's leader in the current advance, and every
+    /// playhead as the advance began.
+    std::vector<std::size_t> leaders_;
+    std::vector<double> before_;
     /// Each step's root motion in the last advance, and the output's.
     std::vector<Transform> motions_;
     Transform rootMotion_;
