@@ -20,12 +20,16 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(crates_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":27,\"bodiesRemoved\":0,\"bodiesRefused\":0")
+    # The prediction runs count ticks confirmed in wall time, so each holds
+    # six of ctest's processors: a machine running every preset at once
+    # starved them into too few confirmations (D83).
     # One bot predicts its ball: hundreds of ticks confirmed, the few
     # rollbacks those of admission.
     add_test(NAME crates_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/crates_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(crates_prediction PROPERTIES
+                         PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,")
     # Sixteen bots play the sample platformer: nine bodies of the level and
     # one runner for each player are made, and the runners move as
@@ -88,6 +92,7 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(runners_prediction PROPERTIES
+                         PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
     # Sixteen bots play the sample 3D game: ten bodies of the plaza and one
     # walker for each player are made, and the walkers move as characters.
@@ -102,5 +107,6 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/plaza_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_prediction PROPERTIES
+                         PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
 endif()

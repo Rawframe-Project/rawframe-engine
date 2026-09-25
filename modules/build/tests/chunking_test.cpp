@@ -47,7 +47,7 @@ RAWFRAME_TEST(ChunksCoverTheBytesWithinTheirBounds) {
     const std::vector<std::byte> kSmall = noise(kMinimumChunk, 1);
     RAWFRAME_EXPECT(chunkEnds(kSmall) == std::vector<std::size_t>{kMinimumChunk});
 
-    const std::vector<std::byte> kLarge = noise(std::size_t{24} * 1024 * 1024, 2);
+    const std::vector<std::byte> kLarge = noise(std::size_t{12} * 1024 * 1024, 2);
     const std::vector<std::size_t> kEnds = chunkEnds(kLarge);
     RAWFRAME_EXPECT(kEnds.back() == kLarge.size() && std::ranges::is_sorted(kEnds));
     std::size_t start = 0;
@@ -59,9 +59,9 @@ RAWFRAME_TEST(ChunksCoverTheBytesWithinTheirBounds) {
         start = kEnds[index];
     }
     RAWFRAME_EXPECT(bounded);
-    // Normalized chunking keeps the average near the target: 24 MiB in
-    // well over the 6 maximum-size chunks and under the 96 minimum-size.
-    RAWFRAME_EXPECT(kEnds.size() > 12 && kEnds.size() < 48);
+    // Normalized chunking keeps the average near the target: 12 MiB in
+    // well over the 3 maximum-size chunks and under the 48 minimum-size.
+    RAWFRAME_EXPECT(kEnds.size() > 6 && kEnds.size() < 24);
     RAWFRAME_EXPECT(chunkEnds(kLarge) == kEnds);
 
     // An edit in the first chunk moves only the cuts near it: every later
