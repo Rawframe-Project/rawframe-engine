@@ -13,6 +13,7 @@
 #include "rawframe/world_replication/server.h"
 #include "rawframe/world_runtime/simulation.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <optional>
@@ -73,6 +74,13 @@ result::Result<network::Compatibility> compatibilityOf(composition::ParticipantC
     return compatibility;
 }
 
+/// Connections a server holds beyond its players, so a hello arriving when it
+/// is full can still be answered `capacity` instead of the transport closing
+/// on it.
+std::size_t admissionRoom(std::size_t players) noexcept {
+    return std::max<std::size_t>(4, players / 8);
+}
+
 std::unexpected<result::Error> missing(std::string_view why) {
     return result::fail(
         result::ErrorClass::FailedPrecondition, kReplicationDomain, code(ReplicationError::Malformed), why);
@@ -95,19 +103,20 @@ public:
         if (kConnections == 0 || kConnections > 4096) {
             return missing("replication.maximum_connections is 1 to 4096");
         }
-        RAWFRAME_TRY_ASSIGN(provider_, transport->provider(providerProfile(static_cast<std::size_t>(kConnections))));
+        const auto kPlayers = static_cast<std::size_t>(kConnections);
+        RAWFRAME_TRY_ASSIGN(provider_, transport->provider(providerProfile(kPlayers + admissionRoom(kPlayers))));
         RAWFRAME_TRY_ASSIGN(const network::Compatibility kExpected, compatibilityOf(context, *plan));
-        RAWFRAME_TRY_ASSIGN(
-            sessions_,
-            network::Sessions::server(
-                *provider_,
-                context.clock(),
-                network::ServerSettings{.profile = sessionProfile(static_cast<std::size_t>(kConnections)),
-                                        .expected = kExpected,
-                                        .admit = &admitWhileActive,
-                                        .admitContext = this,
-                                        .tickRateTicks = simulation_->rate().ticks,
-                                        .tickRateSeconds = simulation_->rate().seconds}));
+        RAWFRAME_TRY_ASSIGN(sessions_,
+                            network::Sessions::server(
+                                *provider_,
+                                context.clock(),
+                                network::ServerSettings{.profile = sessionProfile(kPlayers + admissionRoom(kPlayers)),
+                                                        .expected = kExpected,
+                                                        .admit = &admitWhileActive,
+                                                        .admitContext = this,
+                                                        .maximumAdmitted = kPlayers,
+                                                        .tickRateTicks = simulation_->rate().ticks,
+                                                        .tickRateSeconds = simulation_->rate().seconds}));
         // SPEC-0013's steady egress objective by default; the budget is per
         // tick, so it follows the World's rate.
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kEgress,
@@ -400,6 +409,7 @@ public:
         std::uint64_t admitted = 0;
         std::uint64_t unavailable = 0;
         std::uint64_t noticed = 0;
+        std::uint64_t full = 0;
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
         PredictionStatistics predicted;
@@ -412,6 +422,7 @@ public:
             admitted += bot.client->admitted() ? 1 : 0;
             unavailable += bot.client->rejection() == network::RejectReason::Unavailable ? 1 : 0;
             noticed += bot.client->serverStopping() ? 1 : 0;
+            full += bot.client->rejection() == network::RejectReason::Capacity ? 1 : 0;
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
             const PredictionStatistics kBot = bot.client->predictionStatistics();
@@ -429,6 +440,7 @@ public:
                       diagnostics::field("admitted", admitted),
                       diagnostics::field("unavailable", unavailable),
                       diagnostics::field("serverStopping", noticed),
+                      diagnostics::field("full", full),
                       diagnostics::field("unpredicted", unpredicted_),
                       diagnostics::field("handed", handed),
                       diagnostics::field("sourceFailures", sourceFailures_),

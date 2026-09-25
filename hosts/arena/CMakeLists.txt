@@ -13,6 +13,12 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(arena_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":16,\"admitted\":16")
+    # A server with room for two players tells a third it is full.
+    add_test(NAME arena_full
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/arena_full.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(arena_full PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bots\":3,\"admitted\":2,\"unavailable\":0,\"serverStopping\":0,\"full\":1")
     # Sixteen bots play the sample physics game: eleven bodies of the level
     # and one ball for each player are made, and nothing is refused.
     add_test(NAME crates_bots
