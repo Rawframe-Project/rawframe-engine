@@ -95,6 +95,7 @@ struct Settings {
     std::size_t ioWorkers = execution::kDefaultBlockingIoWorkers;
     execution::MonotonicDuration shutdownBudget = execution::MonotonicDuration::fromSeconds(5);
     execution::MonotonicDuration drain = execution::MonotonicDuration::fromSeconds(5);
+    execution::MonotonicDuration stall = execution::MonotonicDuration::fromSeconds(10);
     Severity minimumSeverity = Severity::Info;
 };
 
@@ -132,6 +133,11 @@ std::optional<std::string_view> readSettings(const composition::Configuration& c
         return "host.drain_ms";
     }
     settings.drain = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kDrain));
+    const auto kStall = configuration.unsignedInteger("host.stall_ms", 10'000);
+    if (!kStall.has_value() || *kStall < 100 || *kStall > 600'000) {
+        return "host.stall_ms";
+    }
+    settings.stall = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kStall));
     if (const auto kSeverity = configuration.text("diagnostics.minimum_severity")) {
         const auto kParsed = severityNamed(*kSeverity);
         if (!kParsed) {
@@ -141,6 +147,34 @@ std::optional<std::string_view> readSettings(const composition::Configuration& c
     }
     return std::nullopt;
 }
+
+/// SPEC-0012's executor progress evidence: work waits or runs while no task
+/// finishes. A long task alone is a stall too; nothing a Host runs should
+/// hold a worker for seconds.
+class StallWatch {
+public:
+    explicit StallWatch(execution::MonotonicInstant start) noexcept : since_(start) {
+    }
+
+    composition::Health check(const execution::ExecutorProgress& progress,
+                              execution::MonotonicInstant now,
+                              execution::MonotonicDuration limit) noexcept {
+        if (progress.waiting + progress.running == 0 || progress.completed != completed_) {
+            completed_ = progress.completed;
+            since_ = now;
+            return composition::Health::Healthy;
+        }
+        const std::int64_t kStalled = (now - since_).nanoseconds;
+        if (kStalled >= limit.nanoseconds) {
+            return composition::Health::Unhealthy;
+        }
+        return kStalled * 2 >= limit.nanoseconds ? composition::Health::Degraded : composition::Health::Healthy;
+    }
+
+private:
+    std::uint64_t completed_ = 0;
+    execution::MonotonicInstant since_;
+};
 
 } // namespace
 
@@ -181,9 +215,17 @@ HostExit runHost(const HostRequest& request) noexcept {
     // SPEC-0012's lifecycle, each move logged. Participants read it through
     // their context; only this thread moves it.
     composition::HostLifecycle lifecycle;
+    HostStatus status;
+    const auto kPublish = [&] {
+        if (request.status.publish != nullptr) {
+            request.status.publish(status, request.status.context);
+        }
+    };
     const auto kEnter = [&](composition::HostState next, std::string_view reason) {
         const composition::HostState kFrom = lifecycle.state();
         if (lifecycle.enter(next)) {
+            status.state = next;
+            kPublish();
             kEmitter.log(Severity::Info,
                          kLifecycle,
                          "host lifecycle",
@@ -196,6 +238,7 @@ HostExit runHost(const HostRequest& request) noexcept {
                  kLifecycle,
                  "host lifecycle",
                  {diagnostics::field("state", composition::describe(composition::HostState::Starting))});
+    kPublish();
     if (kBadKey) {
         kEmitter.log(Severity::Critical,
                      kBadConfiguration,
@@ -276,6 +319,8 @@ HostExit runHost(const HostRequest& request) noexcept {
     std::uint64_t iteration = 0;
     HostExit exit = HostExit::Stopped;
     composition::HealthReport health;
+    StallWatch cpuWatch{clock.now()};
+    StallWatch ioWatch{clock.now()};
     execution::MonotonicInstant drainStart = clock.now();
     const auto kDrainFrom = [&](std::string_view reason) {
         drainStart = clock.now();
@@ -306,14 +351,39 @@ HostExit runHost(const HostRequest& request) noexcept {
             }
         }
         ++iteration;
-        if (const composition::HealthReport kReport = composition.health(); kReport.health != health.health) {
-            health = kReport;
+        status.iteration = iteration;
+        // The worst of the participants' reports and the Host's own watch.
+        composition::HealthReport report = composition.health();
+        const execution::MonotonicInstant kChecked = clock.now();
+        const std::pair<StallWatch*, execution::Executor*> kWatched[] = {{&cpuWatch, &cpu}, {&ioWatch, &io}};
+        for (const auto& [watch, executor] : kWatched) {
+            const composition::Health kStall = watch->check(executor->progress(), kChecked, settings.stall);
+            if (kStall > report.health) {
+                report = composition::HealthReport{
+                    .health = kStall,
+                    .reason = "executor_stalled",
+                    .participant = executor->kind() == execution::ExecutorKind::Cpu ? "host.cpu" : "host.blocking_io"};
+            }
+        }
+        bool changed = false;
+        if (report.health != health.health) {
+            health = report;
+            status.health = health.health;
+            status.reason = health.reason;
+            changed = true;
             kEmitter.log(health.health == composition::Health::Healthy ? Severity::Info : Severity::Warning,
                          kHealth,
                          "host health",
                          {diagnostics::field("health", composition::describe(health.health)),
                           diagnostics::field("reason", health.reason),
                           diagnostics::field("participant", health.participant)});
+        }
+        if (const std::size_t kConnections = composition.connections(); kConnections != status.connections) {
+            status.connections = kConnections;
+            changed = true;
+        }
+        if (changed) {
+            kPublish();
         }
         next = next + kPeriod;
         const execution::MonotonicInstant kNow = clock.now();

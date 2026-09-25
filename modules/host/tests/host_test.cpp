@@ -1,6 +1,7 @@
 // The Host end to end: configuration, composition, the Host schedule, the log,
-// the lifecycle, draining, health, and orderly stop, driven by a participant
-// that counts its phases and plays at serving connections.
+// the lifecycle, draining, health, the status snapshot, and orderly stop,
+// driven by a participant that counts its phases, plays at serving
+// connections, and can hold the CPU worker.
 
 #include "rawframe/composition/composition.h"
 #include "rawframe/host/host.h"
@@ -12,6 +13,7 @@
 #include <initializer_list>
 #include <string>
 #include <thread>
+#include <vector>
 
 using namespace rawframe;
 using composition::HostPhase;
@@ -35,6 +37,12 @@ struct Counts {
     int stopAt = -1;
     int unhealthyAt = -1;
     std::atomic<bool>* stop = nullptr;
+    /// The iteration a task that holds the CPU worker is submitted at, and
+    /// what lets it go.
+    int holdWorkerAt = -1;
+    std::atomic<bool> release{false};
+    /// Every status the Host published.
+    std::vector<host::HostStatus> statuses;
 };
 
 Counts counts;
@@ -72,6 +80,14 @@ private:
         if (counts.stop != nullptr && counts.runWorlds == counts.stopAt) {
             counts.stop->store(true, std::memory_order_release);
         }
+        if (counts.runWorlds == counts.holdWorkerAt && context_->cpuExecutor() != nullptr) {
+            static_cast<void>(
+                context_->cpuExecutor()->submit(context_->owner(), execution::Priority::Normal, []() noexcept {
+                    while (!counts.release.load()) {
+                        std::this_thread::yield();
+                    }
+                }));
+        }
         if (counts.unhealthyAt >= 0 && counts.runWorlds >= counts.unhealthyAt) {
             context_->reportHealth(composition::Health::Unhealthy, "test_failure");
         }
@@ -94,6 +110,7 @@ void registerCounting(composition::ParticipantRegistrar& registrar) noexcept {
         .scope = composition::LifetimeScope::Runtime,
         .requiredCapabilities =
             requireMissing ? std::span<const std::string_view>{kMissing} : std::span<const std::string_view>{},
+        .executor = {.cpu = true, .blockingIo = false, .quota = {.maximumPendingTasks = 4}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
         .hostPhases =
             composition::hostPhaseBit(HostPhase::RunWorlds) | composition::hostPhaseBit(HostPhase::Maintenance),
@@ -120,7 +137,18 @@ void reset() {
     counts.stopAt = -1;
     counts.unhealthyAt = -1;
     counts.stop = nullptr;
+    counts.holdWorkerAt = -1;
+    counts.release = false;
+    counts.statuses.clear();
     requireMissing = false;
+}
+
+/// Keeps each status, and lets the held worker go once the Host is unhealthy.
+void observe(const host::HostStatus& status, void*) noexcept {
+    counts.statuses.push_back(status);
+    if (status.health == composition::Health::Unhealthy) {
+        counts.release = true;
+    }
 }
 
 host::HostExit run(std::string_view configurationText, std::string& log, const std::atomic<bool>* stop = nullptr) {
@@ -130,7 +158,8 @@ host::HostExit run(std::string_view configurationText, std::string& log, const s
                                            .registrars = kRegistrars,
                                            .configuration = &*kConfiguration,
                                            .log = {.write = &collect, .context = &log},
-                                           .stopRequested = stop});
+                                           .stopRequested = stop,
+                                           .status = {.publish = &observe, .context = nullptr}});
 }
 
 bool mentions(const std::string& log, std::string_view text) {
@@ -185,6 +214,51 @@ RAWFRAME_TEST(AStopRequestDrainsTheConnectionsBeforeStopping) {
     RAWFRAME_EXPECT(movesThrough(log, {"active", "draining", "stopping", "stopped"}));
     RAWFRAME_EXPECT(mentions(log, "\"reason\":\"stop_requested\"") && mentions(log, "\"reason\":\"drained\""));
     RAWFRAME_EXPECT(mentions(log, "\"health\":\"healthy\""));
+
+    // The snapshot followed: every state once, in order, and the
+    // connections as they closed.
+    std::vector<composition::HostState> states;
+    std::vector<std::size_t> connections;
+    for (const host::HostStatus& kStatus : counts.statuses) {
+        if (states.empty() || states.back() != kStatus.state) {
+            states.push_back(kStatus.state);
+        }
+        if (connections.empty() || connections.back() != kStatus.connections) {
+            connections.push_back(kStatus.connections);
+        }
+    }
+    using composition::HostState;
+    RAWFRAME_EXPECT((states == std::vector<HostState>{HostState::Starting,
+                                                      HostState::Preparing,
+                                                      HostState::Ready,
+                                                      HostState::Active,
+                                                      HostState::Draining,
+                                                      HostState::Stopping,
+                                                      HostState::Stopped}));
+    RAWFRAME_EXPECT((connections == std::vector<std::size_t>{0, 3, 2, 1, 0}));
+    RAWFRAME_EXPECT(counts.statuses.back().iteration == 7);
+}
+
+RAWFRAME_TEST(AStalledExecutorIsDegradedThenUnhealthy) {
+    reset();
+    std::string log;
+    counts.holdWorkerAt = 2;
+    // The one worker is held, and the task behind it waits: nothing
+    // finishes. The observer lets the worker go once the Host is unhealthy.
+    const auto kExit = run(
+        "host.iteration_rate = 1000\nhost.cpu_workers = 1\nhost.stall_ms = 100\nhost.maximum_iterations = 100000", log);
+    RAWFRAME_EXPECT(kExit == host::HostExit::Unhealthy);
+    std::vector<composition::Health> seen;
+    for (const host::HostStatus& kStatus : counts.statuses) {
+        if (seen.empty() || seen.back() != kStatus.health) {
+            seen.push_back(kStatus.health);
+        }
+    }
+    RAWFRAME_EXPECT((seen == std::vector<composition::Health>{composition::Health::Healthy,
+                                                              composition::Health::Degraded,
+                                                              composition::Health::Unhealthy}));
+    RAWFRAME_EXPECT(counts.statuses.back().reason == "executor_stalled");
+    RAWFRAME_EXPECT(mentions(log, "\"participant\":\"host.cpu\"") && mentions(log, "\"reason\":\"unhealthy\""));
 }
 
 RAWFRAME_TEST(ADrainEndsWhenItsTimeIsUp) {
