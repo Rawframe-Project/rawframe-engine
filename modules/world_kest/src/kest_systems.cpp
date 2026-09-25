@@ -1,7 +1,9 @@
 #include "rawframe/world_kest/kest_systems.h"
 
+#include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/errors.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <limits>
@@ -53,6 +55,9 @@ struct KestSystems::Doorway {
         const schema::ComponentDescriptor* descriptor = nullptr;
         std::vector<std::byte> scratch;
         std::vector<std::size_t> entityFields;
+        /// Offered though the game does not list it: a World without it
+        /// refuses the door when called, not the systems when declared.
+        bool optional = false;
     };
 
     /// A prefab with its components' registry entries, found with the
@@ -553,7 +558,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
     }
     // The doorway first: every door's context points into it.
     auto doorway = std::make_unique<Doorway>();
-    doorway->components.reserve(settings.components.size());
+    doorway->components.reserve(settings.components.size() + 1);
     for (const KestComponent& component : settings.components) {
         Doorway::Component& added = doorway->components.emplace_back();
         added.doorway = doorway.get();
@@ -562,6 +567,21 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         added.entityFields.assign(component.entityFields.begin(), component.entityFields.end());
         added.insertName = added.kestType + ".insert";
         added.removeName = added.kestType + ".remove";
+    }
+    // rawframe.world asks for the persistent identity's insert whether or
+    // not the game lists it; any program that lays it out may insert it.
+    if (std::ranges::none_of(settings.components,
+                             [](const KestComponent& component) {
+                                 return component.component == world::Persistent::kComponentTypeId;
+                             }) &&
+        settings.program->layout("Persistent").has_value()) {
+        Doorway::Component& added = doorway->components.emplace_back();
+        added.doorway = doorway.get();
+        added.id = world::Persistent::kComponentTypeId;
+        added.kestType = "Persistent";
+        added.insertName = "Persistent.insert";
+        added.removeName = "Persistent.remove";
+        added.optional = true;
     }
     for (const KestPrefab& prefab : settings.prefabs) {
         doorway->prefabs.push_back(Doorway::Prefab{.prefab = prefab, .runtimes = {}, .descriptors = {}});
@@ -656,6 +676,10 @@ result::Status KestSystems::declareSystems(const schema::SchemaRegistry& registr
         return {};
     };
     for (Doorway::Component& component : doorway_->components) {
+        if (component.optional && !registry.find(component.id).has_value()) {
+            component.descriptor = nullptr;
+            continue;
+        }
         RAWFRAME_TRY_ASSIGN(component.runtime, registry.find(component.id));
         component.descriptor = &registry.descriptor(component.runtime);
         RAWFRAME_TRY(kShaped(*component.descriptor, component.kestType));

@@ -2,6 +2,7 @@
 
 #include "physics_facts.h"
 #include "rawframe/base/sha256.h"
+#include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_replication/perception.h"
 
@@ -22,6 +23,18 @@ kest::TypeLayout perceptionLayout() {
             kest::Field{.name = "baseTick", .offset = offsetof(Perception, baseTick), .kind = kest::FieldKind::U64},
             kest::Field{.name = "fraction", .offset = offsetof(Perception, fraction), .kind = kest::FieldKind::U16},
             kest::Field{.name = "viewer", .offset = offsetof(Perception, viewer), .kind = kest::FieldKind::U32}}};
+    made.mark = engineLayoutMark(made);
+    return made;
+}
+
+kest::TypeLayout persistentLayout() {
+    using world::Persistent;
+    kest::TypeLayout made{
+        .size = sizeof(Persistent),
+        .alignment = alignof(Persistent),
+        .mark = 0,
+        .fields = {kest::Field{.name = "high", .offset = offsetof(Persistent, high), .kind = kest::FieldKind::U64},
+                   kest::Field{.name = "low", .offset = offsetof(Persistent, low), .kind = kest::FieldKind::U64}}};
     made.mark = engineLayoutMark(made);
     return made;
 }
@@ -93,6 +106,8 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
     std::optional<kest::TypeLayout> engine;
     if (component.id == world_replication::Perception::kComponentTypeId) {
         engine = perceptionLayout();
+    } else if (component.id == world::Persistent::kComponentTypeId) {
+        engine = persistentLayout();
     } else if (game.physics.has_value()) {
         for (const physics::ComponentLayout& owned : physicsFacts(game.physics->dimensions).components) {
             if (owned.id == component.id) {

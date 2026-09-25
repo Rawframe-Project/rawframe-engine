@@ -1,6 +1,7 @@
 #include "rawframe/world_kest/game.h"
 
 #include "physics_facts.h"
+#include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_replication/perception.h"
 
@@ -421,6 +422,11 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             return badLine(line, WorldKestError::UnknownName, "a line names a component the game does not declare");
         }
     }
+    // Any entity may carry a persistent identity (SPEC-0006), from a scene
+    // or from `world.persist`.
+    game.components.push_back(GameComponent{.id = world::Persistent::kComponentTypeId,
+                                            .name = std::string{world::Persistent::kComponentName},
+                                            .kestType = "Persistent"});
     // Every player holds the moment its client saw.
     if (game.inputPerceived) {
         game.player.emplace_back(world_replication::Perception::kComponentName);

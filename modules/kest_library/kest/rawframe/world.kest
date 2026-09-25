@@ -27,3 +27,20 @@ fn create() -> Entity {
 fn destroy(entity: Entity) {
     World.destroy(entity)
 }
+
+// An entity's persistent identity (SPEC-0006), which it keeps from one World
+// to the next through saves. The engine names it: a program asks for one and
+// never reads or forges the numbers.
+struct Persistent {
+    own high: u64
+    own low: u64
+}
+
+extern fn Persistent.insert(entity: Entity, value: Persistent)
+
+// Records that the entity is to be persistent. At the next barrier it is
+// named, from the World's own stream, unless it already has a name, which it
+// keeps.
+fn persist(entity: Entity) {
+    Persistent.insert(entity, Persistent(u64(0), u64(0)))
+}

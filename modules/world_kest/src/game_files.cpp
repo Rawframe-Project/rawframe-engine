@@ -198,7 +198,16 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
     }
     for (const std::string& name : sceneNames(game.description_)) {
         RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / name));
-        game.scenes_.push_back(Named{.name = name, .text = std::move(text)});
+        std::optional<base::Bits128> identity;
+        const std::filesystem::path kSidecar = kDirectory / (name + std::string{content::kSidecarSuffix});
+        if (std::filesystem::is_regular_file(kSidecar)) {
+            RAWFRAME_TRY_ASSIGN(const std::string kSidecarText, readText(kSidecar));
+            const auto kRead = content::readSidecar(kSidecarText);
+            if (kRead.has_value() && kRead->importer == "rawframe.scene") {
+                identity = kRead->id.value;
+            }
+        }
+        game.scenes_.push_back(Named{.name = name, .text = std::move(text), .identity = identity});
     }
     // A scene an instance names, by the sidecar that names it.
     RAWFRAME_TRY(game.readInstanced([&kDirectory](base::Bits128 scene) -> result::Result<std::string> {
@@ -266,7 +275,7 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
             std::string text,
             readResource(content.store(),
                          content::ResourceRef{.id = content::ResourceId{kScene->scene}, .type = kSceneType}));
-        game.scenes_.push_back(Named{.name = name, .text = std::move(text)});
+        game.scenes_.push_back(Named{.name = name, .text = std::move(text), .identity = kScene->scene});
     }
     RAWFRAME_TRY(game.readInstanced([&content, &kSceneType](base::Bits128 scene) {
         return readResource(content.store(),
@@ -312,6 +321,11 @@ result::Result<std::string_view> GameFiles::scene(std::string_view name) const {
         return unreadable("the description names no such scene", name);
     }
     return std::string_view{kFound->text};
+}
+
+std::optional<base::Bits128> GameFiles::sceneIdentity(std::string_view name) const {
+    const auto kFound = std::ranges::find(scenes_, name, &Named::name);
+    return kFound != scenes_.end() ? kFound->identity : std::nullopt;
 }
 
 result::Result<std::string_view> GameFiles::sceneById(base::Bits128 scene) const {

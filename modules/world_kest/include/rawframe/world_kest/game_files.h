@@ -64,6 +64,9 @@ public:
     /// The scene the description names `name` (a `scene` line), its text;
     /// refused (`unreadable_file`) for a name it does not use.
     [[nodiscard]] result::Result<std::string_view> scene(std::string_view name) const;
+    /// That scene's resource identity: the resource read from content, or
+    /// in development the identity its sidecar gives, if it has one.
+    [[nodiscard]] std::optional<base::Bits128> sceneIdentity(std::string_view name) const;
     /// The scene of resource identity `scene` that an instance names (D96),
     /// its text: one of the scenes the game's scenes instance, however far
     /// down, all read when the files were. Refused (`unreadable_file`) for
@@ -88,6 +91,8 @@ private:
     struct Named {
         std::string name;
         std::string text;
+        /// A scene's resource identity, when known.
+        std::optional<base::Bits128> identity;
     };
     /// A program the description names: its entry among the files of one
     /// of `sources_`.

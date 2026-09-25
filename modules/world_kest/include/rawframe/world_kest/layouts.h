@@ -2,10 +2,10 @@
 
 // A game's components as the World lays them out (D94): a type of the
 // program's own as the program lays it out, with Kest's mark; a component
-// the engine owns (its physics components, a player's Perception) as the
-// engine lays it out, with a mark the engine derives from that layout, the
-// same whether or not the program names the type. The mark is what a scene
-// records it was authored against (D92).
+// the engine owns (its physics components, a player's Perception, the
+// persistent identity) as the engine lays it out, with a mark the engine
+// derives from that layout, the same whether or not the program names the
+// type. The mark is what a scene records it was authored against (D92).
 
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"

@@ -11,6 +11,7 @@
 #include "rawframe/physics3d/physics.h"
 #include "rawframe/scene/resolve.h"
 #include "rawframe/scene/scene.h"
+#include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/game_files.h"
@@ -714,6 +715,8 @@ private:
     struct SceneSpawns {
         std::vector<GameSpawn> spawns;
         std::vector<SceneReference> references;
+        /// Each spawn's entity id in the resolved scene.
+        std::vector<base::Bits128> ids;
     };
 
     result::Result<SceneSpawns> sceneSpawns(const GameFiles& files, const std::string& path) const {
@@ -774,6 +777,7 @@ private:
                 spawn.components.push_back(std::move(part));
             }
             made.spawns.push_back(std::move(spawn));
+            made.ids.push_back(entity.id);
         }
         return made;
     }
@@ -782,6 +786,7 @@ private:
     result::Status addScenes(const GameFiles& files) {
         for (const std::string& path : game_.scenes) {
             RAWFRAME_TRY_ASSIGN(SceneSpawns scene, sceneSpawns(files, path));
+            RAWFRAME_TRY(namePersistent(files, path, scene));
             const std::size_t kFirst = game_.spawns.size();
             for (SceneReference& reference : scene.references) {
                 reference.spawn += kFirst;
@@ -789,6 +794,33 @@ private:
                 references_.push_back(reference);
             }
             std::ranges::move(scene.spawns, std::back_inserter(game_.spawns));
+        }
+        return {};
+    }
+
+    /// A scene entity that is persistent is named from the scene's identity
+    /// and its own id, so the same level in a new World names it the same
+    /// (world/persistent.h). A prefab's are not: each copy is named where it
+    /// is made.
+    result::Status namePersistent(const GameFiles& files, const std::string& path, SceneSpawns& scene) const {
+        const std::optional<base::Bits128> kScene = files.sceneIdentity(path);
+        for (std::size_t index = 0; index < scene.spawns.size(); ++index) {
+            const auto kPart = std::ranges::find(
+                scene.spawns[index].components, world::Persistent::kComponentName, &GameSpawnComponent::component);
+            if (kPart == scene.spawns[index].components.end()) {
+                continue;
+            }
+            if (!kScene.has_value()) {
+                return std::unexpected<result::Error>{
+                    refuse(result::ErrorClass::InvalidArgument,
+                           WorldKestError::BadGameLine,
+                           "a scene with persistent entities needs a resource identity, from its sidecar")
+                        .error()
+                        .withContext("scene", path)};
+            }
+            const world::PersistentEntityId kId = world::persistentFromSource(*kScene, scene.ids[index]);
+            kPart->fields = {GameFieldValue{.field = "high", .value = std::to_string(kId.value.high)},
+                             GameFieldValue{.field = "low", .value = std::to_string(kId.value.low)}};
         }
         return {};
     }
