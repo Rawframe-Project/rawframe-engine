@@ -17,8 +17,11 @@
 #include <iterator>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
 
 using namespace rawframe;
 using namespace rawframe::assets;
@@ -28,22 +31,28 @@ namespace {
 constexpr content::ResourceTypeId kTextType{base::Bits128{.high = 7, .low = 7}};
 constexpr content::ResourceTypeId kOtherType{base::Bits128{.high = 7, .low = 8}};
 
+#if RAWFRAME_THREADS
 /// Holds every decode until opened, to catch a load in flight.
 std::atomic<bool> gOpen{true};
 /// Holds the decode of "bad" alone until opened.
 std::atomic<bool> gBadOpen{true};
+#endif
 
 /// The test family: bytes to a string, one byte a byte; "bad" does not
 /// decode.
 result::Result<DecodedForm> decodeText(const content::VerifiedContent& content) {
+#if RAWFRAME_THREADS
     while (!gOpen.load(std::memory_order_acquire)) {
         std::this_thread::yield();
     }
+#endif
     const std::span<const std::byte> kBytes = content.bytes();
     std::string text{reinterpret_cast<const char*>(kBytes.data()), kBytes.size()};
+#if RAWFRAME_THREADS
     while (text == "bad" && !gBadOpen.load(std::memory_order_acquire)) {
         std::this_thread::yield();
     }
+#endif
     if (text == "bad") {
         return result::fail(result::ErrorClass::InvalidArgument, kAssetsDomain, code(AssetError::DecodeFailed), "bad");
     }
@@ -127,11 +136,17 @@ struct Fixture {
     }
 
     /// Updates until `requester` is no longer pending, within ten seconds.
-    Readiness settle(RequesterId requester, std::uint64_t tick) const {
+    Readiness settle(RequesterId requester, std::uint64_t tick) {
         const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         while (set->readiness(requester) == Readiness::Pending && std::chrono::steady_clock::now() < kDeadline) {
             set->update(tick);
+#if RAWFRAME_THREADS
             std::this_thread::yield();
+#else
+            // No workers: the loads run here, as a Host would run them.
+            while (io.runOne() || cpu.runOne()) {
+            }
+#endif
         }
         return set->readiness(requester);
     }
@@ -228,6 +243,8 @@ RAWFRAME_TEST(FailuresAreStickyAndTyped) {
         failedAs(*fixture.set, kFake, content::kContentDomain, code(content::ContentError::DigestMismatch).value));
 }
 
+// Decodes held open while the test goes on need a worker to hold them.
+#if RAWFRAME_THREADS
 RAWFRAME_TEST(ADeadlineFailsOnlyItsOwnRequester) {
     Fixture fixture;
     gOpen.store(false, std::memory_order_release);
@@ -262,6 +279,8 @@ RAWFRAME_TEST(ALoadNoOneWantsIsDiscarded) {
     RAWFRAME_EXPECT(kAfter.loading == 0 && kAfter.resident == 0 && kAfter.evictable == 0 && kAfter.residentBytes == 0);
 }
 
+#endif
+
 RAWFRAME_TEST(AClosedSetNamesWhatWasStillWanted) {
     Fixture fixture;
     const RequesterId kKept = *fixture.set->request(refOf(1));
@@ -274,6 +293,7 @@ RAWFRAME_TEST(AClosedSetNamesWhatWasStillWanted) {
     RAWFRAME_EXPECT(!fixture.set->request(refOf(1)).has_value());
 }
 
+#if RAWFRAME_THREADS
 RAWFRAME_TEST(AReloadReplacesWhatChangedInFourPhases) {
     Fixture fixture;
     AssetSet& set = *fixture.set;
@@ -356,3 +376,4 @@ RAWFRAME_TEST(AReloadReplacesWhatChangedInFourPhases) {
     const RequesterId kIjk2 = *set.request(refOf(4));
     RAWFRAME_EXPECT(fixture.settle(kIjk2, 10) == Readiness::Ready && fixture.textOf(kIjk2, 10) == "ijk2");
 }
+#endif
