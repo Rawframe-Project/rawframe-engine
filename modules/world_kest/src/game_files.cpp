@@ -35,10 +35,62 @@ std::unexpected<result::Error> unreadable(std::string_view why, std::string_view
             .withContext("path", where)};
 }
 
-#if RAWFRAME_FILE_SYSTEM
 /// The largest description, document, or Kest file a game reads.
-constexpr std::uintmax_t kLargestFile = std::uintmax_t{1} << 20U;
+constexpr std::size_t kLargestFile = std::size_t{1} << 20U;
 
+} // namespace
+
+struct GameFiles::Reader {
+    /// A file by its path relative to the game's directory, at most
+    /// kLargestFile bytes.
+    std::function<result::Result<std::string>(std::string_view path)> read;
+    std::function<bool(std::string_view path)> exists;
+    /// Every file's relative path, `/` between parts.
+    std::function<result::Result<std::vector<std::string>>()> list;
+};
+
+namespace {
+
+/// Sources by the identity their sidecars give them, as relative paths.
+using Sources = std::vector<std::pair<base::Bits128, std::string>>;
+
+/// The source of each sidecar the reader lists that `importer` cooks, by
+/// the identity it gives it. A sidecar that does not read is no one's.
+template <typename Reader> result::Result<Sources> sourcesBySidecar(const Reader& reader, std::string_view importer) {
+    Sources sources;
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::string> kPaths, reader.list());
+    for (const std::string& path : kPaths) {
+        if (!path.ends_with(content::kSidecarSuffix)) {
+            continue;
+        }
+        RAWFRAME_TRY_ASSIGN(const std::string kText, reader.read(path));
+        const auto kSidecar = content::readSidecar(kText);
+        if (kSidecar.has_value() && kSidecar->importer == importer) {
+            sources.emplace_back(kSidecar->id.value, path.substr(0, path.size() - content::kSidecarSuffix.size()));
+        }
+    }
+    return sources;
+}
+
+/// Every `.kest` file the reader lists, by its relative path, in path order.
+template <typename Reader> result::Result<std::vector<kest::SourceFile>> kestFilesOf(const Reader& reader) {
+    std::vector<kest::SourceFile> files;
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::string> kPaths, reader.list());
+    for (const std::string& path : kPaths) {
+        if (!path.ends_with(".kest")) {
+            continue;
+        }
+        if (files.size() == kest_library::kMaximumGameFiles) {
+            return unreadable("a game has more Kest files than a game may", path);
+        }
+        RAWFRAME_TRY_ASSIGN(std::string text, reader.read(path));
+        files.push_back(kest::SourceFile{.path = path, .text = std::move(text)});
+    }
+    std::ranges::sort(files, {}, &kest::SourceFile::path);
+    return files;
+}
+
+#if RAWFRAME_FILE_SYSTEM
 result::Result<std::string> readText(const std::filesystem::path& path) {
     std::error_code error;
     const std::uintmax_t kSize = std::filesystem::file_size(path, error);
@@ -53,58 +105,21 @@ result::Result<std::string> readText(const std::filesystem::path& path) {
     return text;
 }
 
-/// Sources by the identity their sidecars give them.
-using Sources = std::vector<std::pair<base::Bits128, std::filesystem::path>>;
-
-/// The source of each sidecar under `directory` that `importer` cooks, by
-/// the identity it gives it. A sidecar that does not read is no one's.
-result::Result<Sources> sourcesBySidecar(const std::filesystem::path& directory, std::string_view importer) {
-    Sources sources;
+/// Every regular file under `directory`, by its path relative to it.
+result::Result<std::vector<std::string>> filesUnder(const std::filesystem::path& directory) {
+    std::vector<std::string> paths;
     std::error_code error;
     for (auto entry = std::filesystem::recursive_directory_iterator{directory, error};
          !error && entry != std::filesystem::recursive_directory_iterator{};
          entry.increment(error)) {
-        const std::string kName = entry->path().filename().string();
-        if (!entry->is_regular_file() || !kName.ends_with(content::kSidecarSuffix)) {
-            continue;
-        }
-        RAWFRAME_TRY_ASSIGN(const std::string kText, readText(entry->path()));
-        const auto kSidecar = content::readSidecar(kText);
-        if (kSidecar.has_value() && kSidecar->importer == importer) {
-            const std::string kSource = entry->path().string();
-            sources.emplace_back(kSidecar->id.value,
-                                 kSource.substr(0, kSource.size() - content::kSidecarSuffix.size()));
+        if (entry->is_regular_file()) {
+            paths.push_back(entry->path().lexically_relative(directory).generic_string());
         }
     }
     if (error) {
         return unreadable("a game's directory cannot be listed", directory.string());
     }
-    return sources;
-}
-
-/// Every `.kest` file under `directory`, by its path relative to it, in path
-/// order.
-result::Result<std::vector<kest::SourceFile>> kestFilesUnder(const std::filesystem::path& directory) {
-    std::vector<kest::SourceFile> files;
-    std::error_code error;
-    for (auto entry = std::filesystem::recursive_directory_iterator{directory, error};
-         !error && entry != std::filesystem::recursive_directory_iterator{};
-         entry.increment(error)) {
-        if (!entry->is_regular_file() || entry->path().extension() != ".kest") {
-            continue;
-        }
-        if (files.size() == kest_library::kMaximumGameFiles) {
-            return unreadable("a game has more Kest files than a game may", directory.string());
-        }
-        RAWFRAME_TRY_ASSIGN(std::string text, readText(entry->path()));
-        files.push_back(kest::SourceFile{.path = entry->path().lexically_relative(directory).generic_string(),
-                                         .text = std::move(text)});
-    }
-    if (error) {
-        return unreadable("a game's directory cannot be listed", directory.string());
-    }
-    std::ranges::sort(files, {}, &kest::SourceFile::path);
-    return files;
+    return paths;
 }
 #endif
 
@@ -337,24 +352,22 @@ result::Status GameFiles::readInstanced(const std::function<result::Result<std::
     return {};
 }
 
-#if RAWFRAME_FILE_SYSTEM
-result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& path,
-                                                   game_content::GameContent* content) {
+result::Result<GameFiles>
+GameFiles::fromReader(std::string_view description, const Reader& reader, game_content::GameContent* content) {
     GameFiles game;
     game.named_ = true;
-    RAWFRAME_TRY_ASSIGN(game.text_, readText(path));
+    RAWFRAME_TRY_ASSIGN(game.text_, reader.read(description));
     RAWFRAME_TRY_ASSIGN(game.description_, parseGame(game.text_));
-    const std::filesystem::path kDirectory = path.parent_path().empty() ? "." : path.parent_path();
     for (std::string& name : documentNames(game.description_)) {
-        RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / name));
+        RAWFRAME_TRY_ASSIGN(std::string text, reader.read(name));
         game.documents_.push_back(Named{.name = std::move(name), .text = std::move(text)});
     }
     for (const std::string& name : sceneNames(game.description_)) {
-        RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / name));
+        RAWFRAME_TRY_ASSIGN(std::string text, reader.read(name));
         std::optional<base::Bits128> identity;
-        const std::filesystem::path kSidecar = kDirectory / (name + std::string{content::kSidecarSuffix});
-        if (std::filesystem::is_regular_file(kSidecar)) {
-            RAWFRAME_TRY_ASSIGN(const std::string kSidecarText, readText(kSidecar));
+        const std::string kSidecar = name + std::string{content::kSidecarSuffix};
+        if (reader.exists(kSidecar)) {
+            RAWFRAME_TRY_ASSIGN(const std::string kSidecarText, reader.read(kSidecar));
             const auto kRead = content::readSidecar(kSidecarText);
             if (kRead.has_value() && kRead->importer == "rawframe.scene") {
                 identity = kRead->id.value;
@@ -365,23 +378,23 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
     // A scene an instance names, and an animator's clip or skeleton, by the
     // sidecar that names it; the directory is listed only for a game that
     // asks.
-    const auto kBySidecar = [&kDirectory](std::string_view importer, std::string_view what) {
-        return [&kDirectory, importer, what, sources = std::optional<Sources>{}](
+    const auto kBySidecar = [&reader](std::string_view importer, std::string_view what) {
+        return [&reader, importer, what, sources = std::optional<Sources>{}](
                    base::Bits128 id) mutable -> result::Result<std::string> {
             if (!sources.has_value()) {
-                RAWFRAME_TRY_ASSIGN(sources, sourcesBySidecar(kDirectory, importer));
+                RAWFRAME_TRY_ASSIGN(sources, sourcesBySidecar(reader, importer));
             }
             const auto kFound = std::ranges::find(*sources, id, &Sources::value_type::first);
             if (kFound == sources->end()) {
                 return unreadable(what, hexOf(id));
             }
-            return readText(kFound->second);
+            return reader.read(kFound->second);
         };
     };
     RAWFRAME_TRY(game.readInstanced(
         kBySidecar("rawframe.scene", "no scene beside the game has the identity an instance names")));
     for (const GameAnimator& animator : game.description_.animators) {
-        RAWFRAME_TRY_ASSIGN(std::string text, readText(kDirectory / animator.path));
+        RAWFRAME_TRY_ASSIGN(std::string text, reader.read(animator.path));
         game.graphs_.push_back(Named{.name = animator.path, .text = std::move(text)});
     }
     RAWFRAME_TRY(game.readAnimations(
@@ -393,8 +406,7 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
     // Each mesh, by the resource its sidecar names.
     std::vector<base::Bits128> meshes;
     for (const GameMesh& declared : game.description_.meshes) {
-        const std::filesystem::path kSidecar = kDirectory / (declared.path + std::string{content::kSidecarSuffix});
-        const auto kSidecarText = readText(kSidecar);
+        const auto kSidecarText = reader.read(declared.path + std::string{content::kSidecarSuffix});
         const auto kSidecarRead =
             kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
         if (!kSidecarRead.has_value() || !kSidecarRead->has_value() || (*kSidecarRead)->importer != "rawframe.mesh") {
@@ -405,7 +417,7 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
     RAWFRAME_TRY(game.readMeshes(content, meshes));
     // Each text document, by the resource its sidecar names.
     for (const std::string& text : game.description_.texts) {
-        const auto kSidecarText = readText(kDirectory / (text + std::string{content::kSidecarSuffix}));
+        const auto kSidecarText = reader.read(text + std::string{content::kSidecarSuffix});
         const auto kSidecarRead =
             kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
         if (!kSidecarRead.has_value() || !kSidecarRead->has_value() || (*kSidecarRead)->importer != "rawframe.text") {
@@ -413,16 +425,65 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
         }
         game.texts_.push_back(GameText{.path = text, .document = (*kSidecarRead)->id.value});
     }
-    RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesUnder(kDirectory));
+    RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesOf(reader));
     game.sources_.push_back(std::move(files));
     for (std::string& name : programNames(game.description_)) {
         game.programs_.push_back(Program{.name = name, .entry = name, .sources = 0});
     }
-    game.directory_ = kDirectory;
     game.seal();
     return game;
 }
+
+#if RAWFRAME_FILE_SYSTEM
+result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& path,
+                                                   game_content::GameContent* content) {
+    const std::filesystem::path kDirectory = path.parent_path().empty() ? "." : path.parent_path();
+    const Reader kReader{.read =
+                             [&kDirectory](std::string_view relative) {
+                                 return readText(kDirectory / std::string{relative});
+                             },
+                         .exists =
+                             [&kDirectory](std::string_view relative) {
+                                 return std::filesystem::is_regular_file(kDirectory / std::string{relative});
+                             },
+                         .list =
+                             [&kDirectory] {
+                                 return filesUnder(kDirectory);
+                             }};
+    RAWFRAME_TRY_ASSIGN(GameFiles game, fromReader(path.filename().string(), kReader, content));
+    game.directory_ = kDirectory;
+    return game;
+}
 #endif
+
+result::Result<GameFiles> GameFiles::fromHeld(std::string_view description,
+                                              std::vector<std::pair<std::string, std::string>> files,
+                                              game_content::GameContent* content) {
+    std::ranges::sort(files, {}, &std::pair<std::string, std::string>::first);
+    const auto kFind = [&files](std::string_view path) {
+        const auto kAt = std::ranges::lower_bound(files, path, {}, &std::pair<std::string, std::string>::first);
+        return kAt != files.end() && kAt->first == path ? &*kAt : nullptr;
+    };
+    const Reader kReader{.read = [&kFind](std::string_view path) -> result::Result<std::string> {
+                             const auto* file = kFind(path);
+                             if (file == nullptr || file->second.size() > kLargestFile) {
+                                 return unreadable("a game file is not held, or is larger than 1 MiB", path);
+                             }
+                             return file->second;
+                         },
+                         .exists =
+                             [&kFind](std::string_view path) {
+                                 return kFind(path) != nullptr;
+                             },
+                         .list = [&files]() -> result::Result<std::vector<std::string>> {
+                             std::vector<std::string> paths;
+                             for (const auto& file : files) {
+                                 paths.push_back(file.first);
+                             }
+                             return paths;
+                         }};
+    return fromReader(description, kReader, content);
+}
 
 result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& content, content::ResourceId description) {
     const content::ResourceTypeId kGameType{kCookedGameType};
@@ -593,7 +654,17 @@ GameFiles::compile(std::string_view name, const kest::CompileSettings& settings,
     }
 #if RAWFRAME_FILE_SYSTEM
     if (directory_) {
-        RAWFRAME_TRY_ASSIGN(const std::vector<kest::SourceFile> kNow, kestFilesUnder(*directory_));
+        const std::filesystem::path& directory = *directory_;
+        const Reader kReader{.read =
+                                 [&directory](std::string_view relative) {
+                                     return readText(directory / std::string{relative});
+                                 },
+                             .exists = {},
+                             .list =
+                                 [&directory] {
+                                     return filesUnder(directory);
+                                 }};
+        RAWFRAME_TRY_ASSIGN(const std::vector<kest::SourceFile> kNow, kestFilesOf(kReader));
         return kest_library::compile(kProgram->entry, kNow, settings, report);
     }
 #endif

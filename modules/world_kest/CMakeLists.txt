@@ -7,14 +7,15 @@ rawframe_module(NAME world_kest
     DEPS world_animation animation mesh scene game_content content kest_library physics2d physics3d physics world_replication world_runtime world_save world_snapshot kest network world composition schema execution diagnostics document result base
 )
 
-# Games read from directories, written by the test or in the tree, where
-# there are files; the web build runs the rest.
+# Games read from directories through the game participant, written by the
+# test or in the tree, where there are files; the web build runs the rest,
+# which read cooked games or games held in memory.
 set(rawframe_world_kest_directory_tests "")
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(rawframe_world_kest_directory_tests tests/admission_test.cpp tests/animation_game_test.cpp tests/door_test.cpp
         tests/game_scene_test.cpp tests/game_test.cpp tests/persistent_test.cpp tests/save_game_test.cpp)
 endif()
-rawframe_module_tests(NAME world_kest SOURCES tests/cooked_game_test.cpp tests/kest_systems_test.cpp
+rawframe_module_tests(NAME world_kest SOURCES tests/cooked_game_test.cpp tests/held_game_test.cpp tests/kest_systems_test.cpp
     ${rawframe_world_kest_directory_tests})
 if(TARGET rawframe_world_kest_tests)
     target_compile_definitions(rawframe_world_kest_tests PRIVATE

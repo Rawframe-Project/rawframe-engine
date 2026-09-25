@@ -62,6 +62,14 @@ public:
     [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path,
                                                                  game_content::GameContent* content = nullptr);
 #endif
+    /// The same game from its files held in memory, by their paths relative
+    /// to the description's directory: `description` is the description's
+    /// own path among them. Read exactly as from a directory, except that
+    /// nothing is watched for a reload. For tests and development clients
+    /// that hold a game's sources rather than a disk's.
+    [[nodiscard]] static result::Result<GameFiles> fromHeld(std::string_view description,
+                                                            std::vector<std::pair<std::string, std::string>> files,
+                                                            game_content::GameContent* content = nullptr);
     /// The game whose cooked description is `description` in `content`
     /// (D88): its documents from the description's record, each scene from
     /// the scene resource it names (D95), each mesh from the mesh resource
@@ -137,6 +145,11 @@ public:
 #endif
 
 private:
+    /// How a game's files are read in development, from a directory or
+    /// from memory (game_files.cpp).
+    struct Reader;
+    [[nodiscard]] static result::Result<GameFiles>
+    fromReader(std::string_view description, const Reader& reader, game_content::GameContent* content);
     struct Named {
         std::string name;
         std::string text;
