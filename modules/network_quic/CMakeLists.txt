@@ -2,7 +2,7 @@
 # with TLS 1.3 from OpenSSL. Both are linked privately, so no header above
 # this module can include them.
 rawframe_module(NAME network_quic
-    SOURCES src/certificate.cpp src/participant.cpp src/qpack.cpp src/quic.cpp src/webtransport.cpp
+    SOURCES src/certificate.cpp src/participant.cpp src/core.cpp src/qpack.cpp src/quic.cpp src/webtransport.cpp
     DEPS network composition execution diagnostics result base
 )
 target_link_libraries(rawframe_network_quic PRIVATE msquic::msquic)
