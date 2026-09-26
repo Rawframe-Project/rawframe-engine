@@ -15,14 +15,29 @@ set(RAWFRAME_MSQUIC_REVISION "a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83")
 set(RAWFRAME_OPENSSL_REVISION "453eaaa9e6bb1304730abacfbb73d51868cb6ab9")
 
 # One compiler for the dependency whatever the preset uses: it is C behind a
-# C interface, and its warnings are chosen for Clang.
-find_program(RAWFRAME_QUIC_C_COMPILER NAMES clang-20 clang cc REQUIRED)
-find_program(RAWFRAME_QUIC_CXX_COMPILER NAMES clang++-20 clang++ c++ REQUIRED)
+# C interface, and its warnings are chosen for Clang. On Windows it is MSVC,
+# the compiler both upstreams build with there (D237).
+if(WIN32)
+    find_program(RAWFRAME_QUIC_C_COMPILER NAMES cl REQUIRED)
+    set(RAWFRAME_QUIC_CXX_COMPILER "${RAWFRAME_QUIC_C_COMPILER}")
+    find_program(RAWFRAME_BASH NAMES bash REQUIRED)
+    set(rawframe_quic_shell "${RAWFRAME_BASH}")
+    set(rawframe_msquic_library "msquic.lib")
+    set(rawframe_crypto_library "libcrypto.lib")
+else()
+    find_program(RAWFRAME_QUIC_C_COMPILER NAMES clang-20 clang cc REQUIRED)
+    find_program(RAWFRAME_QUIC_CXX_COMPILER NAMES clang++-20 clang++ c++ REQUIRED)
+    set(rawframe_quic_shell "")
+    set(rawframe_msquic_library "libmsquic.a")
+    set(rawframe_crypto_library "libcrypto.a")
+endif()
 
 if(DEFINED ENV{RAWFRAME_DEPENDENCY_CACHE})
     set(rawframe_quic_cache "$ENV{RAWFRAME_DEPENDENCY_CACHE}")
 elseif(DEFINED ENV{XDG_CACHE_HOME})
     set(rawframe_quic_cache "$ENV{XDG_CACHE_HOME}/rawframe")
+elseif(WIN32)
+    file(TO_CMAKE_PATH "$ENV{LOCALAPPDATA}/rawframe" rawframe_quic_cache)
 else()
     set(rawframe_quic_cache "$ENV{HOME}/.cache/rawframe")
 endif()
@@ -37,7 +52,7 @@ file(LOCK "${RAWFRAME_QUIC_PREFIX}.lock" GUARD PROCESS TIMEOUT 1200)
 if(NOT EXISTS "${RAWFRAME_QUIC_PREFIX}/complete")
     message(STATUS "Building MsQuic and OpenSSL into ${RAWFRAME_QUIC_PREFIX}")
     execute_process(
-        COMMAND "${PROJECT_SOURCE_DIR}/tools/build_quic.sh" "${RAWFRAME_QUIC_PREFIX}"
+        COMMAND ${rawframe_quic_shell} "${PROJECT_SOURCE_DIR}/tools/build_quic.sh" "${RAWFRAME_QUIC_PREFIX}"
                 "${RAWFRAME_QUIC_C_COMPILER}" "${RAWFRAME_QUIC_CXX_COMPILER}"
         RESULT_VARIABLE rawframe_quic_result)
     if(NOT rawframe_quic_result EQUAL 0)
@@ -49,7 +64,7 @@ file(LOCK "${RAWFRAME_QUIC_PREFIX}.lock" RELEASE)
 find_package(Threads REQUIRED)
 add_library(msquic::msquic STATIC IMPORTED GLOBAL)
 set_target_properties(msquic::msquic PROPERTIES
-    IMPORTED_LOCATION "${RAWFRAME_QUIC_PREFIX}/lib/libmsquic.a"
+    IMPORTED_LOCATION "${RAWFRAME_QUIC_PREFIX}/lib/${rawframe_msquic_library}"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/msquic/src/inc;${RAWFRAME_QUIC_PREFIX}/include"
     INTERFACE_LINK_LIBRARIES "Threads::Threads;${CMAKE_DL_LIBS}")
 # On macOS MsQuic checks certificates through the system's trust store
@@ -58,6 +73,11 @@ if(APPLE)
     set_property(TARGET msquic::msquic APPEND PROPERTY INTERFACE_LINK_LIBRARIES
                  "-framework Security" "-framework CoreFoundation")
 endif()
+# On Windows, the system libraries its platform layer and OpenSSL call.
+if(WIN32)
+    set_property(TARGET msquic::msquic APPEND PROPERTY INTERFACE_LINK_LIBRARIES
+                 ws2_32 iphlpapi ntdll ncrypt bcrypt crypt32 secur32 wbemuuid winmm advapi32 user32)
+endif()
 
 # OpenSSL's libcrypto alone, from the same build, for Ed25519 signatures
 # (SPEC-0019: engine-side verification through OpenSSL's EVP one-shot
@@ -65,6 +85,9 @@ endif()
 # both: the linker takes each symbol once.
 add_library(openssl::crypto STATIC IMPORTED GLOBAL)
 set_target_properties(openssl::crypto PROPERTIES
-    IMPORTED_LOCATION "${RAWFRAME_QUIC_PREFIX}/lib/libcrypto.a"
+    IMPORTED_LOCATION "${RAWFRAME_QUIC_PREFIX}/lib/${rawframe_crypto_library}"
     INTERFACE_INCLUDE_DIRECTORIES "${RAWFRAME_QUIC_PREFIX}/include"
     INTERFACE_LINK_LIBRARIES "Threads::Threads;${CMAKE_DL_LIBS}")
+if(WIN32)
+    set_property(TARGET openssl::crypto APPEND PROPERTY INTERFACE_LINK_LIBRARIES ws2_32 crypt32 advapi32 user32)
+endif()
