@@ -35,6 +35,11 @@ target_compile_definitions(rawframe_policy INTERFACE
     # 1 in shipping, where development-only surfaces refuse to compile.
     RAWFRAME_SHIPPING=${RAWFRAME_SHIPPING}
     RAWFRAME_CONFIGURATION_NAME="${RAWFRAME_CONFIGURATION}")
+# windows.h without its min and max macros, which break std::min and
+# std::max, and without the rarely used half of its headers (D237).
+if(WIN32)
+    target_compile_definitions(rawframe_policy INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
 
 if(MSVC)
     target_compile_options(rawframe_policy INTERFACE

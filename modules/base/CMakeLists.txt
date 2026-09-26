@@ -2,6 +2,10 @@
 # primitives, the 128-bit value, the byte vocabulary, platform detection,
 # SHA-256 for fingerprints, and the operating system's secure random source.
 rawframe_module(NAME base SOURCES src/fatal.cpp src/usage.cpp src/secure_random.cpp src/sha256.cpp)
+# Windows' secure random numbers (D237).
+if(WIN32)
+    target_link_libraries(rawframe_base PUBLIC bcrypt)
+endif()
 
 # The fatal path ends the process, which is watched from a forked parent;
 # a WebAssembly module has neither.

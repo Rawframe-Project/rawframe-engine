@@ -8,6 +8,13 @@
 #elif defined(__wasi__)
 #include <algorithm>
 #include <unistd.h>
+#elif defined(_WIN32)
+#include <algorithm>
+#include <limits>
+// clang-format off: windows.h first, bcrypt.h needs its types.
+#include <windows.h>
+#include <bcrypt.h>
+// clang-format on
 #endif
 
 namespace rawframe::base {
@@ -34,6 +41,17 @@ bool fillSecureRandom(std::span<std::byte> into) noexcept {
     // The host's random_get, at most 256 bytes a call.
     for (std::size_t filled = 0; filled < into.size(); filled += 256) {
         if (::getentropy(into.data() + filled, std::min<std::size_t>(256, into.size() - filled)) != 0) {
+            return false;
+        }
+    }
+    return true;
+#elif defined(_WIN32)
+    // The system's preferred generator, at most a ULONG's worth a call.
+    constexpr std::size_t kMost = std::numeric_limits<ULONG>::max();
+    for (std::size_t filled = 0; filled < into.size(); filled += kMost) {
+        const auto kPart = static_cast<ULONG>(std::min(kMost, into.size() - filled));
+        if (!BCRYPT_SUCCESS(::BCryptGenRandom(
+                nullptr, reinterpret_cast<PUCHAR>(into.data() + filled), kPart, BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
             return false;
         }
     }

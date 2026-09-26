@@ -15,11 +15,27 @@
 #elif defined(__APPLE__)
 #include <mach/mach.h>
 #include <sys/resource.h>
+#elif defined(_WIN32)
+// clang-format off: windows.h first, psapi.h needs its types.
+#include <windows.h>
+#include <psapi.h>
+// clang-format on
 #endif
 
 namespace rawframe::base {
 
 namespace {
+
+#if defined(_WIN32)
+/// The process's memory counters: its working set is what is resident.
+std::optional<PROCESS_MEMORY_COUNTERS> memoryCounters() noexcept {
+    PROCESS_MEMORY_COUNTERS counters{};
+    if (::GetProcessMemoryInfo(::GetCurrentProcess(), &counters, sizeof(counters)) == 0) {
+        return std::nullopt;
+    }
+    return counters;
+}
+#endif
 
 /// A field of /proc/self/statm, in bytes: 1 resident, 2 shared (file-backed).
 std::optional<std::uint64_t> statm(int field) noexcept {
@@ -70,6 +86,9 @@ std::optional<std::uint64_t> residentBytes() noexcept {
         return std::nullopt;
     }
     return static_cast<std::uint64_t>(info.resident_size);
+#elif defined(_WIN32)
+    const auto kCounters = memoryCounters();
+    return kCounters ? std::optional<std::uint64_t>{kCounters->WorkingSetSize} : std::nullopt;
 #else
     return std::nullopt;
 #endif
@@ -105,6 +124,11 @@ std::optional<std::uint64_t> peakResidentBytes() noexcept {
     const auto kPeak = static_cast<std::uint64_t>(usage.ru_maxrss);
 #endif
     return std::max(kPeak, residentBytes().value_or(0));
+#elif defined(_WIN32)
+    const auto kCounters = memoryCounters();
+    return kCounters ? std::optional<std::uint64_t>{std::max<std::uint64_t>(kCounters->PeakWorkingSetSize,
+                                                                            kCounters->WorkingSetSize)}
+                     : std::nullopt;
 #else
     return std::nullopt;
 #endif
@@ -121,6 +145,19 @@ std::optional<std::uint64_t> cpuNanoseconds() noexcept {
                (static_cast<std::uint64_t>(value.tv_usec) * 1'000U);
     };
     return kNanoseconds(usage.ru_utime) + kNanoseconds(usage.ru_stime);
+#elif defined(_WIN32)
+    FILETIME created{};
+    FILETIME exited{};
+    FILETIME kernel{};
+    FILETIME user{};
+    if (::GetProcessTimes(::GetCurrentProcess(), &created, &exited, &kernel, &user) == 0) {
+        return std::nullopt;
+    }
+    // In units of 100 nanoseconds.
+    const auto kNanoseconds = [](const FILETIME& value) {
+        return ((static_cast<std::uint64_t>(value.dwHighDateTime) << 32U) | value.dwLowDateTime) * 100U;
+    };
+    return kNanoseconds(kernel) + kNanoseconds(user);
 #else
     return std::nullopt;
 #endif
