@@ -64,19 +64,18 @@ fi
 # MsQuic with OpenSSL as its TLS library, logging compiled out. Its warning
 # flags are chosen by the C++ compiler, so that is named too. It builds with
 # warnings as errors, and MSVC 14.51's range analysis (C28020) finds what
-# older compilers did not in code this engine does not change.
-msquic_flags=()
-if [ "$windows" = 1 ]; then
-    msquic_flags=(-DCMAKE_C_FLAGS=/wd28020)
-fi
+# older compilers did not in code this engine does not change: MSVC reads
+# _CL_ after the command line, so /WX- there outlasts MsQuic's /WX.
 (
+    if [ "$windows" = 1 ]; then
+        export _CL_=/WX-
+    fi
     cmake -S "$root/msquic" -B "$work/msquic" -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_C_COMPILER="$compiler" -DCMAKE_CXX_COMPILER="$cxx_compiler" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DQUIC_TLS_LIB=openssl -DQUIC_OPENSSL_INCLUDE_DIR="$prefix/include" \
         -DQUIC_OPENSSL_LIB_DIR="$prefix/lib" -DQUIC_BUILD_SHARED=OFF -DQUIC_BUILD_TEST=OFF \
         -DQUIC_BUILD_TOOLS=OFF -DQUIC_BUILD_PERF=OFF -DQUIC_ENABLE_LOGGING=OFF \
-        -DQUIC_STATIC_LINK_CRT=OFF -DQUIC_STATIC_LINK_PARTIAL_CRT=OFF ${msquic_flags[@]+"${msquic_flags[@]}"} \
-        >"$work/msquic.log" 2>&1
+        -DQUIC_STATIC_LINK_CRT=OFF -DQUIC_STATIC_LINK_PARTIAL_CRT=OFF >"$work/msquic.log" 2>&1
     cmake --build "$work/msquic" -j"$jobs" >>"$work/msquic.log" 2>&1
 ) || { tail -30 "$work/msquic.log"; exit 1; }
 
