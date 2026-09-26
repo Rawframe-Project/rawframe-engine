@@ -19,7 +19,7 @@ cat >"$work/server.conf" <<CONF
 host.iteration_rate = 120
 host.drain_ms = 60000
 world.tick_rate = 60
-kest.game = games/arena/arena.game
+kest.game = $PWD/games/arena/arena.game
 network.quic.self_signed = true
 network.quic.fingerprint_file = $work/fingerprint
 replication.endpoint = 127.0.0.1:$port
@@ -29,7 +29,7 @@ bots_conf() {
 host.maximum_iterations = $1
 host.iteration_rate = 120
 kest.plan_only = true
-kest.game = games/arena/arena.game
+kest.game = $PWD/games/arena/arena.game
 network.quic.pin_file = $work/fingerprint
 bots.count = 2
 bots.endpoint = 127.0.0.1:$port

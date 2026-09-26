@@ -37,7 +37,7 @@ for game in arena runners plaza; do
         echo "host.maximum_iterations = 720"
         echo "host.iteration_rate = 120"
         echo "world.tick_rate = 60"
-        echo "kest.game = games/$game/$game.game"
+        echo "kest.game = $PWD/games/$game/$game.game"
         echo "network.loopback.latency_ms = 10"
         echo "replication.endpoint = arena"
         echo "bots.count = 64"

@@ -16,7 +16,7 @@ cat >"$work/server.conf" <<CONF
 host.maximum_iterations = 120
 host.iteration_rate = 120
 world.tick_rate = 60
-kest.game = games/runners/runners.game
+kest.game = $PWD/games/runners/runners.game
 save.directory = $work/saves
 save.namespace = 72756e6e657273000000000000000001
 CONF

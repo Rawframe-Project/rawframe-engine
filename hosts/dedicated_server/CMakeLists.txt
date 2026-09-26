@@ -17,6 +17,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(dedicated_server_kest_game PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"code\":\"game_loaded\".*\"code\":\"stopped\"")
+    # The same, started from elsewhere: the configuration's paths are under
+    # its own directory, not where the process starts (D188).
+    add_test(NAME dedicated_server_elsewhere
+             COMMAND rawframe_host_dedicated_server --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/kest_game.conf
+             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(dedicated_server_elsewhere PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"code\":\"game_loaded\".*\"code\":\"stopped\"")
     # Serves the Kest game over QUIC with an identity made at start.
     add_test(NAME dedicated_server_quic
              COMMAND rawframe_host_dedicated_server --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/quic.conf

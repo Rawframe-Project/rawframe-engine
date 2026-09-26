@@ -26,6 +26,16 @@ game="${6:-games/arena/arena.game}"
 server_settings="${7:-/dev/null}"
 bots_settings="${8:-/dev/null}"
 bots_game="${9-$game}"
+# Paths in a configuration are under its own directory (D188); the games
+# named here are under the repository root, where this runs from.
+absolute() {
+    case "$1" in
+    "" | /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$PWD" "$1" ;;
+    esac
+}
+game="$(absolute "$game")"
+bots_game="$(absolute "$bots_game")"
 work="$(mktemp -d)"
 pids=()
 trap 'kill "${pids[@]}" 2>/dev/null || true; rm -rf "$work"' EXIT

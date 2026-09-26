@@ -21,7 +21,7 @@ cat >"$work/arena.conf" <<CONF
 host.maximum_iterations = 1200
 host.iteration_rate = 120
 world.tick_rate = 60
-kest.game = games/runners/runners.game
+kest.game = $repository/games/runners/runners.game
 content.root = $work/content
 content.reload_every = 12
 network.loopback.latency_ms = 10

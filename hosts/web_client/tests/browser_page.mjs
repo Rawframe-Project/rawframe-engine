@@ -38,7 +38,7 @@ const port = await new Promise((resolve) => {
 await writeFile(join(work, 'server.conf'), [
     'host.iteration_rate = 120',
     'world.tick_rate = 60',
-    'kest.game = games/arena/arena.game',
+    `kest.game = ${join(repository, 'games/arena/arena.game')}`,
     'network.quic.self_signed = true',
     'network.quic.webtransport = true',
     `network.quic.fingerprint_file = ${join(work, 'fingerprint')}`,

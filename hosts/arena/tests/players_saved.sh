@@ -17,7 +17,7 @@ cat >"$work/arena.conf" <<CONF
 host.maximum_iterations = 120
 host.iteration_rate = 120
 world.tick_rate = 60
-kest.game = games/runners/runners.game
+kest.game = $PWD/games/runners/runners.game
 network.loopback.latency_ms = 10
 replication.endpoint = arena
 bots.count = 2
