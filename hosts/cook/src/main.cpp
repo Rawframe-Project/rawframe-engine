@@ -17,19 +17,35 @@
 
 #include <array>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <string_view>
 
-#if defined(__APPLE__)
+#if defined(_WIN32)
+#include <windows.h>
+#elif defined(__APPLE__)
 #include <cstdint>
 #include <mach-o/dyld.h>
 #endif
 
 namespace {
 
-/// Where this program's own file is, to read it (D236).
-std::string ownExecutable() {
-#if defined(__APPLE__)
+/// Where this program's own file is, to read it (D236, D237 on Windows).
+std::filesystem::path ownExecutable() {
+#if defined(_WIN32)
+    std::wstring path(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD kLength = ::GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+        if (kLength == 0) {
+            return {};
+        }
+        if (kLength < path.size()) {
+            path.resize(kLength);
+            return path;
+        }
+        path.resize(path.size() * 2);
+    }
+#elif defined(__APPLE__)
     std::uint32_t size = 0;
     static_cast<void>(::_NSGetExecutablePath(nullptr, &size));
     std::string path(size, '\0');
