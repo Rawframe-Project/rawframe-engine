@@ -1,7 +1,7 @@
 # The zero-dependency leaf of the module graph (ADR-0075): assertion and fatal
 # primitives, the 128-bit value, the byte vocabulary, platform detection,
 # SHA-256 for fingerprints, and the operating system's secure random source.
-rawframe_module(NAME base SOURCES src/fatal.cpp src/memory.cpp src/secure_random.cpp src/sha256.cpp)
+rawframe_module(NAME base SOURCES src/fatal.cpp src/usage.cpp src/secure_random.cpp src/sha256.cpp)
 
 # The fatal path ends the process, which is watched from a forked parent;
 # a WebAssembly module has neither.
@@ -12,7 +12,7 @@ endif()
 
 rawframe_module_tests(NAME base SOURCES
     tests/bits128_test.cpp
-    tests/memory_test.cpp
+    tests/usage_test.cpp
     ${rawframe_base_process_tests}
     tests/secure_random_test.cpp
     tests/sha256_test.cpp

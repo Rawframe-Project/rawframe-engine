@@ -1,4 +1,4 @@
-#include "rawframe/base/memory.h"
+#include "rawframe/base/usage.h"
 
 #include <algorithm>
 
@@ -67,6 +67,22 @@ std::optional<std::uint64_t> peakResidentBytes() noexcept {
     const auto kPeak = static_cast<std::uint64_t>(usage.ru_maxrss);
 #endif
     return std::max(kPeak, residentBytes().value_or(0));
+#else
+    return std::nullopt;
+#endif
+}
+
+std::optional<std::uint64_t> cpuNanoseconds() noexcept {
+#if defined(__linux__) || defined(__APPLE__)
+    rusage usage{};
+    if (::getrusage(RUSAGE_SELF, &usage) != 0) {
+        return std::nullopt;
+    }
+    const auto kNanoseconds = [](const timeval& value) {
+        return (static_cast<std::uint64_t>(value.tv_sec) * 1'000'000'000U) +
+               (static_cast<std::uint64_t>(value.tv_usec) * 1'000U);
+    };
+    return kNanoseconds(usage.ru_utime) + kNanoseconds(usage.ru_stime);
 #else
     return std::nullopt;
 #endif

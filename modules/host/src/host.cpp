@@ -1,6 +1,6 @@
 #include "rawframe/host/host.h"
 
-#include "rawframe/base/memory.h"
+#include "rawframe/base/usage.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/plan.h"
 #include "rawframe/diagnostics/emitter.h"
@@ -234,7 +234,8 @@ struct Host::State {
                                              .monotonic = &diagnostics::steadyClockNanoseconds,
                                              .wall = &wallNanoseconds},
                  sinks),
-          emitter(router.emitter()), cpuWatch(clock.now()), ioWatch(clock.now()), drainStart(clock.now()) {
+          emitter(router.emitter()), cpuWatch(clock.now()), ioWatch(clock.now()), drainStart(clock.now()),
+          born(clock.now()) {
     }
 
     static const composition::Configuration& emptyConfiguration() noexcept {
@@ -397,9 +398,12 @@ struct Host::State {
                     {diagnostics::field("participants", plan->participants().size()),
                      diagnostics::field("cpuWorkers", cpu->workerCount()),
                      diagnostics::field("shutdownBoundMs", shutdownBound(settings).nanoseconds / 1'000'000),
-                     // SPEC-0013's fresh ready memory (D211); nought where
-                     // the platform does not say.
-                     diagnostics::field("residentBytes", base::residentBytes().value_or(0))});
+                     // SPEC-0013's fresh ready memory (D211) and start time,
+                     // and processor time so far (D213); nought where the
+                     // platform does not say.
+                     diagnostics::field("residentBytes", base::residentBytes().value_or(0)),
+                     diagnostics::field("readyMs", (clock.now() - born).nanoseconds / 1'000'000),
+                     diagnostics::field("cpuMs", base::cpuNanoseconds().value_or(0) / 1'000'000)});
         enter(composition::HostState::Ready, "started");
         // Immediate activation, the only policy until a supervised one is
         // accepted: admission opens as soon as the Host is ready.
@@ -525,8 +529,11 @@ struct Host::State {
                      diagnostics::field("exit", describe(exit)),
                      diagnostics::field("exitCode", static_cast<std::uint64_t>(exitCode(exit))),
                      diagnostics::field("shutdownMs", (clock.now() - drainStart).nanoseconds / 1'000'000),
-                     // The most the run held at once (D211).
-                     diagnostics::field("peakResidentBytes", base::peakResidentBytes().value_or(0))});
+                     // The most the run held at once (D211), and how long it
+                     // ran and the processor time it took (D213).
+                     diagnostics::field("peakResidentBytes", base::peakResidentBytes().value_or(0)),
+                     diagnostics::field("runMs", (clock.now() - born).nanoseconds / 1'000'000),
+                     diagnostics::field("cpuMs", base::cpuNanoseconds().value_or(0) / 1'000'000)});
         router.stop();
         drainLog();
         return exit;
@@ -561,6 +568,8 @@ struct Host::State {
     StallWatch cpuWatch;
     StallWatch ioWatch;
     execution::MonotonicInstant drainStart;
+    /// When the Host was made, as near the process's start as it sees.
+    execution::MonotonicInstant born;
 };
 
 std::string_view describe(HostExit exit) noexcept {
