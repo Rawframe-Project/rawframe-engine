@@ -7,3 +7,5 @@ rawframe_module(NAME world_snapshot
 )
 
 rawframe_module_tests(NAME world_snapshot SOURCES tests/snapshot_test.cpp)
+# A restore and a capture an input: fewer runs, and edits of at most 64.
+rawframe_module_fuzz(NAME world_snapshot TARGET checkpoint RUNS 5000 MAX_LEN 192 SOURCES tests/fuzz_checkpoint.cpp)
