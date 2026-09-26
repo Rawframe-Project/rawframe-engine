@@ -142,8 +142,9 @@ std::size_t StagedCheckpoint::heldBytes() const noexcept {
 result::Result<StagedCheckpoint>
 stage(const world::World& world, const SnapshotProjection& projection, const CaptureSettings& settings) {
     const SnapshotLimits& limits = settings.limits;
-    if (limits.maximumEntities == 0 || limits.maximumRows == 0 || limits.maximumRandomStreams == 0 ||
-        limits.maximumArtifactBytes == 0 || limits.rowsPerChunk == 0) {
+    if (limits.maximumEntities == 0 || limits.maximumRows == 0 || limits.maximumReferences == 0 ||
+        limits.maximumRandomStreams == 0 || limits.maximumArtifactBytes == 0 || limits.maximumDecodedBytes == 0 ||
+        limits.maximumChunks == 0 || limits.maximumChunkBytes == 0 || limits.rowsPerChunk == 0) {
         return detail::fail(
             result::ErrorClass::InvalidArgument, SnapshotError::LimitExceeded, "every snapshot limit is required");
     }
@@ -188,6 +189,7 @@ stage(const world::World& world, const SnapshotProjection& projection, const Cap
     }
 
     for (const Resolved& resolved : kResolved) {
+        const std::size_t kGroup = rowGroup(*resolved.component, limits);
         Output rows;
         std::uint64_t count = 0;
         const auto kFlush = [&] {
@@ -214,7 +216,7 @@ stage(const world::World& world, const SnapshotProjection& projection, const Cap
             for (const SnapshotField& field : resolved.component->fields) {
                 writeField(rows, field, value, places, totals.references);
             }
-            if (++count == limits.rowsPerChunk) {
+            if (++count == kGroup) {
                 kFlush();
             }
         }
@@ -246,6 +248,18 @@ stage(const world::World& world, const SnapshotProjection& projection, const Cap
     }
     for (const Pending& chunk : chunks) {
         totals.decodedBytes += chunk.payload.size();
+        if (chunk.payload.size() > limits.maximumChunkBytes) {
+            return detail::fail(result::ErrorClass::ResourceExhausted,
+                                SnapshotError::LimitExceeded,
+                                "a chunk is larger than the snapshot profile allows");
+        }
+    }
+    // The world header and the manifest are chunks too.
+    if (chunks.size() + 2 > limits.maximumChunks || totals.references > limits.maximumReferences ||
+        totals.decodedBytes > limits.maximumDecodedBytes) {
+        return detail::fail(result::ErrorClass::ResourceExhausted,
+                            SnapshotError::LimitExceeded,
+                            "the checkpoint has more chunks, references, or bytes than the snapshot profile allows");
     }
     if (totals.decodedBytes > kMaximumStagedBytes) {
         return detail::fail(result::ErrorClass::ResourceExhausted,

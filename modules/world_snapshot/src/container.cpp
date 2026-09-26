@@ -165,11 +165,15 @@ Fingerprint profileFingerprint(const SnapshotLimits& limits) {
     Output words;
     words.u64(limits.maximumEntities);
     words.u64(limits.maximumRows);
+    words.u64(limits.maximumReferences);
     words.u64(limits.maximumRandomStreams);
     words.u64(limits.maximumArtifactBytes);
+    words.u64(limits.maximumDecodedBytes);
+    words.u64(limits.maximumChunks);
+    words.u64(limits.maximumChunkBytes);
     words.u64(limits.rowsPerChunk);
     base::Sha256 hasher;
-    hasher.update("rawframe.world_snapshot.profile.v1");
+    hasher.update("rawframe.world_snapshot.profile.v2");
     hasher.update(words.data());
     return hasher.finish();
 }

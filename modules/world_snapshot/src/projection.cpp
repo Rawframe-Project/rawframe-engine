@@ -1,5 +1,7 @@
 #include "rawframe/world_snapshot/projection.h"
 
+#include "rawframe/world_snapshot/checkpoint.h"
+
 #include <algorithm>
 #include <array>
 
@@ -25,6 +27,15 @@ std::size_t widthOf(FieldKind kind) noexcept {
         return 8;
     }
     return 0;
+}
+
+std::size_t rowGroup(const SnapshotComponent& component, const SnapshotLimits& limits) noexcept {
+    // A row is its place and its fields.
+    std::size_t wire = 8;
+    for (const SnapshotField& field : component.fields) {
+        wire += widthOf(field.kind);
+    }
+    return std::max<std::size_t>(1, std::min(limits.rowsPerChunk, limits.maximumChunkBytes / wire));
 }
 
 base::Sha256Digest projectionFingerprint(const SnapshotProjection& projection) {

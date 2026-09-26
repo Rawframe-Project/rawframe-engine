@@ -290,6 +290,30 @@ RAWFRAME_TEST(RowGroupsFollowTheProfile) {
         failedWith(world_snapshot::restore(*kGrouped, projection(), kIdentity, {}, other), SnapshotError::Mismatch));
 }
 
+RAWFRAME_TEST(ChunksAreHeldToTheProfile) {
+    // SPEC-0013's chunk ceilings (D231): a component's rows wider than the
+    // chunk allows split into groups that fit; too many chunks are refused
+    // on capture, and on restore before anything is decoded.
+    Sample sample;
+    // A body row is 35 bytes, so two to a chunk of 80; the random streams'
+    // chunk still fits.
+    const world_snapshot::SnapshotLimits kNarrow{.maximumChunkBytes = 80};
+    RAWFRAME_EXPECT(world_snapshot::rowGroup(projection().components[0], kNarrow) == 2);
+    const auto kNarrowed = world_snapshot::capture(sample.world, projection(), settings(kNarrow));
+    RAWFRAME_EXPECT(kNarrowed.has_value());
+    world::World candidate{sample.schema};
+    RAWFRAME_EXPECT(kNarrowed.has_value() &&
+                    world_snapshot::restore(*kNarrowed, projection(), kIdentity, kNarrow, candidate).has_value());
+    const world_snapshot::SnapshotLimits kFew{.maximumChunks = 3};
+    RAWFRAME_EXPECT(
+        failedWith(world_snapshot::capture(sample.world, projection(), settings(kFew)), SnapshotError::LimitExceeded));
+    const auto kWhole = world_snapshot::capture(sample.world, projection(), settings());
+    world::World other{sample.schema};
+    RAWFRAME_EXPECT(kWhole.has_value() &&
+                    failedWith(world_snapshot::restore(*kWhole, projection(), kIdentity, kFew, other),
+                               SnapshotError::LimitExceeded));
+}
+
 RAWFRAME_TEST(EveryDamagedArtifactIsRefused) {
     Sample sample;
     const auto kArtifact = world_snapshot::capture(sample.world, projection(), settings());

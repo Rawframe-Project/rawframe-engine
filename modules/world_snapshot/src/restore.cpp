@@ -115,11 +115,18 @@ readField(Input& in, const SnapshotField& field, std::byte* value, std::uint64_t
 
 /// Every chunk from the prologue to the footer, in order, each checked
 /// against its digest, with the manifest checked against them all.
-result::Result<std::vector<ChunkHeader>>
-walkChunks(std::span<const std::byte> artifact, const detail::Footer& footer, detail::Manifest& manifest) {
+result::Result<std::vector<ChunkHeader>> walkChunks(std::span<const std::byte> artifact,
+                                                    const detail::Footer& footer,
+                                                    const SnapshotLimits& limits,
+                                                    detail::Manifest& manifest) {
     std::vector<ChunkHeader> chunks;
     std::uint64_t offset = detail::kPrologueSize;
     while (offset < footer.preFooterSize) {
+        if (chunks.size() == limits.maximumChunks) {
+            return detail::fail(result::ErrorClass::ResourceExhausted,
+                                SnapshotError::LimitExceeded,
+                                "the checkpoint has more chunks than the snapshot profile allows");
+        }
         RAWFRAME_TRY_ASSIGN(const ChunkHeader kChunk, detail::readChunk(artifact.first(footer.preFooterSize), offset));
         if (kChunk.ordinal != chunks.size()) {
             return detail::malformed("chunk ordinals are not contiguous from nought");
@@ -246,7 +253,7 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
     RAWFRAME_TRY(detail::readPrologue(artifact));
     RAWFRAME_TRY_ASSIGN(const detail::Footer kFooter, detail::readFooter(artifact));
     detail::Manifest manifest;
-    RAWFRAME_TRY_ASSIGN(const std::vector<ChunkHeader> kChunks, walkChunks(artifact, kFooter, manifest));
+    RAWFRAME_TRY_ASSIGN(const std::vector<ChunkHeader> kChunks, walkChunks(artifact, kFooter, limits, manifest));
     RAWFRAME_TRY_ASSIGN(const detail::WorldHeader kHeader, detail::readWorldHeader(payloadOf(artifact, kChunks[0])));
     const detail::Fingerprints kExpected{.schema = identity.schema,
                                          .package = {},
@@ -274,7 +281,8 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
         return mismatch("the checkpoint was written with another projection, codec, or snapshot profile");
     }
     const detail::Totals& kTotals = kHeader.totals;
-    if (kTotals.entities > limits.maximumEntities || kTotals.rows > limits.maximumRows) {
+    if (kTotals.entities > limits.maximumEntities || kTotals.rows > limits.maximumRows ||
+        kTotals.references > limits.maximumReferences || kTotals.decodedBytes > limits.maximumDecodedBytes) {
         return detail::fail(result::ErrorClass::ResourceExhausted,
                             SnapshotError::LimitExceeded,
                             "the checkpoint holds more than the snapshot profile allows");
@@ -296,14 +304,31 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
         const ChunkHeader& kChunk = kChunks[index];
         const std::span<const std::byte> kPayload = payloadOf(artifact, kChunk);
         decoded += kPayload.size();
+        if (kPayload.size() > limits.maximumChunkBytes || decoded > limits.maximumDecodedBytes) {
+            return detail::fail(result::ErrorClass::ResourceExhausted,
+                                SnapshotError::LimitExceeded,
+                                "a chunk, or the chunks together, are larger than the snapshot profile allows");
+        }
         Input in{kPayload};
         // Row groups are the profile's: every chunk of a run but the last is
-        // full, so one World has one artifact.
+        // full, so one World has one artifact. A component's group follows
+        // how wide its rows are (D231).
         const ChunkHeader& kBefore = kChunks[index - 1];
         const bool kGrouped = kChunk.kind != ChunkKind::RandomStreams && kChunk.kind != ChunkKind::ModSet;
-        if (kChunk.recordCount == 0 || (kGrouped && kChunk.recordCount > limits.rowsPerChunk) ||
+        std::size_t group = limits.rowsPerChunk;
+        if (kChunk.kind == ChunkKind::ComponentRows) {
+            const auto kComponent = std::find_if(
+                projection.components.begin(), projection.components.end(), [&](const SnapshotComponent& each) {
+                    return detail::subjectOf(each.id) == kChunk.subject;
+                });
+            if (kComponent == projection.components.end()) {
+                return mismatch("the checkpoint holds a component the projection does not");
+            }
+            group = rowGroup(*kComponent, limits);
+        }
+        if (kChunk.recordCount == 0 || (kGrouped && kChunk.recordCount > group) ||
             (kGrouped && kBefore.kind == kChunk.kind && kBefore.subject == kChunk.subject &&
-             kBefore.recordCount != limits.rowsPerChunk)) {
+             kBefore.recordCount != group)) {
             return detail::malformed("a chunk is empty, or not the profile's row group");
         }
         switch (kChunk.kind) {

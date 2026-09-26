@@ -29,15 +29,27 @@ namespace rawframe::world_snapshot {
 
 using Fingerprint = base::Sha256Digest;
 
-/// Every bound a capture or restore keeps. None may be zero.
+/// Every bound a capture or restore keeps, SPEC-0013's snapshot profile by
+/// default (D231). None may be zero.
 struct SnapshotLimits {
-    std::size_t maximumEntities = std::size_t{1} << 20U;
-    std::size_t maximumRows = std::size_t{1} << 22U;
+    std::size_t maximumEntities = 100'000;
+    std::size_t maximumRows = 1'000'000;
+    std::size_t maximumReferences = 4'000'000;
     std::size_t maximumRandomStreams = 4096;
-    std::size_t maximumArtifactBytes = std::size_t{1} << 30U;
-    /// Rows one component chunk holds: the deterministic row group.
+    /// The stored artifact, and its chunks' payloads together.
+    std::size_t maximumArtifactBytes = std::size_t{128} << 20U;
+    std::size_t maximumDecodedBytes = std::size_t{256} << 20U;
+    /// Chunks in an artifact, and one chunk's payload.
+    std::size_t maximumChunks = 512;
+    std::size_t maximumChunkBytes = std::size_t{1} << 20U;
+    /// Rows one chunk holds at most: the deterministic row group, fewer for
+    /// a component whose rows are wide (`rowGroup`).
     std::size_t rowsPerChunk = 4096;
 };
+
+/// The rows every chunk of `component` holds but its last: `rowsPerChunk`,
+/// or as many rows as fit in `maximumChunkBytes`, at least one (D231).
+[[nodiscard]] std::size_t rowGroup(const SnapshotComponent& component, const SnapshotLimits& limits) noexcept;
 
 /// A mod a World ran with (SPEC-0042): its subject and exact version.
 struct CheckpointMod {
