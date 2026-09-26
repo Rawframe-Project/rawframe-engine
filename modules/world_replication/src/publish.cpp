@@ -314,6 +314,11 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         peer.byNetEntity.erase(mapping.second.id.value);
         return false;
     });
+    if (peer.retired.size() > kMaximumTombstones) {
+        peer.retired.erase(peer.retired.begin(),
+                           peer.retired.begin() +
+                               static_cast<std::ptrdiff_t>(peer.retired.size() - kMaximumTombstones));
+    }
     // Declare what is new, before any state names it: the connection's
     // own player first, whatever the bound on mappings.
     const std::size_t kSettled = peer.mapped.size();

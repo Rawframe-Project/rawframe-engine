@@ -39,6 +39,9 @@ inline constexpr std::uint64_t kOwnedPriority = std::uint64_t{1} << 40U;
 /// Ticks of retired mappings the victim gate remembers: the most a physics
 /// history keeps.
 inline constexpr std::uint64_t kInterestKept = 1024;
+/// SPEC-0013's tombstones per connection: retired mappings remembered at
+/// most, the oldest forgotten past them (D226).
+inline constexpr std::size_t kMaximumTombstones = 16'384;
 /// No place in a table by slot.
 inline constexpr std::size_t kNowhere = SIZE_MAX;
 

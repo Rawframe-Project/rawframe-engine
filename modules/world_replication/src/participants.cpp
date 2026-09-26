@@ -48,7 +48,9 @@ constexpr std::string_view kBotsMaybe[] = {
 network::SessionProfile sessionProfile(std::size_t sessions) {
     return network::SessionProfile{.maximumSessions = sessions,
                                    .maximumPreAdmissionBytes = 4096,
-                                   .maximumControlBuffer = std::size_t{1} << 20U,
+                                   // SPEC-0013's ingress queued per connection
+                                   // (D226).
+                                   .maximumControlBuffer = std::size_t{256} << 10U,
                                    .maximumFramePayload = 4096,
                                    .maximumDatagramPayload = 1100,
                                    .admissionTimeout = execution::MonotonicDuration::fromSeconds(5)};
