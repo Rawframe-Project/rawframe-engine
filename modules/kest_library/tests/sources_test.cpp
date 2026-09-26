@@ -1,8 +1,9 @@
 // A game's Kest files as one resource: written in one form only, read back
-// exactly, and refused in any other.
+// exactly, and refused in any other, mutated text included.
 
 #include "rawframe/kest_library/errors.h"
 #include "rawframe/kest_library/library.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <string>
@@ -84,4 +85,27 @@ RAWFRAME_TEST(AnythingElseIsRefused) {
     }
     RAWFRAME_EXPECT(
         kest_library::readGameSources("{\"files\":[],\"formatVersion\":1,\"kind\":\"kest.sources\"}").has_value());
+}
+
+RAWFRAME_TEST(HostileSourcesReadOnlyAsTheyWrite) {
+    // A client reads a game's Kest files from content it fetched.
+    const auto kWritten = kest_library::writeGameSources(kGame);
+    RAWFRAME_EXPECT(kWritten.has_value());
+    if (!kWritten.has_value()) {
+        return;
+    }
+    test::Mutations mutations;
+    std::size_t read = 0;
+    for (int round = 0; round < 20'000; ++round) {
+        const std::string kDamaged = mutations.mutate(*kWritten, "\"{}[],:\\ 0at\n\x00\x7f\xc3\xff");
+        const auto kRead = kest_library::readGameSources(kDamaged);
+        if (!kRead.has_value()) {
+            RAWFRAME_EXPECT(refused(kRead));
+            continue;
+        }
+        ++read;
+        const auto kAgain = kest_library::writeGameSources(*kRead);
+        RAWFRAME_EXPECT(kAgain.has_value() && *kAgain == kDamaged);
+    }
+    RAWFRAME_EXPECT(read > 0);
 }

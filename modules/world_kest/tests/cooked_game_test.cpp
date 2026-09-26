@@ -1,8 +1,9 @@
 // A cooked game description: its text, the documents it names, its
 // programs as files of Kest sources, and its scenes, meshes, animators'
 // graphs, and text documents as resources, written in one form and read
-// back exactly; anything else refused.
+// back exactly; anything else, mutated text included, refused.
 
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/errors.h"
@@ -152,4 +153,27 @@ RAWFRAME_TEST(ACookedGameIsRefusedInAnyOtherForm) {
         RAWFRAME_EXPECT(refused(readCookedGame(bad)));
     }
     RAWFRAME_EXPECT(readCookedGame("{\"animators\":[],\"files\":[]" + kTail).has_value());
+}
+
+RAWFRAME_TEST(HostileCookedGamesReadOnlyAsTheyWrite) {
+    // A client reads its game from content it fetched.
+    const auto kWritten = writeCookedGame(sample());
+    RAWFRAME_EXPECT(kWritten.has_value());
+    if (!kWritten.has_value()) {
+        return;
+    }
+    test::Mutations mutations;
+    std::size_t read = 0;
+    for (int round = 0; round < 20'000; ++round) {
+        const std::string kDamaged = mutations.mutate(*kWritten, "\"{}[],:\\ 0a\n\x00\xff");
+        const auto kRead = readCookedGame(kDamaged);
+        if (!kRead.has_value()) {
+            RAWFRAME_EXPECT(refused(kRead));
+            continue;
+        }
+        ++read;
+        const auto kAgain = writeCookedGame(*kRead);
+        RAWFRAME_EXPECT(kAgain.has_value() && *kAgain == kDamaged);
+    }
+    RAWFRAME_EXPECT(read > 0);
 }
