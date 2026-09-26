@@ -4,4 +4,9 @@ add_executable(rawframe_scenario_tests compensation_test.cpp install_test.cpp ke
 target_link_libraries(rawframe_scenario_tests PRIVATE
     rawframe_policy rawframe::world_kest rawframe::physics2d rawframe::world_replication rawframe::network_loopback
     rawframe::build rawframe::install rawframe::test)
+# The install scenario reads SPEC-0021's golden Build and pins the plans
+# made of it.
+target_compile_definitions(rawframe_scenario_tests PRIVATE
+    RAWFRAME_BUILD_GOLDEN="${PROJECT_SOURCE_DIR}/modules/build/tests/golden/"
+    RAWFRAME_PLAN_GOLDEN="${CMAKE_CURRENT_SOURCE_DIR}/golden/")
 add_test(NAME scenarios COMMAND rawframe_scenario_tests)

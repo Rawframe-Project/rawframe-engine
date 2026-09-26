@@ -16,9 +16,11 @@
 #include "rawframe/install/errors.h"
 #include "rawframe/install/installation.h"
 #include "rawframe/signature/errors.h"
+#include "rawframe/signature/signature.h"
 #include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -441,4 +443,35 @@ RAWFRAME_TEST(RollbackMovesThePointerAndCollectKeepsWhatItNeeds) {
     RAWFRAME_EXPECT(library.rollback().has_value() && library.installed().active == kSecond);
     const auto kWhole = library.heal(*kOrigin);
     RAWFRAME_EXPECT(kWhole.has_value() && kWhole->fetched == 0);
+}
+
+// SPEC-0038's golden plans: the golden Build of SPEC-0021's corpus (D82)
+// planned against no store and against one holding its first resource and
+// the first chunk of its second, byte for byte. A change is a new plan
+// generation, never a silent one; RAWFRAME_WRITE_GOLDEN=1 rewrites them.
+RAWFRAME_TEST(PlansAreGolden) {
+    const fs::path kBuild{RAWFRAME_BUILD_GOLDEN};
+    const fs::path kPlans{RAWFRAME_PLAN_GOLDEN};
+    const std::string kManifest = readText(kBuild / "build.manifest");
+    const std::string kSigned = readText(kBuild / "build.manifest.sig");
+    const auto kRoot = content::ContentDigest::parse(readText(kBuild / "root.txt").substr(0, 71));
+    const auto kKeys = signature::readPublisherKeySet(readText(kBuild / "rawframe.keys"));
+    RAWFRAME_EXPECT(kRoot.has_value() && kKeys.has_value());
+    if (!kRoot.has_value() || !kKeys.has_value()) {
+        return;
+    }
+    const auto kRead = content::readBuildManifest(bytesOf(kManifest), bytesOf(kSigned), kRoot->bytes, *kKeys);
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->chunks.size() >= 2);
+    if (!kRead.has_value() || kRead->chunks.size() < 2) {
+        return;
+    }
+    const Inventory kHeld = {kRead->chunks[0].front().blob.bytes, kRead->chunks[1].front().blob.bytes};
+    for (const auto& [name, inventory] : {std::pair{"full.plan", Inventory{}}, std::pair{"partial.plan", kHeld}}) {
+        const auto kWritten = writePlan(planUpdate(std::span{&*kRead, 1}, inventory));
+        RAWFRAME_EXPECT(kWritten.has_value());
+        if (std::getenv("RAWFRAME_WRITE_GOLDEN") != nullptr && kWritten.has_value()) {
+            writeText(kPlans / name, *kWritten);
+        }
+        RAWFRAME_EXPECT(kWritten.value_or("") == readText(kPlans / name));
+    }
 }
