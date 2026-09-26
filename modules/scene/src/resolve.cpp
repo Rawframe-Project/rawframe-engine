@@ -3,6 +3,7 @@
 #include "rawframe/scene/errors.h"
 
 #include <algorithm>
+#include <iterator>
 #include <map>
 #include <vector>
 

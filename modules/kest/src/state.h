@@ -60,7 +60,8 @@ public:
 private:
     std::FILE* file_ = nullptr;
     char* buffer_ = nullptr;
-    std::size_t size_ = 0;
+    // Written by open_memstream, which Windows has not.
+    [[maybe_unused]] std::size_t size_ = 0;
 };
 
 } // namespace rawframe::kest
