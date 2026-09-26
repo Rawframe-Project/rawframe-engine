@@ -22,16 +22,14 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(bots_same_session PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,.*\"bots\":1,\"admitted\":0,\"unavailable\":1|\"bots\":1,\"admitted\":0,\"unavailable\":1,.*\"bots\":1,\"admitted\":1,")
     # A server asked to stop drains: it refuses new bots as unavailable and
-    # stops once the bots it serves have left. Asked with SIGTERM, which a
-    # Windows process does not receive; its console control event waits for
-    # a test of its own (D237).
-    if(NOT WIN32)
-        add_test(NAME bots_drain
-                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drain.sh
-                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots>
-                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-        set_tests_properties(bots_drain PROPERTIES PASS_REGULAR_EXPRESSION "drained in order" TIMEOUT 120)
-    endif()
+    # stops once the bots it serves have left. Asked with SIGTERM on POSIX
+    # and Ctrl+Break on Windows, which Python sends and a shell cannot (D237).
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME bots_drain
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drain.py
+                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(bots_drain PROPERTIES PASS_REGULAR_EXPRESSION "drained in order" TIMEOUT 120)
     # Bots agreeing with the server on runners' Composition are admitted,
     # and bots naming another Composition of the same Build are not.
     add_test(NAME bots_composition
