@@ -26,7 +26,9 @@ if(TARGET rawframe_network_quic_tests)
     # A browser's side, played by aioquic (python3-aioquic), under the
     # Python this machine names (python3 is not a name on Windows, D237).
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    # Forward slashes, which a C string reads as they are.
+    file(TO_CMAKE_PATH "${Python3_EXECUTABLE}" rawframe_python)
     target_compile_definitions(rawframe_network_quic_tests PRIVATE
-        RAWFRAME_PYTHON="${Python3_EXECUTABLE}"
+        RAWFRAME_PYTHON="${rawframe_python}"
         RAWFRAME_WEBTRANSPORT_CLIENT="${CMAKE_CURRENT_SOURCE_DIR}/tests/webtransport_client.py")
 endif()

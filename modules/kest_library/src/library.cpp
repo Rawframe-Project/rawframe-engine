@@ -4,6 +4,7 @@
 #include "rawframe/kest/errors.h"
 
 #include <algorithm>
+#include <iterator>
 
 namespace rawframe::kest_library {
 
