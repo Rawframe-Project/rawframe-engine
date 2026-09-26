@@ -4,6 +4,8 @@
 #include "rawframe/content/errors.h"
 #include "source.h"
 
+#include <algorithm>
+
 namespace rawframe::content {
 
 namespace {
@@ -65,8 +67,8 @@ result::Result<signature::PublisherKeySet> Library::keys(std::string_view publis
         std::string_view{reinterpret_cast<const char*>(kBytes.data()), kBytes.size()});
 }
 
-result::Result<BuildContent> Library::build(const base::Sha256Digest& root,
-                                            const signature::PublisherKeySet& publisher) const {
+result::Result<BuildManifest> Library::manifest(const base::Sha256Digest& root,
+                                                const signature::PublisherKeySet& publisher) const {
     const std::string kDirectory = buildDirectoryOf(root) + "/";
     RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kManifest,
                         readWithin(*files_,
@@ -77,7 +79,41 @@ result::Result<BuildContent> Library::build(const base::Sha256Digest& root,
         const std::vector<std::byte> kSigned,
         readWithin(
             *files_, kDirectory + std::string{kBuildSignatureName}, kMaximumBuildSignature, "the Build is not signed"));
-    return ContentSource::openBuild(files_, kManifest, kSigned, root, publisher);
+    return readBuildManifest(kManifest, kSigned, root, publisher);
+}
+
+result::Result<std::vector<ContentDigest>> Library::damaged(const BuildManifest& manifest) const {
+    std::vector<ContentDigest> found;
+    for (std::size_t at = 0; at < manifest.entries.size(); ++at) {
+        base::Sha256 whole;
+        bool intact = true;
+        for (const BuildChunk& chunk : manifest.chunks[at]) {
+            const auto kContent = readChunk(*files_, chunk);
+            if (kContent.has_value()) {
+                whole.update(*kContent);
+                continue;
+            }
+            intact = false;
+            if (std::ranges::find(found, chunk.blob) == found.end()) {
+                found.push_back(chunk.blob);
+            }
+        }
+        if (intact && !sameDigest(ContentDigest{.bytes = whole.finish()}, manifest.entries[at].digest)) {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::DataLoss,
+                                                               kContentDomain,
+                                                               code(ContentError::DigestMismatch),
+                                                               "the Build's chunks do not make its resource")
+                                                      .error()
+                                                      .withContext("resource", manifest.entries[at].locator)};
+        }
+    }
+    return found;
+}
+
+result::Result<BuildContent> Library::build(const base::Sha256Digest& root,
+                                            const signature::PublisherKeySet& publisher) const {
+    RAWFRAME_TRY_ASSIGN(BuildManifest read, manifest(root, publisher));
+    return ContentSource::openBuild(files_, std::move(read));
 }
 
 } // namespace rawframe::content

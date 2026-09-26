@@ -10,6 +10,7 @@
 
 #include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
+#include "rawframe/content/build_manifest.h"
 #include "rawframe/content/identity.h"
 #include "rawframe/content/source.h"
 #include "rawframe/result/result.h"
@@ -60,11 +61,25 @@ public:
     /// read or `readPublisherKeySet` refuses. Blocks.
     [[nodiscard]] result::Result<signature::PublisherKeySet> keys(std::string_view publisher) const;
 
+    /// The manifest of the Build of root hash `root`, read as
+    /// `readBuildManifest` reads one against `publisher`; refused
+    /// (`SourceUnavailable`) when the library holds none. Blocks.
+    [[nodiscard]] result::Result<BuildManifest> manifest(const base::Sha256Digest& root,
+                                                         const signature::PublisherKeySet& publisher) const;
+
     /// The Build of root hash `root`, verified against `publisher` as
     /// `ContentSource::build` verifies one, its blobs read from the store.
     /// Blocks.
     [[nodiscard]] result::Result<BuildContent> build(const base::Sha256Digest& root,
                                                      const signature::PublisherKeySet& publisher) const;
+
+    /// What heal finds (SPEC-0038): every blob of `manifest`'s Build that the
+    /// store lacks or that does not verify as SPEC-0021's order verifies it,
+    /// once each, in the manifest's order; none when every resource reads.
+    /// A Build whose chunks all verify but do not make a resource is the
+    /// publisher's fault, not the store's, and is refused (`DigestMismatch`).
+    /// Blocks, and reads every blob.
+    [[nodiscard]] result::Result<std::vector<ContentDigest>> damaged(const BuildManifest& manifest) const;
 
 private:
     explicit Library(std::shared_ptr<const ContentSource::Implementation> files) noexcept : files_(std::move(files)) {

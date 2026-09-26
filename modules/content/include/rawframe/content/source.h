@@ -13,6 +13,7 @@
 
 #include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
+#include "rawframe/content/build_manifest.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/result/result.h"
 #include "rawframe/signature/signature.h"
@@ -89,6 +90,8 @@ private:
                                                                 std::span<const std::byte> signedBytes,
                                                                 const base::Sha256Digest& expectedRoot,
                                                                 const signature::PublisherKeySet& publisher);
+    /// A Build whose manifest has been read, its blobs in `files`.
+    [[nodiscard]] static BuildContent openBuild(std::shared_ptr<const Implementation> files, BuildManifest manifest);
     explicit ContentSource(std::shared_ptr<const Implementation> implementation) noexcept
         : implementation_(std::move(implementation)) {
     }
