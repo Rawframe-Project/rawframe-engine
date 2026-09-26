@@ -4,7 +4,6 @@
 #include "rawframe/kest/errors.h"
 
 #include <algorithm>
-#include <filesystem>
 
 namespace rawframe::kest_library {
 
@@ -17,10 +16,23 @@ result::Result<std::shared_ptr<const kest::Program>> refuse(std::string_view why
 
 } // namespace
 
+// Read as text, never by the host's path rules, so a path is plain or not
+// the same way everywhere: on Windows `/x` is not absolute and `\` and `:`
+// separate (D237).
 bool plainGamePath(std::string_view path) {
-    const std::filesystem::path kPath{path};
-    return !path.empty() && kPath.is_relative() && kPath.lexically_normal().generic_string() == path &&
-           !path.ends_with('/') && *kPath.begin() != ".." && path != "kest.project";
+    if (path.empty() || path == "kest.project" || path.find_first_of("\\:") != std::string_view::npos) {
+        return false;
+    }
+    std::size_t start = 0;
+    while (start <= path.size()) {
+        const std::size_t kEnd = std::min(path.find('/', start), path.size());
+        const std::string_view kSegment = path.substr(start, kEnd - start);
+        if (kSegment.empty() || kSegment == "." || kSegment == "..") {
+            return false;
+        }
+        start = kEnd + 1;
+    }
+    return true;
 }
 
 std::vector<kest::SourceFile> files() {
