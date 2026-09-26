@@ -1,0 +1,35 @@
+name: portability
+
+# Builds and tests the engine on macOS, the desktop target the owner's
+# machine cannot run (D236). On GitHub's own runners, which cost a public
+# repository nothing, nightly and on request only: no push or pull request
+# triggers it, so no fork's code ever runs here or on the owner's machine.
+on:
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: brew install llvm@20 ninja ccache
+      - name: Clang 20 by the names the presets use
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -s "$(brew --prefix llvm@20)/bin/clang" "$RUNNER_TEMP/bin/clang-20"
+          ln -s "$(brew --prefix llvm@20)/bin/clang++" "$RUNNER_TEMP/bin/clang++-20"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Configure
+        run: cmake --preset clang-development
+      - name: Build
+        run: cmake --build out/clang-development
+      - name: Test
+        run: ctest --test-dir out/clang-development --output-on-failure -j3
