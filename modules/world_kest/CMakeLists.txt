@@ -12,7 +12,7 @@ rawframe_module(NAME world_kest
 # held in memory as a web client holds its files (D167).
 set(rawframe_world_kest_directory_tests "")
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")
-    set(rawframe_world_kest_directory_tests tests/animation_game_test.cpp tests/game_scene_test.cpp tests/game_test.cpp tests/persistent_test.cpp tests/save_game_test.cpp)
+    set(rawframe_world_kest_directory_tests tests/animation_game_test.cpp tests/game_description_test.cpp tests/game_scene_test.cpp tests/game_test.cpp tests/persistent_test.cpp tests/save_game_test.cpp)
 endif()
 rawframe_module_tests(NAME world_kest SOURCES tests/admission_test.cpp tests/cooked_game_test.cpp tests/door_test.cpp tests/mod_api_test.cpp
     tests/held_game_test.cpp tests/kest_systems_test.cpp
