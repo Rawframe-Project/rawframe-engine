@@ -1,7 +1,8 @@
-# SPEC-0013's canonical workload on one machine: 10,000 World entities over
-# a square field a kilometer wide, 2,048 of them walking under Kest, and
-# each player sent what is within 90 meters, about 256 entities. Players
-# steer as in the arena; everything else stands where it was placed.
+# SPEC-0013's canonical workload on one machine: 10,000 World entities with
+# its 64 players (9,936 spawned here) over a square field a kilometer wide,
+# 2,048 of them walking under Kest, and each player sent what is within 90
+# meters, about 256 entities. Players steer as in the arena; everything else
+# stands where it was placed.
 program crowd.kest
 
 component 5bb8316e-e458-42fe-a415-82d2f103be9c crowd.position Position
