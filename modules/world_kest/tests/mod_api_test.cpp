@@ -3,6 +3,7 @@
 // way a description gets them wrong; and a mod's description cooked with its
 // scenes (D178); and SPEC-0042's validation of a Composition's mods (D179).
 
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/cooked_mod.h"
 #include "rawframe/world_kest/errors.h"
@@ -285,48 +286,6 @@ RAWFRAME_TEST(AnEventPointTakesHandlersAfterASystem) {
                                 "fan/horde:a fan/more:b"));
 }
 
-namespace {
-
-/// Xorshift, seeded: the same mutations on every run and every target.
-struct Mutations {
-    std::uint64_t state = 0x9E3779B97F4A7C15ULL;
-
-    std::uint64_t next() noexcept {
-        state ^= state << 13U;
-        state ^= state >> 7U;
-        state ^= state << 17U;
-        return state;
-    }
-
-    /// `seed` with one to four edits: a byte replaced, a run erased, a
-    /// character inserted, or a whole line from `lines` inserted.
-    std::string mutate(std::string_view seed, std::string_view inserted, std::span<const std::string_view> lines) {
-        std::string text{seed};
-        const int kEdits = 1 + static_cast<int>(next() % 4);
-        for (int edit = 0; edit < kEdits && !text.empty(); ++edit) {
-            const std::size_t kAt = next() % text.size();
-            switch (next() % 4) {
-            case 0:
-                text[kAt] = static_cast<char>(next() & 0xFFU);
-                break;
-            case 1:
-                text.erase(kAt, 1 + (next() % 8));
-                break;
-            case 2:
-                text.insert(kAt, 1, inserted[next() % inserted.size()]);
-                break;
-            default:
-                text.insert(text.find('\n', kAt) == std::string::npos ? text.size() : text.find('\n', kAt) + 1,
-                            lines[next() % lines.size()]);
-                break;
-            }
-        }
-        return text;
-    }
-};
-
-} // namespace
-
 RAWFRAME_TEST(HostileModDescriptionsAreReadOrRefusedNeverHalfRead) {
     // A mod description is an untrusted author's text (SPEC-0042, D183):
     // whatever parses keeps every rule a description has, and a game checks
@@ -350,7 +309,7 @@ RAWFRAME_TEST(HostileModDescriptionsAreReadOrRefusedNeverHalfRead) {
     if (!kGame.has_value()) {
         return;
     }
-    Mutations mutations;
+    test::Mutations mutations;
     int accepted = 0;
     int taken = 0;
     for (int round = 0; round < 20'000; ++round) {
@@ -398,11 +357,10 @@ RAWFRAME_TEST(HostileCookedModsReadOnlyAsTheyWrite) {
         return;
     }
     constexpr std::string_view kInserted = "{}[]\",:\\0123456789abcdef";
-    constexpr std::array<std::string_view, 1> kNoLines = {""};
-    Mutations mutations;
+    test::Mutations mutations;
     int accepted = 0;
     for (int round = 0; round < 20'000; ++round) {
-        const std::string kText = mutations.mutate(*kSeed, kInserted, kNoLines);
+        const std::string kText = mutations.mutate(*kSeed, kInserted);
         const auto kRead = world_kest::readCookedMod(kText);
         if (!kRead.has_value()) {
             continue;

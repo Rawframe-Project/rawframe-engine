@@ -5,6 +5,7 @@
 
 #include "rawframe/document/errors.h"
 #include "rawframe/document/json.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <cstdint>
@@ -201,33 +202,12 @@ RAWFRAME_TEST(HostileBytesNeverWriteDifferentlyThanTheyRead) {
     // Seeded mutations of a real document: whatever the reader accepts writes
     // canonical text that reads back to the same bytes.
     const std::string kSeed = write(*parse(kCanonical));
-    std::uint64_t state = 0x9E3779B97F4A7C15ULL;
-    const auto kNext = [&state] {
-        state ^= state << 13U;
-        state ^= state >> 7U;
-        state ^= state << 17U;
-        return state;
-    };
     constexpr std::string_view kInserted = "{}[]\",:\\0e-.\xC3\xF0";
+    test::Mutations mutations;
     int accepted = 0;
     for (int round = 0; round < 20'000; ++round) {
-        std::string text = kSeed;
-        const int kEdits = 1 + static_cast<int>(kNext() % 4);
-        for (int edit = 0; edit < kEdits && !text.empty(); ++edit) {
-            const std::size_t kAt = kNext() % text.size();
-            switch (kNext() % 3) {
-            case 0:
-                text[kAt] = static_cast<char>(kNext() & 0xFFU);
-                break;
-            case 1:
-                text.erase(kAt, 1 + (kNext() % 8));
-                break;
-            default:
-                text.insert(kAt, 1, kInserted[kNext() % kInserted.size()]);
-                break;
-            }
-        }
-        const auto kRead = parse(text);
+        const std::string kText = mutations.mutate(kSeed, kInserted);
+        const auto kRead = parse(kText);
         if (!kRead.has_value()) {
             continue;
         }

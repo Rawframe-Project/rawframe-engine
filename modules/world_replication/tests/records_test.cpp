@@ -1,6 +1,7 @@
 // Replication payloads and component codecs: exact round trips, network byte
 // order, every cut refused, and bounds kept.
 
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_replication/codec.h"
 #include "rawframe/world_replication/errors.h"
@@ -198,50 +199,22 @@ RAWFRAME_TEST(AClaimedMomentIsKeptNearWhatItsConnectionUsuallyClaims) {
 
 namespace {
 
-/// Seeded mutations of `seed`: one to four bytes replaced, runs erased, or
-/// bytes inserted, the same on every run and target.
-struct Mutations {
-    std::uint64_t state = 0x9E3779B97F4A7C15ULL;
-
-    std::uint64_t next() noexcept {
-        state ^= state << 13U;
-        state ^= state >> 7U;
-        state ^= state << 17U;
-        return state;
-    }
-
-    std::vector<std::byte> mutate(std::span<const std::byte> seed) {
-        std::vector<std::byte> bytes{seed.begin(), seed.end()};
-        const int kEdits = 1 + static_cast<int>(next() % 4);
-        for (int edit = 0; edit < kEdits && !bytes.empty(); ++edit) {
-            const std::size_t kAt = static_cast<std::size_t>(next() % bytes.size());
-            switch (next() % 3) {
-            case 0:
-                bytes[kAt] = static_cast<std::byte>(next() & 0xFFU);
-                break;
-            case 1:
-                bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(kAt),
-                            bytes.begin() + static_cast<std::ptrdiff_t>(std::min(
-                                                bytes.size(), kAt + 1 + static_cast<std::size_t>(next() % 4))));
-                break;
-            default:
-                bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(kAt), static_cast<std::byte>(next() & 0xFFU));
-                break;
-            }
-        }
-        return bytes;
-    }
-};
-
 /// Runs `rounds` mutations of `seed` through `decode`, and for each one it
 /// accepts, checks `encode` writes the very same bytes back; the count
 /// accepted.
 template <typename Decode, typename Encode>
 int reencodes(std::span<const std::byte> seed, Decode decode, Encode encode, int rounds = 20'000) {
-    Mutations mutations;
+    // Any byte may be inserted.
+    std::string everyByte;
+    for (int value = 0; value < 256; ++value) {
+        everyByte.push_back(static_cast<char>(value));
+    }
+    test::Mutations mutations;
     int accepted = 0;
     for (int round = 0; round < rounds; ++round) {
-        const std::vector<std::byte> kBytes = mutations.mutate(seed);
+        const std::string kText =
+            mutations.mutate(std::string_view{reinterpret_cast<const char*>(seed.data()), seed.size()}, everyByte);
+        const auto kBytes = std::as_bytes(std::span{kText.data(), kText.size()});
         const auto kRead = decode(std::span<const std::byte>{kBytes});
         if (!kRead.has_value()) {
             continue;
