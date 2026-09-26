@@ -1,9 +1,10 @@
 name: portability
 
-# Builds and tests the engine on macOS, the desktop target the owner's
-# machine cannot run (D236). On GitHub's own runners, which cost a public
-# repository nothing, nightly and on request only: no push or pull request
-# triggers it, so no fork's code ever runs here or on the owner's machine.
+# Builds and tests the engine on macOS (D236) and Windows (D237), the desktop
+# targets the owner's machine cannot run. On GitHub's own runners, which cost
+# a public repository nothing, nightly and on request only: no push or pull
+# request triggers it, so no fork's code ever runs here or on the owner's
+# machine.
 on:
   schedule:
     - cron: '17 1 * * *'
@@ -42,3 +43,37 @@ jobs:
         run: cmake --build out/clang-development -- -k 0
       - name: Test
         run: ctest --test-dir out/clang-development --output-on-failure -j3
+
+  windows:
+    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tools
+        shell: pwsh
+        run: |
+          choco install llvm --version=20.1.8 --allow-downgrade -y --no-progress
+          "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
+          # The browser's side of the WebTransport test.
+          python -m pip install aioquic
+      - name: MSVC's developer environment for every later step
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { "$($matches[1])=$($matches[2])" >> $env:GITHUB_ENV }
+          }
+      - name: Configure
+        shell: pwsh
+        # Git's bash runs tools/build_quic.sh, never WSL's; OpenSSL's
+        # Configure wants the Windows perl.
+        env:
+          RAWFRAME_PERL: C:/Strawberry/perl/bin/perl.exe
+        run: cmake --preset windows-development "-DRAWFRAME_BASH=C:/Program Files/Git/bin/bash.exe"
+      - name: Build
+        shell: pwsh
+        run: cmake --build out/windows-development -- -k 0
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir out/windows-development --output-on-failure -j3

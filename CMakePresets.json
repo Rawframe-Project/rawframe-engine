@@ -41,6 +41,15 @@
       "cacheVariables": { "RAWFRAME_BUILD_TESTS": "OFF" }
     },
     {
+      "name": "windows-development",
+      "inherits": ["base", "development"],
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER_LAUNCHER": ""
+      }
+    },
+    {
       "name": "clang-thread",
       "inherits": ["clang", "development"],
       "cacheVariables": { "RAWFRAME_SANITIZE": "thread" }
