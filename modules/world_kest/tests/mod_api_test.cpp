@@ -332,6 +332,41 @@ RAWFRAME_TEST(AServicePointTakesOneProvider) {
                     "fan/bounty:double fan/more:half"));
 }
 
+RAWFRAME_TEST(AReplacementPointTakesOneFunctionForASystem) {
+    const std::string kSystems = "system raid.fight simulation fight write raid.enemy\n"
+                                 "system raid.move simulation move write raid.enemy predicted\n";
+    const auto kGame =
+        parseGame(kBase + kSystems + "mods open\nmodapi raid 1\nextension fighting replacement raid.fight exclusive\n");
+    RAWFRAME_EXPECT(kGame.has_value());
+    if (!kGame.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(kGame->mods.points[0].kind == world_kest::GameExtensionPoint::Kind::Replacement &&
+                    kGame->mods.points[0].accepts == "raid.fight");
+    // Exclusive, of a system the game declares that is not predicted, and
+    // one point per system.
+    for (const std::string_view kLine : {"extension fighting replacement raid.fight multi\n",
+                                         "extension fighting replacement raid.rest exclusive\n",
+                                         "extension moving replacement raid.move exclusive\n",
+                                         "extension fighting replacement raid.fight exclusive\n"
+                                         "extension brawling replacement raid.fight exclusive\n"}) {
+        RAWFRAME_EXPECT(refused(kSystems + "modapi raid 1\n" + std::string{kLine}));
+    }
+    const std::string kReplacer = "target acme/raid\nmodapi 1\nprogram f.kest\nreplace fighting brawl\n";
+    const auto kMod = world_kest::parseMod(kReplacer);
+    RAWFRAME_EXPECT(kMod.has_value() && kMod->replacements.size() == 1 && kMod->replacements[0].function == "brawl");
+    RAWFRAME_EXPECT(!world_kest::parseMod("target acme/raid\nmodapi 1\nreplace fighting brawl\n").has_value());
+    const std::vector<world_kest::ComposedMod> kOne = {modOf("fan/brawl", kReplacer)};
+    RAWFRAME_EXPECT(world_kest::checkMods(*kGame, "acme/raid", kOne, {}).has_value());
+    RAWFRAME_EXPECT(
+        refusedWith(*kGame,
+                    {modOf("fan/brawl", kReplacer),
+                     modOf("fan/calm", "target acme/raid\nmodapi 1\nprogram c.kest\nreplace fighting calm\n")},
+                    "fan/brawl:brawl fan/calm:calm"));
+    RAWFRAME_EXPECT(refusedWith(
+        *kGame, {modOf("fan/brawl", "target acme/raid\nmodapi 1\nprogram f.kest\nreplace spawned x\n")}, "spawned"));
+}
+
 RAWFRAME_TEST(EveryLimitPointHoldsAtItsValue) {
     // SPEC-0042's named limit points (D195): at the value read, one past it
     // refused.

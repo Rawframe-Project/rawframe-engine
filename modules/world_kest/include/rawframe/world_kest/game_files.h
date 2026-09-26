@@ -62,6 +62,7 @@ struct GameModProgram {
     std::vector<kest::SourceFile> files;
     std::vector<ModHandler> handlers;
     std::vector<ModProvider> providers;
+    std::vector<ModReplacement> replacements;
 };
 
 class GameFiles {

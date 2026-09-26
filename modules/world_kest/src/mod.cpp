@@ -159,19 +159,27 @@ result::Result<ModDescription> parseMod(std::string_view text) {
                 return badLine(number, "a mod provides each service once, `provide <point> <function>`");
             }
             mod.providers.push_back(ModProvider{.point = std::string{kWords[1]}, .function = std::string{kWords[2]}});
+        } else if (kWords[0] == "replace") {
+            if (kWords.size() != 3 || std::ranges::contains(mod.replacements, kWords[1], &ModReplacement::point)) {
+                return badLine(number, "a mod replaces each system once, `replace <point> <function>`");
+            }
+            mod.replacements.push_back(
+                ModReplacement{.point = std::string{kWords[1]}, .function = std::string{kWords[2]}});
         } else {
-            return badLine(number, "a mod description line is target, modapi, contribute, program, handle, or provide");
+            return badLine(
+                number, "a mod description line is target, modapi, contribute, program, handle, provide, or replace");
         }
-        if (mod.contributions.size() + mod.handlers.size() + mod.providers.size() > kMaximumModContributions) {
+        if (mod.contributions.size() + mod.handlers.size() + mod.providers.size() + mod.replacements.size() >
+            kMaximumModContributions) {
             return badLine(number, "a mod contributes and handles more than the limit");
         }
     }
     if (targetLine == 0 || modApiLine == 0) {
         return badLine(number, "a mod names its target and its Mod API range");
     }
-    if ((mod.handlers.empty() && mod.providers.empty()) != mod.program.empty()) {
+    if ((mod.handlers.empty() && mod.providers.empty() && mod.replacements.empty()) != mod.program.empty()) {
         return badLine(programLine != 0 ? programLine : number,
-                       "a mod with handlers or providers names their program, and only then");
+                       "a mod with handlers, providers, or replacements names their program, and only then");
     }
     return mod;
 }

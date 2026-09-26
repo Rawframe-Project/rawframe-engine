@@ -13,8 +13,9 @@
 //   program <file>                the Kest program its handlers are in
 //   handle <point> <function>     a function of it as an event's handler
 //   provide <point> <function>    a function of it as a service's provider
+//   replace <point> <function>    a function of it in place of a game system's
 //
-// A mod with handlers or providers names one program, compiled from the Kest sources of
+// A mod with handlers, providers, or replacements names one program, compiled from the Kest sources of
 // the `kest.project` beside it and run on a machine of its own under Kest's
 // untrusted profile (D181).
 
@@ -64,16 +65,24 @@ struct ModProvider {
     std::string function;
 };
 
+/// A function of a mod's program that runs in place of the game system a
+/// replacement point names: it takes the system's columns (D200).
+struct ModReplacement {
+    std::string point;
+    std::string function;
+};
+
 struct ModDescription {
     std::string target;
     /// Every bound holds of a version the mod accepts.
     std::vector<ModApiBound> modApi;
     std::vector<ModContribution> contributions;
-    /// The program its handlers and providers are in; empty for a mod with
-    /// neither.
+    /// The program its handlers, providers, and replacements are in; empty
+    /// for a mod with none.
     std::string program;
     std::vector<ModHandler> handlers;
     std::vector<ModProvider> providers;
+    std::vector<ModReplacement> replacements;
 };
 
 /// The most lines a mod description may have.
@@ -85,8 +94,8 @@ inline constexpr std::size_t kMaximumModLines = 1024;
 
 /// `mod_descriptor_bytes_max`: checked before anything is parsed.
 inline constexpr std::size_t kMaximumModDescriptorBytes = 64 * 1024;
-/// `contributions_per_mod_max`: its `contribute`, `handle`, and `provide`
-/// lines.
+/// `contributions_per_mod_max`: its `contribute`, `handle`, `provide`, and
+/// `replace` lines.
 inline constexpr std::size_t kMaximumModContributions = 256;
 /// `contributions_per_point_max`: scenes given to one data point by every
 /// mod of a Composition.
@@ -98,9 +107,9 @@ inline constexpr std::size_t kMaximumEventHandlers = 64;
 /// Parses a description. Refuses (`invalid_argument`, `BadGameLine`, with
 /// the line as context) a description past its size limit, an unknown
 /// keyword, a target or range missing, given twice, or outside its grammar,
-/// a range no version satisfies, a contribution, handler, or provider named
-/// twice, more of them than the limit, handlers or providers without a
-/// program, and a program without either.
+/// a range no version satisfies, a contribution, handler, provider, or
+/// replacement named twice, more of them than the limit, any of the last
+/// three without a program, and a program without any.
 [[nodiscard]] result::Result<ModDescription> parseMod(std::string_view text);
 
 /// Whether `version` of a game's Mod API satisfies every bound.
@@ -119,8 +128,9 @@ struct ComposedMod {
 /// - a mod targeting another game, or whose range the game's version is
 ///   outside;
 /// - values for a point the game does not declare as a data point, a
-///   handler for one it does not declare as an event point, or a provider
-///   for one it does not declare as a service point;
+///   handler for one it does not declare as an event point, a provider for
+///   one it does not declare as a service point, or a replacement for one
+///   it does not declare as a replacement point;
 /// - more mods than a Composition names, or more claimants of one point
 ///   than its limit;
 /// - two claimants of an exclusive point, every one named;

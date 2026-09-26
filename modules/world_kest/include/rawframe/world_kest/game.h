@@ -305,18 +305,24 @@ enum class ModPolicy : std::uint8_t {
 /// `service` point, from `extension <name> service <component> exclusive
 /// [required]`, takes one provider: a Kest function of a mod's machine that
 /// the game calls through the door `Mods.<name>(value: T) -> T`, T the
-/// component's type, and that rewrites the value it is lent (D199).
+/// component's type, and that rewrites the value it is lent (D199). A
+/// `replacement` point, from `extension <name> replacement <system>
+/// exclusive [required]`, lets one mod run its own function in place of a
+/// game system's, over the same columns in the same place of the schedule,
+/// on the mod's machine; a predicted system is never replaceable (D200).
 struct GameExtensionPoint {
     enum class Kind : std::uint8_t {
         Data,
         Event,
-        Service
+        Service,
+        Replacement
     };
     /// Its identity is `<namespace>/<name>`.
     std::string name;
     Kind kind = Kind::Data;
     /// The component each contribution is a value of, that an event's
-    /// entities hold, or whose type a service call takes and answers.
+    /// entities hold, or whose type a service call takes and answers; for a
+    /// replacement, the game system it replaces.
     std::string accepts;
     /// An event's: the game system its handlers run after, and what they
     /// may write.

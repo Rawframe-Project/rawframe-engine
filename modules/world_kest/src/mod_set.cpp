@@ -62,6 +62,14 @@ result::Status checkMods(const GameDescription& game,
                                                           .withContext("point", handler.point)};
             }
         }
+        for (const ModReplacement& replacement : mod.description.replacements) {
+            if (!kKnown(replacement.point, GameExtensionPoint::Kind::Replacement)) {
+                return std::unexpected<result::Error>{
+                    refused("a mod replaces through a point the game does not declare as a replacement")
+                        .withContext("mod", mod.subject)
+                        .withContext("point", replacement.point)};
+            }
+        }
         for (const ModProvider& provider : mod.description.providers) {
             if (!kKnown(provider.point, GameExtensionPoint::Kind::Service)) {
                 return std::unexpected<result::Error>{
@@ -81,6 +89,14 @@ result::Status checkMods(const GameDescription& game,
                     // Named only where an exclusive point's refusal needs them.
                     if (point.exclusive) {
                         claimants += (count == 0 ? "" : " ") + mod.subject + ":" + contribution.scene;
+                    }
+                    ++count;
+                }
+            }
+            for (const ModReplacement& replacement : mod.description.replacements) {
+                if (replacement.point == point.name) {
+                    if (point.exclusive) {
+                        claimants += (count == 0 ? "" : " ") + mod.subject + ":" + replacement.function;
                     }
                     ++count;
                 }

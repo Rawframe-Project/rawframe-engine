@@ -78,12 +78,12 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
     }
     // `extension <name> data <component> multi|exclusive [required]`,
     // `extension <name> event <component> after <system> [write
-    // <component>]... multi|exclusive [required]`, or `extension <name>
-    // service <component> exclusive [required]`.
-    if (words.size() >= 3 && words[2] == "replacement") {
-        return badLine(line,
-                       WorldKestError::BadGameLine,
-                       "replacement points are not built yet; a point is `data`, `event`, or `service`");
+    // <component>]... multi|exclusive [required]`, `extension <name> service
+    // <component> exclusive [required]`, or `extension <name> replacement
+    // <system> exclusive [required]`.
+    if (words.size() >= 5 && words[2] == "replacement" && words[4] == "multi") {
+        return badLine(
+            line, WorldKestError::BadGameLine, "a replacement point is exclusive: a system has one function");
     }
     if (words.size() >= 5 && words[2] == "service" && words[4] == "multi") {
         return badLine(line,
@@ -118,9 +118,14 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
                      !std::ranges::contains(point.writes, kClauses[at + 1]);
             point.writes.emplace_back(kClauses[at + 1]);
         }
-    } else if (shaped && kBody[2] == "service") {
-        point.kind = GameExtensionPoint::Kind::Service;
-        shaped = kBody.size() == 5 && point.exclusive;
+    } else if (shaped && (kBody[2] == "service" || kBody[2] == "replacement")) {
+        point.kind = kBody[2] == "service" ? GameExtensionPoint::Kind::Service : GameExtensionPoint::Kind::Replacement;
+        // One replacement point per system: a system has one function.
+        shaped = kBody.size() == 5 && point.exclusive &&
+                 (point.kind == GameExtensionPoint::Kind::Service ||
+                  std::ranges::none_of(mods.points, [&point](const GameExtensionPoint& other) {
+                      return other.kind == GameExtensionPoint::Kind::Replacement && other.accepts == point.accepts;
+                  }));
     } else {
         shaped = shaped && kBody.size() == 5 && kBody[2] == "data";
     }
@@ -129,7 +134,8 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
                        WorldKestError::BadGameLine,
                        "a game declares each point once, `extension <name> data <component> multi|exclusive "
                        "[required]`, `extension <name> event <component> after <system> [write <component>]... "
-                       "multi|exclusive [required]`, or `extension <name> service <component> exclusive [required]`");
+                       "multi|exclusive [required]`, `extension <name> service <component> exclusive [required]`, or "
+                       "`extension <name> replacement <system> exclusive [required]`");
     }
     if (mods.points.size() == kMaximumExtensionPoints) {
         return badLine(line, WorldKestError::BadGameLine, "a game declares more extension points than the limit");
@@ -150,6 +156,17 @@ result::Status checkModApi(const GameDescription& game, const ModLines& lines) {
         return badLine(lines.firstApproval, WorldKestError::BadGameLine, "only a curated game approves mods");
     }
     for (const GameExtensionPoint& point : mods.points) {
+        if (point.kind == GameExtensionPoint::Kind::Replacement) {
+            // A client predicts with the game's own function and runs no
+            // mod, so a predicted system is the game's alone.
+            const auto kSystem = std::ranges::find(game.systems, point.accepts, &GameSystem::identity);
+            if (kSystem == game.systems.end() || kSystem->predicted) {
+                return badLine(lines.firstPoint,
+                               WorldKestError::UnknownName,
+                               "a replacement point names a system the game declares, and not a predicted one");
+            }
+            continue;
+        }
         const bool kKnown = std::ranges::contains(game.components, point.accepts, &GameComponent::name) &&
                             std::ranges::all_of(point.writes, [&game](const std::string& written) {
                                 return std::ranges::contains(game.components, written, &GameComponent::name);
