@@ -66,6 +66,31 @@ result::Result<std::vector<std::unique_ptr<KestSystems>>> modHandlers(const Game
             const auto kPoint = std::ranges::find(game.mods.points, provider.point, &GameExtensionPoint::name);
             RAWFRAME_TRY(kSameShape(kPoint->accepts));
         }
+        // Each replacement takes the game system's place: its identity, phase,
+        // columns, order, and streams, with the mod's function (D200).
+        std::vector<const GameSystem*> replaced;
+        for (const ModReplacement& replacement : mod.replacements) {
+            const auto kPoint = std::ranges::find(game.mods.points, replacement.point, &GameExtensionPoint::name);
+            const GameSystem& system = *std::ranges::find(game.systems, kPoint->accepts, &GameSystem::identity);
+            std::vector<KestColumn>& systemColumns = columns.emplace_back();
+            for (const GameColumn& column : system.columns) {
+                if (column.entities) {
+                    systemColumns.push_back(KestColumn{.component = {}, .element = {}, .entities = true});
+                    continue;
+                }
+                // A filter lends nothing, so the mod need not name its type.
+                if (column.access != world::Access::Read && column.access != world::Access::Write) {
+                    const auto kFilter = std::ranges::find(game.components, column.component, &GameComponent::name);
+                    systemColumns.push_back(
+                        KestColumn{.component = kFilter->id, .element = {}, .access = column.access});
+                    continue;
+                }
+                RAWFRAME_TRY_ASSIGN(const GameComponent* component, kSameShape(column.component));
+                systemColumns.push_back(
+                    KestColumn{.component = component->id, .element = component->kestType, .access = column.access});
+            }
+            replaced.push_back(&system);
+        }
         std::vector<KestSystemDeclaration> declarations;
         for (std::size_t at = 0; at < mod.handlers.size(); ++at) {
             declarations.push_back(KestSystemDeclaration{.identity = identities[at],
@@ -75,6 +100,23 @@ result::Result<std::vector<std::unique_ptr<KestSystems>>> modHandlers(const Game
                                                          .after = after[at],
                                                          .before = {},
                                                          .randomStreams = {}});
+        }
+        std::vector<std::vector<std::string_view>> orders;
+        for (std::size_t at = 0; at < replaced.size(); ++at) {
+            const GameSystem& system = *replaced[at];
+            orders.emplace_back(system.after.begin(), system.after.end());
+            orders.emplace_back(system.before.begin(), system.before.end());
+            orders.emplace_back(system.randomStreams.begin(), system.randomStreams.end());
+        }
+        for (std::size_t at = 0; at < replaced.size(); ++at) {
+            const GameSystem& system = *replaced[at];
+            declarations.push_back(KestSystemDeclaration{.identity = system.identity,
+                                                         .phase = system.phase,
+                                                         .entry = mod.replacements[at].function,
+                                                         .columns = columns[mod.handlers.size() + at],
+                                                         .after = orders[3 * at],
+                                                         .before = orders[(3 * at) + 1],
+                                                         .randomStreams = orders[(3 * at) + 2]});
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));

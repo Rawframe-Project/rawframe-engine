@@ -256,6 +256,11 @@ void GameFiles::seal() {
             field(digest, provider.point);
             field(digest, provider.function);
         }
+        for (const ModReplacement& replacement : program.replacements) {
+            field(digest, "replace");
+            field(digest, replacement.point);
+            field(digest, replacement.function);
+        }
     }
     digest_ = digest.finish();
 }
@@ -349,12 +354,12 @@ result::Status GameFiles::readMods(game_content::GameContent* content) {
                                               .text = std::move(text),
                                               .identity = kScene->scene});
         }
-        // Its handlers' and providers' program, from the mod's own sources.
+        // The program its functions are in, from the mod's own sources.
         if (mods[at].description.program.empty()) {
             continue;
         }
         if (cooked[at].programs.size() != 1 || cooked[at].programs[0].path != mods[at].description.program) {
-            return modRefused("a cooked mod does not name the sources of the program its handlers and providers are in",
+            return modRefused("a cooked mod does not name the sources of the program its functions are in",
                               mods[at].subject);
         }
         const content::ResourceTypeId kSourcesType{kest_library::kGameSourcesType};
@@ -367,7 +372,8 @@ result::Status GameFiles::readMods(game_content::GameContent* content) {
                                               .entry = cooked[at].programs[0].entry,
                                               .files = std::move(files),
                                               .handlers = mods[at].description.handlers,
-                                              .providers = mods[at].description.providers});
+                                              .providers = mods[at].description.providers,
+                                              .replacements = mods[at].description.replacements});
     }
     return {};
 }

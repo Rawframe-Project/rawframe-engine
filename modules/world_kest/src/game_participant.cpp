@@ -181,9 +181,21 @@ public:
             before_.emplace_back(system.before.begin(), system.before.end());
             streams_.emplace_back(system.randomStreams.begin(), system.randomStreams.end());
         }
+        // A system a mod replaces runs the mod's function instead, on the
+        // mod's machine (D200).
+        std::vector<std::string> replaced;
+        for (const GameModProgram& modProgram : files.modPrograms()) {
+            for (const ModReplacement& replacement : modProgram.replacements) {
+                const auto kPoint = std::ranges::find(game_.mods.points, replacement.point, &GameExtensionPoint::name);
+                replaced.push_back(kPoint->accepts);
+            }
+        }
         std::vector<KestSystemDeclaration> declarations;
         for (std::size_t index = 0; index < game_.systems.size(); ++index) {
             const GameSystem& system = game_.systems[index];
+            if (std::ranges::contains(replaced, system.identity)) {
+                continue;
+            }
             declarations.push_back(KestSystemDeclaration{.identity = system.identity,
                                                          .phase = system.phase,
                                                          .entry = system.entry,
@@ -259,6 +271,7 @@ public:
         for (const GameModProgram& modProgram : files.modPrograms()) {
             modHandlerCount_ += modProgram.handlers.size();
             modProviderCount_ += modProgram.providers.size();
+            modReplacementCount_ += modProgram.replacements.size();
         }
         return simulation_->addSystems(*systems_);
     }
@@ -311,6 +324,7 @@ public:
                                diagnostics::field("systems", game_.systems.size()),
                                diagnostics::field("modHandlers", modHandlerCount_),
                                diagnostics::field("modProviders", modProviderCount_),
+                               diagnostics::field("modReplacements", modReplacementCount_),
                                diagnostics::field("entities", spawned)});
         return {};
     }
@@ -935,6 +949,7 @@ private:
     std::vector<std::unique_ptr<KestSystems>> modHandlers_;
     std::size_t modHandlerCount_ = 0;
     std::size_t modProviderCount_ = 0;
+    std::size_t modReplacementCount_ = 0;
 };
 
 result::Result<composition::ParticipantOwner> makeGame(composition::ParticipantContext& context) noexcept {
