@@ -17,9 +17,31 @@
 
 #include <array>
 #include <cstdio>
+#include <string>
 #include <string_view>
 
+#if defined(__APPLE__)
+#include <cstdint>
+#include <mach-o/dyld.h>
+#endif
+
 namespace {
+
+/// Where this program's own file is, to read it (D236).
+std::string ownExecutable() {
+#if defined(__APPLE__)
+    std::uint32_t size = 0;
+    static_cast<void>(::_NSGetExecutablePath(nullptr, &size));
+    std::string path(size, '\0');
+    if (::_NSGetExecutablePath(path.data(), &size) != 0) {
+        return {};
+    }
+    path.resize(path.find('\0'));
+    return path;
+#else
+    return "/proc/self/exe";
+#endif
+}
 
 void print(const rawframe::result::Error& error) {
     std::string_view where;
@@ -44,7 +66,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     // The tool's own bytes are its identity in every cook key.
-    const auto kToolchain = rawframe::cook::digestOfFile("/proc/self/exe");
+    const auto kToolchain = rawframe::cook::digestOfFile(ownExecutable());
     if (!kToolchain.has_value()) {
         std::fputs("rawframe-cook: cannot read its own executable\n", stderr);
         return 1;
