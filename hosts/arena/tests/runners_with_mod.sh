@@ -19,11 +19,12 @@ repository=$4
 work=$5
 
 rm -rf "$work"
-mkdir -p "$work/game" "$work/mod" "$work/sting" "$work/penalty" "$work/late" "$work/wide" "$work/elsewhere"
+mkdir -p "$work/game" "$work/mod" "$work/sting" "$work/penalty" "$work/swift" "$work/late" "$work/wide" "$work/elsewhere"
 cp -r "$repository/games/runners/." "$work/game/"
 cp -r "$repository/games/runners-timers/." "$work/mod/"
 cp -r "$repository/games/runners-sting/." "$work/sting/"
 cp -r "$repository/games/runners-penalty/." "$work/penalty/"
+cp -r "$repository/games/runners-swift/." "$work/swift/"
 cp -r "$repository/games/runners-timers/." "$work/late/"
 sed -i 's/^modapi 1$/modapi >=2/' "$work/late/timers.mod"
 cp -r "$repository/games/runners-timers/." "$work/wide/"
@@ -51,6 +52,7 @@ SCENE
 "$cook" "$work/mod" "$work/mod-cooked" >/dev/null
 "$cook" "$work/sting" "$work/sting-cooked" >/dev/null
 "$cook" "$work/penalty" "$work/penalty-cooked" >/dev/null
+"$cook" "$work/swift" "$work/swift-cooked" >/dev/null
 "$cook" "$work/late" "$work/late-cooked" >/dev/null
 "$cook" "$work/wide" "$work/wide-cooked" >/dev/null
 
@@ -64,6 +66,7 @@ game_root=$(pack "$work/game-cooked" "$work/game-build" rawframe/runners)
 mod_root=$(pack "$work/mod-cooked" "$work/mod-build" rawframe/runners-timers)
 sting_root=$(pack "$work/sting-cooked" "$work/sting-build" rawframe/runners-sting)
 penalty_root=$(pack "$work/penalty-cooked" "$work/penalty-build" rawframe/runners-penalty)
+swift_root=$(pack "$work/swift-cooked" "$work/swift-build" rawframe/runners-swift)
 late_root=$(pack "$work/late-cooked" "$work/late-build" rawframe/runners-late)
 wide_root=$(pack "$work/wide-cooked" "$work/wide-build" rawframe/runners-wide)
 "$build" compose "$library" "$game_root" tool "$work/plain.composition" >/dev/null
@@ -71,6 +74,7 @@ wide_root=$(pack "$work/wide-cooked" "$work/wide-build" rawframe/runners-wide)
 "$build" compose "$library" "$game_root" tool "$work/stung.composition" --mod "$mod_root" --mod "$sting_root" \
     >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/penalized.composition" --mod "$penalty_root" >/dev/null
+"$build" compose "$library" "$game_root" tool "$work/swift.composition" --mod "$swift_root" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/late.composition" --mod "$late_root" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/wide.composition" --mod "$wide_root" >/dev/null
 game=$(sed -n 's/.*"resourceId": "\([0-9a-f]*\)".*/\1/p' "$repository/games/runners/runners.game.rfmeta")
@@ -173,4 +177,21 @@ rm -rf "$work/saves"
 run "$work/penalized.composition" 600
 grep -q '"code":"game_loaded".*"modProviders":1' "$work/log.ndjson"
 penalized=$(taken_in_twos "runners-penalty's provider")
-echo "mod taken: $plain entities without it, $modded with it; stung hits $stung; penalized hits $penalized; checkpoints know their mods"
+
+# Swift: the game's age system is replaced by the mod's, and the hall ages
+# a thousand ticks a tick.
+rm -rf "$work/saves"
+run "$work/swift.composition" 60
+grep -q '"code":"game_loaded".*"modReplacements":1' "$work/log.ndjson"
+aged=$(python3 - "$work/saves/world.rfsave" <<'PY'
+import struct, sys
+body = open(sys.argv[1], "rb").read()[:-32]
+# The hall's age is the last eight bytes before the digest.
+print(struct.unpack_from("<Q", body, len(body) - 8)[0])
+PY
+)
+if [ "$aged" -eq 0 ] || [ $((aged % 1000)) -ne 0 ]; then
+    echo "the hall aged $aged ticks with runners-swift replacing its age system" >&2
+    exit 1
+fi
+echo "mod taken: $plain entities without it, $modded with it; stung hits $stung; penalized hits $penalized; swift hall aged $aged; checkpoints know their mods"

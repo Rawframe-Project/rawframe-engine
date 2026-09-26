@@ -40,12 +40,14 @@ save player runner runners.score
 # handles hits: right after hurt, over each runner hit, it may change the
 # runner's score (runners-sting is one). One mod may also say what a hit
 # costs: hurt asks the penalty service, which answers one taken unless a
-# mod provides it (runners-penalty is one).
+# mod provides it (runners-penalty is one). And one mod may replace how the
+# hall and every timer age (runners-swift is one).
 mods open
 modapi runners 1
 extension timers data runners.age multi
 extension hits event runners.hit after runners.hurt write runners.score multi
 extension penalty service runners.penalty exclusive
+extension aging replacement runners.age exclusive
 
 replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter
 player runners.stick runners.score runners.emitter rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception

@@ -1,0 +1,16 @@
+module swift
+
+// Runners' own shape, field for field: the engine checks it is laid out as
+// runners' is.
+struct Age {
+    ticks: u64
+}
+
+// Takes the columns runners' age system takes, in its place.
+fn swift(count: i32, ages: [Age]) {
+    let i = 0
+    while i < count {
+        ages[i].ticks = ages[i].ticks + u64(1000)
+        i = i + 1
+    }
+}
