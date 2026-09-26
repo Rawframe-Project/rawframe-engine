@@ -86,6 +86,7 @@ private:
             }
         }
         context_->reportConnections(counts.connections);
+        context_->reportMemory(4096);
         if (counts.stop != nullptr && counts.runWorlds == counts.stopAt) {
             counts.stop->store(true, std::memory_order_release);
         }
@@ -216,6 +217,20 @@ RAWFRAME_TEST(AHostRunsItsIterationsAndStopsInOrder) {
     // The bound ends the run where it falls: every state, in order.
     RAWFRAME_EXPECT(movesThrough(log, {"starting", "preparing", "ready", "active", "draining", "stopping", "stopped"}));
     RAWFRAME_EXPECT(mentions(log, "\"reason\":\"iteration_bound\"") && counts.admitting == 5 && counts.closed == 0);
+}
+
+RAWFRAME_TEST(TheHostAttributesMemoryToItsParticipants) {
+    // SPEC-0013's memory attribution (D216): sampled once a second, logged
+    // at stop, what each participant said it holds and what is left over.
+    reset();
+    std::string log;
+    const auto kExit = run("host.maximum_iterations = 1000\nhost.iteration_rate = 1000\nhost.cpu_workers = 1", log);
+    RAWFRAME_EXPECT(kExit == host::HostExit::Stopped);
+#if defined(__linux__) || defined(__APPLE__)
+    RAWFRAME_EXPECT(mentions(log, "\"code\":\"memory_attribution\""));
+    RAWFRAME_EXPECT(mentions(log, "\"participant\":\"test.counting\",\"steadyBytes\":4096,\"peakBytes\":4096"));
+    RAWFRAME_EXPECT(mentions(log, "\"code\":\"memory_summary\"") && mentions(log, "\"attributedBytes\":4096"));
+#endif
 }
 
 RAWFRAME_TEST(AStopRequestDrainsTheConnectionsBeforeStopping) {

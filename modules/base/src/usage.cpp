@@ -15,9 +15,11 @@
 
 namespace rawframe::base {
 
-std::optional<std::uint64_t> residentBytes() noexcept {
+namespace {
+
+/// A field of /proc/self/statm, in bytes: 1 resident, 2 shared (file-backed).
+std::optional<std::uint64_t> statm(int field) noexcept {
 #if defined(__linux__)
-    // statm: total pages, then resident pages.
     const int kFile = ::open("/proc/self/statm", O_RDONLY | O_CLOEXEC);
     if (kFile < 0) {
         return std::nullopt;
@@ -30,15 +32,32 @@ std::optional<std::uint64_t> residentBytes() noexcept {
     }
     const char* const kEnd = text.data() + kRead;
     const char* at = text.data();
-    while (at != kEnd && *at != ' ') {
+    for (int skipped = 0; skipped < field; ++skipped) {
+        while (at != kEnd && *at != ' ') {
+            ++at;
+        }
+        if (at == kEnd) {
+            return std::nullopt;
+        }
         ++at;
     }
     std::uint64_t pages = 0;
-    if (at == kEnd || std::from_chars(at + 1, kEnd, pages).ec != std::errc{}) {
+    if (std::from_chars(at, kEnd, pages).ec != std::errc{}) {
         return std::nullopt;
     }
     const long kPage = ::sysconf(_SC_PAGESIZE);
     return kPage > 0 ? std::optional{pages * static_cast<std::uint64_t>(kPage)} : std::nullopt;
+#else
+    static_cast<void>(field);
+    return std::nullopt;
+#endif
+}
+
+} // namespace
+
+std::optional<std::uint64_t> residentBytes() noexcept {
+#if defined(__linux__)
+    return statm(1);
 #elif defined(__APPLE__)
     mach_task_basic_info_data_t info{};
     mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
@@ -50,6 +69,10 @@ std::optional<std::uint64_t> residentBytes() noexcept {
 #else
     return std::nullopt;
 #endif
+}
+
+std::optional<std::uint64_t> fileResidentBytes() noexcept {
+    return statm(2);
 }
 
 std::optional<std::uint64_t> peakResidentBytes() noexcept {

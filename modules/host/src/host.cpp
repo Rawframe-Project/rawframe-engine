@@ -43,6 +43,8 @@ constexpr EventIdentity kNotStarted{"host", "not_started"};
 constexpr EventIdentity kUnknownSetting{"host", "unknown_setting"};
 constexpr EventIdentity kLifecycle{"host", "lifecycle"};
 constexpr EventIdentity kHealth{"host", "health"};
+constexpr EventIdentity kMemoryAttribution{"host", "memory_attribution"};
+constexpr EventIdentity kMemorySummary{"host", "memory_summary"};
 
 // The sink's buffer, allocated once. At 120 iterations per second a drain
 // happens every 8 ms, so this holds far more than one iteration writes.
@@ -452,6 +454,9 @@ struct Host::State {
         ++iteration;
         status.iteration = iteration;
         watchHealth();
+        if (iteration % settings.iterationRate == 0) {
+            sampleMemory();
+        }
         next = next + period;
         const execution::MonotonicInstant kNow = clock.now();
         if (kNow >= next && (kNow - next) > period) {
@@ -460,6 +465,49 @@ struct Host::State {
             next = kNow;
         }
         return true;
+    }
+
+    /// SPEC-0013's memory attribution (D216), once a second while running:
+    /// what each participant says it holds, and what the process holds, the
+    /// last seen and the most.
+    void sampleMemory() {
+        composition->memory(reports);
+        for (const composition::Composition::MemoryReport& report : reports) {
+            auto kept = std::ranges::find(attribution, report.participant, &Attributed::participant);
+            if (kept == attribution.end()) {
+                attribution.push_back(Attributed{.participant = report.participant});
+                kept = attribution.end() - 1;
+            }
+            kept->steady = report.bytes;
+            kept->peak = std::max(kept->peak, report.bytes);
+        }
+        resident = base::residentBytes().value_or(0);
+        fileBacked = base::fileResidentBytes().value_or(0);
+    }
+
+    /// Once, at stop: each participant's attribution, then the process's.
+    void logMemory() noexcept {
+        if (resident == 0) {
+            return;
+        }
+        std::uint64_t attributed = 0;
+        for (const Attributed& each : attribution) {
+            attributed += each.steady;
+            emitter.log(Severity::Info,
+                        kMemoryAttribution,
+                        "memory a participant holds, as it counts it",
+                        {diagnostics::field("participant", each.participant),
+                         diagnostics::field("steadyBytes", each.steady),
+                         diagnostics::field("peakBytes", each.peak)});
+        }
+        emitter.log(Severity::Info,
+                    kMemorySummary,
+                    "memory the process holds, and how much of it participants account for",
+                    {diagnostics::field("residentBytes", resident),
+                     diagnostics::field("fileBackedBytes", fileBacked),
+                     diagnostics::field("attributedBytes", attributed),
+                     diagnostics::field("unattributedBytes",
+                                        resident > attributed + fileBacked ? resident - attributed - fileBacked : 0)});
     }
 
     /// The worst of the participants' reports and the Host's own watch on its
@@ -507,6 +555,7 @@ struct Host::State {
             drainFrom("iteration_bound");
         }
         const std::size_t kConnections = composition->connections();
+        logMemory();
         enter(composition::HostState::Stopping, kConnections == 0 ? "drained" : "drain_ended");
         emitter.log(Severity::Info,
                     kStopping,
@@ -568,6 +617,17 @@ struct Host::State {
     StallWatch cpuWatch;
     StallWatch ioWatch;
     execution::MonotonicInstant drainStart;
+    struct Attributed {
+        std::string_view participant;
+        std::uint64_t steady = 0;
+        std::uint64_t peak = 0;
+    };
+    std::vector<Attributed> attribution;
+    std::vector<composition::Composition::MemoryReport> reports;
+    /// Resident bytes at the last sample while running, and of them those
+    /// backed by files.
+    std::uint64_t resident = 0;
+    std::uint64_t fileBacked = 0;
     /// When the Host was made, as near the process's start as it sees.
     execution::MonotonicInstant born;
 };

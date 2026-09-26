@@ -109,6 +109,10 @@ public:
     /// with `reason` a fixed category that outlives the participant.
     void reportConnections(std::size_t connections) noexcept;
     void reportHealth(Health health, std::string_view reason) noexcept;
+    /// The bytes this participant holds, as it counts them (D216): SPEC-0013's
+    /// memory attribution, what the Host logs beside the process's resident
+    /// memory. Nought until reported.
+    void reportMemory(std::uint64_t bytes) noexcept;
 
 private:
     [[nodiscard]] result::Result<CapabilityObject> resolve(std::string_view capability) noexcept;
@@ -163,6 +167,14 @@ public:
     /// together, and the worst health, the first reporter's on a tie.
     [[nodiscard]] std::size_t connections() const noexcept;
     [[nodiscard]] HealthReport health() const noexcept;
+    /// The bytes each running participant last reported holding, by its
+    /// identity, which outlives the composition; those that reported none
+    /// are left out.
+    struct MemoryReport {
+        std::string_view participant;
+        std::uint64_t bytes = 0;
+    };
+    void memory(std::vector<MemoryReport>& into) const;
 
     /// Stable owner identity for a participant: FNV-1a over its identity.
     [[nodiscard]] static execution::OwnerId ownerFor(std::string_view identity) noexcept;
@@ -188,6 +200,7 @@ private:
         bool cpuAdmitted = false;
         bool blockingIoAdmitted = false;
         std::size_t connections = 0;
+        std::uint64_t memory = 0;
         Health health = Health::Healthy;
         std::string_view healthReason;
     };

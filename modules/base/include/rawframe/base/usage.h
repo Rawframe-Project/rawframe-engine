@@ -13,6 +13,10 @@ namespace rawframe::base {
 /// Bytes resident now.
 [[nodiscard]] std::optional<std::uint64_t> residentBytes() noexcept;
 
+/// Of those, bytes backed by files: the program, its libraries, and files
+/// mapped in (SPEC-0013's mapped artifacts, D216).
+[[nodiscard]] std::optional<std::uint64_t> fileResidentBytes() noexcept;
+
 /// The most bytes resident at once since the process began.
 [[nodiscard]] std::optional<std::uint64_t> peakResidentBytes() noexcept;
 

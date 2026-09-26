@@ -83,6 +83,10 @@ void ParticipantContext::reportConnections(std::size_t connections) noexcept {
     composition_->slots_[index_].connections = connections;
 }
 
+void ParticipantContext::reportMemory(std::uint64_t bytes) noexcept {
+    composition_->slots_[index_].memory = bytes;
+}
+
 void ParticipantContext::reportHealth(Health health, std::string_view reason) noexcept {
     Composition::Slot& slot = composition_->slots_[index_];
     slot.health = health;
@@ -280,6 +284,15 @@ std::size_t Composition::connections() const noexcept {
         total += slot.connections;
     }
     return total;
+}
+
+void Composition::memory(std::vector<MemoryReport>& into) const {
+    into.clear();
+    for (const Slot& slot : slots_) {
+        if (slot.planned != nullptr && slot.memory != 0) {
+            into.push_back(MemoryReport{.participant = slot.planned->identity, .bytes = slot.memory});
+        }
+    }
 }
 
 HealthReport Composition::health() const noexcept {
