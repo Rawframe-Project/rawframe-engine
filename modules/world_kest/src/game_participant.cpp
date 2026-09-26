@@ -242,8 +242,11 @@ public:
             RAWFRAME_TRY(addPhysicsDoors(doors, game_.physics->dimensions, &doorContext_));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap, configuration.unsignedInteger("kest.heap_bytes", 64U << 20U));
-        RAWFRAME_TRY_ASSIGN(const std::uint64_t kFuel,
-                            configuration.unsignedInteger("kest.fuel_per_system", 10'000'000));
+        // Half a million steps: about 3.5 ms of a spinning loop here, so a
+        // system that runs away is stopped within SPEC-0013's 8 ms
+        // containment with room for a slower machine, and deterministically
+        // (D228). The crowd's busiest system takes a few tens of thousands.
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kFuel, configuration.unsignedInteger("kest.fuel_per_system", 500'000));
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{
                                 .program = program_,

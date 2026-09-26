@@ -1,0 +1,9 @@
+# A game whose one system never ends: its fuel stops it every tick, within
+# SPEC-0013's 8 ms containment (D228). The bench runs it.
+program runaway.kest
+
+component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 runaway.position Position
+
+system runaway.spin simulation spin write runaway.position
+
+spawn 1 runaway.position x=0

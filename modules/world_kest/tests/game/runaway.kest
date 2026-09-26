@@ -1,0 +1,17 @@
+module runaway
+
+// A system that spins until its fuel runs out.
+
+struct Position {
+    x: f32
+}
+
+fn spin(count: i32, positions: [Position]) {
+    let i = 0
+    while i >= 0 {
+        i = i + 1
+        if i > 1000000000 {
+            i = 0
+        }
+    }
+}

@@ -166,4 +166,25 @@ printf 'bench crowd checkpoint: %s\n' "$verdict"
 if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
     failures=$((failures + 1))
 fi
+# A Kest system that never ends (D228): its fuel stops it every tick, and
+# the tick it spoils stays within SPEC-0013's 8 ms emergency containment.
+printf 'world.tick_rate = 60\nhost.iteration_rate = 60\nhost.maximum_iterations = 60\nkest.game = %s\n' \
+    "$PWD/modules/world_kest/tests/game/runaway.game" >"$work/runaway.conf"
+logs="$("$build/hosts/dedicated_server/rawframe-server" --config "$work/runaway.conf" 2>&1 || true)"
+verdict="$(python3 -c '
+import json, sys
+logs = [json.loads(line) for line in sys.argv[1].splitlines() if line.startswith("{")]
+failed = [l for l in logs if l.get("code") == "system_failed"]
+tick = [l["fields"] for l in logs if l.get("code") == "tick_summary"]
+if not failed or not tick:
+    print("FAIL the runaway system was not stopped, or no tick summary")
+    sys.exit()
+line = "stopped %d times, tick p50 %.3f ms, p99 %.3f ms" % (len(failed), tick[0]["p50"] / 1000, tick[0]["p99"] / 1000)
+if tick[0]["p99"] > 8000:
+    line = "FAIL past SPEC-0013: " + line
+print(line)' "$logs")"
+printf 'bench runaway Kest: %s\n' "$verdict"
+if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
+    failures=$((failures + 1))
+fi
 exit $((failures > 0))
