@@ -77,6 +77,29 @@ result::Result<Configuration> Configuration::parse(std::string_view text) {
     return configuration;
 }
 
+result::Result<Configuration> Configuration::parse(std::string_view text, std::string_view base) {
+    RAWFRAME_TRY_ASSIGN(Configuration configuration, parse(text));
+    while (base.size() > 1 && (base.back() == '/' || base.back() == '\\')) {
+        base.remove_suffix(1);
+    }
+    configuration.base_ = base;
+    return configuration;
+}
+
+std::optional<std::string> Configuration::path(std::string_view key) const {
+    const auto kValue = text(key);
+    if (!kValue) {
+        return std::nullopt;
+    }
+    // Absolute: from the root, a drive, or a share.
+    const bool kAbsolute =
+        kValue->starts_with('/') || kValue->starts_with('\\') || (kValue->size() >= 2 && (*kValue)[1] == ':');
+    if (kAbsolute || base_.empty() || kValue->empty()) {
+        return std::string{*kValue};
+    }
+    return base_ + "/" + std::string{*kValue};
+}
+
 std::optional<std::string_view> Configuration::text(std::string_view key) const {
     const auto kFound = entries_.find(key);
     if (kFound == entries_.end()) {

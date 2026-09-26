@@ -27,8 +27,17 @@ public:
     /// ignored. Refuses a malformed line, a bad or repeated key, and anything
     /// past the bounds, all as `invalid_argument`.
     [[nodiscard]] static result::Result<Configuration> parse(std::string_view text);
+    /// The same, read from a file in `base`, the directory its relative
+    /// paths are under (SPEC-0012: where a process is started from never
+    /// changes what its configuration names, D188).
+    [[nodiscard]] static result::Result<Configuration> parse(std::string_view text, std::string_view base);
 
     [[nodiscard]] std::optional<std::string_view> text(std::string_view key) const;
+
+    /// A value that names a file or directory: an absolute path as it is, a
+    /// relative one under the configuration's base when it has one. Every
+    /// key that names a path is read through here, never `text`.
+    [[nodiscard]] std::optional<std::string> path(std::string_view key) const;
 
     /// The value as an unsigned integer: absent gives `fallback`, and a
     /// malformed value is `invalid_argument`.
@@ -51,6 +60,9 @@ private:
         mutable std::atomic<bool> read{false};
     };
     std::map<std::string, Entry, std::less<>> entries_;
+    /// Where relative paths are, with no trailing separator; empty for as
+    /// given.
+    std::string base_;
 };
 
 } // namespace rawframe::composition

@@ -5,6 +5,8 @@
 #include "rawframe/test/test.h"
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 using namespace rawframe::composition;
 
@@ -36,4 +38,36 @@ RAWFRAME_TEST(MalformedConfigurationIsRefused) {
     RAWFRAME_EXPECT(
         !Configuration::parse("key = " + std::string(kMaximumConfigurationValueBytes + 1, 'v')).has_value());
     RAWFRAME_EXPECT(Configuration::parse("").has_value());
+}
+
+RAWFRAME_TEST(PathsAreUnderTheConfigurationsOwnDirectory) {
+    // Where a process starts from never changes what its configuration
+    // names (SPEC-0012, D188): relative paths are under the file's directory.
+    const auto kRead = Configuration::parse(
+        "game = games/arena.game\nroot = /srv/content\ndrive = C:/content\nshare = \\\\host\\content\nempty =\n",
+        "/etc/rawframe/");
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(kRead->path("game") == "/etc/rawframe/games/arena.game");
+    RAWFRAME_EXPECT(kRead->path("root") == "/srv/content" && kRead->path("drive") == "C:/content" &&
+                    kRead->path("share") == "\\\\host\\content" && kRead->path("empty") == "");
+    RAWFRAME_EXPECT(!kRead->path("absent").has_value());
+    // Without a base, as given; and a path read is a key read.
+    const auto kGiven = Configuration::parse("game = games/arena.game\n");
+    RAWFRAME_EXPECT(kGiven.has_value() && kGiven->path("game") == "games/arena.game" && kGiven->unread().empty());
+}
+
+RAWFRAME_TEST(AKeyNothingAskedForIsUnread) {
+    const auto kRead = Configuration::parse("a.b = 1\nc.d = 2\ne.f = x\n");
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT((kRead->unread() == std::vector<std::string_view>{"a.b", "c.d", "e.f"}));
+    static_cast<void>(kRead->unsignedInteger("c.d", 0));
+    static_cast<void>(kRead->text("e.f"));
+    static_cast<void>(kRead->text("g.h"));
+    RAWFRAME_EXPECT((kRead->unread() == std::vector<std::string_view>{"a.b"}));
 }
