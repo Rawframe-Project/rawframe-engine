@@ -1,5 +1,6 @@
 #include "checkpoints.h"
 
+#include "rawframe/base/threads.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/world_runtime/checkpoint.h"
 #include "rawframe/world_runtime/errors.h"
@@ -7,10 +8,18 @@
 #include "rawframe/world_snapshot/checkpoint.h"
 
 #include <array>
+#include <atomic>
 #include <charconv>
 #include <cstdio>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <chrono>
+#include <thread>
+#endif
 
 namespace rawframe::world_runtime {
 
@@ -75,6 +84,27 @@ result::Status writeArtifact(const std::string& path, std::span<const std::byte>
     return {};
 }
 
+/// One capture past its safe point: sealed on the CPU executor, then
+/// written on the blocking-I/O executor, one capture at a time (SPEC-0013's
+/// one active encoder task, D227). The Host thread moves it on between
+/// ticks; a task only fills in its own step's result.
+struct Flight {
+    enum class Step : std::uint8_t {
+        Sealing,
+        Sealed,
+        Writing,
+        Written
+    };
+    std::atomic<Step> step{Step::Sealing};
+    world_snapshot::StagedCheckpoint staged;
+    std::optional<result::Result<world_snapshot::SealedCheckpoint>> sealed;
+    result::Status written;
+    std::uint64_t tick = 0;
+    std::string path;
+    execution::MonotonicInstant start;
+    std::int64_t pauseMicroseconds = 0;
+};
+
 /// Restores a checkpoint before the first tick, and captures at exact ticks.
 class Checkpoints final : public composition::Participant {
 public:
@@ -113,6 +143,9 @@ public:
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
         clock_ = &context.clock();
+        cpu_ = context.cpuExecutor();
+        io_ = context.blockingIoExecutor();
+        owner_ = context.owner();
         if (simulation_ == nullptr) {
             return {};
         }
@@ -123,22 +156,28 @@ public:
         return {};
     }
 
-    /// Between ticks: a capture due now happens, then the next one is held for.
+    /// Between ticks: a capture under way moves on, and one due now is
+    /// staged, then the next one is held for.
     void runHostPhase(composition::HostPhase, const composition::HostFrame&) noexcept override {
+        advance();
         if (simulation_ == nullptr || next_ >= captureTicks_.size() ||
             simulation_->tick().value != captureTicks_[next_]) {
             return;
         }
+        // One capture at a time: the one before is finished first.
+        finish();
         const auto kStatus = capture();
         if (!kStatus.has_value()) {
-            emitter_.log(diagnostics::Severity::Error,
-                         kCaptureFailed,
-                         "a checkpoint was not captured",
-                         {diagnostics::field("tick", simulation_->tick().value),
-                          diagnostics::field("error", kStatus.error().description())});
+            failedAt(simulation_->tick().value, kStatus.error());
         }
         ++next_;
         holdNext();
+    }
+
+    /// A capture under way is finished, on the Host thread, where waiting
+    /// is allowed.
+    void stop() noexcept override {
+        finish();
     }
 
 private:
@@ -177,32 +216,113 @@ private:
         return {};
     }
 
+    /// Stages the World at its safe point, the only part that holds it,
+    /// and hands the rest to the executors (D227).
     result::Status capture() {
         const execution::MonotonicInstant kStart = clock_->now();
         const world::TickIndex kTick = simulation_->tick();
-        RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes,
-                            world_snapshot::capture(*simulation_->world(),
-                                                    *projection_,
-                                                    world_snapshot::CaptureSettings{.tick = kTick,
-                                                                                    .rate = simulation_->rate(),
-                                                                                    .identity = plan_->identity(),
-                                                                                    .limits = limits_}));
-        // The SnapshotDigest: everything before the 128-byte footer.
-        const world_snapshot::Fingerprint kDigest = base::sha256(std::span{kBytes}.first(kBytes.size() - 128));
-        const std::string kPath = capturePrefix_ + std::to_string(kTick.value) + ".rfsn";
-        RAWFRAME_TRY(writeArtifact(kPath, kBytes));
-        emitter_.log(diagnostics::Severity::Info,
-                     kCaptured,
-                     "a checkpoint was captured",
-                     {diagnostics::field("tick", kTick.value),
-                      diagnostics::field("bytes", kBytes.size()),
-                      diagnostics::field("digest", std::string_view{hex(kDigest)}),
-                      // SPEC-0013's capture deadline, the write included (D215).
-                      diagnostics::field("captureMs", (clock_->now() - kStart).nanoseconds / 1'000'000)});
+        RAWFRAME_TRY_ASSIGN(world_snapshot::StagedCheckpoint staged,
+                            world_snapshot::stage(*simulation_->world(),
+                                                  *projection_,
+                                                  world_snapshot::CaptureSettings{.tick = kTick,
+                                                                                  .rate = simulation_->rate(),
+                                                                                  .identity = plan_->identity(),
+                                                                                  .limits = limits_}));
+        flight_ = std::make_unique<Flight>();
+        flight_->staged = std::move(staged);
+        flight_->tick = kTick.value;
+        flight_->path = capturePrefix_ + std::to_string(kTick.value) + ".rfsn";
+        flight_->start = kStart;
+        flight_->pauseMicroseconds = (clock_->now() - kStart).nanoseconds / 1'000;
+        run(cpu_, [flight = flight_.get()]() noexcept {
+            flight->sealed.emplace(world_snapshot::seal(std::move(flight->staged)));
+            flight->step.store(Flight::Step::Sealed, std::memory_order_release);
+        });
         return {};
     }
 
+    /// Runs `task` on `executor`, or here when there is none or it refuses;
+    /// a refused task is left as it was.
+    void run(execution::Executor* executor, execution::Task&& task) noexcept {
+        if (executor == nullptr ||
+            !executor->submit(owner_, execution::Priority::Background, std::move(task)).has_value()) {
+            task();
+        }
+    }
+
+    /// Moves a capture under way on: a sealed one is written, a written one
+    /// reported.
+    void advance() noexcept {
+        if (flight_ == nullptr) {
+            return;
+        }
+        switch (flight_->step.load(std::memory_order_acquire)) {
+        case Flight::Step::Sealed:
+            if (!flight_->sealed->has_value()) {
+                failedAt(flight_->tick, flight_->sealed->error());
+                flight_.reset();
+                return;
+            }
+            flight_->step.store(Flight::Step::Writing, std::memory_order_release);
+            run(io_, [flight = flight_.get()]() noexcept {
+                flight->written = writeArtifact(flight->path, (*flight->sealed)->bytes);
+                flight->step.store(Flight::Step::Written, std::memory_order_release);
+            });
+            return;
+        case Flight::Step::Written: {
+            if (!flight_->written.has_value()) {
+                failedAt(flight_->tick, flight_->written.error());
+                flight_.reset();
+                return;
+            }
+            const world_snapshot::SealedCheckpoint& kSealed = **flight_->sealed;
+            emitter_.log(diagnostics::Severity::Info,
+                         kCaptured,
+                         "a checkpoint was captured",
+                         {diagnostics::field("tick", flight_->tick),
+                          diagnostics::field("bytes", kSealed.bytes.size()),
+                          diagnostics::field("digest", std::string_view{hex(kSealed.digest)}),
+                          // SPEC-0013's safe-point pause: how long the World
+                          // was held for the capture (D227).
+                          diagnostics::field("pauseUs", flight_->pauseMicroseconds),
+                          // SPEC-0013's capture deadline, the write included (D215).
+                          diagnostics::field("captureMs", (clock_->now() - flight_->start).nanoseconds / 1'000'000)});
+            flight_.reset();
+            return;
+        }
+        case Flight::Step::Sealing:
+        case Flight::Step::Writing:
+            return;
+        }
+    }
+
+    /// Finishes a capture under way, helping its executors meanwhile.
+    void finish() noexcept {
+        while (flight_ != nullptr) {
+            advance();
+            if (flight_ == nullptr) {
+                return;
+            }
+            if ((cpu_ != nullptr && cpu_->runOne()) || (io_ != nullptr && io_->runOne())) {
+                continue;
+            }
+#if RAWFRAME_THREADS
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+#endif
+        }
+    }
+
+    void failedAt(std::uint64_t tick, const result::Error& error) noexcept {
+        emitter_.log(diagnostics::Severity::Error,
+                     kCaptureFailed,
+                     "a checkpoint was not captured",
+                     {diagnostics::field("tick", tick), diagnostics::field("error", error.description())});
+    }
+
     const execution::MonotonicSource* clock_ = nullptr;
+    execution::Executor* cpu_ = nullptr;
+    execution::Executor* io_ = nullptr;
+    execution::OwnerId owner_;
     Simulation* simulation_ = nullptr;
     const CheckpointPlan* plan_ = nullptr;
     const world_snapshot::SnapshotProjection* projection_ = nullptr;
@@ -212,6 +332,8 @@ private:
     std::string capturePrefix_;
     std::vector<std::uint64_t> captureTicks_;
     std::size_t next_ = 0;
+    /// The capture under way, if any.
+    std::unique_ptr<Flight> flight_;
 };
 
 result::Result<composition::ParticipantOwner> makeCheckpoints(composition::ParticipantContext& context) noexcept {
@@ -229,7 +351,11 @@ void registerCheckpoints(composition::ParticipantRegistrar& registrar) noexcept 
         .scope = composition::LifetimeScope::World,
         .requiredCapabilities = kNeeds,
         .optionalCapabilities = kMaybe,
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
+        // One task at a time on each: the seal, then the write (D227).
+        .executor = {.cpu = true, .blockingIo = true, .quota = {.maximumPendingTasks = 1}},
+        // Stopping finishes a capture under way: milliseconds for the
+        // canonical crowd, within the budget with room to spare.
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(500)},
         .observabilityIdentity = "world_runtime.checkpoints",
         .budgetOwner = "world",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::Maintenance),

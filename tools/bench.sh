@@ -136,8 +136,9 @@ if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
     failures=$((failures + 1))
 fi
 # A checkpoint of the crowd captured and restored (D215): capture within
-# 10 s, restore within 15 s, and the artifact within 128 MiB (SPEC-0013's
-# snapshot ceilings).
+# 10 s, restore within 15 s, the artifact within 128 MiB, and the World held
+# for the capture's safe point within 5 ms (SPEC-0013's snapshot ceilings;
+# D227).
 common="host.iteration_rate = 1000
 world.tick_rate = 1000
 kest.game = $PWD/games/crowd/crowd.game"
@@ -155,9 +156,10 @@ if not captured or not restored:
     print("FAIL no capture or no restore")
     sys.exit()
 c, r = captured[0], restored[0]
-line = "%d entities, %.1f KiB, captured in %d ms, restored in %d ms" % (
-    r["entities"], c["bytes"] / 1024, c["captureMs"], r["restoreMs"])
-if c["captureMs"] > 10000 or r["restoreMs"] > 15000 or c["bytes"] > 128 * 2**20 or c["digest"] != r["digest"]:
+line = "%d entities, %.1f KiB, World held %.2f ms, captured in %d ms, restored in %d ms" % (
+    r["entities"], c["bytes"] / 1024, c["pauseUs"] / 1000, c["captureMs"], r["restoreMs"])
+if c["captureMs"] > 10000 or r["restoreMs"] > 15000 or c["bytes"] > 128 * 2**20 or c["digest"] != r["digest"] or \
+        c["pauseUs"] > 5000:
     line = "FAIL past SPEC-0013: " + line
 print(line)' "$logs")"
 printf 'bench crowd checkpoint: %s\n' "$verdict"
