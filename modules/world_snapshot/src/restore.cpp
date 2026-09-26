@@ -128,7 +128,9 @@ walkChunks(std::span<const std::byte> artifact, const detail::Footer& footer, de
         return detail::malformed("the chunks do not end exactly at the footer, or their count is wrong");
     }
     const ChunkHeader& kLast = chunks.back();
+    // Only component rows have a subject.
     if (chunks.front().kind != ChunkKind::WorldHeader || chunks.front().recordCount != 1 ||
+        chunks.front().subject != detail::Subject{} || kLast.subject != detail::Subject{} ||
         kLast.kind != ChunkKind::Manifest || kLast.offset != footer.manifestOffset ||
         kLast.storedSize != footer.manifestSize || kLast.digest != footer.manifestDigest ||
         kLast.recordCount != chunks.size() - 1) {

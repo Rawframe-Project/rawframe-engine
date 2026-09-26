@@ -1,7 +1,10 @@
 // World checkpoints: a round trip that restores every value, reference, and
 // random stream and captures to the same bytes again; canonical NaNs; row
-// groups; and refusal of every damaged, foreign, or oversized artifact.
+// groups; refusal of every damaged, foreign, or oversized artifact; and
+// hostile artifacts with matching digests restored only as they capture.
 
+#include "rawframe/base/sha256.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_snapshot/checkpoint.h"
 #include "rawframe/world_snapshot/errors.h"
@@ -120,6 +123,48 @@ struct Sample {
 
 bool failedWith(const auto& outcome, SnapshotError error) {
     return !outcome.has_value() && outcome.error().code() == code(error);
+}
+
+std::uint64_t u64At(std::span<const std::byte> bytes, std::size_t at) {
+    std::uint64_t value = 0;
+    for (std::size_t index = 0; index < 8; ++index) {
+        value |= std::to_integer<std::uint64_t>(bytes[at + index]) << (8U * index);
+    }
+    return value;
+}
+
+void digestAt(std::vector<std::byte>& bytes, std::size_t at, std::span<const std::byte> of) {
+    const auto kDigest = base::sha256(of);
+    std::ranges::copy(kDigest, bytes.begin() + static_cast<std::ptrdiff_t>(at));
+}
+
+/// `damaged` with every digest made to match again, its chunks where they
+/// lie in `layout` (SPEC-0011's generation 1): what a hostile writer hands
+/// over, which only the reader's structure can refuse. A digest is not a
+/// signature.
+std::vector<std::byte> resealed(std::vector<std::byte> damaged, std::span<const std::byte> layout) {
+    constexpr std::size_t kHeader = 96;
+    constexpr std::size_t kHeaderDigest = 48;
+    constexpr std::size_t kEntry = 104;
+    constexpr std::size_t kEntryDigest = 72;
+    const std::size_t kFooter = layout.size() - 128;
+    std::vector<std::size_t> chunks;
+    for (std::size_t at = 32; at < kFooter; at += kHeader + static_cast<std::size_t>(u64At(layout, at + 24))) {
+        chunks.push_back(at);
+    }
+    const std::size_t kManifest = chunks.back() + kHeader;
+    const auto kPayload = [&damaged, &layout](std::size_t chunk) {
+        return std::span<const std::byte>{damaged}.subspan(chunk + kHeader,
+                                                           static_cast<std::size_t>(u64At(layout, chunk + 24)));
+    };
+    for (std::size_t index = 0; index + 1 < chunks.size(); ++index) {
+        digestAt(damaged, chunks[index] + kHeaderDigest, kPayload(chunks[index]));
+        digestAt(damaged, kManifest + index * kEntry + kEntryDigest, kPayload(chunks[index]));
+    }
+    digestAt(damaged, chunks.back() + kHeaderDigest, kPayload(chunks.back()));
+    digestAt(damaged, kFooter + 80, kPayload(chunks.back()));
+    digestAt(damaged, kFooter + 48, std::span<const std::byte>{damaged}.first(kFooter));
+    return damaged;
 }
 
 } // namespace
@@ -243,6 +288,51 @@ RAWFRAME_TEST(EveryDamagedArtifactIsRefused) {
     payload[32 + 96] ^= std::byte{1};
     RAWFRAME_EXPECT(failedWith(world_snapshot::restore(payload, projection(), kIdentity, {}, candidate),
                                SnapshotError::DigestMismatch));
+}
+
+RAWFRAME_TEST(HostileArtifactsWithMatchingDigestsRestoreOnlyAsTheyCapture) {
+    Sample sample;
+    const world_snapshot::SnapshotLimits kSmall{.rowsPerChunk = 2};
+    test::Mutations mutations;
+    std::size_t accepted = 0;
+    std::size_t refused = 0;
+    for (const world_snapshot::SnapshotLimits& limits : {world_snapshot::SnapshotLimits{}, kSmall}) {
+        const auto kArtifact = world_snapshot::capture(sample.world, projection(), settings(limits));
+        RAWFRAME_EXPECT(kArtifact.has_value());
+        if (!kArtifact.has_value()) {
+            return;
+        }
+        // Resealing an undamaged artifact changes nothing.
+        RAWFRAME_EXPECT(resealed(*kArtifact, *kArtifact) == *kArtifact);
+        for (int round = 0; round < 3000; ++round) {
+            // One to four bytes replaced in place, so the layout holds and
+            // the digests can be made to match.
+            std::vector<std::byte> damaged = *kArtifact;
+            const auto kEdits = 1 + mutations.next() % 4;
+            for (std::uint64_t edit = 0; edit < kEdits; ++edit) {
+                damaged[static_cast<std::size_t>(mutations.next() % (damaged.size() - 128))] =
+                    static_cast<std::byte>(mutations.next() & 0xFFU);
+            }
+            damaged = resealed(std::move(damaged), *kArtifact);
+            world::World candidate{sample.schema};
+            const auto kRestored = world_snapshot::restore(damaged, projection(), kIdentity, limits, candidate);
+            if (!kRestored.has_value()) {
+                ++refused;
+                continue;
+            }
+            // What is accepted is read exactly: the World it made captures
+            // to the same bytes.
+            ++accepted;
+            const auto kAgain = world_snapshot::capture(
+                candidate,
+                projection(),
+                world_snapshot::CaptureSettings{
+                    .tick = kRestored->tick, .rate = kRestored->rate, .identity = kIdentity, .limits = limits});
+            RAWFRAME_EXPECT(kAgain.has_value() && *kAgain == damaged);
+        }
+    }
+    // Most damage is refused by structure alone.
+    RAWFRAME_EXPECT(refused > accepted);
 }
 
 RAWFRAME_TEST(ForeignArtifactsAndBadCandidatesAreRefused) {
