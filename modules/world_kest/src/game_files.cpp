@@ -324,6 +324,9 @@ result::Status GameFiles::readMods(game_content::GameContent* content) {
         cooked.push_back(std::move(read));
     }
     RAWFRAME_TRY(checkMods(description_, game->reference.subject, mods, held));
+    for (const game_content::ComposedBuild& build : content->composedMods()) {
+        modBuilds_.push_back(build.reference);
+    }
     // Taken: each contributed scene, as the mod's record names it.
     for (std::size_t at = 0; at < mods.size(); ++at) {
         for (const ModContribution& contribution : mods[at].description.contributions) {

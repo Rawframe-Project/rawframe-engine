@@ -137,6 +137,9 @@ public:
         RAWFRAME_TRY(kScenes.addModScenes(files, game_.spawns));
         RAWFRAME_TRY(kScenes.addPrefabs(files, prefabs_));
         RAWFRAME_TRY(planReplication(files.digest()));
+        for (const content::BuildReference& build : files.modBuilds()) {
+            mods_.push_back(world_snapshot::CheckpointMod{.subject = build.subject, .version = build.version});
+        }
         RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planInterest());
         RAWFRAME_TRY(planPhysics());
@@ -447,7 +450,7 @@ public:
         return &projection_;
     }
     world_snapshot::CheckpointIdentity identity() const noexcept override {
-        return world_snapshot::CheckpointIdentity{.schema = fingerprint_.bytes};
+        return world_snapshot::CheckpointIdentity{.schema = fingerprint_.bytes, .mods = mods_};
     }
 
     result::Result<const world_save::SaveDeclaration*> saveDeclaration() const override {
@@ -884,6 +887,8 @@ private:
     std::vector<schema::ComponentTypeId> playerComponents_;
     std::optional<world_replication::ComponentCodec> input_;
     network::Fingerprint fingerprint_;
+    /// The mods the game runs with, as a checkpoint records them.
+    std::vector<world_snapshot::CheckpointMod> mods_;
     std::vector<schema::ComponentTypeId> predicted_;
     std::vector<schema::ComponentTypeId> nearby_;
     kest::MachineLimits predictionLimits_;

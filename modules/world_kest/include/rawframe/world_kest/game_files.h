@@ -15,6 +15,7 @@
 #include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/participant.h"
+#include "rawframe/content/composition_record.h"
 #include "rawframe/content/identity.h"
 #include "rawframe/game_content/game_content.h"
 #include "rawframe/kest/program.h"
@@ -153,6 +154,11 @@ public:
     [[nodiscard]] const std::vector<GameModScene>& modScenes() const noexcept {
         return modScenes_;
     }
+    /// The Builds of the taken mods, as the Composition names them: in
+    /// subject order, each subject once.
+    [[nodiscard]] const std::vector<content::BuildReference>& modBuilds() const noexcept {
+        return modBuilds_;
+    }
     /// The programs of the taken mods that handle events, in the record's
     /// mod order.
     [[nodiscard]] const std::vector<GameModProgram>& modPrograms() const noexcept {
@@ -228,6 +234,7 @@ private:
     std::vector<Program> programs_;
     std::vector<physics3d::BodyMesh> meshes_;
     std::vector<GameText> texts_;
+    std::vector<content::BuildReference> modBuilds_;
     std::vector<GameModScene> modScenes_;
     std::vector<GameModProgram> modPrograms_;
     /// The digest of each mesh's cooked bytes, in the same order.

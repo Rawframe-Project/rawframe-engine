@@ -6,7 +6,8 @@
 # sting's handler, on its own untrusted machine, counts every hit a second
 # time, so each score kept has an even count of hits taken. A mod whose range
 # the game's Mod API version is outside, and one whose timer is also
-# persistent, are refused before any World runs.
+# persistent, are refused before any World runs. A checkpoint taken with a
+# mod is refused without it, naming the mod removed (D197).
 #
 # usage: runners_with_mod.sh <rawframe-arena> <rawframe-cook> <rawframe-build> <repository> <work directory>
 set -euo pipefail
@@ -85,6 +86,7 @@ bots.endpoint = arena
 bots.session = runner
 save.directory = $work/saves
 save.namespace = 72756e6e657273000000000000000001
+${3:-}
 CONF
     (cd "$work/elsewhere" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson" 2>"$work/errors.txt")
 }
@@ -107,12 +109,23 @@ grep -q "holds the point's component and nothing else" "$work/log.ndjson"
 
 run "$work/plain.composition"
 plain=$(entities)
-run "$work/modded.composition"
+run "$work/modded.composition" 30 "checkpoint.capture_ticks = 10
+checkpoint.capture_prefix = $work/modded-"
 modded=$(entities)
 if [ "$modded" -ne $((plain + 2)) ]; then
     echo "the mod's two timers did not join the World: $plain without it, $modded with it" >&2
     exit 1
 fi
+
+# A checkpoint knows the mods it ran with (D197): restored without the mod,
+# it is refused naming the mod removed; with it, it restores.
+if run "$work/plain.composition" 30 "checkpoint.restore = $work/modded-10.rfsn"; then
+    echo "a checkpoint taken with a mod was restored without it" >&2
+    exit 1
+fi
+grep -q "another set of mods.*removed: rawframe/runners-timers@" "$work/log.ndjson"
+run "$work/modded.composition" 30 "checkpoint.restore = $work/modded-10.rfsn"
+grep -q '"code":"checkpoint_restored"' "$work/log.ndjson"
 
 # Stung: the handler is loaded, and every score kept has taken hits in twos.
 rm -rf "$work/saves"
@@ -141,4 +154,4 @@ if [ "$total" -eq 0 ]; then
     echo "no runner was hit, so the handler proved nothing" >&2
     exit 1
 fi
-echo "mod taken: $plain entities without it, $modded with it; stung hits $total"
+echo "mod taken: $plain entities without it, $modded with it; stung hits $total; checkpoints know their mods"
