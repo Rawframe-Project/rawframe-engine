@@ -254,10 +254,12 @@ RAWFRAME_TEST(AFullListenerRefuses) {
 // MsQuic and MsQuic has not yet released is held across its connections as
 // well as per connection. Past the aggregate a datagram is lost and a stream
 // send closes its connection, since a reliable stream cannot lose bytes.
+// Each send here passes the aggregate alone, so how soon MsQuic releases
+// earlier ones does not matter.
 RAWFRAME_TEST(WhatWaitsToBeSentIsHeldAcrossConnections) {
     RAWFRAME_EXPECT(!QuicNetwork::create(QuicSettings{.maximumSendingBytesInAll = 0}).has_value());
     const auto kIdentity = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
-    auto network = QuicNetwork::create(QuicSettings{.certificate = kIdentity, .maximumSendingBytesInAll = 3000});
+    auto network = QuicNetwork::create(QuicSettings{.certificate = kIdentity, .maximumSendingBytesInAll = 900});
     auto clients = QuicNetwork::create(QuicSettings{.pin = *network_quic::fingerprintOf(kIdentity)});
     RAWFRAME_EXPECT(network.has_value() && clients.has_value());
     if (!network.has_value() || !clients.has_value()) {
@@ -280,20 +282,18 @@ RAWFRAME_TEST(WhatWaitsToBeSentIsHeldAcrossConnections) {
     }
     const ConnectionId kPeer = accepted->connection;
 
-    // A burst past the aggregate: the first datagrams go, the rest are lost.
-    const std::vector<std::byte> kDatagram(1000);
-    for (int sent = 0; sent < 32; ++sent) {
-        RAWFRAME_EXPECT(server->sendDatagram(kPeer, kDatagram).has_value());
-    }
-    RAWFRAME_EXPECT(server->statistics().datagramsDropped > 0);
+    // A datagram past the aggregate is lost, counted as dropped.
+    const std::uint64_t kDroppedBefore = server->statistics().datagramsDropped;
+    RAWFRAME_EXPECT(server->sendDatagram(kPeer, std::vector<std::byte>(1000)).has_value());
+    RAWFRAME_EXPECT(server->statistics().datagramsDropped == kDroppedBefore + 1);
 
-    // A stream send larger than the aggregate closes its connection.
+    // So is a stream send, and its connection closes.
     const auto kStream = server->openStream(kPeer, false);
     RAWFRAME_EXPECT(kStream.has_value());
     if (!kStream.has_value()) {
         return;
     }
-    const auto kRefused = server->send(kPeer, *kStream, std::vector<std::byte>(3500));
+    const auto kRefused = server->send(kPeer, *kStream, std::vector<std::byte>(1000));
     RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().errorClass() == result::ErrorClass::ResourceExhausted);
     RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}}, [&] {
         const Event* closed = find(serverEvents, EventKind::Closed);
