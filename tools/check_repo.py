@@ -66,12 +66,25 @@ def read_modules():
     return allowed
 
 
+HOST_NAME = re.compile(r"rawframe_host\(NAME ([a-z0-9_]+)")
+
+
+def row_of(relative):
+    """A module's row is its directory's name; a host's is the name its
+    CMakeLists.txt gives it, which may differ (hosts/build is build_tool)."""
+    if relative.parts[0] == "hosts":
+        found = HOST_NAME.search((ROOT / "hosts" / relative.parts[1] / "CMakeLists.txt").read_text())
+        if found:
+            return found.group(1)
+    return relative.parts[1]
+
+
 def check_boundaries(files, allowed, findings):
     for path in files:
         relative = path.relative_to(ROOT)
         if relative.parts[0] not in ("modules", "hosts") or path.suffix not in SOURCE_SUFFIXES:
             continue
-        module = relative.parts[1]
+        module = row_of(relative)
         if module not in allowed:
             findings.append(f"{relative}: module '{module}' is not listed in tools/modules.txt")
             continue
