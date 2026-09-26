@@ -126,6 +126,10 @@ summary = first("memory_summary")
 if summary:
     line += "; attributed %.1f MiB, files %.1f MiB, unattributed %.1f MiB" % (
         summary["attributedBytes"] / 2**20, summary["fileBackedBytes"] / 2**20, summary["unattributedBytes"] / 2**20)
+    # Of the unattributed, as the allocator counts it (D233).
+    line += " (heap unclaimed %.1f, allocator free %.1f, outside the heap %.1f)" % (
+        summary["heapUnclaimedBytes"] / 2**20, summary["allocatorFreeBytes"] / 2**20,
+        summary["outsideHeapBytes"] / 2**20)
 if degraded:
     line += "; degraded %d times" % len(degraded)
 if ready > 128 or peak > 512 or degraded or stopped["exit"] != "clean_stop" or \

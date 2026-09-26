@@ -492,6 +492,7 @@ struct Host::State {
         }
         resident = base::residentBytes().value_or(0);
         fileBacked = base::fileResidentBytes().value_or(0);
+        heap = base::heapUsage().value_or(base::HeapUsage{});
     }
 
     /// Once, at stop: each participant's attribution, then the process's.
@@ -509,14 +510,29 @@ struct Host::State {
                          diagnostics::field("steadyBytes", each.steady),
                          diagnostics::field("peakBytes", each.peak)});
         }
+        const std::uint64_t kUnattributed = resident > attributed + fileBacked ? resident - attributed - fileBacked : 0;
+        // The unattributed remainder split by the allocator's count (D233):
+        // heap no participant claims (MsQuic's pools, diagnostics, the
+        // Host's own), the allocator's free space, and what lies outside
+        // the heap (stacks, static data). The allocator counts pages it has
+        // not touched yet, which are not resident, so each part is capped
+        // by what is left of the remainder: an estimate, nought where the
+        // platform does not say.
+        const std::uint64_t kHeapUnclaimed =
+            std::min(heap.inUseBytes > attributed ? heap.inUseBytes - attributed : 0, kUnattributed);
+        const std::uint64_t kAllocatorFree = std::min(heap.freeBytes, kUnattributed - kHeapUnclaimed);
+        const std::uint64_t kOutsideHeap = kUnattributed - kHeapUnclaimed - kAllocatorFree;
         emitter.log(Severity::Info,
                     kMemorySummary,
                     "memory the process holds, and how much of it participants account for",
                     {diagnostics::field("residentBytes", resident),
                      diagnostics::field("fileBackedBytes", fileBacked),
                      diagnostics::field("attributedBytes", attributed),
-                     diagnostics::field("unattributedBytes",
-                                        resident > attributed + fileBacked ? resident - attributed - fileBacked : 0)});
+                     diagnostics::field("unattributedBytes", kUnattributed),
+                     diagnostics::field("heapInUseBytes", heap.inUseBytes),
+                     diagnostics::field("heapUnclaimedBytes", kHeapUnclaimed),
+                     diagnostics::field("allocatorFreeBytes", kAllocatorFree),
+                     diagnostics::field("outsideHeapBytes", kOutsideHeap)});
     }
 
     /// The worst of the participants' reports and the Host's own watch on its
@@ -637,6 +653,7 @@ struct Host::State {
     /// backed by files.
     std::uint64_t resident = 0;
     std::uint64_t fileBacked = 0;
+    base::HeapUsage heap;
     /// When the Host was made, as near the process's start as it sees.
     execution::MonotonicInstant born;
 };

@@ -2,6 +2,10 @@
 
 #include <algorithm>
 
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
+
 #if defined(__linux__)
 #include <array>
 #include <charconv>
@@ -73,6 +77,17 @@ std::optional<std::uint64_t> residentBytes() noexcept {
 
 std::optional<std::uint64_t> fileResidentBytes() noexcept {
     return statm(2);
+}
+
+std::optional<HeapUsage> heapUsage() noexcept {
+#if defined(__GLIBC__)
+    // Small blocks in use and large ones mapped on their own; free space the
+    // arenas hold.
+    const struct mallinfo2 kInfo = ::mallinfo2();
+    return HeapUsage{.inUseBytes = kInfo.uordblks + kInfo.hblkhd, .freeBytes = kInfo.fordblks};
+#else
+    return std::nullopt;
+#endif
 }
 
 std::optional<std::uint64_t> peakResidentBytes() noexcept {
