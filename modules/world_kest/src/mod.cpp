@@ -154,19 +154,24 @@ result::Result<ModDescription> parseMod(std::string_view text) {
                 return badLine(number, "a mod handles an event with each function once, `handle <point> <function>`");
             }
             mod.handlers.push_back(ModHandler{.point = std::string{kWords[1]}, .function = std::string{kWords[2]}});
+        } else if (kWords[0] == "provide") {
+            if (kWords.size() != 3 || std::ranges::contains(mod.providers, kWords[1], &ModProvider::point)) {
+                return badLine(number, "a mod provides each service once, `provide <point> <function>`");
+            }
+            mod.providers.push_back(ModProvider{.point = std::string{kWords[1]}, .function = std::string{kWords[2]}});
         } else {
-            return badLine(number, "a mod description line is target, modapi, contribute, program, or handle");
+            return badLine(number, "a mod description line is target, modapi, contribute, program, handle, or provide");
         }
-        if (mod.contributions.size() + mod.handlers.size() > kMaximumModContributions) {
+        if (mod.contributions.size() + mod.handlers.size() + mod.providers.size() > kMaximumModContributions) {
             return badLine(number, "a mod contributes and handles more than the limit");
         }
     }
     if (targetLine == 0 || modApiLine == 0) {
         return badLine(number, "a mod names its target and its Mod API range");
     }
-    if (mod.handlers.empty() != mod.program.empty()) {
+    if ((mod.handlers.empty() && mod.providers.empty()) != mod.program.empty()) {
         return badLine(programLine != 0 ? programLine : number,
-                       "a mod with handlers names their program, and only then");
+                       "a mod with handlers or providers names their program, and only then");
     }
     return mod;
 }

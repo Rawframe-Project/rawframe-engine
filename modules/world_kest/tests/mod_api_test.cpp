@@ -287,6 +287,51 @@ RAWFRAME_TEST(AnEventPointTakesHandlersAfterASystem) {
                                 "fan/horde:a fan/more:b"));
 }
 
+RAWFRAME_TEST(AServicePointTakesOneProvider) {
+    const auto kGame =
+        parseGame(kBase + "mods open\nmodapi raid 1\nextension bounty service raid.rules exclusive required\n"
+                          "extension spawned data raid.enemy multi\n");
+    RAWFRAME_EXPECT(kGame.has_value());
+    if (!kGame.has_value()) {
+        return;
+    }
+    const auto& kPoint = kGame->mods.points[0];
+    RAWFRAME_EXPECT(kPoint.kind == world_kest::GameExtensionPoint::Kind::Service && kPoint.accepts == "raid.rules" &&
+                    kPoint.exclusive && kPoint.required);
+    // Exclusive only, of a declared component, with nothing more; and no
+    // replacement points yet.
+    for (const std::string_view kLine : {"extension bounty service raid.rules multi\n",
+                                         "extension bounty service raid.boss exclusive\n",
+                                         "extension bounty service raid.rules after x exclusive\n",
+                                         "extension bounty replacement raid.rules exclusive\n"}) {
+        RAWFRAME_EXPECT(refused("modapi raid 1\n" + std::string{kLine}));
+    }
+
+    // A mod provides a service with a function of its one program.
+    const auto kMod = world_kest::parseMod("target acme/raid\nmodapi 1\nprogram b.kest\nprovide bounty double\n");
+    RAWFRAME_EXPECT(kMod.has_value() && kMod->providers.size() == 1 && kMod->providers[0].function == "double" &&
+                    kMod->handlers.empty());
+    for (const std::string_view kText : {"target acme/raid\nmodapi 1\nprovide bounty double\n",
+                                         "target acme/raid\nmodapi 1\nprogram b.kest\nprovide bounty double\n"
+                                         "provide bounty triple\n",
+                                         "target acme/raid\nmodapi 1\nprogram b.kest\nprovide bounty\n"}) {
+        RAWFRAME_EXPECT(!world_kest::parseMod(kText).has_value());
+    }
+    const std::string kProvider = "target acme/raid\nmodapi 1\nprogram b.kest\nprovide bounty double\n";
+    const std::vector<world_kest::ComposedMod> kProvided = {modOf("fan/bounty", kProvider)};
+    RAWFRAME_EXPECT(world_kest::checkMods(*kGame, "acme/raid", kProvided, {}).has_value());
+    // Required: someone provides it. Only to a service point. One provider,
+    // and two are both named.
+    RAWFRAME_EXPECT(refusedWith(*kGame, {}, "bounty", {}));
+    RAWFRAME_EXPECT(refusedWith(
+        *kGame, {modOf("fan/bounty", "target acme/raid\nmodapi 1\nprogram b.kest\nprovide spawned x\n")}, "spawned"));
+    RAWFRAME_EXPECT(
+        refusedWith(*kGame,
+                    {modOf("fan/bounty", kProvider),
+                     modOf("fan/more", "target acme/raid\nmodapi 1\nprogram m.kest\nprovide bounty half\n")},
+                    "fan/bounty:double fan/more:half"));
+}
+
 RAWFRAME_TEST(EveryLimitPointHoldsAtItsValue) {
     // SPEC-0042's named limit points (D195): at the value read, one past it
     // refused.

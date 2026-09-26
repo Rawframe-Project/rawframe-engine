@@ -301,17 +301,22 @@ enum class ModPolicy : std::uint8_t {
 /// [write <component>]... multi|exclusive [required]`, takes handlers: Kest
 /// functions of a mod's own untrusted machine, run as systems right after
 /// the game's system, over the entities holding the event's component, which
-/// they read, and the components the point lets them write (D181).
+/// they read, and the components the point lets them write (D181). A
+/// `service` point, from `extension <name> service <component> exclusive
+/// [required]`, takes one provider: a Kest function of a mod's machine that
+/// the game calls through the door `Mods.<name>(value: T) -> T`, T the
+/// component's type, and that rewrites the value it is lent (D199).
 struct GameExtensionPoint {
     enum class Kind : std::uint8_t {
         Data,
-        Event
+        Event,
+        Service
     };
     /// Its identity is `<namespace>/<name>`.
     std::string name;
     Kind kind = Kind::Data;
-    /// The component each contribution is a value of, or that an event's
-    /// entities hold.
+    /// The component each contribution is a value of, that an event's
+    /// entities hold, or whose type a service call takes and answers.
     std::string accepts;
     /// An event's: the game system its handlers run after, and what they
     /// may write.

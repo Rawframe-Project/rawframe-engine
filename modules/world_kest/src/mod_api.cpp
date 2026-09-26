@@ -76,13 +76,20 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
         lines.firstApproval = lines.firstApproval == 0 ? line : lines.firstApproval;
         return {};
     }
-    // `extension <name> data <component> multi|exclusive [required]`, or
+    // `extension <name> data <component> multi|exclusive [required]`,
     // `extension <name> event <component> after <system> [write
-    // <component>]... multi|exclusive [required]`.
-    if (words.size() >= 3 && (words[2] == "service" || words[2] == "replacement")) {
+    // <component>]... multi|exclusive [required]`, or `extension <name>
+    // service <component> exclusive [required]`.
+    if (words.size() >= 3 && words[2] == "replacement") {
         return badLine(line,
                        WorldKestError::BadGameLine,
-                       "service and replacement points are not built yet; a point is `data` or `event`");
+                       "replacement points are not built yet; a point is `data`, `event`, or `service`");
+    }
+    if (words.size() >= 5 && words[2] == "service" && words[4] == "multi") {
+        return badLine(line,
+                       WorldKestError::BadGameLine,
+                       "a service point is exclusive: a call has one answer, and more than one provider would "
+                       "leave which answers to order");
     }
     const bool kRequired = words.size() >= 5 && words.back() == "required";
     const std::span<const std::string_view> kBody = words.first(words.size() - (kRequired ? 1 : 0));
@@ -111,6 +118,9 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
                      !std::ranges::contains(point.writes, kClauses[at + 1]);
             point.writes.emplace_back(kClauses[at + 1]);
         }
+    } else if (shaped && kBody[2] == "service") {
+        point.kind = GameExtensionPoint::Kind::Service;
+        shaped = kBody.size() == 5 && point.exclusive;
     } else {
         shaped = shaped && kBody.size() == 5 && kBody[2] == "data";
     }
@@ -118,8 +128,8 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
         return badLine(line,
                        WorldKestError::BadGameLine,
                        "a game declares each point once, `extension <name> data <component> multi|exclusive "
-                       "[required]` or `extension <name> event <component> after <system> [write <component>]... "
-                       "multi|exclusive [required]`");
+                       "[required]`, `extension <name> event <component> after <system> [write <component>]... "
+                       "multi|exclusive [required]`, or `extension <name> service <component> exclusive [required]`");
     }
     if (mods.points.size() == kMaximumExtensionPoints) {
         return badLine(line, WorldKestError::BadGameLine, "a game declares more extension points than the limit");

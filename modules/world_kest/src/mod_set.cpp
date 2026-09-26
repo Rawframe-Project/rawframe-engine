@@ -62,6 +62,14 @@ result::Status checkMods(const GameDescription& game,
                                                           .withContext("point", handler.point)};
             }
         }
+        for (const ModProvider& provider : mod.description.providers) {
+            if (!kKnown(provider.point, GameExtensionPoint::Kind::Service)) {
+                return std::unexpected<result::Error>{
+                    refused("a mod provides a service point the game does not declare")
+                        .withContext("mod", mod.subject)
+                        .withContext("point", provider.point)};
+            }
+        }
     }
     // Occupancy, over every mod at once: never decided by order.
     for (const GameExtensionPoint& point : api.points) {
@@ -73,6 +81,14 @@ result::Status checkMods(const GameDescription& game,
                     // Named only where an exclusive point's refusal needs them.
                     if (point.exclusive) {
                         claimants += (count == 0 ? "" : " ") + mod.subject + ":" + contribution.scene;
+                    }
+                    ++count;
+                }
+            }
+            for (const ModProvider& provider : mod.description.providers) {
+                if (provider.point == point.name) {
+                    if (point.exclusive) {
+                        claimants += (count == 0 ? "" : " ") + mod.subject + ":" + provider.function;
                     }
                     ++count;
                 }
