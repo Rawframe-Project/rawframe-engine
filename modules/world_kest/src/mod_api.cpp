@@ -29,7 +29,8 @@ bool validName(std::string_view name) noexcept {
 } // namespace
 
 bool modKeyword(std::string_view keyword) noexcept {
-    return keyword == "mods" || keyword == "modapi" || keyword == "approve" || keyword == "extension";
+    return keyword == "mods" || keyword == "modapi" || keyword == "approve" || keyword == "extension" ||
+           keyword == "prefer";
 }
 
 result::Status
@@ -74,6 +75,26 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
         }
         mods.approved.emplace_back(words[1]);
         lines.firstApproval = lines.firstApproval == 0 ? line : lines.firstApproval;
+        return {};
+    }
+    if (kKeyword == "prefer") {
+        // `prefer <point> <publisher/name>...`: which mod keeps an exclusive
+        // point several claim, in the game's order (SPEC-0042 question 6,
+        // D202).
+        std::vector<std::string> subjects;
+        bool valid = words.size() >= 3 && validName(words[1]) &&
+                     !std::ranges::contains(lines.preferences, words[1], &ModLines::Preference::point);
+        for (std::size_t at = 2; valid && at < words.size(); ++at) {
+            valid = content::validSubject(words[at]) && !std::ranges::contains(subjects, words[at]);
+            subjects.emplace_back(words[at]);
+        }
+        if (!valid) {
+            return badLine(line,
+                           WorldKestError::BadGameLine,
+                           "a game prefers mods on a point once, `prefer <point> <publisher/name>...`");
+        }
+        lines.preferences.push_back(
+            ModLines::Preference{.line = line, .point = std::string{words[1]}, .subjects = std::move(subjects)});
         return {};
     }
     // `extension <name> data <component> multi|exclusive [required]`,
@@ -145,8 +166,15 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
     return {};
 }
 
-result::Status checkModApi(const GameDescription& game, const ModLines& lines) {
-    const GameModApi& mods = game.mods;
+result::Status checkModApi(GameDescription& game, const ModLines& lines) {
+    GameModApi& mods = game.mods;
+    for (const ModLines::Preference& preference : lines.preferences) {
+        const auto kPoint = std::ranges::find(mods.points, preference.point, &GameExtensionPoint::name);
+        if (kPoint == mods.points.end() || !kPoint->exclusive) {
+            return badLine(preference.line, WorldKestError::UnknownName, "a game prefers mods on an exclusive point");
+        }
+        kPoint->preferred = preference.subjects;
+    }
     if ((mods.policy != ModPolicy::Closed || !mods.points.empty()) && lines.modApi == 0) {
         return badLine(std::max(lines.policy, lines.firstPoint),
                        WorldKestError::BadGameLine,

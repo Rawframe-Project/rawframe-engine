@@ -15,10 +15,10 @@ result::Error refused(std::string_view why) {
 
 } // namespace
 
-result::Status checkMods(const GameDescription& game,
-                         std::string_view gameSubject,
-                         std::span<const ComposedMod> mods,
-                         std::span<const std::string> gameHolds) {
+result::Result<std::vector<SetAsideClaim>> checkMods(const GameDescription& game,
+                                                     std::string_view gameSubject,
+                                                     std::span<const ComposedMod> mods,
+                                                     std::span<const std::string> gameHolds) {
     const GameModApi& api = game.mods;
     if (mods.size() > content::kMaximumCompositionMods) {
         return std::unexpected<result::Error>{refused("more mods than a Composition names")};
@@ -80,42 +80,62 @@ result::Status checkMods(const GameDescription& game,
         }
     }
     // Occupancy, over every mod at once: never decided by order.
+    std::vector<SetAsideClaim> setAside;
     for (const GameExtensionPoint& point : api.points) {
         std::string claimants;
         std::size_t count = 0;
-        for (const ComposedMod& mod : mods) {
+        // How many claims each mod makes on the point.
+        std::vector<std::size_t> claims(mods.size(), 0);
+        for (std::size_t at = 0; at < mods.size(); ++at) {
+            const ComposedMod& mod = mods[at];
+            const auto kClaim = [&](std::string_view what) {
+                // Named only where an exclusive point's refusal needs them.
+                if (point.exclusive) {
+                    claimants += (count == 0 ? "" : " ") + mod.subject + ":" + std::string{what};
+                }
+                ++count;
+                ++claims[at];
+            };
             for (const ModContribution& contribution : mod.description.contributions) {
                 if (contribution.point == point.name) {
-                    // Named only where an exclusive point's refusal needs them.
-                    if (point.exclusive) {
-                        claimants += (count == 0 ? "" : " ") + mod.subject + ":" + contribution.scene;
-                    }
-                    ++count;
+                    kClaim(contribution.scene);
                 }
             }
             for (const ModReplacement& replacement : mod.description.replacements) {
                 if (replacement.point == point.name) {
-                    if (point.exclusive) {
-                        claimants += (count == 0 ? "" : " ") + mod.subject + ":" + replacement.function;
-                    }
-                    ++count;
+                    kClaim(replacement.function);
                 }
             }
             for (const ModProvider& provider : mod.description.providers) {
                 if (provider.point == point.name) {
-                    if (point.exclusive) {
-                        claimants += (count == 0 ? "" : " ") + mod.subject + ":" + provider.function;
-                    }
-                    ++count;
+                    kClaim(provider.function);
                 }
             }
             for (const ModHandler& handler : mod.description.handlers) {
                 if (handler.point == point.name) {
-                    if (point.exclusive) {
-                        claimants += (count == 0 ? "" : " ") + mod.subject + ":" + handler.function;
-                    }
-                    ++count;
+                    kClaim(handler.function);
                 }
+            }
+        }
+        // The game's own order settles an exclusive point: the first mod it
+        // prefers that makes one claim keeps it, and every other mod's claims
+        // on it are set aside (D202).
+        if (point.exclusive && count > 1) {
+            const auto kKeeps = [&](const std::string& subject) {
+                const auto kMod = std::ranges::find(mods, subject, &ComposedMod::subject);
+                return kMod != mods.end() && claims[static_cast<std::size_t>(kMod - mods.begin())] > 0;
+            };
+            const auto kKeeper = std::ranges::find_if(point.preferred, kKeeps);
+            const auto kMod = kKeeper == point.preferred.end()
+                                  ? mods.end()
+                                  : std::ranges::find(mods, *kKeeper, &ComposedMod::subject);
+            if (kMod != mods.end() && claims[static_cast<std::size_t>(kMod - mods.begin())] == 1) {
+                for (std::size_t at = 0; at < mods.size(); ++at) {
+                    if (claims[at] > 0 && at != static_cast<std::size_t>(kMod - mods.begin())) {
+                        setAside.push_back(SetAsideClaim{.mod = mods[at].subject, .point = point.name});
+                    }
+                }
+                count = 1;
             }
         }
         const std::size_t kLimit =
@@ -139,7 +159,7 @@ result::Status checkMods(const GameDescription& game,
                 refused("a required point is filled by no mod and not by the game").withContext("point", point.name)};
         }
     }
-    return {};
+    return setAside;
 }
 
 } // namespace rawframe::world_kest

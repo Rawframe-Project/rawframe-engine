@@ -306,7 +306,7 @@ result::Status GameFiles::readMods(game_content::GameContent* content) {
     }
     const game_content::ComposedBuild* game = content != nullptr ? content->composedGame() : nullptr;
     if (game == nullptr) {
-        return checkMods(description_, "", {}, held);
+        return checkMods(description_, "", {}, held).transform([](const std::vector<SetAsideClaim>&) {});
     }
     const content::ResourceTypeId kModType{kCookedModType};
     const content::ResourceTypeId kSceneType{scene::kSceneType};
@@ -333,7 +333,23 @@ result::Status GameFiles::readMods(game_content::GameContent* content) {
         mods.push_back(ComposedMod{.subject = build.reference.subject, .description = std::move(description)});
         cooked.push_back(std::move(read));
     }
-    RAWFRAME_TRY(checkMods(description_, game->reference.subject, mods, held));
+    RAWFRAME_TRY_ASSIGN(setAside_, checkMods(description_, game->reference.subject, mods, held));
+    // A claim the game's preference gave another mod is taken no further.
+    for (const SetAsideClaim& claim : setAside_) {
+        ModDescription& description = std::ranges::find(mods, claim.mod, &ComposedMod::subject)->description;
+        std::erase_if(description.contributions, [&claim](const ModContribution& each) {
+            return each.point == claim.point;
+        });
+        std::erase_if(description.handlers, [&claim](const ModHandler& each) {
+            return each.point == claim.point;
+        });
+        std::erase_if(description.providers, [&claim](const ModProvider& each) {
+            return each.point == claim.point;
+        });
+        std::erase_if(description.replacements, [&claim](const ModReplacement& each) {
+            return each.point == claim.point;
+        });
+    }
     for (const game_content::ComposedBuild& build : content->composedMods()) {
         modBuilds_.push_back(build.reference);
     }

@@ -330,6 +330,10 @@ struct GameExtensionPoint {
     std::vector<std::string> writes;
     /// At most one contribution; otherwise any number.
     bool exclusive = false;
+    /// For an exclusive point, from a `prefer <point> <publisher/name>...`
+    /// line: when several mods claim it, the first of these that does keeps
+    /// it, and the others' claims on it are set aside (D202).
+    std::vector<std::string> preferred;
     /// At least one contribution, or the Composition is invalid.
     bool required = false;
 };

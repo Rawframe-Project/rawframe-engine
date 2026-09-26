@@ -324,6 +324,7 @@ public:
                                diagnostics::field("modHandlers", modHandlerCount_),
                                diagnostics::field("modProviders", modProviderCount_),
                                diagnostics::field("modReplacements", modReplacementCount_),
+                               diagnostics::field("modClaimsSetAside", files_->setAside().size()),
                                diagnostics::field("entities", spawned)});
         return {};
     }

@@ -367,6 +367,51 @@ RAWFRAME_TEST(AReplacementPointTakesOneFunctionForASystem) {
         *kGame, {modOf("fan/brawl", "target acme/raid\nmodapi 1\nprogram f.kest\nreplace spawned x\n")}, "spawned"));
 }
 
+RAWFRAME_TEST(AGamesPreferenceSettlesAnExclusivePoint) {
+    const std::string kPoints = "mods open\nmodapi raid 1\nextension rules data raid.rules exclusive\n"
+                                "extension enemies data raid.enemy multi\n";
+    const auto kGame = parseGame(kBase + kPoints + "prefer rules fan/horde fan/bosses\n");
+    const std::vector<std::string> kPreferred = {"fan/horde", "fan/bosses"};
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->mods.points[0].preferred == kPreferred);
+    if (!kGame.has_value()) {
+        return;
+    }
+    // Only on an exclusive point the game declares, once, naming each mod
+    // once.
+    for (const std::string_view kLine : {"prefer enemies fan/horde\n",
+                                         "prefer bosses fan/horde\n",
+                                         "prefer rules\n",
+                                         "prefer rules fan/horde fan/horde\n",
+                                         "prefer rules horde\n",
+                                         "prefer rules fan/horde\nprefer rules fan/bosses\n"}) {
+        RAWFRAME_EXPECT(refused(kPoints + std::string{kLine}));
+    }
+    const auto kClaim = [](std::string subject, std::string_view scenes) {
+        return modOf(std::move(subject), "target acme/raid\nmodapi 1\n" + std::string{scenes});
+    };
+    // The first preferred claimant keeps the point; the other's claim on it
+    // alone is set aside.
+    const std::vector<world_kest::ComposedMod> kBoth = {
+        kClaim("fan/bosses", "contribute rules hard.scene\ncontribute enemies boss.scene\n"),
+        kClaim("fan/horde", "contribute rules easy.scene\n")};
+    const auto kSettled = world_kest::checkMods(*kGame, "acme/raid", kBoth, {});
+    RAWFRAME_EXPECT(kSettled.has_value() && kSettled->size() == 1 && (*kSettled)[0].mod == "fan/bosses" &&
+                    (*kSettled)[0].point == "rules");
+    // No preferred claimant, or the preferred one claiming twice: the
+    // conflict stands, every claimant named.
+    RAWFRAME_EXPECT(refusedWith(
+        *kGame,
+        {kClaim("fan/other", "contribute rules a.scene\n"), kClaim("fan/third", "contribute rules b.scene\n")},
+        "fan/other:a.scene fan/third:b.scene"));
+    RAWFRAME_EXPECT(refusedWith(*kGame,
+                                {kClaim("fan/bosses", "contribute rules hard.scene\n"),
+                                 kClaim("fan/horde", "contribute rules easy.scene\ncontribute rules hard.scene\n")},
+                                "fan/horde:hard.scene"));
+    // One claimant needs no preference.
+    const auto kAlone = world_kest::checkMods(*kGame, "acme/raid", std::span{kBoth}.first(1), {});
+    RAWFRAME_EXPECT(kAlone.has_value() && kAlone->empty());
+}
+
 RAWFRAME_TEST(EveryLimitPointHoldsAtItsValue) {
     // SPEC-0042's named limit points (D195): at the value read, one past it
     // refused.

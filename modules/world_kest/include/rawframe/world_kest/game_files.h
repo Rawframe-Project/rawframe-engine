@@ -156,6 +156,11 @@ public:
     [[nodiscard]] const std::vector<GameModScene>& modScenes() const noexcept {
         return modScenes_;
     }
+    /// The claims of taken mods that the game's `prefer` lines set aside
+    /// (D202).
+    [[nodiscard]] const std::vector<SetAsideClaim>& setAside() const noexcept {
+        return setAside_;
+    }
     /// The Builds of the taken mods, as the Composition names them: in
     /// subject order, each subject once.
     [[nodiscard]] const std::vector<content::BuildReference>& modBuilds() const noexcept {
@@ -237,6 +242,7 @@ private:
     std::vector<physics3d::BodyMesh> meshes_;
     std::vector<GameText> texts_;
     std::vector<content::BuildReference> modBuilds_;
+    std::vector<SetAsideClaim> setAside_;
     std::vector<GameModScene> modScenes_;
     std::vector<GameModProgram> modPrograms_;
     /// The digest of each mesh's cooked bytes, in the same order.

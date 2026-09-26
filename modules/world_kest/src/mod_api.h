@@ -8,7 +8,9 @@
 
 #include <cstddef>
 #include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::world_kest {
 
@@ -21,6 +23,14 @@ struct ModLines {
     std::size_t firstPoint = 0;
     /// The Mod API surface's bytes so far.
     std::size_t surfaceBytes = 0;
+    /// Each `prefer` line, its point and subjects, given to the point once
+    /// every point is read.
+    struct Preference {
+        std::size_t line = 0;
+        std::string point;
+        std::vector<std::string> subjects;
+    };
+    std::vector<Preference> preferences;
 };
 
 /// Whether `keyword` begins a Mod API line.
@@ -31,8 +41,9 @@ struct ModLines {
 readModLine(std::span<const std::string_view> words, std::size_t line, GameDescription& game, ModLines& lines);
 
 /// Checks what only the whole description says: a Mod API where there is a
-/// policy other than closed or a point, approvals only where curated, and
-/// each point's component declared.
-[[nodiscard]] result::Status checkModApi(const GameDescription& game, const ModLines& lines);
+/// policy other than closed or a point, approvals only where curated, each
+/// point's component declared, and each `prefer` line on an exclusive point
+/// of its own, which it gives the point.
+[[nodiscard]] result::Status checkModApi(GameDescription& game, const ModLines& lines);
 
 } // namespace rawframe::world_kest
