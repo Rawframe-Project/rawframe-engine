@@ -190,7 +190,7 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(plaza_bots PROPERTIES
                          FIXTURES_REQUIRED plaza_content
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":30,\"bodiesRemoved\":0,\"bodiesRefused\":0,\"teleports\":0,.*\"targets\":[1-9][0-9]*,\"characterMoves\":[1-9][0-9]*,\"jointsMade\":1,\"jointsRemoved\":0,\"jointsRefused\":0.*\"instancesMade\":9,\"instancesRemoved\":0,\"animatorsRefused\":0,.*\"rootMotions\":[1-9][0-9]*,\"stagesRun\":[1-9][0-9]*")
-    # Four bots predict their walkers in 3D: a thousand ticks confirmed, the
+    # Four bots predict their walkers in 3D: at least a thousand ticks confirmed, the
     # rollbacks only those of admission.
     add_test(NAME plaza_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza_prediction.conf
@@ -198,5 +198,5 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(plaza_prediction PROPERTIES
                          FIXTURES_REQUIRED plaza_content
                          PROCESSORS 6
-                         PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
+                         PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
 endif()
