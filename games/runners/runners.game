@@ -47,6 +47,9 @@ modapi runners 1
 extension timers data runners.age multi
 extension hits event runners.hit after runners.hurt write runners.score multi
 extension penalty service runners.penalty exclusive
+# When more than one mod provides the penalty, runners-penalty's is kept and
+# the others' are set aside.
+prefer penalty rawframe/runners-penalty
 extension aging replacement runners.age exclusive
 
 replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter

@@ -19,11 +19,18 @@ repository=$4
 work=$5
 
 rm -rf "$work"
-mkdir -p "$work/game" "$work/mod" "$work/sting" "$work/penalty" "$work/swift" "$work/late" "$work/wide" "$work/elsewhere"
+mkdir -p "$work/game" "$work/mod" "$work/sting" "$work/penalty" "$work/lenient" "$work/swift" "$work/late" "$work/wide" "$work/elsewhere"
 cp -r "$repository/games/runners/." "$work/game/"
 cp -r "$repository/games/runners-timers/." "$work/mod/"
 cp -r "$repository/games/runners-sting/." "$work/sting/"
 cp -r "$repository/games/runners-penalty/." "$work/penalty/"
+# A second provider of the penalty, which costs a hit one: runners prefers
+# runners-penalty's.
+cp -r "$repository/games/runners-penalty/." "$work/lenient/"
+sed -i 's/values\[0\].taken \* 2/values[0].taken/' "$work/lenient/penalty.kest"
+# Resources of its own: a Composition names each resource once.
+sed -i 's/"resourceId": "[0-9a-f]*"/"resourceId": "1e41e470000000000000000000000001"/' "$work/lenient/kest.project.rfmeta"
+sed -i 's/"resourceId": "[0-9a-f]*"/"resourceId": "1e41e470000000000000000000000002"/' "$work/lenient/penalty.mod.rfmeta"
 cp -r "$repository/games/runners-swift/." "$work/swift/"
 cp -r "$repository/games/runners-timers/." "$work/late/"
 sed -i 's/^modapi 1$/modapi >=2/' "$work/late/timers.mod"
@@ -52,6 +59,7 @@ SCENE
 "$cook" "$work/mod" "$work/mod-cooked" >/dev/null
 "$cook" "$work/sting" "$work/sting-cooked" >/dev/null
 "$cook" "$work/penalty" "$work/penalty-cooked" >/dev/null
+"$cook" "$work/lenient" "$work/lenient-cooked" >/dev/null
 "$cook" "$work/swift" "$work/swift-cooked" >/dev/null
 "$cook" "$work/late" "$work/late-cooked" >/dev/null
 "$cook" "$work/wide" "$work/wide-cooked" >/dev/null
@@ -66,6 +74,7 @@ game_root=$(pack "$work/game-cooked" "$work/game-build" rawframe/runners)
 mod_root=$(pack "$work/mod-cooked" "$work/mod-build" rawframe/runners-timers)
 sting_root=$(pack "$work/sting-cooked" "$work/sting-build" rawframe/runners-sting)
 penalty_root=$(pack "$work/penalty-cooked" "$work/penalty-build" rawframe/runners-penalty)
+lenient_root=$(pack "$work/lenient-cooked" "$work/lenient-build" rawframe/runners-lenient)
 swift_root=$(pack "$work/swift-cooked" "$work/swift-build" rawframe/runners-swift)
 late_root=$(pack "$work/late-cooked" "$work/late-build" rawframe/runners-late)
 wide_root=$(pack "$work/wide-cooked" "$work/wide-build" rawframe/runners-wide)
@@ -73,7 +82,8 @@ wide_root=$(pack "$work/wide-cooked" "$work/wide-build" rawframe/runners-wide)
 "$build" compose "$library" "$game_root" tool "$work/modded.composition" --mod "$mod_root" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/stung.composition" --mod "$mod_root" --mod "$sting_root" \
     >/dev/null
-"$build" compose "$library" "$game_root" tool "$work/penalized.composition" --mod "$penalty_root" >/dev/null
+"$build" compose "$library" "$game_root" tool "$work/penalized.composition" --mod "$penalty_root" --mod "$lenient_root" \
+    >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/swift.composition" --mod "$swift_root" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/late.composition" --mod "$late_root" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/wide.composition" --mod "$wide_root" >/dev/null
@@ -172,10 +182,11 @@ run "$work/stung.composition" 600
 grep -q '"code":"game_loaded".*"modHandlers":1' "$work/log.ndjson"
 stung=$(taken_in_twos "runners-sting's handler")
 
-# Penalized: the provider is bound, and every hit costs two taken.
+# Penalized: runners-penalty's provider is bound, the lenient one's claim
+# is set aside by runners' preference (D202), and every hit costs two taken.
 rm -rf "$work/saves"
 run "$work/penalized.composition" 600
-grep -q '"code":"game_loaded".*"modProviders":1' "$work/log.ndjson"
+grep -q '"code":"game_loaded".*"modProviders":1,.*"modClaimsSetAside":1' "$work/log.ndjson"
 penalized=$(taken_in_twos "runners-penalty's provider")
 
 # Swift: the game's age system is replaced by the mod's, and the hall ages
