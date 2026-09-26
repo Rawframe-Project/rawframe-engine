@@ -3,6 +3,7 @@
 
 #include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
+#include "rawframe/world_replication/checksum.h"
 #include "rawframe/world_replication/codec.h"
 #include "rawframe/world_replication/errors.h"
 #include "rawframe/world_replication/records.h"
@@ -238,7 +239,7 @@ RAWFRAME_TEST(HostilePeerPayloadsReadOnlyAsTheyWrite) {
     std::array<std::byte, 256> seed{};
 
     // Client to server: an input window, a state acknowledgement, a
-    // perception context, a mapping acknowledgement.
+    // perception context, a mapping acknowledgement, a checksum.
     const std::array<std::byte, 3> kFirst = {std::byte{1}, std::byte{2}, std::byte{3}};
     const std::array<std::byte, 1> kSecond = {std::byte{9}};
     network::Writer window{seed};
@@ -277,6 +278,12 @@ RAWFRAME_TEST(HostilePeerPayloadsReadOnlyAsTheyWrite) {
         encodeMapping(mapping, MappingRecord{.replicationEpoch = 3, .entity = NetEntityId{77}, .owned = true})
             .has_value());
     const int kMappings = reencodes(mapping.written(), &decodeMapping, &encodeMapping);
+    std::array<std::byte, 32> checksumSeed{};
+    network::Writer checksum{checksumSeed};
+    RAWFRAME_EXPECT(
+        encodeChecksum(checksum, ChecksumRecord{.tick = 4000, .scope = 0xdc31f5d4fc776b6cULL, .checksum = 7})
+            .has_value());
+    const int kChecksums = reencodes(checksum.written(), &decodeChecksum, &encodeChecksum);
 
     // Server to client: a pace signal, and a component value by its codec.
     std::array<std::byte, 16> paceSeed{};
@@ -284,11 +291,55 @@ RAWFRAME_TEST(HostilePeerPayloadsReadOnlyAsTheyWrite) {
     RAWFRAME_EXPECT(encodePace(pace, Pace{.measuredLead = -3, .targetLead = 2}).has_value());
     const int kPaces = reencodes(pace.written(), &decodePace, &encodePace);
 
-    std::printf("  accepted: %d windows, %d acks, %d perceptions, %d mappings, %d paces of 20000 each\n",
+    std::printf("  accepted: %d windows, %d acks, %d perceptions, %d mappings, %d checksums, %d paces of 20000 each\n",
                 kWindows,
                 kAcks,
                 kPerceptions,
                 kMappings,
+                kChecksums,
                 kPaces);
-    RAWFRAME_EXPECT(kWindows > 0 && kAcks > 0 && kPerceptions > 0 && kMappings > 0 && kPaces > 0);
+    RAWFRAME_EXPECT(kWindows > 0 && kAcks > 0 && kPerceptions > 0 && kMappings > 0 && kChecksums > 0 && kPaces > 0);
+}
+
+RAWFRAME_TEST(TheChecksumIsPinned) {
+    // Golden vectors (D203), computed apart from this code: a change to the
+    // algorithm is a new identity, never a quiet change to these.
+    constexpr std::array<schema::ComponentTypeId, 2> kScope = {
+        schema::ComponentTypeId::fromText("6b05cdb4-0683-437a-aaac-7ad990b2ddb4"),
+        schema::ComponentTypeId::fromText("3d8b6f21-7c4e-4a95-b0d3-e6f1a2c95b78")};
+    RAWFRAME_EXPECT(scopeFingerprint(kScope) == 0xdc31f5d4fc776b6cULL);
+    RAWFRAME_EXPECT(scopeFingerprint({}) == 0xd3a3834dfe70caf2ULL);
+    const std::array<std::byte, 3> kValue = {std::byte{1}, std::byte{2}, std::byte{3}};
+    const std::array<std::span<const std::byte>, 2> kBoth = {kValue, std::span<const std::byte>{}};
+    RAWFRAME_EXPECT(predictedChecksum(kBoth) == 0xecf4cf2e9344edf0ULL);
+    RAWFRAME_EXPECT(predictedChecksum(std::span{kBoth}.first(1)) == 0x3393db065a7b1300ULL);
+    // The record: a varint tick, then the scope and the checksum in network
+    // order.
+    std::array<std::byte, 32> buffer{};
+    network::Writer writer{buffer};
+    RAWFRAME_EXPECT(
+        encodeChecksum(writer, ChecksumRecord{.tick = 300, .scope = 0x0102030405060708ULL, .checksum = 9}).has_value());
+    const std::array<std::byte, 18> kExpected = {std::byte{0x41},
+                                                 std::byte{0x2c},
+                                                 std::byte{1},
+                                                 std::byte{2},
+                                                 std::byte{3},
+                                                 std::byte{4},
+                                                 std::byte{5},
+                                                 std::byte{6},
+                                                 std::byte{7},
+                                                 std::byte{8},
+                                                 std::byte{0},
+                                                 std::byte{0},
+                                                 std::byte{0},
+                                                 std::byte{0},
+                                                 std::byte{0},
+                                                 std::byte{0},
+                                                 std::byte{0},
+                                                 std::byte{9}};
+    RAWFRAME_EXPECT(std::ranges::equal(writer.written(), kExpected));
+    const auto kRead = decodeChecksum(kExpected);
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->tick == 300 && kRead->scope == 0x0102030405060708ULL &&
+                    kRead->checksum == 9);
+    RAWFRAME_EXPECT(!decodeChecksum(std::span{kExpected}.first(17)).has_value());
 }

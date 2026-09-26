@@ -33,6 +33,7 @@ inline constexpr std::uint64_t kPacePayload = 2;
 /// Payload types on the input lane (client to server).
 inline constexpr std::uint64_t kInputWindowPayload = 1;
 inline constexpr std::uint64_t kStateAckPayload = 2;
+inline constexpr std::uint64_t kChecksumPayload = 3;
 
 /// `mapping_declare`, `mapping_ack`, `mapping_retire`, and
 /// `mapping_retire_ack` all carry this. `owned` is set only on a declare,
@@ -138,6 +139,18 @@ struct KeptPerception {
 /// nothing and is kept, touching nothing.
 [[nodiscard]] KeptPerception
 keepPerception(PerceptionContext claimed, std::uint64_t arrived, double skew, std::optional<double>& lag) noexcept;
+
+/// SPEC-0041's checksum record: a client's hash of its whole predicted scope
+/// at a confirmed server tick (checksum.h), and the fingerprint of the scope
+/// it hashed.
+struct ChecksumRecord {
+    std::uint64_t tick = 0;
+    std::uint64_t scope = 0;
+    std::uint64_t checksum = 0;
+};
+
+[[nodiscard]] result::Status encodeChecksum(network::Writer& writer, const ChecksumRecord& record);
+[[nodiscard]] result::Result<ChecksumRecord> decodeChecksum(std::span<const std::byte> payload);
 
 [[nodiscard]] result::Status encodeInputWindow(network::Writer& writer, const InputWindow& window);
 /// The decoded commands borrow from `payload`.

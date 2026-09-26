@@ -3,7 +3,7 @@
 # that turns committed World state into state datagrams and input datagrams
 # into World input. Owns NetEntityId.
 rawframe_module(NAME world_replication
-    SOURCES src/client.cpp src/codec.cpp src/interpolation.cpp src/participants.cpp src/prediction.cpp src/records.cpp src/server.cpp
+    SOURCES src/checksum.cpp src/client.cpp src/codec.cpp src/interpolation.cpp src/participants.cpp src/prediction.cpp src/records.cpp src/server.cpp
     DEPS game_content world_runtime network world composition schema execution diagnostics result base
 )
 

@@ -125,6 +125,31 @@ result::Result<StateAck> decodeStateAck(std::span<const std::byte> payload) {
     return ack;
 }
 
+result::Status encodeChecksum(network::Writer& writer, const ChecksumRecord& record) {
+    RAWFRAME_TRY(writer.varint(record.tick));
+    std::array<std::byte, 16> words{};
+    for (std::size_t index = 0; index < 8; ++index) {
+        words[index] = static_cast<std::byte>((record.scope >> (8U * (7 - index))) & 0xFFU);
+        words[8 + index] = static_cast<std::byte>((record.checksum >> (8U * (7 - index))) & 0xFFU);
+    }
+    return writer.bytes(words);
+}
+
+result::Result<ChecksumRecord> decodeChecksum(std::span<const std::byte> payload) {
+    network::Reader reader{payload};
+    ChecksumRecord record;
+    RAWFRAME_TRY_ASSIGN(record.tick, reader.varint());
+    RAWFRAME_TRY_ASSIGN(const std::span<const std::byte> kWords, reader.bytes(16));
+    for (std::size_t index = 0; index < 8; ++index) {
+        record.scope = (record.scope << 8U) | std::to_integer<std::uint64_t>(kWords[index]);
+        record.checksum = (record.checksum << 8U) | std::to_integer<std::uint64_t>(kWords[8 + index]);
+    }
+    if (reader.remaining() != 0) {
+        return malformed("a checksum record has bytes past its end");
+    }
+    return record;
+}
+
 result::Status encodePerception(network::Writer& writer, const PerceptionContext& perception) {
     RAWFRAME_TRY(writer.varint(perception.baseTick));
     const std::array<std::byte, 2> kFraction = {static_cast<std::byte>(perception.fraction >> 8U),
