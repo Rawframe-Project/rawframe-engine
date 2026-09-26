@@ -10,9 +10,5 @@ set(CMAKE_C_COMPILER clang-20)
 set(CMAKE_CXX_COMPILER clang++-20)
 set(CMAKE_C_COMPILER_TARGET wasm32-wasi)
 set(CMAKE_CXX_COMPILER_TARGET wasm32-wasi)
-# A 1 MiB stack: wasm-ld's default of 64 KiB is overflowed by Maul3D's
-# queries, which need between 128 and 256 KiB (D164), and a WebAssembly
-# stack that overflows corrupts the memory below it instead of faulting.
-set(CMAKE_EXE_LINKER_FLAGS_INIT "-Wl,-z,stack-size=1048576")
 set(CMAKE_CROSSCOMPILING_EMULATOR node;--no-warnings;${CMAKE_CURRENT_LIST_DIR}/../tools/wasi_run.mjs)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)

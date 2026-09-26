@@ -21,6 +21,13 @@ endif()
 # lists, the third-party code they need, and the web client host, which is
 # listed there too.
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
+    # A 1 MiB stack: wasm-ld's default of 64 KiB is overflowed by Maul3D's
+    # queries, which need between 128 and 256 KiB (D164), and a WebAssembly
+    # stack that overflows corrupts the memory below it instead of faulting.
+    # A link option, not CMAKE_EXE_LINKER_FLAGS_INIT, which seeds only a new
+    # cache and so never reached a build directory configured before it
+    # (D224).
+    add_link_options("-Wl,-z,stack-size=1048576")
     file(STRINGS "${PROJECT_SOURCE_DIR}/tools/web_modules.txt" rawframe_web_lines REGEX "^[a-z]")
     string(JOIN " " rawframe_web_modules ${rawframe_web_lines})
     separate_arguments(rawframe_web_modules)
