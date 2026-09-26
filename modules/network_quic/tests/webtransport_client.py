@@ -12,7 +12,7 @@ import sys
 
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
-from aioquic.h3.connection import H3_ALPN, FrameType, H3Connection
+from aioquic.h3.connection import H3_ALPN, FrameType, H3Connection, H3Stream
 from aioquic.h3.events import DatagramReceived, HeadersReceived, WebTransportStreamDataReceived
 from aioquic.quic.configuration import QuicConfiguration
 
@@ -65,10 +65,11 @@ async def main(port):
             print(f"webtransport: refused with {status}")
             return 1
         stream = browser.http.create_webtransport_stream(session)
-        # aioquic 0.9 does not mark a two-way stream it opened as the
-        # session's, so it would read the answer as HTTP/3 frames; a browser
-        # reads it as the stream's bytes, and so must this.
-        opened = browser.http._get_or_create_stream(stream)
+        # aioquic does not mark a two-way stream it opened as the session's,
+        # so it would read the answer as HTTP/3 frames; a browser reads it as
+        # the stream's bytes, and so must this. The stream table is reached
+        # directly: 0.9 and 1.x differ in how they hand a stream out.
+        opened = browser.http._stream.setdefault(stream, H3Stream(stream))
         opened.frame_type = FrameType.WEBTRANSPORT_STREAM
         opened.session_id = session
         browser._quic.send_stream_data(stream, b"ping")
