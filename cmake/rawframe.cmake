@@ -58,7 +58,9 @@ if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         /GR-            # no RTTI (ADR-0008)
         /EHs-c-         # no exceptions (ADR-0008)
         -Wpedantic -Wshadow -Wno-missing-field-initializers
-        /fp:precise /clang:-ffp-contract=off  # deterministic simulation
+        # Precise floating point is its default; /fp:precise would be
+        # overridden by the contraction option.
+        /clang:-ffp-contract=off  # deterministic simulation
     )
     target_compile_definitions(rawframe_policy INTERFACE _HAS_EXCEPTIONS=0)
 elseif(MSVC)
