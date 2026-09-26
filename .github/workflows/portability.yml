@@ -81,10 +81,13 @@ jobs:
       - name: Configure
         shell: pwsh
         # Git's bash runs tools/build_quic.sh, never WSL's; OpenSSL's
-        # Configure wants the Windows perl.
+        # Configure wants the Windows perl; the tests' Python is the one
+        # aioquic was installed into.
         env:
           RAWFRAME_PERL: C:/Strawberry/perl/bin/perl.exe
-        run: cmake --preset windows-development "-DRAWFRAME_BASH=C:/Program Files/Git/bin/bash.exe"
+        run: >-
+          cmake --preset windows-development "-DRAWFRAME_BASH=C:/Program Files/Git/bin/bash.exe"
+          "-DPython3_EXECUTABLE=$((Get-Command python).Source)"
       - name: Keep MsQuic and OpenSSL
         uses: actions/cache/save@v6
         with:
