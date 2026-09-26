@@ -216,6 +216,9 @@ struct Peer {
     std::int64_t measuredLead = 0;
     bool heardInput = false;
     ChecksumBook checksums;
+    /// Closed by this side, for breaking the protocol or striking out: to
+    /// be forgotten once its event is handled (D223).
+    bool gone = false;
 };
 
 /// An entity by the ID of the mapping a connection has acknowledged for it:

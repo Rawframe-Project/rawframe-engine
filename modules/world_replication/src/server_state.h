@@ -152,6 +152,13 @@ struct ReplicationServer::State {
 
     void onFrame(world::World& world, Peer& peer, const network::SessionEvent& event);
 
+    /// A strike against a peer whose payload was malformed (SPEC-0013,
+    /// D223); the one that strikes it out leaves it gone.
+    void strike(Peer& peer);
+
+    /// A connection that ended or was closed: its player leaves the World.
+    void forget(world::World& world, std::map<std::uint64_t, Peer>::iterator peer);
+
     void onStateAck(Peer& peer, const network::SessionEvent& event);
 
     void onInput(Peer& peer, const network::SessionEvent& event);

@@ -138,6 +138,8 @@ struct ServerReplicationStatistics {
     std::uint64_t checksumsUnverifiable = 0;
     std::uint64_t checksumsDiverged = 0;
     std::uint64_t checksumsLimited = 0;
+    /// Malformed payloads struck against their connections (D223).
+    std::uint64_t strikes = 0;
 };
 
 class ReplicationServer final : public world_runtime::SystemContributor, public InterestHistory {

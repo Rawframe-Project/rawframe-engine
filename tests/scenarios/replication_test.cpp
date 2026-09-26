@@ -7,6 +7,7 @@
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
 #include "rawframe/world_replication/client.h"
+#include "rawframe/world_replication/records.h"
 #include "rawframe/world_replication/server.h"
 
 #include <algorithm>
@@ -477,6 +478,44 @@ RAWFRAME_TEST(StateGoesOutOnceAPeriodAndPredictionHolds) {
     const Position* shown = scenario.clientWorld.get(scenario.client->owned(), kPosition);
     const Position* server = scenario.firstPlayerPosition();
     RAWFRAME_EXPECT(shown != nullptr && server != nullptr && shown->x == server->x && shown->y == server->y);
+}
+
+RAWFRAME_TEST(AClientSendingMalformedInputStrikesOut) {
+    // SPEC-0013's strikes (D223): malformed input windows are refused, and
+    // the eighth within ten seconds closes the connection and takes its
+    // player out of the World.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.client->admitted() && scenario.firstPlayerPosition() != nullptr);
+    const std::uint64_t kEpoch = scenario.client->accept().has_value() ? scenario.client->accept()->inputEpoch : 0;
+    const std::vector<std::byte> kGarbage(3, std::byte{0xff});
+    const auto kStrike = [&](std::uint64_t sequence) {
+        static_cast<void>(scenario.clientSessions->sendDatagram(network::ConnectionId{1},
+                                                                {.lane = network::DatagramLane::Input,
+                                                                 .laneEpoch = kEpoch,
+                                                                 .sequence = sequence,
+                                                                 .payloadType = world_replication::kInputWindowPayload,
+                                                                 .payload = kGarbage}));
+        // Ticks without input: once struck out, the client may still think
+        // itself admitted until it hears the close.
+        for (int step = 0; step < 5; ++step) {
+            scenario.clock.advance(scenario.stepLength);
+            scenario.server->pump(scenario.serverWorld, scenario.tick);
+            RAWFRAME_EXPECT(
+                scenario.schedule->runTick(scenario.serverWorld, scenario.tick, *world::TickRate::of(60)).has_value());
+            scenario.client->pump();
+        }
+    };
+    for (std::uint64_t strike = 1; strike < network::kMaximumStrikes; ++strike) {
+        kStrike(1000 + strike);
+    }
+    RAWFRAME_EXPECT(scenario.firstPlayerPosition() != nullptr);
+    kStrike(2000);
+    RAWFRAME_EXPECT(scenario.firstPlayerPosition() == nullptr);
+    RAWFRAME_EXPECT(scenario.server->statistics().strikes == network::kMaximumStrikes);
+    RAWFRAME_EXPECT(scenario.serverSessions->struckOut() == 1);
 }
 
 RAWFRAME_TEST(PredictionRecoversFromLostInput) {

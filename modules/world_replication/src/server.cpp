@@ -32,11 +32,31 @@ void ReplicationServer::State::sendMapping(Peer& peer, network::ControlFrame typ
     }
 }
 
+void ReplicationServer::State::strike(Peer& peer) {
+    ++statistics.strikes;
+    if (!sessions->strike(peer.connection)) {
+        peer.gone = true;
+    }
+}
+
+void ReplicationServer::State::forget(world::World& world, std::map<std::uint64_t, Peer>::iterator peer) {
+    if (peer->second.identity.has_value() && settings.presence != nullptr) {
+        settings.presence->leaving(world, peer->second.player, *peer->second.identity);
+    }
+    static_cast<void>(world.destroy(peer->second.player));
+    peers.erase(peer);
+}
+
 void ReplicationServer::State::onFrame(world::World& world, Peer& peer, const network::SessionEvent& event) {
     const auto kType = static_cast<network::ControlFrame>(event.frameType);
     if (kType == network::ControlFrame::MappingAck || kType == network::ControlFrame::MappingRetireAck) {
         const auto kRecord = decodeMapping(event.payload);
-        if (!kRecord.has_value() || kRecord->replicationEpoch != peer.accept.replicationEpoch) {
+        if (!kRecord.has_value()) {
+            strike(peer);
+            return;
+        }
+        // One from before the epoch changed is late, not malformed.
+        if (kRecord->replicationEpoch != peer.accept.replicationEpoch) {
             return;
         }
         if (kType == network::ControlFrame::MappingAck) {
@@ -56,12 +76,14 @@ void ReplicationServer::State::onFrame(world::World& world, Peer& peer, const ne
     // protocol.
     static_cast<void>(world);
     sessions->close(peer.connection);
+    peer.gone = true;
 }
 
 void ReplicationServer::State::onStateAck(Peer& peer, const network::SessionEvent& event) {
     const auto kAck = decodeStateAck(event.payload);
     if (!kAck.has_value()) {
         ++statistics.acknowledgementsRefused;
+        strike(peer);
         return;
     }
     // Only what this server sent can be acknowledged: a sequence it
@@ -111,19 +133,26 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
         onChecksum(peer, event);
         return;
     }
+    // A record from before the lane's epoch changed is late, not malformed;
+    // a payload of no kind this lane carries is.
     if (!settings.input || event.laneEpoch != peer.accept.inputEpoch || event.payloadType != kInputWindowPayload) {
         ++statistics.inputsRefused;
+        if (event.laneEpoch == peer.accept.inputEpoch) {
+            strike(peer);
+        }
         return;
     }
     const auto kWindow = decodeInputWindow(event.payload);
     if (!kWindow.has_value()) {
         ++statistics.inputsRefused;
+        strike(peer);
         return;
     }
     peer.measuredLead =
         static_cast<std::int64_t>(kWindow->newestInputTick) - static_cast<std::int64_t>(peer.nextInputTick);
     peer.heardInput = true;
     const std::uint64_t kFirst = kWindow->newestInputTick + 1 - kWindow->commands.size();
+    bool misshapen = false;
     for (std::size_t index = 0; index < kWindow->commands.size(); ++index) {
         const std::uint64_t kTick = kFirst + index;
         const auto kCommand = kWindow->commands[index];
@@ -137,10 +166,15 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
                                  : kCommand.size() == kWire;
         if (kTick >= peer.nextInputTick + settings.inputFutureWindow || !kShaped) {
             ++statistics.inputsRefused;
+            misshapen = misshapen || !kShaped;
             continue;
         }
         peer.waitingInputs.try_emplace(kTick,
                                        Waiting{.command = {kCommand.begin(), kCommand.end()}, .arrived = pumpTick});
+    }
+    // One strike a window, however many of its commands are misshapen.
+    if (misshapen) {
+        strike(peer);
     }
 }
 
@@ -214,6 +248,7 @@ void ReplicationServer::State::onChecksum(Peer& peer, const network::SessionEven
     const auto kRecord = decodeChecksum(event.payload);
     if (!kRecord.has_value()) {
         ++statistics.inputsRefused;
+        strike(peer);
         return;
     }
     const std::optional<std::uint64_t> kExpected = peer.checksums.at(kRecord->tick);
@@ -456,20 +491,22 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
         case network::SessionEventKind::Frame:
             if (kPeer != state.peers.end()) {
                 state.onFrame(world, kPeer->second, event);
+                if (kPeer->second.gone) {
+                    state.forget(world, kPeer);
+                }
             }
             break;
         case network::SessionEventKind::Datagram:
             if (kPeer != state.peers.end()) {
                 state.onInput(kPeer->second, event);
+                if (kPeer->second.gone) {
+                    state.forget(world, kPeer);
+                }
             }
             break;
         case network::SessionEventKind::Ended:
             if (kPeer != state.peers.end()) {
-                if (kPeer->second.identity.has_value() && state.settings.presence != nullptr) {
-                    state.settings.presence->leaving(world, kPeer->second.player, *kPeer->second.identity);
-                }
-                static_cast<void>(world.destroy(kPeer->second.player));
-                state.peers.erase(kPeer);
+                state.forget(world, kPeer);
             }
             break;
         case network::SessionEventKind::Rejected:
