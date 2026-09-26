@@ -20,6 +20,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -87,6 +88,44 @@ struct CaptureSettings {
     SnapshotLimits limits;
 };
 
+/// SPEC-0013's pinned additional memory: the most a staged capture holds
+/// apart from its World (D227).
+inline constexpr std::size_t kMaximumStagedBytes = std::size_t{128} << 20U;
+
+/// A sealed artifact and its SnapshotDigest, the SHA-256 of everything
+/// before its footer.
+struct SealedCheckpoint {
+    std::vector<std::byte> bytes;
+    Fingerprint digest{};
+};
+
+/// What a capture read from a World at its safe point: everything the
+/// artifact will hold, and nothing of the World, which may run on while it
+/// is sealed elsewhere (D227). Move-only; empty when default-made.
+class StagedCheckpoint {
+public:
+    struct State;
+
+    StagedCheckpoint() noexcept;
+    explicit StagedCheckpoint(std::unique_ptr<State> state) noexcept;
+    StagedCheckpoint(StagedCheckpoint&&) noexcept;
+    StagedCheckpoint& operator=(StagedCheckpoint&&) noexcept;
+    ~StagedCheckpoint();
+
+    /// The bytes it holds, at most kMaximumStagedBytes.
+    [[nodiscard]] std::size_t heldBytes() const noexcept;
+    [[nodiscard]] bool empty() const noexcept {
+        return state_ == nullptr;
+    }
+    /// For `seal`.
+    [[nodiscard]] State* state() const noexcept {
+        return state_.get();
+    }
+
+private:
+    std::unique_ptr<State> state_;
+};
+
 /// Everything an artifact says about itself, from a successful restore.
 struct CheckpointFacts {
     world::TickIndex tick;
@@ -104,6 +143,18 @@ struct CheckpointFacts {
 /// subject order, repeated, empty, or past their bounds.
 [[nodiscard]] result::Result<std::vector<std::byte>>
 capture(const world::World& world, const SnapshotProjection& projection, const CaptureSettings& settings);
+
+/// The part of `capture` that reads the World, for its safe point: the same
+/// checks, and the staged artifact past kMaximumStagedBytes refused
+/// (`limit_exceeded`). Only this needs the World held (D227).
+[[nodiscard]] result::Result<StagedCheckpoint>
+stage(const world::World& world, const SnapshotProjection& projection, const CaptureSettings& settings);
+
+/// The rest, on any thread: the chunks written with their digests, the
+/// manifest, and the footer. `capture` is `seal(stage(...))`. Refuses
+/// (`invalid_argument`) an empty staging and (`limit_exceeded`) an artifact
+/// past its limit.
+[[nodiscard]] result::Result<SealedCheckpoint> seal(StagedCheckpoint staged);
 
 /// Rebuilds `artifact` into `candidate`, which must be empty and built from
 /// the registry the projection names. Everything is checked before the

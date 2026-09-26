@@ -112,8 +112,35 @@ void writeField(Output& out,
 
 } // namespace
 
-result::Result<std::vector<std::byte>>
-capture(const world::World& world, const SnapshotProjection& projection, const CaptureSettings& settings) {
+struct StagedCheckpoint::State {
+    struct Pending {
+        ChunkKind kind;
+        std::uint64_t records;
+        detail::Subject subject;
+        std::vector<std::byte> payload;
+    };
+    std::vector<Pending> chunks;
+    detail::Totals totals;
+    world::TickIndex tick;
+    world::TickRate rate;
+    Fingerprint schema{};
+    Fingerprint projection{};
+    SnapshotLimits limits;
+};
+
+StagedCheckpoint::StagedCheckpoint() noexcept = default;
+StagedCheckpoint::StagedCheckpoint(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
+}
+StagedCheckpoint::StagedCheckpoint(StagedCheckpoint&&) noexcept = default;
+StagedCheckpoint& StagedCheckpoint::operator=(StagedCheckpoint&&) noexcept = default;
+StagedCheckpoint::~StagedCheckpoint() = default;
+
+std::size_t StagedCheckpoint::heldBytes() const noexcept {
+    return state_ != nullptr ? state_->totals.decodedBytes : 0;
+}
+
+result::Result<StagedCheckpoint>
+stage(const world::World& world, const SnapshotProjection& projection, const CaptureSettings& settings) {
     const SnapshotLimits& limits = settings.limits;
     if (limits.maximumEntities == 0 || limits.maximumRows == 0 || limits.maximumRandomStreams == 0 ||
         limits.maximumArtifactBytes == 0 || limits.rowsPerChunk == 0) {
@@ -145,14 +172,11 @@ capture(const world::World& world, const SnapshotProjection& projection, const C
         places.emplace(entities[index], index + 1);
     }
 
-    struct Pending {
-        ChunkKind kind;
-        std::uint64_t records;
-        detail::Subject subject;
-        std::vector<std::byte> payload;
-    };
-    std::vector<Pending> chunks;
-    detail::Totals totals{.entities = entities.size()};
+    auto state = std::make_unique<StagedCheckpoint::State>();
+    using Pending = StagedCheckpoint::State::Pending;
+    std::vector<Pending>& chunks = state->chunks;
+    detail::Totals& totals = state->totals;
+    totals.entities = entities.size();
 
     for (std::size_t first = 0; first < entities.size(); first += limits.rowsPerChunk) {
         const std::size_t kCount = std::min(limits.rowsPerChunk, entities.size() - first);
@@ -223,18 +247,37 @@ capture(const world::World& world, const SnapshotProjection& projection, const C
     for (const Pending& chunk : chunks) {
         totals.decodedBytes += chunk.payload.size();
     }
+    if (totals.decodedBytes > kMaximumStagedBytes) {
+        return detail::fail(result::ErrorClass::ResourceExhausted,
+                            SnapshotError::LimitExceeded,
+                            "the staged checkpoint holds more than the snapshot profile allows apart from the World");
+    }
+    state->tick = settings.tick;
+    state->rate = settings.rate;
+    state->schema = settings.identity.schema;
+    state->projection = projectionFingerprint(projection);
+    state->limits = limits;
+    return StagedCheckpoint{std::move(state)};
+}
 
-    const std::uint64_t kDivisor = std::gcd(std::uint64_t{settings.rate.ticks}, std::uint64_t{settings.rate.seconds});
-    const detail::Fingerprints kFingerprints{.schema = settings.identity.schema,
+result::Result<SealedCheckpoint> seal(StagedCheckpoint staged) {
+    const StagedCheckpoint::State* const kState = staged.state();
+    if (kState == nullptr) {
+        return detail::fail(
+            result::ErrorClass::InvalidArgument, SnapshotError::InvalidCandidate, "there is nothing staged to seal");
+    }
+    const detail::Totals& totals = kState->totals;
+    const std::uint64_t kDivisor = std::gcd(std::uint64_t{kState->rate.ticks}, std::uint64_t{kState->rate.seconds});
+    const detail::Fingerprints kFingerprints{.schema = kState->schema,
                                              .package = {},
-                                             .projection = projectionFingerprint(projection),
+                                             .projection = kState->projection,
                                              .toolchain = detail::toolchainFingerprint(),
-                                             .profile = detail::profileFingerprint(limits)};
+                                             .profile = detail::profileFingerprint(kState->limits)};
     Output header;
     detail::writeWorldHeader(header,
-                             detail::WorldHeader{.tick = settings.tick.value,
-                                                 .rateNumerator = settings.rate.ticks / kDivisor,
-                                                 .rateDenominator = settings.rate.seconds / kDivisor,
+                             detail::WorldHeader{.tick = kState->tick.value,
+                                                 .rateNumerator = kState->rate.ticks / kDivisor,
+                                                 .rateDenominator = kState->rate.seconds / kDivisor,
                                                  .fingerprints = kFingerprints,
                                                  .totals = totals});
 
@@ -242,7 +285,7 @@ capture(const world::World& world, const SnapshotProjection& projection, const C
     detail::writePrologue(out);
     detail::Manifest manifest{.entries = {}, .fingerprints = kFingerprints, .totals = totals};
     manifest.entries.push_back(detail::writeChunk(out, ChunkKind::WorldHeader, 0, 1, {}, header.data()));
-    for (const Pending& chunk : chunks) {
+    for (const StagedCheckpoint::State::Pending& chunk : kState->chunks) {
         manifest.entries.push_back(
             detail::writeChunk(out, chunk.kind, manifest.entries.size(), chunk.records, chunk.subject, chunk.payload));
     }
@@ -251,19 +294,27 @@ capture(const world::World& world, const SnapshotProjection& projection, const C
     const ChunkHeader kManifest = detail::writeChunk(
         out, ChunkKind::Manifest, manifest.entries.size(), manifest.entries.size(), {}, manifestPayload.data());
     const std::uint64_t kPreFooter = out.data().size();
+    const Fingerprint kDigest = base::sha256(std::span{out.data()}.first(kPreFooter));
     detail::writeFooter(out,
                         detail::Footer{.manifestOffset = kManifest.offset,
                                        .manifestSize = kManifest.storedSize,
                                        .chunkCount = manifest.entries.size() + 1,
                                        .preFooterSize = kPreFooter,
-                                       .digest = base::sha256(std::span{out.data()}.first(kPreFooter)),
+                                       .digest = kDigest,
                                        .manifestDigest = kManifest.digest});
-    if (out.data().size() > limits.maximumArtifactBytes) {
+    if (out.data().size() > kState->limits.maximumArtifactBytes) {
         return detail::fail(result::ErrorClass::ResourceExhausted,
                             SnapshotError::LimitExceeded,
                             "the checkpoint is larger than the snapshot profile allows");
     }
-    return std::move(out.data());
+    return SealedCheckpoint{.bytes = std::move(out.data()), .digest = kDigest};
+}
+
+result::Result<std::vector<std::byte>>
+capture(const world::World& world, const SnapshotProjection& projection, const CaptureSettings& settings) {
+    RAWFRAME_TRY_ASSIGN(StagedCheckpoint staged, stage(world, projection, settings));
+    RAWFRAME_TRY_ASSIGN(SealedCheckpoint sealed, seal(std::move(staged)));
+    return std::move(sealed.bytes);
 }
 
 } // namespace rawframe::world_snapshot

@@ -1,7 +1,8 @@
 // World checkpoints: a round trip that restores every value, reference, and
 // random stream and captures to the same bytes again; canonical NaNs; row
 // groups; refusal of every damaged, foreign, or oversized artifact; and
-// hostile artifacts with matching digests restored only as they capture.
+// hostile artifacts with matching digests restored only as they capture;
+// and a capture staged at the safe point and sealed after the World ran on.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/test/mutations.h"
@@ -229,6 +230,30 @@ RAWFRAME_TEST(ACheckpointRestoresEveryValueReferenceAndStream) {
     // function of the state, not of how the World came to hold it.
     const auto kAgain = world_snapshot::capture(candidate, projection(), settings());
     RAWFRAME_EXPECT(kAgain.has_value() && *kAgain == *kArtifact);
+}
+
+RAWFRAME_TEST(AStagedCaptureSealsAsTheWorldWasWhenStaged) {
+    // D227: only staging reads the World; what is sealed after the World has
+    // run on is the artifact of the World as it was staged, with its
+    // SnapshotDigest.
+    Sample sample;
+    const auto kBefore = world_snapshot::capture(sample.world, projection(), settings());
+    auto staged = world_snapshot::stage(sample.world, projection(), settings());
+    RAWFRAME_EXPECT(kBefore.has_value() && staged.has_value() && staged->heldBytes() > 0);
+    if (!kBefore.has_value() || !staged.has_value()) {
+        return;
+    }
+    const auto kBody = *sample.schema->key<Body>();
+    sample.world.get(sample.live[0], kBody)->score = 99;
+    RAWFRAME_EXPECT(sample.world.destroy(sample.live[1]).has_value());
+    const auto kSealed = world_snapshot::seal(std::move(*staged));
+    RAWFRAME_EXPECT(kSealed.has_value() && kSealed->bytes == *kBefore);
+    RAWFRAME_EXPECT(kSealed.has_value() &&
+                    kSealed->digest == base::sha256(std::span{kSealed->bytes}.first(kSealed->bytes.size() - 128)));
+    const auto kAfter = world_snapshot::capture(sample.world, projection(), settings());
+    RAWFRAME_EXPECT(kAfter.has_value() && *kAfter != *kBefore);
+    RAWFRAME_EXPECT(
+        failedWith(world_snapshot::seal(world_snapshot::StagedCheckpoint{}), SnapshotError::InvalidCandidate));
 }
 
 RAWFRAME_TEST(NaNsAreWrittenOneWay) {
