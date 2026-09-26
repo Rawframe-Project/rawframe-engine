@@ -1,5 +1,6 @@
 #include "rawframe/host/host.h"
 
+#include "rawframe/base/memory.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/plan.h"
 #include "rawframe/diagnostics/emitter.h"
@@ -395,7 +396,10 @@ struct Host::State {
                     "host started",
                     {diagnostics::field("participants", plan->participants().size()),
                      diagnostics::field("cpuWorkers", cpu->workerCount()),
-                     diagnostics::field("shutdownBoundMs", shutdownBound(settings).nanoseconds / 1'000'000)});
+                     diagnostics::field("shutdownBoundMs", shutdownBound(settings).nanoseconds / 1'000'000),
+                     // SPEC-0013's fresh ready memory (D211); nought where
+                     // the platform does not say.
+                     diagnostics::field("residentBytes", base::residentBytes().value_or(0))});
         enter(composition::HostState::Ready, "started");
         // Immediate activation, the only policy until a supervised one is
         // accepted: admission opens as soon as the Host is ready.
@@ -519,7 +523,9 @@ struct Host::State {
                     {diagnostics::field("health", composition::describe(health.health)),
                      diagnostics::field("exit", describe(exit)),
                      diagnostics::field("exitCode", static_cast<std::uint64_t>(exitCode(exit))),
-                     diagnostics::field("shutdownMs", (clock.now() - drainStart).nanoseconds / 1'000'000)});
+                     diagnostics::field("shutdownMs", (clock.now() - drainStart).nanoseconds / 1'000'000),
+                     // The most the run held at once (D211).
+                     diagnostics::field("peakResidentBytes", base::peakResidentBytes().value_or(0))});
         router.stop();
         drainLog();
         return exit;
