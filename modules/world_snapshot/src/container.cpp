@@ -10,7 +10,7 @@ constexpr std::array<std::byte, 4> kFooterMagic = {std::byte{'R'}, std::byte{'F'
 
 bool knownKind(std::uint16_t kind) noexcept {
     return kind >= static_cast<std::uint16_t>(ChunkKind::WorldHeader) &&
-           kind <= static_cast<std::uint16_t>(ChunkKind::RandomStreams);
+           kind <= static_cast<std::uint16_t>(ChunkKind::ModSet);
 }
 
 } // namespace

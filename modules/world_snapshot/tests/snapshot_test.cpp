@@ -10,11 +10,14 @@
 #include "rawframe/world_snapshot/errors.h"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <string>
+#include <utility>
 #include <vector>
 
 using namespace rawframe;
@@ -69,6 +72,13 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
 }
 
 constexpr world_snapshot::CheckpointIdentity kIdentity{.schema = {std::byte{7}}};
+
+/// The same game with two mods.
+world_snapshot::CheckpointIdentity modded() {
+    return world_snapshot::CheckpointIdentity{
+        .schema = kIdentity.schema,
+        .mods = {{.subject = "fan/horde", .version = "1.0.0"}, {.subject = "fan/sting", .version = "0.2.0"}}};
+}
 
 world_snapshot::CaptureSettings settings(world_snapshot::SnapshotLimits limits = {}) {
     return world_snapshot::CaptureSettings{.tick = world::TickIndex{1234},
@@ -296,8 +306,13 @@ RAWFRAME_TEST(HostileArtifactsWithMatchingDigestsRestoreOnlyAsTheyCapture) {
     test::Mutations mutations;
     std::size_t accepted = 0;
     std::size_t refused = 0;
-    for (const world_snapshot::SnapshotLimits& limits : {world_snapshot::SnapshotLimits{}, kSmall}) {
-        const auto kArtifact = world_snapshot::capture(sample.world, projection(), settings(limits));
+    // Whole chunks without mods, and row groups of two with mods recorded.
+    const std::array<std::pair<world_snapshot::SnapshotLimits, world_snapshot::CheckpointIdentity>, 2> kRuns = {
+        std::pair{world_snapshot::SnapshotLimits{}, kIdentity}, std::pair{kSmall, modded()}};
+    for (const auto& [limits, identity] : kRuns) {
+        world_snapshot::CaptureSettings captured = settings(limits);
+        captured.identity = identity;
+        const auto kArtifact = world_snapshot::capture(sample.world, projection(), captured);
         RAWFRAME_EXPECT(kArtifact.has_value());
         if (!kArtifact.has_value()) {
             return;
@@ -315,7 +330,7 @@ RAWFRAME_TEST(HostileArtifactsWithMatchingDigestsRestoreOnlyAsTheyCapture) {
             }
             damaged = resealed(std::move(damaged), *kArtifact);
             world::World candidate{sample.schema};
-            const auto kRestored = world_snapshot::restore(damaged, projection(), kIdentity, limits, candidate);
+            const auto kRestored = world_snapshot::restore(damaged, projection(), identity, limits, candidate);
             if (!kRestored.has_value()) {
                 ++refused;
                 continue;
@@ -327,7 +342,7 @@ RAWFRAME_TEST(HostileArtifactsWithMatchingDigestsRestoreOnlyAsTheyCapture) {
                 candidate,
                 projection(),
                 world_snapshot::CaptureSettings{
-                    .tick = kRestored->tick, .rate = kRestored->rate, .identity = kIdentity, .limits = limits});
+                    .tick = kRestored->tick, .rate = kRestored->rate, .identity = identity, .limits = limits});
             RAWFRAME_EXPECT(kAgain.has_value() && *kAgain == damaged);
         }
     }
@@ -369,4 +384,50 @@ RAWFRAME_TEST(ForeignArtifactsAndBadCandidatesAreRefused) {
     RAWFRAME_EXPECT(
         failedWith(world_snapshot::restore(*kArtifact, projection(), kIdentity, {.maximumArtifactBytes = 64}, small),
                    SnapshotError::LimitExceeded));
+}
+
+RAWFRAME_TEST(ACheckpointKnowsTheModsItRanWith) {
+    Sample sample;
+    world_snapshot::CaptureSettings captured = settings();
+    captured.identity = modded();
+    const auto kArtifact = world_snapshot::capture(sample.world, projection(), captured);
+    RAWFRAME_EXPECT(kArtifact.has_value());
+    if (!kArtifact.has_value()) {
+        return;
+    }
+    world::World same{sample.schema};
+    RAWFRAME_EXPECT(world_snapshot::restore(*kArtifact, projection(), modded(), {}, same).has_value());
+    // Another mod set, even with the same schema, is its own refusal naming
+    // what changed.
+    world_snapshot::CheckpointIdentity other = modded();
+    other.mods[0].version = "1.1.0";
+    other.mods.erase(other.mods.begin() + 1);
+    other.mods.push_back({.subject = "fan/timers", .version = "0.1.0"});
+    world::World candidate{sample.schema};
+    const auto kRefused = world_snapshot::restore(*kArtifact, projection(), other, {}, candidate);
+    RAWFRAME_EXPECT(failedWith(kRefused, SnapshotError::ModSetChanged));
+    if (!kRefused.has_value()) {
+        std::string context;
+        for (const result::ContextField& field : kRefused.error().context()) {
+            context += std::string{field.key} + "=" + std::string{field.value} + ";";
+        }
+        RAWFRAME_EXPECT(context == "added=fan/timers@0.1.0;removed=fan/sting@0.2.0;changed=fan/horde@1.0.0>1.1.0;");
+    }
+    // No mods then, some now; and a checkpoint without mods keeps its bytes.
+    world::World unmodded{sample.schema};
+    RAWFRAME_EXPECT(failedWith(world_snapshot::restore(*kArtifact, projection(), kIdentity, {}, unmodded),
+                               SnapshotError::ModSetChanged));
+    const auto kPlain = world_snapshot::capture(sample.world, projection(), settings());
+    RAWFRAME_EXPECT(kPlain.has_value() && kPlain->size() < kArtifact->size());
+    // Capture records only a set in subject order, each once and bounded.
+    for (const std::vector<world_snapshot::CheckpointMod>& kBad :
+         {std::vector<world_snapshot::CheckpointMod>{{"fan/sting", "1"}, {"fan/horde", "1"}},
+          std::vector<world_snapshot::CheckpointMod>{{"fan/horde", "1"}, {"fan/horde", "2"}},
+          std::vector<world_snapshot::CheckpointMod>{{"fan/horde", ""}},
+          std::vector<world_snapshot::CheckpointMod>{{std::string(257, 'a'), "1"}}}) {
+        world_snapshot::CaptureSettings bad = settings();
+        bad.identity.mods = kBad;
+        RAWFRAME_EXPECT(
+            failedWith(world_snapshot::capture(sample.world, projection(), bad), SnapshotError::InvalidCandidate));
+    }
 }

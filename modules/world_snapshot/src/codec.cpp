@@ -70,6 +70,51 @@ result::Result<WorldHeader> readWorldHeader(std::span<const std::byte> payload) 
     return header;
 }
 
+bool validModSet(std::span<const CheckpointMod> mods) noexcept {
+    const auto kValid = [](const std::string& text) {
+        return !text.empty() && text.size() <= kMaximumCheckpointModText;
+    };
+    for (std::size_t index = 0; index < mods.size(); ++index) {
+        if (!kValid(mods[index].subject) || !kValid(mods[index].version) ||
+            (index > 0 && mods[index - 1].subject >= mods[index].subject)) {
+            return false;
+        }
+    }
+    return mods.size() <= kMaximumCheckpointMods;
+}
+
+void writeModSet(Output& out, std::span<const CheckpointMod> mods) {
+    for (const CheckpointMod& mod : mods) {
+        for (const std::string* text : {&mod.subject, &mod.version}) {
+            out.u32(static_cast<std::uint32_t>(text->size()));
+            out.bytes(std::as_bytes(std::span{text->data(), text->size()}));
+        }
+    }
+}
+
+result::Result<std::vector<CheckpointMod>> readModSet(std::span<const std::byte> payload, std::uint64_t records) {
+    if (records > kMaximumCheckpointMods) {
+        return malformed("a checkpoint records more mods than the bound");
+    }
+    Input in{payload};
+    std::vector<CheckpointMod> mods;
+    for (std::uint64_t record = 0; record < records; ++record) {
+        CheckpointMod& mod = mods.emplace_back();
+        for (std::string* text : {&mod.subject, &mod.version}) {
+            std::uint32_t length = 0;
+            std::span<const std::byte> taken;
+            if (!in.u32(length) || length > kMaximumCheckpointModText || !in.take(length, taken)) {
+                return malformed("a recorded mod is short or past its bound");
+            }
+            text->assign(reinterpret_cast<const char*>(taken.data()), taken.size());
+        }
+    }
+    if (in.remaining() != 0 || !validModSet(mods)) {
+        return malformed("the recorded mods are out of order, repeated, empty, or not their exact length");
+    }
+    return mods;
+}
+
 void writeManifest(Output& out, const Manifest& manifest) {
     for (const ChunkHeader& entry : manifest.entries) {
         out.u64(entry.ordinal);

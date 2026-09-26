@@ -145,6 +145,7 @@ walkChunks(std::span<const std::byte> artifact, const detail::Footer& footer, de
         if (kChunk.kind == ChunkKind::WorldHeader || kChunk.kind == ChunkKind::Manifest || kChunk.kind < kBefore.kind ||
             (kSubjectless && kChunk.subject != detail::Subject{}) ||
             (kChunk.kind == ChunkKind::RandomStreams && kBefore.kind == ChunkKind::RandomStreams) ||
+            (kChunk.kind == ChunkKind::ModSet && kBefore.kind == ChunkKind::ModSet) ||
             (kChunk.kind == ChunkKind::ComponentRows && kBefore.kind == ChunkKind::ComponentRows &&
              kChunk.subject < kBefore.subject)) {
             return detail::malformed("the chunks are not in generation 1's order");
@@ -165,12 +166,63 @@ walkChunks(std::span<const std::byte> artifact, const detail::Footer& footer, de
     return chunks;
 }
 
+/// Each mod as `subject@version`, one space between.
+std::string listed(std::span<const CheckpointMod> mods) {
+    std::string text;
+    for (const CheckpointMod& mod : mods) {
+        text += (text.empty() ? "" : " ") + mod.subject + "@" + mod.version;
+    }
+    return text;
+}
+
+std::unexpected<result::Error> modSetChanged(const ModSetChange& change) {
+    std::string changed;
+    for (const ModSetChange::Changed& each : change.changed) {
+        changed += (changed.empty() ? "" : " ") + each.subject + "@" + each.from + ">" + each.to;
+    }
+    result::Error error = detail::fail(result::ErrorClass::FailedPrecondition,
+                                       SnapshotError::ModSetChanged,
+                                       "the checkpoint was taken with another set of mods")
+                              .error();
+    // Only what changed is named.
+    for (const auto& [kKey, kValue] : {std::pair<std::string_view, std::string>{"added", listed(change.added)},
+                                       std::pair<std::string_view, std::string>{"removed", listed(change.removed)},
+                                       std::pair<std::string_view, std::string>{"changed", std::move(changed)}}) {
+        if (!kValue.empty()) {
+            error = std::move(error).withContext(kKey, kValue);
+        }
+    }
+    return std::unexpected<result::Error>{std::move(error)};
+}
+
 std::span<const std::byte> payloadOf(std::span<const std::byte> artifact, const ChunkHeader& chunk) noexcept {
     return artifact.subspan(static_cast<std::size_t>(chunk.offset + detail::kChunkHeaderSize),
                             static_cast<std::size_t>(chunk.storedSize));
 }
 
 } // namespace
+
+ModSetChange modSetChange(std::span<const CheckpointMod> recorded, std::span<const CheckpointMod> loading) {
+    ModSetChange change;
+    // Both in subject order: one merge.
+    std::size_t was = 0;
+    std::size_t now = 0;
+    while (was < recorded.size() || now < loading.size()) {
+        if (now == loading.size() || (was < recorded.size() && recorded[was].subject < loading[now].subject)) {
+            change.removed.push_back(recorded[was++]);
+        } else if (was == recorded.size() || loading[now].subject < recorded[was].subject) {
+            change.added.push_back(loading[now++]);
+        } else {
+            if (recorded[was].version != loading[now].version) {
+                change.changed.push_back(ModSetChange::Changed{
+                    .subject = loading[now].subject, .from = recorded[was].version, .to = loading[now].version});
+            }
+            ++was;
+            ++now;
+        }
+    }
+    return change;
+}
 
 result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
                                         const SnapshotProjection& projection,
@@ -200,6 +252,17 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
                                          .profile = detail::profileFingerprint(limits)};
     if (kHeader.fingerprints != manifest.fingerprints || kHeader.totals != manifest.totals) {
         return detail::malformed("the manifest and the world header disagree");
+    }
+    // The mods first: a game's schema covers its mods, so another mod set
+    // would otherwise read as another game.
+    std::vector<CheckpointMod> recorded;
+    for (const ChunkHeader& chunk : kChunks) {
+        if (chunk.kind == ChunkKind::ModSet) {
+            RAWFRAME_TRY_ASSIGN(recorded, detail::readModSet(payloadOf(artifact, chunk), chunk.recordCount));
+        }
+    }
+    if (const ModSetChange kChange = modSetChange(recorded, identity.mods); !kChange.empty()) {
+        return modSetChanged(kChange);
     }
     if (kHeader.fingerprints.schema != kExpected.schema) {
         return mismatch("the checkpoint is of another game or schema");
@@ -234,7 +297,7 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
         // Row groups are the profile's: every chunk of a run but the last is
         // full, so one World has one artifact.
         const ChunkHeader& kBefore = kChunks[index - 1];
-        const bool kGrouped = kChunk.kind != ChunkKind::RandomStreams;
+        const bool kGrouped = kChunk.kind != ChunkKind::RandomStreams && kChunk.kind != ChunkKind::ModSet;
         if (kChunk.recordCount == 0 || (kGrouped && kChunk.recordCount > limits.rowsPerChunk) ||
             (kGrouped && kBefore.kind == kChunk.kind && kBefore.subject == kChunk.subject &&
              kBefore.recordCount != limits.rowsPerChunk)) {
@@ -307,6 +370,12 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
                 streams.push_back(std::move(stream));
             }
             break;
+        case ChunkKind::ModSet: {
+            // Read and compared before anything else.
+            std::span<const std::byte> read;
+            static_cast<void>(in.take(kPayload.size(), read));
+            break;
+        }
         case ChunkKind::WorldHeader:
         case ChunkKind::Manifest:
             break;

@@ -120,6 +120,11 @@ capture(const world::World& world, const SnapshotProjection& projection, const C
         return detail::fail(
             result::ErrorClass::InvalidArgument, SnapshotError::LimitExceeded, "every snapshot limit is required");
     }
+    if (!detail::validModSet(settings.identity.mods)) {
+        return detail::fail(result::ErrorClass::InvalidArgument,
+                            SnapshotError::InvalidCandidate,
+                            "the mods are out of subject order, repeated, empty, or past their bounds");
+    }
     RAWFRAME_TRY_ASSIGN(const std::vector<Resolved> kResolved, resolve(world, projection));
 
     // Every live entity, in slot order; its place in the artifact is its
@@ -209,6 +214,11 @@ capture(const world::World& world, const SnapshotProjection& projection, const C
             random.u64(stream.incrementWord());
         }
         chunks.push_back(Pending{ChunkKind::RandomStreams, streams.size(), {}, std::move(random.data())});
+    }
+    if (!settings.identity.mods.empty()) {
+        Output mods;
+        detail::writeModSet(mods, settings.identity.mods);
+        chunks.push_back(Pending{ChunkKind::ModSet, settings.identity.mods.size(), {}, std::move(mods.data())});
     }
     for (const Pending& chunk : chunks) {
         totals.decodedBytes += chunk.payload.size();

@@ -34,6 +34,8 @@ enum class ChunkKind : std::uint16_t {
     Manifest = 4,
     /// The World's random streams, which D18 keeps in the World (D29).
     RandomStreams = 5,
+    /// The mods the World ran with, when there are any (D197).
+    ModSet = 6,
 };
 
 using Subject = std::array<std::byte, 16>;

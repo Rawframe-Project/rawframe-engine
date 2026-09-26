@@ -53,6 +53,15 @@ struct Manifest {
     Totals totals;
 };
 
+/// A mod set's payload: each mod's subject and version, lengths first.
+/// Reading refuses mods out of subject order, repeated, empty, or past their
+/// bounds, which writing never makes.
+void writeModSet(Output& out, std::span<const CheckpointMod> mods);
+[[nodiscard]] result::Result<std::vector<CheckpointMod>> readModSet(std::span<const std::byte> payload,
+                                                                    std::uint64_t records);
+/// Whether `mods` is a set a checkpoint may record.
+[[nodiscard]] bool validModSet(std::span<const CheckpointMod> mods) noexcept;
+
 void writeManifest(Output& out, const Manifest& manifest);
 [[nodiscard]] result::Result<Manifest> readManifest(std::span<const std::byte> payload, std::uint64_t entries);
 

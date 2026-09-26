@@ -28,6 +28,9 @@ enum class SnapshotError : std::uint32_t {
     /// A candidate World that is not empty, or a projection that does not
     /// fit the World's registry.
     InvalidCandidate = 7,
+    /// A checkpoint of the same game with another set of mods (SPEC-0042):
+    /// what was added, removed, or changed is its context.
+    ModSetChanged = 8,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(SnapshotError error) noexcept {
