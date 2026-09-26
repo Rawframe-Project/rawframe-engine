@@ -8,6 +8,7 @@
 #include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <string>
