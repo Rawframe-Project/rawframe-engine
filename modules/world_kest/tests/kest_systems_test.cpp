@@ -371,6 +371,54 @@ RAWFRAME_TEST(AnEntityMadeInOneRunIsNotTakenInAnother) {
     RAWFRAME_EXPECT(world.entityCount() == 2);
 }
 
+RAWFRAME_TEST(ATicksOperationsAreBoundedAcrossItsSystems) {
+    // SPEC-0013's journal operations per tick (D240): two systems each
+    // create three entities, three commands; with four a tick, the second
+    // is refused and records nothing, and the next tick starts afresh.
+    const std::array<kest::SourceFile, 2> kFiles = {
+        kest::SourceFile{.path = "keeper.kest", .text = std::string{kKeeper}},
+        kest::SourceFile{.path = "rawframe/world.kest",
+                         .text = readText(std::string{RAWFRAME_WORLD_KEST_MODULES} + "rawframe/world.kest")}};
+    auto compiled = kest::Program::compile(kFiles, {});
+    RAWFRAME_EXPECT(compiled.has_value());
+    if (!compiled.has_value()) {
+        return;
+    }
+    constexpr auto kLinkId = schema::ComponentTypeId::fromText("0a1f5c3e-7d29-4b86-a4e2-93c6b8d1f047");
+    schema::RegistryBuilder builder;
+    builder.add(schema::ComponentDescriptor{
+        .id = kLinkId, .name = "test.link", .size = 8, .alignment = 4, .plainData = true, .operations = {}});
+    const auto kRegistry = *builder.freeze();
+    world::World world{kRegistry};
+    const auto kLink = *kRegistry->find(kLinkId);
+    std::array<std::uint32_t, 2> zero{};
+    for (int holder = 0; holder < 3; ++holder) {
+        const world::EntityHandle kHolder = *world.create();
+        RAWFRAME_EXPECT(world.insertErased(kHolder, kLink, zero.data()).has_value());
+    }
+    constexpr std::array<KestColumn, 1> kLinks = {
+        KestColumn{.component = kLinkId, .element = "Link", .access = world::Access::Write}};
+    const std::array<KestSystemDeclaration, 2> kDeclarations = {
+        KestSystemDeclaration{.identity = "keeper.first", .entry = "make", .columns = kLinks},
+        KestSystemDeclaration{.identity = "keeper.second", .entry = "make", .columns = kLinks}};
+    auto kest = KestSystems::create(
+        {.program = *compiled, .limits = kLimits, .systems = kDeclarations, .journalOperationsPerTick = 4});
+    RAWFRAME_EXPECT(kest.has_value());
+    if (!kest.has_value()) {
+        return;
+    }
+    world::Schedule ticks = schedule(**kest, *kRegistry);
+    world::TickIndex tick;
+    for (int round = 1; round <= 2; ++round) {
+        auto report = ticks.runTick(world, tick, *world::TickRate::of(60));
+        RAWFRAME_EXPECT(
+            report.has_value() && report->failures.size() == 1 && report->failures[0].system == "keeper.second" &&
+            report->failures[0].error.code() == world_kest::code(world_kest::WorldKestError::JournalExhausted));
+        // Three holders, and three made by the first system each tick.
+        RAWFRAME_EXPECT(world.entityCount() == static_cast<std::size_t>(3 + (3 * round)));
+    }
+}
+
 namespace {
 
 constexpr std::string_view kDice = "module dice\n"

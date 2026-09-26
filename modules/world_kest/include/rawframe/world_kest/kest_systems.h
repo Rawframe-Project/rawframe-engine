@@ -97,6 +97,9 @@ struct KestPrefab {
 /// SPEC-0013's mutation journal per Domain and tick: the columns a
 /// machine's systems copy to write in one tick, together (D229).
 inline constexpr std::size_t kMaximumJournalBytes = std::size_t{4} << 20U;
+/// SPEC-0013's journal operations per Domain and tick: the structural
+/// commands a machine's systems record in one tick, together (D240).
+inline constexpr std::size_t kMaximumJournalOperations = 65'536;
 
 struct KestSystemsSettings {
     std::shared_ptr<const kest::Program> program;
@@ -118,6 +121,9 @@ struct KestSystemsSettings {
     /// Journal bytes all the systems may take in one tick; a system that
     /// would pass it is refused for the tick and changes nothing.
     std::size_t journalBytesPerTick = kMaximumJournalBytes;
+    /// Commands all the systems may record in one tick; a system that would
+    /// pass it is refused for the tick and changes nothing.
+    std::size_t journalOperationsPerTick = kMaximumJournalOperations;
 };
 
 /// The Kest systems of one program on one machine, contributed to a World.

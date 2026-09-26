@@ -83,6 +83,9 @@ struct KestSystems::Doorway {
     std::uint64_t journalTick = std::numeric_limits<std::uint64_t>::max();
     std::size_t journaled = 0;
     std::size_t journalLimit = kMaximumJournalBytes;
+    /// Commands recorded in `journalTick`, against `operationLimit` (D240).
+    std::size_t operations = 0;
+    std::size_t operationLimit = kMaximumJournalOperations;
     std::uint32_t run = 0;
     /// Where runs are timed, or nowhere (D210).
     KestTiming* timing = nullptr;
@@ -410,6 +413,7 @@ private:
         if (doorway_->journalTick != context.tick.value) {
             doorway_->journalTick = context.tick.value;
             doorway_->journaled = 0;
+            doorway_->operations = 0;
         }
         if (journalBytes > doorway_->journalLimit - doorway_->journaled) {
             return refuse(result::ErrorClass::ResourceExhausted,
@@ -428,12 +432,22 @@ private:
         // The doors act on this run's command buffer, and only during it.
         doorway_->context = &context;
         ++doorway_->run;
+        const std::size_t kCommandsBefore = context.commands.size();
         result::Status called;
         for (std::size_t at = 0; at < chunks_.size() && called.has_value(); ++at) {
             called = callOnce(chunks_[at], at == 0 ? kest::Fuel::Refill : kest::Fuel::Continue);
         }
         doorway_->context = nullptr;
         RAWFRAME_TRY(std::move(called));
+        // SPEC-0013's journal operations per tick, across the machine's
+        // systems: past it, this run's commands and writes are discarded.
+        const std::size_t kRecorded = context.commands.size() - kCommandsBefore;
+        if (kRecorded > doorway_->operationLimit - doorway_->operations) {
+            return refuse(result::ErrorClass::ResourceExhausted,
+                          WorldKestError::JournalExhausted,
+                          "the tick's systems would record more operations than they may");
+        }
+        doorway_->operations += kRecorded;
 
         // Every call succeeded: the journal becomes the World's values.
         forEachJournaled([this](const Lent& lent, std::size_t bytes) {
@@ -601,6 +615,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
     auto doorway = std::make_unique<Doorway>();
     doorway->timing = settings.timing;
     doorway->journalLimit = settings.journalBytesPerTick;
+    doorway->operationLimit = settings.journalOperationsPerTick;
     doorway->components.reserve(settings.components.size() + 1);
     for (const KestComponent& component : settings.components) {
         Doorway::Component& added = doorway->components.emplace_back();
