@@ -38,8 +38,13 @@ struct Settings {
     world::TickRate rate;
     std::uint32_t maximumTicksPerIteration = 4;
     world::WorldSettings world;
-    /// How long a World may stay more than a second behind before it is
-    /// overloaded; nought never.
+    /// How far behind a World is degraded (SPEC-0013's degraded debt
+    /// threshold), and past which it is overloaded at once (its shutdown
+    /// threshold; nought never), in milliseconds of ticks (D212).
+    std::uint64_t degradedMs = 1000;
+    std::uint64_t debtLimitMs = 0;
+    /// How long a World may stay degraded before it is overloaded; nought
+    /// never.
     execution::MonotonicDuration overloadAfter;
 };
 
@@ -53,8 +58,11 @@ result::Result<Settings> readSettings(const composition::Configuration& configur
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kEntities,
                         configuration.unsignedInteger("world.maximum_entities", std::uint64_t{1} << 20U));
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kOverloadMs, configuration.unsignedInteger("world.overload_ms", 30'000));
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kDegradedMs, configuration.unsignedInteger("world.degraded_ms", 1000));
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kDebtLimitMs, configuration.unsignedInteger("world.debt_limit_ms", 0));
     if (kTicks > kMaximum32 || kSeconds > kMaximum32 || kCatchUp == 0 || kCatchUp > kMaximum32 || kEntities == 0 ||
-        kEntities > kMaximum32 || kOverloadMs > kMaximum32) {
+        kEntities > kMaximum32 || kOverloadMs > kMaximum32 || kDegradedMs == 0 || kDegradedMs > kMaximum32 ||
+        kDebtLimitMs > kMaximum32 || (kDebtLimitMs != 0 && kDebtLimitMs < kDegradedMs)) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kWorldRuntimeDomain,
                             code(WorldRuntimeError::SettingOutOfRange),
@@ -67,6 +75,8 @@ result::Result<Settings> readSettings(const composition::Configuration& configur
         .maximumTicksPerIteration = static_cast<std::uint32_t>(kCatchUp),
         .world = world::WorldSettings{.maximumEntities = static_cast<std::uint32_t>(kEntities),
                                       .rootSeed = world::RootSeed{kSeed}},
+        .degradedMs = kDegradedMs,
+        .debtLimitMs = kDebtLimitMs,
         .overloadAfter = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kOverloadMs)),
     };
 }
@@ -201,14 +211,16 @@ public:
         if (kDue.debt != 0) {
             emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
         }
-        // SPEC-0012's tick progress: a World a second or more behind is
-        // degraded, and healthy again once it has caught up; one behind for
-        // longer than `world.overload_ms` is overloaded, and stays so.
-        const std::uint64_t kSecond = std::max<std::uint64_t>(1, settings_.rate.ticks / settings_.rate.seconds);
+        // SPEC-0012's tick progress, on SPEC-0013's thresholds (D212): a
+        // World `world.degraded_ms` or more behind is degraded, and healthy
+        // again once it has caught up; one degraded for longer than
+        // `world.overload_ms`, or `world.debt_limit_ms` behind, is
+        // overloaded, and stays so.
+        const std::uint64_t kDebtMs = kDue.debt * 1000 * settings_.rate.seconds / settings_.rate.ticks;
         if (overloaded_) {
             return;
         }
-        if (kDue.debt <= kSecond) {
+        if (kDebtMs < settings_.degradedMs) {
             behindSince_.reset();
             context_->reportHealth(composition::Health::Healthy, {});
             return;
@@ -216,7 +228,8 @@ public:
         if (!behindSince_.has_value()) {
             behindSince_ = frame.now;
         }
-        if (settings_.overloadAfter.nanoseconds != 0 && frame.now - *behindSince_ >= settings_.overloadAfter) {
+        if ((settings_.overloadAfter.nanoseconds != 0 && frame.now - *behindSince_ >= settings_.overloadAfter) ||
+            (settings_.debtLimitMs != 0 && kDebtMs >= settings_.debtLimitMs)) {
             overloaded_ = true;
             emitter_.log(diagnostics::Severity::Critical,
                          kOverloadedEvent,

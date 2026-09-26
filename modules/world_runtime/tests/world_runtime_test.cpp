@@ -207,12 +207,43 @@ RAWFRAME_TEST(AWorldBehindTooLongIsOverloaded) {
     movement = nullptr;
 }
 
+RAWFRAME_TEST(SpecThresholdsDegradeAndOverloadAWorldSooner) {
+    // SPEC-0013's canonical thresholds (D212): 100 ms behind is degraded,
+    // and 500 ms behind is overloaded at once, however briefly.
+    const auto kPlan = plan();
+    RAWFRAME_EXPECT(kPlan.has_value());
+    const auto kConfiguration =
+        composition::Configuration::parse("world.tick_rate = 10\nworld.maximum_ticks_per_iteration = 1\n"
+                                          "world.degraded_ms = 100\nworld.debt_limit_ms = 500\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *kPlan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    std::uint64_t iteration = 0;
+    iterate(composition, iteration++, clock.now());
+    // Owing three ticks, one runs: two behind, 200 ms, degraded.
+    clock.advance(MonotonicDuration::fromMilliseconds(300));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Degraded);
+    // Owing six more, one runs: seven behind, 700 ms, overloaded.
+    clock.advance(MonotonicDuration::fromMilliseconds(600));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Unhealthy &&
+                    composition.health().reason == composition::kOverloaded);
+    composition.stop();
+    movement = nullptr;
+}
+
 RAWFRAME_TEST(BadWorldSettingsFailTheStart) {
     const auto kPlan = plan();
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    for (const std::string_view kText :
-         {"world.tick_rate = 0", "world.maximum_ticks_per_iteration = 0", "world.root_seed = minus one"}) {
+    for (const std::string_view kText : {"world.tick_rate = 0",
+                                         "world.maximum_ticks_per_iteration = 0",
+                                         "world.root_seed = minus one",
+                                         "world.degraded_ms = 0",
+                                         "world.degraded_ms = 500\nworld.debt_limit_ms = 100"}) {
         const auto kConfiguration = composition::Configuration::parse(kText);
         composition::Composition composition{
             *kPlan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
