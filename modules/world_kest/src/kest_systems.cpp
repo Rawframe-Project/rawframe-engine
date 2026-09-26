@@ -78,6 +78,11 @@ struct KestSystems::Doorway {
     };
 
     world::SystemContext* context = nullptr;
+    /// Journal bytes the machine's systems took in `journalTick`, against
+    /// `journalLimit` (D229).
+    std::uint64_t journalTick = std::numeric_limits<std::uint64_t>::max();
+    std::size_t journaled = 0;
+    std::size_t journalLimit = kMaximumJournalBytes;
     std::uint32_t run = 0;
     /// Where runs are timed, or nowhere (D210).
     KestTiming* timing = nullptr;
@@ -400,6 +405,18 @@ private:
         if (chunks_.empty()) {
             return {};
         }
+        // SPEC-0013's journal per tick, counted across the machine's
+        // systems before any is copied.
+        if (doorway_->journalTick != context.tick.value) {
+            doorway_->journalTick = context.tick.value;
+            doorway_->journaled = 0;
+        }
+        if (journalBytes > doorway_->journalLimit - doorway_->journaled) {
+            return refuse(result::ErrorClass::ResourceExhausted,
+                          WorldKestError::JournalExhausted,
+                          "the tick's systems would journal more than they may");
+        }
+        doorway_->journaled += journalBytes;
         // The journal grows to the largest tick seen and is then reused.
         if (journal_.size() < journalBytes) {
             journal_.resize(journalBytes);
@@ -583,6 +600,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
     // The doorway first: every door's context points into it.
     auto doorway = std::make_unique<Doorway>();
     doorway->timing = settings.timing;
+    doorway->journalLimit = settings.journalBytesPerTick;
     doorway->components.reserve(settings.components.size() + 1);
     for (const KestComponent& component : settings.components) {
         Doorway::Component& added = doorway->components.emplace_back();

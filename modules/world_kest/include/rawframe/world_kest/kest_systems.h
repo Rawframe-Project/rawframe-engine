@@ -94,6 +94,10 @@ struct KestPrefab {
     std::vector<Entity> entities;
 };
 
+/// SPEC-0013's mutation journal per Domain and tick: the columns a
+/// machine's systems copy to write in one tick, together (D229).
+inline constexpr std::size_t kMaximumJournalBytes = std::size_t{4} << 20U;
+
 struct KestSystemsSettings {
     std::shared_ptr<const kest::Program> program;
     /// Copied: the doors themselves must outlive the systems. `World.create`,
@@ -111,6 +115,9 @@ struct KestSystemsSettings {
     std::span<const KestSystemDeclaration> systems;
     /// Where each system's runs are timed, or nowhere; outlives the systems.
     KestTiming* timing = nullptr;
+    /// Journal bytes all the systems may take in one tick; a system that
+    /// would pass it is refused for the tick and changes nothing.
+    std::size_t journalBytesPerTick = kMaximumJournalBytes;
 };
 
 /// The Kest systems of one program on one machine, contributed to a World.

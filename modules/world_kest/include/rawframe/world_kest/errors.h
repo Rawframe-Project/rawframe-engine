@@ -32,6 +32,9 @@ enum class WorldKestError : std::uint32_t {
     /// A mod the game does not take (SPEC-0042, D179); the context names
     /// the mod, the point, or every claimant.
     ModRefused = 9,
+    /// A tick's systems would journal more than they may (SPEC-0013's
+    /// mutation journal, D229).
+    JournalExhausted = 10,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(WorldKestError error) noexcept {

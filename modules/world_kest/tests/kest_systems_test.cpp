@@ -203,6 +203,36 @@ RAWFRAME_TEST(ARefusedSystemChangesNothing) {
     RAWFRAME_EXPECT(world.get(kMovers.plain[1], kPosition)->x == 1);
 }
 
+RAWFRAME_TEST(ATicksJournalIsBoundedAcrossItsSystems) {
+    // SPEC-0013's mutation journal per tick (D229): two systems each
+    // journal five positions, 40 bytes; with 64 a tick, the second is
+    // refused and changes nothing, and the next tick starts afresh.
+    const auto kRegistry = registry();
+    world::World world{kRegistry};
+    const Movers kMovers = spawn(world);
+    const std::array<KestSystemDeclaration, 2> kDeclarations = {
+        KestSystemDeclaration{.identity = "game.first", .entry = "integrate", .columns = kMotion},
+        KestSystemDeclaration{.identity = "game.second", .entry = "integrate", .columns = kMotion}};
+    auto made = KestSystems::create(
+        {.program = program(), .limits = kLimits, .systems = kDeclarations, .journalBytesPerTick = 64});
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    world::Schedule ticks = schedule(**made, *kRegistry);
+    world::TickIndex tick;
+    for (int round = 0; round < 2; ++round) {
+        auto report = ticks.runTick(world, tick, *world::TickRate::of(60));
+        RAWFRAME_EXPECT(report.has_value() && report->failures.size() == 1);
+        RAWFRAME_EXPECT(report.has_value() && report->failures.size() == 1 &&
+                        report->failures[0].error.code() ==
+                            world_kest::code(world_kest::WorldKestError::JournalExhausted));
+    }
+    // One of the two moved each tick: two steps, not four.
+    const auto kPosition = *world.registry().key<Position>();
+    RAWFRAME_EXPECT(world.get(kMovers.plain[0], kPosition)->x == 2);
+}
+
 RAWFRAME_TEST(AKestSystemDeclaresItsAccess) {
     const auto kRegistry = registry();
     const std::array<KestSystemDeclaration, 1> kDeclarations = {
