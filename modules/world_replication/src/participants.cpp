@@ -30,6 +30,7 @@ using diagnostics::EventIdentity;
 
 constexpr EventIdentity kListening{"replication", "listening"};
 constexpr EventIdentity kServerSummary{"replication", "server_summary"};
+constexpr EventIdentity kDivergence{"replication", "prediction_divergence"};
 constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
 constexpr EventIdentity kBotsAdmitted{"replication", "bots_admitted"};
 
@@ -136,15 +137,17 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(
             server_,
-            ReplicationServer::create(*sessions_,
-                                      ServerReplicationSettings{.table = plan->table(),
-                                                                .playerComponents = {plan->playerComponents().begin(),
-                                                                                     plan->playerComponents().end()},
-                                                                .input = plan->input(),
-                                                                .perception = plan->perceivedInput(),
-                                                                .interest = plan->interest(),
-                                                                .stateBytesPerTick = static_cast<std::size_t>(kPerTick),
-                                                                .presence = presence}));
+            ReplicationServer::create(
+                *sessions_,
+                ServerReplicationSettings{
+                    .table = plan->table(),
+                    .playerComponents = {plan->playerComponents().begin(), plan->playerComponents().end()},
+                    .input = plan->input(),
+                    .perception = plan->perceivedInput(),
+                    .interest = plan->interest(),
+                    .stateBytesPerTick = static_cast<std::size_t>(kPerTick),
+                    .presence = presence,
+                    .predicted = {plan->predictedComponents().begin(), plan->predictedComponents().end()}}));
         return simulation_->addSystems(*server_);
     }
 
@@ -171,6 +174,17 @@ public:
             server_->forgetWorld();
         }
         server_->pump(*simulation_->world(), simulation_->tick());
+        // A detection for operators and the game, never a response (SPEC-0041).
+        for (const Divergence& divergence : server_->takeDivergences()) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kDivergence,
+                         "a client's predicted state at a confirmed tick is not the server's",
+                         {diagnostics::field("connection", divergence.connection.value),
+                          diagnostics::field("tick", divergence.tick),
+                          diagnostics::field("scope", divergence.scope),
+                          diagnostics::field("expected", divergence.expected),
+                          diagnostics::field("received", divergence.received)});
+        }
         admitting_.clear();
         // Host phases run once the Host is active, so admission closed here
         // means it drains: the players hear so once.
@@ -204,6 +218,10 @@ public:
                       diagnostics::field("inputsNeutral", kStatistics.inputsNeutral),
                       diagnostics::field("inputsRefused", kStatistics.inputsRefused),
                       diagnostics::field("perceptionsClamped", kStatistics.perceptionsClamped),
+                      diagnostics::field("checksumsVerified", kStatistics.checksumsVerified),
+                      diagnostics::field("checksumsUnverifiable", kStatistics.checksumsUnverifiable),
+                      diagnostics::field("checksumsDiverged", kStatistics.checksumsDiverged),
+                      diagnostics::field("checksumsLimited", kStatistics.checksumsLimited),
                       diagnostics::field("admissionsRefused", refused_)});
     }
 
@@ -326,6 +344,19 @@ public:
         }
         // A game that predicts is played predicting unless told otherwise.
         const bool kPredicting = !plan_->predictedComponents().empty() && kPredict != "false";
+        // A checksum record every second at 60 Hz by default (D204); the
+        // divergence drill exists in development builds only.
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kChecksumInterval,
+                            configuration.unsignedInteger("bots.checksum_interval", 60));
+        if (kChecksumInterval > 1'000'000) {
+            return missing("bots.checksum_interval is at most a million confirmed ticks");
+        }
+        checksumInterval_ = static_cast<std::uint32_t>(kChecksumInterval);
+        const auto kDrill = configuration.text("bots.divergence_drill");
+        if (kDrill.has_value() && (RAWFRAME_SHIPPING || (*kDrill != "true" && *kDrill != "false"))) {
+            return missing("bots.divergence_drill is true or false, and only in a development build");
+        }
+        divergenceDrill_ = kDrill == "true";
         const auto kInterpolate = configuration.text("bots.interpolate");
         if (kInterpolate.has_value() && *kInterpolate != "true" && *kInterpolate != "false") {
             return missing("bots.interpolate is true or false");
@@ -361,7 +392,9 @@ public:
                     prediction = PredictionSettings{
                         .predictor = bot.predictor.get(),
                         .predicted = {plan_->predictedComponents().begin(), plan_->predictedComponents().end()},
-                        .neighborhood = {plan_->nearbyComponents().begin(), plan_->nearbyComponents().end()}};
+                        .neighborhood = {plan_->nearbyComponents().begin(), plan_->nearbyComponents().end()},
+                        .checksumInterval = checksumInterval_,
+                        .divergenceDrill = divergenceDrill_};
                 } else {
                     ++unpredicted_;
                 }
@@ -473,6 +506,7 @@ public:
             predicted.resimulatedTicks += kBot.resimulatedTicks;
             predicted.stalled += kBot.stalled;
             predicted.failedSteps += kBot.failedSteps;
+            predicted.checksumsSent += kBot.checksumsSent;
         }
         emitter_.log(diagnostics::Severity::Info,
                      kBotsSummary,
@@ -494,6 +528,7 @@ public:
                       diagnostics::field("resimulatedTicks", predicted.resimulatedTicks),
                       diagnostics::field("stalled", predicted.stalled),
                       diagnostics::field("failedSteps", predicted.failedSteps),
+                      diagnostics::field("checksumsSent", predicted.checksumsSent),
                       diagnostics::field("blended", interpolated.blended),
                       diagnostics::field("shownNewest", interpolated.newest)});
     }
@@ -540,6 +575,8 @@ private:
     std::string sessionPrefix_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     std::vector<Bot> bots_;
+    std::uint32_t checksumInterval_ = 60;
+    bool divergenceDrill_ = false;
     /// Bots that would predict but could not have a predictor.
     std::uint64_t unpredicted_ = 0;
     bool allAdmitted_ = false;

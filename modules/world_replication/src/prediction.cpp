@@ -68,7 +68,7 @@ void Prediction::command(std::uint64_t tick, std::span<const std::byte> value) {
     }
 }
 
-void Prediction::authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values) {
+bool Prediction::authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values) {
     for (std::size_t index = 0; index < values.size() && index < known_.size(); ++index) {
         if (!values[index].empty()) {
             known_[index].assign(values[index].begin(), values[index].end());
@@ -79,7 +79,7 @@ void Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
         if (std::ranges::any_of(known_, [](const std::vector<std::byte>& value) {
                 return value.empty();
             })) {
-            return;
+            return false;
         }
         write(known_);
         if (place_) {
@@ -89,13 +89,13 @@ void Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
         predictedTick_ = consumed;
         history_.clear();
         advance(newestCommand_);
-        return;
+        return false;
     }
     const auto kPredicted = history_.find(consumed);
     if (kPredicted == history_.end() && consumed <= predictedTick_) {
         // Already compared and released, or older than the window: nothing
         // this state can say about what is predicted now.
-        return;
+        return false;
     }
     bool equal = kPredicted != history_.end();
     State base = equal ? kPredicted->second : read();
@@ -112,7 +112,8 @@ void Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
     if (equal) {
         ++statistics_.confirmed;
         history_.erase(history_.begin(), history_.upper_bound(consumed));
-        return;
+        confirmed_ = std::move(base);
+        return true;
     }
     // Back to the server's state at `consumed`, then every later input again.
     ++statistics_.rollbacks;
@@ -127,6 +128,7 @@ void Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
     advance(kThrough);
     statistics_.resimulatedTicks += statistics_.predictedTicks - kBefore;
     statistics_.predictedTicks = kBefore;
+    return false;
 }
 
 std::optional<std::span<const std::byte>> Prediction::current(std::size_t index) const {

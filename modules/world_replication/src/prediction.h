@@ -22,8 +22,14 @@ public:
     void command(std::uint64_t tick, std::span<const std::byte> value);
     /// The server's values for some predicted components of the player,
     /// after consuming input `consumed`, in `predicted` order with an empty
-    /// span for one not in this state.
-    void authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values);
+    /// span for one not in this state. True when they confirmed the
+    /// prediction, whose whole state is then `confirmed()`.
+    bool authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values);
+    /// Every predicted component's value, in memory layout, at the last
+    /// confirmed input tick: what a checksum record hashes (D204).
+    [[nodiscard]] const std::vector<std::vector<std::byte>>& confirmed() const noexcept {
+        return confirmed_;
+    }
     /// The predicted value of the `index`th predicted component, if the
     /// prediction has started.
     [[nodiscard]] std::optional<std::span<const std::byte>> current(std::size_t index) const;
@@ -63,6 +69,7 @@ private:
     std::uint64_t predictedTick_ = 0;
     std::uint64_t newestCommand_ = 0;
     PredictionStatistics statistics_;
+    State confirmed_;
     std::function<void()> place_;
 };
 

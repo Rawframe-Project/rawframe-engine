@@ -4,6 +4,7 @@
 // sent of each entity, what it acknowledged, and its inputs waiting for
 // their ticks. Private to the server.
 
+#include "checksums.h"
 #include "rawframe/network/admission.h"
 #include "rawframe/network/provider.h"
 #include "rawframe/world/entity.h"
@@ -108,6 +109,7 @@ struct Peer {
     /// How far ahead of consumption the newest command arrived, last seen.
     std::int64_t measuredLead = 0;
     bool heardInput = false;
+    ChecksumBook checksums;
 };
 
 /// An entity by the ID of the mapping a connection has acknowledged for it:

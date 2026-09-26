@@ -68,6 +68,14 @@ struct PredictionSettings {
     /// every resimulation (D39): what the player's own entity may meet.
     /// Replicated components; none gives the predictor nothing else.
     std::vector<schema::ComponentTypeId> neighborhood;
+    /// SPEC-0041's checksum_interval: a checksum record of the whole
+    /// predicted scope every so many confirmed ticks (D204); nought sends
+    /// none.
+    std::uint32_t checksumInterval = 60;
+    /// SPEC-0041's divergence drill, for development builds only: one bit of
+    /// every state hashed is flipped, so the server must find each record
+    /// diverged.
+    bool divergenceDrill = false;
 };
 
 struct PredictionStatistics {
@@ -81,6 +89,8 @@ struct PredictionStatistics {
     std::uint64_t stalled = 0;
     /// Steps a predicted system refused; the player then waits for the server.
     std::uint64_t failedSteps = 0;
+    /// Checksum records sent.
+    std::uint64_t checksumsSent = 0;
 };
 
 } // namespace rawframe::world_replication

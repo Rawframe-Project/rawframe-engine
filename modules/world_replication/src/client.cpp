@@ -3,6 +3,7 @@
 #include "interpolation.h"
 #include "prediction.h"
 #include "rawframe/network/close.h"
+#include "rawframe/world_replication/checksum.h"
 #include "rawframe/world_replication/errors.h"
 
 #include <algorithm>
@@ -75,6 +76,11 @@ struct ReplicationClient::State {
     std::vector<NeighborValue> neighborValues;
     /// By table index: which predicted component it is, if any.
     std::vector<std::optional<std::size_t>> predictedIndex;
+    /// Each predicted component's table index, and the scope's fingerprint.
+    std::vector<std::size_t> predictedTable;
+    std::uint64_t scope = 0;
+    std::uint64_t confirmations = 0;
+    std::uint64_t checksumsSent = 0;
     std::uint64_t serverTick = 0;
     std::uint64_t stateSequence = 0;
     std::uint64_t consumedInputTick = 0;
@@ -287,13 +293,13 @@ struct ReplicationClient::State {
         stateSequence = std::max(stateSequence, event.sequence);
         consumedInputTick = std::max(consumedInputTick, kHeader->consumedInputTick);
         if (prediction) {
-            reconcile(kHeader->consumedInputTick);
+            reconcile(kHeader->consumedInputTick, kHeader->serverTick);
         }
     }
 
     /// Hands the server's values for the player's predicted components, as
     /// staged from this datagram, to the prediction, and shows its result.
-    void reconcile(std::uint64_t consumed) {
+    void reconcile(std::uint64_t consumed, std::uint64_t tick) {
         std::vector<std::span<const std::byte>> values(prediction->count());
         bool any = false;
         for (const Staged& record : staged) {
@@ -305,8 +311,52 @@ struct ReplicationClient::State {
             }
         }
         if (any) {
-            prediction->authoritative(consumed, values);
+            const std::uint32_t kInterval = settings.prediction->checksumInterval;
+            if (prediction->authoritative(consumed, values) && kInterval != 0 && ++confirmations % kInterval == 0) {
+                sendChecksum(tick);
+            }
             present();
+        }
+    }
+
+    /// SPEC-0041's checksum record of the whole predicted scope at the
+    /// confirmed server tick `tick`, each value in its codec's wire form
+    /// (D204).
+    void sendChecksum(std::uint64_t tick) {
+        const auto& kConfirmed = prediction->confirmed();
+        std::vector<std::byte> wire;
+        std::vector<std::size_t> ends;
+        for (std::size_t index = 0; index < kConfirmed.size() && index < predictedTable.size(); ++index) {
+            const ComponentCodec& codec = settings.table.components[predictedTable[index]];
+            const std::size_t kAt = wire.size();
+            wire.resize(kAt + codec.wireSize());
+            network::Writer writer{std::span{wire}.subspan(kAt)};
+            if (kConfirmed[index].size() != codec.size || !codec.encode(kConfirmed[index].data(), writer).has_value()) {
+                return;
+            }
+            ends.push_back(wire.size());
+        }
+        if (settings.prediction->divergenceDrill && !wire.empty()) {
+            wire[0] ^= std::byte{1};
+        }
+        std::vector<std::span<const std::byte>> values;
+        for (std::size_t index = 0; index < ends.size(); ++index) {
+            const std::size_t kFrom = index == 0 ? 0 : ends[index - 1];
+            values.push_back(std::span{wire}.subspan(kFrom, ends[index] - kFrom));
+        }
+        scratch.resize(32);
+        network::Writer writer{scratch};
+        if (encodeChecksum(writer, ChecksumRecord{.tick = tick, .scope = scope, .checksum = predictedChecksum(values)})
+                .has_value() &&
+            sessions
+                ->sendDatagram(*connection,
+                               network::DatagramRecord{.lane = network::DatagramLane::Input,
+                                                       .laneEpoch = accept->inputEpoch,
+                                                       .sequence = ++inputSequence,
+                                                       .payloadType = kChecksumPayload,
+                                                       .payload = writer.written()})
+                .has_value()) {
+            ++checksumsSent;
         }
     }
 
@@ -399,7 +449,9 @@ ReplicationClient::create(network::Sessions& sessions, world::World& world, Clie
                               "a predicted component does not replicate");
             }
             state->predictedIndex[static_cast<std::size_t>(kIn - settings.table.components.begin())] = index;
+            state->predictedTable.push_back(static_cast<std::size_t>(kIn - settings.table.components.begin()));
         }
+        state->scope = scopeFingerprint(settings.prediction->predicted);
         state->prediction.emplace(kPrediction, settings.input->size);
     }
     if (settings.interpolation) {
@@ -601,7 +653,12 @@ ClientReplicationStatistics ReplicationClient::statistics() const noexcept {
 }
 
 PredictionStatistics ReplicationClient::predictionStatistics() const noexcept {
-    return state_->prediction ? state_->prediction->statistics() : PredictionStatistics{};
+    if (!state_->prediction) {
+        return {};
+    }
+    PredictionStatistics statistics = state_->prediction->statistics();
+    statistics.checksumsSent = state_->checksumsSent;
+    return statistics;
 }
 
 std::optional<double> ReplicationClient::perceivedTick() const noexcept {

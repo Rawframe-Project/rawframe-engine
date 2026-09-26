@@ -3,6 +3,7 @@
 #include "peers.h"
 #include "rawframe/network/close.h"
 #include "rawframe/world/column_query.h"
+#include "rawframe/world_replication/checksum.h"
 #include "rawframe/world_replication/errors.h"
 #include "rawframe/world_replication/perception.h"
 
@@ -65,6 +66,12 @@ struct ReplicationServer::State {
     std::vector<schema::ComponentRuntimeId> reads;
     std::vector<std::unique_ptr<world::System>> systems;
     std::vector<schema::ComponentRuntimeId> inputWrites;
+    /// Each predicted component's replication table index, in the game's
+    /// order, and the fingerprint of that scope (D204).
+    std::vector<std::size_t> predicted;
+    std::uint64_t scope = 0;
+    std::vector<Divergence> divergences;
+    std::vector<std::span<const std::byte>> scopeValues;
 
     // Scratch reused every tick. Every replicated value is encoded once per
     // tick, in entity then component order, and copied to each connection.
@@ -184,6 +191,10 @@ struct ReplicationServer::State {
     void onInput(Peer& peer, const network::SessionEvent& event) {
         if (event.laneEpoch == peer.accept.inputEpoch && event.payloadType == kStateAckPayload) {
             onStateAck(peer, event);
+            return;
+        }
+        if (event.laneEpoch == peer.accept.inputEpoch && event.payloadType == kChecksumPayload) {
+            onChecksum(peer, event);
             return;
         }
         if (!settings.input || event.laneEpoch != peer.accept.inputEpoch || event.payloadType != kInputWindowPayload) {
@@ -409,7 +420,59 @@ struct ReplicationServer::State {
         }
     }
 
+    /// SPEC-0041's checksum record (D204): looked at only within the rate
+    /// limit, checked against the server's own checksum at its tick, and a
+    /// mismatch recorded and counted, never acted on.
+    void onChecksum(Peer& peer, const network::SessionEvent& event) {
+        const std::uint64_t kSeconds = std::max<std::uint64_t>(peer.accept.tickRateSeconds, 1);
+        if (!peer.checksums.admit(
+                pumpTick, (peer.accept.tickRateTicks + kSeconds - 1) / kSeconds, settings.checksumsPerSecond)) {
+            ++statistics.checksumsLimited;
+            return;
+        }
+        const auto kRecord = decodeChecksum(event.payload);
+        if (!kRecord.has_value()) {
+            ++statistics.inputsRefused;
+            return;
+        }
+        const std::optional<std::uint64_t> kExpected = peer.checksums.at(kRecord->tick);
+        const ChecksumBook::Verdict kVerdict = kRecord->scope != scope || predicted.empty()
+                                                   ? ChecksumBook::Verdict::Unverifiable
+                                                   : peer.checksums.check(kRecord->tick, kRecord->checksum);
+        statistics.checksumsVerified += kVerdict == ChecksumBook::Verdict::Verified ? 1 : 0;
+        statistics.checksumsUnverifiable += kVerdict == ChecksumBook::Verdict::Unverifiable ? 1 : 0;
+        if (kVerdict == ChecksumBook::Verdict::Diverged) {
+            ++statistics.checksumsDiverged;
+            if (divergences.size() < 64) {
+                divergences.push_back(Divergence{.connection = peer.connection,
+                                                 .tick = kRecord->tick,
+                                                 .scope = kRecord->scope,
+                                                 .expected = *kExpected,
+                                                 .received = kRecord->checksum});
+            }
+        }
+    }
+
+    /// The server's own checksum of the connection's predicted scope at the
+    /// tick it publishes: its player's values as this tick encoded them.
+    void keepChecksum(Peer& peer, world::TickIndex tick) {
+        if (predicted.empty()) {
+            return;
+        }
+        scopeValues.assign(predicted.size(), {});
+        const auto kFirst = std::ranges::lower_bound(present, peer.player, {}, &PresentValue::entity);
+        for (auto at = kFirst; at != present.end() && at->entity == peer.player; ++at) {
+            const auto kPlace = std::ranges::find(predicted, at->component);
+            if (kPlace != predicted.end()) {
+                scopeValues[static_cast<std::size_t>(kPlace - predicted.begin())] =
+                    std::span{encoded}.subspan(at->offset, at->length);
+            }
+        }
+        peer.checksums.keep(tick.value, predictedChecksum(scopeValues));
+    }
+
     void publishTo(Peer& peer, world::TickIndex tick) {
+        keepChecksum(peer, tick);
         std::erase_if(peer.retired, [&](const Sent& gone) {
             return gone.until + kInterestKept < tick.value;
         });
@@ -676,6 +739,17 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
     for (const ComponentCodec& codec : state->settings.table.components) {
         state->naming.push_back(codec.namesEntities() ? 1 : 0);
     }
+    for (const schema::ComponentTypeId& component : state->settings.predicted) {
+        const auto& kTable = state->settings.table.components;
+        const auto kCodec = std::ranges::find(kTable, component, &ComponentCodec::component);
+        if (kCodec == kTable.end()) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          ReplicationError::Malformed,
+                          "a predicted component is not replicated");
+        }
+        state->predicted.push_back(static_cast<std::size_t>(kCodec - kTable.begin()));
+    }
+    state->scope = scopeFingerprint(state->settings.predicted);
     return std::make_unique<ReplicationServer>(std::move(state));
 }
 
@@ -895,6 +969,15 @@ void ReplicationServer::noticeStopping() noexcept {
 world::EntityHandle ReplicationServer::player(network::ConnectionId connection) const noexcept {
     const auto kPeer = state_->peers.find(connection.value);
     return kPeer == state_->peers.end() ? world::EntityHandle{} : kPeer->second.player;
+}
+
+std::vector<Divergence> ReplicationServer::takeDivergences() {
+    return std::exchange(state_->divergences, {});
+}
+
+std::uint64_t ReplicationServer::divergences(network::ConnectionId connection) const noexcept {
+    const auto kPeer = state_->peers.find(connection.value);
+    return kPeer == state_->peers.end() ? 0 : kPeer->second.checksums.divergences;
 }
 
 } // namespace rawframe::world_replication

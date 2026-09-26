@@ -87,6 +87,23 @@ struct ServerReplicationSettings {
     /// Told of each player with an identity (a session asked for) as their
     /// entity is made and before it goes; none tells no one.
     world_runtime::PlayerPresence* presence = nullptr;
+    /// The player's components clients predict, in the game's order, all
+    /// replicated: the scope a client's checksum records are of. None takes
+    /// no checksum records.
+    std::vector<schema::ComponentTypeId> predicted;
+    /// SPEC-0041's checksum_rate_max: records looked at per connection per
+    /// second; the rest are dropped unread.
+    std::uint32_t checksumsPerSecond = 8;
+};
+
+/// SPEC-0041's `prediction_divergence`: a connection's checksum of its
+/// predicted scope at a tick the server published was not the server's.
+struct Divergence {
+    network::ConnectionId connection;
+    std::uint64_t tick = 0;
+    std::uint64_t scope = 0;
+    std::uint64_t expected = 0;
+    std::uint64_t received = 0;
 };
 
 /// What the server counted.
@@ -108,6 +125,13 @@ struct ServerReplicationStatistics {
     std::uint64_t inputsRefused = 0;
     /// Claimed moments moved to within the skew.
     std::uint64_t perceptionsClamped = 0;
+    /// Checksum records that matched, that could not be checked (another
+    /// scope, a tick no longer kept), that did not match, and that were
+    /// dropped by the rate limit.
+    std::uint64_t checksumsVerified = 0;
+    std::uint64_t checksumsUnverifiable = 0;
+    std::uint64_t checksumsDiverged = 0;
+    std::uint64_t checksumsLimited = 0;
 };
 
 class ReplicationServer final : public world_runtime::SystemContributor, public InterestHistory {
@@ -147,6 +171,11 @@ public:
     void leaveAll(world::World& world) noexcept;
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
+    /// Divergences found since last asked, the oldest first, at most 64; a
+    /// detection, never a response (SPEC-0041).
+    [[nodiscard]] std::vector<Divergence> takeDivergences();
+    /// How many of a connection's checksum records did not match.
+    [[nodiscard]] std::uint64_t divergences(network::ConnectionId connection) const noexcept;
 
     [[nodiscard]] std::optional<std::uint64_t>
     sentSince(std::uint32_t viewer, world::EntityHandle entity, std::uint64_t tick) const noexcept override;
