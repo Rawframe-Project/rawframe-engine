@@ -36,6 +36,12 @@ result::Status
 readModLine(std::span<const std::string_view> words, std::size_t line, GameDescription& game, ModLines& lines) {
     GameModApi& mods = game.mods;
     const std::string_view kKeyword = words[0];
+    for (const std::string_view kWord : words) {
+        lines.surfaceBytes += kWord.size() + 1;
+    }
+    if (lines.surfaceBytes > kMaximumModApiSurfaceBytes) {
+        return badLine(line, WorldKestError::BadGameLine, "a game's Mod API surface is past its size limit");
+    }
     if (kKeyword == "mods") {
         if (lines.policy != 0 || words.size() != 2 ||
             (words[1] != "closed" && words[1] != "curated" && words[1] != "open")) {
@@ -114,6 +120,9 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
                        "a game declares each point once, `extension <name> data <component> multi|exclusive "
                        "[required]` or `extension <name> event <component> after <system> [write <component>]... "
                        "multi|exclusive [required]`");
+    }
+    if (mods.points.size() == kMaximumExtensionPoints) {
+        return badLine(line, WorldKestError::BadGameLine, "a game declares more extension points than the limit");
     }
     mods.points.push_back(std::move(point));
     lines.firstPoint = lines.firstPoint == 0 ? line : lines.firstPoint;

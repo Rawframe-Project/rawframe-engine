@@ -34,6 +34,10 @@ struct CompositionRecord {
     std::int64_t createdAt = 0;
 };
 
+/// The most mods one Composition names: SPEC-0042's
+/// `mods_per_composition_max` (D195).
+inline constexpr std::size_t kMaximumCompositionMods = 256;
+
 /// The record's canonical bytes, closed schema, at most 1 MiB: at most 256
 /// mods and 4,096 packages, each list in subject order with no subject
 /// twice, every subject, version, and root in its grammar. Refused

@@ -3,6 +3,7 @@
 // way a description gets them wrong; and a mod's description cooked with its
 // scenes (D178); and SPEC-0042's validation of a Composition's mods (D179).
 
+#include "rawframe/content/composition_record.h"
 #include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/cooked_mod.h"
@@ -284,6 +285,70 @@ RAWFRAME_TEST(AnEventPointTakesHandlersAfterASystem) {
                                 {modOf("fan/horde", "target acme/raid\nmodapi 1\nprogram h.kest\nhandle rule a\n"),
                                  modOf("fan/more", "target acme/raid\nmodapi 1\nprogram m.kest\nhandle rule b\n")},
                                 "fan/horde:a fan/more:b"));
+}
+
+RAWFRAME_TEST(EveryLimitPointHoldsAtItsValue) {
+    // SPEC-0042's named limit points (D195): at the value read, one past it
+    // refused.
+    const auto kPoints = [](std::size_t count) {
+        std::string text = kBase + "mods open\nmodapi raid 1\n";
+        for (std::size_t index = 0; index < count; ++index) {
+            text += "extension p" + std::to_string(index) + " data raid.enemy multi\n";
+        }
+        return text;
+    };
+    RAWFRAME_EXPECT(parseGame(kPoints(world_kest::kMaximumExtensionPoints)).has_value());
+    RAWFRAME_EXPECT(refused(kPoints(world_kest::kMaximumExtensionPoints + 1).substr(kBase.size())));
+    // Approvals count toward the surface's bytes.
+    std::string approvals = "mods curated\nmodapi raid 1\n";
+    while (approvals.size() <= world_kest::kMaximumModApiSurfaceBytes) {
+        approvals += "approve fan/m" + std::to_string(approvals.size()) + "\n";
+    }
+    RAWFRAME_EXPECT(refused(approvals));
+
+    const auto kContributions = [](std::size_t count, std::string_view point) {
+        std::string text = "target acme/raid\nmodapi 1\n";
+        for (std::size_t index = 0; index < count; ++index) {
+            text += "contribute " + std::string{point} + " s" + std::to_string(index) + ".scene\n";
+        }
+        return text;
+    };
+    RAWFRAME_EXPECT(world_kest::parseMod(kContributions(world_kest::kMaximumModContributions, "p0")).has_value());
+    RAWFRAME_EXPECT(!world_kest::parseMod(kContributions(world_kest::kMaximumModContributions + 1, "p0")).has_value());
+    const std::string kLong =
+        "target acme/raid\nmodapi 1\n#" + std::string(world_kest::kMaximumModDescriptorBytes, 'x');
+    RAWFRAME_EXPECT(!world_kest::parseMod(kLong).has_value());
+
+    // Over a Composition: claimants of one data point, handlers of one
+    // event, and mods.
+    const auto kGame = parseGame(kBase + "system raid.fight simulation fight write raid.enemy\nmods open\n"
+                                         "modapi raid 1\nextension p0 data raid.enemy multi\n"
+                                         "extension hits event raid.enemy after raid.fight multi\n");
+    RAWFRAME_EXPECT(kGame.has_value());
+    if (!kGame.has_value()) {
+        return;
+    }
+    std::vector<world_kest::ComposedMod> mods;
+    const std::size_t kFull = world_kest::kMaximumPointContributions / world_kest::kMaximumModContributions;
+    for (std::size_t index = 0; index < kFull; ++index) {
+        mods.push_back(
+            modOf("fan/m" + std::to_string(index), kContributions(world_kest::kMaximumModContributions, "p0")));
+    }
+    RAWFRAME_EXPECT(world_kest::checkMods(*kGame, "acme/raid", mods, {}).has_value());
+    mods.push_back(modOf("fan/over", kContributions(1, "p0")));
+    RAWFRAME_EXPECT(refusedWith(*kGame, mods, "p0"));
+    std::vector<world_kest::ComposedMod> handlers;
+    for (std::size_t index = 0; index <= world_kest::kMaximumEventHandlers; ++index) {
+        handlers.push_back(
+            modOf("fan/h" + std::to_string(index), "target acme/raid\nmodapi 1\nprogram h.kest\nhandle hits a\n"));
+    }
+    RAWFRAME_EXPECT(refusedWith(*kGame, handlers, "hits"));
+    handlers.pop_back();
+    RAWFRAME_EXPECT(world_kest::checkMods(*kGame, "acme/raid", handlers, {}).has_value());
+    std::vector<world_kest::ComposedMod> many(content::kMaximumCompositionMods + 1,
+                                              modOf("fan/same", "target acme/raid\nmodapi 1\n"));
+    const auto kMany = world_kest::checkMods(*kGame, "acme/raid", many, {});
+    RAWFRAME_EXPECT(!kMany.has_value() && kMany.error().code() == code(world_kest::WorldKestError::ModRefused));
 }
 
 RAWFRAME_TEST(HostileModDescriptionsAreReadOrRefusedNeverHalfRead) {

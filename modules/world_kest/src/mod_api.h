@@ -19,6 +19,8 @@ struct ModLines {
     std::size_t modApi = 0;
     std::size_t firstApproval = 0;
     std::size_t firstPoint = 0;
+    /// The Mod API surface's bytes so far.
+    std::size_t surfaceBytes = 0;
 };
 
 /// Whether `keyword` begins a Mod API line.

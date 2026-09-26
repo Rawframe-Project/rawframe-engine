@@ -68,11 +68,27 @@ struct ModDescription {
 /// The most lines a mod description may have.
 inline constexpr std::size_t kMaximumModLines = 1024;
 
+// SPEC-0042's named limit points, valued here (D195). A point the engine
+// does not build yet (capability grants, mod migrations) has no value, and
+// no mod can use it.
+
+/// `mod_descriptor_bytes_max`: checked before anything is parsed.
+inline constexpr std::size_t kMaximumModDescriptorBytes = 64 * 1024;
+/// `contributions_per_mod_max`: its `contribute` and `handle` lines.
+inline constexpr std::size_t kMaximumModContributions = 256;
+/// `contributions_per_point_max`: scenes given to one data point by every
+/// mod of a Composition.
+inline constexpr std::size_t kMaximumPointContributions = 1024;
+/// `mod_event_handlers_per_event_max`: handlers of one event point by every
+/// mod of a Composition, each a system run every tick.
+inline constexpr std::size_t kMaximumEventHandlers = 64;
+
 /// Parses a description. Refuses (`invalid_argument`, `BadGameLine`, with
-/// the line as context) an unknown keyword, a target or range missing, given
-/// twice, or outside its grammar, a range no version satisfies, a
-/// contribution or handler named twice, handlers without a program, and a
-/// program without handlers.
+/// the line as context) a description past its size limit, an unknown
+/// keyword, a target or range missing, given twice, or outside its grammar,
+/// a range no version satisfies, a contribution or handler named twice, more
+/// of them than the limit, handlers without a program, and a program without
+/// handlers.
 [[nodiscard]] result::Result<ModDescription> parseMod(std::string_view text);
 
 /// Whether `version` of a game's Mod API satisfies every bound.
@@ -92,6 +108,8 @@ struct ComposedMod {
 ///   outside;
 /// - values for a point the game does not declare as a data point, or a
 ///   handler for one it does not declare as an event point;
+/// - more mods than a Composition names, or more claimants of one point
+///   than its limit;
 /// - two claimants of an exclusive point, every one named;
 /// - a required point no mod fills and whose component none of the game's
 ///   own scenes hold.

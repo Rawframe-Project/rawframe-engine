@@ -133,6 +133,11 @@ namespace rawframe::world_kest {
 inline constexpr std::size_t kMaximumGameLines = 4096;
 /// The most entities one spawn line may create.
 inline constexpr std::uint32_t kMaximumSpawnCount = 1U << 20U;
+/// SPEC-0042's `extension_points_per_game_max` (D195).
+inline constexpr std::size_t kMaximumExtensionPoints = 64;
+/// SPEC-0042's `mod_api_surface_bytes_max` (D195): the bytes of the words
+/// of a game's Mod API lines, a space after each.
+inline constexpr std::size_t kMaximumModApiSurfaceBytes = 16 * 1024;
 
 struct GameComponent {
     schema::ComponentTypeId id;

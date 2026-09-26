@@ -14,7 +14,6 @@ namespace {
 using document::Value;
 
 constexpr std::size_t kMaximumRecord = std::size_t{1024} * 1024;
-constexpr std::size_t kMaximumMods = 256;
 constexpr std::size_t kMaximumPackages = 4'096;
 
 std::unexpected<result::Error> refuse(std::string_view why) {
@@ -91,7 +90,7 @@ result::Result<CompositionRecord> readComposition(std::string_view text) {
     }
     CompositionRecord made;
     RAWFRAME_TRY_ASSIGN(made.game, referenceOf(*game));
-    RAWFRAME_TRY_ASSIGN(made.mods, referencesOf(record.find("mods"), kMaximumMods));
+    RAWFRAME_TRY_ASSIGN(made.mods, referencesOf(record.find("mods"), kMaximumCompositionMods));
     RAWFRAME_TRY_ASSIGN(made.packages, referencesOf(record.find("packages"), kMaximumPackages));
     made.profile = *profile->text();
     made.createdAt = *created->integer();

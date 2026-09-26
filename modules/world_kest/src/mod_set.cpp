@@ -1,3 +1,4 @@
+#include "rawframe/content/composition_record.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/mod.h"
 
@@ -19,6 +20,9 @@ result::Status checkMods(const GameDescription& game,
                          std::span<const ComposedMod> mods,
                          std::span<const std::string> gameHolds) {
     const GameModApi& api = game.mods;
+    if (mods.size() > content::kMaximumCompositionMods) {
+        return std::unexpected<result::Error>{refused("more mods than a Composition names")};
+    }
     for (const ComposedMod& mod : mods) {
         if (api.policy == ModPolicy::Closed) {
             return std::unexpected<result::Error>{refused("the game takes no mods").withContext("mod", mod.subject)};
@@ -66,16 +70,28 @@ result::Status checkMods(const GameDescription& game,
         for (const ComposedMod& mod : mods) {
             for (const ModContribution& contribution : mod.description.contributions) {
                 if (contribution.point == point.name) {
-                    claimants += (count == 0 ? "" : " ") + mod.subject + ":" + contribution.scene;
+                    // Named only where an exclusive point's refusal needs them.
+                    if (point.exclusive) {
+                        claimants += (count == 0 ? "" : " ") + mod.subject + ":" + contribution.scene;
+                    }
                     ++count;
                 }
             }
             for (const ModHandler& handler : mod.description.handlers) {
                 if (handler.point == point.name) {
-                    claimants += (count == 0 ? "" : " ") + mod.subject + ":" + handler.function;
+                    if (point.exclusive) {
+                        claimants += (count == 0 ? "" : " ") + mod.subject + ":" + handler.function;
+                    }
                     ++count;
                 }
             }
+        }
+        const std::size_t kLimit =
+            point.kind == GameExtensionPoint::Kind::Data ? kMaximumPointContributions : kMaximumEventHandlers;
+        if (count > kLimit) {
+            return std::unexpected<result::Error>{refused("a point has more claimants than its limit")
+                                                      .withContext("point", point.name)
+                                                      .withContext("limit", std::to_string(kLimit))};
         }
         if (point.exclusive && count > 1) {
             return std::unexpected<result::Error>{refused("an exclusive point has more than one claimant")

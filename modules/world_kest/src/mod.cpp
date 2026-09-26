@@ -85,6 +85,9 @@ result::Result<ModDescription> parseMod(std::string_view text) {
     std::size_t targetLine = 0;
     std::size_t modApiLine = 0;
     std::size_t programLine = 0;
+    if (text.size() > kMaximumModDescriptorBytes) {
+        return badLine(1, "a mod description is past its size limit");
+    }
     while (!text.empty()) {
         const std::size_t kEnd = text.find('\n');
         std::string_view line = text.substr(0, kEnd);
@@ -153,6 +156,9 @@ result::Result<ModDescription> parseMod(std::string_view text) {
             mod.handlers.push_back(ModHandler{.point = std::string{kWords[1]}, .function = std::string{kWords[2]}});
         } else {
             return badLine(number, "a mod description line is target, modapi, contribute, program, or handle");
+        }
+        if (mod.contributions.size() + mod.handlers.size() > kMaximumModContributions) {
+            return badLine(number, "a mod contributes and handles more than the limit");
         }
     }
     if (targetLine == 0 || modApiLine == 0) {
