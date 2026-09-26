@@ -1,6 +1,7 @@
 // Effects in a game (D219): `effect` lines and the `emits` pairs of
 // predicted systems, and the `Effects.<name>` doors a predictor keeps what
-// a step emitted through, each with its kind, emitter, and ordinal.
+// a step emitted through, each with its kind, emitter, and ordinal; an
+// effect's sound.
 
 #include "../src/effect_doors.h"
 #include "rawframe/kest_library/library.h"
@@ -74,6 +75,20 @@ RAWFRAME_TEST(EffectLinesAndEmittersAreChecked) {
     const auto kGame = parseGame(std::string{kHead} + "effect jump predicted\neffect land confirmed_only\n");
     RAWFRAME_EXPECT(kGame.has_value() && kGame->effects.size() == 2 &&
                     kGame->effects[1].effectClass == world_replication::EffectClass::ConfirmedOnly);
+}
+
+// An effect may name a declared sound a client plays for it (D220).
+RAWFRAME_TEST(AnEffectsSoundIsOneTheGameDeclares) {
+    constexpr std::string_view kAudio = "mixer game.mixer\nsound 57164ad59d5b6a23 jump.sound\n";
+    const auto kGame =
+        parseGame(std::string{kHead} + std::string{kAudio} + "effect jump predicted sound 57164ad59d5b6a23\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->effects[0].sound == 0x57164ad59d5b6a23);
+    // Undeclared, with no audio at all, nought, not hexadecimal, half said.
+    RAWFRAME_EXPECT(!parses(std::string{kAudio} + "effect jump predicted sound 57164ad59d5b6a24\n"));
+    RAWFRAME_EXPECT(!parses("effect jump predicted sound 57164ad59d5b6a23\n"));
+    RAWFRAME_EXPECT(!parses(std::string{kAudio} + "effect jump predicted sound 0000000000000000\n"));
+    RAWFRAME_EXPECT(!parses(std::string{kAudio} + "effect jump predicted sound jump\n"));
+    RAWFRAME_EXPECT(!parses(std::string{kAudio} + "effect jump predicted sound\n"));
 }
 
 RAWFRAME_TEST(APredictorsDoorsKeepWhatAStepEmitted) {

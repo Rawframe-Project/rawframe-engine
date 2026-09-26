@@ -38,7 +38,8 @@
 // on predicting clients too, over the player alone (SPEC-0041); it may write
 // no replicated component that is not predicted and draw from no World
 // stream, whose state a client does not have. An `effect <name> predicted`
-// or `effect <name> confirmed_only` line declares a presentation effect,
+// or `effect <name> confirmed_only` line, optionally followed by `sound <16
+// hex digits>` naming a declared sound, declares a presentation effect,
 // which one predicted system with `emits <name>` emits through
 // `Effects.<name>(entity)`; a predicting client delivers it once (D219), a
 // server keeps nothing of it. `nearby` lists replicated
@@ -179,6 +180,9 @@ struct GameSystem {
 struct GameEffect {
     std::string name;
     world_replication::EffectClass effectClass = world_replication::EffectClass::Predicted;
+    /// The declared sound a client plays where the effect's player is, from
+    /// a trailing `sound <16 hex digits>`; nought for none.
+    std::uint64_t sound = 0;
 };
 
 /// Effect kinds a game declares at most.

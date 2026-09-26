@@ -281,13 +281,53 @@ result::Result<composition::ParticipantOwner> makeServer(composition::Participan
     return composition::ParticipantOwner{participant.release()};
 }
 
+/// A client's effect events until presentation takes them: at most
+/// kEffectsWaiting, the oldest let go past them, so a client nothing
+/// presents holds a bounded few.
+class EffectQueue final : public EffectSink {
+public:
+    static constexpr std::size_t kEffectsWaiting = 256;
+
+    void deliver(const PredictedEffect& effect) noexcept override {
+        push({.effect = effect});
+    }
+
+    void cancel(const PredictedEffect& effect) noexcept override {
+        push({.effect = effect, .cancelled = true});
+    }
+
+    void take(std::vector<EffectEvent>& into) noexcept {
+        into.clear();
+        for (std::size_t index = 0; index < size_; ++index) {
+            into.push_back(events_[(first_ + index) % kEffectsWaiting]);
+        }
+        first_ = 0;
+        size_ = 0;
+    }
+
+private:
+    void push(const EffectEvent& event) noexcept {
+        events_[(first_ + size_) % kEffectsWaiting] = event;
+        if (size_ < kEffectsWaiting) {
+            ++size_;
+        } else {
+            first_ = (first_ + 1) % kEffectsWaiting;
+        }
+    }
+
+    std::array<EffectEvent, kEffectsWaiting> events_{};
+    std::size_t first_ = 0;
+    std::size_t size_ = 0;
+};
+
 /// One headless client.
 struct Bot {
     std::unique_ptr<network::Provider> provider;
     std::unique_ptr<network::Sessions> sessions;
     std::unique_ptr<world::World> world;
-    /// Declared before the client that points at it, so it outlives it.
+    /// Declared before the client that points at them, so they outlive it.
     std::unique_ptr<Predictor> predictor;
+    std::unique_ptr<EffectQueue> effects;
     std::unique_ptr<ReplicationClient> client;
     world::Pcg32 random;
     /// The game's input mapping with a hand on its controls, when the game
@@ -321,6 +361,14 @@ public:
             return {};
         }
         return ClientView{.world = bots_[index].world.get(), .owned = bots_[index].client->owned()};
+    }
+
+    void takeEffects(std::size_t index, std::vector<EffectEvent>& into) noexcept override {
+        if (index >= bots_.size() || bots_[index].effects == nullptr) {
+            into.clear();
+            return;
+        }
+        bots_[index].effects->take(into);
     }
 
     result::Status load(composition::ParticipantContext& context, std::uint64_t count) {
@@ -402,12 +450,14 @@ public:
                 // them plays as a client that does not predict would.
                 if (predictor.has_value()) {
                     bot.predictor = std::move(*predictor);
+                    bot.effects = std::make_unique<EffectQueue>();
                     prediction = PredictionSettings{
                         .predictor = bot.predictor.get(),
                         .predicted = {plan_->predictedComponents().begin(), plan_->predictedComponents().end()},
                         .neighborhood = {plan_->nearbyComponents().begin(), plan_->nearbyComponents().end()},
                         .checksumInterval = checksumInterval_,
                         .rollbackAlarm = rollbackAlarm_,
+                        .effects = bot.effects.get(),
                         .effectClasses = {plan_->effectClasses().begin(), plan_->effectClasses().end()},
                         .divergenceDrill = divergenceDrill_};
                 } else {
