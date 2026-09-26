@@ -1,12 +1,16 @@
 // Admission payloads: exact round trips, every truncation refused, bounds and
-// domains kept, and the compatibility matrix with no downgrade.
+// domains kept, hostile payloads read only as they write, and the
+// compatibility matrix with no downgrade.
 
 #include "rawframe/network/admission.h"
 #include "rawframe/network/close.h"
 #include "rawframe/network/errors.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <array>
+#include <cstring>
+#include <string>
 #include <vector>
 
 using namespace rawframe;
@@ -45,6 +49,42 @@ template <typename T> std::vector<std::byte> encoded(const T& value, result::Sta
     Writer writer{buffer};
     RAWFRAME_EXPECT(encode(writer, value).has_value());
     return {writer.written().begin(), writer.written().end()};
+}
+
+std::vector<std::byte> bytesOf(const std::string& text) {
+    std::vector<std::byte> bytes(text.size());
+    if (!text.empty()) {
+        std::memcpy(bytes.data(), text.data(), text.size());
+    }
+    return bytes;
+}
+
+std::string textOf(std::span<const std::byte> bytes) {
+    return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+}
+
+/// Mutations of `seed` read as `T`: whatever is read writes back to its very
+/// bytes, so a peer has one spelling for each payload. Returns how many were
+/// read.
+template <typename T>
+std::size_t mutated(std::span<const std::byte> seed,
+                    result::Result<T> (*decode)(std::span<const std::byte>),
+                    result::Status (*encode)(Writer&, const T&)) {
+    test::Mutations mutations;
+    std::size_t read = 0;
+    for (int round = 0; round < 20'000; ++round) {
+        const std::vector<std::byte> kDamaged =
+            bytesOf(mutations.mutate(textOf(seed), std::string_view{"\x00\x01\x02\x3f\x40\x80\xc0\xff", 8}));
+        const auto kRead = decode(kDamaged);
+        if (!kRead.has_value()) {
+            continue;
+        }
+        ++read;
+        std::vector<std::byte> buffer(4096);
+        Writer writer{buffer};
+        RAWFRAME_EXPECT(encode(writer, *kRead).has_value() && std::ranges::equal(writer.written(), kDamaged));
+    }
+    return read;
 }
 
 template <typename T> bool failedWith(const result::Result<T>& outcome, NetworkError error) {
@@ -112,6 +152,33 @@ RAWFRAME_TEST(AcceptsAndRejectsRoundTrip) {
     std::vector<std::byte> unknown = kRejectBytes;
     unknown[0] = std::byte{0x3f};
     RAWFRAME_EXPECT(failedWith(decodeReject(unknown), NetworkError::Malformed));
+}
+
+RAWFRAME_TEST(HostileAdmissionPayloadsReadOnlyAsTheyWrite) {
+    // A Hello is the first thing an unadmitted peer sends; an Accept or a
+    // Reject is what a client believes of a server it has not yet trusted.
+    Accept accept{.compatibility = compatibility(),
+                  .features = 3,
+                  .session = {std::byte{1}, std::byte{2}},
+                  .connection = 44,
+                  .connectionEpoch = 5,
+                  .inputEpoch = 6,
+                  .replicationEpoch = 1ULL << 40U,
+                  .tickRateTicks = 60,
+                  .tickRateSeconds = 1,
+                  .tickOrigin = 1000,
+                  .maximumDatagram = 1200,
+                  .maximumFrame = 65536};
+    accept.nonce.fill(std::byte{9});
+    Hello shortTicket = hello();
+    shortTicket.ticket.resize(12);
+    const std::size_t kHellos = mutated(encoded(shortTicket, &encodeHello), &decodeHello, &encodeHello);
+    const std::size_t kAccepts = mutated(encoded(accept, &encodeAccept), &decodeAccept, &encodeAccept);
+    const std::size_t kRejects =
+        mutated(encoded(Reject{.reason = RejectReason::SchemaMismatch, .message = "schema differs"}, &encodeReject),
+                &decodeReject,
+                &encodeReject);
+    RAWFRAME_EXPECT(kHellos > 0 && kAccepts > 0 && kRejects > 0);
 }
 
 RAWFRAME_TEST(CompatibilityIsExactWithNoDowngrade) {
