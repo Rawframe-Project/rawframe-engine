@@ -292,28 +292,28 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     // Retire what is gone or out of interest; the ID is never used again
     // in this epoch. What stays is marked as held for this connection.
     ++markNow;
-    for (auto mapping = peer.mapped.begin(); mapping != peer.mapped.end();) {
-        const std::size_t kIndex = presentIndex(mapping->first);
+    peer.mapped.keepIf([&](Mappings::Entry& mapping) {
+        const std::size_t kIndex = presentIndex(mapping.first);
         const bool kPresent = kIndex != kNowhere;
         if (kPresent && relevant(peer, kViewer, entities[kIndex], true)) {
             heldMark[kIndex] = markNow;
-            ++mapping;
-            continue;
+            return true;
         }
         statistics.interestLeft += kPresent ? 1 : 0;
-        if (mapping->second.firstSent.has_value()) {
+        if (mapping.second.firstSent.has_value()) {
             peer.retired.push_back(
-                Sent{.entity = mapping->first, .from = *mapping->second.firstSent, .until = tick.value});
+                Sent{.entity = mapping.first, .from = *mapping.second.firstSent, .until = tick.value});
         }
-        sendMapping(peer, network::ControlFrame::MappingRetire, mapping->second.id, false);
-        peer.byNetEntity.erase(mapping->second.id.value);
-        mapping = peer.mapped.erase(mapping);
-    }
+        sendMapping(peer, network::ControlFrame::MappingRetire, mapping.second.id, false);
+        peer.byNetEntity.erase(mapping.second.id.value);
+        return false;
+    });
     // Declare what is new, before any state names it: the connection's
     // own player first, whatever the bound on mappings.
+    const std::size_t kSettled = peer.mapped.size();
     const auto kDeclare = [&](world::EntityHandle entity) {
         const NetEntityId kId{peer.nextNetEntity++};
-        peer.mapped[entity] = Mapping{.id = kId};
+        peer.mapped.add(entity, Mapping{.id = kId});
         peer.byNetEntity[kId.value] = entity;
         sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
     };
@@ -350,6 +350,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         }
         kDeclare(entities[kIndex].entity);
     }
+    peer.mapped.settle(kSettled);
     // State for acknowledged mappings, as many datagrams as the byte
     // budget allows.
     const std::size_t kRoom = static_cast<std::size_t>(peer.accept.maximumDatagram);
@@ -427,7 +428,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
                 continue;
             }
             if (replica.sent && tick.value - replica.sentAt < settings.resendAfter &&
-                sameBytes(replica.lastSent, kValue)) {
+                sameBytes(replica.lastSent.bytes(), kValue)) {
                 continue;
             }
             replica.priority += value.entity == peer.player ? kOwnedPriority : 1;
@@ -462,8 +463,8 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
             inDatagram.clear();
             continue;
         }
-        if (!replica.sent || !sameBytes(replica.lastSent, kValue)) {
-            replica.lastSent.assign(kValue.begin(), kValue.end());
+        if (!replica.sent || !sameBytes(replica.lastSent.bytes(), kValue)) {
+            replica.lastSent.assign(kValue);
             replica.changedAt = tick.value;
             replica.sent = true;
         }

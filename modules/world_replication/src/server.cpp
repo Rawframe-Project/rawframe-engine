@@ -41,8 +41,9 @@ void ReplicationServer::State::onFrame(world::World& world, Peer& peer, const ne
         }
         if (kType == network::ControlFrame::MappingAck) {
             const auto kEntity = peer.byNetEntity.find(kRecord->entity.value);
-            if (kEntity != peer.byNetEntity.end()) {
-                peer.mapped[kEntity->second].acknowledged = true;
+            Mapping* const kMapping = kEntity != peer.byNetEntity.end() ? peer.mapped.find(kEntity->second) : nullptr;
+            if (kMapping != nullptr) {
+                kMapping->acknowledged = true;
             }
         }
         return;
@@ -83,11 +84,11 @@ void ReplicationServer::State::onStateAck(Peer& peer, const network::SessionEven
             if (kEntity == peer.byNetEntity.end()) {
                 continue;
             }
-            const auto kMapping = peer.mapped.find(kEntity->second);
-            if (kMapping == peer.mapped.end() || component >= kMapping->second.replicas.size()) {
+            Mapping* const kMapping = peer.mapped.find(kEntity->second);
+            if (kMapping == nullptr || component >= kMapping->replicas.size()) {
                 continue;
             }
-            Replica& replica = kMapping->second.replicas[component];
+            Replica& replica = kMapping->replicas[component];
             replica.acknowledgedAt = std::max(replica.acknowledgedAt.value_or(0), sent->tick);
         }
     }
@@ -478,9 +479,9 @@ ReplicationServer::sentSince(std::uint32_t viewer, world::EntityHandle entity, s
         if (entity == peer.player) {
             return 0;
         }
-        const auto kMapped = peer.mapped.find(entity);
-        if (kMapped != peer.mapped.end() && kMapped->second.firstSent.has_value()) {
-            return kMapped->second.firstSent;
+        const Mapping* const kMapped = peer.mapped.find(entity);
+        if (kMapped != nullptr && kMapped->firstSent.has_value()) {
+            return kMapped->firstSent;
         }
         const auto kThen = std::ranges::find_if(peer.retired, [&](const Sent& gone) {
             return gone.entity == entity && gone.from <= tick && tick < gone.until;
