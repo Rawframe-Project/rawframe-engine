@@ -26,17 +26,23 @@ game="${6:-games/arena/arena.game}"
 server_settings="${7:-/dev/null}"
 bots_settings="${8:-/dev/null}"
 bots_game="${9-$game}"
+# Paths as the programs under test read them: Git's bash on Windows names
+# D:/a as /d/a, which only its own tools understand (D237).
+native() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+}
+here="$(native "$PWD")"
 # Paths in a configuration are under its own directory (D188); the games
 # named here are under the repository root, where this runs from.
 absolute() {
     case "$1" in
     "" | /*) printf '%s' "$1" ;;
-    *) printf '%s/%s' "$PWD" "$1" ;;
+    *) printf '%s/%s' "$here" "$1" ;;
     esac
 }
 game="$(absolute "$game")"
 bots_game="$(absolute "$bots_game")"
-work="$(mktemp -d)"
+work="$(native "$(mktemp -d)")"
 pids=()
 trap 'kill ${pids[@]+"${pids[@]}"} 2>/dev/null || true; rm -rf "$work"' EXIT
 

@@ -9,14 +9,20 @@
 set -euo pipefail
 
 server="$1"
-work="$(mktemp -d)"
+# Paths as the programs under test read them: Git's bash on Windows names
+# D:/a as /d/a, which only its own tools understand (D237).
+native() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+}
+here="$(native "$PWD")"
+work="$(native "$(mktemp -d)")"
 trap 'rm -rf "$work"' EXIT
 
 cat >"$work/server.conf" <<CONF
 host.maximum_iterations = 120
 host.iteration_rate = 120
 world.tick_rate = 60
-kest.game = $PWD/games/runners/runners.game
+kest.game = $here/games/runners/runners.game
 save.directory = $work/saves
 save.namespace = 72756e6e657273000000000000000001
 CONF

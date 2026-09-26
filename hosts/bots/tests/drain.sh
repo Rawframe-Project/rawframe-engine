@@ -9,7 +9,13 @@ set -euo pipefail
 
 server="$1"
 bots="$2"
-work="$(mktemp -d)"
+# Paths as the programs under test read them: Git's bash on Windows names
+# D:/a as /d/a, which only its own tools understand (D237).
+native() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+}
+here="$(native "$PWD")"
+work="$(native "$(mktemp -d)")"
 pids=()
 trap 'kill ${pids[@]+"${pids[@]}"} 2>/dev/null || true; rm -rf "$work"' EXIT
 
@@ -19,7 +25,7 @@ cat >"$work/server.conf" <<CONF
 host.iteration_rate = 120
 host.drain_ms = 60000
 world.tick_rate = 60
-kest.game = $PWD/games/arena/arena.game
+kest.game = $here/games/arena/arena.game
 network.quic.self_signed = true
 network.quic.fingerprint_file = $work/fingerprint
 replication.endpoint = 127.0.0.1:$port
@@ -29,7 +35,7 @@ bots_conf() {
 host.maximum_iterations = $1
 host.iteration_rate = 120
 kest.plan_only = true
-kest.game = $PWD/games/arena/arena.game
+kest.game = $here/games/arena/arena.game
 network.quic.pin_file = $work/fingerprint
 bots.count = 2
 bots.endpoint = 127.0.0.1:$port

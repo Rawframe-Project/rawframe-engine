@@ -8,14 +8,20 @@
 set -euo pipefail
 
 server="$1"
-work="$(mktemp -d)"
+# Paths as the programs under test read them: Git's bash on Windows names
+# D:/a as /d/a, which only its own tools understand (D237).
+native() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+}
+here="$(native "$PWD")"
+work="$(native "$(mktemp -d)")"
 trap 'rm -rf "$work"' EXIT
 
 common="host.maximum_iterations = 400
 host.iteration_rate = 1000
 world.tick_rate = 1000
 world.root_seed = 7
-kest.game = $PWD/modules/world_kest/tests/game/shooter.game"
+kest.game = $here/modules/world_kest/tests/game/shooter.game"
 
 printf '%s\ncheckpoint.capture_ticks = 50 100\ncheckpoint.capture_prefix = %s/a-\n' "$common" "$work" >"$work/a.conf"
 printf '%s\ncheckpoint.restore = %s/a-50.rfsn\ncheckpoint.capture_ticks = 100\ncheckpoint.capture_prefix = %s/b-\n' \
