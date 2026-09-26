@@ -43,6 +43,10 @@
     {
       "name": "shots",
       "maximumInstances": 8
+    },
+    {
+      "name": "jumps",
+      "maximumInstances": 4
     }
   ]
 }

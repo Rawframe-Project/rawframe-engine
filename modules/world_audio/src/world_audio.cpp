@@ -250,6 +250,18 @@ void WorldAudio::update(world::World& world, float seconds) {
     state_->update(world, seconds);
 }
 
+void WorldAudio::playOnce(const world::World& world, std::uint64_t sound, world::EntityHandle from) {
+    const auto kSound = state_->soundOf(sound);
+    if (!kSound) {
+        ++state_->statistics.unknownSounds;
+        return;
+    }
+    const auto kPlace = world.alive(from) ? state_->placeOf(world, from) : std::nullopt;
+    Tracked unfollowed;
+    ++state_->statistics.once;
+    state_->play(unfollowed, *kSound, kPlace ? std::optional{kPlace->position} : std::nullopt, false);
+}
+
 const WorldAudioStatistics& WorldAudio::statistics() const noexcept {
     return state_->statistics;
 }

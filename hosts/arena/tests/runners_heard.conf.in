@@ -1,6 +1,7 @@
 # Eight bots play the sample platformer for four seconds while the first
 # one's mirrored World is heard as its player would hear it and written to a
-# WAVE file in the build tree: shots sound, from where they were fired.
+# WAVE file in the build tree: shots sound, from where they were fired, and
+# its own jumps as they are predicted.
 # Its sounds are read by identity from the game's content cooked into the
 # build tree.
 host.maximum_iterations = 480

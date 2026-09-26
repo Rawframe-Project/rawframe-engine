@@ -60,7 +60,7 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldAudioE
 /// One client's mirrored World heard as its player would hear it: the
 /// game's sounds on a mixer at a rate, the listener bound to the player.
 struct Hearing {
-    const world_replication::ClientWorlds* clients = nullptr;
+    world_replication::ClientWorlds* clients = nullptr;
     std::uint64_t client = 0;
     std::unique_ptr<audio::Mixer> mixer;
     /// Keeps streamed sounds decoded ahead: on the participant's CPU
@@ -70,6 +70,12 @@ struct Hearing {
     std::unique_ptr<audio::Sounds> sounds;
     std::size_t master = 0;
     WorldAudioSettings settings;
+    /// Each effect kind's sound, by kind; nought for none (D220).
+    std::vector<std::uint64_t> effectSounds;
+    std::vector<world_replication::EffectEvent> effects;
+    /// Effects taken back after they were heard: a one-shot already
+    /// sounding plays on.
+    std::uint64_t takenBack = 0;
     std::unique_ptr<WorldAudio> heard;
     std::optional<execution::MonotonicInstant> last;
     /// The game's sounds, read by identity from the Runtime's cooked
@@ -122,6 +128,9 @@ struct Hearing {
         RAWFRAME_TRY_ASSIGN(sounds, audio::Sounds::create(*mixer, game.layout, {.streamer = streamer.get()}));
         settings.emitter = game.emitter;
         settings.listener = game.listener;
+        for (const world_kest::GameEffect& effect : files->description().effects) {
+            effectSounds.push_back(effect.sound);
+        }
 
         // The game's cooked content, admitting sound clips.
         RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
@@ -227,6 +236,15 @@ struct Hearing {
         const double kSeconds = static_cast<double>((frame.now - *last).nanoseconds) / 1e9;
         last = frame.now;
         heard->bindListener(kView.owned.isNull() ? std::nullopt : std::optional{kView.owned});
+        // The client's predicted effects, where its player is.
+        clients->takeEffects(client, effects);
+        for (const world_replication::EffectEvent& event : effects) {
+            if (event.cancelled) {
+                ++takenBack;
+            } else if (event.effect.kind < effectSounds.size() && effectSounds[event.effect.kind] != 0) {
+                heard->playOnce(*kView.world, effectSounds[event.effect.kind], kView.owned);
+            }
+        }
         heard->update(*kView.world, static_cast<float>(kSeconds));
         return kSeconds;
     }
@@ -316,6 +334,8 @@ public:
                       diagnostics::field("frames", clip.frames()),
                       diagnostics::field("peak", static_cast<double>(peak)),
                       diagnostics::field("cues", kHeard.cues),
+                      diagnostics::field("effects", kHeard.once),
+                      diagnostics::field("effectsTakenBack", hearing_.takenBack),
                       diagnostics::field("refused", kHeard.refused),
                       diagnostics::field("unknownSounds", kHeard.unknownSounds),
                       diagnostics::field("listenerConflicts", kHeard.listenerConflicts)});
@@ -411,6 +431,7 @@ public:
                       diagnostics::field("longestCallbackNanoseconds", kOutput.longestCallbackNanoseconds),
                       diagnostics::field("peak", static_cast<double>(peak_)),
                       diagnostics::field("cues", kHeard.cues),
+                      diagnostics::field("effects", kHeard.once),
                       diagnostics::field("refused", kHeard.refused)});
     }
 

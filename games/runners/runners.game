@@ -23,8 +23,8 @@ system runners.hurt simulation hurt write runners.score read runners.hit entitie
 system runners.age simulation age write runners.age
 
 # A jump is a presentation effect the runner predicts: its player hears it
-# at once, and once (D219).
-effect jump predicted
+# at once, and once (D219), as jump.sound (D220).
+effect jump predicted sound 57164ad59d5b6a23
 
 # The level (level.scene): the ground, eighty meters wide, walls at its
 # ends, three platforms to jump up to, slopes of 20 degrees at both ends,
@@ -68,9 +68,11 @@ interpolate rawframe.physics2d.pose
 predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick
 
 # Each shot sounds from the runner that fired it (runners.mixer, shot.sound);
-# clients hear them, a server carries only the counts.
+# clients hear them, a server carries only the counts. A jump sounds from
+# the runner that jumped, heard by its own player only.
 mixer runners.mixer
 sound 950e09337d03de69 shot.sound
+sound 57164ad59d5b6a23 jump.sound
 
 # What a client shows: the HUD's words in English and Turkish (hud.strings,
 # hud.tr.translations), English unless the player asks otherwise. A server

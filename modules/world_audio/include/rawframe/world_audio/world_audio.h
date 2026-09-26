@@ -65,6 +65,8 @@ struct WorldAudioStatistics {
     std::uint64_t loopingCues = 0;
     /// Plays the Sounds refused (a full concurrency set, no voice).
     std::uint64_t refused = 0;
+    /// Sounds played once by `playOnce`, a predicted effect's (D220).
+    std::uint64_t once = 0;
 };
 
 class WorldAudio {
@@ -85,6 +87,12 @@ public:
     /// Once a frame, on the owner's thread: the listener, every emitter's
     /// continuous sound and new cues, what despawned, then the Sounds.
     void update(world::World& world, float seconds);
+
+    /// Plays the declared sound `sound` once from where `from` is, or where
+    /// the listener is when it has no pose: a predicted effect heard (D220).
+    /// Before the frame's `update`, which moves the Sounds on. A sound the
+    /// game does not declare counts as unknown.
+    void playOnce(const world::World& world, std::uint64_t sound, world::EntityHandle from);
 
     [[nodiscard]] const WorldAudioStatistics& statistics() const noexcept;
 

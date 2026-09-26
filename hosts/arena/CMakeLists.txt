@@ -111,7 +111,8 @@ if(RAWFRAME_BUILD_TESTS)
                          FIXTURES_REQUIRED runners_content
                          PASS_REGULAR_EXPRESSION "\"text_catalog\".*\"tables\":1,\"translations\":1,\"keys\":3,\"stale\":0,\"locale\":\"tr-TR\",\"default\":\"en\"")
     # Eight bots play runners and the first one's World is heard: its shots
-    # and the others' within range sound, and the recording is not silent.
+    # and the others' within range sound, its own jumps sound as predicted
+    # effects (D220), and the recording is not silent.
     set(RECORD ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.wav)
     configure_file(tests/runners_heard.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.conf @ONLY)
     add_test(NAME runners_heard
@@ -119,7 +120,8 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(runners_heard PROPERTIES
                          FIXTURES_REQUIRED runners_content
-                         PASS_REGULAR_EXPRESSION "\"written\":true,\"frames\":[0-9]+,\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+                         PASS_REGULAR_EXPRESSION
+                         "\"written\":true,\"frames\":[0-9]+,\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9][0-9]*,\"effects\":[1-9]")
     # Four bots play runners and the first one's World is played on a null
     # device: its thread renders the mixer, and shots reach the master bus.
     configure_file(tests/runners_played.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_played.conf @ONLY)
