@@ -80,8 +80,8 @@ class Checkpoints final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
         const composition::Configuration& configuration = context.configuration();
-        restorePath_ = std::string{configuration.text("checkpoint.restore").value_or("")};
-        capturePrefix_ = std::string{configuration.text("checkpoint.capture_prefix").value_or("")};
+        restorePath_ = std::string{configuration.path("checkpoint.restore").value_or("")};
+        capturePrefix_ = std::string{configuration.path("checkpoint.capture_prefix").value_or("")};
         std::string_view ticks = configuration.text("checkpoint.capture_ticks").value_or("");
         while (!ticks.empty()) {
             const std::size_t kSpace = ticks.find(' ');

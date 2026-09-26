@@ -92,8 +92,8 @@ private:
 };
 
 result::Result<std::optional<Certificate>> identityOf(const composition::Configuration& configuration, bool browsers) {
-    const auto kCertificateFile = configuration.text("network.quic.certificate_file");
-    const auto kKeyFile = configuration.text("network.quic.private_key_file");
+    const auto kCertificateFile = configuration.path("network.quic.certificate_file");
+    const auto kKeyFile = configuration.path("network.quic.private_key_file");
     const auto kSelfSigned = configuration.text("network.quic.self_signed");
     if (kSelfSigned.has_value() && *kSelfSigned != "true" && *kSelfSigned != "false") {
         return badFile("network.quic.self_signed is true or false");
@@ -120,7 +120,7 @@ result::Result<std::optional<Certificate>> identityOf(const composition::Configu
 
 result::Result<std::optional<Fingerprint>> pinOf(const composition::Configuration& configuration) {
     const auto kPin = configuration.text("network.quic.pin");
-    const auto kPinFile = configuration.text("network.quic.pin_file");
+    const auto kPinFile = configuration.path("network.quic.pin_file");
     if (kPin.has_value() && kPinFile.has_value()) {
         return badFile("network.quic.pin and network.quic.pin_file are one or the other");
     }
@@ -161,7 +161,7 @@ result::Result<composition::ParticipantOwner> makeQuic(composition::ParticipantC
     std::optional<Fingerprint> identity;
     if (settings.certificate.has_value()) {
         RAWFRAME_TRY_ASSIGN(identity, fingerprintOf(*settings.certificate));
-        if (const auto kPath = configuration.text("network.quic.fingerprint_file")) {
+        if (const auto kPath = configuration.path("network.quic.fingerprint_file")) {
             RAWFRAME_TRY(writeFile(std::string{*kPath}, formatFingerprint(*identity) + "\n"));
         }
     }

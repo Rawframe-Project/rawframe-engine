@@ -242,7 +242,7 @@ class Recorder final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
         const composition::Configuration& configuration = context.configuration();
-        const auto kPath = configuration.text("audio.record");
+        const auto kPath = configuration.path("audio.record");
         if (!kPath.has_value()) {
             return {};
         }

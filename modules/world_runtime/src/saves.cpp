@@ -74,7 +74,7 @@ class Saves final : public composition::Participant, public PlayerPresence {
 public:
     result::Status load(composition::ParticipantContext& context) {
         const composition::Configuration& configuration = context.configuration();
-        const auto kDirectory = configuration.text("save.directory");
+        const auto kDirectory = configuration.path("save.directory");
         if (!kDirectory.has_value()) {
             return {};
         }
@@ -82,7 +82,7 @@ public:
             return misconfigured("save.directory needs a game that declares a save");
         }
         slot_ = std::string{configuration.text("save.slot").value_or("world")};
-        restoring_ = configuration.text("checkpoint.restore").has_value();
+        restoring_ = configuration.path("checkpoint.restore").has_value();
         const base::Bits128Parse kParsed = base::parseBits128Hex(configuration.text("save.namespace").value_or(""));
         if (!kParsed.parsed || kParsed.value == base::Bits128{}) {
             return misconfigured("save.namespace is the persistence namespace, 32 lowercase hex digits, not nought");

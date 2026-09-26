@@ -42,7 +42,7 @@ public:
 #if !RAWFRAME_FILE_SYSTEM
         // Without files, content is held by the host that fetched it, not
         // named by a path.
-        if (configuration.text("content.root") || configuration.text("content.composition")) {
+        if (configuration.path("content.root") || configuration.path("content.composition")) {
             return std::unexpected<result::Error>{
                 result::fail(result::ErrorClass::FailedPrecondition,
                              content::kContentDomain,
@@ -56,12 +56,12 @@ public:
         return {};
 #else
         std::optional<std::filesystem::path> root;
-        if (const auto kRoot = configuration.text("content.root")) {
+        if (const auto kRoot = configuration.path("content.root")) {
             root = std::filesystem::path{std::string{*kRoot}};
         }
         // A Composition, or a cook's output, or nothing.
-        if (const auto kComposition = configuration.text("content.composition")) {
-            const auto kLibrary = configuration.text("content.library");
+        if (const auto kComposition = configuration.path("content.composition")) {
+            const auto kLibrary = configuration.path("content.library");
             if (root.has_value() || !kLibrary.has_value()) {
                 return std::unexpected<result::Error>{
                     result::fail(result::ErrorClass::InvalidArgument,
@@ -94,9 +94,9 @@ public:
     /// a cook's output is a directory's, never held.
     result::Status loadHeld(composition::ParticipantContext& context, const composition::HeldFiles& held) {
         const composition::Configuration& configuration = context.configuration();
-        const auto kComposition = configuration.text("content.composition");
-        const auto kLibrary = configuration.text("content.library");
-        if (configuration.text("content.root")) {
+        const auto kComposition = configuration.path("content.composition");
+        const auto kLibrary = configuration.path("content.library");
+        if (configuration.path("content.root")) {
             return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
                                                                content::kContentDomain,
                                                                code(content::ContentError::SourceUnavailable),

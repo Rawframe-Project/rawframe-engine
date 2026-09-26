@@ -825,7 +825,7 @@ public:
 
 result::Result<composition::ParticipantOwner> makeGameFiles(composition::ParticipantContext& context) noexcept {
     auto participant = std::make_unique<GameFilesParticipant>();
-    const auto kPath = context.configuration().text("kest.game");
+    const auto kPath = context.configuration().path("kest.game");
     const auto kResource = context.configuration().text("kest.game_resource");
     if (kPath && kResource) {
         return result::fail(result::ErrorClass::InvalidArgument,
@@ -841,14 +841,15 @@ result::Result<composition::ParticipantOwner> makeGameFiles(composition::Partici
         // From the files the host holds when it holds some (D167): the
         // description's directory's files.
         if (const composition::HeldFiles* held = context.heldFiles()) {
-            const std::size_t kSlash = kPath->rfind('/');
-            const std::string_view kDirectory = kSlash == std::string_view::npos ? "" : kPath->substr(0, kSlash);
+            const std::string_view kHeld = *kPath;
+            const std::size_t kSlash = kHeld.rfind('/');
+            const std::string_view kDirectory = kSlash == std::string_view::npos ? "" : kHeld.substr(0, kSlash);
             std::vector<std::pair<std::string, std::string>> files;
             for (auto& [path, bytes] : held->under(kDirectory)) {
                 files.emplace_back(std::move(path),
                                    std::string{reinterpret_cast<const char*>(bytes.data()), bytes.size()});
             }
-            const std::string_view kName = kSlash == std::string_view::npos ? *kPath : kPath->substr(kSlash + 1);
+            const std::string_view kName = kSlash == std::string_view::npos ? kHeld : kHeld.substr(kSlash + 1);
             RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromHeld(kName, std::move(files), content));
         } else {
 #if RAWFRAME_FILE_SYSTEM

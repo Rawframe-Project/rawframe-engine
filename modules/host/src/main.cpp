@@ -9,6 +9,7 @@
 #include <atomic>
 #include <csignal>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 namespace rawframe::host {
@@ -61,10 +62,15 @@ bool readFile(const char* path, std::string& text) {
 int hostMain(int argc, char** argv, const ProcessEntry& entry) {
     const auto kName = static_cast<int>(entry.name.size());
     std::string configurationText;
+    // Relative paths in the configuration are under its own directory, so
+    // where the process starts from never changes what it names (D188).
+    std::string base;
     for (int index = 1; index < argc; ++index) {
         const std::string_view kArgument{argv[index]};
         if (kArgument == "--config" && index + 1 < argc) {
-            if (!readFile(argv[++index], configurationText)) {
+            std::error_code error;
+            base = std::filesystem::absolute(argv[index + 1], error).parent_path().string();
+            if (error || !readFile(argv[++index], configurationText)) {
                 std::fprintf(stderr, "%.*s: cannot read the configuration file\n", kName, entry.name.data());
                 return exitCode(HostExit::InvalidInvocation);
             }
@@ -73,7 +79,7 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
             return exitCode(HostExit::InvalidInvocation);
         }
     }
-    const auto kConfiguration = composition::Configuration::parse(configurationText);
+    const auto kConfiguration = composition::Configuration::parse(configurationText, base);
     if (!kConfiguration.has_value()) {
         std::fprintf(stderr,
                      "%.*s: %.*s\n",
