@@ -90,15 +90,19 @@ if mine and p95 > 2 * statistics.median(mine) + 0.5:
 done
 
 # The crowd as SPEC-0013 deploys it: the dedicated server over QUIC, and 64
-# bots in four processes of their own (D211). What is held here is the
-# server's memory (ready at most 128 MiB, peak at most 512 MiB) and its tick
-# p95 and p99. Its p50 is reported, not held: the bots and MsQuic's workers
+# bots in four processes of their own (D211), under SPEC-0013's overload
+# thresholds (bench/canonical_profile.conf, D212). What is held here is the
+# server's memory (ready at most 128 MiB, peak at most 512 MiB), its tick p95
+# and p99, and that it was never degraded. Its p50 is reported, not held: the bots and MsQuic's workers
 # share this machine, and the arena's runs above hold the p50.
 play="$(hosts/bots/tests/play.sh "$build/hosts/dedicated_server/rawframe-server" "$build/hosts/bots/rawframe-bots" \
-    16 4 1440 games/crowd/crowd.game 2>&1 || true)"
+    16 4 1440 games/crowd/crowd.game "$PWD/bench/canonical_profile.conf" 2>&1 || true)"
 verdict="$(python3 -c '
 import json, sys
 logs = [json.loads(line) for line in sys.argv[1].splitlines() if line.startswith("{")]
+# The server logs first, to its stop.
+logs = logs[:next((i + 1 for i, l in enumerate(logs) if l.get("code") == "stopped"), len(logs))]
+degraded = [l for l in logs if l.get("code") == "health" and l["fields"]["health"] != "healthy"]
 def first(code):
     found = [l["fields"] for l in logs if l.get("code") == code]
     return found[0] if found else None
@@ -109,7 +113,9 @@ if not (started and stopped and tick):
 ready, peak = started["residentBytes"] / 2**20, stopped["peakResidentBytes"] / 2**20
 line = "ready %.1f MiB, peak %.1f MiB; tick p50 %.3f ms, p95 %.3f ms, p99 %.3f ms" % (
     ready, peak, tick["p50"] / 1000, tick["p95"] / 1000, tick["p99"] / 1000)
-if ready > 128 or peak > 512 or tick["p95"] > 8330 or tick["p99"] > 12500:
+if degraded:
+    line += "; degraded %d times" % len(degraded)
+if ready > 128 or peak > 512 or tick["p95"] > 8330 or tick["p99"] > 12500 or degraded or stopped["exit"] != "clean_stop":
     line = "FAIL past SPEC-0013: " + line
 print(line)' "$play")"
 printf 'bench crowd over QUIC: %s\n' "$verdict"
