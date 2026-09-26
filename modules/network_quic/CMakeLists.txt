@@ -2,10 +2,21 @@
 # with TLS 1.3 from OpenSSL. Both are linked privately, so no header above
 # this module can include them.
 rawframe_module(NAME network_quic
-    SOURCES src/certificate.cpp src/participant.cpp src/core.cpp src/qpack.cpp src/quic.cpp src/webtransport.cpp
+    SOURCES src/allocations.cpp src/certificate.cpp src/participant.cpp src/core.cpp src/qpack.cpp src/quic.cpp
+            src/webtransport.cpp
     DEPS network composition execution diagnostics result base
 )
 target_link_libraries(rawframe_network_quic PRIVATE msquic::msquic)
+# MsQuic's heap, counted where the linker routes its allocations (D234): a
+# program that links this module links through the counters. The counters
+# are asked for up front, so their object is taken from this archive even
+# when nothing else of it names them, before MsQuic's archive needs them.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_definitions(rawframe_network_quic PRIVATE RAWFRAME_QUIC_HEAP_COUNTED=1)
+    target_link_options(rawframe_network_quic INTERFACE "LINKER:--undefined=__wrap_CxPlatAlloc"
+                        "LINKER:--wrap=CxPlatAlloc" "LINKER:--wrap=CxPlatAllocUninitialized"
+                        "LINKER:--wrap=CxPlatFree")
+endif()
 
 rawframe_module_tests(NAME network_quic SOURCES tests/quic_test.cpp tests/webtransport_test.cpp)
 if(TARGET rawframe_network_quic_tests)

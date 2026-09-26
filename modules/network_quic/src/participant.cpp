@@ -1,3 +1,4 @@
+#include "allocations.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/network/errors.h"
 #include "rawframe/network/transport.h"
@@ -78,6 +79,8 @@ public:
     }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
+        context_ = &context;
+        context.reportMemory(quicHeapBytes().value_or(0));
         const std::string kFingerprint = identity_.has_value() ? formatFingerprint(*identity_) : std::string{};
         context.emitter().log(diagnostics::Severity::Info,
                               kReady,
@@ -86,7 +89,15 @@ public:
         return {};
     }
 
+    /// MsQuic's heap, twice a second at 120 iterations (D234).
+    void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
+        if (context_ != nullptr && frame.iteration % 60 == 0) {
+            context_->reportMemory(quicHeapBytes().value_or(0));
+        }
+    }
+
 private:
+    composition::ParticipantContext* context_ = nullptr;
     std::unique_ptr<QuicNetwork> network_;
     std::optional<Fingerprint> identity_;
 };
@@ -188,6 +199,8 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         // Closing connections waits for their peers' acknowledgement.
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromSeconds(2)},
         .observabilityIdentity = "network.quic",
+        .budgetOwner = "network",
+        .hostPhases = composition::hostPhaseBit(composition::HostPhase::Maintenance),
     });
 }
 
