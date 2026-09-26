@@ -68,7 +68,8 @@ jobs:
   fuzz:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # Five minutes a target, and the build.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - name: Tools
