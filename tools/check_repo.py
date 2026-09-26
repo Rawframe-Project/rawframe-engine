@@ -6,7 +6,7 @@
 2. File size (STD-0001): handwritten source fails at 1,500 lines and is
    reported from 1,000. Tables a tool writes under a `generated` directory
    are not handwritten and are not measured.
-3. Owner rules: no em dash in any tracked text file, and no AI attribution
+3. Owner rules: no em dash in any text file, added or not, and no AI attribution
    trailer in any commit message.
 4. No `.value()` call in engine source: on a Result it throws on failure, and
    exceptions are disabled (SPEC-0004, SPEC-0050). Test for `has_value()` and
@@ -50,8 +50,10 @@ NOT_IN_SERVER = {
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 
 
-def tracked_files():
-    listing = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True)
+def repository_files():
+    # Files not yet added count too, so a check before a commit sees them.
+    listing = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
+                             capture_output=True, check=True)
     return [ROOT / name for name in listing.stdout.decode().split("\0") if name]
 
 
@@ -172,7 +174,7 @@ def check_owner_rules(files, findings):
 
 
 def main():
-    files = [path for path in tracked_files() if path.is_file()]
+    files = [path for path in repository_files() if path.is_file()]
     findings, notes = [], []
     modules = read_modules()
     check_boundaries(files, modules, findings)

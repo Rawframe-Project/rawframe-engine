@@ -27,7 +27,8 @@ step "repository rules"
 python3 tools/check_repo.py || fail "repository rules"
 
 step "format"
-mapfile -t sources < <(git ls-files '*.h' '*.cpp' | grep -v '^third_party/' || true)
+# Files not yet added count too, so a check before a commit sees them.
+mapfile -t sources < <(git ls-files --cached --others --exclude-standard '*.h' '*.cpp' | grep -v '^third_party/' || true)
 if [ "${#sources[@]}" -gt 0 ]; then
     if ! clang-format-20 --dry-run --Werror "${sources[@]}" >out/format.log 2>&1; then
         head -20 out/format.log; fail "format (run: clang-format-20 -i on the files above)"
