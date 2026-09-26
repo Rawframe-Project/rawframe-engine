@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.skeleton",
+  "bones": [
+    {
+      "target": "ee3bf6f6e5d23f68705c98ecb7321ee6",
+      "name": "pivot",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "target": "14c5955a2658b0749b0072ccbf36785c",
+      "name": "blade",
+      "parent": 0,
+      "translation": [
+        0,
+        -3,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    }
+  ]
+}

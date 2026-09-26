@@ -1,0 +1,17 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.mask",
+  "skeleton": "00000000000000070000000000000007",
+  "chains": [
+    {
+      "root": "00000000000000010000000000000002",
+      "descendants": true,
+      "weight": 1
+    },
+    {
+      "root": "00000000000000010000000000000004",
+      "descendants": false,
+      "weight": 0.5
+    }
+  ]
+}

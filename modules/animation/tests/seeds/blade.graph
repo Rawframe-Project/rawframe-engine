@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.graph",
+  "interface": {
+    "parameters": {}
+  },
+  "graph": {
+    "0000000000000001": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "81ea751472ab319978cff7d3442a4fcc"
+      },
+      "inputs": {}
+    },
+    "0000000000000002": {
+      "type": "rawframe/output@1",
+      "params": {},
+      "inputs": {
+        "pose": {
+          "node": "0000000000000001",
+          "output": "pose"
+        }
+      }
+    }
+  }
+}
