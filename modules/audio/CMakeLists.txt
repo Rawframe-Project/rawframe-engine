@@ -28,4 +28,10 @@ rawframe_module_tests(NAME audio SOURCES tests/decode_test.cpp tests/effects_tes
 if(TARGET rawframe_audio_tests)
     target_compile_definitions(rawframe_audio_tests PRIVATE RAWFRAME_AUDIO_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/")
 endif()
-rawframe_module_fuzz(NAME audio TARGET decode MAX_LEN 16384 SEEDS tests/seeds SOURCES tests/fuzz_decode.cpp)
+rawframe_module_fuzz(NAME audio TARGET decode MAX_LEN 16384 SEEDS tests/seeds/decode SOURCES tests/fuzz_decode.cpp)
+rawframe_module_fuzz(NAME audio TARGET declarations RUNS 35000 SEEDS tests/seeds/declarations SOURCES tests/fuzz_declarations.cpp)
+if(TARGET rawframe_audio_fuzz_declarations)
+    # Sounds are read against the runners game's layout.
+    target_compile_definitions(rawframe_audio_fuzz_declarations PRIVATE
+        RAWFRAME_RUNNERS_MIXER="${PROJECT_SOURCE_DIR}/games/runners/runners.mixer")
+endif()
