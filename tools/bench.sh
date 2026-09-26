@@ -8,7 +8,8 @@
 #                           each game to bench/results.tsv
 #   tools/bench.sh check    measure and record nothing; fail on a tick past
 #                           SPEC-0013's ceilings (p50 5 ms, p95 8.33 ms, p99
-#                           12.5 ms), or on a p95 past twice this machine's
+#                           12.5 ms), on Kest time per tick past its p95 of
+#                           4 ms, or on a p95 past twice this machine's
 #                           recorded one (the median of its last three rows)
 #                           and half a millisecond
 #
@@ -30,7 +31,7 @@ trap 'rm -rf "$work"' EXIT
 "$build/hosts/cook/rawframe-cook" games/plaza "$work/plaza" "$work/cache" >/dev/null
 
 mkdir -p bench
-[ -f "$results" ] || printf 'date\tcommit\tmachine\tgame\tbots\tticks\tp50_ms\tp95_ms\tp99_ms\n' >"$results"
+[ -f "$results" ] || printf 'date\tcommit\tmachine\tgame\tbots\tticks\tp50_ms\tp95_ms\tp99_ms\tkest_p95_ms\n' >"$results"
 
 failures=0
 for game in arena runners plaza crowd; do
@@ -45,7 +46,9 @@ for game in arena runners plaza crowd; do
         echo "bots.endpoint = arena"
         if [ "$game" = plaza ]; then echo "content.root = $work/plaza"; fi
     } >"$work/$game.conf"
-    summary="$("$build/hosts/arena/rawframe-arena" --config "$work/$game.conf" 2>&1 | grep '"code":"tick_summary"' | tail -1 || true)"
+    "$build/hosts/arena/rawframe-arena" --config "$work/$game.conf" >"$work/$game.log" 2>&1 || true
+    summary="$(grep '"code":"tick_summary"' "$work/$game.log" | tail -1 || true)"
+    kest="$(grep '"code":"kest_summary"' "$work/$game.log" | tail -1 || true)"
     if [ -z "$summary" ]; then
         printf 'bench %s: no tick summary\n' "$game"; failures=$((failures + 1)); continue
     fi
@@ -54,25 +57,33 @@ for game in arena runners plaza crowd; do
 import json, sys
 f = json.loads(sys.argv[1])["fields"]
 print(f["ticks"], *("%.3f" % (f[k] / 1000) for k in ("p50", "p95", "p99")))' "$summary")
-    printf 'bench %s: %s ticks, p50 %s ms, p95 %s ms, p99 %s ms\n' "$game" "$ticks" "$p50" "$p95" "$p99"
+    # Kest time per tick, SPEC-0013's aggregate script time (D210).
+    kest95="$(python3 -c '
+import json, sys
+print("%.3f" % (json.loads(sys.argv[1])["fields"]["p95"] / 1000) if sys.argv[1] else "none")' "$kest")"
+    printf 'bench %s: %s ticks, p50 %s ms, p95 %s ms, p99 %s ms; Kest p95 %s ms\n' "$game" "$ticks" "$p50" "$p95" "$p99" \
+        "$kest95"
     if [ "$mode" = check ]; then
         verdict="$(python3 -c '
 import statistics, sys
-path, machine, game, p50, p95, p99 = sys.argv[1:7]
+path, machine, game, p50, p95, p99, kest95 = sys.argv[1:8]
 p50, p95, p99 = float(p50), float(p95), float(p99)
 if p50 > 5 or p95 > 8.33 or p99 > 12.5:
     print("past SPEC-0013 ceilings")
     sys.exit()
+if kest95 == "none" or float(kest95) > 4:
+    print("Kest time per tick past SPEC-0013 p95 4 ms, or not reported")
+    sys.exit()
 rows = [line.rstrip("\n").split("\t") for line in open(path)][1:]
 mine = [float(r[7]) for r in rows if r[2] == machine and r[3] == game][-3:]
 if mine and p95 > 2 * statistics.median(mine) + 0.5:
-    print("p95 past twice the recorded %.3f ms" % statistics.median(mine))' "$results" "$machine" "$game" "$p50" "$p95" "$p99")"
+    print("p95 past twice the recorded %.3f ms" % statistics.median(mine))' "$results" "$machine" "$game" "$p50" "$p95" "$p99" "$kest95")"
         if [ -n "$verdict" ]; then
             printf 'bench %s: %s\n' "$game" "$verdict"; failures=$((failures + 1))
         fi
     else
-        printf '%s\t%s\t%s\t%s\t64\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$commit" "$machine" "$game" \
-            "$ticks" "$p50" "$p95" "$p99" >>"$results"
+        printf '%s\t%s\t%s\t%s\t64\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$commit" "$machine" \
+            "$game" "$ticks" "$p50" "$p95" "$p99" "$kest95" >>"$results"
     fi
 done
 exit $((failures > 0))
