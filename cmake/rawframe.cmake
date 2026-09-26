@@ -113,6 +113,11 @@ else()
     )
     if(RAWFRAME_SANITIZE STREQUAL "address")
         target_compile_options(rawframe_policy INTERFACE -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+        # Coverage for the fuzz targets' guidance inside every module they
+        # reach, not only their own files (D242).
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            target_compile_options(rawframe_policy INTERFACE -fsanitize=fuzzer-no-link)
+        endif()
         target_link_options(rawframe_policy INTERFACE -fsanitize=address,undefined)
     elseif(RAWFRAME_SANITIZE STREQUAL "thread")
         target_compile_options(rawframe_policy INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
@@ -205,3 +210,27 @@ function(rawframe_module_tests)
     target_link_libraries(${target} PRIVATE rawframe::${arg_NAME} rawframe::test)
     add_test(NAME ${arg_NAME} COMMAND ${target})
 endfunction()
+
+# Declares a coverage-guided fuzz target for one module's hostile input
+# (D242): libFuzzer's, built in the address sanitizer tree with Clang, the
+# one tree where the fuzzer and the sanitizers it needs both are. The check
+# runs it for a fixed number of inputs from a fixed seed, so a run is the
+# same run each time; a longer search runs nightly.
+#
+#   rawframe_module_fuzz(NAME network TARGET wire SOURCES tests/fuzz_wire.cpp)
+function(rawframe_module_fuzz)
+    cmake_parse_arguments(arg "" "NAME;TARGET" "SOURCES" ${ARGN})
+    if(NOT RAWFRAME_BUILD_TESTS OR NOT RAWFRAME_SANITIZE STREQUAL "address" OR MSVC
+       OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        return()
+    endif()
+    set(target rawframe_${arg_NAME}_fuzz_${arg_TARGET})
+    add_executable(${target} ${arg_SOURCES})
+    target_link_libraries(${target} PRIVATE rawframe::${arg_NAME})
+    target_compile_options(${target} PRIVATE -fsanitize=fuzzer)
+    target_link_options(${target} PRIVATE -fsanitize=fuzzer)
+    set_property(GLOBAL APPEND PROPERTY RAWFRAME_FUZZ_TARGETS ${target})
+    add_test(NAME ${arg_NAME}_fuzz_${arg_TARGET}
+             COMMAND ${target} -seed=1 -runs=${RAWFRAME_FUZZ_RUNS} -max_len=4096)
+endfunction()
+set(RAWFRAME_FUZZ_RUNS 50000 CACHE STRING "Inputs each fuzz target tries in the check (D242)")
