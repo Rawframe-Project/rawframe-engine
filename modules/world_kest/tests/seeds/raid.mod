@@ -1,0 +1,1 @@
+{"formatVersion":2,"kind":"mod.description","programs":[{"entry":"horde.kest","path":"horde.kest","sources":"000000000000000000000000000000b3"}],"scenes":[{"path":"more.scene","scene":"000000000000000000000000000000b3"},{"path":"wave.scene","scene":"000000000000000000000000000000b2"}],"text":"target acme/raid\nmodapi 3\n"}

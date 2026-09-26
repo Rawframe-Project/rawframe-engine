@@ -19,6 +19,7 @@ rawframe_module(NAME kest_library
 target_include_directories(rawframe_kest_library PRIVATE src)
 
 rawframe_module_tests(NAME kest_library SOURCES tests/library_test.cpp tests/sources_test.cpp)
+rawframe_module_fuzz(NAME kest_library TARGET sources RUNS 20000 MAX_LEN 16384 SEEDS tests/seeds SOURCES tests/fuzz_sources.cpp)
 if(TARGET rawframe_kest_library_tests)
     target_compile_definitions(rawframe_kest_library_tests PRIVATE
         RAWFRAME_KEST_LIBRARY="${RAWFRAME_KEST_LIBRARY}"

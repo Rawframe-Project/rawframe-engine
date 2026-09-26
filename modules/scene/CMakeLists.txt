@@ -7,3 +7,4 @@ rawframe_module(NAME scene
 )
 
 rawframe_module_tests(NAME scene SOURCES tests/resolve_test.cpp tests/scene_test.cpp)
+rawframe_module_fuzz(NAME scene TARGET scene SEEDS tests/seeds SOURCES tests/fuzz_scene.cpp)

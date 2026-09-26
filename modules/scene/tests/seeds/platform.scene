@@ -1,0 +1,18 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "rawframe.world.persistent": "afc8322918a647ff",
+    "runners.age": "b1e3cd3c575b7a33"
+  },
+  "entities": [
+    {
+      "id": "909c0889-a695-4893-a218-b36b9eb97339",
+      "name": "hall",
+      "components": {
+        "rawframe.world.persistent": {},
+        "runners.age": {}
+      }
+    }
+  ]
+}

@@ -17,6 +17,7 @@ endif()
 rawframe_module_tests(NAME world_kest SOURCES tests/admission_test.cpp tests/cooked_game_test.cpp tests/door_test.cpp tests/effect_test.cpp tests/kest_timing_test.cpp tests/mod_api_test.cpp tests/mod_services_test.cpp
     tests/held_game_test.cpp tests/kest_systems_test.cpp
     ${rawframe_world_kest_directory_tests})
+rawframe_module_fuzz(NAME world_kest TARGET cooked RUNS 10000 MAX_LEN 16384 SEEDS tests/seeds SOURCES tests/fuzz_cooked.cpp)
 if(TARGET rawframe_world_kest_tests)
     target_compile_definitions(rawframe_world_kest_tests PRIVATE
         RAWFRAME_WORLD_KEST_GAMES="${CMAKE_CURRENT_SOURCE_DIR}/tests/game/"
