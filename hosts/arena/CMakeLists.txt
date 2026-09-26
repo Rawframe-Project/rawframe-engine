@@ -15,7 +15,7 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "\"bots\":16,\"admitted\":16")
     # Runners' players keep their scores from one arena run to the next.
     add_test(NAME arena_players_saved
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/players_saved.sh $<TARGET_FILE:rawframe_host_arena>
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/players_saved.sh $<TARGET_FILE:rawframe_host_arena>
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(arena_players_saved PROPERTIES PASS_REGULAR_EXPRESSION "players kept across runs")
     # A server with room for two players tells a third it is full.
@@ -75,7 +75,7 @@ if(RAWFRAME_BUILD_TESTS)
     # process started outside the repository that reads the game itself and
     # its sounds from the Build, named by its Composition: shots are heard.
     add_test(NAME runners_from_build
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_from_build.sh $<TARGET_FILE:rawframe_host_arena>
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_from_build.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_build_tool> ${PROJECT_SOURCE_DIR} ${CONTENT}
                      ${CMAKE_CURRENT_BINARY_DIR}/runners_from_build)
     set_tests_properties(runners_from_build PROPERTIES
@@ -85,7 +85,7 @@ if(RAWFRAME_BUILD_TESTS)
     # shot's recording, each cooked, packed, and signed apart: shots are
     # heard with the Package, and without it nothing starts.
     add_test(NAME runners_with_package
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_with_package.sh $<TARGET_FILE:rawframe_host_arena>
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_with_package.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_with_package)
     set_tests_properties(runners_with_package PROPERTIES
@@ -95,7 +95,7 @@ if(RAWFRAME_BUILD_TESTS)
     # the World, and sting's untrusted handler counts every hit twice; a mod
     # outside the game's Mod API version is refused.
     add_test(NAME runners_with_mod
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_with_mod.sh $<TARGET_FILE:rawframe_host_arena>
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_with_mod.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_with_mod)
     set_tests_properties(runners_with_mod PROPERTIES
@@ -135,7 +135,7 @@ if(RAWFRAME_BUILD_TESTS)
     # publishes the changed manifest and the shot's new revision replaces
     # the old one, and shots are still heard.
     add_test(NAME runners_recooked
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_recooked.sh $<TARGET_FILE:rawframe_host_arena>
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_recooked.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/runners_recooked)
     set_tests_properties(runners_recooked PROPERTIES

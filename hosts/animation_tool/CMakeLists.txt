@@ -15,7 +15,7 @@ endif()
 if(RAWFRAME_BUILD_TESTS)
     # An arm imported from glTF, again with its identities kept, and cooked.
     add_test(NAME animation_from_gltf
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/from_gltf.sh $<TARGET_FILE:rawframe_host_animation_tool>
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/from_gltf.sh $<TARGET_FILE:rawframe_host_animation_tool>
                      $<TARGET_FILE:rawframe_host_cook_tool> ${CMAKE_CURRENT_SOURCE_DIR}/tests/arm.gltf
                      ${CMAKE_CURRENT_BINARY_DIR}/from_gltf)
     set_tests_properties(animation_from_gltf PROPERTIES

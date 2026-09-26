@@ -16,6 +16,15 @@ else()
     message(FATAL_ERROR "RAWFRAME_CONFIGURATION must be debug, development, or shipping, not '${RAWFRAME_CONFIGURATION}'")
 endif()
 
+# What runs a test written as a shell script: the script itself where the
+# system reads its first line, Git's bash on Windows (D237).
+if(WIN32)
+    find_program(RAWFRAME_BASH NAMES bash REQUIRED)
+    set(RAWFRAME_SHELL "${RAWFRAME_BASH}")
+else()
+    set(RAWFRAME_SHELL "")
+endif()
+
 set(RAWFRAME_SANITIZE "" CACHE STRING "Sanitizers: empty, `address` (with undefined behaviour), or `thread`")
 
 # The allowed dependency table. One line per module: `name: dep dep ...`.

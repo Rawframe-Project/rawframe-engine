@@ -33,12 +33,12 @@ if(RAWFRAME_BUILD_TESTS)
     # A checkpoint restores: a server restored at tick 50 and run to 100
     # captures the same bytes as the server that ran there itself.
     add_test(NAME dedicated_server_checkpoint
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/checkpoint.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/checkpoint.sh $<TARGET_FILE:rawframe_host_dedicated_server>
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(dedicated_server_checkpoint PROPERTIES PASS_REGULAR_EXPRESSION "checkpoints identical")
     # Runners keeps its hall's age from one run of the server to the next.
     add_test(NAME dedicated_server_save
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/save.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/save.sh $<TARGET_FILE:rawframe_host_dedicated_server>
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(dedicated_server_save PROPERTIES PASS_REGULAR_EXPRESSION "hall kept across runs")
     # A bad argument is a usage error, not a crash.
