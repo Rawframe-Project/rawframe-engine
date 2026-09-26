@@ -6,8 +6,12 @@
 #include "rawframe/world_replication/errors.h"
 #include "rawframe/world_replication/records.h"
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <span>
 #include <vector>
 
 using namespace rawframe;
@@ -190,4 +194,128 @@ RAWFRAME_TEST(AClaimedMomentIsKeptNearWhatItsConnectionUsuallyClaims) {
     const double kBefore = *lag;
     const KeptPerception kNothing = keepPerception({}, 4000, 6, lag);
     RAWFRAME_EXPECT(!kNothing.clamped && kNothing.moment.baseTick == 0 && lag == kBefore);
+}
+
+namespace {
+
+/// Seeded mutations of `seed`: one to four bytes replaced, runs erased, or
+/// bytes inserted, the same on every run and target.
+struct Mutations {
+    std::uint64_t state = 0x9E3779B97F4A7C15ULL;
+
+    std::uint64_t next() noexcept {
+        state ^= state << 13U;
+        state ^= state >> 7U;
+        state ^= state << 17U;
+        return state;
+    }
+
+    std::vector<std::byte> mutate(std::span<const std::byte> seed) {
+        std::vector<std::byte> bytes{seed.begin(), seed.end()};
+        const int kEdits = 1 + static_cast<int>(next() % 4);
+        for (int edit = 0; edit < kEdits && !bytes.empty(); ++edit) {
+            const std::size_t kAt = static_cast<std::size_t>(next() % bytes.size());
+            switch (next() % 3) {
+            case 0:
+                bytes[kAt] = static_cast<std::byte>(next() & 0xFFU);
+                break;
+            case 1:
+                bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(kAt),
+                            bytes.begin() + static_cast<std::ptrdiff_t>(std::min(
+                                                bytes.size(), kAt + 1 + static_cast<std::size_t>(next() % 4))));
+                break;
+            default:
+                bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(kAt), static_cast<std::byte>(next() & 0xFFU));
+                break;
+            }
+        }
+        return bytes;
+    }
+};
+
+/// Runs `rounds` mutations of `seed` through `decode`, and for each one it
+/// accepts, checks `encode` writes the very same bytes back; the count
+/// accepted.
+template <typename Decode, typename Encode>
+int reencodes(std::span<const std::byte> seed, Decode decode, Encode encode, int rounds = 20'000) {
+    Mutations mutations;
+    int accepted = 0;
+    for (int round = 0; round < rounds; ++round) {
+        const std::vector<std::byte> kBytes = mutations.mutate(seed);
+        const auto kRead = decode(std::span<const std::byte>{kBytes});
+        if (!kRead.has_value()) {
+            continue;
+        }
+        ++accepted;
+        std::array<std::byte, 4096> out{};
+        network::Writer writer{out};
+        const bool kWritten = encode(writer, *kRead).has_value();
+        RAWFRAME_EXPECT(kWritten && std::ranges::equal(writer.written(), kBytes));
+    }
+    return accepted;
+}
+
+} // namespace
+
+RAWFRAME_TEST(HostilePeerPayloadsReadOnlyAsTheyWrite) {
+    // What a peer sends is hostile input (ADR-0084, D189): each payload a
+    // server reads from a client, and each a client reads from a server,
+    // mutated, and whatever a decoder accepts writes back to the very same
+    // bytes, so no payload has two readings and no bound is passed.
+    std::array<std::byte, 256> seed{};
+
+    // Client to server: an input window, a state acknowledgement, a
+    // perception context, a mapping acknowledgement.
+    const std::array<std::byte, 3> kFirst = {std::byte{1}, std::byte{2}, std::byte{3}};
+    const std::array<std::byte, 1> kSecond = {std::byte{9}};
+    network::Writer window{seed};
+    RAWFRAME_EXPECT(encodeInputWindow(window,
+                                      InputWindow{.newestInputTick = 300,
+                                                  .ackedStateSequence = 77,
+                                                  .ackedServerTick = 290,
+                                                  .commands = {kFirst, kSecond, kFirst}})
+                        .has_value());
+    const int kWindows = reencodes(
+        window.written(),
+        [](std::span<const std::byte> bytes) {
+            auto read = decodeInputWindow(bytes);
+            if (read.has_value()) {
+                RAWFRAME_EXPECT(read->commands.size() <= kMaximumInputWindow &&
+                                std::ranges::all_of(read->commands, [](std::span<const std::byte> command) {
+                                    return command.size() <= kMaximumInputCommand;
+                                }));
+            }
+            return read;
+        },
+        [](network::Writer& writer, const InputWindow& read) {
+            return encodeInputWindow(writer, read);
+        });
+    std::array<std::byte, 16> ackSeed{};
+    network::Writer ack{ackSeed};
+    RAWFRAME_EXPECT(encodeStateAck(ack, StateAck{.latest = 300, .earlier = 0x8000'0000'0000'0005ULL}).has_value());
+    const int kAcks = reencodes(ack.written(), &decodeStateAck, &encodeStateAck);
+    std::array<std::byte, 16> perceptionSeed{};
+    network::Writer perception{perceptionSeed};
+    RAWFRAME_EXPECT(encodePerception(perception, PerceptionContext{.baseTick = 4000, .fraction = 777}).has_value());
+    const int kPerceptions = reencodes(perception.written(), &decodePerception, &encodePerception);
+    std::array<std::byte, 32> mappingSeed{};
+    network::Writer mapping{mappingSeed};
+    RAWFRAME_EXPECT(
+        encodeMapping(mapping, MappingRecord{.replicationEpoch = 3, .entity = NetEntityId{77}, .owned = true})
+            .has_value());
+    const int kMappings = reencodes(mapping.written(), &decodeMapping, &encodeMapping);
+
+    // Server to client: a pace signal, and a component value by its codec.
+    std::array<std::byte, 16> paceSeed{};
+    network::Writer pace{paceSeed};
+    RAWFRAME_EXPECT(encodePace(pace, Pace{.measuredLead = -3, .targetLead = 2}).has_value());
+    const int kPaces = reencodes(pace.written(), &decodePace, &encodePace);
+
+    std::printf("  accepted: %d windows, %d acks, %d perceptions, %d mappings, %d paces of 20000 each\n",
+                kWindows,
+                kAcks,
+                kPerceptions,
+                kMappings,
+                kPaces);
+    RAWFRAME_EXPECT(kWindows > 0 && kAcks > 0 && kPerceptions > 0 && kMappings > 0 && kPaces > 0);
 }
