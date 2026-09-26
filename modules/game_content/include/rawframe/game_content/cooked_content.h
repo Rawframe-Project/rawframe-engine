@@ -8,6 +8,7 @@
 // only where there are files (RAWFRAME_FILE_SYSTEM, D159).
 
 #include "rawframe/base/platform.h"
+#include "rawframe/content/library.h"
 #include "rawframe/content/source.h"
 #include "rawframe/execution/cancellation.h"
 #include "rawframe/execution/executor.h"
@@ -15,7 +16,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -29,8 +29,7 @@
 
 namespace rawframe::game_content {
 
-/// A library's files by their paths within it (`keys/<publisher>.keys`,
-/// `builds/<root>/build.manifest` and the rest of each Build), held in
+/// A library's files by their paths within it (`content::Library`), held in
 /// memory.
 using HeldLibrary = std::vector<std::pair<std::string, std::vector<std::byte>>>;
 
@@ -53,10 +52,10 @@ public:
                                                                              std::optional<std::filesystem::path> root);
 
     /// The Composition whose canonical record is `record` (SPEC-0021): its
-    /// Game Build and Packages, each read from `library/builds/<root>/` (the
-    /// root's 64 hexadecimal digits) and verified against its publisher's
-    /// key set `library/keys/<publisher>.keys`, pinned there, and each the
-    /// subject and version the record names (`ManifestInvalid`). Its Mods
+    /// Game Build and Packages, each read from the library at `library`
+    /// (`content::Library`) and verified against the key set pinned there
+    /// for its publisher, and each the subject and version the record names
+    /// (`ManifestInvalid`). Its Mods
     /// are read the same way after its Packages; whether the game takes them
     /// is the game's to decide (D179). A resource two of them hold is refused
     /// as a catalog refuses it. Builds never change, so `refresh` finds
@@ -100,11 +99,6 @@ public:
     [[nodiscard]] std::span<const ComposedBuild> composedMods() const noexcept override;
 
 private:
-    /// A key set's text by its publisher, and a Build by its root.
-    using KeysOf = std::function<result::Result<std::string>(std::string_view publisher)>;
-    using BuildOf = std::function<result::Result<content::BuildContent>(
-        std::string_view root, const base::Sha256Digest& digest, const signature::PublisherKeySet& keys)>;
-
     CookedContent() = default;
     /// A Composition's Builds, however the library holds them.
     [[nodiscard]] static result::Result<std::unique_ptr<CookedContent>> compose(execution::Executor& blockingIo,
@@ -112,8 +106,7 @@ private:
                                                                                 execution::CancellationScope& parent,
                                                                                 const execution::MonotonicSource& clock,
                                                                                 std::string_view record,
-                                                                                const KeysOf& keysOf,
-                                                                                const BuildOf& buildOf);
+                                                                                const content::Library& library);
     /// Each source's entries of admitted representations, published as the
     /// next catalog.
     result::Status publish(const std::vector<std::vector<content::ManifestEntry>>& manifests);

@@ -77,18 +77,8 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::openComposition(ex
                                                                               const execution::MonotonicSource& clock,
                                                                               std::string_view record,
                                                                               const std::filesystem::path& library) {
-    return compose(
-        blockingIo,
-        owner,
-        parent,
-        clock,
-        record,
-        [&library](std::string_view publisher) -> result::Result<std::string> {
-            return readText(library / "keys" / (std::string{publisher} + ".keys"));
-        },
-        [&library](std::string_view root, const base::Sha256Digest& digest, const signature::PublisherKeySet& keys) {
-            return content::ContentSource::build(library / "builds" / std::string{root}, digest, keys);
-        });
+    RAWFRAME_TRY_ASSIGN(const content::Library kLibrary, content::Library::directory(library));
+    return compose(blockingIo, owner, parent, clock, record, kLibrary);
 }
 #endif
 
@@ -98,31 +88,8 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::openComposition(ex
                                                                               const execution::MonotonicSource& clock,
                                                                               std::string_view record,
                                                                               HeldLibrary library) {
-    return compose(
-        blockingIo,
-        owner,
-        parent,
-        clock,
-        record,
-        [&library](std::string_view publisher) -> result::Result<std::string> {
-            const std::string kPath = "keys/" + std::string{publisher} + ".keys";
-            const auto kFound = std::ranges::find(library, kPath, &HeldLibrary::value_type::first);
-            if (kFound == library.end()) {
-                return std::string{};
-            }
-            return std::string{reinterpret_cast<const char*>(kFound->second.data()), kFound->second.size()};
-        },
-        [&library](std::string_view root, const base::Sha256Digest& digest, const signature::PublisherKeySet& keys) {
-            // The Build's own files, by their paths within it.
-            const std::string kPrefix = "builds/" + std::string{root} + "/";
-            HeldLibrary files;
-            for (const auto& [path, bytes] : library) {
-                if (path.starts_with(kPrefix)) {
-                    files.emplace_back(path.substr(kPrefix.size()), bytes);
-                }
-            }
-            return content::ContentSource::build(std::move(files), digest, keys);
-        });
+    RAWFRAME_TRY_ASSIGN(const content::Library kLibrary, content::Library::memory(std::move(library)));
+    return compose(blockingIo, owner, parent, clock, record, kLibrary);
 }
 
 result::Result<std::unique_ptr<CookedContent>> CookedContent::compose(execution::Executor& blockingIo,
@@ -130,8 +97,7 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::compose(execution:
                                                                       execution::CancellationScope& parent,
                                                                       const execution::MonotonicSource& clock,
                                                                       std::string_view record,
-                                                                      const KeysOf& keysOf,
-                                                                      const BuildOf& buildOf) {
+                                                                      const content::Library& library) {
     RAWFRAME_TRY_ASSIGN(const content::CompositionRecord kRecord, content::readComposition(record));
     // The game, its Packages, then its Mods: sources in that order.
     std::vector<const content::BuildReference*> builds = {&kRecord.game};
@@ -148,12 +114,11 @@ result::Result<std::unique_ptr<CookedContent>> CookedContent::compose(execution:
         const content::BuildReference* reference = builds[at];
         const std::string kRoot = content::ContentDigest{.bytes = reference->build}.text().substr(7);
         const std::string kPublisher{content::publisherOf(reference->subject)};
-        RAWFRAME_TRY_ASSIGN(const std::string kKeysText, keysOf(kPublisher));
-        auto keys = signature::readPublisherKeySet(kKeysText);
+        auto keys = library.keys(kPublisher);
         if (!keys.has_value()) {
             return std::unexpected<result::Error>{std::move(keys).error().withContext("publisher", kPublisher)};
         }
-        auto opened = buildOf(kRoot, reference->build, *keys);
+        auto opened = library.build(reference->build, *keys);
         if (!opened.has_value()) {
             return std::unexpected<result::Error>{std::move(opened).error().withContext("build", kRoot)};
         }

@@ -8,6 +8,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/content/composition_record.h"
 #include "rawframe/content/errors.h"
+#include "rawframe/content/library.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/content/product.h"
 #include "rawframe/document/json.h"
@@ -336,11 +337,12 @@ addBuild(HeldLibrary& library, std::string_view subject, std::uint64_t id, std::
         .keys = {signature::PublisherKey{
             .kid = "0000000000000001", .publicKey = publicKey, .state = signature::KeyState::Active, .since = 1}}};
 
-    const std::string kBuild = "builds/" + content::ContentDigest{.bytes = kRoot}.text().substr(7) + "/";
-    library.emplace_back(kBuild + "build.manifest", bytesOf(kManifest));
-    library.emplace_back(kBuild + "build.manifest.sig", bytesOf(signature::writeEnvelope(envelope)));
-    library.emplace_back(kBuild + "sha256/" + kDigest.substr(7, 2) + "/" + kDigest.substr(9), kBytes);
-    library.emplace_back("keys/" + kPublisher + ".keys", bytesOf(*signature::writePublisherKeySet(kKeys)));
+    const std::string kBuild = content::buildDirectoryOf(kRoot) + "/";
+    library.emplace_back(kBuild + std::string{content::kBuildManifestName}, bytesOf(kManifest));
+    library.emplace_back(kBuild + std::string{content::kBuildSignatureName},
+                         bytesOf(signature::writeEnvelope(envelope)));
+    library.emplace_back(content::blobPathOf(content::ContentDigest::of(kBytes)), kBytes);
+    library.emplace_back(content::keysPathOf(kPublisher), bytesOf(*signature::writePublisherKeySet(kKeys)));
     return kRoot;
 }
 

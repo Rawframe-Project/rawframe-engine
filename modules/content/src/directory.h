@@ -24,7 +24,7 @@ public:
     result::Result<std::vector<std::byte>> read(std::string_view locator, std::uint64_t length) const override;
 
     /// The size of the regular file at a locator, found as `read` finds it.
-    [[nodiscard]] result::Result<std::uint64_t> size(std::string_view locator) const;
+    [[nodiscard]] result::Result<std::uint64_t> size(std::string_view locator) const override;
 
     /// The platform's hold on the root.
     struct Root;

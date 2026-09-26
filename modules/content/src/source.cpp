@@ -3,6 +3,7 @@
 #include "directory.h"
 #include "frame.h"
 #include "rawframe/content/errors.h"
+#include "rawframe/content/library.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/content/product.h"
 #include "rawframe/document/json.h"
@@ -39,6 +40,14 @@ public:
         return kFound->second;
     }
 
+    result::Result<std::uint64_t> size(std::string_view locator) const override {
+        const auto kFound = files_.find(locator);
+        if (kFound == files_.end()) {
+            return refuse(ContentError::ReadFailed, result::ErrorClass::NotFound, "the source has no such file");
+        }
+        return kFound->second.size();
+    }
+
 private:
     std::map<std::string, std::vector<std::byte>, std::less<>> files_;
 };
@@ -54,7 +63,6 @@ struct Chunk {
 };
 
 /// SPEC-0021's hard ceilings.
-constexpr std::size_t kMaximumBuildManifest = std::size_t{64} * 1024 * 1024;
 constexpr std::size_t kMaximumBuildResources = 262'144;
 constexpr std::size_t kMaximumChunks = 65'536;
 constexpr std::uint64_t kMaximumChunkSize = std::uint64_t{4} * 1024 * 1024;
@@ -75,9 +83,7 @@ public:
         for (const Chunk& chunk : kFound->second) {
             // The stored blob verified before it is used, then the content
             // it holds (SPEC-0021's verification order, steps 2 and 3).
-            const std::string kHex = chunk.blob.text().substr(7);
-            RAWFRAME_TRY_ASSIGN(std::vector<std::byte> blob,
-                                blobs_->read("sha256/" + kHex.substr(0, 2) + "/" + kHex.substr(2), chunk.blobSize));
+            RAWFRAME_TRY_ASSIGN(std::vector<std::byte> blob, blobs_->read(blobPathOf(chunk.blob), chunk.blobSize));
             if (!sameDigest(ContentDigest::of(blob), chunk.blob)) {
                 return refuse(
                     ContentError::DigestMismatch, result::ErrorClass::DataLoss, "a blob is not what the Build says");
@@ -97,6 +103,18 @@ public:
                 ContentError::SourceChanged, result::ErrorClass::DataLoss, "the chunks do not make the resource");
         }
         return bytes;
+    }
+
+    result::Result<std::uint64_t> size(std::string_view locator) const override {
+        const auto kFound = chunks_.find(locator);
+        if (kFound == chunks_.end()) {
+            return refuse(ContentError::ReadFailed, result::ErrorClass::NotFound, "the Build has no such resource");
+        }
+        std::uint64_t total = 0;
+        for (const Chunk& chunk : kFound->second) {
+            total += chunk.size;
+        }
+        return total;
     }
 
 private:
@@ -277,18 +295,18 @@ result::Result<BuildContent> ContentSource::build(const std::filesystem::path& r
                                                   const base::Sha256Digest& expectedRoot,
                                                   const signature::PublisherKeySet& publisher) {
     RAWFRAME_TRY_ASSIGN(auto files, DirectorySource::open(root, "the Build is not a readable directory"));
-    const auto kManifestSize = files->size("build.manifest");
+    const auto kManifestSize = files->size(kBuildManifestName);
     if (!kManifestSize || *kManifestSize > kMaximumBuildManifest) {
         return refuse(ContentError::SourceUnavailable,
                       result::ErrorClass::Unavailable,
                       "the Build has no manifest within its ceiling");
     }
-    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes, files->read("build.manifest", *kManifestSize));
-    const auto kSignatureSize = files->size("build.manifest.sig");
-    if (!kSignatureSize || *kSignatureSize > 1024) {
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes, files->read(kBuildManifestName, *kManifestSize));
+    const auto kSignatureSize = files->size(kBuildSignatureName);
+    if (!kSignatureSize || *kSignatureSize > kMaximumBuildSignature) {
         return refuse(ContentError::SourceUnavailable, result::ErrorClass::Unavailable, "the Build is not signed");
     }
-    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kSigned, files->read("build.manifest.sig", *kSignatureSize));
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kSigned, files->read(kBuildSignatureName, *kSignatureSize));
     return openBuild(std::move(files), kBytes, kSigned, expectedRoot, publisher);
 }
 #endif
@@ -303,14 +321,14 @@ result::Result<BuildContent> ContentSource::build(std::vector<std::pair<std::str
         }
         held.insert_or_assign(std::move(locator), std::move(bytes));
     }
-    const auto kManifest = held.find("build.manifest");
+    const auto kManifest = held.find(kBuildManifestName);
     if (kManifest == held.end() || kManifest->second.size() > kMaximumBuildManifest) {
         return refuse(ContentError::SourceUnavailable,
                       result::ErrorClass::Unavailable,
                       "the Build has no manifest within its ceiling");
     }
-    const auto kSignature = held.find("build.manifest.sig");
-    if (kSignature == held.end() || kSignature->second.size() > 1024) {
+    const auto kSignature = held.find(kBuildSignatureName);
+    if (kSignature == held.end() || kSignature->second.size() > kMaximumBuildSignature) {
         return refuse(ContentError::SourceUnavailable, result::ErrorClass::Unavailable, "the Build is not signed");
     }
     const std::vector<std::byte> kBytes = kManifest->second;

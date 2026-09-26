@@ -12,7 +12,7 @@
 //
 // `key` writes `<kid>.key`, the secret, readable by its owner only, and
 // `<publisher>.keys`, the publisher key set that readers pin. `install`
-// copies a Build into a library as `builds/<root>/`; `compose` writes the
+// copies a Build into a library (`content::Library`); `compose` writes the
 // CompositionRecord of the library's Build of that root as the Game, with
 // the library's Builds of any package roots as its Packages and of any mod
 // roots as its Mods, and prints its CompositionId. Whether the game takes
@@ -20,6 +20,7 @@
 
 #include "rawframe/build/build.h"
 #include "rawframe/content/composition_record.h"
+#include "rawframe/content/library.h"
 #include "rawframe/document/json.h"
 #include "rawframe/signature/signature.h"
 
@@ -93,8 +94,9 @@ std::string readText(const std::filesystem::path& path) {
 /// A Build's manifest's identity section, or none: what `install` and
 /// `compose` read of a Build.
 std::optional<rawframe::document::Value> identityOf(const std::filesystem::path& build) {
-    auto manifest = rawframe::document::parseCanonicalRecord(
-        readText(build / "build.manifest"), rawframe::document::ReadLimits{.maximumBytes = 64U << 20U});
+    auto manifest =
+        rawframe::document::parseCanonicalRecord(readText(build / rawframe::content::kBuildManifestName),
+                                                 rawframe::document::ReadLimits{.maximumBytes = 64U << 20U});
     if (!manifest.has_value() || manifest->find("identity") == nullptr) {
         return std::nullopt;
     }
@@ -110,13 +112,25 @@ int install(const std::filesystem::path& build, const std::filesystem::path& lib
         return 1;
     }
     const rawframe::content::ContentDigest kRoot{.bytes = rawframe::base::sha256(*kBytes)};
-    const std::filesystem::path kInto = library / "builds" / kRoot.text().substr(7);
+    // The manifest and its signature under the Build's own directory, its
+    // blobs in the library's one store.
+    const std::filesystem::path kInto = library / rawframe::content::buildDirectoryOf(kRoot.bytes);
     std::error_code error;
     std::filesystem::create_directories(kInto, error);
-    std::filesystem::copy(build,
-                          kInto,
-                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing,
-                          error);
+    for (const std::string_view kName :
+         {rawframe::content::kBuildManifestName, rawframe::content::kBuildSignatureName}) {
+        if (!error) {
+            std::filesystem::copy_file(
+                build / kName, kInto / kName, std::filesystem::copy_options::overwrite_existing, error);
+        }
+    }
+    if (!error) {
+        std::filesystem::copy(build / "sha256",
+                              library / "sha256",
+                              std::filesystem::copy_options::recursive |
+                                  std::filesystem::copy_options::overwrite_existing,
+                              error);
+    }
     if (error) {
         std::fputs("rawframe-build: install: the Build cannot be copied\n", stderr);
         return 1;
@@ -129,7 +143,8 @@ int install(const std::filesystem::path& build, const std::filesystem::path& lib
 std::optional<rawframe::content::BuildReference> referenceTo(const std::filesystem::path& library,
                                                              std::string_view root) {
     const auto kRoot = rawframe::content::ContentDigest::parse(root);
-    const auto kIdentity = kRoot.has_value() ? identityOf(library / "builds" / kRoot->text().substr(7)) : std::nullopt;
+    const auto kIdentity =
+        kRoot.has_value() ? identityOf(library / rawframe::content::buildDirectoryOf(kRoot->bytes)) : std::nullopt;
     const rawframe::document::Value* subject = kIdentity.has_value() ? kIdentity->find("subject") : nullptr;
     const rawframe::document::Value* version = kIdentity.has_value() ? kIdentity->find("version") : nullptr;
     if (subject == nullptr || version == nullptr || subject->text() == nullptr || version->text() == nullptr) {

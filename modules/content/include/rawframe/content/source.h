@@ -33,6 +33,7 @@
 namespace rawframe::content {
 
 class ContentStore;
+class Library;
 struct BuildContent;
 
 class ContentSource {
@@ -80,6 +81,7 @@ public:
 
 private:
     friend class ContentStore;
+    friend class Library;
     /// SPEC-0021's verification order over a Build's files, wherever they
     /// are held.
     [[nodiscard]] static result::Result<BuildContent> openBuild(std::shared_ptr<const Implementation> files,
