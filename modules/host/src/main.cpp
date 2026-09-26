@@ -12,6 +12,10 @@
 #include <filesystem>
 #include <string>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 namespace rawframe::host {
 
 namespace {
@@ -24,8 +28,29 @@ extern "C" void requestStop(int) {
     stopRequested.store(true, std::memory_order_release);
 }
 
+#if defined(_WIN32)
+/// Windows asks a console process to stop with a control event, on a thread
+/// of its own: Ctrl+C, Ctrl+Break, the console closing, logoff, or shutdown
+/// (D237).
+BOOL WINAPI requestStopOnEvent(DWORD event) {
+    switch (event) {
+    case CTRL_C_EVENT:
+    case CTRL_BREAK_EVENT:
+    case CTRL_CLOSE_EVENT:
+    case CTRL_LOGOFF_EVENT:
+    case CTRL_SHUTDOWN_EVENT:
+        requestStop(0);
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+#endif
+
 void installStopBridge() {
-#if defined(__unix__) || defined(__APPLE__)
+#if defined(_WIN32)
+    ::SetConsoleCtrlHandler(&requestStopOnEvent, TRUE);
+#elif defined(__unix__) || defined(__APPLE__)
     struct sigaction action{};
     action.sa_handler = &requestStop;
     sigemptyset(&action.sa_mask);
