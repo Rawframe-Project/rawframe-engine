@@ -2,6 +2,7 @@
 
 #include "rawframe/base/assert.h"
 #include "rawframe/base/threads.h"
+#include "rawframe/execution/parallelism.h"
 #include "rawframe/network/errors.h"
 #include "rawframe/network_quic/errors.h"
 #include "tls.h"
@@ -10,10 +11,14 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cstring>
 #include <deque>
 #include <limits>
 #include <map>
 #include <memory>
+// The global execution configuration (D214) is a preview feature of the
+// MsQuic this engine pins; the library takes it whatever the header shows.
+#define QUIC_API_ENABLE_PREVIEW_FEATURES 1
 #include <msquic.h>
 #include <mutex>
 #include <optional>
@@ -21,6 +26,10 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#if defined(__linux__)
+#include <sched.h>
+#endif
 
 namespace rawframe::network_quic {
 
@@ -860,6 +869,41 @@ private:
 
 } // namespace
 
+namespace {
+
+/// Keeps MsQuic's threads to `processors` of those this process may run on
+/// (D214). MsQuic takes this only before its library is in use, so a process
+/// with a network already open keeps the first one's choice.
+void spreadAcross(const QUIC_API_TABLE& api, std::uint32_t processors) noexcept {
+    const std::size_t kWanted = processors != 0 ? processors : execution::effectiveParallelism();
+    std::vector<std::uint16_t> allowed;
+#if defined(__linux__)
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    if (sched_getaffinity(0, sizeof mask, &mask) == 0) {
+        for (int cpu = 0; cpu < CPU_SETSIZE && allowed.size() < kWanted; ++cpu) {
+            if (CPU_ISSET(cpu, &mask)) {
+                allowed.push_back(static_cast<std::uint16_t>(cpu));
+            }
+        }
+    }
+#endif
+    for (std::uint16_t cpu = 0; allowed.empty() && cpu < kWanted; ++cpu) {
+        allowed.push_back(cpu);
+    }
+    // The configuration ends in a list of processors, one given in place.
+    std::vector<std::byte> config(QUIC_GLOBAL_EXECUTION_CONFIG_MIN_SIZE + (allowed.size() * sizeof(std::uint16_t)));
+    QUIC_GLOBAL_EXECUTION_CONFIG header{};
+    header.ProcessorCount = static_cast<std::uint32_t>(allowed.size());
+    std::memcpy(config.data(), &header, QUIC_GLOBAL_EXECUTION_CONFIG_MIN_SIZE);
+    std::memcpy(
+        config.data() + QUIC_GLOBAL_EXECUTION_CONFIG_MIN_SIZE, allowed.data(), allowed.size() * sizeof(std::uint16_t));
+    static_cast<void>(api.SetParam(
+        nullptr, QUIC_PARAM_GLOBAL_EXECUTION_CONFIG, static_cast<std::uint32_t>(config.size()), config.data()));
+}
+
+} // namespace
+
 QuicNetwork::QuicNetwork(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
 }
 
@@ -882,6 +926,7 @@ result::Result<std::unique_ptr<QuicNetwork>> QuicNetwork::create(QuicSettings se
         state->api = nullptr;
         return fail(result::ErrorClass::Unavailable, QuicError::Unavailable, "MsQuic could not be opened");
     }
+    spreadAcross(*state->api, state->settings.processors);
     const QUIC_REGISTRATION_CONFIG kRegistration{"rawframe", QUIC_EXECUTION_PROFILE_LOW_LATENCY};
     if (QUIC_FAILED(state->api->RegistrationOpen(&kRegistration, &state->registration))) {
         state->registration = nullptr;

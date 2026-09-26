@@ -35,6 +35,11 @@ struct QuicSettings {
     /// open one WebTransport session, each then a connection like any
     /// other, its bytes those inside the session (D172).
     bool webTransport = false;
+    /// Processors MsQuic's threads, and the buffers each keeps, spread
+    /// across; nought for the process's effective parallelism, which counts
+    /// a container's CPU quota as MsQuic does not (D214). Set by the first
+    /// network a process opens; while one is open, others share its choice.
+    std::uint32_t processors = 0;
 };
 
 class QuicNetwork {

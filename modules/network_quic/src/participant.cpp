@@ -148,6 +148,13 @@ result::Result<composition::ParticipantOwner> makeQuic(composition::ParticipantC
                             network::code(network::NetworkError::InvalidProfile),
                             "a QUIC timeout is at most an hour");
     }
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kProcessors, configuration.unsignedInteger("network.quic.processors", 0));
+    if (kProcessors > 1024) {
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            network::kNetworkDomain,
+                            network::code(network::NetworkError::InvalidProfile),
+                            "network.quic.processors is at most 1024");
+    }
     const auto kBrowsers = configuration.text("network.quic.webtransport");
     if (kBrowsers.has_value() && *kBrowsers != "true" && *kBrowsers != "false") {
         return badFile("network.quic.webtransport is true or false");
@@ -155,7 +162,8 @@ result::Result<composition::ParticipantOwner> makeQuic(composition::ParticipantC
     QuicSettings settings{
         .idleTimeout = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kIdle)),
         .keepAlive = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kKeepAlive)),
-        .webTransport = kBrowsers == "true"};
+        .webTransport = kBrowsers == "true",
+        .processors = static_cast<std::uint32_t>(kProcessors)};
     RAWFRAME_TRY_ASSIGN(settings.certificate, identityOf(configuration, settings.webTransport));
     RAWFRAME_TRY_ASSIGN(settings.pin, pinOf(configuration));
     std::optional<Fingerprint> identity;
