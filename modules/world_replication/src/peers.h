@@ -187,6 +187,37 @@ struct Waiting {
     std::uint64_t arrived = 0;
 };
 
+/// What one connection sent on the input lane in the current second, held
+/// to SPEC-0013's input ceilings before any work on a record (D225).
+struct InputAllowance {
+    std::uint64_t second = 0;
+    std::uint64_t windows = 0;
+    std::uint64_t bytes = 0;
+
+    /// Whether a record of `size` payload bytes may be looked at, at `tick`,
+    /// with `windows` of it counting against `maximumWindows`: an input
+    /// window counts one, anything else none.
+    [[nodiscard]] bool admit(std::uint64_t tick,
+                             std::uint64_t ticksPerSecond,
+                             std::size_t size,
+                             std::uint64_t window,
+                             std::uint64_t maximumWindows,
+                             std::uint64_t maximumBytes) noexcept {
+        const std::uint64_t kSecond = tick / (ticksPerSecond == 0 ? 1 : ticksPerSecond);
+        if (kSecond != second) {
+            second = kSecond;
+            windows = 0;
+            bytes = 0;
+        }
+        if (bytes + size > maximumBytes || windows + window > maximumWindows) {
+            return false;
+        }
+        bytes += size;
+        windows += window;
+        return true;
+    }
+};
+
 /// One admitted connection.
 struct Peer {
     network::ConnectionId connection;
@@ -216,6 +247,7 @@ struct Peer {
     std::int64_t measuredLead = 0;
     bool heardInput = false;
     ChecksumBook checksums;
+    InputAllowance allowance;
     /// Closed by this side, for breaking the protocol or striking out: to
     /// be forgotten once its event is handled (D223).
     bool gone = false;

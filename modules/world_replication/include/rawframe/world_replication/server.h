@@ -100,6 +100,11 @@ struct ServerReplicationSettings {
     /// SPEC-0041's checksum_rate_max: records looked at per connection per
     /// second; the rest are dropped unread.
     std::uint32_t checksumsPerSecond = 8;
+    /// SPEC-0013's input ceilings per connection a second: payload bytes on
+    /// the input lane, and input windows, at most one a tick by default
+    /// (nought). What passes either is dropped unread (D225).
+    std::size_t inputBytesPerSecond = 65'536;
+    std::uint64_t inputWindowsPerSecond = 0;
 };
 
 /// SPEC-0041's `prediction_divergence`: a connection's checksum of its
@@ -140,6 +145,9 @@ struct ServerReplicationStatistics {
     std::uint64_t checksumsLimited = 0;
     /// Malformed payloads struck against their connections (D223).
     std::uint64_t strikes = 0;
+    /// Input-lane records dropped unread past SPEC-0013's input ceilings
+    /// (D225).
+    std::uint64_t inputsLimited = 0;
 };
 
 class ReplicationServer final : public world_runtime::SystemContributor, public InterestHistory {

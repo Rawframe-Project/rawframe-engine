@@ -242,6 +242,7 @@ public:
                       diagnostics::field("checksumsDiverged", kStatistics.checksumsDiverged),
                       diagnostics::field("checksumsLimited", kStatistics.checksumsLimited),
                       diagnostics::field("strikes", kStatistics.strikes),
+                      diagnostics::field("inputsLimited", kStatistics.inputsLimited),
                       diagnostics::field("struckOut", sessions_->struckOut()),
                       diagnostics::field("admissionsRefused", refused_)});
     }

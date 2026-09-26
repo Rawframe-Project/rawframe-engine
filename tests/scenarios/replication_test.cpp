@@ -518,6 +518,42 @@ RAWFRAME_TEST(AClientSendingMalformedInputStrikesOut) {
     RAWFRAME_EXPECT(scenario.serverSessions->struckOut() == 1);
 }
 
+RAWFRAME_TEST(AFloodOfInputIsDroppedUnreadPastTheCeilings) {
+    // SPEC-0013's input ceilings (D225): at most one input window a tick,
+    // and 64 KiB, are looked at in a second; what passes them is dropped
+    // unread. The floods here are of an earlier epoch, late rather than
+    // malformed, so nothing strikes the connection out.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.client->admitted());
+    const std::uint64_t kLate = scenario.client->accept().has_value() ? scenario.client->accept()->inputEpoch + 1 : 0;
+    std::uint64_t sequence = 10'000;
+    const auto kFlood = [&](int perStep, std::uint64_t payloadType, std::size_t size) {
+        const std::vector<std::byte> kPayload(size, std::byte{0xff});
+        const std::uint64_t kBefore = scenario.server->statistics().inputsLimited;
+        for (int step = 0; step < 60; ++step) {
+            for (int flood = 0; flood < perStep; ++flood) {
+                static_cast<void>(scenario.clientSessions->sendDatagram(network::ConnectionId{1},
+                                                                        {.lane = network::DatagramLane::Input,
+                                                                         .laneEpoch = kLate,
+                                                                         .sequence = ++sequence,
+                                                                         .payloadType = payloadType,
+                                                                         .payload = kPayload}));
+            }
+            scenario.step(Steer{.dx = 1, .dy = 0});
+        }
+        return scenario.server->statistics().inputsLimited - kBefore;
+    };
+    // Ten windows a tick, 600 in a second of ticks: at most two seconds'
+    // allowance, 120, is looked at.
+    RAWFRAME_EXPECT(kFlood(10, world_replication::kInputWindowPayload, 8) >= 480);
+    // Twenty kilobyte records a tick: at most two seconds' 64 KiB are.
+    RAWFRAME_EXPECT(kFlood(20, 99, 1000) >= 1000);
+    RAWFRAME_EXPECT(scenario.server->statistics().strikes == 0 && scenario.firstPlayerPosition() != nullptr);
+}
+
 RAWFRAME_TEST(PredictionRecoversFromLostInput) {
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(30),
                        .jitter = MonotonicDuration::fromMilliseconds(30),

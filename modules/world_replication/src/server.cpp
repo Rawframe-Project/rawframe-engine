@@ -125,6 +125,21 @@ void ReplicationServer::State::onStateAck(Peer& peer, const network::SessionEven
 }
 
 void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& event) {
+    // SPEC-0013's input ceilings, before any work on the record: one input
+    // window a tick, and so many bytes a second.
+    const std::uint64_t kSeconds = std::max<std::uint64_t>(peer.accept.tickRateSeconds, 1);
+    const std::uint64_t kTicksPerSecond = (peer.accept.tickRateTicks + kSeconds - 1) / kSeconds;
+    const std::uint64_t kWindows =
+        settings.inputWindowsPerSecond != 0 ? settings.inputWindowsPerSecond : kTicksPerSecond;
+    if (!peer.allowance.admit(pumpTick,
+                              kTicksPerSecond,
+                              event.payload.size(),
+                              event.payloadType == kInputWindowPayload ? 1 : 0,
+                              kWindows,
+                              settings.inputBytesPerSecond)) {
+        ++statistics.inputsLimited;
+        return;
+    }
     if (event.laneEpoch == peer.accept.inputEpoch && event.payloadType == kStateAckPayload) {
         onStateAck(peer, event);
         return;
