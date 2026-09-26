@@ -146,6 +146,17 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_prediction PROPERTIES
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
+    if(NOT RAWFRAME_SHIPPING)
+        add_test(NAME runners_divergence_drill
+                 COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_divergence_drill.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        # Every record sent is found diverged, none is taken for verified,
+        # and the players stay.
+        set_tests_properties(runners_divergence_drill PROPERTIES
+                             PROCESSORS 6
+                             PASS_REGULAR_EXPRESSION
+                             "prediction_divergence.*\"checksumsVerified\":0,\"checksumsUnverifiable\":0,\"checksumsDiverged\":[1-9]")
+    endif()
     # The plaza's sources cooked into the build tree: its mound's mesh.
     set(PLAZA_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/plaza_content)
     add_test(NAME plaza_cooked
