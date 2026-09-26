@@ -149,7 +149,7 @@ private:
 ///   host.cpu_workers           explicit CPU worker count (derived)
 ///   host.io_workers            blocking-I/O workers (2)
 ///   host.shutdown_budget_ms    the composition's stop budget (5000)
-///   host.drain_ms              longest a drain waits for connections (5000)
+///   host.drain_ms              longest a drain waits for connections (2000)
 ///   host.stall_ms              an executor stall that is unhealthy (10000)
 ///   host.supervisor_grace_ms   the grace a supervisor gives a stop; the
 ///                              drain, the shutdown budget, and the executors'

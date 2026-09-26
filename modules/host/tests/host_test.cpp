@@ -401,14 +401,18 @@ RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {
     RAWFRAME_EXPECT(run("diagnostics.minimum_severity = loud", log) == host::HostExit::InvalidLaunchDescriptor);
 
     // A supervisor's grace too short for the drain, the shutdown budget, and
-    // the executors' budgets (5 + 5 + 6 seconds) and a tenth of it.
+    // the executors' budgets (2 + 5 + 6 seconds) and a tenth of it. A normal
+    // stop, the drain and the shutdown budget, is within SPEC-0013's 8 s
+    // (D230).
     log.clear();
-    RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 17000", log) == host::HostExit::InvalidLaunchDescriptor);
+    RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 14000\nhost.maximum_iterations = 1", log) ==
+                    host::HostExit::InvalidLaunchDescriptor);
     RAWFRAME_EXPECT(mentions(log, "host.supervisor_grace_ms"));
     log.clear();
-    RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 18000\nhost.maximum_iterations = 1", log) ==
+    RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 15000\nhost.maximum_iterations = 1", log) ==
                     host::HostExit::Stopped);
-    RAWFRAME_EXPECT(mentions(log, "\"shutdownBoundMs\":16000") && mentions(log, "\"shutdownMs\":"));
+    RAWFRAME_EXPECT(mentions(log, "\"shutdownBoundMs\":13000,\"normalShutdownBoundMs\":7000") &&
+                    mentions(log, "\"shutdownMs\":"));
 
     log.clear();
     reset();

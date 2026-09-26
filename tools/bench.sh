@@ -95,9 +95,10 @@ done
 # thresholds (bench/canonical_profile.conf, D212). What is held here is the
 # server's memory (ready at most 128 MiB, peak at most 512 MiB), that it was
 # never degraded (100 ms behind), its start and shutdown within their hard
-# values (5 s, 8 s), and its average processor use while active within 1.5
-# CPUs (D213). Its tick is reported, not held: four bots processes with their
-# own MsQuic threads share this machine, and their load shows in its tail
+# values (5 s, 8 s), its configured normal shutdown within 8 s too (D230),
+# and its average processor use while active within 1.5 CPUs (D213). Its
+# tick is reported, not held: four bots processes with their own MsQuic
+# threads share this machine, and their load shows in its tail
 # (D215); the arena's runs above hold the tick.
 play="$(hosts/bots/tests/play.sh "$build/hosts/dedicated_server/rawframe-server" "$build/hosts/bots/rawframe-bots" \
     16 4 1440 games/crowd/crowd.game "$PWD/bench/canonical_profile.conf" 2>&1 || true)"
@@ -128,7 +129,8 @@ if summary:
 if degraded:
     line += "; degraded %d times" % len(degraded)
 if ready > 128 or peak > 512 or degraded or stopped["exit"] != "clean_stop" or \
-        started["readyMs"] > 5000 or stopped["shutdownMs"] > 8000 or cpus > 1.5:
+        started["readyMs"] > 5000 or stopped["shutdownMs"] > 8000 or cpus > 1.5 or \
+        started["normalShutdownBoundMs"] > 8000:
     line = "FAIL past SPEC-0013: " + line
 print(line)' "$play")"
 printf 'bench crowd over QUIC: %s\n' "$verdict"

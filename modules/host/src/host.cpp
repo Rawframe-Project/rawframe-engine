@@ -104,11 +104,19 @@ struct Settings {
     std::optional<std::size_t> cpuWorkers;
     std::size_t ioWorkers = execution::kDefaultBlockingIoWorkers;
     execution::MonotonicDuration shutdownBudget = execution::MonotonicDuration::fromSeconds(5);
-    execution::MonotonicDuration drain = execution::MonotonicDuration::fromSeconds(5);
+    /// Two seconds, so a normal shutdown, the drain and the composition's
+    /// stop, stays within SPEC-0013's 8 s at their defaults (D230).
+    execution::MonotonicDuration drain = execution::MonotonicDuration::fromSeconds(2);
     execution::MonotonicDuration stall = execution::MonotonicDuration::fromSeconds(10);
     std::optional<execution::MonotonicDuration> supervisorGrace;
     Severity minimumSeverity = Severity::Info;
 };
+
+/// The longest a normal stop can take: the drain and the composition's stop
+/// (SPEC-0013's aggregate normal shutdown, D230).
+execution::MonotonicDuration normalShutdownBound(const Settings& settings) noexcept {
+    return settings.drain + settings.shutdownBudget;
+}
 
 /// The longest a stop can take: the drain, the composition's stop, then the
 /// blocking-I/O and CPU executors each draining and joining.
@@ -146,7 +154,7 @@ std::optional<std::string_view> readSettings(const composition::Configuration& c
         return "host.shutdown_budget_ms";
     }
     settings.shutdownBudget = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kBudget));
-    const auto kDrain = configuration.unsignedInteger("host.drain_ms", 5000);
+    const auto kDrain = configuration.unsignedInteger("host.drain_ms", 2000);
     if (!kDrain.has_value() || *kDrain > 600'000) {
         return "host.drain_ms";
     }
@@ -400,6 +408,7 @@ struct Host::State {
                     {diagnostics::field("participants", plan->participants().size()),
                      diagnostics::field("cpuWorkers", cpu->workerCount()),
                      diagnostics::field("shutdownBoundMs", shutdownBound(settings).nanoseconds / 1'000'000),
+                     diagnostics::field("normalShutdownBoundMs", normalShutdownBound(settings).nanoseconds / 1'000'000),
                      // SPEC-0013's fresh ready memory (D211) and start time,
                      // and processor time so far (D213); nought where the
                      // platform does not say.
