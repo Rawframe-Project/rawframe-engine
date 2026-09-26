@@ -35,6 +35,11 @@ if [ "${#sources[@]}" -gt 0 ]; then
     fi
 fi
 
+# Test jobs per preset: the whole machine for one preset, a quarter of it
+# each when eight run at once, so tests that play in real time are not
+# starved by eight times as many jobs as cores.
+jobs=$(nproc)
+
 build_and_test() {
     local preset="$1"
     step "$preset"
@@ -44,7 +49,7 @@ build_and_test() {
     if ! cmake --build "out/$preset" >"out/$preset.build.log" 2>&1; then
         grep -E 'error|FAILED' "out/$preset.build.log" | head -20; fail "$preset build"; return
     fi
-    if ! ctest --test-dir "out/$preset" --output-on-failure -j "$(nproc)" >"out/$preset.test.log" 2>&1; then
+    if ! ctest --test-dir "out/$preset" --output-on-failure -j "$jobs" >"out/$preset.test.log" 2>&1; then
         tail -30 "out/$preset.test.log"; fail "$preset tests"; return
     fi
 }
@@ -53,6 +58,7 @@ if [ "$tier" = "fast" ]; then
     build_and_test clang-development
 else
     # Independent build trees, so they build in parallel.
+    jobs=$(( ($(nproc) + 3) / 4 ))
     presets=(gcc-debug gcc-shipping clang-development clang-shipping clang-sanitize clang-thread wasm-development wasm-shipping)
     pids=()
     for preset in "${presets[@]}"; do
