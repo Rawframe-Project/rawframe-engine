@@ -66,6 +66,10 @@ void Sha256::block(const std::byte* data) noexcept {
 }
 
 void Sha256::update(std::span<const std::byte> bytes) noexcept {
+    // An empty span may hold no pointer at all, which memcpy may not be given.
+    if (bytes.empty()) {
+        return;
+    }
     length_ += bytes.size();
     std::size_t at = 0;
     if (buffered_ != 0) {

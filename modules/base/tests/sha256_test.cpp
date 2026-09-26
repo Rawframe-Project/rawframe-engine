@@ -1,8 +1,10 @@
-// SHA-256 against FIPS 180-4 / NIST vectors, and pieces fed any way.
+// SHA-256 against FIPS 180-4 / NIST vectors, pieces fed any way, and empty
+// pieces, which may carry no pointer.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/test/test.h"
 
+#include <span>
 #include <string>
 
 using namespace rawframe::base;
@@ -45,4 +47,13 @@ RAWFRAME_TEST(Sha256IsTheSameInAnyPieces) {
         }
         RAWFRAME_EXPECT(pieces.finish() == kWhole);
     }
+}
+
+RAWFRAME_TEST(Sha256TakesEmptyPiecesWithNoPointer) {
+    Sha256 pieces;
+    pieces.update(std::span<const std::byte>{});
+    pieces.update("ab");
+    pieces.update(std::span<const std::byte>{});
+    pieces.update("c");
+    RAWFRAME_EXPECT(pieces.finish() == sha256("abc"));
 }
