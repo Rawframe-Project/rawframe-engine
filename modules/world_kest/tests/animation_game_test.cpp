@@ -11,6 +11,7 @@
 #include "rawframe/animation/graph.h"
 #include "rawframe/animation/mask.h"
 #include "rawframe/animation/skeleton.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_animation/components.h"
@@ -126,8 +127,12 @@ std::optional<std::vector<Played>> play(const std::filesystem::path& game, compo
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     if (!composition.start().has_value()) {
         composition.stop();
         simulation = nullptr;

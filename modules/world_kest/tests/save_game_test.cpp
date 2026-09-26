@@ -4,6 +4,7 @@
 // and is left as it was.
 
 #include "game_harness.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/game.h"
@@ -98,8 +99,11 @@ struct Run {
             "\nworld.tick_rate = 10\nsave.directory = " + (directory / "saves").string() +
             "\nsave.namespace = 7a11700000000000000000000000000a\nsave.every_seconds = 1\n" + extra);
         composition.emplace(*plan,
-                            composition::HostServices{
-                                .clock = &clock, .scope = &root, .blockingIo = &io, .configuration = &*configuration});
+                            composition::HostServices{.clock = &clock,
+                                                      .scope = &root,
+                                                      .cpu = &test::cpuExecutor(),
+                                                      .blockingIo = &io,
+                                                      .configuration = &*configuration});
         return composition->start();
     }
 

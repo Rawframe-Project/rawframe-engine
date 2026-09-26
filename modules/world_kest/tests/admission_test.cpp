@@ -3,6 +3,7 @@
 // and a rule of the wrong shape stops the game loading.
 
 #include "game_harness.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_replication/plan.h"
@@ -72,10 +73,13 @@ struct Run {
         RAWFRAME_EXPECT(made.has_value());
         composed = std::move(*made);
         configuration = *composition::Configuration::parse("kest.game = game/" + std::string{game} + "\n");
-        composition.emplace(
-            *composed,
-            composition::HostServices{
-                .clock = &clock, .scope = &root, .configuration = &*configuration, .files = &game_test::heldGames()});
+        composition.emplace(*composed,
+                            composition::HostServices{.clock = &clock,
+                                                      .scope = &root,
+                                                      .cpu = &test::cpuExecutor(),
+                                                      .blockingIo = &test::blockingIoExecutor(),
+                                                      .configuration = &*configuration,
+                                                      .files = &game_test::heldGames()});
         return composition->start();
     }
 };

@@ -4,6 +4,7 @@
 
 #include "game_harness.h"
 #include "rawframe/scene/scene.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/game_files.h"
@@ -60,8 +61,12 @@ result::Result<std::vector<world::Persistent>> play(const std::filesystem::path&
                                                                   "\nworld.tick_rate = 10\nworld.root_seed = 99\n");
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     RAWFRAME_TRY(composition.start());
     clock.advance(execution::MonotonicDuration::fromMilliseconds(100 * ticks));
     composition.runHostPhase(composition::HostPhase::RunWorlds,

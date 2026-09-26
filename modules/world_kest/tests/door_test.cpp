@@ -11,6 +11,7 @@
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/registrar.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
 
@@ -42,10 +43,13 @@ template <typename Check> void play(std::string_view name, std::uint64_t ticks, 
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan,
-        composition::HostServices{
-            .clock = &clock, .scope = &root, .configuration = &*kConfiguration, .files = &heldGames()}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration,
+                                                                   .files = &heldGames()}};
     auto started = composition.start();
     if (!started.has_value()) {
         std::fprintf(stderr, "%s\n", std::string{started.error().description()}.c_str());

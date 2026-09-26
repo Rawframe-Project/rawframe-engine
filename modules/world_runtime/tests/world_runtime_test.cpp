@@ -2,6 +2,7 @@
 // system, and Host iterations run exactly the ticks the pacer owes.
 
 #include "rawframe/composition/composition.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
 #include "rawframe/world_runtime/errors.h"
@@ -139,8 +140,12 @@ RAWFRAME_TEST(HostIterationsRunTheTicksThePacerOwes) {
         composition::Configuration::parse("world.tick_rate = 10\nworld.maximum_ticks_per_iteration = 3\n");
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *kPlan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*kPlan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
     RAWFRAME_EXPECT(movement != nullptr);
     if (movement == nullptr) {
@@ -171,8 +176,12 @@ RAWFRAME_TEST(AWorldBehindTooLongIsOverloaded) {
         "world.tick_rate = 10\nworld.maximum_ticks_per_iteration = 1\nworld.overload_ms = 3000\n");
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *kPlan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*kPlan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
     std::uint64_t iteration = 0;
     iterate(composition, iteration++, clock.now());
@@ -217,8 +226,12 @@ RAWFRAME_TEST(SpecThresholdsDegradeAndOverloadAWorldSooner) {
                                           "world.degraded_ms = 100\nworld.debt_limit_ms = 500\n");
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *kPlan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*kPlan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
     std::uint64_t iteration = 0;
     iterate(composition, iteration++, clock.now());
@@ -245,8 +258,12 @@ RAWFRAME_TEST(BadWorldSettingsFailTheStart) {
                                          "world.degraded_ms = 0",
                                          "world.degraded_ms = 500\nworld.debt_limit_ms = 100"}) {
         const auto kConfiguration = composition::Configuration::parse(kText);
-        composition::Composition composition{
-            *kPlan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        composition::Composition composition{*kPlan,
+                                             composition::HostServices{.clock = &clock,
+                                                                       .scope = &root,
+                                                                       .cpu = &test::cpuExecutor(),
+                                                                       .blockingIo = &test::blockingIoExecutor(),
+                                                                       .configuration = &*kConfiguration}};
         RAWFRAME_EXPECT(!composition.start().has_value());
     }
     movement = nullptr;

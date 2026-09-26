@@ -4,6 +4,7 @@
 
 #include "game_harness.h"
 #include "rawframe/scene/scene.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/spawn_scene.h"
@@ -83,8 +84,12 @@ RAWFRAME_TEST(AGameStartsWithItsScenes) {
                                               "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n");
         execution::ManualClock clock;
         execution::CancellationScope root{clock};
-        composition::Composition composition{
-            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        composition::Composition composition{*plan,
+                                             composition::HostServices{.clock = &clock,
+                                                                       .scope = &root,
+                                                                       .cpu = &test::cpuExecutor(),
+                                                                       .blockingIo = &test::blockingIoExecutor(),
+                                                                       .configuration = &*kConfiguration}};
         if (!composition.start().has_value()) {
             simulation = nullptr;
             return std::nullopt;
@@ -164,8 +169,12 @@ RAWFRAME_TEST(AScenesEntitiesNameEachOther) {
             composition::Configuration::parse("kest.game = " + (kDirectory / "linked.game").string() + "\n");
         execution::ManualClock clock;
         execution::CancellationScope root{clock};
-        composition::Composition composition{
-            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        composition::Composition composition{*plan,
+                                             composition::HostServices{.clock = &clock,
+                                                                       .scope = &root,
+                                                                       .cpu = &test::cpuExecutor(),
+                                                                       .blockingIo = &test::blockingIoExecutor(),
+                                                                       .configuration = &*kConfiguration}};
         // By hops: each link's entity and the entity it holds.
         std::vector<std::tuple<std::int32_t, world::EntityHandle, world::EntityHandle>> links;
         if (composition.start().has_value()) {
@@ -295,8 +304,12 @@ RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
         "kest.game = " + (kDirectory / "movers.game").string() + "\nworld.tick_rate = 10\n");
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
     if (simulation != nullptr) {
         auto found = positions();
@@ -345,8 +358,12 @@ RAWFRAME_TEST(AProgramLinksEntitiesItCreatesInOneRun) {
                                           "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n");
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     const auto kStarted = composition.start();
     RAWFRAME_EXPECT(kStarted.has_value());
     if (!kStarted.has_value()) {
@@ -424,8 +441,12 @@ RAWFRAME_TEST(AProgramSpawnsAPrefabWhole) {
                                           "\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n");
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     const auto kStarted = composition.start();
     RAWFRAME_EXPECT(kStarted.has_value());
     if (!kStarted.has_value()) {
@@ -468,8 +489,12 @@ RAWFRAME_TEST(AProgramSpawnsAPrefabWhole) {
         again);
     execution::ManualClock later;
     execution::CancellationScope laterRoot{later};
-    composition::Composition refused{
-        *unknown, composition::HostServices{.clock = &later, .scope = &laterRoot, .configuration = &*kConfiguration}};
+    composition::Composition refused{*unknown,
+                                     composition::HostServices{.clock = &later,
+                                                               .scope = &laterRoot,
+                                                               .cpu = &test::cpuExecutor(),
+                                                               .blockingIo = &test::blockingIoExecutor(),
+                                                               .configuration = &*kConfiguration}};
     if (refused.start().has_value()) {
         later.advance(execution::MonotonicDuration::fromMilliseconds(100));
         refused.runHostPhase(composition::HostPhase::RunWorlds,

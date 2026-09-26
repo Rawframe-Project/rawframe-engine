@@ -8,6 +8,7 @@
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/registrar.h"
 #include "rawframe/scene/scene.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/query.h"
@@ -344,8 +345,12 @@ RAWFRAME_TEST(AKestGameRunsInTheWorld) {
     RAWFRAME_EXPECT(kConfiguration.has_value());
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
@@ -383,7 +388,10 @@ RAWFRAME_TEST(WithoutAGameNothingLoads) {
         problems);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{*plan, composition::HostServices{.clock = &clock, .scope = &root}};
+    composition::Composition composition{
+        *plan,
+        composition::HostServices{
+            .clock = &clock, .scope = &root, .cpu = &test::cpuExecutor(), .blockingIo = &test::blockingIoExecutor()}};
     RAWFRAME_EXPECT(composition.start().has_value());
     composition.stop();
 }
@@ -416,8 +424,12 @@ RAWFRAME_TEST(AReplicatedComponentMayNameEntities) {
     execution::CancellationScope root{clock};
     const auto kConfiguration = composition::Configuration::parse(std::string{"kest.game = "} +
                                                                   RAWFRAME_WORLD_KEST_GAMES + "sharedlinks.game\n");
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
     composition.stop();
 }
@@ -436,8 +448,12 @@ RAWFRAME_TEST(AGameThatDoesNotLoadFailsTheStart) {
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "misinterested.game\n",
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "mislinked.game\n"}) {
         const auto kConfiguration = composition::Configuration::parse(kText);
-        composition::Composition composition{
-            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        composition::Composition composition{*plan,
+                                             composition::HostServices{.clock = &clock,
+                                                                       .scope = &root,
+                                                                       .cpu = &test::cpuExecutor(),
+                                                                       .blockingIo = &test::blockingIoExecutor(),
+                                                                       .configuration = &*kConfiguration}};
         RAWFRAME_EXPECT(!composition.start().has_value());
     }
 }
@@ -473,8 +489,12 @@ RAWFRAME_TEST(KestSystemsCreateAndDestroyEntities) {
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
@@ -521,8 +541,12 @@ std::vector<std::vector<std::pair<physics2d::Pose2D, physics2d::Velocity2D>>> pl
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
@@ -603,8 +627,12 @@ RAWFRAME_TEST(AKestSystemShootsBackInTime) {
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
@@ -644,8 +672,12 @@ RAWFRAME_TEST(AKestSystemAsksThreeDimensionalPhysics) {
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
@@ -698,8 +730,12 @@ RAWFRAME_TEST(AKestProgramHangsABarOnAHinge) {
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
@@ -752,8 +788,12 @@ RAWFRAME_TEST(AKestProgramHangsABarOnAHingeInTwoDimensions) {
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
@@ -796,8 +836,12 @@ RAWFRAME_TEST(ARunnerHitIsToldSo) {
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
@@ -871,8 +915,12 @@ RAWFRAME_TEST(AChangedProgramReloadsBetweenTicks) {
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
     std::uint64_t iteration = 0;
     const auto kIterate = [&] {
@@ -952,8 +1000,12 @@ RAWFRAME_TEST(CheckpointsCarryEntityReferences) {
     execution::CancellationScope root{clock};
     const auto kRun = [&](const std::string& extra) {
         const auto kConfiguration = composition::Configuration::parse(kGame + extra);
-        composition::Composition composition{
-            *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+        composition::Composition composition{*plan,
+                                             composition::HostServices{.clock = &clock,
+                                                                       .scope = &root,
+                                                                       .cpu = &test::cpuExecutor(),
+                                                                       .blockingIo = &test::blockingIoExecutor(),
+                                                                       .configuration = &*kConfiguration}};
         RAWFRAME_EXPECT(composition.start().has_value());
         // Ten ticks are due; the capture holds the World at tick 5.
         clock.advance(execution::MonotonicDuration::fromSeconds(1));
@@ -972,8 +1024,12 @@ RAWFRAME_TEST(CheckpointsCarryEntityReferences) {
     // around a cycle of three, five hops each, at tick 5.
     const auto kConfiguration =
         composition::Configuration::parse(kGame + "checkpoint.restore = " + (kDirectory / "c-5.rfsn").string() + "\n");
-    composition::Composition composition{
-        *plan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
     RAWFRAME_EXPECT(simulation->tick().value == 5);
     const std::vector<LinkRow> kAfter = links();

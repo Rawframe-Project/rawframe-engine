@@ -14,6 +14,7 @@
 #include "rawframe/game_content/cooked_content.h"
 #include "rawframe/game_content/registrar.h"
 #include "rawframe/signature/signature.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 
 #include <array>
