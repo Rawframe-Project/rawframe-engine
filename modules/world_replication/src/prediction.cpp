@@ -117,6 +117,15 @@ bool Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
     }
     // Back to the server's state at `consumed`, then every later input again.
     ++statistics_.rollbacks;
+    if (consumed / ticksPerSecond_ != alarmSecond_) {
+        alarmSecond_ = consumed / ticksPerSecond_;
+        secondRollbacks_ = 0;
+        alarmed_ = false;
+    }
+    if (++secondRollbacks_ > settings_.rollbackAlarm && !alarmed_) {
+        alarmed_ = true;
+        ++statistics_.rollbackAlarms;
+    }
     const std::uint64_t kThrough = std::max(predictedTick_, consumed);
     write(base);
     if (place_) {

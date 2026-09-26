@@ -72,6 +72,11 @@ struct PredictionSettings {
     /// predicted scope every so many confirmed ticks (D204); nought sends
     /// none.
     std::uint32_t checksumInterval = 60;
+    /// SPEC-0041's rollback_rate_alarm: rollbacks in one second of input
+    /// ticks past which the second is counted as pathological (D207).
+    /// Rollback itself is normal; this marks a client rolling back far more
+    /// than predicting.
+    std::uint32_t rollbackAlarm = 30;
     /// SPEC-0041's divergence drill, for development builds only: one bit of
     /// every state hashed is flipped, so the server must find each record
     /// diverged.
@@ -91,6 +96,8 @@ struct PredictionStatistics {
     std::uint64_t failedSteps = 0;
     /// Checksum records sent.
     std::uint64_t checksumsSent = 0;
+    /// Seconds of input ticks with more rollbacks than the alarm allows.
+    std::uint64_t rollbackAlarms = 0;
 };
 
 } // namespace rawframe::world_replication

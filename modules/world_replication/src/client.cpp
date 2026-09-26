@@ -522,6 +522,8 @@ void ReplicationClient::pump() {
                                                            static_cast<std::uint32_t>(event.accept.tickRateSeconds))) {
                     state.settings.prediction->predictor->rate(*kRate);
                 }
+                state.prediction->ticksPerSecond((event.accept.tickRateTicks + event.accept.tickRateSeconds - 1) /
+                                                 std::max<std::uint64_t>(event.accept.tickRateSeconds, 1));
             }
             break;
         case network::SessionEventKind::Frame:

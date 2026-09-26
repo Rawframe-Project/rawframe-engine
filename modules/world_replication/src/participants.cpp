@@ -31,6 +31,7 @@ using diagnostics::EventIdentity;
 constexpr EventIdentity kListening{"replication", "listening"};
 constexpr EventIdentity kServerSummary{"replication", "server_summary"};
 constexpr EventIdentity kDivergence{"replication", "prediction_divergence"};
+constexpr EventIdentity kRollbackAlarm{"replication", "rollback_rate_alarm"};
 constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
 constexpr EventIdentity kBotsAdmitted{"replication", "bots_admitted"};
 
@@ -293,6 +294,8 @@ struct Bot {
     /// since admission, not once per Host iteration.
     std::optional<execution::MonotonicInstant> admittedAt;
     std::uint64_t submitted = 0;
+    /// Rollback alarms already reported.
+    std::uint64_t alarms = 0;
 };
 
 class BotsParticipant final : public composition::Participant, public ClientWorlds {
@@ -357,6 +360,11 @@ public:
             return missing("bots.divergence_drill is true or false, and only in a development build");
         }
         divergenceDrill_ = kDrill == "true";
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kAlarmLimit, configuration.unsignedInteger("bots.rollback_alarm", 30));
+        if (kAlarmLimit > 1'000'000) {
+            return missing("bots.rollback_alarm is at most a million rollbacks a second");
+        }
+        rollbackAlarm_ = static_cast<std::uint32_t>(kAlarmLimit);
         const auto kInterpolate = configuration.text("bots.interpolate");
         if (kInterpolate.has_value() && *kInterpolate != "true" && *kInterpolate != "false") {
             return missing("bots.interpolate is true or false");
@@ -394,6 +402,7 @@ public:
                         .predicted = {plan_->predictedComponents().begin(), plan_->predictedComponents().end()},
                         .neighborhood = {plan_->nearbyComponents().begin(), plan_->nearbyComponents().end()},
                         .checksumInterval = checksumInterval_,
+                        .rollbackAlarm = rollbackAlarm_,
                         .divergenceDrill = divergenceDrill_};
                 } else {
                     ++unpredicted_;
@@ -446,6 +455,18 @@ public:
                                          .has_value();
                 } else {
                     bot.client->pump();
+                    // Pathology, not rollback itself: a local diagnostic,
+                    // once for each second past the alarm (SPEC-0041).
+                    const std::uint64_t kAlarms = bot.client->predictionStatistics().rollbackAlarms;
+                    if (kAlarms > bot.alarms) {
+                        bot.alarms = kAlarms;
+                        emitter_.log(diagnostics::Severity::Warning,
+                                     kRollbackAlarm,
+                                     "a bot rolled back more in a second than the alarm allows",
+                                     {diagnostics::field("bot", static_cast<std::uint64_t>(&bot - bots_.data())),
+                                      diagnostics::field("alarms", kAlarms),
+                                      diagnostics::field("limit", std::uint64_t{rollbackAlarm_})});
+                    }
                 }
                 admitted += bot.client->admitted() ? 1 : 0;
             } else if (phase == composition::HostPhase::Egress && bot.client->admitted() && !bot.input.empty()) {
@@ -507,6 +528,7 @@ public:
             predicted.stalled += kBot.stalled;
             predicted.failedSteps += kBot.failedSteps;
             predicted.checksumsSent += kBot.checksumsSent;
+            predicted.rollbackAlarms += kBot.rollbackAlarms;
         }
         emitter_.log(diagnostics::Severity::Info,
                      kBotsSummary,
@@ -529,6 +551,7 @@ public:
                       diagnostics::field("stalled", predicted.stalled),
                       diagnostics::field("failedSteps", predicted.failedSteps),
                       diagnostics::field("checksumsSent", predicted.checksumsSent),
+                      diagnostics::field("rollbackAlarms", predicted.rollbackAlarms),
                       diagnostics::field("blended", interpolated.blended),
                       diagnostics::field("shownNewest", interpolated.newest)});
     }
@@ -576,6 +599,7 @@ private:
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     std::vector<Bot> bots_;
     std::uint32_t checksumInterval_ = 60;
+    std::uint32_t rollbackAlarm_ = 30;
     bool divergenceDrill_ = false;
     /// Bots that would predict but could not have a predictor.
     std::uint64_t unpredicted_ = 0;

@@ -37,6 +37,10 @@ public:
         return settings_.predicted.size();
     }
     void reset();
+    /// Input ticks in a second, told on admission, for the rollback alarm.
+    void ticksPerSecond(std::uint64_t ticks) noexcept {
+        ticksPerSecond_ = ticks == 0 ? 1 : ticks;
+    }
     /// Called when prediction starts and before every resimulation, to
     /// give the predictor the neighborhood as last heard.
     void neighbors(std::function<void()> place) {
@@ -70,6 +74,12 @@ private:
     std::uint64_t newestCommand_ = 0;
     PredictionStatistics statistics_;
     State confirmed_;
+    std::uint64_t ticksPerSecond_ = 60;
+    /// The second of input ticks the rollback alarm counts in, its
+    /// rollbacks, and whether it has raised the alarm.
+    std::uint64_t alarmSecond_ = 0;
+    std::uint64_t secondRollbacks_ = 0;
+    bool alarmed_ = false;
     std::function<void()> place_;
 };
 
