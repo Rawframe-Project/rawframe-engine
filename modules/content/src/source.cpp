@@ -50,6 +50,15 @@ private:
 };
 
 #if RAWFRAME_FILE_SYSTEM
+/// When a file was last modified, by the name each platform gives it.
+const timespec& modifiedAt(const struct stat& status) noexcept {
+#if defined(__APPLE__)
+    return status.st_mtimespec;
+#else
+    return status.st_mtim;
+#endif
+}
+
 /// A file descriptor closed when it goes.
 class Descriptor {
 public:
@@ -128,8 +137,8 @@ public:
         std::byte extra{};
         struct stat after{};
         if (::read(kFile.get(), &extra, 1) != 0 || ::fstat(kFile.get(), &after) != 0 ||
-            after.st_size != before.st_size || after.st_mtim.tv_sec != before.st_mtim.tv_sec ||
-            after.st_mtim.tv_nsec != before.st_mtim.tv_nsec) {
+            after.st_size != before.st_size || modifiedAt(after).tv_sec != modifiedAt(before).tv_sec ||
+            modifiedAt(after).tv_nsec != modifiedAt(before).tv_nsec) {
             return refuse(
                 ContentError::SourceChanged, result::ErrorClass::DataLoss, "the file changed while it was read");
         }

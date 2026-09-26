@@ -30,6 +30,8 @@ jobs:
       - name: Configure
         run: cmake --preset clang-development
       - name: Build
-        run: cmake --build out/clang-development
+        # Past the first failure, so one run shows every file that does not
+        # build here.
+        run: cmake --build out/clang-development -- -k 0
       - name: Test
         run: ctest --test-dir out/clang-development --output-on-failure -j3
