@@ -12,7 +12,8 @@
 //
 // `key` writes `<kid>.key`, the secret, readable by its owner only, and
 // `<publisher>.keys`, the publisher key set that readers pin. `install`
-// copies a Build into a library (`content::Library`); `compose` writes the
+// adds a Build to a library (`install::Installation`), verified against
+// the key set the library pins for its publisher; `compose` writes the
 // CompositionRecord of the library's Build of that root as the Game, with
 // the library's Builds of any package roots as its Packages and of any mod
 // roots as its Mods, and prints its CompositionId. Whether the game takes
@@ -22,6 +23,7 @@
 #include "rawframe/content/composition_record.h"
 #include "rawframe/content/library.h"
 #include "rawframe/document/json.h"
+#include "rawframe/install/installation.h"
 #include "rawframe/signature/signature.h"
 
 #include <algorithm>
@@ -112,27 +114,28 @@ int install(const std::filesystem::path& build, const std::filesystem::path& lib
         return 1;
     }
     const rawframe::content::ContentDigest kRoot{.bytes = rawframe::base::sha256(*kBytes)};
-    // The manifest and its signature under the Build's own directory, its
-    // blobs in the library's one store.
-    const std::filesystem::path kInto = library / rawframe::content::buildDirectoryOf(kRoot.bytes);
-    std::error_code error;
-    std::filesystem::create_directories(kInto, error);
-    for (const std::string_view kName :
-         {rawframe::content::kBuildManifestName, rawframe::content::kBuildSignatureName}) {
-        if (!error) {
-            std::filesystem::copy_file(
-                build / kName, kInto / kName, std::filesystem::copy_options::overwrite_existing, error);
-        }
+    // What the Build says it is, to be verified against the key set the
+    // library pins for its publisher before a blob of it is taken.
+    const rawframe::document::Value* subject = kIdentity->find("subject");
+    const rawframe::document::Value* version = kIdentity->find("version");
+    if (subject == nullptr || version == nullptr || subject->text() == nullptr || version->text() == nullptr) {
+        std::fputs("rawframe-build: install: not a Build\n", stderr);
+        return 1;
     }
-    if (!error) {
-        std::filesystem::copy(build / "sha256",
-                              library / "sha256",
-                              std::filesystem::copy_options::recursive |
-                                  std::filesystem::copy_options::overwrite_existing,
-                              error);
+    auto installation = rawframe::install::Installation::open(library);
+    if (!installation.has_value()) {
+        print(installation.error());
+        return 1;
     }
-    if (error) {
-        std::fputs("rawframe-build: install: the Build cannot be copied\n", stderr);
+    auto origin = rawframe::install::packedBuildAt(build);
+    if (!origin.has_value()) {
+        print(origin.error());
+        return 1;
+    }
+    const auto kAdded =
+        installation->add({.subject = *subject->text(), .version = *version->text(), .build = kRoot.bytes}, **origin);
+    if (!kAdded.has_value()) {
+        print(kAdded.error());
         return 1;
     }
     std::printf("installed %s\n", kRoot.text().c_str());
