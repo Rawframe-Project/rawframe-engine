@@ -1,4 +1,4 @@
-date	commit	machine	game	bots	ticks	p50_ms	p95_ms	p99_ms
+date	commit	machine	game	bots	ticks	p50_ms	p95_ms	p99_ms	kest_p95_ms
 2026-09-25T12:09:26Z	a0889ca1e969	turan-uxplima-dev	arena	64	360	1.374	2.274	2.382
 2026-09-25T12:09:32Z	a0889ca1e969	turan-uxplima-dev	runners	64	359	2.107	2.263	2.322
 2026-09-25T12:09:38Z	a0889ca1e969	turan-uxplima-dev	plaza	64	360	1.735	2.038	2.110
@@ -6,3 +6,7 @@ date	commit	machine	game	bots	ticks	p50_ms	p95_ms	p99_ms
 2026-09-26T03:10:47Z	7f56b3b4cbac	turan-uxplima-dev	runners	64	359	2.192	2.316	2.369
 2026-09-26T03:10:53Z	7f56b3b4cbac	turan-uxplima-dev	plaza	64	360	1.952	2.288	2.354
 2026-09-26T03:10:59Z	7f56b3b4cbac	turan-uxplima-dev	crowd	64	360	3.714	4.330	4.543
+2026-09-26T03:19:57Z	799b4749d44a+	turan-uxplima-dev	arena	64	361	1.169	1.967	2.265	0.020
+2026-09-26T03:20:03Z	799b4749d44a+	turan-uxplima-dev	runners	64	359	2.180	2.336	2.471	0.169
+2026-09-26T03:20:10Z	799b4749d44a+	turan-uxplima-dev	plaza	64	360	1.856	2.007	2.188	0.036
+2026-09-26T03:20:16Z	799b4749d44a+	turan-uxplima-dev	crowd	64	360	3.400	4.349	4.659	0.187
