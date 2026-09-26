@@ -1,0 +1,13 @@
+module penalty
+
+// Runners' own shape, field for field: the engine checks it is laid out as
+// runners' is.
+struct Penalty {
+    taken: i32
+}
+
+// What runners asks about is lent as the one value of `values`; what is left
+// there is the answer.
+fn double(values: [Penalty]) {
+    values[0].taken = values[0].taken * 2
+}

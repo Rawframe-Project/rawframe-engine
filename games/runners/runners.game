@@ -13,6 +13,8 @@ component f6453556-fcdd-46e8-9208-866fade389cf runners.score Score
 component 4a1a3d29-28e9-46fe-aae0-6bb3576ca9b3 runners.hit Hit
 component 5f3691c6-292c-4054-b868-142fe8a4448f runners.emitter Emitter
 component 8c4e2a17-5b90-4d3f-a6e8-1f7c9d0b2e53 runners.age Age
+# No entity holds a penalty: it is what the penalty service is asked about.
+component 3d8b6f21-7c4e-4a95-b0d3-e6f1a2c95b78 runners.penalty Penalty
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity before rawframe.physics2d.step predicted
@@ -36,11 +38,14 @@ save player runner runners.score
 # Anyone may mod it. A mod adds timers, entities holding runners.age that the
 # age system counts up as it does the hall's (runners-timers is one), and
 # handles hits: right after hurt, over each runner hit, it may change the
-# runner's score (runners-sting is one).
+# runner's score (runners-sting is one). One mod may also say what a hit
+# costs: hurt asks the penalty service, which answers one taken unless a
+# mod provides it (runners-penalty is one).
 mods open
 modapi runners 1
 extension timers data runners.age multi
 extension hits event runners.hit after runners.hurt write runners.score multi
+extension penalty service runners.penalty exclusive
 
 replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter
 player runners.stick runners.score runners.emitter rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception

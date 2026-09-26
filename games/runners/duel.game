@@ -11,6 +11,7 @@ component 6b05cdb4-0683-437a-aaac-7ad990b2ddb4 runners.stick Stick
 component f6453556-fcdd-46e8-9208-866fade389cf runners.score Score
 component 4a1a3d29-28e9-46fe-aae0-6bb3576ca9b3 runners.hit Hit
 component 5f3691c6-292c-4054-b868-142fe8a4448f runners.emitter Emitter
+component 3d8b6f21-7c4e-4a95-b0d3-e6f1a2c95b78 runners.penalty Penalty
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity before rawframe.physics2d.step predicted
@@ -18,6 +19,11 @@ system runners.shoot simulation shoot read runners.stick read rawframe.physics2d
 system runners.hurt simulation hurt write runners.score read runners.hit entities
 
 input runners.stick perceived
+
+# The program asks the penalty service what a hit costs. Closed to mods, the
+# service answers what runners asks: one taken.
+modapi runners 1
+extension penalty service runners.penalty exclusive
 
 # The level (level.scene): the ground, eighty meters wide, walls at its
 # ends, three platforms to jump up to, slopes of 20 degrees at both ends,

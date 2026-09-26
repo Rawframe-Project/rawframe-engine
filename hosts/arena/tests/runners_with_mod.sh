@@ -19,10 +19,11 @@ repository=$4
 work=$5
 
 rm -rf "$work"
-mkdir -p "$work/game" "$work/mod" "$work/sting" "$work/late" "$work/wide" "$work/elsewhere"
+mkdir -p "$work/game" "$work/mod" "$work/sting" "$work/penalty" "$work/late" "$work/wide" "$work/elsewhere"
 cp -r "$repository/games/runners/." "$work/game/"
 cp -r "$repository/games/runners-timers/." "$work/mod/"
 cp -r "$repository/games/runners-sting/." "$work/sting/"
+cp -r "$repository/games/runners-penalty/." "$work/penalty/"
 cp -r "$repository/games/runners-timers/." "$work/late/"
 sed -i 's/^modapi 1$/modapi >=2/' "$work/late/timers.mod"
 cp -r "$repository/games/runners-timers/." "$work/wide/"
@@ -49,6 +50,7 @@ SCENE
 "$cook" "$work/game" "$work/game-cooked" >/dev/null
 "$cook" "$work/mod" "$work/mod-cooked" >/dev/null
 "$cook" "$work/sting" "$work/sting-cooked" >/dev/null
+"$cook" "$work/penalty" "$work/penalty-cooked" >/dev/null
 "$cook" "$work/late" "$work/late-cooked" >/dev/null
 "$cook" "$work/wide" "$work/wide-cooked" >/dev/null
 
@@ -61,12 +63,14 @@ pack() {
 game_root=$(pack "$work/game-cooked" "$work/game-build" rawframe/runners)
 mod_root=$(pack "$work/mod-cooked" "$work/mod-build" rawframe/runners-timers)
 sting_root=$(pack "$work/sting-cooked" "$work/sting-build" rawframe/runners-sting)
+penalty_root=$(pack "$work/penalty-cooked" "$work/penalty-build" rawframe/runners-penalty)
 late_root=$(pack "$work/late-cooked" "$work/late-build" rawframe/runners-late)
 wide_root=$(pack "$work/wide-cooked" "$work/wide-build" rawframe/runners-wide)
 "$build" compose "$library" "$game_root" tool "$work/plain.composition" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/modded.composition" --mod "$mod_root" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/stung.composition" --mod "$mod_root" --mod "$sting_root" \
     >/dev/null
+"$build" compose "$library" "$game_root" tool "$work/penalized.composition" --mod "$penalty_root" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/late.composition" --mod "$late_root" >/dev/null
 "$build" compose "$library" "$game_root" tool "$work/wide.composition" --mod "$wide_root" >/dev/null
 game=$(sed -n 's/.*"resourceId": "\([0-9a-f]*\)".*/\1/p' "$repository/games/runners/runners.game.rfmeta")
@@ -129,11 +133,11 @@ grep -q "another set of mods.*removed: rawframe/runners-timers@" "$work/log.ndjs
 run "$work/modded.composition" 30 "checkpoint.restore = $work/modded-10.rfsn"
 grep -q '"code":"checkpoint_restored"' "$work/log.ndjson"
 
-# Stung: the handler is loaded, and every score kept has taken hits in twos.
-rm -rf "$work/saves"
-run "$work/stung.composition" 600
-grep -q '"code":"game_loaded".*"modHandlers":1' "$work/log.ndjson"
-taken=$(python3 - "$work/saves" <<'PY'
+# Every score kept has taken hits in twos, and some runner was hit: the
+# total taken, or a failure naming `$1`.
+taken_in_twos() {
+    local taken each total=0
+    taken=$(python3 - "$work/saves" <<'PY'
 import glob, struct, sys
 taken = []
 for path in sorted(glob.glob(sys.argv[1] + "/p-*.rfsave")):
@@ -143,17 +147,30 @@ for path in sorted(glob.glob(sys.argv[1] + "/p-*.rfsave")):
 print(" ".join(map(str, taken)))
 PY
 )
-echo "taken: $taken"
-total=0
-for each in $taken; do
-    if [ $((each % 2)) -ne 0 ]; then
-        echo "a hit was counted once with runners-sting taken" >&2
+    echo "taken: $taken" >&2
+    for each in $taken; do
+        if [ $((each % 2)) -ne 0 ]; then
+            echo "a hit was counted once with $1" >&2
+            exit 1
+        fi
+        total=$((total + each))
+    done
+    if [ "$total" -eq 0 ]; then
+        echo "no runner was hit, so $1 proved nothing" >&2
         exit 1
     fi
-    total=$((total + each))
-done
-if [ "$total" -eq 0 ]; then
-    echo "no runner was hit, so the handler proved nothing" >&2
-    exit 1
-fi
-echo "mod taken: $plain entities without it, $modded with it; stung hits $total; checkpoints know their mods"
+    echo "$total"
+}
+
+# Stung: the handler is loaded, and every score kept has taken hits in twos.
+rm -rf "$work/saves"
+run "$work/stung.composition" 600
+grep -q '"code":"game_loaded".*"modHandlers":1' "$work/log.ndjson"
+stung=$(taken_in_twos "runners-sting's handler")
+
+# Penalized: the provider is bound, and every hit costs two taken.
+rm -rf "$work/saves"
+run "$work/penalized.composition" 600
+grep -q '"code":"game_loaded".*"modProviders":1' "$work/log.ndjson"
+penalized=$(taken_in_twos "runners-penalty's provider")
+echo "mod taken: $plain entities without it, $modded with it; stung hits $stung; penalized hits $penalized; checkpoints know their mods"

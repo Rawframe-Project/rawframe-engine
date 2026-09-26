@@ -33,6 +33,14 @@ struct Hit {
 extern fn Hit.insert(entity: world.Entity, value: Hit)
 extern fn Hit.remove(entity: world.Entity)
 
+// What a hit costs the runner it met: one taken, unless a mod provides the
+// penalty service (D199).
+struct Penalty {
+    taken: i32
+}
+
+extern fn Mods.penalty(value: Penalty) -> Penalty
+
 // How long this level has been played, over every run of the server: the
 // hall (hall.scene) is persistent, and the game's save keeps its age.
 struct Age {
@@ -113,7 +121,7 @@ fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: 
 fn hurt(count: i32, scores: [Score], hits: [Hit], entities: [world.Entity]) {
     let i = 0
     while i < count {
-        scores[i].taken = scores[i].taken + 1
+        scores[i].taken = scores[i].taken + Mods.penalty(Penalty(1)).taken
         Hit.remove(entities[i])
         i = i + 1
     }
