@@ -47,6 +47,10 @@ std::string keysPathOf(std::string_view publisher) {
     return "keys/" + std::string{publisher} + ".keys";
 }
 
+std::string compositionPathOf(const base::Sha256Digest& composition) {
+    return "compositions/" + ContentDigest{.bytes = composition}.text().substr(7);
+}
+
 #if RAWFRAME_FILE_SYSTEM
 result::Result<Library> Library::directory(const std::filesystem::path& root) {
     RAWFRAME_TRY_ASSIGN(auto opened, DirectorySource::open(root, "the library is not a readable directory"));

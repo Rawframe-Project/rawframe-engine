@@ -5,8 +5,11 @@
 // its root hash's 64 hexadecimal digits; the blobs of every Build are in one
 // content-addressed store, `sha256/<2>/<62>`, so a blob two Builds share is
 // held once and an update fetches only what the store lacks; and the key set
-// pinned for each publisher is `keys/<publisher>.keys`. This module reads
-// the layout and names its paths; nothing else spells them.
+// pinned for each publisher is `keys/<publisher>.keys`. An installed library
+// (rawframe.install) also keeps the Compositions it has installed under
+// `compositions/`, names the active one and those retained for rollback in
+// `installed`, and writes under `staging/` before it publishes. This module
+// reads the layout and names its paths; nothing else spells them.
 
 #include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
@@ -41,6 +44,11 @@ inline constexpr std::string_view kBuildSignatureName = "build.manifest.sig";
 [[nodiscard]] std::string blobPathOf(const ContentDigest& blob);
 /// `keys/<publisher>.keys`.
 [[nodiscard]] std::string keysPathOf(std::string_view publisher);
+/// `compositions/` and the CompositionId's 64 hexadecimal digits.
+[[nodiscard]] std::string compositionPathOf(const base::Sha256Digest& composition);
+/// The installed pointer, and where an update stages what it writes.
+inline constexpr std::string_view kInstalledName = "installed";
+inline constexpr std::string_view kStagingName = "staging";
 
 class Library {
 public:

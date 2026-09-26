@@ -20,6 +20,11 @@
 
 namespace rawframe::content {
 
+/// SPEC-0021's hard ceiling on a Build manifest, and a signature envelope's
+/// own.
+inline constexpr std::size_t kMaximumBuildManifest = std::size_t{64} * 1024 * 1024;
+inline constexpr std::size_t kMaximumBuildSignature = 1024;
+
 /// SPEC-0021's chunk, as the manifest lists it: a `raw` blob is its
 /// content, a `zstd` blob one Zstandard frame of it.
 struct BuildChunk {
