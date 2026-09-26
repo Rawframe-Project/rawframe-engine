@@ -4,6 +4,8 @@
 
 #include "rawframe/audio/sound.h"
 #include "rawframe/document/errors.h"
+#include "rawframe/document/json.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <cmath>
@@ -207,4 +209,21 @@ RAWFRAME_TEST(FalloffsAreTheCurvesTheyName) {
     }
     RAWFRAME_EXPECT(kAt(Falloff::Inverse, 8) == 0.25F && kAt(Falloff::InverseSquare, 8) == 0.0625F);
     RAWFRAME_EXPECT(kAt(Falloff::Linear, 17) == 0.5F && std::abs(kAt(Falloff::Logarithmic, 8) - 0.5F) < 1e-6F);
+}
+
+RAWFRAME_TEST(HostileSoundsReadOnlyInTheirCanonicalText) {
+    // A sound declaration comes with content a client fetched.
+    const Layout kLayout = layout();
+    const test::WrittenRun kRun = test::readOnlyAsWritten(
+        kSound,
+        "\"{}[],:.-0123456789abe_ \n",
+        [&kLayout](std::string_view text) {
+            return readSound(text, kLayout).transform([text](const SoundDeclaration&) {
+                return std::string{text};
+            });
+        },
+        [](const std::string& read) {
+            return document::write(*document::parse(read));
+        });
+    RAWFRAME_EXPECT(kRun.read > 0 && kRun.differing == 0);
 }

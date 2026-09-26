@@ -4,6 +4,8 @@
 
 #include "rawframe/audio/layout.h"
 #include "rawframe/document/errors.h"
+#include "rawframe/document/json.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
@@ -411,4 +413,23 @@ RAWFRAME_TEST(EveryEffectRuleIsRefusedAtItsField) {
     }
     const auto kTooMany = refusalOf(std::string{kEffects}, {.maximumEqBands = 2});
     RAWFRAME_EXPECT(kTooMany.first == DocumentError::Invalid && kTooMany.second == "$.master.effects[0].bands");
+}
+
+RAWFRAME_TEST(HostileLayoutsReadOnlyInTheirCanonicalText) {
+    // A mixer layout comes with content a client fetched. It has no writer
+    // of its own: what it reads is the document's canonical text.
+    for (const std::string_view kSeed : {kLayout, kEffects}) {
+        const test::WrittenRun kRun = test::readOnlyAsWritten(
+            kSeed,
+            "\"{}[],:.-0123456789abe_ \n",
+            [](std::string_view text) {
+                return readLayout(text).transform([text](const Layout&) {
+                    return std::string{text};
+                });
+            },
+            [](const std::string& read) {
+                return document::write(*document::parse(read));
+            });
+        RAWFRAME_EXPECT(kRun.read > 0 && kRun.differing == 0);
+    }
 }
