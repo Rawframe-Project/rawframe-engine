@@ -18,7 +18,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Tools
         run: |
           brew install llvm@20 ninja ccache
