@@ -112,6 +112,7 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        clock_ = &context.clock();
         if (simulation_ == nullptr) {
             return {};
         }
@@ -151,6 +152,7 @@ private:
     }
 
     result::Status restore() {
+        const execution::MonotonicInstant kStart = clock_->now();
         RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes,
                             readArtifact(restorePath_, limits_.maximumArtifactBytes));
         RAWFRAME_TRY_ASSIGN(std::unique_ptr<world::World> candidate, simulation_->candidate());
@@ -169,11 +171,14 @@ private:
                      {diagnostics::field("tick", kFacts.tick.value),
                       diagnostics::field("entities", kFacts.entities),
                       diagnostics::field("rows", kFacts.rows),
-                      diagnostics::field("digest", std::string_view{hex(kFacts.digest)})});
+                      diagnostics::field("digest", std::string_view{hex(kFacts.digest)}),
+                      // SPEC-0013's restore deadline (D215).
+                      diagnostics::field("restoreMs", (clock_->now() - kStart).nanoseconds / 1'000'000)});
         return {};
     }
 
     result::Status capture() {
+        const execution::MonotonicInstant kStart = clock_->now();
         const world::TickIndex kTick = simulation_->tick();
         RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kBytes,
                             world_snapshot::capture(*simulation_->world(),
@@ -191,10 +196,13 @@ private:
                      "a checkpoint was captured",
                      {diagnostics::field("tick", kTick.value),
                       diagnostics::field("bytes", kBytes.size()),
-                      diagnostics::field("digest", std::string_view{hex(kDigest)})});
+                      diagnostics::field("digest", std::string_view{hex(kDigest)}),
+                      // SPEC-0013's capture deadline, the write included (D215).
+                      diagnostics::field("captureMs", (clock_->now() - kStart).nanoseconds / 1'000'000)});
         return {};
     }
 
+    const execution::MonotonicSource* clock_ = nullptr;
     Simulation* simulation_ = nullptr;
     const CheckpointPlan* plan_ = nullptr;
     const world_snapshot::SnapshotProjection* projection_ = nullptr;
