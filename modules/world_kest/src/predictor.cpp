@@ -1,6 +1,7 @@
 #include "predictor.h"
 
 #include "animation_doors.h"
+#include "effect_doors.h"
 #include "mod_services.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
@@ -97,6 +98,8 @@ public:
         }
         services_ = std::make_unique<ModServices>(game, sizes);
         RAWFRAME_TRY(services_->addDoors(doors));
+        effects_ = std::make_unique<EffectDoors>(game, true);
+        RAWFRAME_TRY(effects_->addDoors(doors));
         dimensions_ = settings.physics3d.has_value() ? 3 : settings.physics.has_value() ? 2 : 0;
         if (dimensions_ != 0) {
             RAWFRAME_TRY(addPhysicsDoors(doors, dimensions_, &doorContext_));
@@ -193,6 +196,7 @@ public:
     }
 
     result::Status step(std::span<const std::byte> input) override {
+        effects_->clear();
         RAWFRAME_TRY(set(registry_->descriptor(input_).id, input));
         // A system that fails leaves the tick to the server's correction.
         RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, schedule_->runTick(*world_, tick_, rate_));
@@ -203,6 +207,10 @@ public:
                                 "a predicted system failed");
         }
         return {};
+    }
+
+    std::span<const world_replication::StepEffect> effects() const noexcept override {
+        return effects_->emitted();
     }
 
 private:
@@ -246,6 +254,8 @@ private:
     std::vector<KestComponent> components_;
     std::vector<Declared> declared_;
     std::unique_ptr<ModServices> services_;
+    /// What each step's predicted systems emitted (D219).
+    std::unique_ptr<EffectDoors> effects_;
     std::unique_ptr<KestSystems> systems_;
     /// The game's physics dimensions, nought for none, and its physics.
     std::uint8_t dimensions_ = 0;

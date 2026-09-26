@@ -39,6 +39,11 @@ public:
     /// A predictor for one client, running the game's predicted systems;
     /// `unsupported` for a game that predicts nothing.
     [[nodiscard]] virtual result::Result<std::unique_ptr<Predictor>> predictor() const = 0;
+    /// Each effect kind's class, by kind, for a predicting client's ledger
+    /// (D219); none for a game without effects.
+    [[nodiscard]] virtual std::span<const EffectClass> effectClasses() const noexcept {
+        return {};
+    }
     /// The components a client shows remote entities' values of between
     /// states; empty for a game that shows every state as it arrives.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept = 0;

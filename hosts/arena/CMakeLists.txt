@@ -139,13 +139,15 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_recooked PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
     # Four bots predict their runners: a thousand ticks confirmed, the
-    # rollbacks only those of admission.
+    # rollbacks only those of admission, and their own jumps heard as
+    # predicted effects (D219).
     add_test(NAME runners_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(runners_prediction PROPERTIES
                          PROCESSORS 6
-                         PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
+                         PASS_REGULAR_EXPRESSION
+                         "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],.*\"effectsDelivered\":[1-9]")
     add_test(NAME runners_rollback_alarm
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_rollback_alarm.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})

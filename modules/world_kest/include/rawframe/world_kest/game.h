@@ -37,7 +37,11 @@
 // player's components a client predicts, and a system marked `predicted` runs
 // on predicting clients too, over the player alone (SPEC-0041); it may write
 // no replicated component that is not predicted and draw from no World
-// stream, whose state a client does not have. `nearby` lists replicated
+// stream, whose state a client does not have. An `effect <name> predicted`
+// or `effect <name> confirmed_only` line declares a presentation effect,
+// which one predicted system with `emits <name>` emits through
+// `Effects.<name>(entity)`; a predicting client delivers it once (D219), a
+// server keeps nothing of it. `nearby` lists replicated
 // components of other entities a predicting client puts beside its player,
 // as last heard, whenever it simulates again, so the player's steps meet
 // them (D39): a game with physics lists the three body components. It
@@ -119,6 +123,7 @@
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/schedule.h"
+#include "rawframe/world_replication/prediction.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -163,7 +168,21 @@ struct GameSystem {
     std::vector<std::string> randomStreams;
     /// Runs on predicting clients too, over the player alone.
     bool predicted = false;
+    /// The effects it emits, from `emits <name>` pairs (D219); only a
+    /// predicted system emits, and each effect has one emitter.
+    std::vector<std::string> emits;
 };
+
+/// A presentation effect predicted systems emit (SPEC-0041, D219), from an
+/// `effect <name> predicted|confirmed_only` line: a program emits it with
+/// `Effects.<name>(entity)`, and a predicting client delivers it once.
+struct GameEffect {
+    std::string name;
+    world_replication::EffectClass effectClass = world_replication::EffectClass::Predicted;
+};
+
+/// Effect kinds a game declares at most.
+inline constexpr std::size_t kMaximumEffects = 64;
 
 struct GameFieldValue {
     std::string field;
@@ -354,6 +373,7 @@ struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
     std::vector<GameSystem> systems;
+    std::vector<GameEffect> effects;
     std::vector<GameSpawn> spawns;
     /// Scene documents (rawframe/scene/scene.h) whose entities the World
     /// starts with, beside any `spawn` lines, from `scene <file>` lines.

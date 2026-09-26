@@ -408,6 +408,7 @@ public:
                         .neighborhood = {plan_->nearbyComponents().begin(), plan_->nearbyComponents().end()},
                         .checksumInterval = checksumInterval_,
                         .rollbackAlarm = rollbackAlarm_,
+                        .effectClasses = {plan_->effectClasses().begin(), plan_->effectClasses().end()},
                         .divergenceDrill = divergenceDrill_};
                 } else {
                     ++unpredicted_;
@@ -534,6 +535,10 @@ public:
             predicted.failedSteps += kBot.failedSteps;
             predicted.checksumsSent += kBot.checksumsSent;
             predicted.rollbackAlarms += kBot.rollbackAlarms;
+            predicted.effectsDelivered += kBot.effectsDelivered;
+            predicted.effectsSuppressed += kBot.effectsSuppressed;
+            predicted.effectsCancelled += kBot.effectsCancelled;
+            predicted.effectsDropped += kBot.effectsDropped;
         }
         emitter_.log(diagnostics::Severity::Info,
                      kBotsSummary,
@@ -557,6 +562,10 @@ public:
                       diagnostics::field("failedSteps", predicted.failedSteps),
                       diagnostics::field("checksumsSent", predicted.checksumsSent),
                       diagnostics::field("rollbackAlarms", predicted.rollbackAlarms),
+                      diagnostics::field("effectsDelivered", predicted.effectsDelivered),
+                      diagnostics::field("effectsSuppressed", predicted.effectsSuppressed),
+                      diagnostics::field("effectsCancelled", predicted.effectsCancelled),
+                      diagnostics::field("effectsDropped", predicted.effectsDropped),
                       diagnostics::field("blended", interpolated.blended),
                       diagnostics::field("shownNewest", interpolated.newest)});
     }

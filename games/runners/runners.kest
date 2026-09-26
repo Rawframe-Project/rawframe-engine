@@ -64,7 +64,11 @@ fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], chara
 
 // Six meters a second either way; on ground, a jump when asked, and in the
 // air, a fall that quickens to twenty meters a second.
-fn run(count: i32, sticks: [controls.Stick], characters: [physics2d.Character2D], velocities: [physics2d.Velocity2D]) {
+// A jump's presentation effect (runners.game's `effect` line, D219).
+extern fn Effects.jump(entity: world.Entity)
+
+fn run(count: i32, sticks: [controls.Stick], characters: [physics2d.Character2D], velocities: [physics2d.Velocity2D],
+       entities: [world.Entity]) {
     let i = 0
     while i < count {
         velocities[i].x = sticks[i].run * 6.0
@@ -75,6 +79,7 @@ fn run(count: i32, sticks: [controls.Stick], characters: [physics2d.Character2D]
         }
         if grounded && sticks[i].jump > 0.5 {
             fall = 10.0
+            Effects.jump(entities[i])
         }
         if fall < -20.0 {
             fall = -20.0

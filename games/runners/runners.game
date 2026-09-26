@@ -17,10 +17,14 @@ component 8c4e2a17-5b90-4d3f-a6e8-1f7c9d0b2e53 runners.age Age
 component 3d8b6f21-7c4e-4a95-b0d3-e6f1a2c95b78 runners.penalty Penalty
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
-system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity before rawframe.physics2d.step predicted
+system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
 system runners.shoot simulation shoot read runners.stick read rawframe.physics2d.pose read rawframe.replication.perception write runners.score write runners.emitter before rawframe.physics2d.step
 system runners.hurt simulation hurt write runners.score read runners.hit entities
 system runners.age simulation age write runners.age
+
+# A jump is a presentation effect the runner predicts: its player hears it
+# at once, and once (D219).
+effect jump predicted
 
 # The level (level.scene): the ground, eighty meters wide, walls at its
 # ends, three platforms to jump up to, slopes of 20 degrees at both ends,

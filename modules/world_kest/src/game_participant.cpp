@@ -1,6 +1,7 @@
 #include "admission.h"
 #include "animation_doors.h"
 #include "animation_plan.h"
+#include "effect_doors.h"
 #include "game_files_participant.h"
 #include "game_persistence.h"
 #include "game_scenes.h"
@@ -231,6 +232,12 @@ public:
         }
         modServices_ = std::make_unique<ModServices>(game_, sizes);
         RAWFRAME_TRY(modServices_->addDoors(doors));
+        // A server presents nothing: its effect doors keep nothing (D219).
+        effects_ = std::make_unique<EffectDoors>(game_, false);
+        RAWFRAME_TRY(effects_->addDoors(doors));
+        for (const GameEffect& effect : game_.effects) {
+            effectClasses_.push_back(effect.effectClass);
+        }
         if (game_.physics.has_value()) {
             RAWFRAME_TRY(addPhysicsDoors(doors, game_.physics->dimensions, &doorContext_));
         }
@@ -454,6 +461,9 @@ public:
     }
     std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept override {
         return interpolated_;
+    }
+    std::span<const world_replication::EffectClass> effectClasses() const noexcept override {
+        return effectClasses_;
     }
     const std::optional<world_replication::InterestSettings>& interest() const noexcept override {
         return interest_;
@@ -872,6 +882,8 @@ private:
     std::unique_ptr<ModServices> modServices_;
     /// Every Kest system's time per tick, the game's and its mods' (D210).
     std::unique_ptr<KestTiming> timing_;
+    std::unique_ptr<EffectDoors> effects_;
+    std::vector<world_replication::EffectClass> effectClasses_;
     std::unique_ptr<KestSystems> systems_;
     /// Each taken mod's handlers, on its own machine.
     std::vector<std::unique_ptr<KestSystems>> modHandlers_;

@@ -303,6 +303,8 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 const std::string kName{kWords[at + 1]};
                 if (kWhat == "random") {
                     system.randomStreams.push_back(kName);
+                } else if (kWhat == "emits") {
+                    system.emits.push_back(kName);
                 } else if (kWhat == "after") {
                     system.after.push_back(kName);
                 } else if (kWhat == "before") {
@@ -314,7 +316,8 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     return badLine(number,
                                    WorldKestError::BadGameLine,
                                    "a system column is entities, or read, write, with, or without a component; an "
-                                   "edge is after or before a system; a stream is random and its name");
+                                   "edge is after or before a system; a stream is random and its name; an effect "
+                                   "is emits and its name");
                 }
             }
             game.systems.push_back(std::move(system));
@@ -431,6 +434,22 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                "a collision line is `collision class <name> <16 hex digits>`, `collision rule <class> "
                                "<class> collide|trigger|ignore`, or one `collision default <rule>`");
             }
+        } else if (kKeyword == "effect") {
+            const bool kShaped = kWords.size() == 3 && (kWords[2] == "predicted" || kWords[2] == "confirmed_only") &&
+                                 !kWords[1].empty() && std::ranges::all_of(kWords[1], [](char each) {
+                                     return (each >= 'a' && each <= 'z') || (each >= '0' && each <= '9') || each == '_';
+                                 });
+            if (!kShaped || std::ranges::contains(game.effects, kWords[1], &GameEffect::name) ||
+                game.effects.size() >= kMaximumEffects) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "an effect line is `effect <lower_snake name> predicted|confirmed_only`, each name "
+                               "once, at most 64");
+            }
+            game.effects.push_back(GameEffect{.name = std::string{kWords[1]},
+                                              .effectClass = kWords[2] == "predicted"
+                                                                 ? world_replication::EffectClass::Predicted
+                                                                 : world_replication::EffectClass::ConfirmedOnly});
         } else if (kKeyword == "interest") {
             // interest <component> <field>... within <radius>
             double radius = 0;
@@ -560,6 +579,19 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     }
     if (mixerLine != 0) {
         game.audio = std::move(audio);
+    }
+    // Each effect has one emitter, a predicted system (D219).
+    std::vector<std::string_view> emitted;
+    for (const GameSystem& system : game.systems) {
+        for (const std::string& effect : system.emits) {
+            if (!std::ranges::contains(game.effects, effect, &GameEffect::name) || !system.predicted ||
+                std::ranges::contains(emitted, effect)) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a system emits a declared effect, is predicted, and is the effect's one emitter");
+            }
+            emitted.push_back(effect);
+        }
     }
     RAWFRAME_TRY(checkModApi(game, modLines));
     return game;
