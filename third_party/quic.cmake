@@ -52,6 +52,12 @@ set_target_properties(msquic::msquic PROPERTIES
     IMPORTED_LOCATION "${RAWFRAME_QUIC_PREFIX}/lib/libmsquic.a"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/msquic/src/inc;${RAWFRAME_QUIC_PREFIX}/include"
     INTERFACE_LINK_LIBRARIES "Threads::Threads;${CMAKE_DL_LIBS}")
+# On macOS MsQuic checks certificates through the system's trust store
+# (D236).
+if(APPLE)
+    set_property(TARGET msquic::msquic APPEND PROPERTY INTERFACE_LINK_LIBRARIES
+                 "-framework Security" "-framework CoreFoundation")
+endif()
 
 # OpenSSL's libcrypto alone, from the same build, for Ed25519 signatures
 # (SPEC-0019: engine-side verification through OpenSSL's EVP one-shot
