@@ -146,6 +146,12 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_prediction PROPERTIES
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":1[0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],")
+    add_test(NAME runners_rollback_alarm
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_rollback_alarm.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(runners_rollback_alarm PROPERTIES
+                         PROCESSORS 6
+                         PASS_REGULAR_EXPRESSION "rollback_rate_alarm.*\"rollbackAlarms\":[1-9]")
     if(NOT RAWFRAME_SHIPPING)
         add_test(NAME runners_divergence_drill
                  COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_divergence_drill.conf
