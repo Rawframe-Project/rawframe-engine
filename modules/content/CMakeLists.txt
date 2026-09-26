@@ -2,7 +2,7 @@
 # manifests, the catalog, and bytes read and verified before anyone sees
 # them. Headless; no decoded assets, importers, or cookers here.
 rawframe_module(NAME content
-    SOURCES src/catalog.cpp src/composition_record.cpp src/frame.cpp src/identity.cpp src/manifest.cpp src/product.cpp src/sidecar.cpp src/source.cpp src/store.cpp
+    SOURCES src/catalog.cpp src/composition_record.cpp src/frame.cpp src/identity.cpp src/manifest.cpp src/product.cpp src/sidecar.cpp src/directory.cpp src/source.cpp src/store.cpp
     DEPS signature document execution result base
 )
 # Zstandard's decoder, for Build chunks (SPEC-0021), linked privately so no
