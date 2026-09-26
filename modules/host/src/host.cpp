@@ -39,6 +39,7 @@ constexpr EventIdentity kStarted{"host", "started"};
 constexpr EventIdentity kStopping{"host", "stopping"};
 constexpr EventIdentity kStopped{"host", "stopped"};
 constexpr EventIdentity kNotStarted{"host", "not_started"};
+constexpr EventIdentity kUnknownSetting{"host", "unknown_setting"};
 constexpr EventIdentity kLifecycle{"host", "lifecycle"};
 constexpr EventIdentity kHealth{"host", "health"};
 
@@ -366,6 +367,24 @@ struct Host::State {
             startExit = startupExit(started.error().errorClass());
             logExit(startExit);
             enter(composition::HostState::Failed, "start_failed");
+            composition.reset();
+            shutDown();
+            drainLog();
+            return false;
+        }
+        // Every key is some participant's, or the Host's: one nothing read is
+        // not a setting of this process (SPEC-0012, D187).
+        if (const std::vector<std::string_view> kUnknown = configuration.unread(); !kUnknown.empty()) {
+            for (const std::string_view kKey : kUnknown) {
+                emitter.log(Severity::Critical,
+                            kUnknownSetting,
+                            "a configuration key is no setting of this process",
+                            {diagnostics::field("key", kKey)});
+            }
+            startExit = HostExit::InvalidLaunchDescriptor;
+            logExit(startExit);
+            enter(composition::HostState::Failed, "unknown_setting");
+            composition->stop();
             composition.reset();
             shutDown();
             drainLog();

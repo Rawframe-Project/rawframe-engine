@@ -343,6 +343,19 @@ RAWFRAME_TEST(AnOverloadedReportEndsTheRunAsAControlledOverload) {
                     mentions(log, "\"exit\":\"controlled_overload\",\"exitCode\":75"));
 }
 
+RAWFRAME_TEST(AKeyNothingReadsRefusesTheStart) {
+    // A setting of no participant here, most often a typing mistake, is
+    // refused rather than ignored, and what started is rolled back (D187).
+    reset();
+    std::string log;
+    RAWFRAME_EXPECT(run("host.maximum_iterations = 2\nhost.iteration_rat = 1000", log) ==
+                    host::HostExit::InvalidLaunchDescriptor);
+    RAWFRAME_EXPECT(mentions(log, "\"code\":\"unknown_setting\"") && mentions(log, "host.iteration_rat") &&
+                    mentions(log, "\"exit\":\"invalid_launch_descriptor\",\"exitCode\":65"));
+    RAWFRAME_EXPECT(counts.started == 1 && counts.stopped == 1 && counts.runWorlds == 0);
+    RAWFRAME_EXPECT(!mentions(log, "\"state\":\"ready\""));
+}
+
 RAWFRAME_TEST(AStopPastItsBudgetEndsTheRunAsATimeout) {
     // A participant that takes 60 ms to stop, under a 20 ms shutdown budget:
     // the run ends in order, and says the stop outlived it (D185).
