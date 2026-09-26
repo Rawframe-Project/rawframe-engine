@@ -22,3 +22,4 @@ rawframe_module_tests(NAME localization
     SOURCES ${rawframe_localization_development_tests} tests/catalog_test.cpp tests/generated/plural_samples.cpp
             tests/locale_test.cpp tests/message_test.cpp tests/number_test.cpp tests/plural_test.cpp tests/table_test.cpp
 )
+rawframe_module_fuzz(NAME localization TARGET documents SEEDS tests/seeds SOURCES tests/fuzz_documents.cpp)

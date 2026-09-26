@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "kind": "text.translations",
+  "table": "aefdab1e47c086ddf189f56bbb92c4f0",
+  "locale": "tr",
+  "entries": {
+    "hud.hit": {
+      "message": "Vuruldun!",
+      "sourceHash": "17ead5c6ce1de56f"
+    },
+    "hud.score": {
+      "message": "{$points} puan",
+      "sourceHash": "92a0315619079782"
+    },
+    "menu.play": {
+      "message": "Oyna",
+      "sourceHash": "436e61016e26fcb7"
+    }
+  }
+}

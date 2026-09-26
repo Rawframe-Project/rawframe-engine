@@ -1,0 +1,5 @@
+.input {$points :integer}
+.local $name = {$player}
+.match $points
+one {{{$name} has {$points} point}}
+* {{{$name} has {$points} points \{!\}}}

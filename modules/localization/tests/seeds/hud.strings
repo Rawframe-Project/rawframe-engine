@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "kind": "text.strings",
+  "sourceLocale": "en",
+  "entries": {
+    "hud.hit": {
+      "message": "Hit!",
+      "description": "Shown when the player's runner is hit."
+    },
+    "hud.score": {
+      "message": ".input {$points :integer}\n.match $points\none {{{$points} point}}\n* {{{$points} points}}",
+      "description": "The player's score, which counts the hits they took."
+    },
+    "menu.play": {
+      "message": "Play"
+    }
+  }
+}
