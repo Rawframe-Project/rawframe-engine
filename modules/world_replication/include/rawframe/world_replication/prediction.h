@@ -26,6 +26,49 @@ struct NeighborValue {
     std::span<const std::byte> value;
 };
 
+/// A presentation effect a predicted system emitted in one step (SPEC-0041's
+/// effect declaration, D219): its kind, by its place among the game's effect
+/// kinds; the stable identity of the system that emitted it; and its place
+/// among that system's emissions in the step.
+struct StepEffect {
+    std::uint32_t kind = 0;
+    std::uint32_t system = 0;
+    std::uint32_t ordinal = 0;
+};
+
+/// SPEC-0041's effect identity: a step's effect at the input tick it was
+/// predicted for. An exact resimulation emits the same identities.
+struct PredictedEffect {
+    std::uint64_t tick = 0;
+    std::uint32_t system = 0;
+    std::uint32_t kind = 0;
+    std::uint32_t ordinal = 0;
+
+    friend auto operator<=>(const PredictedEffect&, const PredictedEffect&) = default;
+};
+
+/// When presentation hears of an effect: at once, and told if a
+/// resimulation takes it back; or only once the server's state confirms its
+/// tick, and never taken back.
+enum class EffectClass : std::uint8_t {
+    Predicted,
+    ConfirmedOnly,
+};
+
+/// Where a client's predicted effects go: each delivered once however many
+/// times resimulation emits it, and a delivered one that a resimulation no
+/// longer emits cancelled once. Presentation decides what either means.
+class EffectSink {
+public:
+    EffectSink() = default;
+    EffectSink(const EffectSink&) = delete;
+    EffectSink& operator=(const EffectSink&) = delete;
+    virtual ~EffectSink() = default;
+
+    virtual void deliver(const PredictedEffect& effect) noexcept = 0;
+    virtual void cancel(const PredictedEffect& effect) noexcept = 0;
+};
+
 /// A game's predicted systems over one entity, the connection's own player.
 /// Values are in memory layout.
 class Predictor {
@@ -49,6 +92,11 @@ public:
     /// replace what the predictor held of other entities; the player's
     /// steps meet them, and they are never compared.
     [[nodiscard]] virtual result::Status place(std::span<const NeighborValue> values) = 0;
+    /// The effects the last step emitted, in the order its systems emitted
+    /// them; none by default.
+    [[nodiscard]] virtual std::span<const StepEffect> effects() const noexcept {
+        return {};
+    }
 };
 
 struct PredictionSettings {
@@ -77,6 +125,14 @@ struct PredictionSettings {
     /// Rollback itself is normal; this marks a client rolling back far more
     /// than predicting.
     std::uint32_t rollbackAlarm = 30;
+    /// Where effects go, owned by the caller and outliving the client; none
+    /// sends them nowhere. Each kind's class, by kind, the kinds past it
+    /// being predicted.
+    EffectSink* effects = nullptr;
+    std::vector<EffectClass> effectClasses;
+    /// SPEC-0041's effect_ledger_max: effect identities remembered, the
+    /// oldest forgotten past it (D219). At least the prediction window's.
+    std::size_t effectLedger = 1024;
     /// SPEC-0041's divergence drill, for development builds only: one bit of
     /// every state hashed is flipped, so the server must find each record
     /// diverged.
@@ -98,6 +154,13 @@ struct PredictionStatistics {
     std::uint64_t checksumsSent = 0;
     /// Seconds of input ticks with more rollbacks than the alarm allows.
     std::uint64_t rollbackAlarms = 0;
+    /// Effects delivered, emitted again by a resimulation and so not,
+    /// cancelled, and held for confirmation then dropped unconfirmed or
+    /// forgotten past the ledger's bound (D219).
+    std::uint64_t effectsDelivered = 0;
+    std::uint64_t effectsSuppressed = 0;
+    std::uint64_t effectsCancelled = 0;
+    std::uint64_t effectsDropped = 0;
 };
 
 } // namespace rawframe::world_replication

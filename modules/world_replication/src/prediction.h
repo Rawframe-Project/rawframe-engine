@@ -61,6 +61,16 @@ private:
     void write(const State& state);
     /// Predicts every tick after the newest predicted one through `through`.
     void advance(std::uint64_t through);
+    /// SPEC-0041's effect ledger (D219): the last step's effects at `tick`,
+    /// delivered, held, or recognized as already delivered.
+    void emitted(std::uint64_t tick);
+    /// Done with every effect at or before `tick`: those held for
+    /// confirmation delivered if `confirmed`, dropped if not.
+    void settle(std::uint64_t tick, bool confirmed);
+    /// After a resimulation from `from`: what it no longer emitted is taken
+    /// back.
+    void takeBack(std::uint64_t from);
+    void deliver(const PredictedEffect& effect);
 
     PredictionSettings settings_;
     std::size_t inputSize_;
@@ -81,6 +91,14 @@ private:
     std::uint64_t secondRollbacks_ = 0;
     bool alarmed_ = false;
     std::function<void()> place_;
+    struct Ledgered {
+        bool confirmedOnly = false;
+        bool delivered = false;
+        /// The resimulation pass that last emitted it.
+        std::uint64_t pass = 0;
+    };
+    std::map<PredictedEffect, Ledgered> ledger_;
+    std::uint64_t pass_ = 0;
 };
 
 } // namespace rawframe::world_replication

@@ -9,6 +9,7 @@ Prediction::Prediction(PredictionSettings settings, std::size_t inputSize)
 }
 
 void Prediction::reset() {
+    ledger_.clear();
     commands_.clear();
     history_.clear();
     known_.assign(settings_.predicted.size(), {});
@@ -57,6 +58,72 @@ void Prediction::advance(std::uint64_t through) {
         predictedTick_ = kTick;
         history_[kTick] = read();
         ++statistics_.predictedTicks;
+        emitted(kTick);
+    }
+}
+
+void Prediction::deliver(const PredictedEffect& effect) {
+    ++statistics_.effectsDelivered;
+    if (settings_.effects != nullptr) {
+        settings_.effects->deliver(effect);
+    }
+}
+
+void Prediction::emitted(std::uint64_t tick) {
+    for (const StepEffect& step : settings_.predictor->effects()) {
+        const PredictedEffect kEffect{.tick = tick, .system = step.system, .kind = step.kind, .ordinal = step.ordinal};
+        const auto kKnown = ledger_.find(kEffect);
+        if (kKnown != ledger_.end()) {
+            // Emitted again by a resimulation: already delivered or held.
+            kKnown->second.pass = pass_;
+            ++statistics_.effectsSuppressed;
+            continue;
+        }
+        const bool kConfirmedOnly = step.kind < settings_.effectClasses.size() &&
+                                    settings_.effectClasses[step.kind] == EffectClass::ConfirmedOnly;
+        ledger_[kEffect] = Ledgered{.confirmedOnly = kConfirmedOnly, .delivered = !kConfirmedOnly, .pass = pass_};
+        if (!kConfirmedOnly) {
+            deliver(kEffect);
+        }
+    }
+    // Ring semantics: past the bound, the oldest is forgotten.
+    while (ledger_.size() > std::max<std::size_t>(settings_.effectLedger, 1)) {
+        statistics_.effectsDropped += ledger_.begin()->second.delivered ? 0 : 1;
+        ledger_.erase(ledger_.begin());
+    }
+}
+
+void Prediction::settle(std::uint64_t tick, bool confirmed) {
+    while (!ledger_.empty() && ledger_.begin()->first.tick <= tick) {
+        const auto kFirst = ledger_.begin();
+        if (!kFirst->second.delivered) {
+            if (confirmed) {
+                deliver(kFirst->first);
+            } else {
+                ++statistics_.effectsDropped;
+            }
+        }
+        ledger_.erase(kFirst);
+    }
+}
+
+void Prediction::takeBack(std::uint64_t from) {
+    for (auto at = ledger_.lower_bound(PredictedEffect{.tick = from + 1}); at != ledger_.end();) {
+        if (at->second.pass == pass_) {
+            ++at;
+            continue;
+        }
+        // No longer emitted: cancelled if presentation heard of it, and
+        // simply let go if it was held.
+        if (at->second.delivered) {
+            ++statistics_.effectsCancelled;
+            if (settings_.effects != nullptr) {
+                settings_.effects->cancel(at->first);
+            }
+        } else {
+            ++statistics_.effectsDropped;
+        }
+        at = ledger_.erase(at);
     }
 }
 
@@ -111,6 +178,7 @@ bool Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
     }
     if (equal) {
         ++statistics_.confirmed;
+        settle(consumed, true);
         history_.erase(history_.begin(), history_.upper_bound(consumed));
         confirmed_ = std::move(base);
         return true;
@@ -133,8 +201,13 @@ bool Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
     }
     history_.clear();
     predictedTick_ = consumed;
+    // What was predicted through `consumed` is past: the server's state
+    // there differs, so what waited on it is not confirmed (D219).
+    settle(consumed, false);
+    ++pass_;
     const std::uint64_t kBefore = statistics_.predictedTicks;
     advance(kThrough);
+    takeBack(consumed);
     statistics_.resimulatedTicks += statistics_.predictedTicks - kBefore;
     statistics_.predictedTicks = kBefore;
     return false;
