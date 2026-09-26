@@ -44,9 +44,14 @@ enum class HostExit : std::uint8_t {
     StartupFailure,
     /// A participant reported the Host unhealthy: it drained and stopped in
     /// order, and a supervisor should not count the run a success.
-    RuntimeFailure, /// The run ended in order, but its composition took longer to stop than
+    RuntimeFailure,
+    /// The run ended in order, but its composition took longer to stop than
     /// its shutdown budget: a supervisor's retry may help.
     ShutdownTimeout,
+    /// A participant reported itself overloaded (composition::kOverloaded):
+    /// the Host drained and stopped in order, and a retry, elsewhere or
+    /// later, may help.
+    ControlledOverload,
 };
 
 /// The reason's SPEC-0012 name, such as `invalid_launch_descriptor`.

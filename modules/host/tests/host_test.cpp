@@ -39,6 +39,7 @@ struct Counts {
     /// unhealthy at.
     int stopAt = -1;
     int unhealthyAt = -1;
+    std::string_view unhealthyReason = "test_failure";
     std::atomic<bool>* stop = nullptr;
     /// The iteration a task that holds the CPU worker is submitted at, and
     /// what lets it go.
@@ -99,7 +100,7 @@ private:
         }
 #endif
         if (counts.unhealthyAt >= 0 && counts.runWorlds >= counts.unhealthyAt) {
-            context_->reportHealth(composition::Health::Unhealthy, "test_failure");
+            context_->reportHealth(composition::Health::Unhealthy, counts.unhealthyReason);
         }
     }
 
@@ -146,6 +147,7 @@ void reset() {
     counts.holdConnections = false;
     counts.stopAt = -1;
     counts.unhealthyAt = -1;
+    counts.unhealthyReason = "test_failure";
     counts.stop = nullptr;
     counts.holdWorkerAt = -1;
     counts.release = false;
@@ -326,6 +328,19 @@ RAWFRAME_TEST(AStopRequestEndsAnUnboundedRun) {
     requester.join();
     RAWFRAME_EXPECT(kExit == host::HostExit::Stopped);
     RAWFRAME_EXPECT(counts.runWorlds > 0 && counts.stopped == 1);
+}
+
+RAWFRAME_TEST(AnOverloadedReportEndsTheRunAsAControlledOverload) {
+    // Drained and stopped in order as any unhealthy run, but a retry may
+    // help, so its reason and code say so (D186).
+    reset();
+    std::string log;
+    counts.unhealthyAt = 3;
+    counts.unhealthyReason = composition::kOverloaded;
+    RAWFRAME_EXPECT(run("host.iteration_rate = 1000\nhost.maximum_iterations = 1000", log) ==
+                    host::HostExit::ControlledOverload);
+    RAWFRAME_EXPECT(mentions(log, "\"reason\":\"overloaded\"") &&
+                    mentions(log, "\"exit\":\"controlled_overload\",\"exitCode\":75"));
 }
 
 RAWFRAME_TEST(AStopPastItsBudgetEndsTheRunAsATimeout) {

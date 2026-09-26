@@ -400,7 +400,8 @@ struct Host::State {
             if (request.stopRequested != nullptr && request.stopRequested->load(std::memory_order_acquire)) {
                 drainFrom("stop_requested");
             } else if (health.health == composition::Health::Unhealthy) {
-                exit = HostExit::RuntimeFailure;
+                exit =
+                    health.reason == composition::kOverloaded ? HostExit::ControlledOverload : HostExit::RuntimeFailure;
                 drainFrom("unhealthy");
             }
         }
@@ -556,6 +557,8 @@ std::string_view describe(HostExit exit) noexcept {
         return "runtime_failure";
     case HostExit::ShutdownTimeout:
         return "shutdown_timeout";
+    case HostExit::ControlledOverload:
+        return "controlled_overload";
     }
     return "startup_failure";
 }
@@ -577,6 +580,7 @@ int exitCode(HostExit exit) noexcept {
     case HostExit::RuntimeFailure:
         return 70;
     case HostExit::ShutdownTimeout:
+    case HostExit::ControlledOverload:
         return 75;
     }
     return 70;
