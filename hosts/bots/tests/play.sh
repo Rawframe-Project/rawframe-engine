@@ -38,7 +38,7 @@ game="$(absolute "$game")"
 bots_game="$(absolute "$bots_game")"
 work="$(mktemp -d)"
 pids=()
-trap 'kill "${pids[@]}" 2>/dev/null || true; rm -rf "$work"' EXIT
+trap 'kill ${pids[@]+"${pids[@]}"} 2>/dev/null || true; rm -rf "$work"' EXIT
 
 # A port nothing holds right now.
 port="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
@@ -75,7 +75,7 @@ for index in $(seq "$processes"); do
     "$bots" --config "$work/bots.conf" >"$work/bots-$index.log" 2>&1 &
     pids+=($!)
 done
-for pid in "${pids[@]}"; do
+for pid in ${pids[@]+"${pids[@]}"}; do
     wait "$pid" || true
 done
 pids=()

@@ -11,7 +11,7 @@ server="$1"
 bots="$2"
 work="$(mktemp -d)"
 pids=()
-trap 'kill "${pids[@]}" 2>/dev/null || true; rm -rf "$work"' EXIT
+trap 'kill ${pids[@]+"${pids[@]}"} 2>/dev/null || true; rm -rf "$work"' EXIT
 
 port="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 
