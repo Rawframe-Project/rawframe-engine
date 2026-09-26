@@ -20,7 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tools
-        run: brew install llvm@20 ninja ccache
+        run: |
+          brew install llvm@20 ninja ccache
+          # The browser's side of the WebTransport test.
+          python3 -m pip install --break-system-packages aioquic
       - name: Clang 20 by the names the presets use
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
