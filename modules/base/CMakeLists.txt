@@ -7,10 +7,10 @@ if(WIN32)
     target_link_libraries(rawframe_base PUBLIC bcrypt)
 endif()
 
-# The fatal path ends the process, which is watched from a forked parent;
-# a WebAssembly module has neither, and Windows has no fork (D237).
+# The fatal path ends the process, which is watched from a parent process;
+# a WebAssembly module has neither.
 set(rawframe_base_process_tests tests/fatal_test.cpp)
-if(CMAKE_SYSTEM_NAME STREQUAL "WASI" OR WIN32)
+if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(rawframe_base_process_tests "")
 endif()
 

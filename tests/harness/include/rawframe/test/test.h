@@ -47,8 +47,10 @@ struct ChildOutcome {
     std::string standardError;
 };
 
-/// Runs `body` in a forked child and reports how the child ended and what it
-/// wrote to standard error. For the fatal path, which never returns. POSIX only.
+/// Runs `body` in a child process and reports how the child ended and what it
+/// wrote to standard error. For the fatal path, which never returns. A forked
+/// child on POSIX; on Windows this executable run again for the calling test
+/// alone, whose abort reads as SIGABRT (D237). Not on WebAssembly.
 [[nodiscard]] ChildOutcome runInChild(void (*body)()) noexcept;
 
 } // namespace rawframe::test
