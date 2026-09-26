@@ -19,6 +19,7 @@
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/schedule.h"
+#include "rawframe/world_kest/kest_timing.h"
 #include "rawframe/world_runtime/simulation.h"
 
 #include <memory>
@@ -108,6 +109,8 @@ struct KestSystemsSettings {
     /// bind, under Kest's untrusted profile.
     kest::Trust trust = kest::Trust::Trusted;
     std::span<const KestSystemDeclaration> systems;
+    /// Where each system's runs are timed, or nowhere; outlives the systems.
+    KestTiming* timing = nullptr;
 };
 
 /// The Kest systems of one program on one machine, contributed to a World.

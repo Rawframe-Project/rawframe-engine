@@ -79,6 +79,8 @@ struct KestSystems::Doorway {
 
     world::SystemContext* context = nullptr;
     std::uint32_t run = 0;
+    /// Where runs are timed, or nowhere (D210).
+    KestTiming* timing = nullptr;
     std::vector<Component> components;
     std::vector<Prefab> prefabs;
     // Reused by every spawn, sized when the systems are declared, so a
@@ -354,6 +356,17 @@ public:
     }
 
     result::Status run(world::SystemContext& context) noexcept override {
+        if (doorway_->timing == nullptr) {
+            return runUntimed(context);
+        }
+        const execution::MonotonicInstant kStart = doorway_->timing->now();
+        result::Status ran = runUntimed(context);
+        doorway_->timing->add(context.tick.value, doorway_->timing->now() - kStart);
+        return ran;
+    }
+
+private:
+    [[nodiscard]] result::Status runUntimed(world::SystemContext& context) noexcept {
         chunks_.clear();
         lendFrom_.clear();
         std::size_t journalBytes = 0;
@@ -412,7 +425,6 @@ public:
         return {};
     }
 
-private:
     static constexpr std::size_t kInPlace = std::numeric_limits<std::size_t>::max();
 
     struct Chunk {
@@ -570,6 +582,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
     }
     // The doorway first: every door's context points into it.
     auto doorway = std::make_unique<Doorway>();
+    doorway->timing = settings.timing;
     doorway->components.reserve(settings.components.size() + 1);
     for (const KestComponent& component : settings.components) {
         Doorway::Component& added = doorway->components.emplace_back();

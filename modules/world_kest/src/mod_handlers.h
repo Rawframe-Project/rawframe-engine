@@ -24,11 +24,13 @@ namespace rawframe::world_kest {
 /// the mod) for a program that does not compile, a handler that is not a
 /// function of it taking those columns, a provider not shaped so, or a Kest
 /// type of a component shaped otherwise than the game's own (`layouts`, in
-/// the order of `game.components`).
+/// the order of `game.components`). Their runs are timed in `timing`, if
+/// any, with the game's own (D210).
 [[nodiscard]] result::Result<std::vector<std::unique_ptr<KestSystems>>>
 modHandlers(const GameDescription& game,
             std::span<const kest::TypeLayout> layouts,
             const GameFiles& files,
-            const kest::MachineLimits& limits);
+            const kest::MachineLimits& limits,
+            KestTiming* timing = nullptr);
 
 } // namespace rawframe::world_kest

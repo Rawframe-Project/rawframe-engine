@@ -56,6 +56,7 @@ constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
 constexpr diagnostics::EventIdentity kGameReloaded{"world_kest", "game_reloaded"};
 constexpr diagnostics::EventIdentity kReloadRefused{"world_kest", "game_reload_refused"};
 constexpr diagnostics::EventIdentity kAdmissionFailed{"world_kest", "admission_rule_failed"};
+constexpr diagnostics::EventIdentity kKestSummary{"world_kest", "kest_summary"};
 
 #if RAWFRAME_FILE_SYSTEM
 /// The newest modification among the `.kest` files beside the program, or
@@ -100,6 +101,7 @@ public:
         const composition::Configuration& configuration = context.configuration();
         RAWFRAME_TRY_ASSIGN(simulation_, context.capability(world_runtime::kSimulation));
         files_ = &files;
+        timing_ = std::make_unique<KestTiming>(context.clock());
         game_ = files.description();
         RAWFRAME_TRY_ASSIGN(reloadEvery_, configuration.unsignedInteger("kest.reload_every", 0));
         const auto kPlanOnly = configuration.text("kest.plan_only");
@@ -242,7 +244,8 @@ public:
                                 .components = components_,
                                 .prefabs = prefabs_,
                                 .limits = {.heapBytes = static_cast<std::size_t>(kHeap), .fuelPerCall = kFuel},
-                                .systems = declarations}));
+                                .systems = declarations,
+                                .timing = timing_.get()}));
         if (!game_.admission.empty()) {
             RAWFRAME_TRY_ASSIGN(const std::uint64_t kAdmissionHeap,
                                 configuration.unsignedInteger("kest.admission_heap_bytes", 1U << 20U));
@@ -262,7 +265,8 @@ public:
             modHandlers(game_,
                         layouts_,
                         files,
-                        kest::MachineLimits{.heapBytes = static_cast<std::size_t>(kModHeap), .fuelPerCall = kModFuel}));
+                        kest::MachineLimits{.heapBytes = static_cast<std::size_t>(kModHeap), .fuelPerCall = kModFuel},
+                        timing_.get()));
         for (const std::unique_ptr<KestSystems>& handlers : modHandlers_) {
             RAWFRAME_TRY(simulation_->addSystems(*handlers));
         }
@@ -327,6 +331,25 @@ public:
                                diagnostics::field("modClaimsSetAside", files_->setAside().size()),
                                diagnostics::field("entities", spawned)});
         return {};
+    }
+
+    /// SPEC-0013's aggregate script time per World tick, once, at stop.
+    void stop() noexcept override {
+        if (timing_ == nullptr) {
+            return;
+        }
+        const KestTiming::Summary kSummary = timing_->summary();
+        if (kSummary.ticks == 0) {
+            return;
+        }
+        emitter_.log(diagnostics::Severity::Info,
+                     kKestSummary,
+                     "Kest system time per World tick, in microseconds",
+                     {diagnostics::field("ticks", kSummary.ticks),
+                      diagnostics::field("p50", kSummary.p50),
+                      diagnostics::field("p95", kSummary.p95),
+                      diagnostics::field("p99", kSummary.p99),
+                      diagnostics::field("max", kSummary.max)});
     }
 
     /// Between ticks, on the Host thread: when the program's sources changed,
@@ -836,6 +859,8 @@ private:
     std::vector<std::vector<std::string_view>> streams_;
     /// Before the machines whose doors name its services.
     std::unique_ptr<ModServices> modServices_;
+    /// Every Kest system's time per tick, the game's and its mods' (D210).
+    std::unique_ptr<KestTiming> timing_;
     std::unique_ptr<KestSystems> systems_;
     /// Each taken mod's handlers, on its own machine.
     std::vector<std::unique_ptr<KestSystems>> modHandlers_;

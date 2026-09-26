@@ -25,7 +25,8 @@ std::unexpected<result::Error> refused(std::string_view why, std::string_view mo
 result::Result<std::vector<std::unique_ptr<KestSystems>>> modHandlers(const GameDescription& game,
                                                                       std::span<const kest::TypeLayout> layouts,
                                                                       const GameFiles& files,
-                                                                      const kest::MachineLimits& limits) {
+                                                                      const kest::MachineLimits& limits,
+                                                                      KestTiming* timing) {
     std::vector<std::unique_ptr<KestSystems>> made;
     for (const GameModProgram& mod : files.modPrograms()) {
         std::string report;
@@ -126,7 +127,8 @@ result::Result<std::vector<std::unique_ptr<KestSystems>>> modHandlers(const Game
                                                                .prefabs = {},
                                                                .limits = limits,
                                                                .trust = kest::Trust::Untrusted,
-                                                               .systems = declarations});
+                                                               .systems = declarations,
+                                                               .timing = timing});
         if (!systems.has_value()) {
             return std::unexpected<result::Error>{std::move(systems).error().withContext("mod", mod.mod)};
         }
