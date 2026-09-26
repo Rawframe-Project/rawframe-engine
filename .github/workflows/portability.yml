@@ -57,6 +57,13 @@ jobs:
           "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
           # The browser's side of the WebTransport test.
           python -m pip install aioquic
+      - name: python3 by that name, as the test scripts call it
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/python3"
+          printf '#!/bin/sh\nexec python "$@"\n' > "$RUNNER_TEMP/python3/python3"
+          chmod +x "$RUNNER_TEMP/python3/python3"
+          echo "$RUNNER_TEMP/python3" >> "$GITHUB_PATH"
       - name: MSVC's developer environment for every later step
         shell: pwsh
         run: |
