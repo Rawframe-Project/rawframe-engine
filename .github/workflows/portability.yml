@@ -64,6 +64,13 @@ jobs:
           cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
             if ($_ -match '^([^=]+)=(.*)$') { "$($matches[1])=$($matches[2])" >> $env:GITHUB_ENV }
           }
+      # MsQuic and OpenSSL take eight minutes here; they are kept once
+      # configure has built them, whatever the later steps do.
+      - name: Restore MsQuic and OpenSSL
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/rawframe
+          key: windows-quic-${{ hashFiles('tools/build_quic.sh', 'third_party/quic.cmake') }}
       - name: Configure
         shell: pwsh
         # Git's bash runs tools/build_quic.sh, never WSL's; OpenSSL's
@@ -71,6 +78,12 @@ jobs:
         env:
           RAWFRAME_PERL: C:/Strawberry/perl/bin/perl.exe
         run: cmake --preset windows-development "-DRAWFRAME_BASH=C:/Program Files/Git/bin/bash.exe"
+      - name: Keep MsQuic and OpenSSL
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/rawframe
+          key: windows-quic-${{ hashFiles('tools/build_quic.sh', 'third_party/quic.cmake') }}
+        continue-on-error: true
       - name: Build
         shell: pwsh
         run: cmake --build out/windows-development -- -k 0
