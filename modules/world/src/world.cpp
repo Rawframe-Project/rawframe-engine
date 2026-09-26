@@ -205,6 +205,14 @@ Pcg32& World::randomStream(std::string_view owner, std::string_view name) {
     return randomStreams_.emplace(std::move(key), deriveStream(settings_.rootSeed, owner, name)).first->second;
 }
 
+std::size_t World::heldBytes() const noexcept {
+    std::size_t bytes = (records_.capacity() * sizeof(EntityRecord)) + (freeSlots_.capacity() * sizeof(std::uint32_t));
+    for (const auto& archetype : archetypes_) {
+        bytes += sizeof(detail::Archetype) + archetype->heldBytes();
+    }
+    return bytes;
+}
+
 std::size_t World::availableSlots() const noexcept {
     return freeSlots_.size() + (settings_.maximumEntities - records_.size());
 }

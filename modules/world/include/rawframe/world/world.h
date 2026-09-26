@@ -133,6 +133,11 @@ public:
         return structureLocked_;
     }
 
+    /// Bytes the World holds for its entities and their values, at the
+    /// capacity each table has grown to: SPEC-0013's World/ECS attribution
+    /// (D216).
+    [[nodiscard]] std::size_t heldBytes() const noexcept;
+
     /// Archetypes in creation order, for queries. Only ever appended to.
     [[nodiscard]] std::span<const std::unique_ptr<detail::Archetype>> archetypes() const noexcept {
         return archetypes_;

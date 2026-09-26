@@ -77,6 +77,9 @@ public:
     /// that row is uninitialized until the caller constructs it.
     std::size_t appendRow(EntityHandle entity);
 
+    /// Bytes its columns and rows hold, at their capacity (D216).
+    [[nodiscard]] std::size_t heldBytes() const noexcept;
+
     /// Destroys the row's values and fills the hole with the last row. Returns
     /// the entity now at `row`, or the null handle if `row` was the last.
     EntityHandle removeRow(std::size_t row) noexcept;

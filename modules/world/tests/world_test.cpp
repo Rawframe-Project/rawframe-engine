@@ -40,6 +40,19 @@ RAWFRAME_TEST(DestroyedHandlesGoStaleAndSlotsComeBackNewer) {
     RAWFRAME_EXPECT(world.entityCount() == 1);
 }
 
+RAWFRAME_TEST(AWorldCountsTheBytesItHolds) {
+    // SPEC-0013's World attribution (D216): the tables grow with entities
+    // and their values.
+    World world{makeRegistry()};
+    const std::size_t kEmpty = world.heldBytes();
+    for (int count = 0; count < 1000; ++count) {
+        const auto kEntity = world.create();
+        RAWFRAME_EXPECT(kEntity.has_value() &&
+                        world.insert(*kEntity, keysOf(world.registry()).position, Position{}).has_value());
+    }
+    RAWFRAME_EXPECT(world.heldBytes() >= kEmpty + (1000 * sizeof(Position)));
+}
+
 RAWFRAME_TEST(ASlotRetiresAtItsLastGeneration) {
     constexpr std::uint32_t kLast = std::numeric_limits<std::uint32_t>::max();
     World world{makeRegistry(), WorldSettings{.maximumEntities = 4, .firstGeneration = kLast - 1}};

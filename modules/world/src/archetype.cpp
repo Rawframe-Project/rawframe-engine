@@ -84,6 +84,14 @@ void Archetype::grow() {
     capacity_ = kCapacity;
 }
 
+std::size_t Archetype::heldBytes() const noexcept {
+    std::size_t bytes = entities_.capacity() * sizeof(EntityHandle);
+    for (const Column& column : columns_) {
+        bytes += capacity_ * column.size;
+    }
+    return bytes;
+}
+
 std::size_t Archetype::appendRow(EntityHandle entity) {
     if (entities_.size() == capacity_) {
         grow();
