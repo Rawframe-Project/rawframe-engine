@@ -13,6 +13,9 @@
 
 #include <array>
 #include <cstdio>
+#if defined(_WIN32)
+#include <filesystem>
+#endif
 #include <string>
 #include <string_view>
 #include <utility>
@@ -99,5 +102,16 @@ inline std::string readText(const std::string& path) {
     }
     return text;
 }
+
+#if defined(_WIN32)
+// A path is text only on POSIX; Windows' is wide (D237).
+inline void writeText(const std::filesystem::path& path, std::string_view text) {
+    writeText(path.string(), text);
+}
+
+inline std::string readText(const std::filesystem::path& path) {
+    return readText(path.string());
+}
+#endif
 
 } // namespace rawframe::game_test

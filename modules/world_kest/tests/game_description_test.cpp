@@ -204,7 +204,7 @@ RAWFRAME_TEST(AGameReadsItsMeshesCooked) {
     const std::filesystem::path kDirectory = test::scratchDirectory("meshes");
     std::filesystem::create_directories(kDirectory);
     const auto kWrite = [&kDirectory](std::string_view name, std::string_view text) {
-        std::FILE* file = std::fopen((kDirectory / name).c_str(), "wb");
+        std::FILE* file = std::fopen((kDirectory / name).string().c_str(), "wb");
         std::fwrite(text.data(), 1, text.size(), file);
         std::fclose(file);
     };
@@ -295,7 +295,7 @@ RAWFRAME_TEST(TextLinesNameDocumentsByTheirSidecars) {
     std::filesystem::remove_all(kDirectory);
     std::filesystem::create_directories(kDirectory);
     const auto kWrite = [&kDirectory](std::string_view name, std::string_view text) {
-        std::FILE* file = std::fopen((kDirectory / name).c_str(), "wb");
+        std::FILE* file = std::fopen((kDirectory / name).string().c_str(), "wb");
         std::fwrite(text.data(), 1, text.size(), file);
         std::fclose(file);
     };
