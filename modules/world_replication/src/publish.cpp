@@ -1,21 +1,57 @@
 // Publishing: committed state out to every connection each tick, within its
 // interest and its byte budget, the connection's own player first (D26, D28,
 // D31, D48), with the server's checksum of its predicted scope kept (D204).
+// Each connection looks only at the interest cells around its player and at
+// what it already holds, so its work follows its interest, not the World
+// (D209).
 
 #include "rawframe/world_replication/checksum.h"
 #include "server_state.h"
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <span>
 
 namespace rawframe::world_replication {
 
+namespace {
+
+/// Cells are a hundredth wider than the entering radius: two coordinates
+/// within the radius of each other then land in the same cell or the next
+/// despite rounding.
+constexpr double kCellSlack = 1.01;
+
+/// The cell a finite coordinate is in, for cells `width` wide. Far out,
+/// cells are clamped, which keeps coordinates in the same cell or the next
+/// where they were.
+std::int64_t cellOf(double coordinate, double width) noexcept {
+    constexpr double kFar = 1099511627776.0;
+    return static_cast<std::int64_t>(std::clamp(std::floor(coordinate / width), -kFar, kFar));
+}
+
+/// A cell's bucket among `mask` + 1: any mix does, since a bucket's
+/// entities are only candidates, each checked by distance.
+std::size_t bucketFor(const std::array<std::int64_t, 3>& cell, std::size_t mask) noexcept {
+    std::uint64_t mixed = (static_cast<std::uint64_t>(cell[0]) * 0x9e3779b97f4a7c15U) ^
+                          (static_cast<std::uint64_t>(cell[1]) * 0xc2b2ae3d27d4eb4fU) ^
+                          (static_cast<std::uint64_t>(cell[2]) * 0x165667b19e3779f9U);
+    mixed ^= mixed >> 29U;
+    return static_cast<std::size_t>(mixed) & mask;
+}
+
+bool finite(const std::array<double, 3>& at) noexcept {
+    return std::isfinite(at[0]) && std::isfinite(at[1]) && std::isfinite(at[2]);
+}
+
+} // namespace
+
 void ReplicationServer::State::publish(world::World& world, world::TickIndex tick) {
-    present.clear();
+    gathered.clear();
     encoded.clear();
+    std::uint32_t slots = 0;
     for (std::size_t index = 0; index < queries.size(); ++index) {
         const ComponentCodec& codec = settings.table.components[index];
         const std::size_t kWire = codec.wireSize();
@@ -28,32 +64,44 @@ void ReplicationServer::State::publish(world::World& world, world::TickIndex tic
                     encoded.resize(kOffset);
                     continue;
                 }
-                present.push_back(PresentValue{.entity = chunk.entities[row],
-                                               .component = index,
-                                               .offset = kOffset,
-                                               .length = kWire,
-                                               .source = chunk.columns[0] + (row * codec.size)});
+                slots = std::max(slots, chunk.entities[row].slot + 1);
+                gathered.push_back(PresentValue{.entity = chunk.entities[row],
+                                                .component = index,
+                                                .offset = kOffset,
+                                                .length = kWire,
+                                                .source = chunk.columns[0] + (row * codec.size)});
             }
         });
     }
-    std::sort(present.begin(), present.end(), [](const PresentValue& left, const PresentValue& right) {
-        return left.entity != right.entity ? left.entity < right.entity : left.component < right.component;
-    });
-    locate(world);
-    entities.clear();
-    auto where = located.begin();
-    for (std::size_t index = 0; index < present.size(); ++index) {
-        const world::EntityHandle kEntity = present[index].entity;
-        if (index != 0 && present[index - 1].entity == kEntity) {
-            continue;
-        }
-        while (where != located.end() && where->entity < kEntity) {
-            ++where;
-        }
-        const bool kLocated = where != located.end() && where->entity == kEntity;
-        entities.push_back(PresentEntity{
-            .entity = kEntity, .located = kLocated, .at = kLocated ? where->at : std::array<double, 3>{}});
+    // Into entity then component order without comparing: a World has one
+    // live entity in a slot, so slot order is entity order, and a counting
+    // sort by slot keeps the component order the values were gathered in.
+    valuesAt.assign(std::size_t{slots} + 1, 0);
+    for (const PresentValue& value : gathered) {
+        ++valuesAt[value.entity.slot + 1];
     }
+    for (std::size_t slot = 1; slot < valuesAt.size(); ++slot) {
+        valuesAt[slot] += valuesAt[slot - 1];
+    }
+    present.resize(gathered.size());
+    filling.assign(valuesAt.begin(), valuesAt.end() - 1);
+    for (const PresentValue& value : gathered) {
+        present[filling[value.entity.slot]++] = value;
+    }
+    entities.clear();
+    entityAt.assign(slots, kNowhere);
+    for (std::uint32_t slot = 0; slot < slots; ++slot) {
+        if (valuesAt[slot] != valuesAt[slot + 1]) {
+            entityAt[slot] = entities.size();
+            entities.push_back(PresentEntity{.entity = present[valuesAt[slot]].entity, .located = false, .at = {}});
+        }
+    }
+    locate(world);
+    if (settings.interest) {
+        cellEntities();
+    }
+    heldMark.assign(entities.size(), 0);
+    markNow = 0;
     for (auto& [id, peer] : peers) {
         publishTo(peer, tick);
     }
@@ -61,6 +109,7 @@ void ReplicationServer::State::publish(world::World& world, world::TickIndex tic
 
 void ReplicationServer::State::locate(world::World& world) {
     located.clear();
+    locatedAt.clear();
     if (!positions) {
         return;
     }
@@ -81,20 +130,99 @@ void ReplicationServer::State::locate(world::World& world) {
                     entry.at[axis] = value;
                 }
             }
+            if (entry.entity.slot >= locatedAt.size()) {
+                locatedAt.resize(std::size_t{entry.entity.slot} + 1, kNowhere);
+            }
+            locatedAt[entry.entity.slot] = located.size();
             located.push_back(entry);
+            if (const std::size_t kIndex = presentIndex(entry.entity); kIndex != kNowhere) {
+                entities[kIndex].located = true;
+                entities[kIndex].at = entry.at;
+            }
         }
-    });
-    std::sort(located.begin(), located.end(), [](const Located& left, const Located& right) {
-        return left.entity < right.entity;
     });
 }
 
+void ReplicationServer::State::cellEntities() {
+    unplaced.clear();
+    const std::size_t kBuckets = std::bit_ceil(std::max<std::size_t>(entities.size() * 2, 16));
+    bucketMask = kBuckets - 1;
+    bucketAt.assign(kBuckets + 1, 0);
+    bucketOf.assign(entities.size(), kNowhere);
+    const double kWidth = settings.interest->radius * kCellSlack;
+    for (std::size_t index = 0; index < entities.size(); ++index) {
+        const PresentEntity& entity = entities[index];
+        if (!entity.located || !finite(entity.at)) {
+            unplaced.push_back(index);
+            continue;
+        }
+        bucketOf[index] = bucketFor(
+            {cellOf(entity.at[0], kWidth), cellOf(entity.at[1], kWidth), cellOf(entity.at[2], kWidth)}, bucketMask);
+        ++bucketAt[bucketOf[index] + 1];
+    }
+    for (std::size_t bucket = 1; bucket <= kBuckets; ++bucket) {
+        bucketAt[bucket] += bucketAt[bucket - 1];
+    }
+    bucketed.resize(bucketAt[kBuckets]);
+    filling.assign(bucketAt.begin(), bucketAt.end() - 1);
+    for (std::size_t index = 0; index < entities.size(); ++index) {
+        if (bucketOf[index] != kNowhere) {
+            bucketed[filling[bucketOf[index]]++] = index;
+        }
+    }
+}
+
+void ReplicationServer::State::reach(const std::array<double, 3>& viewer) {
+    reachable.assign(unplaced.begin(), unplaced.end());
+    if (!finite(viewer)) {
+        // Rare enough to look at everything, and never in reach of what is.
+        reachable.resize(entities.size());
+        for (std::size_t index = 0; index < entities.size(); ++index) {
+            reachable[index] = index;
+        }
+        return;
+    }
+    const double kWidth = settings.interest->radius * kCellSlack;
+    const std::array<std::int64_t, 3> kAt = {
+        cellOf(viewer[0], kWidth), cellOf(viewer[1], kWidth), cellOf(viewer[2], kWidth)};
+    // One to three axes: the cells around the viewer's along each, and its
+    // own along the axes interest does not use, where every entity is at
+    // nought. Each bucket once, however many of those cells it holds.
+    const std::size_t kAxes = settings.interest->axes.size();
+    const std::int64_t kSpan[3] = {1, kAxes > 1 ? 1 : 0, kAxes > 2 ? 1 : 0};
+    std::array<std::size_t, 27> buckets{};
+    std::size_t count = 0;
+    for (std::int64_t x = -kSpan[0]; x <= kSpan[0]; ++x) {
+        for (std::int64_t y = -kSpan[1]; y <= kSpan[1]; ++y) {
+            for (std::int64_t z = -kSpan[2]; z <= kSpan[2]; ++z) {
+                buckets[count++] = bucketFor({kAt[0] + x, kAt[1] + y, kAt[2] + z}, bucketMask);
+            }
+        }
+    }
+    std::sort(buckets.begin(), buckets.begin() + static_cast<std::ptrdiff_t>(count));
+    for (std::size_t at = 0; at < count; ++at) {
+        if (at == 0 || buckets[at] != buckets[at - 1]) {
+            reachable.insert(reachable.end(),
+                             bucketed.begin() + static_cast<std::ptrdiff_t>(bucketAt[buckets[at]]),
+                             bucketed.begin() + static_cast<std::ptrdiff_t>(bucketAt[buckets[at] + 1]));
+        }
+    }
+}
+
 const std::array<double, 3>* ReplicationServer::State::locationOf(world::EntityHandle entity) const noexcept {
-    const auto kFound =
-        std::lower_bound(located.begin(), located.end(), entity, [](const Located& value, world::EntityHandle key) {
-            return value.entity < key;
-        });
-    return kFound != located.end() && kFound->entity == entity ? &kFound->at : nullptr;
+    if (entity.slot >= locatedAt.size() || locatedAt[entity.slot] == kNowhere) {
+        return nullptr;
+    }
+    const Located& place = located[locatedAt[entity.slot]];
+    return place.entity == entity ? &place.at : nullptr;
+}
+
+std::size_t ReplicationServer::State::presentIndex(world::EntityHandle entity) const noexcept {
+    if (entity.slot >= entityAt.size() || entityAt[entity.slot] == kNowhere) {
+        return kNowhere;
+    }
+    const std::size_t kIndex = entityAt[entity.slot];
+    return entities[kIndex].entity == entity ? kIndex : kNowhere;
 }
 
 bool ReplicationServer::State::relevant(const Peer& peer,
@@ -118,11 +246,7 @@ bool ReplicationServer::State::relevant(const Peer& peer,
 }
 
 bool ReplicationServer::State::isPresent(world::EntityHandle entity) const noexcept {
-    const auto kFound = std::lower_bound(
-        entities.begin(), entities.end(), entity, [](const PresentEntity& value, world::EntityHandle key) {
-            return value.entity < key;
-        });
-    return kFound != entities.end() && kFound->entity == entity;
+    return presentIndex(entity) != kNowhere;
 }
 
 void ReplicationServer::State::sendPace(Peer& peer) {
@@ -144,12 +268,13 @@ void ReplicationServer::State::keepChecksum(Peer& peer, world::TickIndex tick) {
         return;
     }
     scopeValues.assign(predicted.size(), {});
-    const auto kFirst = std::ranges::lower_bound(present, peer.player, {}, &PresentValue::entity);
-    for (auto at = kFirst; at != present.end() && at->entity == peer.player; ++at) {
-        const auto kPlace = std::ranges::find(predicted, at->component);
-        if (kPlace != predicted.end()) {
-            scopeValues[static_cast<std::size_t>(kPlace - predicted.begin())] =
-                std::span{encoded}.subspan(at->offset, at->length);
+    if (isPresent(peer.player)) {
+        for (std::size_t at = valuesAt[peer.player.slot]; at != valuesAt[peer.player.slot + 1]; ++at) {
+            const auto kPlace = std::ranges::find(predicted, present[at].component);
+            if (kPlace != predicted.end()) {
+                scopeValues[static_cast<std::size_t>(kPlace - predicted.begin())] =
+                    std::span{encoded}.subspan(present[at].offset, present[at].length);
+            }
         }
     }
     peer.checksums.keep(tick.value, predictedChecksum(scopeValues));
@@ -165,14 +290,13 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     }
     const std::array<double, 3>* const kViewer = locationOf(peer.player);
     // Retire what is gone or out of interest; the ID is never used again
-    // in this epoch. Both in entity order: one walk along the entities.
-    auto walk = entities.begin();
+    // in this epoch. What stays is marked as held for this connection.
+    ++markNow;
     for (auto mapping = peer.mapped.begin(); mapping != peer.mapped.end();) {
-        while (walk != entities.end() && walk->entity < mapping->first) {
-            ++walk;
-        }
-        const bool kPresent = walk != entities.end() && walk->entity == mapping->first;
-        if (kPresent && relevant(peer, kViewer, *walk, true)) {
+        const std::size_t kIndex = presentIndex(mapping->first);
+        const bool kPresent = kIndex != kNowhere;
+        if (kPresent && relevant(peer, kViewer, entities[kIndex], true)) {
+            heldMark[kIndex] = markNow;
             ++mapping;
             continue;
         }
@@ -195,20 +319,36 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     };
     if (!peer.mapped.contains(peer.player) && isPresent(peer.player) && peer.nextNetEntity != 0) {
         kDeclare(peer.player);
+        heldMark[presentIndex(peer.player)] = markNow;
     }
-    // Both in entity order: one walk along the mappings, which a
-    // declaration never moves behind.
-    auto known = peer.mapped.begin();
-    for (const PresentEntity& entity : entities) {
-        while (known != peer.mapped.end() && known->first < entity.entity) {
-            ++known;
+    // What enters, declared in entity order up to the bound: few a tick,
+    // so only they are put in order.
+    entering.clear();
+    const auto kConsider = [&](std::size_t index) {
+        if (heldMark[index] != markNow && relevant(peer, kViewer, entities[index], false)) {
+            entering.push_back(index);
         }
-        if ((known != peer.mapped.end() && known->first == entity.entity) ||
-            peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0 ||
-            !relevant(peer, kViewer, entity, false)) {
-            continue;
+    };
+    if (!settings.interest) {
+        for (std::size_t index = 0; index < entities.size(); ++index) {
+            kConsider(index);
         }
-        kDeclare(entity.entity);
+    } else if (kViewer != nullptr) {
+        reach(*kViewer);
+        for (const std::size_t kIndex : reachable) {
+            kConsider(kIndex);
+        }
+    } else {
+        for (const std::size_t kIndex : unplaced) {
+            kConsider(kIndex);
+        }
+    }
+    std::ranges::sort(entering);
+    for (const std::size_t kIndex : entering) {
+        if (peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0) {
+            break;
+        }
+        kDeclare(entities[kIndex].entity);
     }
     // State for acknowledged mappings, as many datagrams as the byte
     // budget allows.
@@ -255,52 +395,45 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
 
     // What needs sending: not known to be held, and not sent so recently
     // that its acknowledgement may still be on the way.
+    // Only the values of what the connection holds are looked at: its
+    // mappings, in entity order, each found among the present values.
     candidates.clear();
-    Mapping* mapping = nullptr;
-    known = peer.mapped.begin();
     named.clear();
-    namedAt.assign(present.size(), 0);
     const PeerNames kNames{peer};
-    const auto kValueOf = [this](std::size_t index) {
+    const auto kValueOf = [this](std::size_t index, std::size_t namedAt) {
         const PresentValue& value = present[index];
-        return naming[value.component] != 0 ? std::span<const std::byte>{named}.subspan(namedAt[index], value.length)
+        return naming[value.component] != 0 ? std::span<const std::byte>{named}.subspan(namedAt, value.length)
                                             : std::span<const std::byte>{encoded}.subspan(value.offset, value.length);
     };
-    for (std::size_t index = 0; index < present.size(); ++index) {
-        const PresentValue& value = present[index];
-        if (index == 0 || present[index - 1].entity != value.entity) {
-            while (known != peer.mapped.end() && known->first < value.entity) {
-                ++known;
+    for (auto& [entity, held] : peer.mapped) {
+        if (!held.acknowledged || !isPresent(entity)) {
+            continue;
+        }
+        held.replicas.resize(settings.table.components.size());
+        for (std::size_t kIndex = valuesAt[entity.slot]; kIndex != valuesAt[entity.slot + 1]; ++kIndex) {
+            const PresentValue& value = present[kIndex];
+            Replica& replica = held.replicas[value.component];
+            // An entity it names goes by this connection's name for it.
+            const ComponentCodec& codec = settings.table.components[value.component];
+            const std::size_t kNamedAt = named.size();
+            if (naming[value.component] != 0) {
+                named.resize(named.size() + value.length);
+                network::Writer writer{std::span{named}.subspan(kNamedAt)};
+                static_cast<void>(codec.encode(value.source, writer, &kNames));
             }
-            mapping = known == peer.mapped.end() || known->first != value.entity || !known->second.acknowledged
-                          ? nullptr
-                          : &known->second;
-            if (mapping != nullptr) {
-                mapping->replicas.resize(settings.table.components.size());
+            const std::span<const std::byte> kValue = kValueOf(kIndex, kNamedAt);
+            if (replica.held(kValue)) {
+                ++statistics.recordsHeld;
+                continue;
             }
+            if (replica.sent && tick.value - replica.sentAt < settings.resendAfter &&
+                sameBytes(replica.lastSent, kValue)) {
+                continue;
+            }
+            replica.priority += value.entity == peer.player ? kOwnedPriority : 1;
+            candidates.push_back(
+                Candidate{.priority = replica.priority, .present = kIndex, .named = kNamedAt, .mapping = &held});
         }
-        if (mapping == nullptr) {
-            continue;
-        }
-        Replica& replica = mapping->replicas[value.component];
-        // An entity it names goes by this connection's name for it.
-        const ComponentCodec& codec = settings.table.components[value.component];
-        if (naming[value.component] != 0) {
-            namedAt[index] = named.size();
-            named.resize(named.size() + value.length);
-            network::Writer writer{std::span{named}.subspan(namedAt[index])};
-            static_cast<void>(codec.encode(value.source, writer, &kNames));
-        }
-        const std::span<const std::byte> kValue = kValueOf(index);
-        if (replica.held(kValue)) {
-            ++statistics.recordsHeld;
-            continue;
-        }
-        if (replica.sent && tick.value - replica.sentAt < settings.resendAfter && sameBytes(replica.lastSent, kValue)) {
-            continue;
-        }
-        replica.priority += value.entity == peer.player ? kOwnedPriority : 1;
-        candidates.push_back(Candidate{.priority = replica.priority, .present = index, .mapping = mapping});
     }
     // Longest waiting first; ties in entity order, so a run repeats.
     std::sort(candidates.begin(), candidates.end(), [](const Candidate& left, const Candidate& right) {
@@ -310,7 +443,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     for (const Candidate& candidate : candidates) {
         const PresentValue& value = present[candidate.present];
         Replica& replica = candidate.mapping->replicas[value.component];
-        const std::span<const std::byte> kValue = kValueOf(candidate.present);
+        const std::span<const std::byte> kValue = kValueOf(candidate.present, candidate.named);
         const std::size_t kRecord = 10 + value.length;
         if (used + kRecord + kStateHeaderRoom > kRoom) {
             kFlush();

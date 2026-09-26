@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <vector>
 
@@ -535,6 +536,76 @@ RAWFRAME_TEST(InterestSendsWhatIsNearThePlayerAndAlwaysThePlayer) {
     // The player itself was never out of its own interest.
     const Position* mirror = scenario.clientWorld.get(scenario.client->owned(), kPosition);
     RAWFRAME_EXPECT(mirror != nullptr && mirror->x == 0);
+}
+
+RAWFRAME_TEST(InterestCellsMissNothingWithinReach) {
+    // A field of props a meter and a quarter apart and a player put down
+    // on cell edges and between them (cells are 10.1 wide): the client
+    // mirrors exactly what is within the radius, as though every prop were
+    // measured (D209).
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)},
+                      {.stateBytesPerTick = 8192,
+                       .interest = world_replication::InterestSettings{
+                           .position = Position::kComponentTypeId,
+                           .axes = {{offsetof(Position, x), WireKind::F32}, {offsetof(Position, y), WireKind::F32}},
+                           .radius = 10,
+                           .leaveRadius = 10}}};
+    const auto kPosition = *scenario.schema->key<Position>();
+    std::vector<Position> props;
+    for (int x = -24; x <= 24; ++x) {
+        for (int y = -24; y <= 24; ++y) {
+            props.push_back(Position{static_cast<float>(x) * 1.25F, static_cast<float>(y) * 1.25F});
+        }
+    }
+    // Far out, and not a place at all: never within reach.
+    props.push_back(Position{1e30F, 0});
+    props.push_back(Position{std::numeric_limits<float>::infinity(), 0});
+    props.push_back(Position{std::numeric_limits<float>::quiet_NaN(), 0});
+    for (const Position& prop : props) {
+        const world::EntityHandle kProp = *scenario.serverWorld.create();
+        RAWFRAME_EXPECT(scenario.serverWorld.insert(kProp, kPosition, prop).has_value());
+    }
+    const auto kMirrored = [&] {
+        std::vector<std::pair<float, float>> found;
+        auto query = world::Query<world::Read<Position>>::resolve(*scenario.schema);
+        query->forEach(scenario.clientWorld, [&](world::EntityHandle entity, const Position& position) {
+            if (entity != scenario.client->owned()) {
+                found.emplace_back(position.x, position.y);
+            }
+        });
+        std::ranges::sort(found);
+        return found;
+    };
+    const auto kWithin = [&](float x, float y) {
+        std::vector<std::pair<float, float>> found;
+        for (const Position& prop : props) {
+            const double kX = static_cast<double>(prop.x) - x;
+            const double kY = static_cast<double>(prop.y) - y;
+            if ((kX * kX) + (kY * kY) <= 100) {
+                found.emplace_back(prop.x, prop.y);
+            }
+        }
+        std::ranges::sort(found);
+        return found;
+    };
+    for (int step = 0; step < 10; ++step) {
+        scenario.step(Steer{});
+    }
+    for (const auto& [kX, kY] : std::vector<std::pair<float, float>>{
+             {0, 0}, {10.1F, 0}, {-10.1F, 10.1F}, {3.3F, -7.7F}, {20.2F, 20.2F}, {1e30F, 0}}) {
+        const world::EntityHandle kPlayer = scenario.server->player(network::ConnectionId{1});
+        RAWFRAME_EXPECT(!kPlayer.isNull());
+        if (kPlayer.isNull()) {
+            return;
+        }
+        *scenario.serverWorld.get(kPlayer, kPosition) = Position{kX, kY};
+        for (int step = 0; step < 30; ++step) {
+            scenario.step(Steer{});
+        }
+        const auto kExpected = kWithin(kX, kY);
+        RAWFRAME_EXPECT(kMirrored() == kExpected);
+        RAWFRAME_EXPECT(kX > 1e29F ? kExpected.size() == 1 : kExpected.size() > 100);
+    }
 }
 
 RAWFRAME_TEST(RemoteEntitiesAreShownBetweenStates) {
