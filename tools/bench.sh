@@ -120,6 +120,11 @@ cpus = (stopped["cpuMs"] - started["cpuMs"]) / active
 line = "ready %.1f MiB, peak %.1f MiB; tick p50 %.3f ms, p95 %.3f ms, p99 %.3f ms; " % (
     ready, peak, tick["p50"] / 1000, tick["p95"] / 1000, tick["p99"] / 1000)
 line += "ready in %d ms, shutdown %d ms, %.2f CPUs active" % (started["readyMs"], stopped["shutdownMs"], cpus)
+# What the participants account for, and what they do not (D216).
+summary = first("memory_summary")
+if summary:
+    line += "; attributed %.1f MiB, files %.1f MiB, unattributed %.1f MiB" % (
+        summary["attributedBytes"] / 2**20, summary["fileBackedBytes"] / 2**20, summary["unattributedBytes"] / 2**20)
 if degraded:
     line += "; degraded %d times" % len(degraded)
 if ready > 128 or peak > 512 or degraded or stopped["exit"] != "clean_stop" or \
