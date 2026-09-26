@@ -63,6 +63,37 @@ jobs:
       - name: Test
         run: ctest --test-dir out/clang-development --output-on-failure -j4
 
+  # A longer search than the check's fixed runs (D242): five minutes a fuzz
+  # target from an empty corpus, each finding printed so it can be replayed.
+  fuzz:
+    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-20 ninja-build ccache python3-aioquic
+      - name: Configure
+        run: cmake --preset clang-sanitize
+      - name: Build
+        run: cmake --build out/clang-sanitize
+      - name: Fuzz
+        run: |
+          status=0
+          mkdir -p findings
+          for target in $(find "$PWD/out/clang-sanitize" -name 'rawframe_*_fuzz_*' -type f -executable); do
+            name="$(basename "$target")"
+            mkdir -p "corpus/$name"
+            echo "== $name"
+            (cd findings && "$target" -max_total_time=300 -max_len=4096 "../corpus/$name") || status=1
+          done
+          for finding in findings/*; do
+            [ -f "$finding" ] && { echo "== $finding"; base64 -w0 "$finding"; echo; }
+          done
+          exit "$status"
+
   windows:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
     runs-on: windows-2025
