@@ -93,7 +93,9 @@ done
 # bots in four processes of their own (D211), under SPEC-0013's overload
 # thresholds (bench/canonical_profile.conf, D212). What is held here is the
 # server's memory (ready at most 128 MiB, peak at most 512 MiB), its tick p95
-# and p99, and that it was never degraded. Its p50 is reported, not held: the bots and MsQuic's workers
+# and p99, that it was never degraded, its start and shutdown within their
+# hard values (5 s, 8 s), and its average processor use while active within
+# 1.5 CPUs (D213). Its p50 is reported, not held: the bots and MsQuic's workers
 # share this machine, and the arena's runs above hold the p50.
 play="$(hosts/bots/tests/play.sh "$build/hosts/dedicated_server/rawframe-server" "$build/hosts/bots/rawframe-bots" \
     16 4 1440 games/crowd/crowd.game "$PWD/bench/canonical_profile.conf" 2>&1 || true)"
@@ -111,11 +113,15 @@ if not (started and stopped and tick):
     print("FAIL no server summary")
     sys.exit()
 ready, peak = started["residentBytes"] / 2**20, stopped["peakResidentBytes"] / 2**20
-line = "ready %.1f MiB, peak %.1f MiB; tick p50 %.3f ms, p95 %.3f ms, p99 %.3f ms" % (
+active = max(stopped["runMs"] - started["readyMs"], 1)
+cpus = (stopped["cpuMs"] - started["cpuMs"]) / active
+line = "ready %.1f MiB, peak %.1f MiB; tick p50 %.3f ms, p95 %.3f ms, p99 %.3f ms; " % (
     ready, peak, tick["p50"] / 1000, tick["p95"] / 1000, tick["p99"] / 1000)
+line += "ready in %d ms, shutdown %d ms, %.2f CPUs active" % (started["readyMs"], stopped["shutdownMs"], cpus)
 if degraded:
     line += "; degraded %d times" % len(degraded)
-if ready > 128 or peak > 512 or tick["p95"] > 8330 or tick["p99"] > 12500 or degraded or stopped["exit"] != "clean_stop":
+if ready > 128 or peak > 512 or tick["p95"] > 8330 or tick["p99"] > 12500 or degraded or stopped["exit"] != "clean_stop" or \
+        started["readyMs"] > 5000 or stopped["shutdownMs"] > 8000 or cpus > 1.5:
     line = "FAIL past SPEC-0013: " + line
 print(line)' "$play")"
 printf 'bench crowd over QUIC: %s\n' "$verdict"
