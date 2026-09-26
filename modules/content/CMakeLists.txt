@@ -10,6 +10,7 @@ rawframe_module(NAME content
 target_link_libraries(rawframe_content PRIVATE rawframe_zstd_decompress)
 
 rawframe_module_tests(NAME content SOURCES tests/catalog_test.cpp tests/store_test.cpp)
+rawframe_module_fuzz(NAME content TARGET records RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_content.cpp)
 if(TARGET rawframe_content_tests)
     # The tests make Zstandard frames, good and bad, for a Build to hold,
     # and sign the Builds they make.

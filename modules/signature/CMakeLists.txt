@@ -10,6 +10,7 @@ rawframe_module(NAME signature
 target_link_libraries(rawframe_signature PRIVATE openssl::crypto)
 
 rawframe_module_tests(NAME signature SOURCES tests/signature_test.cpp)
+rawframe_module_fuzz(NAME signature TARGET records SEEDS tests/seeds SOURCES tests/fuzz_signature.cpp)
 if(TARGET rawframe_signature_tests)
     # The tests sign, to have signatures to verify.
     target_link_libraries(rawframe_signature_tests PRIVATE openssl::crypto)

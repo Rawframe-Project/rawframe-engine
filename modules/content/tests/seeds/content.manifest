@@ -1,0 +1,78 @@
+{
+  "kind": "content.manifest",
+  "formatVersion": 1,
+  "entries": [
+    {
+      "resourceId": "0210c143de7237f56d9195d29013927c",
+      "resourceTypeId": "4530b8b3c0311816d2a65a512c4f7070",
+      "representation": "rawframe.text.translations",
+      "byteLength": 423,
+      "digest": "sha256:0d49a2079aceb01ce1c8fd9e74a6be088caa4e4b684880a22848478e3d9f6320",
+      "locator": "objects/0d49a2079aceb01ce1c8fd9e74a6be088caa4e4b684880a22848478e3d9f6320"
+    },
+    {
+      "resourceId": "0ef1a81f70a113a696a0f55dabdfc157",
+      "resourceTypeId": "684215ae3a2a3f665361a5a7b3b260c6",
+      "representation": "rawframe.audio.wave",
+      "byteLength": 9644,
+      "digest": "sha256:50ad5549446b34f8e38c574b2cdd8d9f57d23cf8ff4237b2c075241dc92068fc",
+      "locator": "objects/50ad5549446b34f8e38c574b2cdd8d9f57d23cf8ff4237b2c075241dc92068fc"
+    },
+    {
+      "resourceId": "1274499474142e189b67a3b499591324",
+      "resourceTypeId": "684215ae3a2a3f665361a5a7b3b260c6",
+      "representation": "rawframe.audio.wave",
+      "byteLength": 11564,
+      "digest": "sha256:287d7a09ec5281a4d32d3a2f1833b37b1f32689ab1936cf16bc9484018c7652a",
+      "locator": "objects/287d7a09ec5281a4d32d3a2f1833b37b1f32689ab1936cf16bc9484018c7652a"
+    },
+    {
+      "resourceId": "52771075251e7361deaecf4939c72e56",
+      "resourceTypeId": "afe08759c97c18977fcf1a5f4f320b2b",
+      "representation": "rawframe.scene",
+      "byteLength": 3765,
+      "digest": "sha256:4e2f66e8690320692244761220515123f865588f9f760e12ad628f3c8186d52c",
+      "locator": "objects/4e2f66e8690320692244761220515123f865588f9f760e12ad628f3c8186d52c"
+    },
+    {
+      "resourceId": "8d1a709be7c6f665a9d32c2c07e122c3",
+      "resourceTypeId": "afe08759c97c18977fcf1a5f4f320b2b",
+      "representation": "rawframe.scene",
+      "byteLength": 567,
+      "digest": "sha256:d23514c7a2a27935a666079fc77c22609bf7ad1e08973c9a2b3e16ffa68518ff",
+      "locator": "objects/d23514c7a2a27935a666079fc77c22609bf7ad1e08973c9a2b3e16ffa68518ff"
+    },
+    {
+      "resourceId": "abb24282d34ee3f6ebb8a4eace2962f4",
+      "resourceTypeId": "94011cff710065644e0f466b35941608",
+      "representation": "rawframe.game.description",
+      "byteLength": 9454,
+      "digest": "sha256:72b95d61a9304f55362dcbea8097578b15daee9227e012e33c30433b511d47fb",
+      "locator": "objects/72b95d61a9304f55362dcbea8097578b15daee9227e012e33c30433b511d47fb"
+    },
+    {
+      "resourceId": "aefdab1e47c086ddf189f56bbb92c4f0",
+      "resourceTypeId": "749e2ba7d0067a4db2348b183fc4d55f",
+      "representation": "rawframe.text.strings",
+      "byteLength": 468,
+      "digest": "sha256:7963903ab1e10995aeb24e2be45366668deb970f9012e3e5b46e5c12d2be2586",
+      "locator": "objects/7963903ab1e10995aeb24e2be45366668deb970f9012e3e5b46e5c12d2be2586"
+    },
+    {
+      "resourceId": "f9f0181057571ecd398d86d2c34a641f",
+      "resourceTypeId": "49be428d0ae12ec9b0f817b7c1e0e956",
+      "representation": "rawframe.kest.sources",
+      "byteLength": 6082,
+      "digest": "sha256:bc96f23a442a8060a99dea5523c405971a330d0650805ea8a8aeb72c621d9100",
+      "locator": "objects/bc96f23a442a8060a99dea5523c405971a330d0650805ea8a8aeb72c621d9100"
+    },
+    {
+      "resourceId": "fd3a48dd33db10fae01e4d65d993d8f3",
+      "resourceTypeId": "afe08759c97c18977fcf1a5f4f320b2b",
+      "representation": "rawframe.scene",
+      "byteLength": 367,
+      "digest": "sha256:59ad2c045afda6e4635fd32e51279284179f6042d4d5e84482e95b874a6f2c58",
+      "locator": "objects/59ad2c045afda6e4635fd32e51279284179f6042d4d5e84482e95b874a6f2c58"
+    }
+  ]
+}
