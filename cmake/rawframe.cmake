@@ -218,8 +218,17 @@ endfunction()
 # same run each time; a longer search runs nightly.
 #
 #   rawframe_module_fuzz(NAME network TARGET wire SOURCES tests/fuzz_wire.cpp)
+#
+# RUNS (the check's inputs) and MAX_LEN (the longest input) default to
+# RAWFRAME_FUZZ_RUNS and 4096; a slow target runs fewer.
 function(rawframe_module_fuzz)
-    cmake_parse_arguments(arg "" "NAME;TARGET" "SOURCES" ${ARGN})
+    cmake_parse_arguments(arg "" "NAME;TARGET;RUNS;MAX_LEN" "SOURCES" ${ARGN})
+    if(NOT arg_RUNS)
+        set(arg_RUNS ${RAWFRAME_FUZZ_RUNS})
+    endif()
+    if(NOT arg_MAX_LEN)
+        set(arg_MAX_LEN 4096)
+    endif()
     if(NOT RAWFRAME_BUILD_TESTS OR NOT RAWFRAME_SANITIZE STREQUAL "address" OR MSVC
        OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         return()
@@ -231,6 +240,6 @@ function(rawframe_module_fuzz)
     target_link_options(${target} PRIVATE -fsanitize=fuzzer)
     set_property(GLOBAL APPEND PROPERTY RAWFRAME_FUZZ_TARGETS ${target})
     add_test(NAME ${arg_NAME}_fuzz_${arg_TARGET}
-             COMMAND ${target} -seed=1 -runs=${RAWFRAME_FUZZ_RUNS} -max_len=4096)
+             COMMAND ${target} -seed=1 -runs=${arg_RUNS} -max_len=${arg_MAX_LEN})
 endfunction()
 set(RAWFRAME_FUZZ_RUNS 50000 CACHE STRING "Inputs each fuzz target tries in the check (D242)")
