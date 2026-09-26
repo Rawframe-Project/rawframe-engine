@@ -11,6 +11,7 @@
 #include "rawframe/build/chunking.h"
 #include "rawframe/build/publisher_key.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 
