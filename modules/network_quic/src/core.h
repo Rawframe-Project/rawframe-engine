@@ -112,6 +112,10 @@ struct Core {
     std::size_t liveHandles = 0;
     std::deque<network::Event> inbound;
     network::ProviderStatistics statistics;
+    /// Across every connection: bytes of events waiting, and bytes handed to
+    /// MsQuic and not yet released (D239).
+    std::size_t queuedBytesInAll = 0;
+    std::size_t sendingBytesInAll = 0;
 
     [[nodiscard]] std::size_t openConnections() const noexcept {
         return static_cast<std::size_t>(std::count_if(connections.begin(), connections.end(), [](const auto& entry) {
@@ -121,12 +125,20 @@ struct Core {
 
     [[nodiscard]] bool fits(const Connection& connection, std::size_t bytes) const noexcept {
         return connection.queuedEvents + 1 <= profile.maximumQueuedEvents &&
-               connection.queuedBytes + bytes <= profile.maximumQueuedBytes;
+               connection.queuedBytes + bytes <= profile.maximumQueuedBytes &&
+               queuedBytesInAll + bytes <= settings->maximumQueuedBytesInAll;
+    }
+
+    /// Whether `bytes` more may be handed to MsQuic for `connection`.
+    [[nodiscard]] bool roomToSend(const Connection& connection, std::size_t bytes) const noexcept {
+        return connection.sendingBytes + bytes <= settings->maximumSendingBytes &&
+               sendingBytesInAll + bytes <= settings->maximumSendingBytesInAll;
     }
 
     void deliver(Connection& connection, network::Event event) {
         connection.queuedEvents += 1;
         connection.queuedBytes += event.bytes.size();
+        queuedBytesInAll += event.bytes.size();
         event.connection = network::ConnectionId{connection.id};
         inbound.push_back(std::move(event));
     }

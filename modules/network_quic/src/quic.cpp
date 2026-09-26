@@ -267,7 +267,7 @@ public:
                           NetworkError::WrongStream,
                           "the stream is not open, or is the peer's one-way stream");
         }
-        if (link->sendingBytes + bytes.size() > core_->profile.maximumQueuedBytes) {
+        if (!core_->roomToSend(*link, bytes.size())) {
             // A reliable stream cannot drop bytes, so the connection ends.
             core_->shutDown(*link, CloseReason::QueueExhausted, kQueueExhaustedCode);
             return refuse(result::ErrorClass::ResourceExhausted,
@@ -307,7 +307,7 @@ public:
         }
         ++core_->statistics.datagramsSent;
         // Unreliable: with no room on the path or in the budget it is lost.
-        if (!link->datagramsEnabled || link->sendingBytes + bytes.size() > core_->profile.maximumQueuedBytes) {
+        if (!link->datagramsEnabled || !core_->roomToSend(*link, bytes.size())) {
             ++core_->statistics.datagramsDropped;
             return {};
         }
@@ -333,6 +333,7 @@ public:
         while (moved < maximum && !core_->inbound.empty()) {
             Event event = std::move(core_->inbound.front());
             core_->inbound.pop_front();
+            core_->queuedBytesInAll -= event.bytes.size();
             if (Connection* link = core_->find(event.connection.value)) {
                 link->queuedEvents -= 1;
                 link->queuedBytes -= event.bytes.size();
@@ -367,13 +368,14 @@ private:
         return link;
     }
 
-    static Sending* copy(Connection& link, std::span<const std::byte> bytes) {
+    Sending* copy(Connection& link, std::span<const std::byte> bytes) {
         auto* sending = new Sending{.connection = link.id};
         const auto* kFirst = reinterpret_cast<const std::uint8_t*>(bytes.data());
         sending->bytes.assign(kFirst, kFirst + bytes.size());
         sending->buffer.Length = static_cast<std::uint32_t>(sending->bytes.size());
         sending->buffer.Buffer = sending->bytes.data();
         link.sendingBytes += bytes.size();
+        core_->sendingBytesInAll += bytes.size();
         return sending;
     }
 
@@ -429,6 +431,10 @@ result::Result<std::unique_ptr<QuicNetwork>> QuicNetwork::create(QuicSettings se
         return refuse(result::ErrorClass::InvalidArgument,
                       NetworkError::InvalidProfile,
                       "the idle timeout is 1 ms to an hour, and the keep-alive shorter than it");
+    }
+    if (settings.maximumSendingBytes == 0 || settings.maximumSendingBytesInAll == 0 ||
+        settings.maximumQueuedBytesInAll == 0) {
+        return refuse(result::ErrorClass::InvalidArgument, NetworkError::InvalidProfile, "a queue ceiling is zero");
     }
     auto state = std::make_unique<State>();
     if (settings.certificate.has_value()) {

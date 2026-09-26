@@ -40,6 +40,17 @@ struct QuicSettings {
     /// a container's CPU quota as MsQuic does not (D214). Set by the first
     /// network a process opens; while one is open, others share its choice.
     std::uint32_t processors = 0;
+    /// Bytes handed to MsQuic and not yet released by it, per connection and
+    /// across one provider's connections: SPEC-0013's egress queued ceilings
+    /// (D239). A datagram past either is dropped; a stream send past either
+    /// closes its connection, since a reliable stream cannot lose bytes.
+    std::size_t maximumSendingBytes = std::size_t{512} << 10U;
+    std::size_t maximumSendingBytesInAll = std::size_t{32} << 20U;
+    /// Bytes of events waiting for the Runtime across one provider's
+    /// connections, SPEC-0013's aggregate ingress ceiling (D239); per
+    /// connection it is the provider profile's. An event past it is treated
+    /// as one past its connection's queue.
+    std::size_t maximumQueuedBytesInAll = std::size_t{16} << 20U;
 };
 
 class QuicNetwork {

@@ -62,7 +62,8 @@ network::ProviderProfile providerProfile(std::size_t connections) {
                                     .maximumStreamSend = 1024,
                                     .maximumDatagram = 1200,
                                     .maximumQueuedEvents = 8192,
-                                    .maximumQueuedBytes = std::size_t{8} << 20U};
+                                    // SPEC-0013's ingress queued per connection (D239).
+                                    .maximumQueuedBytes = std::size_t{256} << 10U};
 }
 
 /// What peers must agree on: the protocol, the game, its replicated

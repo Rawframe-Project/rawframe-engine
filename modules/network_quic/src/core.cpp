@@ -127,6 +127,7 @@ void releaseSending(Core& core, Sending* sending) noexcept {
     if (Connection* connection = core.find(sending->connection)) {
         connection->sendingBytes -= sending->bytes.size();
     }
+    core.sendingBytesInAll -= sending->bytes.size();
     delete sending;
 }
 
@@ -139,6 +140,7 @@ bool sendOwn(Core& core, Connection& connection, HQUIC stream, std::span<const s
     sending->buffer.Length = static_cast<std::uint32_t>(sending->bytes.size());
     sending->buffer.Buffer = sending->bytes.data();
     connection.sendingBytes += bytes.size();
+    core.sendingBytesInAll += bytes.size();
     if (QUIC_FAILED(core.api->StreamSend(stream, &sending->buffer, 1, QUIC_SEND_FLAG_NONE, sending))) {
         releaseSending(core, sending);
         return false;
