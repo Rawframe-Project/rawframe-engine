@@ -83,12 +83,20 @@ jobs:
         run: |
           status=0
           mkdir -p findings
-          for target in $(find "$PWD/out/clang-sanitize" -name 'rawframe_*_fuzz_*' -type f -executable); do
-            name="$(basename "$target")"
+          # Each target as the check runs it (its longest input and its
+          # seeds), searching for five minutes from a fresh seed instead of
+          # a fixed number of inputs.
+          ctest --test-dir out/clang-sanitize --show-only=json-v1 -R '_fuzz_' | python3 -c '
+          import json, sys
+          for test in json.load(sys.stdin)["tests"]:
+              print("\t".join(a for a in test["command"] if not a.startswith(("-runs=", "-seed="))))
+          ' > fuzz.commands
+          while IFS=$'\t' read -r -a command; do
+            name="$(basename "${command[0]}")"
             mkdir -p "corpus/$name"
             echo "== $name"
-            (cd findings && "$target" -max_total_time=300 -max_len=4096 "../corpus/$name") || status=1
-          done
+            (cd findings && "${command[@]}" -max_total_time=300 "../corpus/$name") </dev/null || status=1
+          done < fuzz.commands
           for finding in findings/*; do
             [ -f "$finding" ] && { echo "== $finding"; base64 -w0 "$finding"; echo; }
           done

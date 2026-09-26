@@ -220,9 +220,12 @@ endfunction()
 #   rawframe_module_fuzz(NAME network TARGET wire SOURCES tests/fuzz_wire.cpp)
 #
 # RUNS (the check's inputs) and MAX_LEN (the longest input) default to
-# RAWFRAME_FUZZ_RUNS and 4096; a slow target runs fewer.
+# RAWFRAME_FUZZ_RUNS and 4096; a slow target runs fewer. SEEDS names
+# directories of valid inputs the search starts from, so it begins past the
+# document syntax a blind search spends its runs on; libFuzzer reads them
+# and never writes to them.
 function(rawframe_module_fuzz)
-    cmake_parse_arguments(arg "" "NAME;TARGET;RUNS;MAX_LEN" "SOURCES" ${ARGN})
+    cmake_parse_arguments(arg "" "NAME;TARGET;RUNS;MAX_LEN" "SOURCES;SEEDS" ${ARGN})
     if(NOT arg_RUNS)
         set(arg_RUNS ${RAWFRAME_FUZZ_RUNS})
     endif()
@@ -239,7 +242,18 @@ function(rawframe_module_fuzz)
     target_compile_options(${target} PRIVATE -fsanitize=fuzzer)
     target_link_options(${target} PRIVATE -fsanitize=fuzzer)
     set_property(GLOBAL APPEND PROPERTY RAWFRAME_FUZZ_TARGETS ${target})
+    set(seeds "")
+    foreach(directory IN LISTS arg_SEEDS)
+        file(GLOB found CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${directory}/*")
+        list(SORT found)
+        list(APPEND seeds ${found})
+    endforeach()
+    set(seed_inputs "")
+    if(seeds)
+        list(JOIN seeds "," joined)
+        set(seed_inputs "-seed_inputs=${joined}")
+    endif()
     add_test(NAME ${arg_NAME}_fuzz_${arg_TARGET}
-             COMMAND ${target} -seed=1 -runs=${arg_RUNS} -max_len=${arg_MAX_LEN})
+             COMMAND ${target} -seed=1 -runs=${arg_RUNS} -max_len=${arg_MAX_LEN} ${seed_inputs})
 endfunction()
 set(RAWFRAME_FUZZ_RUNS 50000 CACHE STRING "Inputs each fuzz target tries in the check (D242)")
