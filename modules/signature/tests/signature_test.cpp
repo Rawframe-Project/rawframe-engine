@@ -6,8 +6,10 @@
 
 #include "rawframe/signature/errors.h"
 #include "rawframe/signature/signature.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
+#include <cstdio>
 #include <openssl/evp.h>
 #include <string>
 
@@ -158,4 +160,40 @@ RAWFRAME_TEST(AVerdictFollowsTheKeysState) {
     RAWFRAME_EXPECT(refusedAs(
         verifyPublished(kKeys, bytesOf("{\"schema\":2}"), {.kid = "000000000000000a", .sig = kActive.sign(kManifest)}),
         SignatureError::BadSignature));
+}
+
+RAWFRAME_TEST(HostileEnvelopesAndKeySetsReadOnlyAsTheyWrite) {
+    // A Build's signature and a publisher's key set come over the network
+    // (D190): seeded mutations of each, and whatever the reader accepts
+    // writes back to the very same bytes.
+    const Signer kSigner{7};
+    const std::string kEnvelope =
+        writeEnvelope(Envelope{.kid = "00112233445566ff", .sig = kSigner.sign(bytesOf("manifest"))});
+    const auto kKeys = writePublisherKeySet(keySetOf(
+        {PublisherKey{
+             .kid = "00112233445566ff", .publicKey = kSigner.publicKey(), .state = KeyState::Active, .since = 1},
+         PublisherKey{
+             .kid = "00112233445566fe", .publicKey = Signer{8}.publicKey(), .state = KeyState::Retired, .since = 2}}));
+    RAWFRAME_EXPECT(kKeys.has_value());
+    if (!kKeys.has_value()) {
+        return;
+    }
+    constexpr std::string_view kInserted = "{}[]\",:0123456789abcdef";
+    test::Mutations mutations;
+    int envelopes = 0;
+    int keySets = 0;
+    for (int round = 0; round < 20'000; ++round) {
+        const std::string kText = mutations.mutate(kEnvelope, kInserted);
+        if (const auto kRead = readEnvelope(kText)) {
+            ++envelopes;
+            RAWFRAME_EXPECT(writeEnvelope(*kRead) == kText);
+        }
+        const std::string kKeysText = mutations.mutate(*kKeys, kInserted);
+        if (const auto kRead = readPublisherKeySet(kKeysText)) {
+            ++keySets;
+            RAWFRAME_EXPECT(writePublisherKeySet(*kRead).value_or("") == kKeysText);
+        }
+    }
+    std::printf("  accepted: %d envelopes, %d key sets of 20000 each\n", envelopes, keySets);
+    RAWFRAME_EXPECT(envelopes > 0 && keySets > 0);
 }

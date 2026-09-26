@@ -5,8 +5,10 @@
 // meaning that ignores where bytes live.
 
 #include "rawframe/content/catalog.h"
+#include "rawframe/content/composition_record.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/manifest.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
@@ -228,4 +230,47 @@ RAWFRAME_TEST(TheFingerprintIsOfMeaningNotPlace) {
     std::vector<BoundManifest> longer = kBase;
     longer[0].entries[0].byteLength = 6;
     RAWFRAME_EXPECT(kFingerprint(longer) != kFingerprint(kBase));
+}
+
+RAWFRAME_TEST(HostileManifestsAndCompositionsReadOnlyAsTheyWrite) {
+    // A Build's manifest is signed by its publisher, a mod's by someone the
+    // game does not trust, and a Composition names Builds a client fetches
+    // (D190): seeded mutations of each. A manifest read in any order writes
+    // its canonical form, which reads back to the same entries; a
+    // Composition is canonical and writes back to its very bytes.
+    const std::vector<ManifestEntry> kEntries = {entry(2, "sounds/theme.rfopus"), entry(1, "sounds/shot.rfopus")};
+    const std::string kManifest = writeManifest(kEntries);
+    base::Sha256Digest root{};
+    root.fill(std::byte{0xab});
+    const auto kComposition = writeComposition(
+        CompositionRecord{.game = {.subject = "rawframe/runners", .version = "0.1.0", .build = root},
+                          .mods = {{.subject = "fan/horde", .version = "1.0.0", .build = root}},
+                          .packages = {{.subject = "rawframe/sounds", .version = "1.0.0", .build = root}},
+                          .profile = "community",
+                          .createdAt = 1'790'000'000});
+    RAWFRAME_EXPECT(kComposition.has_value());
+    if (!kComposition.has_value()) {
+        return;
+    }
+    constexpr std::string_view kInserted = "{}[]\",: \n./-_0123456789abcdef";
+    test::Mutations mutations;
+    int manifests = 0;
+    int compositions = 0;
+    for (int round = 0; round < 20'000; ++round) {
+        const std::string kText = mutations.mutate(kManifest, kInserted);
+        if (const auto kRead = readManifest(kText)) {
+            ++manifests;
+            const std::string kWritten = writeManifest(*kRead);
+            const auto kAgain = readManifest(kWritten);
+            RAWFRAME_EXPECT(kAgain.has_value() && writeManifest(*kAgain) == kWritten &&
+                            kAgain->size() == kRead->size());
+        }
+        const std::string kRecord = mutations.mutate(*kComposition, kInserted);
+        if (const auto kRead = readComposition(kRecord)) {
+            ++compositions;
+            RAWFRAME_EXPECT(writeComposition(*kRead).value_or("") == kRecord);
+        }
+    }
+    std::printf("  accepted: %d manifests, %d compositions of 20000 each\n", manifests, compositions);
+    RAWFRAME_EXPECT(manifests > 0 && compositions > 0);
 }
