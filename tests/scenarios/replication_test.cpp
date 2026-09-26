@@ -154,7 +154,8 @@ network::Compatibility compatibility() {
 
 /// What differs between scenarios besides the network.
 struct Options {
-    std::size_t stateBytesPerTick = 1092;
+    std::uint32_t statePeriod = 1;
+    std::size_t stateBytesPerPublish = 1092;
     bool predicting = false;
     std::optional<world_replication::InterestSettings> interest;
     bool interpolating = false;
@@ -197,7 +198,8 @@ struct Scenario {
              .playerComponents = {Position::kComponentTypeId, Steer::kComponentTypeId},
              .input = steerCodec(),
              .interest = std::move(options.interest),
-             .stateBytesPerTick = options.stateBytesPerTick});
+             .statePeriod = options.statePeriod,
+             .stateBytesPerPublish = options.stateBytesPerPublish});
         std::vector<world::SystemDeclaration> declarations;
         RAWFRAME_EXPECT(server->declareSystems(*schema, declarations).has_value());
         move = std::make_unique<Move>(*schema);
@@ -400,7 +402,7 @@ RAWFRAME_TEST(ReplicationHoldsThroughLossAndReordering) {
 RAWFRAME_TEST(ANarrowBudgetSendsThePlayerFirstAndTheRestInTurn) {
     // Room for the header and two or three records a tick: far less than
     // twenty moving props need.
-    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}, {.stateBytesPerTick = 64}};
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}, {.stateBytesPerPublish = 64}};
     const auto kPosition = *scenario.schema->key<Position>();
     const auto kSteer = *scenario.schema->key<Steer>();
     for (int index = 0; index < 20; ++index) {
@@ -453,6 +455,27 @@ RAWFRAME_TEST(APredictingClientRunsAheadAndIsConfirmed) {
     }
     shown = scenario.clientWorld.get(scenario.client->owned(), kPosition);
     server = scenario.firstPlayerPosition();
+    RAWFRAME_EXPECT(shown != nullptr && server != nullptr && shown->x == server->x && shown->y == server->y);
+}
+
+RAWFRAME_TEST(StateGoesOutOnceAPeriodAndPredictionHolds) {
+    // SPEC-0013's 20 Hz current-state production at 60 ticks a second
+    // (D222): a state datagram every third tick, and a predicting client
+    // confirmed as often and agreeing exactly once input is idle.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(40)}, {.statePeriod = 3, .predicting = true}};
+    const auto kPosition = *scenario.schema->key<Position>();
+    for (int step = 0; step < 180; ++step) {
+        scenario.step(Steer{static_cast<float>(step % 5), 0.25F});
+    }
+    const std::uint64_t kDatagrams = scenario.server->statistics().stateDatagrams;
+    RAWFRAME_EXPECT(kDatagrams >= 50 && kDatagrams <= 60);
+    const auto kStatistics = scenario.client->predictionStatistics();
+    RAWFRAME_EXPECT(kStatistics.predictedTicks > 150 && kStatistics.confirmed > 40 && kStatistics.rollbacks <= 3);
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{});
+    }
+    const Position* shown = scenario.clientWorld.get(scenario.client->owned(), kPosition);
+    const Position* server = scenario.firstPlayerPosition();
     RAWFRAME_EXPECT(shown != nullptr && server != nullptr && shown->x == server->x && shown->y == server->y);
 }
 
@@ -560,7 +583,7 @@ RAWFRAME_TEST(InterestCellsMissNothingWithinReach) {
     // mirrors exactly what is within the radius, as though every prop were
     // measured (D209).
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)},
-                      {.stateBytesPerTick = 8192,
+                      {.stateBytesPerPublish = 8192,
                        .interest = world_replication::InterestSettings{
                            .position = Position::kComponentTypeId,
                            .axes = {{offsetof(Position, x), WireKind::F32}, {offsetof(Position, y), WireKind::F32}},

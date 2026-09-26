@@ -127,14 +127,26 @@ public:
                                                         .maximumAdmitted = kPlayers,
                                                         .tickRateTicks = simulation_->rate().ticks,
                                                         .tickRateSeconds = simulation_->rate().seconds}));
+        // State at most so many times a second, every tick by default; the
+        // period is the whole number of ticks that keeps under the rate
+        // (D222).
+        const world::TickRate kRate = simulation_->rate();
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kStateRate,
+                            context.configuration().unsignedInteger("replication.state_rate", 0));
+        const std::uint64_t kTicksPerSecond = kRate.ticks / kRate.seconds;
+        if (kStateRate > kTicksPerSecond) {
+            return missing("replication.state_rate is at most the World's tick rate");
+        }
+        const std::uint64_t kPeriod = kStateRate == 0 ? 1 : (kTicksPerSecond + kStateRate - 1) / kStateRate;
         // SPEC-0013's steady egress objective by default; the budget is per
-        // tick, so it follows the World's rate.
+        // publish, so it follows the World's rate and the period.
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kEgress,
                             context.configuration().unsignedInteger("replication.egress_bytes_per_second", 65'536));
-        const world::TickRate kRate = simulation_->rate();
-        const std::uint64_t kPerTick = kEgress > (std::uint64_t{1} << 30U) ? 0 : kEgress * kRate.seconds / kRate.ticks;
-        if (kPerTick < 64) {
-            return missing("replication.egress_bytes_per_second allows at least 64 bytes a tick, and at most 1 GiB/s");
+        const std::uint64_t kPerPublish =
+            kEgress > (std::uint64_t{1} << 30U) ? 0 : kEgress * kRate.seconds * kPeriod / kRate.ticks;
+        if (kPerPublish < 64) {
+            return missing(
+                "replication.egress_bytes_per_second allows at least 64 bytes a publish, and at most 1 GiB/s");
         }
         RAWFRAME_TRY_ASSIGN(
             server_,
@@ -146,7 +158,8 @@ public:
                     .input = plan->input(),
                     .perception = plan->perceivedInput(),
                     .interest = plan->interest(),
-                    .stateBytesPerTick = static_cast<std::size_t>(kPerTick),
+                    .statePeriod = static_cast<std::uint32_t>(kPeriod),
+                    .stateBytesPerPublish = static_cast<std::size_t>(kPerPublish),
                     .presence = presence,
                     .predicted = {plan->predictedComponents().begin(), plan->predictedComponents().end()}}));
         return simulation_->addSystems(*server_);

@@ -15,6 +15,9 @@ namespace rawframe::world_replication {
 ///
 ///   replication.endpoint             where to listen; without it, nothing
 ///   replication.maximum_connections  admitted at once (64)
+///   replication.state_rate           state publishes per connection a
+///                                    second, at most the tick rate; 0,
+///                                    every tick (0)
 ///   replication.egress_bytes_per_second
 ///                                    state bytes per connection (65536)
 ///

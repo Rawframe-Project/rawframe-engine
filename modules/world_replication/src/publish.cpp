@@ -1,6 +1,7 @@
-// Publishing: committed state out to every connection each tick, within its
-// interest and its byte budget, the connection's own player first (D26, D28,
-// D31, D48), with the server's checksum of its predicted scope kept (D204).
+// Publishing: committed state out to every connection once a state period,
+// within its interest and its byte budget, the connection's own player first
+// (D26, D28, D31, D48, D222), with the server's checksum of its predicted
+// scope kept every tick (D204).
 // Each connection looks only at the interest cells around its player and at
 // what it already holds, so its work follows its interest, not the World
 // (D209).
@@ -288,6 +289,11 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     if (settings.input && peer.heardInput && tick.value % settings.paceInterval == 0) {
         sendPace(peer);
     }
+    // Each connection on its own tick of the period, so the work of a
+    // period is spread across its ticks.
+    if ((tick.value + peer.connection.value) % settings.statePeriod != 0) {
+        return;
+    }
     const std::array<double, 3>* const kViewer = locationOf(peer.player);
     // Retire what is gone or out of interest; the ID is never used again
     // in this epoch. What stays is marked as held for this connection.
@@ -449,7 +455,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         if (used + kRecord + kStateHeaderRoom > kRoom) {
             kFlush();
         }
-        if (spent + used + kRecord + kStateHeaderRoom > settings.stateBytesPerTick) {
+        if (spent + used + kRecord + kStateHeaderRoom > settings.stateBytesPerPublish) {
             ++statistics.recordsDeferred;
             continue;
         }
