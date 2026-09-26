@@ -11,12 +11,7 @@
 #include <string_view>
 
 #ifdef _WIN32
-// Both names belong to the Windows SDK's own include contract and cannot carry
-// the repository's macro prefix.
-// NOLINTNEXTLINE(readability-identifier-naming)
-#define WIN32_LEAN_AND_MEAN
-// NOLINTNEXTLINE(readability-identifier-naming)
-#define NOMINMAX
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
 #include <windows.h>
 #else
 #include <unistd.h>

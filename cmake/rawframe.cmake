@@ -44,10 +44,14 @@ target_compile_definitions(rawframe_policy INTERFACE
     # 1 in shipping, where development-only surfaces refuse to compile.
     RAWFRAME_SHIPPING=${RAWFRAME_SHIPPING}
     RAWFRAME_CONFIGURATION_NAME="${RAWFRAME_CONFIGURATION}")
-# windows.h without its min and max macros, which break std::min and
-# std::max, and without the rarely used half of its headers (D237).
+# On Windows (D237): windows.h without its min and max macros, which break
+# std::min and std::max, and without the rarely used half of its headers; the
+# standard C library's functions without MSVC's deprecation of them in favour
+# of its own _s variants; and MSVC's library without its vectorized find,
+# which asserts on 16-byte values such as Bits128 when Clang compiles it.
 if(WIN32)
-    target_compile_definitions(rawframe_policy INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_definitions(rawframe_policy INTERFACE
+        NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _USE_STD_VECTOR_ALGORITHMS=0)
 endif()
 
 if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
