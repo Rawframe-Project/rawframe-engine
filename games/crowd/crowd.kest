@@ -1,0 +1,76 @@
+module crowd
+
+// SPEC-0013's canonical workload (crowd.game): a field of entities, some
+// walking, and players steering through it.
+
+import rawframe.random
+import rawframe.world
+
+// The field is FIELD meters square, centered on the origin.
+const FIELD: f32 = 1000.0
+const HALF: f32 = 500.0
+
+struct Position {
+    x: f32
+    y: f32
+}
+
+struct Steer {
+    dx: f32
+    dy: f32
+}
+
+struct Walk {
+    dx: f32
+    dy: f32
+}
+
+// On an entity once scatter has placed it.
+struct Placed {
+    tick: i32
+}
+
+extern fn Placed.insert(entity: world.Entity, value: Placed)
+
+// Every entity arrives at the origin: here it is put somewhere on the
+// field, once. At most PLACED a tick, inside a system's command bound, so
+// the field fills over its first five ticks.
+const PLACED: i32 = 2048
+
+fn scatter(count: i32, positions: [Position], entities: [world.Entity]) {
+    let i = 0
+    while i < count && i < PLACED {
+        positions[i].x = f32(random.unit(0)) * FIELD - HALF
+        positions[i].y = f32(random.unit(0)) * FIELD - HALF
+        Placed.insert(entities[i], Placed(0))
+        i = i + 1
+    }
+}
+
+// Walkers leaving one edge come back at the other, so the field stays as
+// full as it started.
+fn walk(count: i32, positions: [Position], walks: [Walk]) {
+    let i = 0
+    while i < count {
+        let x = positions[i].x + walks[i].dx
+        let y = positions[i].y + walks[i].dy
+        if x > HALF {
+            x = x - FIELD
+        }
+        if y < 0.0 - HALF {
+            y = y + FIELD
+        }
+        positions[i].x = x
+        positions[i].y = y
+        i = i + 1
+    }
+}
+
+fn drive(count: i32, positions: [Position], steers: [Steer]) {
+    let i = 0
+    while i < count {
+        positions[i].x = positions[i].x + steers[i].dx
+        positions[i].y = positions[i].y + steers[i].dy
+        i = i + 1
+    }
+}

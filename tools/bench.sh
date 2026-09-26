@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The engine against SPEC-0013's tick budget: 64 bots play each sample game
 # for six seconds in one arena process built for shipping, and the server
-# World's tick durations are read from its summary.
+# World's tick durations are read from its summary. The crowd is SPEC-0013's
+# canonical workload: 10,000 entities, 2,048 of them walking.
 #
 #   tools/bench.sh          measure, and add a dated, commit-stamped row for
 #                           each game to bench/results.tsv
@@ -32,7 +33,7 @@ mkdir -p bench
 [ -f "$results" ] || printf 'date\tcommit\tmachine\tgame\tbots\tticks\tp50_ms\tp95_ms\tp99_ms\n' >"$results"
 
 failures=0
-for game in arena runners plaza; do
+for game in arena runners plaza crowd; do
     {
         echo "host.maximum_iterations = 720"
         echo "host.iteration_rate = 120"
