@@ -3,6 +3,7 @@
 
 #include "rawframe/animation/errors.h"
 #include "rawframe/animation/mask.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <string>
@@ -78,4 +79,22 @@ RAWFRAME_TEST(ASubsetHoldsWhatItWeighsAndEveryBoneAbove) {
     const Mask kHandOnly{.skeleton = kSkeletonId, .chains = {MaskChain{.root = kHand, .descendants = false}}};
     const auto kSubset = boneSubset(kHandOnly, body(), kSkeletonId);
     RAWFRAME_EXPECT(kSubset.has_value() && *kSubset == (std::vector<std::uint8_t>{1, 1, 1, 1, 0}));
+}
+
+RAWFRAME_TEST(HostileMasksReadOnlyAsTheyWrite) {
+    const auto kText = writeMask(upper());
+    RAWFRAME_EXPECT(kText.has_value());
+    if (!kText.has_value()) {
+        return;
+    }
+    const test::WrittenRun kRun = test::readOnlyAsWritten(
+        *kText,
+        "\"{}[],:.-+eE0123456789 \n",
+        [](std::string_view text) {
+            return readMask(text);
+        },
+        [](const Mask& read) {
+            return writeMask(read);
+        });
+    RAWFRAME_EXPECT(kRun.read > 0 && kRun.differing == 0);
 }

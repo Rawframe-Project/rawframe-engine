@@ -4,6 +4,7 @@
 
 #include "rawframe/animation/errors.h"
 #include "rawframe/animation/graph.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
@@ -216,4 +217,22 @@ RAWFRAME_TEST(OnlyTheCanonicalGraphTextReads) {
     }
     RAWFRAME_EXPECT(refusedWith(readGraph(*kText, {.maximumNodes = 3}), AnimationError::OverLimit));
     RAWFRAME_EXPECT(refusedWith(readGraph(*kText, {.maximumParameters = 4}), AnimationError::OverLimit));
+}
+
+RAWFRAME_TEST(HostileGraphsReadOnlyAsTheyWrite) {
+    const auto kText = writeGraph(locomotion());
+    RAWFRAME_EXPECT(kText.has_value());
+    if (!kText.has_value()) {
+        return;
+    }
+    const test::WrittenRun kRun = test::readOnlyAsWritten(
+        *kText,
+        "\"{}[],:.-+eE0123456789 \n",
+        [](std::string_view text) {
+            return readGraph(text);
+        },
+        [](const Graph& read) {
+            return writeGraph(read);
+        });
+    RAWFRAME_EXPECT(kRun.read > 0 && kRun.differing == 0);
 }

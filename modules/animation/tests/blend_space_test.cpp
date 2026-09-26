@@ -4,6 +4,7 @@
 
 #include "rawframe/animation/errors.h"
 #include "rawframe/animation/instance.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <cmath>
@@ -187,4 +188,22 @@ RAWFRAME_TEST(APlaneSharesWithinItsTriangles) {
     RAWFRAME_EXPECT(near(kAt(2, 2)[0], 1.0) && near(kAt(2, 2)[1], 0.5));
     // Past a corner: the corner.
     RAWFRAME_EXPECT(near(kAt(5, 0)[0], 2.0) && near(kAt(5, 0)[1], 0.0));
+}
+
+RAWFRAME_TEST(HostileBlendSpacesReadOnlyAsTheyWrite) {
+    const auto kText = writeGraph(plane());
+    RAWFRAME_EXPECT(kText.has_value());
+    if (!kText.has_value()) {
+        return;
+    }
+    const test::WrittenRun kRun = test::readOnlyAsWritten(
+        *kText,
+        "\"{}[],:.-+eE0123456789 \n",
+        [](std::string_view text) {
+            return readGraph(text);
+        },
+        [](const Graph& read) {
+            return writeGraph(read);
+        });
+    RAWFRAME_EXPECT(kRun.read > 0 && kRun.differing == 0);
 }

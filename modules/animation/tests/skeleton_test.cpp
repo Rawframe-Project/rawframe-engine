@@ -3,6 +3,7 @@
 
 #include "rawframe/animation/errors.h"
 #include "rawframe/animation/skeleton.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <array>
@@ -163,4 +164,22 @@ RAWFRAME_TEST(OnlyTheCanonicalTextReads) {
         RAWFRAME_EXPECT(!readSkeleton(std::string_view{*kText}.substr(0, length)).has_value());
     }
     RAWFRAME_EXPECT(refusedWith(readSkeleton(*kText, {.maximumBones = 2}), AnimationError::OverLimit));
+}
+
+RAWFRAME_TEST(HostileSkeletonsReadOnlyAsTheyWrite) {
+    const auto kText = writeSkeleton(rig());
+    RAWFRAME_EXPECT(kText.has_value());
+    if (!kText.has_value()) {
+        return;
+    }
+    const test::WrittenRun kRun = test::readOnlyAsWritten(
+        *kText,
+        "\"{}[],:.-+eE0123456789 \n",
+        [](std::string_view text) {
+            return readSkeleton(text);
+        },
+        [](const Skeleton& read) {
+            return writeSkeleton(read);
+        });
+    RAWFRAME_EXPECT(kRun.read > 0 && kRun.differing == 0);
 }

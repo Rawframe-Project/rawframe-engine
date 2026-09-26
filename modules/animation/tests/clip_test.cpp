@@ -3,6 +3,7 @@
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/errors.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <array>
@@ -172,4 +173,22 @@ RAWFRAME_TEST(OnlyTheCanonicalClipTextReads) {
     }
     RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumKeys = 2}), AnimationError::OverLimit));
     RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumEvents = 3}), AnimationError::OverLimit));
+}
+
+RAWFRAME_TEST(HostileClipsReadOnlyAsTheyWrite) {
+    const auto kText = writeClip(walk());
+    RAWFRAME_EXPECT(kText.has_value());
+    if (!kText.has_value()) {
+        return;
+    }
+    const test::WrittenRun kRun = test::readOnlyAsWritten(
+        *kText,
+        "\"{}[],:.-+eE0123456789 \n",
+        [](std::string_view text) {
+            return readClip(text);
+        },
+        [](const Clip& read) {
+            return writeClip(read);
+        });
+    RAWFRAME_EXPECT(kRun.read > 0 && kRun.differing == 0);
 }

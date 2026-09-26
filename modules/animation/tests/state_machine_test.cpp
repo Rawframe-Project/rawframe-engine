@@ -4,6 +4,7 @@
 
 #include "rawframe/animation/errors.h"
 #include "rawframe/animation/instance.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
@@ -262,4 +263,22 @@ RAWFRAME_TEST(GameplayRequestsTransitionsForOneAdvance) {
     RAWFRAME_EXPECT(player.instance.request(kStop));
     player.x(0.1);
     RAWFRAME_EXPECT(player.instance.state(player.machine()) == 0);
+}
+
+RAWFRAME_TEST(HostileStateMachinesReadOnlyAsTheyWrite) {
+    const auto kText = writeGraph(mover());
+    RAWFRAME_EXPECT(kText.has_value());
+    if (!kText.has_value()) {
+        return;
+    }
+    const test::WrittenRun kRun = test::readOnlyAsWritten(
+        *kText,
+        "\"{}[],:.-+eE0123456789 \n",
+        [](std::string_view text) {
+            return readGraph(text);
+        },
+        [](const Graph& read) {
+            return writeGraph(read);
+        });
+    RAWFRAME_EXPECT(kRun.read > 0 && kRun.differing == 0);
 }

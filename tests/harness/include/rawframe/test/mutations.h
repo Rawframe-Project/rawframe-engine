@@ -55,4 +55,31 @@ private:
     std::uint64_t state_ = 0x9E3779B97F4A7C15ULL;
 };
 
+/// What a run of `readOnlyAsWritten` saw.
+struct WrittenRun {
+    std::size_t read = 0;
+    /// Texts read that `write` did not give back byte for byte.
+    std::size_t differing = 0;
+};
+
+/// `rounds` mutations of `written`, the canonical text of a document, each
+/// handed to `read`; whatever is read must be what `write` makes of it. A
+/// reader of one written form holds when `differing` is nought.
+template <typename Read, typename Write>
+WrittenRun
+readOnlyAsWritten(std::string_view written, std::string_view inserted, Read read, Write write, int rounds = 20'000) {
+    Mutations mutations;
+    WrittenRun run;
+    for (int round = 0; round < rounds; ++round) {
+        const std::string kText = mutations.mutate(written, inserted);
+        const auto kRead = read(kText);
+        if (!kRead.has_value()) {
+            continue;
+        }
+        ++run.read;
+        run.differing += write(*kRead) == kText ? 0 : 1;
+    }
+    return run;
+}
+
 } // namespace rawframe::test
