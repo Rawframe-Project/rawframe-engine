@@ -1,10 +1,13 @@
 // Rebinding: overrides written, read back to the same bytes, applied
-// without touching the defaults, orphans kept and reported, and conflicts
-// found by what would activate together.
+// without touching the defaults, orphans kept and reported, conflicts found
+// by what would activate together, and hostile sets and overrides read only
+// as they are written.
 
 #include "rawframe/document/errors.h"
+#include "rawframe/document/json.h"
 #include "rawframe/input/conflicts.h"
 #include "rawframe/input/overrides.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
@@ -235,4 +238,40 @@ RAWFRAME_TEST(ConflictsAreWhatWouldActivateTogether) {
     reserved.reserved.push_back(*controlNamed(DeviceClass::Keyboard, "escape"));
     found = conflicts(reserved);
     RAWFRAME_EXPECT(count(found, Conflict::Kind::Reserved) == 1 && found[0].action == 3);
+}
+
+RAWFRAME_TEST(HostileSetsAndOverridesReadOnlyAsTheyAreWritten) {
+    // A player's overrides are a file anyone may edit, and a set comes with
+    // content a client fetched.
+    const ActionSet kDefaults = *readActionSet(kSet);
+    // A set has no writer of its own: what it reads is the document's
+    // canonical text, which the document writer gives back.
+    const test::WrittenRun kSets = test::readOnlyAsWritten(
+        kSet,
+        "\"{}[],:0123456789abcdef_ \n",
+        [](std::string_view text) {
+            return readActionSet(text).transform([text](const ActionSet&) {
+                return std::string{text};
+            });
+        },
+        [](const std::string& read) {
+            return document::write(*document::parse(read));
+        });
+    Overrides overrides{.target = "game.actions"};
+    RAWFRAME_EXPECT(overrides.rebind(kDefaults, kInteract, keyBinding("key_f")).has_value());
+    Binding modified = keyBinding("key_g", 1);
+    modified.modifiers = static_cast<std::uint8_t>(Modifier::Ctrl);
+    RAWFRAME_EXPECT(overrides.rebind(kDefaults, kInteract, modified).has_value());
+    RAWFRAME_EXPECT(overrides.disable(kDefaults, kJump, DeviceClass::Gamepad, 0).has_value());
+    const test::WrittenRun kOverrides = test::readOnlyAsWritten(
+        writeOverrides(overrides),
+        "\"{}[],:0123456789abcdef_ \n",
+        [&kDefaults](std::string_view text) {
+            return readOverrides(text, kDefaults, "game.actions");
+        },
+        [](const Overrides& read) {
+            return writeOverrides(read);
+        });
+    RAWFRAME_EXPECT(kSets.read > 0 && kSets.differing == 0);
+    RAWFRAME_EXPECT(kOverrides.read > 0 && kOverrides.differing == 0);
 }
