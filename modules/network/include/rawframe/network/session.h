@@ -22,6 +22,11 @@
 
 namespace rawframe::network {
 
+/// SPEC-0013's malformed and security strikes: the eighth within ten
+/// seconds ends an admitted connection as a protocol violation (D223).
+inline constexpr std::size_t kMaximumStrikes = 8;
+inline constexpr execution::MonotonicDuration kStrikeWindow = execution::MonotonicDuration::fromSeconds(10);
+
 /// Every bound a session side keeps. All are required.
 struct SessionProfile {
     /// Connections admitting or admitted at once.
@@ -139,11 +144,22 @@ public:
     [[nodiscard]] result::Status sendDatagram(ConnectionId connection, const DatagramRecord& record);
     /// The tick new admissions start from (server).
     void setTickOrigin(std::uint64_t tick) noexcept;
+    /// Ends a connection the owner is done with. No `Ended` follows: the
+    /// owner forgets the connection itself.
     void close(ConnectionId connection) noexcept;
+    /// A strike against an admitted peer whose payload the owner found
+    /// malformed. The strike that makes kMaximumStrikes within
+    /// kStrikeWindow closes the connection as `close` does and answers
+    /// false, and the owner forgets it; true while it stays open.
+    /// Datagram records this side cannot read, or on the wrong lane, are
+    /// strikes too; those end the connection with an `Ended` event.
+    [[nodiscard]] bool strike(ConnectionId connection) noexcept;
 
     /// Records dropped before reaching the owner: before admission, on the
     /// wrong lane, or malformed.
     [[nodiscard]] std::uint64_t droppedDatagrams() const noexcept;
+    /// Connections ended for their strikes.
+    [[nodiscard]] std::uint64_t struckOut() const noexcept;
 
     explicit Sessions(std::unique_ptr<SessionCore> core) noexcept;
 

@@ -35,6 +35,10 @@ struct Connection {
     bool prefaced = false;
     std::vector<std::byte> buffer;
     Hello hello;
+    /// When its last strikes were, a ring of kMaximumStrikes, and how many
+    /// there have been.
+    std::array<execution::MonotonicInstant, kMaximumStrikes> strikes{};
+    std::uint64_t struck = 0;
 };
 
 EndReason endReasonOf(CloseReason reason) noexcept {
@@ -76,6 +80,7 @@ public:
     std::uint64_t random_ = 0;
     std::uint64_t tickOrigin_ = 0;
     std::uint64_t dropped_ = 0;
+    std::uint64_t struckOut_ = 0;
     std::map<std::uint64_t, Connection> connections_;
     /// Rejected connections, held open until the peer, having read its
     /// rejection, closes, or until their deadline: a transport may drop what
@@ -129,6 +134,19 @@ public:
             count += state.phase == Phase::Active ? 1 : 0;
         }
         return count;
+    }
+
+    /// Counts a strike against an admitted connection; true when it is
+    /// the one that makes kMaximumStrikes within kStrikeWindow.
+    bool struckOut(Connection& state) noexcept {
+        const execution::MonotonicInstant kNow = clock_->now();
+        state.strikes[state.struck % kMaximumStrikes] = kNow;
+        ++state.struck;
+        // The oldest of the last kMaximumStrikes is where the next goes.
+        const bool kOut =
+            state.struck >= kMaximumStrikes && (kNow - state.strikes[state.struck % kMaximumStrikes]) < kStrikeWindow;
+        struckOut_ += kOut ? 1 : 0;
+        return kOut;
     }
 
     void end(ConnectionId connection, EndReason reason, std::vector<SessionEvent>& into) {
@@ -401,6 +419,9 @@ public:
         const DatagramLane kExpected = server_ ? DatagramLane::Input : DatagramLane::State;
         if (!record.has_value() || record->lane != kExpected) {
             ++dropped_;
+            if (struckOut(kFound->second)) {
+                end(event.connection, EndReason::ProtocolViolation, into);
+            }
             return;
         }
         into.push_back(SessionEvent{.kind = SessionEventKind::Datagram,
@@ -545,8 +566,24 @@ void Sessions::close(ConnectionId connection) noexcept {
     }
 }
 
+bool Sessions::strike(ConnectionId connection) noexcept {
+    const auto kFound = core_->connections_.find(connection.value);
+    if (kFound == core_->connections_.end() || kFound->second.phase != Phase::Active) {
+        return false;
+    }
+    if (core_->struckOut(kFound->second)) {
+        close(connection);
+        return false;
+    }
+    return true;
+}
+
 std::uint64_t Sessions::droppedDatagrams() const noexcept {
     return core_->dropped_;
+}
+
+std::uint64_t Sessions::struckOut() const noexcept {
+    return core_->struckOut_;
 }
 
 } // namespace rawframe::network

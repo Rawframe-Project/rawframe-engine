@@ -1,6 +1,6 @@
 // Sessions over loopback: admission end to end, every rejection reason a
 // client can meet, timeouts, protocol violations closing the peer, and
-// datagrams kept to their lanes.
+// datagrams kept to their lanes, and strikes against malformed ones.
 
 #include "rawframe/network/errors.h"
 #include "rawframe/network/session.h"
@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <span>
+#include <utility>
 #include <vector>
 
 using namespace rawframe;
@@ -278,4 +279,64 @@ RAWFRAME_TEST(DatagramsBeforeAdmissionAreDropped) {
     world.run(5);
     RAWFRAME_EXPECT(world.find(world.serverEvents, SessionEventKind::Datagram) == nullptr);
     RAWFRAME_EXPECT(world.server->droppedDatagrams() == 1);
+}
+
+RAWFRAME_TEST(StrikesWithinTenSecondsCloseThePeer) {
+    // SPEC-0013's malformed and security strikes (D223): seven unreadable
+    // datagrams are dropped, and the eighth within ten seconds ends the
+    // connection; strikes further apart than that never add up.
+    const auto kAdmitted = [](World& world) {
+        const auto kConnection = world.client->connect({"game"}, hello());
+        world.run(20);
+        const SessionEvent* granted = world.find(world.serverEvents, SessionEventKind::Admitted);
+        RAWFRAME_EXPECT(kConnection.has_value() && granted != nullptr);
+        return std::pair{kConnection.value_or(ConnectionId{}),
+                         granted != nullptr ? granted->connection : ConnectionId{}};
+    };
+    const std::vector<std::byte> kGarbage = {std::byte{0xff}, std::byte{0xff}, std::byte{0xff}};
+    const auto kEnded = [](World& world) {
+        const SessionEvent* ended = world.find(world.serverEvents, SessionEventKind::Ended);
+        return ended != nullptr && ended->reason == network::EndReason::ProtocolViolation;
+    };
+    {
+        World world;
+        const auto [kClient, kServer] = kAdmitted(world);
+        for (std::size_t strike = 1; strike < network::kMaximumStrikes; ++strike) {
+            RAWFRAME_EXPECT(world.clientTransport->sendDatagram(kClient, kGarbage).has_value());
+            world.run(5);
+        }
+        RAWFRAME_EXPECT(!kEnded(world) && world.server->struckOut() == 0);
+        RAWFRAME_EXPECT(world.clientTransport->sendDatagram(kClient, kGarbage).has_value());
+        world.run(5);
+        RAWFRAME_EXPECT(kEnded(world) && world.server->struckOut() == 1);
+        static_cast<void>(kServer);
+    }
+    {
+        World world;
+        const auto [kClient, kServer] = kAdmitted(world);
+        for (std::size_t strike = 0; strike < 3 * network::kMaximumStrikes; ++strike) {
+            RAWFRAME_EXPECT(world.clientTransport->sendDatagram(kClient, kGarbage).has_value());
+            // Strikes a second and a half apart: any eight span more than
+            // ten seconds.
+            world.run(300);
+        }
+        RAWFRAME_EXPECT(!kEnded(world) && world.server->struckOut() == 0);
+        static_cast<void>(kServer);
+    }
+    {
+        // The owner's strikes count the same, and the one that strikes out
+        // closes without an `Ended`: the owner forgets the connection.
+        World world;
+        const auto [kClient, kServer] = kAdmitted(world);
+        for (std::size_t strike = 1; strike < network::kMaximumStrikes; ++strike) {
+            RAWFRAME_EXPECT(world.server->strike(kServer));
+        }
+        RAWFRAME_EXPECT(!world.server->strike(kServer) && world.server->struckOut() == 1);
+        RAWFRAME_EXPECT(!world.server->strike(kServer));
+        world.run(5);
+        RAWFRAME_EXPECT(world.find(world.serverEvents, SessionEventKind::Ended) == nullptr);
+        const SessionEvent* gone = world.find(world.clientEvents, SessionEventKind::Ended);
+        RAWFRAME_EXPECT(gone != nullptr);
+        static_cast<void>(kClient);
+    }
 }
