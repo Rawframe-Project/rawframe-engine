@@ -12,7 +12,15 @@ prefix="$1"
 compiler="$2"
 cxx_compiler="$3"
 root="$PWD/third_party"
-jobs="$(nproc)"
+jobs="$(getconf _NPROCESSORS_ONLN)"
+# OpenSSL's name for this machine (D236).
+case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64) openssl_target=linux-x86_64 ;;
+    Linux-aarch64) openssl_target=linux-aarch64 ;;
+    Darwin-arm64) openssl_target=darwin64-arm64-cc ;;
+    Darwin-x86_64) openssl_target=darwin64-x86_64-cc ;;
+    *) echo "build_quic: no OpenSSL target for $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+esac
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -23,7 +31,7 @@ mkdir -p "$work/openssl" "$work/msquic"
 # MsQuic links the two libraries and nothing else.
 (
     cd "$work/openssl"
-    CC="$compiler" perl "$root/openssl/Configure" linux-x86_64 no-shared no-tests no-docs no-apps \
+    CC="$compiler" perl "$root/openssl/Configure" "$openssl_target" no-shared no-tests no-docs no-apps \
         --prefix="$prefix" --libdir=lib -fPIC >"$work/openssl.log" 2>&1
     make -j"$jobs" build_libs >>"$work/openssl.log" 2>&1
     make install_dev >>"$work/openssl.log" 2>&1
