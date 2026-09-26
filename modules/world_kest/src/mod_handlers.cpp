@@ -4,6 +4,8 @@
 #include "rawframe/world_kest/errors.h"
 
 #include <algorithm>
+#include <array>
+#include <optional>
 #include <string>
 
 namespace rawframe::world_kest {
@@ -60,6 +62,10 @@ result::Result<std::vector<std::unique_ptr<KestSystems>>> modHandlers(const Game
             identities.push_back(mod.mod + "/" + handler.point + "/" + handler.function);
             after.push_back({kPoint->after});
         }
+        for (const ModProvider& provider : mod.providers) {
+            const auto kPoint = std::ranges::find(game.mods.points, provider.point, &GameExtensionPoint::name);
+            RAWFRAME_TRY(kSameShape(kPoint->accepts));
+        }
         std::vector<KestSystemDeclaration> declarations;
         for (std::size_t at = 0; at < mod.handlers.size(); ++at) {
             declarations.push_back(KestSystemDeclaration{.identity = identities[at],
@@ -81,6 +87,21 @@ result::Result<std::vector<std::unique_ptr<KestSystems>>> modHandlers(const Game
                                                                .systems = declarations});
         if (!systems.has_value()) {
             return std::unexpected<result::Error>{std::move(systems).error().withContext("mod", mod.mod)};
+        }
+        // Each provider takes `values: [T]`, the point's type shaped as the
+        // game's (checked above), and answers nothing: it rewrites
+        // `values[0]` (D199).
+        for (const ModProvider& provider : mod.providers) {
+            kest::Machine& machine = (*systems)->machine();
+            const std::array<kest::Argument, 1> kTakes = {kest::Argument{.slot = kest::Slot::I64, .lent = true}};
+            const auto kEntry = machine.entry(provider.function);
+            if (!kEntry.has_value() || !machine.checkArguments(*kEntry, kTakes).has_value() ||
+                !machine.checkAnswer(*kEntry, std::nullopt).has_value()) {
+                return refused("a mod's provider is not a function of its program taking `values: [T]` and "
+                               "answering nothing",
+                               mod.mod,
+                               provider.function);
+            }
         }
         made.push_back(std::move(*systems));
     }

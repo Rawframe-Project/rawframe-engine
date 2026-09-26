@@ -5,6 +5,7 @@
 #include "game_files_participant.h"
 #include "game_scenes.h"
 #include "mod_handlers.h"
+#include "mod_services.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "predictor.h"
@@ -211,6 +212,12 @@ public:
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
         RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors_));
+        std::vector<std::size_t> sizes;
+        for (const kest::TypeLayout& layout : layouts_) {
+            sizes.push_back(layout.size);
+        }
+        modServices_ = std::make_unique<ModServices>(game_, sizes);
+        RAWFRAME_TRY(modServices_->addDoors(doors));
         if (game_.physics.has_value()) {
             RAWFRAME_TRY(addPhysicsDoors(doors, game_.physics->dimensions, &doorContext_));
         }
@@ -248,8 +255,10 @@ public:
         for (const std::unique_ptr<KestSystems>& handlers : modHandlers_) {
             RAWFRAME_TRY(simulation_->addSystems(*handlers));
         }
+        RAWFRAME_TRY(modServices_->bind(files.modPrograms(), modHandlers_));
         for (const GameModProgram& modProgram : files.modPrograms()) {
             modHandlerCount_ += modProgram.handlers.size();
+            modProviderCount_ += modProgram.providers.size();
         }
         return simulation_->addSystems(*systems_);
     }
@@ -301,6 +310,7 @@ public:
                               {diagnostics::field("components", game_.components.size()),
                                diagnostics::field("systems", game_.systems.size()),
                                diagnostics::field("modHandlers", modHandlerCount_),
+                               diagnostics::field("modProviders", modProviderCount_),
                                diagnostics::field("entities", spawned)});
         return {};
     }
@@ -918,10 +928,13 @@ private:
     std::vector<std::vector<std::string_view>> after_;
     std::vector<std::vector<std::string_view>> before_;
     std::vector<std::vector<std::string_view>> streams_;
+    /// Before the machines whose doors name its services.
+    std::unique_ptr<ModServices> modServices_;
     std::unique_ptr<KestSystems> systems_;
     /// Each taken mod's handlers, on its own machine.
     std::vector<std::unique_ptr<KestSystems>> modHandlers_;
     std::size_t modHandlerCount_ = 0;
+    std::size_t modProviderCount_ = 0;
 };
 
 result::Result<composition::ParticipantOwner> makeGame(composition::ParticipantContext& context) noexcept {

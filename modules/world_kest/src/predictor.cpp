@@ -1,6 +1,7 @@
 #include "predictor.h"
 
 #include "animation_doors.h"
+#include "mod_services.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "rawframe/world/schedule.h"
@@ -88,6 +89,14 @@ public:
         RAWFRAME_TRY(kest::addStandardMath(doors));
         // A predicting client plays no animation: its doors refuse.
         RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors_));
+        // Nor runs a mod: a service answers the value it is given, and the
+        // server's state corrects what a provider would have changed.
+        std::vector<std::size_t> sizes;
+        for (const schema::ComponentDescriptor& descriptor : settings.descriptors) {
+            sizes.push_back(descriptor.size);
+        }
+        services_ = std::make_unique<ModServices>(game, sizes);
+        RAWFRAME_TRY(services_->addDoors(doors));
         dimensions_ = settings.physics3d.has_value() ? 3 : settings.physics.has_value() ? 2 : 0;
         if (dimensions_ != 0) {
             RAWFRAME_TRY(addPhysicsDoors(doors, dimensions_, &doorContext_));
@@ -236,6 +245,7 @@ private:
     schema::ComponentRuntimeId input_;
     std::vector<KestComponent> components_;
     std::vector<Declared> declared_;
+    std::unique_ptr<ModServices> services_;
     std::unique_ptr<KestSystems> systems_;
     /// The game's physics dimensions, nought for none, and its physics.
     std::uint8_t dimensions_ = 0;

@@ -19,11 +19,12 @@ namespace rawframe::world_kest {
 /// profile with `limits`, offered the standard math alone; each handler a
 /// system of it that runs right after the point's game system, over the
 /// entities holding the event's component, which it reads, and the
-/// components the point lets it write, in that order. Refused
-/// (`ModRefused`, naming the mod) for a program that does not compile, a
-/// handler that is not a function of it taking those columns, or a Kest type
-/// of a component shaped otherwise than the game's own (`layouts`, in the
-/// order of `game.components`).
+/// components the point lets it write, in that order; each provider a
+/// function of it taking `values: [T]` (D199). Refused (`ModRefused`, naming
+/// the mod) for a program that does not compile, a handler that is not a
+/// function of it taking those columns, a provider not shaped so, or a Kest
+/// type of a component shaped otherwise than the game's own (`layouts`, in
+/// the order of `game.components`).
 [[nodiscard]] result::Result<std::vector<std::unique_ptr<KestSystems>>>
 modHandlers(const GameDescription& game,
             std::span<const kest::TypeLayout> layouts,
