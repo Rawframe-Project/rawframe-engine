@@ -14,8 +14,11 @@ using detail::Input;
 
 namespace {
 
+/// An artifact that does not fit the process restoring it is an argument
+/// that is wrong whatever the process's state: SPEC-0012's incompatible
+/// artifact, exit 65 (D198).
 std::unexpected<result::Error> mismatch(std::string_view why) {
-    return detail::fail(result::ErrorClass::FailedPrecondition, SnapshotError::Mismatch, why);
+    return detail::fail(result::ErrorClass::InvalidArgument, SnapshotError::Mismatch, why);
 }
 
 std::unexpected<result::Error> badReference(std::string_view why) {
@@ -180,7 +183,7 @@ std::unexpected<result::Error> modSetChanged(const ModSetChange& change) {
     for (const ModSetChange::Changed& each : change.changed) {
         changed += (changed.empty() ? "" : " ") + each.subject + "@" + each.from + ">" + each.to;
     }
-    result::Error error = detail::fail(result::ErrorClass::FailedPrecondition,
+    result::Error error = detail::fail(result::ErrorClass::InvalidArgument,
                                        SnapshotError::ModSetChanged,
                                        "the checkpoint was taken with another set of mods")
                               .error();

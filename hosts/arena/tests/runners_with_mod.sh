@@ -119,8 +119,10 @@ fi
 
 # A checkpoint knows the mods it ran with (D197): restored without the mod,
 # it is refused naming the mod removed; with it, it restores.
-if run "$work/plain.composition" 30 "checkpoint.restore = $work/modded-10.rfsn"; then
-    echo "a checkpoint taken with a mod was restored without it" >&2
+status=0
+run "$work/plain.composition" 30 "checkpoint.restore = $work/modded-10.rfsn" || status=$?
+if [ "$status" -ne 65 ]; then
+    echo "a checkpoint taken with a mod, restored without it, exited $status, not 65 (an incompatible artifact)" >&2
     exit 1
 fi
 grep -q "another set of mods.*removed: rawframe/runners-timers@" "$work/log.ndjson"

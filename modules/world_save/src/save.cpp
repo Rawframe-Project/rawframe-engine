@@ -474,7 +474,7 @@ readComponent(Reader& reader, const SaveDeclaration& declaration, const std::vec
         fits = fits && (kWas == read.fields.end() || widens(kWas->kind, field.kind));
     }
     if (!fits) {
-        return fail(result::ErrorClass::FailedPrecondition,
+        return fail(result::ErrorClass::InvalidArgument,
                     SaveError::Mismatch,
                     "a save's component changed in a way no migration covers: a field's kind narrowed, or it has no "
                     "fields");
@@ -542,7 +542,7 @@ result::Result<StagedSave> read(std::span<const std::byte> bytes,
     }
     RAWFRAME_TRY_ASSIGN(const std::uint32_t kFormat, reader.number<std::uint32_t>());
     if (kFormat > kSaveFormat) {
-        return fail(result::ErrorClass::FailedPrecondition, SaveError::TooNew, "a save of a later format");
+        return fail(result::ErrorClass::InvalidArgument, SaveError::TooNew, "a save of a later format");
     }
     if (kFormat != kSaveFormat) {
         return malformed("a save of no format this engine knows");
@@ -552,7 +552,7 @@ result::Result<StagedSave> read(std::span<const std::byte> bytes,
     RAWFRAME_TRY_ASSIGN(const auto kName, reader.bytes(kNameLength));
     if (kSpace != space || !std::ranges::equal(kName, std::as_bytes(std::span{declaration.document}))) {
         return fail(
-            result::ErrorClass::FailedPrecondition, SaveError::Mismatch, "a save of another namespace or document");
+            result::ErrorClass::InvalidArgument, SaveError::Mismatch, "a save of another namespace or document");
     }
 
     // The declaration it was written under, and how each of its components
@@ -772,7 +772,7 @@ result::Result<Applied> applyTo(const StagedSave& staged,
                                 world::PersistentEntityId as) {
     if (!world.alive(entity) || staged.entities.size() > 1 ||
         (!staged.entities.empty() && staged.entities[0].id != as)) {
-        return fail(result::ErrorClass::FailedPrecondition,
+        return fail(result::ErrorClass::InvalidArgument,
                     SaveError::Mismatch,
                     "a save applied to one entity holds that entity alone, under the identity asked for");
     }
