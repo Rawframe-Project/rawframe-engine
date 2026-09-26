@@ -159,6 +159,10 @@ public:
     void forgetWorld() noexcept;
 
     [[nodiscard]] ServerReplicationStatistics statistics() const noexcept;
+    /// Bytes it holds for its connections and its publishing, at the
+    /// capacity each table has grown to, counting a node-based container's
+    /// entries by their size: SPEC-0013's replication attribution (D216).
+    [[nodiscard]] std::size_t heldBytes() const noexcept;
     /// Admitted connections, each with its player.
     [[nodiscard]] std::size_t connections() const noexcept;
     /// Tells every admitted connection the server is stopping (SPEC-0012's

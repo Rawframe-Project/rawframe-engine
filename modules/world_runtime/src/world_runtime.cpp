@@ -211,6 +211,7 @@ public:
         if (kDue.debt != 0) {
             emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
         }
+        context_->reportMemory(world_->heldBytes());
         // SPEC-0012's tick progress, on SPEC-0013's thresholds (D212): a
         // World `world.degraded_ms` or more behind is degraded, and healthy
         // again once it has caught up; one degraded for longer than

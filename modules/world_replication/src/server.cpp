@@ -495,6 +495,47 @@ ServerReplicationStatistics ReplicationServer::statistics() const noexcept {
     return state_->statistics;
 }
 
+namespace {
+
+template <typename Vector> std::size_t capacityBytes(const Vector& vector) noexcept {
+    return vector.capacity() * sizeof(typename Vector::value_type);
+}
+
+/// What a map's node holds beside its entry: three links and a color.
+constexpr std::size_t kNodeOverhead = 32;
+
+} // namespace
+
+std::size_t ReplicationServer::heldBytes() const noexcept {
+    const State& state = *state_;
+    std::size_t bytes = capacityBytes(state.present) + capacityBytes(state.gathered) + capacityBytes(state.encoded) +
+                        capacityBytes(state.named) + capacityBytes(state.valuesAt) + capacityBytes(state.filling) +
+                        capacityBytes(state.located) + capacityBytes(state.locatedAt) + capacityBytes(state.entities) +
+                        capacityBytes(state.entityAt) + capacityBytes(state.bucketed) + capacityBytes(state.bucketAt) +
+                        capacityBytes(state.bucketOf) + capacityBytes(state.unplaced) + capacityBytes(state.reachable) +
+                        capacityBytes(state.entering) + capacityBytes(state.heldMark) +
+                        capacityBytes(state.candidates) + capacityBytes(state.records) + capacityBytes(state.datagram) +
+                        capacityBytes(state.frame) + capacityBytes(state.inDatagram);
+    for (const auto& [id, peer] : state.peers) {
+        bytes += sizeof(Peer) + kNodeOverhead + capacityBytes(peer.retired) + capacityBytes(peer.lastCommand) +
+                 (peer.byNetEntity.size() * (sizeof(std::pair<std::uint32_t, world::EntityHandle>) + kNodeOverhead));
+        bytes += peer.mapped.capacity() * sizeof(Mappings::Entry);
+        for (const auto& [entity, mapping] : peer.mapped) {
+            bytes += capacityBytes(mapping.replicas);
+            for (const Replica& replica : mapping.replicas) {
+                bytes += replica.lastSent.heapBytes();
+            }
+        }
+        for (const auto& [tick, waiting] : peer.waitingInputs) {
+            bytes += sizeof(Waiting) + kNodeOverhead + capacityBytes(waiting.command);
+        }
+        for (const SentState& sent : peer.sent) {
+            bytes += sizeof(SentState) + capacityBytes(sent.records);
+        }
+    }
+    return bytes;
+}
+
 std::size_t ReplicationServer::connections() const noexcept {
     return state_->peers.size();
 }

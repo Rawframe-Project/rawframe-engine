@@ -281,6 +281,7 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        context_ = &context;
         if (simulation_ == nullptr || planOnly_) {
             return {};
         }
@@ -355,6 +356,15 @@ public:
     /// Between ticks, on the Host thread: when the program's sources changed,
     /// compiles and swaps it in, or says why not and keeps the old one.
     void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
+        // SPEC-0013's Kest attribution (D216): what the game's machine and
+        // each mod's hold on their heaps.
+        if (context_ != nullptr && systems_ != nullptr) {
+            std::uint64_t heap = systems_->machine().heapUsed();
+            for (const std::unique_ptr<KestSystems>& handlers : modHandlers_) {
+                heap += handlers->machine().heapUsed();
+            }
+            context_->reportMemory(heap);
+        }
         if (systems_ == nullptr || reloadEvery_ == 0 || frame.iteration % reloadEvery_ != 0) {
             return;
         }
@@ -816,6 +826,7 @@ private:
 
     world_runtime::Simulation* simulation_ = nullptr;
     diagnostics::Emitter emitter_;
+    composition::ParticipantContext* context_ = nullptr;
     const GameFiles* files_ = nullptr;
     std::uint64_t reloadEvery_ = 0;
     bool planOnly_ = false;

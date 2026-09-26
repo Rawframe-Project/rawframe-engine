@@ -166,7 +166,7 @@ public:
         return {};
     }
 
-    void runHostPhase(composition::HostPhase, const composition::HostFrame&) noexcept override {
+    void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
         if (server_ == nullptr || simulation_->world() == nullptr) {
             return;
         }
@@ -194,6 +194,11 @@ public:
             server_->noticeStopping();
         }
         context_->reportConnections(server_->connections());
+        // Its memory walks every connection's mappings: twice a second at
+        // 120 iterations (D216).
+        if (frame.iteration % 60 == 0) {
+            context_->reportMemory(server_->heldBytes());
+        }
     }
 
     void stop() noexcept override {

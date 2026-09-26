@@ -41,6 +41,10 @@ public:
     [[nodiscard]] std::span<const std::byte> bytes() const noexcept {
         return size_ <= kInPlace ? std::span<const std::byte>{inPlace_.data(), size_} : std::span{heap_};
     }
+    /// Bytes on the heap: none for a value held in place.
+    [[nodiscard]] std::size_t heapBytes() const noexcept {
+        return heap_.capacity();
+    }
     void assign(std::span<const std::byte> value) {
         size_ = value.size();
         if (size_ <= kInPlace) {
@@ -97,8 +101,17 @@ public:
     [[nodiscard]] std::vector<Entry>::iterator end() noexcept {
         return entries_.end();
     }
+    [[nodiscard]] std::vector<Entry>::const_iterator begin() const noexcept {
+        return entries_.begin();
+    }
+    [[nodiscard]] std::vector<Entry>::const_iterator end() const noexcept {
+        return entries_.end();
+    }
     [[nodiscard]] std::size_t size() const noexcept {
         return entries_.size();
+    }
+    [[nodiscard]] std::size_t capacity() const noexcept {
+        return entries_.capacity();
     }
     [[nodiscard]] Mapping* find(world::EntityHandle entity) noexcept {
         const auto kAt = std::ranges::lower_bound(entries_, entity, {}, &Entry::first);
