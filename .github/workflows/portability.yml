@@ -27,6 +27,10 @@ jobs:
           ln -s "$(brew --prefix llvm@20)/bin/clang" "$RUNNER_TEMP/bin/clang-20"
           ln -s "$(brew --prefix llvm@20)/bin/clang++" "$RUNNER_TEMP/bin/clang++-20"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          # Its headers are LLVM 20's libc++, so programs link that libc++,
+          # not the older one macOS carries.
+          libcxx="$(brew --prefix llvm@20)/lib/c++"
+          echo "LDFLAGS=-L$libcxx -Wl,-rpath,$libcxx" >> "$GITHUB_ENV"
       - name: Configure
         run: cmake --preset clang-development
       - name: Build
