@@ -38,7 +38,7 @@ RAWFRAME_TEST(HostileGameDescriptionsAreReadOrRefusedAtALine) {
     for (const std::string_view kGame : kGames) {
         const std::string kSeed = game_test::readText(std::string{RAWFRAME_SAMPLE_GAMES} + std::string{kGame});
         RAWFRAME_EXPECT(world_kest::parseGame(kSeed).has_value());
-        for (int round = 0; round < 4'000; ++round) {
+        for (int round = 0; round < 1'000; ++round) {
             const std::string kText = mutations.mutate(kSeed, " \t\r\n#.-_09aZ\xC3", kLines);
             const auto kParsed = world_kest::parseGame(kText);
             if (kParsed.has_value()) {

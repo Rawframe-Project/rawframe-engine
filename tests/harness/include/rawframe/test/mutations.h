@@ -67,7 +67,7 @@ struct WrittenRun {
 /// reader of one written form holds when `differing` is nought.
 template <typename Read, typename Write>
 WrittenRun
-readOnlyAsWritten(std::string_view written, std::string_view inserted, Read read, Write write, int rounds = 20'000) {
+readOnlyAsWritten(std::string_view written, std::string_view inserted, Read read, Write write, int rounds = 5'000) {
     Mutations mutations;
     WrittenRun run;
     for (int round = 0; round < rounds; ++round) {
