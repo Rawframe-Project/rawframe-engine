@@ -8,7 +8,8 @@ import { WASI } from 'node:wasi';
 import { argv, env, exit } from 'node:process';
 import { WebTransportRelay } from './web_transport_relay.mjs';
 
-const wasi = new WASI({ args: argv.slice(2), env, preopens: { '/': '/' }, returnOnExit: true });
+// Preview 1 is the ABI wasi-libc targets; Node 20 and later require it named.
+const wasi = new WASI({ version: 'preview1', args: argv.slice(2), env, preopens: { '/': '/' }, returnOnExit: true });
 const module = await WebAssembly.compile(await readFile(argv[2]));
 let instance;
 const relay = new WebTransportRelay();

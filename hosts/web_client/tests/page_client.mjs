@@ -9,7 +9,8 @@ import { WASI } from 'node:wasi';
 export class PageClient {
     /** Instantiates `wasmPath` with `relay` as its transport. */
     static async load(wasmPath, relay) {
-        const wasi = new WASI({ args: [], env: {}, preopens: {}, returnOnExit: true });
+        // Preview 1 is the ABI wasi-libc targets; Node 20 and later require it named.
+        const wasi = new WASI({ version: 'preview1', args: [], env: {}, preopens: {}, returnOnExit: true });
         const module = await WebAssembly.compile(await readFile(wasmPath));
         let instance;
         instance = await WebAssembly.instantiate(module, {
