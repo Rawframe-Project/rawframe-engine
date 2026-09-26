@@ -40,6 +40,12 @@ struct HostServices {
     const HeldFiles* files = nullptr;
 };
 
+/// The health reason of a World behind by more than it can catch up, for
+/// longer than it may be (SPEC-0012's sustained tick debt, D186): a Host
+/// ends such a run as a controlled overload, where a supervisor's retry may
+/// help.
+inline constexpr std::string_view kOverloaded = "overloaded";
+
 /// The worst health a participant reported, and why.
 struct HealthReport {
     Health health = Health::Healthy;

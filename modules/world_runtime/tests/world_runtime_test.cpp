@@ -161,6 +161,52 @@ RAWFRAME_TEST(HostIterationsRunTheTicksThePacerOwes) {
     movement = nullptr;
 }
 
+RAWFRAME_TEST(AWorldBehindTooLongIsOverloaded) {
+    // SPEC-0012's sustained tick debt (D186): more than a second behind is
+    // degraded; caught up, healthy again; behind for `world.overload_ms`,
+    // overloaded, and it stays so.
+    const auto kPlan = plan();
+    RAWFRAME_EXPECT(kPlan.has_value());
+    const auto kConfiguration = composition::Configuration::parse(
+        "world.tick_rate = 10\nworld.maximum_ticks_per_iteration = 1\nworld.overload_ms = 3000\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{
+        *kPlan, composition::HostServices{.clock = &clock, .scope = &root, .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    std::uint64_t iteration = 0;
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Healthy);
+    // Two seconds owe twenty ticks, one runs: degraded.
+    clock.advance(MonotonicDuration::fromSeconds(2));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Degraded &&
+                    composition.health().reason == "tick_debt");
+    // Caught up with no time passing: healthy, and the clock of being behind
+    // starts again.
+    for (int round = 0; round < 20; ++round) {
+        iterate(composition, iteration++, clock.now());
+    }
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Healthy);
+    // Behind again, and for longer than it may be: overloaded.
+    clock.advance(MonotonicDuration::fromSeconds(2));
+    iterate(composition, iteration++, clock.now());
+    clock.advance(MonotonicDuration::fromSeconds(2));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Degraded);
+    clock.advance(MonotonicDuration::fromMilliseconds(1'500));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Unhealthy &&
+                    composition.health().reason == composition::kOverloaded);
+    // Catching up does not undo it: the Host decides what happens next.
+    for (int round = 0; round < 100; ++round) {
+        iterate(composition, iteration++, clock.now());
+    }
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Unhealthy);
+    composition.stop();
+    movement = nullptr;
+}
+
 RAWFRAME_TEST(BadWorldSettingsFailTheStart) {
     const auto kPlan = plan();
     execution::ManualClock clock;

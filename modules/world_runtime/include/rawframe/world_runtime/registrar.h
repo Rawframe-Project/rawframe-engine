@@ -14,6 +14,9 @@ namespace rawframe::world_runtime {
 ///   world.maximum_ticks_per_iteration catch-up bound per Host iteration (4)
 ///   world.root_seed                   the random root seed (0)
 ///   world.maximum_entities            the entity ceiling (1048576)
+///   world.overload_ms                 how long the World may stay more than a
+///                                     second behind before it reports itself
+///                                     overloaded, unhealthy; 0 never (30000)
 ///
 /// And `rawframe.world_runtime.checkpoints`, which restores the World from a
 /// SPEC-0011 checkpoint before the first tick and captures checkpoints at

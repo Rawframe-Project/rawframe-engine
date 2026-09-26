@@ -20,6 +20,7 @@ constexpr std::string_view kProvided[] = {kSimulation.name};
 constexpr diagnostics::EventIdentity kSystemFailed{"world_runtime", "system_failed"};
 constexpr diagnostics::EventIdentity kTickFailed{"world_runtime", "tick_failed"};
 constexpr diagnostics::EventIdentity kTickDebt{"world_runtime", "tick_debt"};
+constexpr diagnostics::EventIdentity kOverloadedEvent{"world_runtime", "overloaded"};
 constexpr diagnostics::EventIdentity kTickSummary{"world_runtime", "tick_summary"};
 
 /// Tick durations kept for the summary: the most recent this many.
@@ -37,6 +38,9 @@ struct Settings {
     world::TickRate rate;
     std::uint32_t maximumTicksPerIteration = 4;
     world::WorldSettings world;
+    /// How long a World may stay more than a second behind before it is
+    /// overloaded; nought never.
+    execution::MonotonicDuration overloadAfter;
 };
 
 result::Result<Settings> readSettings(const composition::Configuration& configuration) {
@@ -48,8 +52,9 @@ result::Result<Settings> readSettings(const composition::Configuration& configur
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kSeed, configuration.unsignedInteger("world.root_seed", 0));
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kEntities,
                         configuration.unsignedInteger("world.maximum_entities", std::uint64_t{1} << 20U));
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kOverloadMs, configuration.unsignedInteger("world.overload_ms", 30'000));
     if (kTicks > kMaximum32 || kSeconds > kMaximum32 || kCatchUp == 0 || kCatchUp > kMaximum32 || kEntities == 0 ||
-        kEntities > kMaximum32) {
+        kEntities > kMaximum32 || kOverloadMs > kMaximum32) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kWorldRuntimeDomain,
                             code(WorldRuntimeError::SettingOutOfRange),
@@ -62,6 +67,7 @@ result::Result<Settings> readSettings(const composition::Configuration& configur
         .maximumTicksPerIteration = static_cast<std::uint32_t>(kCatchUp),
         .world = world::WorldSettings{.maximumEntities = static_cast<std::uint32_t>(kEntities),
                                       .rootSeed = world::RootSeed{kSeed}},
+        .overloadAfter = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kOverloadMs)),
     };
 }
 
@@ -185,13 +191,31 @@ public:
             emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
         }
         // SPEC-0012's tick progress: a World a second or more behind is
-        // degraded, and healthy again once it has caught up.
+        // degraded, and healthy again once it has caught up; one behind for
+        // longer than `world.overload_ms` is overloaded, and stays so.
         const std::uint64_t kSecond = std::max<std::uint64_t>(1, settings_.rate.ticks / settings_.rate.seconds);
-        if (kDue.debt > kSecond) {
-            context_->reportHealth(composition::Health::Degraded, "tick_debt");
-        } else {
-            context_->reportHealth(composition::Health::Healthy, {});
+        if (overloaded_) {
+            return;
         }
+        if (kDue.debt <= kSecond) {
+            behindSince_.reset();
+            context_->reportHealth(composition::Health::Healthy, {});
+            return;
+        }
+        if (!behindSince_.has_value()) {
+            behindSince_ = frame.now;
+        }
+        if (settings_.overloadAfter.nanoseconds != 0 && frame.now - *behindSince_ >= settings_.overloadAfter) {
+            overloaded_ = true;
+            emitter_.log(diagnostics::Severity::Critical,
+                         kOverloadedEvent,
+                         "the World has been behind for longer than it may be",
+                         {diagnostics::field("debt", kDue.debt),
+                          diagnostics::field("behindMs", (frame.now - *behindSince_).nanoseconds / 1'000'000)});
+            context_->reportHealth(composition::Health::Unhealthy, composition::kOverloaded);
+            return;
+        }
+        context_->reportHealth(composition::Health::Degraded, "tick_debt");
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -250,6 +274,10 @@ private:
     diagnostics::Emitter emitter_;
     bool started_ = false;
     bool running_ = false;
+    /// When the World fell more than a second behind, while it stays there;
+    /// and whether it has been behind too long.
+    std::optional<execution::MonotonicInstant> behindSince_;
+    bool overloaded_ = false;
 };
 
 result::Result<composition::ParticipantOwner> makeWorldRuntime(composition::ParticipantContext& context) noexcept {
