@@ -6,3 +6,4 @@ rawframe_module(NAME network
 )
 
 rawframe_module_tests(NAME network SOURCES tests/admission_test.cpp tests/wire_test.cpp)
+rawframe_module_fuzz(NAME network TARGET wire SOURCES tests/fuzz_wire.cpp)

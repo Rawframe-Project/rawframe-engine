@@ -32,3 +32,7 @@ if(TARGET rawframe_network_quic_tests)
         RAWFRAME_PYTHON="${rawframe_python}"
         RAWFRAME_WEBTRANSPORT_CLIENT="${CMAKE_CURRENT_SOURCE_DIR}/tests/webtransport_client.py")
 endif()
+rawframe_module_fuzz(NAME network_quic TARGET webtransport SOURCES tests/fuzz_webtransport.cpp)
+if(TARGET rawframe_network_quic_fuzz_webtransport)
+    target_include_directories(rawframe_network_quic_fuzz_webtransport PRIVATE src)
+endif()

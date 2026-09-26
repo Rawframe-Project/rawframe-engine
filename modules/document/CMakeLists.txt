@@ -6,3 +6,4 @@ rawframe_module(NAME document
 )
 
 rawframe_module_tests(NAME document SOURCES tests/json_test.cpp tests/record_test.cpp)
+rawframe_module_fuzz(NAME document TARGET json SOURCES tests/fuzz_json.cpp)
