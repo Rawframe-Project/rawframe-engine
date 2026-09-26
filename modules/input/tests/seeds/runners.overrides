@@ -1,0 +1,14 @@
+{
+  "kind": "input.overrides",
+  "formatVersion": 1,
+  "target": "runners.actions",
+  "entries": [
+    {
+      "actionId": "2cb70c262f28ab66",
+      "device": "keyboard",
+      "binding": {
+        "physicalKey": "key_j"
+      }
+    }
+  ]
+}

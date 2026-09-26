@@ -7,3 +7,9 @@ rawframe_module(NAME input
 )
 
 rawframe_module_tests(NAME input SOURCES tests/actions_test.cpp tests/mapper_test.cpp tests/overrides_test.cpp)
+rawframe_module_fuzz(NAME input TARGET actions RUNS 20000 SEEDS tests/seeds SOURCES tests/fuzz_actions.cpp)
+if(TARGET rawframe_input_fuzz_actions)
+    # Overrides are read over the runners game's action set.
+    target_compile_definitions(rawframe_input_fuzz_actions PRIVATE
+        RAWFRAME_RUNNERS_ACTIONS="${PROJECT_SOURCE_DIR}/games/runners/runners.actions")
+endif()
