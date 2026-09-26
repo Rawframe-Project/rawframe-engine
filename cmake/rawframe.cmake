@@ -50,7 +50,18 @@ if(WIN32)
     target_compile_definitions(rawframe_policy INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
-if(MSVC)
+if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # clang-cl (D237): MSVC's library and linker, Clang's warnings as on
+    # Linux, and contraction turned off the way Clang spells it.
+    target_compile_options(rawframe_policy INTERFACE
+        /W4 /WX /Zc:__cplusplus /utf-8
+        /GR-            # no RTTI (ADR-0008)
+        /EHs-c-         # no exceptions (ADR-0008)
+        -Wpedantic -Wshadow -Wno-missing-field-initializers
+        /fp:precise /clang:-ffp-contract=off  # deterministic simulation
+    )
+    target_compile_definitions(rawframe_policy INTERFACE _HAS_EXCEPTIONS=0)
+elseif(MSVC)
     target_compile_options(rawframe_policy INTERFACE
         /W4 /WX /permissive- /Zc:__cplusplus /utf-8
         /GR-            # no RTTI (ADR-0008)
@@ -81,6 +92,27 @@ else()
         message(FATAL_ERROR "RAWFRAME_SANITIZE must be empty, address, or thread")
     endif()
 endif()
+
+# Gives a target options spelled as GCC and Clang spell them, the way its
+# compiler reads them: as they are, or through /clang: under clang-cl, whose
+# own -Wall means every warning (D237). MSVC's own compiler reads neither
+# and gets none.
+#
+#   rawframe_gnu_options(target PRIVATE -ffp-contract=off -Wall)
+if(MSVC AND NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    set(RAWFRAME_GNU_OPTIONS FALSE)
+else()
+    set(RAWFRAME_GNU_OPTIONS TRUE)
+endif()
+function(rawframe_gnu_options target scope)
+    if(NOT RAWFRAME_GNU_OPTIONS)
+        return()
+    endif()
+    if(MSVC)
+        list(TRANSFORM ARGN PREPEND "/clang:")
+    endif()
+    target_compile_options(${target} ${scope} ${ARGN})
+endfunction()
 
 # Declares one module. Checks its dependencies against tools/modules.txt so a
 # boundary cannot be crossed by editing a CMakeLists.txt alone.

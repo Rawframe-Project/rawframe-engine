@@ -34,10 +34,10 @@ add_library(kest::kest ALIAS rawframe_kest_vendor)
 target_include_directories(rawframe_kest_vendor PUBLIC include PRIVATE src)
 set_target_properties(rawframe_kest_vendor PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 target_compile_definitions(rawframe_kest_vendor PRIVATE KEST_LIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/lib/")
+# Kest's own warnings, but not -Werror: a new compiler's new warning in code
+# we do not edit must not stop the engine building.
+rawframe_gnu_options(rawframe_kest_vendor PRIVATE -O2 -ffp-contract=off -Wall -Wextra)
 if(NOT MSVC)
-    # Kest's own warnings, but not -Werror: a new compiler's new warning in
-    # code we do not edit must not stop the engine building.
-    target_compile_options(rawframe_kest_vendor PRIVATE -O2 -ffp-contract=off -Wall -Wextra)
     target_link_libraries(rawframe_kest_vendor PUBLIC m)
 endif()
 

@@ -86,15 +86,13 @@ target_include_directories(rawframe_maul3d_cpu PRIVATE include src)
 foreach(target rawframe_maul3d_vendor rawframe_maul3d_cpu)
     set_target_properties(${target} PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF
                                                 C_VISIBILITY_PRESET hidden)
-    if(NOT MSVC)
-        # Maul3D's own warnings, but not -Werror: a new compiler's new
-        # warning in code we do not edit must not stop the engine building.
-        target_compile_options(${target} PRIVATE -ffp-contract=off -fno-trapping-math -fno-fast-math
-                                                   -fno-unsafe-math-optimizations -Wall -Wextra)
-    endif()
+    # Maul3D's own warnings, but not -Werror: a new compiler's new warning
+    # in code we do not edit must not stop the engine building.
+    rawframe_gnu_options(${target} PRIVATE -ffp-contract=off -fno-trapping-math -fno-fast-math
+                                             -fno-unsafe-math-optimizations -Wall -Wextra)
 endforeach()
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND NOT MSVC)
-    target_compile_options(rawframe_maul3d_vendor PRIVATE -mavx2 -mfma)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND RAWFRAME_GNU_OPTIONS)
+    rawframe_gnu_options(rawframe_maul3d_vendor PRIVATE -mavx2 -mfma)
     target_compile_definitions(rawframe_maul3d_vendor PRIVATE MAUL3D_BUILT_FOR_AVX2=1)
     target_compile_definitions(rawframe_maul3d_cpu PRIVATE MAUL3D_BUILT_FOR_AVX2=1)
 endif()
