@@ -28,3 +28,4 @@ rawframe_module_tests(NAME audio SOURCES tests/decode_test.cpp tests/effects_tes
 if(TARGET rawframe_audio_tests)
     target_compile_definitions(rawframe_audio_tests PRIVATE RAWFRAME_AUDIO_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/")
 endif()
+rawframe_module_fuzz(NAME audio TARGET decode SOURCES tests/fuzz_decode.cpp)

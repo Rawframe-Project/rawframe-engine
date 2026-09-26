@@ -7,3 +7,4 @@ rawframe_module(NAME mesh
 )
 
 rawframe_module_tests(NAME mesh SOURCES tests/mesh_test.cpp)
+rawframe_module_fuzz(NAME mesh TARGET mesh SOURCES tests/fuzz_mesh.cpp)
