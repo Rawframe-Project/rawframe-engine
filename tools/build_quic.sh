@@ -65,10 +65,11 @@ fi
 # flags are chosen by the C++ compiler, so that is named too. It builds with
 # warnings as errors, and MSVC 14.51's range analysis (C28020) finds what
 # older compilers did not in code this engine does not change: MSVC reads
-# _CL_ after the command line, so /WX- there outlasts MsQuic's /WX.
+# _CL_ after the command line, so -WX- there outlasts MsQuic's /WX. Written
+# with a dash, since Git's bash turns /WX- into a path for Windows programs.
 (
     if [ "$windows" = 1 ]; then
-        export _CL_=/WX-
+        export _CL_=-WX-
     fi
     cmake -S "$root/msquic" -B "$work/msquic" -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_C_COMPILER="$compiler" -DCMAKE_CXX_COMPILER="$cxx_compiler" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
