@@ -27,13 +27,13 @@ cp -r "$repository/games/runners-penalty/." "$work/penalty/"
 # A second provider of the penalty, which costs a hit one: runners prefers
 # runners-penalty's.
 cp -r "$repository/games/runners-penalty/." "$work/lenient/"
-sed -i 's/values\[0\].taken \* 2/values[0].taken/' "$work/lenient/penalty.kest"
+perl -pi -e 's/values\[0\].taken \* 2/values[0].taken/' "$work/lenient/penalty.kest"
 # Resources of its own: a Composition names each resource once.
-sed -i 's/"resourceId": "[0-9a-f]*"/"resourceId": "1e41e470000000000000000000000001"/' "$work/lenient/kest.project.rfmeta"
-sed -i 's/"resourceId": "[0-9a-f]*"/"resourceId": "1e41e470000000000000000000000002"/' "$work/lenient/penalty.mod.rfmeta"
+perl -pi -e 's/"resourceId": "[0-9a-f]*"/"resourceId": "1e41e470000000000000000000000001"/' "$work/lenient/kest.project.rfmeta"
+perl -pi -e 's/"resourceId": "[0-9a-f]*"/"resourceId": "1e41e470000000000000000000000002"/' "$work/lenient/penalty.mod.rfmeta"
 cp -r "$repository/games/runners-swift/." "$work/swift/"
 cp -r "$repository/games/runners-timers/." "$work/late/"
-sed -i 's/^modapi 1$/modapi >=2/' "$work/late/timers.mod"
+perl -pi -e 's/^modapi 1$/modapi >=2/' "$work/late/timers.mod"
 cp -r "$repository/games/runners-timers/." "$work/wide/"
 cat >"$work/wide/timers.scene" <<'SCENE'
 {

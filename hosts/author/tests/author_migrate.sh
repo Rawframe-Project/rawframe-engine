@@ -27,7 +27,7 @@ JSON
 grep -q '"ticks": 5' "$work/hall.scene"
 
 # Age grows a field: the hall is authored against an older layout.
-sed -i 's/^struct Age {$/struct Age {\n    laps: u32/' "$work/runners.kest"
+perl -pi -e 's/^struct Age {$/struct Age {\n    laps: u32/' "$work/runners.kest"
 cat >"$work/arena.conf" <<CONF
 host.maximum_iterations = 4
 host.iteration_rate = 120
@@ -56,7 +56,7 @@ grep -q '"verdict": "unchanged"' "$work/again.out"
 # Age's ticks renamed: a new field and an old one gone, so the hall's age
 # has nowhere to go, and nothing is dropped.
 cp "$work/hall.scene" "$work/kept.scene"
-sed -i 's/^    ticks: u64$/    played: u64/; s/ages\[i\]\.ticks/ages[i].played/g' "$work/runners.kest"
+perl -pi -e 's/^    ticks: u64$/    played: u64/; s/ages\[i\]\.ticks/ages[i].played/g' "$work/runners.kest"
 if "$author" migrate "$work/runners.game" "$work/hall.scene" >"$work/refused.out"; then
     exit 1
 fi
