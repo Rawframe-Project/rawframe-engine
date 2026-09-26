@@ -37,9 +37,7 @@ target_compile_definitions(rawframe_kest_vendor PRIVATE KEST_LIB_DIR="${CMAKE_CU
 # Kest's own warnings, but not -Werror: a new compiler's new warning in code
 # we do not edit must not stop the engine building.
 rawframe_gnu_options(rawframe_kest_vendor PRIVATE -O2 -ffp-contract=off -Wall -Wextra)
-if(NOT MSVC)
-    target_link_libraries(rawframe_kest_vendor PUBLIC m)
-endif()
+target_link_libraries(rawframe_kest_vendor PUBLIC ${RAWFRAME_MATH_LIBRARY})
 
 # Where the Kest standard library is, for hosts building programs that import it.
 set(RAWFRAME_KEST_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/lib/" CACHE INTERNAL "Kest standard library directory")

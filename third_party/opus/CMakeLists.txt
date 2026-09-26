@@ -43,4 +43,4 @@ target_compile_definitions(rawframe_opus_vendor PRIVATE OPUS_BUILD ENABLE_HARDEN
 # Upstream's code, upstream's warnings: none of ours applies.
 target_compile_options(rawframe_opus_vendor PRIVATE -w)
 set_target_properties(rawframe_opus_vendor PROPERTIES C_STANDARD 99 POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(rawframe_opus_vendor PRIVATE m)
+target_link_libraries(rawframe_opus_vendor PRIVATE ${RAWFRAME_MATH_LIBRARY})

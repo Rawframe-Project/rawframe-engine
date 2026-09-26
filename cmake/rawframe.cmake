@@ -16,6 +16,14 @@ else()
     message(FATAL_ERROR "RAWFRAME_CONFIGURATION must be debug, development, or shipping, not '${RAWFRAME_CONFIGURATION}'")
 endif()
 
+# The C math library, a library of its own on POSIX and part of the C
+# runtime on Windows (D237).
+if(WIN32)
+    set(RAWFRAME_MATH_LIBRARY "")
+else()
+    set(RAWFRAME_MATH_LIBRARY m)
+endif()
+
 # What runs a test written as a shell script: the script itself where the
 # system reads its first line, Git's bash on Windows (D237).
 if(WIN32)
@@ -67,6 +75,22 @@ if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         /clang:-ffp-contract=off  # deterministic simulation
     )
     target_compile_definitions(rawframe_policy INTERFACE _HAS_EXCEPTIONS=0)
+    # Clang's own runtime routines, such as 128-bit division, which MSVC's
+    # libraries do not carry.
+    execute_process(
+        COMMAND "${CMAKE_CXX_COMPILER}" /clang:--rtlib=compiler-rt /clang:-print-libgcc-file-name
+        OUTPUT_VARIABLE rawframe_clang_builtins OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT EXISTS "${rawframe_clang_builtins}")
+        # Installers that keep the older layout, one directory per system.
+        execute_process(COMMAND "${CMAKE_CXX_COMPILER}" /clang:-print-resource-dir
+                        OUTPUT_VARIABLE rawframe_clang_resources OUTPUT_STRIP_TRAILING_WHITESPACE)
+        file(TO_CMAKE_PATH "${rawframe_clang_resources}" rawframe_clang_resources)
+        set(rawframe_clang_builtins "${rawframe_clang_resources}/lib/windows/clang_rt.builtins-x86_64.lib")
+    endif()
+    if(NOT EXISTS "${rawframe_clang_builtins}")
+        message(FATAL_ERROR "clang-cl names no builtins library ('${rawframe_clang_builtins}')")
+    endif()
+    target_link_libraries(rawframe_policy INTERFACE "${rawframe_clang_builtins}")
 elseif(MSVC)
     target_compile_options(rawframe_policy INTERFACE
         /W4 /WX /permissive- /Zc:__cplusplus /utf-8

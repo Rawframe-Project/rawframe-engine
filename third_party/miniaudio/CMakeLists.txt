@@ -17,11 +17,11 @@ target_compile_definitions(rawframe_miniaudio_vendor PUBLIC
 # Upstream's code, upstream's warnings: none of ours applies.
 target_compile_options(rawframe_miniaudio_vendor PRIVATE -w)
 set_target_properties(rawframe_miniaudio_vendor PROPERTIES C_STANDARD 99 POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(rawframe_miniaudio_vendor PRIVATE ${CMAKE_DL_LIBS} Threads::Threads m)
+target_link_libraries(rawframe_miniaudio_vendor PRIVATE ${CMAKE_DL_LIBS} Threads::Threads ${RAWFRAME_MATH_LIBRARY})
 
 # The sources themselves, for the one translation unit that builds
 # miniaudio's decoders with stb_vorbis for import tooling (ADR-0058); no
 # runtime closure links it.
 add_library(rawframe_miniaudio_source INTERFACE)
 target_include_directories(rawframe_miniaudio_source SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(rawframe_miniaudio_source INTERFACE Threads::Threads m)
+target_link_libraries(rawframe_miniaudio_source INTERFACE Threads::Threads ${RAWFRAME_MATH_LIBRARY})
