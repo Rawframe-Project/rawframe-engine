@@ -7,4 +7,4 @@ rawframe_module(NAME mesh
 )
 
 rawframe_module_tests(NAME mesh SOURCES tests/mesh_test.cpp)
-rawframe_module_fuzz(NAME mesh TARGET mesh SOURCES tests/fuzz_mesh.cpp)
+rawframe_module_fuzz(NAME mesh TARGET mesh RUNS 25000 MAX_LEN 16384 SEEDS tests/seeds SOURCES tests/fuzz_mesh.cpp)
