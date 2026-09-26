@@ -68,9 +68,11 @@ result::Result<Configuration> Configuration::parse(std::string_view text) {
         if (configuration.entries_.size() == kMaximumConfigurationEntries) {
             return invalid("the configuration has more entries than its bound", kKey);
         }
-        if (!configuration.entries_.emplace(std::string{kKey}, std::string{kValue}).second) {
+        const auto [entry, kAdded] = configuration.entries_.try_emplace(std::string{kKey});
+        if (!kAdded) {
             return invalid("a configuration key appears twice", kKey);
         }
+        entry->second.value = kValue;
     }
     return configuration;
 }
@@ -80,7 +82,18 @@ std::optional<std::string_view> Configuration::text(std::string_view key) const 
     if (kFound == entries_.end()) {
         return std::nullopt;
     }
-    return std::string_view{kFound->second};
+    kFound->second.read.store(true, std::memory_order_relaxed);
+    return std::string_view{kFound->second.value};
+}
+
+std::vector<std::string_view> Configuration::unread() const {
+    std::vector<std::string_view> keys;
+    for (const auto& [kKey, kEntry] : entries_) {
+        if (!kEntry.read.load(std::memory_order_relaxed)) {
+            keys.emplace_back(kKey);
+        }
+    }
+    return keys;
 }
 
 result::Result<std::uint64_t> Configuration::unsignedInteger(std::string_view key, std::uint64_t fallback) const {

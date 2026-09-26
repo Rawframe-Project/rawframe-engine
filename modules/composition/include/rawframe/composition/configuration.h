@@ -2,12 +2,14 @@
 
 #include "rawframe/result/result.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::composition {
 
@@ -36,8 +38,19 @@ public:
         return entries_.size();
     }
 
+    /// Every key nothing has asked for, in key order: after a Runtime has
+    /// started, a key no participant reads is one this process does not
+    /// know, most often a typing mistake, which SPEC-0012 refuses rather than
+    /// ignores (D187).
+    [[nodiscard]] std::vector<std::string_view> unread() const;
+
 private:
-    std::map<std::string, std::string, std::less<>> entries_;
+    struct Entry {
+        std::string value;
+        /// Set by the first read; reads may come from any thread.
+        mutable std::atomic<bool> read{false};
+    };
+    std::map<std::string, Entry, std::less<>> entries_;
 };
 
 } // namespace rawframe::composition
