@@ -23,7 +23,10 @@ if(TARGET rawframe_network_quic_tests)
     # The HTTP/3 and QPACK readers are this module's own; their tests read
     # them where they are.
     target_include_directories(rawframe_network_quic_tests PRIVATE src)
-    # A browser's side, played by aioquic (python3-aioquic).
+    # A browser's side, played by aioquic (python3-aioquic), under the
+    # Python this machine names (python3 is not a name on Windows, D237).
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
     target_compile_definitions(rawframe_network_quic_tests PRIVATE
+        RAWFRAME_PYTHON="${Python3_EXECUTABLE}"
         RAWFRAME_WEBTRANSPORT_CLIENT="${CMAKE_CURRENT_SOURCE_DIR}/tests/webtransport_client.py")
 endif()

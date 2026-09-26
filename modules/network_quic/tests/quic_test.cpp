@@ -8,16 +8,23 @@
 #include "rawframe/network_quic/quic.h"
 #include "rawframe/test/test.h"
 
-#include <arpa/inet.h>
 #include <chrono>
 #include <cstdio>
 #include <functional>
-#include <netinet/in.h>
 #include <string>
-#include <sys/socket.h>
 #include <thread>
-#include <unistd.h>
 #include <vector>
+
+#if defined(_WIN32)
+#include <winsock2.h>
+#define popen _popen
+#define pclose _pclose
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 using namespace rawframe;
 using network::CloseReason;
@@ -38,14 +45,26 @@ constexpr network::ProviderProfile kProfile{.maximumConnections = 4,
 
 /// A UDP port nothing holds right now, from the kernel.
 std::uint16_t freePort() {
+#if defined(_WIN32)
+    // Windows' sockets start per process; starting them twice is counted.
+    WSADATA started{};
+    ::WSAStartup(MAKEWORD(2, 2), &started);
+    const SOCKET kSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
+    int length = sizeof(sockaddr_in);
+#else
     const int kSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
+    socklen_t length = sizeof(sockaddr_in);
+#endif
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    socklen_t length = sizeof(address);
     ::bind(kSocket, reinterpret_cast<sockaddr*>(&address), sizeof(address));
     ::getsockname(kSocket, reinterpret_cast<sockaddr*>(&address), &length);
+#if defined(_WIN32)
+    ::closesocket(kSocket);
+#else
     ::close(kSocket);
+#endif
     return ntohs(address.sin_port);
 }
 
@@ -298,7 +317,8 @@ RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
     RAWFRAME_EXPECT(server->listen({endpointAt(kPort)}).has_value());
     std::string said;
     std::thread browser{[&said, kPort] {
-        const std::string kCommand = "python3 " RAWFRAME_WEBTRANSPORT_CLIENT " " + std::to_string(kPort) + " 2>&1";
+        const std::string kCommand =
+            RAWFRAME_PYTHON " " RAWFRAME_WEBTRANSPORT_CLIENT " " + std::to_string(kPort) + " 2>&1";
         if (std::FILE* output = ::popen(kCommand.c_str(), "r")) {
             char buffer[256];
             while (std::fgets(buffer, sizeof buffer, output) != nullptr) {
