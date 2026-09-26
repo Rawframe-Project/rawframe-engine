@@ -92,6 +92,14 @@ void ReplicationServer::State::onStateAck(Peer& peer, const network::SessionEven
             replica.acknowledgedAt = std::max(replica.acknowledgedAt.value_or(0), sent->tick);
         }
     }
+    // What lies more than an acknowledgement's reach behind the newest one
+    // heard can never be acknowledged: forgotten now rather than when the
+    // window fills (D217). A connection claiming more than was sent only
+    // forgets what it could have acknowledged.
+    const std::uint64_t kLatest = std::min(kAck->latest, peer.stateSequence);
+    while (!peer.sent.empty() && peer.sent.front().sequence + kAckBits < kLatest) {
+        peer.sent.pop_front();
+    }
 }
 
 void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& event) {

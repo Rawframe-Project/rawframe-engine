@@ -22,9 +22,11 @@
 
 namespace rawframe::world_replication {
 
-/// State datagrams remembered per connection for acknowledgement. One not
-/// acknowledged by the time it leaves this window was lost, as far as the
-/// server is concerned, and its values go again.
+/// State datagrams remembered per connection for acknowledgement, at most:
+/// those an acknowledgement can no longer reach are forgotten as soon as a
+/// newer one arrives (D217), so this bounds only a connection that stops
+/// acknowledging. One not acknowledged by the time it leaves was lost, as
+/// far as the server is concerned, and its values go again.
 inline constexpr std::size_t kSentWindow = 256;
 
 /// A state acknowledgement covers its newest sequence and the 64 before it.

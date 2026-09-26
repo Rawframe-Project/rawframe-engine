@@ -538,6 +538,22 @@ RAWFRAME_TEST(InterestSendsWhatIsNearThePlayerAndAlwaysThePlayer) {
     RAWFRAME_EXPECT(mirror != nullptr && mirror->x == 0);
 }
 
+RAWFRAME_TEST(WhatIsAcknowledgedIsForgottenAsPlayGoesOn) {
+    // A state datagram an acknowledgement can no longer reach is forgotten
+    // once a newer acknowledgement arrives (D217), so what the server holds
+    // for a connection that keeps acknowledging stays flat.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    for (int step = 0; step < 100; ++step) {
+        scenario.step(Steer{.dx = 1, .dy = 0});
+    }
+    const std::size_t kEarly = scenario.server->heldBytes();
+    for (int step = 0; step < 300; ++step) {
+        scenario.step(Steer{.dx = 1, .dy = 0});
+    }
+    RAWFRAME_EXPECT(!scenario.client->owned().isNull());
+    RAWFRAME_EXPECT(scenario.server->heldBytes() <= kEarly + 256);
+}
+
 RAWFRAME_TEST(InterestCellsMissNothingWithinReach) {
     // A field of props a meter and a quarter apart and a player put down
     // on cell edges and between them (cells are 10.1 wide): the client
