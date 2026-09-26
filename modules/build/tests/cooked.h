@@ -10,13 +10,13 @@
 #include "rawframe/build/build.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/document/json.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
-#include <unistd.h>
 #include <vector>
 
 namespace rawframe::build::testing {
@@ -62,7 +62,7 @@ inline const BuildIdentity kIdentity{.subject = "rawframe/runners",
 /// megabyte of a repeated phrase that compresses well, with its manifest and
 /// a receipt that proves it.
 struct Cooked {
-    fs::path base = fs::temp_directory_path() / ("rawframe-build-" + std::to_string(::getpid()));
+    fs::path base = test::scratchDirectory("build");
     fs::path cooked = base / "cooked";
     fs::path output = base / "build";
     std::vector<content::ManifestEntry> entries;

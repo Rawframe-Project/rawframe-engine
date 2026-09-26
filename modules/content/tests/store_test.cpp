@@ -10,6 +10,7 @@
 #include "rawframe/document/json.h"
 #include "rawframe/signature/errors.h"
 #include "rawframe/test/files.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 
 #include <iterator>
@@ -23,7 +24,6 @@
 #include <filesystem>
 #include <fstream>
 #include <openssl/evp.h>
-#include <unistd.h>
 #include <zstd.h>
 #endif
 
@@ -162,8 +162,7 @@ RAWFRAME_TEST(AReadReturnsExactlyTheDeclaredBytes) {
 
 #if RAWFRAME_FILE_SYSTEM
 RAWFRAME_TEST(ADirectorySourceReadsOnlyWithinItsRoot) {
-    const std::filesystem::path kBase =
-        std::filesystem::temp_directory_path() / ("rawframe-content-" + std::to_string(::getpid()));
+    const std::filesystem::path kBase = test::scratchDirectory("content");
     const std::filesystem::path kRoot = kBase / "root";
     std::filesystem::create_directories(kRoot / "sounds");
     std::filesystem::create_directories(kBase / "outside");
@@ -298,8 +297,7 @@ struct TestPublisher {
 /// chunk's codec.
 struct BuildOnDisk {
     TestPublisher publisher;
-    std::filesystem::path root =
-        std::filesystem::temp_directory_path() / ("rawframe-content-build-" + std::to_string(::getpid()));
+    std::filesystem::path root = test::scratchDirectory("content-build");
     base::Sha256Digest rootHash{};
 
     explicit BuildOnDisk(std::vector<std::string> chunksOf2 = {"abcd", "efgh"}, std::string_view codec = "raw") {
@@ -477,8 +475,7 @@ namespace {
 /// `blob` with codec zstd.
 struct ZstdBuild {
     TestPublisher publisher;
-    std::filesystem::path root =
-        std::filesystem::temp_directory_path() / ("rawframe-content-zstd-" + std::to_string(::getpid()));
+    std::filesystem::path root = test::scratchDirectory("content-zstd");
     base::Sha256Digest rootHash{};
 
     ZstdBuild(std::string_view text, const std::vector<std::byte>& blob) {

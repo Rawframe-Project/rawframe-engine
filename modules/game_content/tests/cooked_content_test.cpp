@@ -15,6 +15,7 @@
 #include "rawframe/game_content/registrar.h"
 #include "rawframe/signature/signature.h"
 #include "rawframe/test/executors.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 
 #include <array>
@@ -26,7 +27,6 @@
 #if RAWFRAME_FILE_SYSTEM
 #include <filesystem>
 #include <fstream>
-#include <unistd.h>
 #endif
 
 using namespace rawframe;
@@ -85,7 +85,7 @@ content::ManifestEntry entryOf(std::uint64_t id,
 /// A cook's output of one sound and one picture, and the executor that
 /// reads it.
 struct Output {
-    fs::path root = fs::temp_directory_path() / ("rawframe-game-content-" + std::to_string(::getpid()));
+    fs::path root = test::scratchDirectory("game-content");
     execution::ManualClock clock;
     execution::CancellationScope scope{clock};
     execution::Executor io{execution::ExecutorSettings{.kind = execution::ExecutorKind::BlockingIo, .workers = 1}};

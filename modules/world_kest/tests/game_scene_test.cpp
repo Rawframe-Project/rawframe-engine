@@ -5,6 +5,7 @@
 #include "game_harness.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/test/executors.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/spawn_scene.h"
@@ -14,7 +15,6 @@
 #include <filesystem>
 #include <string>
 #include <tuple>
-#include <unistd.h>
 #include <vector>
 
 using namespace rawframe;
@@ -31,8 +31,7 @@ constexpr std::string_view kEmptyScene =
 RAWFRAME_TEST(AGameStartsWithItsScenes) {
     // Movers with their starting entities in a scene, not spawn lines: two
     // at rest where the scene puts them, one moving, and one spawn line.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-scene-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("scene");
     std::filesystem::create_directories(kDirectory);
     writeText(kDirectory / "movers.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest"));
     std::string game = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game");
@@ -127,8 +126,7 @@ RAWFRAME_TEST(AGameStartsWithItsScenes) {
 RAWFRAME_TEST(AScenesEntitiesNameEachOther) {
     // Two links naming each other and one naming none, by their ids in the
     // scene; spawned, each holds the other's entity.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-links-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("links");
     std::filesystem::create_directories(kDirectory);
     writeText(kDirectory / "linked.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "linked.kest"));
     const std::string kGame = "program linked.kest\ncomponent 5e0a7c31-9d24-4b8f-a6e1-3c7b9f2d0e84 linked.link Link\n";
@@ -242,8 +240,7 @@ RAWFRAME_TEST(SpawnLinesBecomeAScene) {
 RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
     // Movers whose start scene instances a two-mover prefab twice, found by
     // its sidecar: one copy as authored, one moved and slowed.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-instances-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("instances");
     std::filesystem::create_directories(kDirectory / "prefabs");
     writeText(kDirectory / "movers.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest"));
     std::string game = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game");
@@ -333,8 +330,7 @@ RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
 RAWFRAME_TEST(AProgramLinksEntitiesItCreatesInOneRun) {
     // A seed plants a pair of links naming each other, both created in the
     // same run: each names the entity the barrier made for the other.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-pairs-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("pairs");
     std::filesystem::create_directories(kDirectory);
     writeText(kDirectory / "pairs.kest",
               "module pairs\n\nimport rawframe.world\n\nstruct Seed {\n    planted: i32\n}\n\nstruct Link {\n"
@@ -397,8 +393,7 @@ RAWFRAME_TEST(AProgramLinksEntitiesItCreatesInOneRun) {
 RAWFRAME_TEST(AProgramSpawnsAPrefabWhole) {
     // A seed spawns a prefab of two links naming each other, once a tick
     // for two ticks: two pairs, each pair's links naming each other.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-prefab-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("prefab");
     std::filesystem::create_directories(kDirectory);
     writeText(kDirectory / "spawner.kest",
               "module spawner\n\nimport rawframe.world\nimport rawframe.scene\n\nstruct Seed {\n    planted: i32\n}\n\n"

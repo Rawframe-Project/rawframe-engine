@@ -17,7 +17,6 @@
 #include <fstream>
 #include <iterator>
 #include <string>
-#include <unistd.h>
 #include <vector>
 
 using namespace rawframe;

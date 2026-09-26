@@ -25,6 +25,7 @@
 #include "rawframe/localization/table.h"
 #include "rawframe/mesh/errors.h"
 #include "rawframe/mesh/mesh.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/cooked_mod.h"
@@ -35,7 +36,6 @@
 #include <fstream>
 #include <iterator>
 #include <string>
-#include <unistd.h>
 #include <vector>
 
 using namespace rawframe;
@@ -70,7 +70,7 @@ std::string sidecar(std::string_view id, std::string_view settings = "", std::st
 /// A project of two sources: a Vorbis tone cooked to Opus, and an MP3 tone
 /// in the short-form tier.
 struct Project {
-    fs::path base = fs::temp_directory_path() / ("rawframe-cook-" + std::to_string(::getpid()));
+    fs::path base = test::scratchDirectory("cook");
     fs::path sources = base / "sources";
     fs::path output = base / "output";
     fs::path cache = base / "cache";

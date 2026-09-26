@@ -5,6 +5,7 @@
 #include "game_harness.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/test/executors.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/game_files.h"
@@ -13,7 +14,6 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
-#include <unistd.h>
 #include <vector>
 
 using namespace rawframe;
@@ -103,8 +103,7 @@ std::string level(const std::filesystem::path& directory) {
 } // namespace
 
 RAWFRAME_TEST(ASceneEntityIsNamedTheSameInEveryWorld) {
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-persistent-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("persistent");
     std::filesystem::create_directories(kDirectory);
     writeText(kDirectory / "keep.kest", kProgram);
     writeText(kDirectory / "keep.game", std::string{kGame} + "scene level.scene\n");
@@ -135,8 +134,7 @@ RAWFRAME_TEST(ASceneEntityIsNamedTheSameInEveryWorld) {
 }
 
 RAWFRAME_TEST(AProgramMakesAnEntityPersistent) {
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-persist-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("persist");
     std::filesystem::create_directories(kDirectory);
     writeText(kDirectory / "keep.kest", kProgram);
     writeText(kDirectory / "keep.game", std::string{kGame} + "spawn 1 keep.door open=7\nspawn 2 keep.door\n");

@@ -10,6 +10,7 @@
 #include "rawframe/physics3d/registrar.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/test/executors.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/query.h"
@@ -31,7 +32,6 @@
 #include <filesystem>
 #include <string>
 #include <tuple>
-#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -691,8 +691,7 @@ std::vector<LinkRow> links() {
 } // namespace
 
 RAWFRAME_TEST(CheckpointsCarryEntityReferences) {
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-checkpoint-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("checkpoint");
     std::filesystem::create_directories(kDirectory);
     const std::string kGame = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
                               "linked.game\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n";

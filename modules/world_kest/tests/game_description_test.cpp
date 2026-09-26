@@ -4,6 +4,7 @@
 
 #include "game_harness.h"
 #include "rawframe/test/mutations.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
@@ -16,7 +17,6 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
-#include <unistd.h>
 #include <vector>
 
 using namespace rawframe;
@@ -201,8 +201,7 @@ RAWFRAME_TEST(MeshesAreDeclaredByLineAndNamedByFile) {
 }
 
 RAWFRAME_TEST(AGameReadsItsMeshesCooked) {
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-meshes-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("meshes");
     std::filesystem::create_directories(kDirectory);
     const auto kWrite = [&kDirectory](std::string_view name, std::string_view text) {
         std::FILE* file = std::fopen((kDirectory / name).c_str(), "wb");
@@ -292,8 +291,7 @@ RAWFRAME_TEST(TextLinesNameDocumentsByTheirSidecars) {
 
     // In development, each by the identity its sidecar gives, which must
     // name rawframe.text; its bytes are not read here.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-texts-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("texts");
     std::filesystem::remove_all(kDirectory);
     std::filesystem::create_directories(kDirectory);
     const auto kWrite = [&kDirectory](std::string_view name, std::string_view text) {

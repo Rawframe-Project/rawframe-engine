@@ -12,6 +12,7 @@
 #include "rawframe/animation/mask.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/test/executors.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_animation/components.h"
@@ -22,7 +23,6 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
-#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -52,8 +52,7 @@ std::string sidecar(base::Bits128 id) {
 /// bones its `held` mask holds.
 std::filesystem::path writeGame(std::string_view name, std::string_view speed) {
     using namespace animation;
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-" + std::string{name} + "-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory(name);
     std::filesystem::remove_all(kDirectory);
     std::filesystem::create_directories(kDirectory);
     const Skeleton kRig{.bones = {Bone{.target = kRoot, .name = "root", .parent = std::nullopt, .bind = {}}}};

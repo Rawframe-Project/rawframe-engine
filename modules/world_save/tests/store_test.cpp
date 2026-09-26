@@ -2,13 +2,13 @@
 // typed, a save over its limit is refused, and keeping again replaces
 // whole.
 
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_save/errors.h"
 #include "rawframe/world_save/store.h"
 
 #include <filesystem>
 #include <string>
-#include <unistd.h>
 
 using namespace rawframe;
 using namespace rawframe::world_save;
@@ -22,8 +22,7 @@ bool refusedWith(const auto& outcome, SaveError error) {
 } // namespace
 
 RAWFRAME_TEST(ADirectoryKeepsSavesBySlot) {
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-saves-" + std::to_string(::getpid())) / "slots";
+    const std::filesystem::path kDirectory = test::scratchDirectory("saves") / "slots";
     DirectorySaveStore store{kDirectory};
     RAWFRAME_EXPECT(refusedWith(store.load("world", 1024), SaveError::Absent));
     const std::vector<std::byte> kFirst(100, std::byte{1});

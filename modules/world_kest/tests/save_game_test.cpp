@@ -5,6 +5,7 @@
 
 #include "game_harness.h"
 #include "rawframe/test/executors.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/game.h"
@@ -16,7 +17,6 @@
 #include <string>
 #include <thread>
 #include <tuple>
-#include <unistd.h>
 #include <vector>
 
 using namespace rawframe;
@@ -117,8 +117,7 @@ struct Run {
 } // namespace
 
 RAWFRAME_TEST(AGamesSaveBringsItsStateBack) {
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-save-game-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("save-game");
     std::filesystem::create_directories(kDirectory);
     std::vector<std::pair<world::PersistentEntityId, std::int32_t>> before;
     {
@@ -179,8 +178,7 @@ RAWFRAME_TEST(AGamesSaveBringsItsStateBack) {
 RAWFRAME_TEST(ASaveOutlivesAChangeToItsComponent) {
     // The count kept as an i32, then the game widens it to an i64 and adds
     // a field: the save is migrated as it is read, the ticks carried over.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-save-migrate-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("save-migrate");
     std::filesystem::create_directories(kDirectory);
     world::PersistentEntityId kept;
     {
@@ -227,8 +225,7 @@ RAWFRAME_TEST(ACheckpointRestoreIsTheWorldItsSaveIsNot) {
     // A checkpoint at tick 2, a save at tick 5: restored from the
     // checkpoint, the World counts from 2, and the save is not applied over
     // it.
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path() / ("rawframe-save-restore-" + std::to_string(::getpid()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("save-restore");
     std::filesystem::create_directories(kDirectory);
     {
         Run run;
