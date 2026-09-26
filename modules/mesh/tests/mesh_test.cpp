@@ -103,13 +103,15 @@ RAWFRAME_TEST(DamagedCookedMeshesAreRefused) {
     std::vector<std::byte> longer = *kBytes;
     longer.push_back(std::byte{0});
     RAWFRAME_EXPECT(refusedWith(decode(longer), MeshError::BadMesh));
-    // Every bit of every byte flipped: refused, or read as a valid mesh.
+    // Every bit of every byte flipped: refused, or read as a valid mesh
+    // that encodes to the same bytes.
     for (std::size_t at = 0; at < kBytes->size(); ++at) {
         for (std::uint32_t bit = 0; bit < 8; ++bit) {
             std::vector<std::byte> damaged = *kBytes;
             damaged[at] ^= static_cast<std::byte>(1U << bit);
             const auto kRead = decode(damaged);
             RAWFRAME_EXPECT(!kRead.has_value() || validate(*kRead).has_value());
+            RAWFRAME_EXPECT(!kRead.has_value() || encode(*kRead) == damaged);
         }
     }
     // Counts past the limits are refused before anything is allocated.
