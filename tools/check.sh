@@ -14,6 +14,9 @@
 # what changed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Node's file operations without io_uring: on the CI runner a web client
+# test once waited forever, idle, on an io_uring request (D236).
+export UV_USE_IO_URING=0
 
 tier="${1:-full}"
 start=$(date +%s)
