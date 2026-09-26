@@ -11,6 +11,8 @@
 #if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <unistd.h>
+#elif defined(_WIN32)
+#include <io.h>
 #endif
 
 #if RAWFRAME_FILE_SYSTEM
@@ -63,7 +65,12 @@ bool writeWhole(const std::string& path, std::span<const std::byte> bytes) {
         return false;
     }
     const bool kWritten = std::fwrite(bytes.data(), 1, bytes.size(), file) == bytes.size();
+#if defined(_WIN32)
+    // Past the C library's buffer and the system's cache, to the disk.
+    const bool kFlushed = std::fflush(file) == 0 && ::_commit(::_fileno(file)) == 0;
+#else
     const bool kFlushed = std::fflush(file) == 0;
+#endif
     return std::fclose(file) == 0 && kWritten && kFlushed;
 #endif
 }

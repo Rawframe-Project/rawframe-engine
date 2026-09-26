@@ -23,6 +23,8 @@
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
+#elif defined(_WIN32)
+#include <process.h>
 #endif
 
 namespace rawframe::host {
@@ -76,6 +78,8 @@ std::string_view roleName(composition::TargetRole role) noexcept {
 std::string processIdentity() {
 #if defined(__unix__) || defined(__APPLE__)
     return "pid-" + std::to_string(static_cast<long long>(::getpid()));
+#elif defined(_WIN32)
+    return "pid-" + std::to_string(static_cast<long long>(::_getpid()));
 #else
     return "process";
 #endif
