@@ -8,3 +8,4 @@ rawframe_module(NAME authoring
 )
 
 rawframe_module_tests(NAME authoring SOURCES tests/authored_scene_test.cpp tests/delta_test.cpp tests/operations_test.cpp tests/queries_test.cpp tests/request_test.cpp)
+rawframe_module_fuzz(NAME authoring TARGET journal RUNS 15000 SEEDS tests/seeds SOURCES tests/fuzz_journal.cpp)
