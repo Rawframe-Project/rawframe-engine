@@ -21,6 +21,20 @@ constexpr std::array<HostState, 8> kStates = {HostState::Starting,
 
 } // namespace
 
+RAWFRAME_TEST(ADegradedHostClosesAdmissionUntilHealthy) {
+    // SPEC-0013's degraded action (D212): admission closes, and reopens
+    // once the Host is healthy again.
+    HostLifecycle lifecycle;
+    for (std::size_t index = 1; index < 4; ++index) {
+        RAWFRAME_EXPECT(lifecycle.enter(kStates[index]));
+    }
+    RAWFRAME_EXPECT(lifecycle.state() == HostState::Active && lifecycle.admitting());
+    lifecycle.judge(Health::Degraded);
+    RAWFRAME_EXPECT(lifecycle.state() == HostState::Active && !lifecycle.admitting());
+    lifecycle.judge(Health::Healthy);
+    RAWFRAME_EXPECT(lifecycle.admitting());
+}
+
 RAWFRAME_TEST(AHostLifecycleMovesOnlyForward) {
     HostLifecycle lifecycle;
     RAWFRAME_EXPECT(lifecycle.state() == HostState::Starting && !lifecycle.admitting());

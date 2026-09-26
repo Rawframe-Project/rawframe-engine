@@ -476,6 +476,7 @@ struct Host::State {
         bool changed = false;
         if (report.health != health.health) {
             health = report;
+            lifecycle.judge(health.health);
             status.health = health.health;
             status.reason = health.reason;
             changed = true;

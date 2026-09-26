@@ -47,9 +47,16 @@ public:
         return state_.load(std::memory_order_acquire);
     }
 
-    /// Gameplay admission: open only while active.
+    /// Gameplay admission: open only while active and not degraded
+    /// (SPEC-0012 lets degraded close it; SPEC-0013's canonical profile
+    /// does, D212), so it reopens once the Host is healthy again.
     [[nodiscard]] bool admitting() const noexcept {
-        return state() == HostState::Active;
+        return state() == HostState::Active && !degraded_.load(std::memory_order_acquire);
+    }
+
+    /// The Host's health, as its thread last judged it.
+    void judge(Health health) noexcept {
+        degraded_.store(health != Health::Healthy, std::memory_order_release);
     }
 
     /// Moves to `next` if allowed from the current state; the Host's thread
@@ -58,6 +65,7 @@ public:
 
 private:
     std::atomic<HostState> state_{HostState::Starting};
+    std::atomic<bool> degraded_{false};
 };
 
 } // namespace rawframe::composition
