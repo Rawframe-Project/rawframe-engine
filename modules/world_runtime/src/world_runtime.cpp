@@ -179,11 +179,22 @@ public:
                 return;
             }
             for (const auto& failure : report->failures) {
+                // Why, as the system's owner recorded it: `key: value` pairs.
+                std::string context;
+                for (const result::ContextField& each : failure.error.context()) {
+                    context += context.empty() ? "" : "; ";
+                    context += each.key;
+                    context += ": ";
+                    context += each.value;
+                }
                 emitter_.log(diagnostics::Severity::Warning,
                              kSystemFailed,
                              "a system returned an error; its commands were discarded",
                              {diagnostics::field("system", std::string_view{failure.system}),
-                              diagnostics::field("tick", report->tick.value)});
+                              diagnostics::field("tick", report->tick.value),
+                              diagnostics::field("error", failure.error.description()),
+                              diagnostics::field("errorClass", result::describe(failure.error.errorClass())),
+                              diagnostics::field("context", std::string_view{context})});
             }
             pacer_->ran(1);
         }
