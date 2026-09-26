@@ -10,20 +10,21 @@ target_link_options(rawframe_host_web_client PRIVATE -mexec-model=reactor)
 
 if(RAWFRAME_BUILD_TESTS)
     # Node plays the page: it holds a test game's files, starts the client,
-    # drives it frame by frame, and stops it; no file system is lent.
+    # drives it frame by frame, and stops it; no file system is lent. Pages
+    # end with a verdict tools/node_page.sh reads, which fails a page that
+    # gives none in two minutes (D238).
     add_test(NAME web_client_game
-             COMMAND node --no-warnings ${CMAKE_CURRENT_SOURCE_DIR}/tests/page.mjs
+             COMMAND ${PROJECT_SOURCE_DIR}/tools/node_page.sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/page.mjs
                      $<TARGET_FILE:rawframe_host_web_client> ${PROJECT_SOURCE_DIR}/modules/world_kest/tests/game)
     set_tests_properties(web_client_game PROPERTIES
-                         TIMEOUT 120
-                         PASS_REGULAR_EXPRESSION "\"code\":\"game_loaded\".*\"code\":\"stopped\".*page: [0-9]+ frames, exit 0")
+                         TIMEOUT 150
+                         PASS_REGULAR_EXPRESSION "\"code\":\"game_loaded\".*\"code\":\"stopped\".*page: [0-9]+ frames, exit 0.*page: passed")
     # Two clients on one page and one relay: one serves the arena sample,
     # the other's bots join it over the web transport and are admitted.
     add_test(NAME web_client_replicated
-             COMMAND node --no-warnings ${CMAKE_CURRENT_SOURCE_DIR}/tests/replicated.mjs
+             COMMAND ${PROJECT_SOURCE_DIR}/tools/node_page.sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/replicated.mjs
                      $<TARGET_FILE:rawframe_host_web_client> ${PROJECT_SOURCE_DIR}/games/arena)
-    # A page that waits forever fails in two minutes, not at the job's end.
     set_tests_properties(web_client_replicated PROPERTIES
-                         TIMEOUT 120
-                         PASS_REGULAR_EXPRESSION "\"bots\":2,\"admitted\":2.*page: both exit 0")
+                         TIMEOUT 150
+                         PASS_REGULAR_EXPRESSION "\"bots\":2,\"admitted\":2.*page: both exit 0.*page: passed")
 endif()

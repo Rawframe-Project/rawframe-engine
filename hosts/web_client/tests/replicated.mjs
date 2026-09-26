@@ -4,9 +4,10 @@
 // page stand in for the server so the client's whole path runs here.
 //
 // usage: replicated.mjs <rawframe-web-client.wasm> <game directory>
-import { argv, exit } from 'node:process';
+import { argv } from 'node:process';
 import { WebTransportRelay } from '../../../tools/web_transport_relay.mjs';
 import { PageClient, nextFrame } from './page_client.mjs';
+import { end } from './verdict.mjs';
 
 const [wasmPath, gameDirectory] = argv.slice(2);
 const relay = new WebTransportRelay();
@@ -18,11 +19,11 @@ await player.holdDirectory(gameDirectory, 'game/');
 const common = 'host.iteration_rate = 120\nworld.tick_rate = 60\nkest.game = game/arena.game\n';
 if (server.start(common + 'replication.endpoint = arena\n') !== 0) {
     console.log('page: the server did not start');
-    exit(1);
+    end(1);
 }
 if (player.start(common + 'kest.plan_only = true\nbots.count = 2\nbots.endpoint = arena\nhost.maximum_iterations = 240\n') !== 0) {
     console.log('page: the player did not start');
-    exit(1);
+    end(1);
 }
 // Both in each frame, the server first, until the player's run ends.
 while (true) {
@@ -35,4 +36,4 @@ while (true) {
 const played = player.stop();
 const served = server.stop();
 console.log(played === 0 && served === 0 ? 'page: both exit 0' : `page: exit ${played} and ${served}`);
-exit(played === 0 && served === 0 ? 0 : 1);
+end(played === 0 && served === 0 ? 0 : 1);

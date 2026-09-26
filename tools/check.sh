@@ -14,10 +14,6 @@
 # what changed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# Node's file operations without io_uring: on the CI runner a web client
-# test once waited forever, idle, on an io_uring request (D236).
-export UV_USE_IO_URING=0
-
 tier="${1:-full}"
 start=$(date +%s)
 failures=0
@@ -77,7 +73,7 @@ else
     # against the native dedicated server over WebTransport (D173).
     if [ "$failures" -eq 0 ]; then
         step "web page"
-        if ! node --no-warnings hosts/web_client/tests/browser_page.mjs \
+        if ! tools/node_page.sh hosts/web_client/tests/browser_page.mjs \
             out/clang-development/hosts/dedicated_server/rawframe-server \
             out/wasm-development/hosts/web_client/rawframe-web-client.wasm "$PWD" >out/web-page.log 2>&1; then
             tail -30 out/web-page.log; fail "web page"

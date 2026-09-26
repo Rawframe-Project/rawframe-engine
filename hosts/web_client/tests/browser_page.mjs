@@ -14,10 +14,11 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createSocket } from 'node:dgram';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
-import { argv, exit } from 'node:process';
+import { argv } from 'node:process';
 import { WebClient } from '../page/client.mjs';
 import { PageTransport } from '../page/transport.mjs';
 import { WebTransport } from './webtransport_node.mjs';
+import { end } from './verdict.mjs';
 
 // What a browser has that Node 18 keeps elsewhere.
 globalThis.crypto ??= webcrypto;
@@ -53,7 +54,7 @@ const watchdog = setTimeout(() => {
     console.log('page: out of time');
     console.log(clientLog.slice(-4000));
     server.kill('SIGKILL');
-    exit(1);
+    end(1);
 }, 60000);
 let clientLog = '';
 server.stdout.on('data', (chunk) => {
@@ -68,7 +69,7 @@ for (let tries = 0; tries < 500 && fingerprint === undefined; tries += 1) {
 if (fingerprint === undefined) {
     console.log('page: the server wrote no fingerprint');
     server.kill();
-    exit(1);
+    end(1);
 }
 
 const transport = new PageTransport({ certificateHashes: [fingerprint], WebTransport });
@@ -102,7 +103,7 @@ if (started !== 0) {
     console.log(`page: the client did not start (${started})`);
     process.stdout.write(clientLog);
     server.kill();
-    exit(1);
+    end(1);
 }
 while (client.frame()) {
     await sleep(16);
@@ -117,4 +118,4 @@ console.log(summary ? summary[0] : 'page: no bots summary');
 // The server's side of the same play: the inputs it took from the page.
 const served = serverLog.match(/"inputsConsumed":(\d+)/);
 console.log(`page: client exit ${code}, the server consumed ${served ? served[1] : 'no'} inputs`);
-exit(code === 0 && summary !== null && /"admitted":2/.test(summary[0]) && served && Number(served[1]) > 0 ? 0 : 1);
+end(code === 0 && summary !== null && /"admitted":2/.test(summary[0]) && served && Number(served[1]) > 0 ? 0 : 1);
