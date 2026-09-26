@@ -1,10 +1,10 @@
 name: portability
 
-# Builds and tests the engine on macOS (D236) and Windows (D237), the desktop
-# targets the owner's machine cannot run. On GitHub's own runners, which cost
-# a public repository nothing, nightly and on request only: no push or pull
-# request triggers it, so no fork's code ever runs here or on the owner's
-# machine.
+# Builds and tests the engine on macOS (D236), Windows (D237), and ARM64
+# Linux (D241), targets the owner's machine cannot run. On GitHub's own
+# runners, which cost a public repository nothing, nightly and on request
+# only: no push or pull request triggers it, so no fork's code ever runs here
+# or on the owner's machine.
 on:
   schedule:
     - cron: '17 1 * * *'
@@ -43,6 +43,25 @@ jobs:
         run: cmake --build out/clang-development -- -k 0
       - name: Test
         run: ctest --test-dir out/clang-development --output-on-failure -j3
+
+  # The dedicated server's next target after x86-64 Linux (ADR-0006): ARM
+  # servers are the cheaper ones to host on (D241).
+  linux-arm64:
+    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-20 ninja-build ccache python3-aioquic
+      - name: Configure
+        run: cmake --preset clang-development
+      - name: Build
+        run: cmake --build out/clang-development -- -k 0
+      - name: Test
+        run: ctest --test-dir out/clang-development --output-on-failure -j4
 
   windows:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
