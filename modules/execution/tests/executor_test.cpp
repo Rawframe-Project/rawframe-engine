@@ -286,6 +286,8 @@ RAWFRAME_TEST(BudgetsMustNest) {
     RAWFRAME_EXPECT(checkBudgetNesting(MonotonicDuration::fromSeconds(8), kExecutor).has_value());
 }
 
+// Watched from a forked parent, which Windows has not (D237).
+#if defined(__unix__) || defined(__APPLE__)
 RAWFRAME_TEST(ShutdownOverrunTakesTheFatalPathWithoutFreeingWork) {
     const auto kOutcome = rawframe::test::runInChild([] {
         ManualClock clock;
@@ -308,3 +310,4 @@ RAWFRAME_TEST(ShutdownOverrunTakesTheFatalPathWithoutFreeingWork) {
     RAWFRAME_EXPECT(kOutcome.signalled && kOutcome.signal == SIGABRT);
     RAWFRAME_EXPECT(kOutcome.standardError.find("executor shutdown exceeded its budget") != std::string::npos);
 }
+#endif
