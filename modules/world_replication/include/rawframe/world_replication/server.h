@@ -71,6 +71,10 @@ struct ServerReplicationSettings {
     /// Ticks the last command is held for when the next has not arrived,
     /// before the input goes neutral (zero).
     std::uint32_t inputHoldLast = 4;
+    /// SPEC-0013's replaceable input age: a command that waited longer than
+    /// this for its tick is dropped when the tick comes, and the tick is
+    /// played as if it had not arrived (D232).
+    std::uint64_t inputMaximumAgeMilliseconds = 100;
     /// How many ticks ahead of consumption input should arrive, and how
     /// often each connection is told how far ahead its input does arrive.
     std::uint64_t targetInputLead = 2;
@@ -133,6 +137,8 @@ struct ServerReplicationStatistics {
     std::uint64_t inputsConsumed = 0;
     std::uint64_t inputsHeld = 0;
     std::uint64_t inputsNeutral = 0;
+    /// Commands dropped for waiting too long for their tick (D232).
+    std::uint64_t inputsStale = 0;
     std::uint64_t inputsRefused = 0;
     /// Claimed moments moved to within the skew.
     std::uint64_t perceptionsClamped = 0;

@@ -204,7 +204,19 @@ void ReplicationServer::State::applyInputs(world::World& world) {
             continue;
         }
         std::vector<std::byte> command;
-        const auto kWaiting = peer.waitingInputs.find(peer.nextInputTick);
+        auto waiting = peer.waitingInputs.find(peer.nextInputTick);
+        // Stale input is dropped, not played late (SPEC-0013, D232): the age
+        // is in server ticks from its arrival, rounded up from the ceiling.
+        const std::uint64_t kSeconds = std::max<std::uint64_t>(peer.accept.tickRateSeconds, 1);
+        const std::uint64_t kMaximumAge =
+            (settings.inputMaximumAgeMilliseconds * peer.accept.tickRateTicks + (1000 * kSeconds) - 1) /
+            (1000 * kSeconds);
+        if (waiting != peer.waitingInputs.end() && pumpTick > waiting->second.arrived + kMaximumAge) {
+            ++statistics.inputsStale;
+            peer.waitingInputs.erase(waiting);
+            waiting = peer.waitingInputs.end();
+        }
+        const auto kWaiting = waiting;
         if (kWaiting != peer.waitingInputs.end()) {
             command = std::move(kWaiting->second.command);
             if (perception) {

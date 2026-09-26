@@ -554,6 +554,46 @@ RAWFRAME_TEST(AFloodOfInputIsDroppedUnreadPastTheCeilings) {
     RAWFRAME_EXPECT(scenario.server->statistics().strikes == 0 && scenario.firstPlayerPosition() != nullptr);
 }
 
+RAWFRAME_TEST(InputThatWaitedTooLongIsDroppedNotPlayedLate) {
+    // SPEC-0013's replaceable input age (D232): commands sent 15 to 30 ticks
+    // ahead wait longer than 100 ms for their ticks, so each is dropped when
+    // its tick comes and the tick plays as if it had not arrived. Paced
+    // input, two ticks ahead, is never stale.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.client->admitted() && scenario.server->statistics().inputsStale == 0);
+    const auto* kBefore = scenario.firstPlayerPosition();
+    const float kX = kBefore != nullptr ? kBefore->x : 0;
+    // Sixteen commands pushing right, for ticks well ahead of consumption.
+    const Steer kRight{.dx = 5, .dy = 0};
+    std::vector<std::byte> wire(8);
+    network::Writer steer{wire};
+    RAWFRAME_EXPECT(steerCodec().encode(reinterpret_cast<const std::byte*>(&kRight), steer).has_value());
+    world_replication::InputWindow window{.newestInputTick = scenario.tick.value + 30};
+    for (std::size_t command = 0; command < world_replication::kMaximumInputWindow; ++command) {
+        window.commands.push_back(wire);
+    }
+    std::vector<std::byte> payload(512);
+    network::Writer writer{payload};
+    RAWFRAME_EXPECT(world_replication::encodeInputWindow(writer, window).has_value());
+    RAWFRAME_EXPECT(scenario.clientSessions
+                        ->sendDatagram(network::ConnectionId{1},
+                                       {.lane = network::DatagramLane::Input,
+                                        .laneEpoch = scenario.client->accept()->inputEpoch,
+                                        .sequence = 1'000'000,
+                                        .payloadType = world_replication::kInputWindowPayload,
+                                        .payload = writer.written()})
+                        .has_value());
+    for (int step = 0; step < 40; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.server->statistics().inputsStale == world_replication::kMaximumInputWindow);
+    const auto* kAfter = scenario.firstPlayerPosition();
+    RAWFRAME_EXPECT(kAfter != nullptr && kAfter->x == kX);
+}
+
 RAWFRAME_TEST(PredictionRecoversFromLostInput) {
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(30),
                        .jitter = MonotonicDuration::fromMilliseconds(30),

@@ -237,6 +237,7 @@ public:
                       diagnostics::field("inputsConsumed", kStatistics.inputsConsumed),
                       diagnostics::field("inputsHeld", kStatistics.inputsHeld),
                       diagnostics::field("inputsNeutral", kStatistics.inputsNeutral),
+                      diagnostics::field("inputsStale", kStatistics.inputsStale),
                       diagnostics::field("inputsRefused", kStatistics.inputsRefused),
                       diagnostics::field("perceptionsClamped", kStatistics.perceptionsClamped),
                       diagnostics::field("checksumsVerified", kStatistics.checksumsVerified),
