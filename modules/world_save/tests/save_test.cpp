@@ -1,9 +1,11 @@
 // Curated saves: a level's door and the key it names captured, then applied
 // to a new World of the same level, updating what it holds and making what
-// it lacks; the same capture giving the same bytes; and every way a save or
-// a World can refuse.
+// it lacks; the same capture giving the same bytes; every way a save or a
+// World can refuse; and hostile saves with a matching digest applied only as
+// they capture.
 
 #include "rawframe/base/sha256.h"
+#include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_save/errors.h"
 #include "rawframe/world_save/save.h"
@@ -198,6 +200,35 @@ RAWFRAME_TEST(ASaveIsHostileInput) {
         refusedWith(read(kSaved, declaration(), *kRegistry, kSpace, {.maximumEntities = 1}), SaveError::LimitExceeded));
     RAWFRAME_EXPECT(
         refusedWith(read(kSaved, declaration(), *kRegistry, kSpace, {.maximumBytes = 64}), SaveError::LimitExceeded));
+}
+
+RAWFRAME_TEST(HostileSavesWithAMatchingDigestApplyOnlyAsTheyCapture) {
+    const std::vector<std::byte> kSaved = played();
+    const auto kRegistry = registry();
+    const std::string_view kSeed{reinterpret_cast<const char*>(kSaved.data()), kSaved.size() - 32};
+    test::Mutations mutations;
+    std::size_t accepted = 0;
+    for (int round = 0; round < 4000; ++round) {
+        const std::string kText = mutations.mutate(kSeed, std::string_view{"\x00\x01\x02\x08\x0b\x0c\xff", 7});
+        std::vector<std::byte> damaged(kText.size() + 32);
+        std::memcpy(damaged.data(), kText.data(), kText.size());
+        damaged = redigested(std::move(damaged));
+        const auto kRead = read(damaged, declaration(), *kRegistry, kSpace);
+        if (!kRead.has_value() || kRead->migrated) {
+            continue;
+        }
+        // What is read applies to a World that captures it to the same
+        // bytes, or is refused whole.
+        world::World world{kRegistry};
+        if (!apply(*kRead, declaration(), world).has_value()) {
+            RAWFRAME_EXPECT(world.entityCount() == 0);
+            continue;
+        }
+        ++accepted;
+        const auto kAgain = capture(world, declaration(), kSpace);
+        RAWFRAME_EXPECT(kAgain.has_value() && *kAgain == damaged);
+    }
+    RAWFRAME_EXPECT(accepted > 0);
 }
 
 RAWFRAME_TEST(WhatCannotBeSavedOrAppliedIsRefused) {
