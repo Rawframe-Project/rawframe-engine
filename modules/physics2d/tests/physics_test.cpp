@@ -415,10 +415,13 @@ RAWFRAME_TEST(ARayCastBackInTimeFindsWhereBodiesWere) {
 RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {
     for (const Physics2DSettings& kSettings : {Physics2DSettings{.substeps = 0},
                                                Physics2DSettings{.bodyCapacity = 0},
-                                               Physics2DSettings{.gravityY = std::nanf("")}}) {
+                                               Physics2DSettings{.gravityY = std::nanf("")},
+                                               // A history past 64 MiB (D208).
+                                               Physics2DSettings{.historyTicks = 1024}}) {
         const auto kMade = Physics2D::create(kSettings);
         RAWFRAME_EXPECT(!kMade.has_value() && kMade.error().code() == code(Physics2DError::InvalidSettings));
     }
+    RAWFRAME_EXPECT(Physics2D::create({.bodyCapacity = 1024, .historyTicks = 1024}).has_value());
     // A World without the physics components.
     schema::RegistryBuilder builder;
     builder.add<Pose2D>();

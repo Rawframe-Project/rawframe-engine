@@ -5,10 +5,23 @@
 
 #include "rawframe/world/entity.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
 namespace rawframe::physics {
+
+/// SPEC-0041's compensation_history_memory_max: the bytes one physics World
+/// may keep of poses for casting back in time, at its body capacity times its
+/// history ticks (D208).
+inline constexpr std::size_t kMaximumCompensationHistoryBytes = std::size_t{64} << 20U;
+
+/// The bytes a history of `ticks` poses of `poseBytes` each for `bodies`
+/// bodies takes at most.
+[[nodiscard]] constexpr std::size_t
+compensationHistoryBytes(std::uint32_t bodies, std::uint32_t ticks, std::size_t poseBytes) noexcept {
+    return std::size_t{bodies} * ticks * poseBytes;
+}
 
 /// Which bodies a query cast back in time takes back, and how far (SPEC-0041's
 /// victim gate); one it gives no tick is tried where it is now.

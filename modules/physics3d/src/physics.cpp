@@ -7,6 +7,7 @@
 #include "meshes.h"
 #include "rawframe/base/threads.h"
 #include "rawframe/physics/filters.h"
+#include "rawframe/physics/rewind.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/errors.h"
 #include "rawframe/world/query.h"
@@ -699,6 +700,12 @@ result::Result<std::unique_ptr<Physics3D>> Physics3D::create(const Physics3DSett
         return refuse(result::ErrorClass::InvalidArgument,
                       Physics3DError::InvalidSettings,
                       "physics settings: at most 1024 ticks of history");
+    }
+    if (physics::compensationHistoryBytes(settings.bodyCapacity, settings.historyTicks, sizeof(Pose3D)) >
+        physics::kMaximumCompensationHistoryBytes) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      Physics3DError::InvalidSettings,
+                      "physics settings: the history of every body's pose is past 64 MiB; keep fewer ticks or bodies");
     }
     if (!std::isfinite(settings.gravityX) || !std::isfinite(settings.gravityY) || !std::isfinite(settings.gravityZ) ||
         settings.substeps == 0 || settings.substeps > 64 || settings.bodyCapacity == 0 ||

@@ -5,6 +5,7 @@
 #include "joints.h"
 #include "rawframe/base/threads.h"
 #include "rawframe/physics/filters.h"
+#include "rawframe/physics/rewind.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/errors.h"
 #include "rawframe/world/query.h"
@@ -698,6 +699,12 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
         return refuse(result::ErrorClass::InvalidArgument,
                       Physics2DError::InvalidSettings,
                       "physics settings: at most 1024 ticks of history");
+    }
+    if (physics::compensationHistoryBytes(settings.bodyCapacity, settings.historyTicks, sizeof(Pose2D)) >
+        physics::kMaximumCompensationHistoryBytes) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      Physics2DError::InvalidSettings,
+                      "physics settings: the history of every body's pose is past 64 MiB; keep fewer ticks or bodies");
     }
     if (!std::isfinite(settings.gravityX) || !std::isfinite(settings.gravityY) || settings.substeps == 0 ||
         settings.substeps > 64 || settings.bodyCapacity == 0 || settings.bodyCapacity > kMost ||

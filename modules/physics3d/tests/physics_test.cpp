@@ -354,6 +354,9 @@ RAWFRAME_TEST(RaysFindBodiesNowAndThen) {
 RAWFRAME_TEST(SettingsAndDocumentsAreChecked) {
     RAWFRAME_EXPECT(!Physics3D::create({.substeps = 0}).has_value());
     RAWFRAME_EXPECT(!Physics3D::create({.historyTicks = 2048}).has_value());
+    // A history past 64 MiB: every body's pose kept for 1024 ticks (D208).
+    RAWFRAME_EXPECT(!Physics3D::create({.historyTicks = 1024}).has_value());
+    RAWFRAME_EXPECT(Physics3D::create({.bodyCapacity = 1024, .historyTicks = 1024}).has_value());
     const auto kBad = Physics3D::create({.collision = {.classes = {{0x1, "one"}, {0x1, "again"}}}});
     RAWFRAME_EXPECT(!kBad.has_value() && kBad.error().code() == physics::code(physics::PhysicsError::InvalidDocument));
 }
