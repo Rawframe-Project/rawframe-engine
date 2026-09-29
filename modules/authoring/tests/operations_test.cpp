@@ -30,13 +30,16 @@ const base::Bits128 kDoor{1, 2};
 
 ComponentCatalog catalog() {
     ComponentCatalog made;
-    RAWFRAME_EXPECT(made.add(ComponentSchema{.id = kPosition,
-                                             .name = "game.position",
-                                             .mark = 0xa1,
-                                             .fields = {{.name = "x", .kind = FieldKind::Real},
-                                                        {.name = "count", .kind = FieldKind::Unsigned},
-                                                        {.name = "lit", .kind = FieldKind::Truth}}})
-                        .has_value());
+    RAWFRAME_EXPECT(
+        made.add(ComponentSchema{
+                     .id = kPosition,
+                     .name = "game.position",
+                     .mark = 0xa1,
+                     .fields = {{.name = "x", .kind = FieldKind::Real},
+                                {.name = "count", .kind = FieldKind::Unsigned},
+                                {.name = "lit", .kind = FieldKind::Truth},
+                                {.name = "pose", .kind = FieldKind::Case, .cases = {"Standing", "Sitting"}}}})
+            .has_value());
     RAWFRAME_EXPECT(made.add(ComponentSchema{.id = kLink,
                                              .name = "game.link",
                                              .mark = 0xb2,
@@ -312,6 +315,15 @@ RAWFRAME_TEST(AnInstancesEntitiesChangeThroughItsPatch) {
                     kPatch()[0].fields[1].value.number == "2");
     RAWFRAME_EXPECT(kRun(RevertField{.entity = kCrate, .component = kPosition, .field = "x"}));
     RAWFRAME_EXPECT(kPatch().size() == 1 && kPatch()[0].fields.size() == 1);
+    // An enum's first case is written out by name (D271).
+    RAWFRAME_EXPECT(kRun(SetField{.entity = kCrate,
+                                  .component = kPosition,
+                                  .field = "pose",
+                                  .value = {.kind = FieldInput::Kind::Case, .caseName = "Standing"}}));
+    RAWFRAME_EXPECT(kPatch()[0].fields.size() == 2 &&
+                    kPatch()[0].fields[1].value.kind == scene::FieldValue::Kind::Case &&
+                    kPatch()[0].fields[1].value.caseName == "Standing");
+    RAWFRAME_EXPECT(kRun(RevertField{.entity = kCrate, .component = kPosition, .field = "pose"}));
     RAWFRAME_EXPECT(refusedWith(kRun(RevertField{.entity = kCrate, .component = kPosition, .field = "x"}),
                                 AuthoringError::TargetNotFound));
 
