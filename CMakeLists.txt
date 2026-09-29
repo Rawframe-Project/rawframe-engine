@@ -117,6 +117,7 @@ add_subdirectory(modules/input_kest)
 add_subdirectory(modules/world_audio)
 add_subdirectory(modules/world_localization)
 add_subdirectory(modules/host)
+add_subdirectory(modules/window_host)
 
 add_subdirectory(hosts/dedicated_server)
 add_subdirectory(hosts/arena)

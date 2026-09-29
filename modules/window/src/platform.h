@@ -24,6 +24,9 @@ struct Platform {
     Windows windows{*this};
     /// What start said, for stop and for run's own result.
     result::Status started;
+    /// Run returned while the page's frames run the program on (the web):
+    /// stop frees this Platform.
+    bool outlivesRun = false;
 
     /// The context behind a Windows, for the test platform's calls.
     [[nodiscard]] static mwinContext* contextOf(Windows& windows) noexcept {

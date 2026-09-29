@@ -26,6 +26,7 @@ install: content signature document result base
 input: document result base
 window: result base
 input_window: input window result base
+window_host: host input_kest input_window input window composition execution result base
 schema: result base
 world: schema execution diagnostics result base
 kest: execution result base
@@ -53,7 +54,7 @@ dedicated_server: host game_content network_quic physics2d physics3d world_anima
 arena: host game_content input_kest world_audio world_localization audio network_loopback physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 web_client: host game_content input_kest network_web physics2d physics3d world_animation world_replication world_kest world_runtime composition execution diagnostics result base
 bots: host game_content input_kest world_audio world_localization audio network_quic world_replication world_kest world_runtime composition diagnostics result base
-client: host game_content input input_kest input_window network_quic window world_audio world_kest world_localization world_replication world_runtime composition execution diagnostics result base
+client: window_host host game_content input_kest network_quic window world_audio world_kest world_localization world_replication world_runtime composition diagnostics result base
 import: audio_import audio result base
 cook_tool: cook localization animation mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
 build_tool: build install signature content document result base

@@ -6,8 +6,8 @@ endif()
 
 rawframe_host(NAME client OUTPUT rawframe-client
     SOURCES src/main.cpp
-    DEPS host game_content input input_kest input_window network_quic window world_audio world_kest world_localization
-         world_replication world_runtime composition execution diagnostics result base
+    DEPS window_host host game_content input_kest network_quic window world_audio world_kest world_localization
+         world_replication world_runtime composition diagnostics result base
 )
 
 # A window needs a display: an X server of its own, where xvfb-run can

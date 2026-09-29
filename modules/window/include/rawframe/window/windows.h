@@ -159,9 +159,10 @@ struct RunSettings {
 /// Runs a program on the platform's window system: start, the frames until
 /// one asks to stop, then stop. Fails with Platform when there is no window
 /// system to reach, OverLimit when the limits' storage cannot be had,
-/// Invalid for a zero limit, and with start's failure. Where the platform
-/// owns the loop this may never return; the program's stop is where its
-/// cleanup belongs. Never from inside a running program.
+/// Invalid for a zero limit, and with start's failure. On the web it
+/// returns success once start succeeded, while the page's frames run the
+/// program on: the program outlives its stop, where its cleanup belongs.
+/// Never from inside a running program.
 [[nodiscard]] result::Status run(Program& program, const RunSettings& settings);
 
 } // namespace rawframe::window

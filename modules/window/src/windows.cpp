@@ -23,9 +23,12 @@ mwinFrameResult frameProgram(mwinContext* /*context*/, void* user) {
 }
 
 void stopProgram(mwinContext* /*context*/, mwinResult /*status*/, void* user) {
-    auto& platform = *static_cast<Platform*>(user);
-    platform.program->stop(platform.windows, platform.started);
-    platform.context = nullptr;
+    auto* const platform = static_cast<Platform*>(user);
+    platform->program->stop(platform->windows, platform->started);
+    platform->context = nullptr;
+    if (platform->outlivesRun) {
+        delete platform;
+    }
 }
 
 mwinLimits toMaul(const Limits& limits, mwinLimits defaults) noexcept {
@@ -69,17 +72,23 @@ mwinCursorMode toMaul(CursorMode mode) noexcept {
 } // namespace
 
 result::Status Platform::run(Program& program, const RunSettings& settings, mwinBackendKind backend) {
-    Platform platform{program};
+    auto platform = std::make_unique<Platform>(program);
     mwinAppDef app = mwinDefaultAppDef();
     app.context.limits = toMaul(settings.limits, app.context.limits);
     app.context.backend = backend;
     app.init = startProgram;
     app.frame = frameProgram;
     app.quit = stopProgram;
-    app.user = &platform;
+    app.user = platform.get();
     const mwinResult status = mwinRun(&app);
-    if (!platform.started.has_value()) {
-        return std::unexpected{std::move(platform.started).error()};
+    if (platform->context != nullptr) {
+        // The page's frames run the program on; its stop frees this.
+        platform->outlivesRun = true;
+        static_cast<void>(platform.release());
+        return {};
+    }
+    if (!platform->started.has_value()) {
+        return std::unexpected{std::move(platform->started).error()};
     }
     if (status != mwin_success) {
         return failure(status, "the window system did not run");
