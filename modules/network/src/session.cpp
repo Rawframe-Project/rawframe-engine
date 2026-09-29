@@ -110,10 +110,10 @@ public:
     std::uint64_t dropped_ = 0;
     std::uint64_t struckOut_ = 0;
     std::map<std::uint64_t, Connection> connections_;
-    /// Rejected connections, held open until the peer, having read its
-    /// rejection, closes, or until their deadline: a transport may drop what
-    /// is still queued when this side closes, and a rejection must arrive
-    /// (SPEC-0010). To the owner they have already ended.
+    /// Rejected and terminated connections, held open until the peer,
+    /// having read why, closes, or until their deadline: a transport may
+    /// drop what is still queued when this side closes, and a rejection
+    /// must arrive (SPEC-0010). To the owner they have already ended.
     std::map<std::uint64_t, execution::MonotonicInstant> rejected_;
     std::vector<Event> events_;
     std::vector<std::byte> scratch_;
@@ -729,6 +729,12 @@ void Sessions::setTickOrigin(std::uint64_t tick) noexcept {
 void Sessions::close(ConnectionId connection) noexcept {
     if (core_->connections_.erase(connection.value) != 0) {
         core_->provider_->close(connection);
+    }
+}
+
+void Sessions::closeAfterSending(ConnectionId connection) noexcept {
+    if (core_->connections_.erase(connection.value) != 0) {
+        core_->rejected_[connection.value] = core_->clock_->now() + core_->profile_.admissionTimeout;
     }
 }
 

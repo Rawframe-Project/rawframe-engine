@@ -227,3 +227,35 @@ RAWFRAME_TEST(AGracefulCloseSaysWhoIsLeaving) {
     RAWFRAME_EXPECT(!decodeGracefulClose(std::vector<std::byte>{std::byte{1}, std::byte{0}}).has_value());
     RAWFRAME_EXPECT(!decodeGracefulClose({}).has_value());
 }
+
+RAWFRAME_TEST(ATerminationSaysWhoEndedItAndWhy) {
+    // ADR-0073's record (D267): exact round trips, the note bounded, and
+    // hostile records read only as they write.
+    for (const Termination& kTermination :
+         {Termination{.reason = TerminationReason::Game, .note = "left the arena"},
+          Termination{.reason = TerminationReason::Operator, .note = {}},
+          Termination{.reason = TerminationReason::Game, .note = std::string(kMaximumTerminationNote, 'x')}}) {
+        const std::vector<std::byte> kBytes = encoded(kTermination, &encodeTermination);
+        const auto kRead = decodeTermination(kBytes);
+        RAWFRAME_EXPECT(kRead.has_value() && kRead->reason == kTermination.reason && kRead->note == kTermination.note);
+    }
+    std::vector<std::byte> buffer(1024);
+    Writer writer{buffer};
+    RAWFRAME_EXPECT(
+        !encodeTermination(writer,
+                           {.reason = TerminationReason::Game, .note = std::string(kMaximumTerminationNote + 1, 'x')})
+             .has_value());
+    for (const std::vector<std::byte>& kRefused : {// Nothing; no reason; one this generation does not know; a note
+                                                   // shorter than it says; bytes after the note; a note past 256.
+                                                   std::vector<std::byte>{},
+                                                   bytesOf(std::string{"\x00\x00", 2}),
+                                                   bytesOf(std::string{"\x03\x00", 2}),
+                                                   bytesOf("\x02\x02z"),
+                                                   bytesOf(std::string{"\x02\x00z", 3}),
+                                                   bytesOf("\x02\x41\x01")}) {
+        RAWFRAME_EXPECT(!decodeTermination(kRefused).has_value());
+    }
+    const std::vector<std::byte> kSeed =
+        encoded(Termination{.reason = TerminationReason::Game, .note = "a note"}, &encodeTermination);
+    RAWFRAME_EXPECT(mutated<Termination>(kSeed, &decodeTermination, &encodeTermination) > 0);
+}

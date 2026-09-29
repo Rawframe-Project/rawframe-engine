@@ -178,6 +178,10 @@ public:
     /// Ends a connection the owner is done with. No `Ended` follows: the
     /// owner forgets the connection itself.
     void close(ConnectionId connection) noexcept;
+    /// As `close`, but what was sent last is given its chance to arrive: the
+    /// connection is held, as a rejected one is, until the peer closes or
+    /// the admission timeout passes (D267).
+    void closeAfterSending(ConnectionId connection) noexcept;
     /// A strike against an admitted peer whose payload the owner found
     /// malformed. The strike that makes kMaximumStrikes within
     /// kStrikeWindow closes the connection as `close` does and answers
