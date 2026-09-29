@@ -48,6 +48,23 @@ spawnsAsScene(const GameDescription& game, const kest::Program& program, const s
             }
             scene::SceneComponent component{.name = part.component, .fields = {}};
             for (const GameFieldValue& field : part.fields) {
+                // An enum's case by its name, none at the first (D270).
+                const auto kPiece = std::ranges::find(kLayout.fields, field.field, &kest::Field::name);
+                if (kPiece != kLayout.fields.end() && kPiece->kind == kest::FieldKind::Tag) {
+                    const auto kCase = std::ranges::find(kPiece->cases, field.value);
+                    if (kCase == kPiece->cases.end()) {
+                        return result::fail(result::ErrorClass::InvalidArgument,
+                                            kWorldKestDomain,
+                                            code(WorldKestError::BadGameLine),
+                                            "a spawn names a case its enum lacks");
+                    }
+                    if (kCase != kPiece->cases.begin()) {
+                        component.fields.push_back(scene::SceneField{
+                            .name = field.field,
+                            .value = scene::FieldValue{.kind = scene::FieldValue::Kind::Case, .caseName = *kCase}});
+                    }
+                    continue;
+                }
                 // A name the game gives is its identity in a scene.
                 RAWFRAME_TRY_ASSIGN(const std::optional<scene::FieldValue> kValue,
                                     sceneValue(spawnValue(game, part.component, field)));

@@ -170,10 +170,12 @@ GameScenes::sceneSpawns(const GameFiles& files, std::string_view sceneText, cons
                     made.references.push_back(std::move(reference));
                     continue;
                 }
-                part.fields.push_back(GameFieldValue{.field = field.name,
-                                                     .value = field.value.kind == scene::FieldValue::Kind::True
-                                                                  ? std::string{"true"}
-                                                                  : field.value.number});
+                // A case goes by its name, as a spawn line writes one (D270).
+                part.fields.push_back(
+                    GameFieldValue{.field = field.name,
+                                   .value = field.value.kind == scene::FieldValue::Kind::True   ? std::string{"true"}
+                                            : field.value.kind == scene::FieldValue::Kind::Case ? field.value.caseName
+                                                                                                : field.value.number});
             }
             spawn.components.push_back(std::move(part));
         }

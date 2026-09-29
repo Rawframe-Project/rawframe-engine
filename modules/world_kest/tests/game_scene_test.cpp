@@ -501,3 +501,83 @@ RAWFRAME_TEST(AProgramSpawnsAPrefabWhole) {
     simulation = nullptr;
     std::filesystem::remove_all(kDirectory);
 }
+
+RAWFRAME_TEST(AnEnumGoesIntoAndOutOfAScene) {
+    // D270: spawn lines naming a case become a scene naming it (none at an
+    // enum's first case), and a game spawned from that scene holds it.
+    const std::filesystem::path kDirectory = test::scratchDirectory("guards");
+    std::filesystem::create_directories(kDirectory);
+    writeText(kDirectory / "patrol.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "patrol.kest"));
+    writeText(kDirectory / "patrol.game", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "patrol.game"));
+    auto files = world_kest::GameFiles::fromDirectory(kDirectory / "patrol.game");
+    const auto kProgram = files.has_value() ? files->compile("patrol.kest") : std::unexpected{files.error().clone()};
+    RAWFRAME_EXPECT(kProgram.has_value());
+    if (!kProgram.has_value()) {
+        return;
+    }
+    std::uint64_t next = 0;
+    const auto kScene = world_kest::spawnsAsScene(files->description(), **kProgram, [&next] {
+        return base::Bits128{.high = 0, .low = ++next};
+    });
+    RAWFRAME_EXPECT(kScene.has_value() && kScene->entities.size() == 3);
+    if (!kScene.has_value() || kScene->entities.size() != 3) {
+        return;
+    }
+    const auto& kDone = kScene->entities[2].components[0].fields;
+    RAWFRAME_EXPECT(std::ranges::none_of(kScene->entities[0].components[0].fields, [](const scene::SceneField& field) {
+        return field.name == "at";
+    }));
+    RAWFRAME_EXPECT(std::ranges::any_of(kDone, [](const scene::SceneField& field) {
+        return field.name == "at" && field.value.kind == scene::FieldValue::Kind::Case &&
+               field.value.caseName == "Done";
+    }));
+    // The game from the scene alone.
+    writeText(kDirectory / "guards.scene", *scene::writeScene(*kScene));
+    std::string game = readText(kDirectory / "patrol.game");
+    game = game.substr(0, game.find("spawn")) + "scene guards.scene\n";
+    writeText(kDirectory / "patrol.game", game);
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    const auto kConfiguration =
+        composition::Configuration::parse("kest.game = " + (kDirectory / "patrol.game").string() + "\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    std::vector<std::array<std::int32_t, 4>> guards;
+    if (simulation != nullptr && simulation->world() != nullptr) {
+        world::World& world = *simulation->world();
+        const auto kId =
+            world.registry().find(schema::ComponentTypeId::fromText("7c2e9a14-3b58-4d61-9f0a-2e8d5b1c6a73"));
+        const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
+        auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+        query->forEachChunk(world, [&guards](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                std::array<std::int32_t, 4> guard{};
+                std::memcpy(guard.data(), chunk.columns[0] + (row * sizeof guard), sizeof guard);
+                guards.push_back(guard);
+            }
+        });
+    }
+    composition.stop();
+    simulation = nullptr;
+    // Post, posts, looks, and where it waits: three are at the start, one done.
+    RAWFRAME_EXPECT(guards.size() == 3 &&
+                    std::ranges::count(guards,
+                                       3,
+                                       [](const auto& guard) {
+                                           return guard[3];
+                                       }) == 1 &&
+                    std::ranges::count(guards, 0, [](const auto& guard) {
+                        return guard[3];
+                    }) == 2);
+    std::filesystem::remove_all(kDirectory);
+}
