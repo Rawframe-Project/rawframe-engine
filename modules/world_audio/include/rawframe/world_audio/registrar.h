@@ -21,7 +21,10 @@ namespace rawframe::world_audio {
 ///
 ///   audio.record           the WAVE file to write
 ///   audio.record_seconds   the most it records (60)
-///   audio.play             `device`, or `null` for a device that plays nothing
+///   audio.play             `device`; `null` for a device that plays nothing;
+///                          or `sink`, where the host lends a FrameSink
+///                          (frame_sink.h) and plays what each frame renders
+///                          into it, as a page does (D259)
 ///   audio.play_period      the device's buffer in frames (256)
 ///   audio.client           which of the process's clients to hear (0)
 ///

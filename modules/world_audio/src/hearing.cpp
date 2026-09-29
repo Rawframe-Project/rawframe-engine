@@ -8,6 +8,7 @@
 #include "rawframe/content/store.h"
 #include "rawframe/game_content/game_content.h"
 #include "rawframe/world_audio/errors.h"
+#include "rawframe/world_audio/frame_sink.h"
 #include "rawframe/world_audio/registrar.h"
 #include "rawframe/world_audio/sound_loader.h"
 #include "rawframe/world_audio/world_audio.h"
@@ -40,8 +41,10 @@ constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
 constexpr EventIdentity kSoundsRead{"audio", "sounds_read"};
 constexpr EventIdentity kSoundReloaded{"audio", "sound_reloaded"};
 constexpr EventIdentity kSoundNotReloaded{"audio", "sound_reload_failed"};
-constexpr std::string_view kMaybe[] = {
-    world_replication::kClientWorlds.name, game_content::kGameContent.name, world_kest::kGameFiles.name};
+constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
+                                       game_content::kGameContent.name,
+                                       world_kest::kGameFiles.name,
+                                       kFrameSink.name};
 constexpr std::uint32_t kRecordingRate = 48'000;
 
 /// A sound's identity as its game writes it, 16 lowercase hexadecimal
@@ -367,13 +370,24 @@ public:
         if (!kPlay.has_value()) {
             return {};
         }
+        if (*kPlay == "sink") {
+            // The host plays what the frames render (D259): a page.
+            if (!context.has(kFrameSink.name)) {
+                return std::unexpected<result::Error>{refuse(result::ErrorClass::FailedPrecondition,
+                                                             WorldAudioError::NoAudio,
+                                                             "audio.play is `sink` only where the host lends one")
+                                                          .error()};
+            }
+            RAWFRAME_TRY_ASSIGN(sink_, context.capability(kFrameSink));
+            return hearing_.load(context, "audio.play", sink_->rate(), false);
+        }
         audio::OutputSettings settings;
         if (*kPlay == "null") {
             settings.backend = audio::OutputBackend::Null;
         } else if (*kPlay != "device") {
             return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
                                                          WorldAudioError::NoAudio,
-                                                         "audio.play is `device` or `null`")
+                                                         "audio.play is `device`, `null`, or `sink`")
                                                       .error()
                                                       .withContext("value", std::string{*kPlay})};
         }
@@ -402,15 +416,29 @@ public:
     }
 
     void runHostPhase(composition::HostPhase phase, const composition::HostFrame& frame) noexcept override {
-        if (phase != composition::HostPhase::PresentationExtract || output_ == nullptr) {
+        if (phase != composition::HostPhase::PresentationExtract || (output_ == nullptr && sink_ == nullptr)) {
             return;
         }
-        if (!hearing_.hear(frame).has_value()) {
+        const std::optional<double> kSeconds = hearing_.hear(frame);
+        if (!kSeconds.has_value()) {
             return;
+        }
+        if (sink_ != nullptr) {
+            // What the frame's time holds, as far as the sink has room; a
+            // host that fell behind loses the rest rather than lags.
+            owed_ += *kSeconds * sink_->rate();
+            const auto kFrames = static_cast<std::size_t>(owed_);
+            owed_ -= static_cast<double>(kFrames);
+            const std::size_t kTaken = std::min(kFrames, sink_->room());
+            rendered_.resize(kTaken * 2);
+            hearing_.mixer->render(rendered_);
+            sink_->write(rendered_);
+            sunk_ += kTaken;
+            dropped_ += kFrames - kTaken;
         }
         peak_ = std::max(
             {peak_, hearing_.mixer->meter(hearing_.master).peakLeft, hearing_.mixer->meter(hearing_.master).peakRight});
-        if (!lostReported_ && output_->state() == audio::OutputState::Lost) {
+        if (output_ != nullptr && !lostReported_ && output_->state() == audio::OutputState::Lost) {
             lostReported_ = true;
             emitter_.log(diagnostics::Severity::Warning,
                          kUnheard,
@@ -420,6 +448,21 @@ public:
     }
 
     void stop() noexcept override {
+        if (sink_ != nullptr && hearing_.mixer != nullptr) {
+            const WorldAudioStatistics kHeard = hearing_.statistics();
+            emitter_.log(diagnostics::Severity::Info,
+                         kPlaying,
+                         "what one client played",
+                         {diagnostics::field("backend", std::string_view{"sink"}),
+                          diagnostics::field("rate", static_cast<std::uint64_t>(sink_->rate())),
+                          diagnostics::field("frames", sunk_),
+                          diagnostics::field("framesDropped", dropped_),
+                          diagnostics::field("peak", static_cast<double>(peak_)),
+                          diagnostics::field("cues", kHeard.cues),
+                          diagnostics::field("effects", kHeard.once),
+                          diagnostics::field("refused", kHeard.refused)});
+            return;
+        }
         if (output_ == nullptr) {
             return;
         }
@@ -446,6 +489,11 @@ private:
     // The output is declared after what it renders, so it stops first.
     Hearing hearing_;
     std::unique_ptr<audio::Output> output_;
+    FrameSink* sink_ = nullptr;
+    double owed_ = 0;
+    std::vector<float> rendered_;
+    std::uint64_t sunk_ = 0;
+    std::uint64_t dropped_ = 0;
     std::optional<std::string> unavailable_;
     float peak_ = 0;
     bool lostReported_ = false;
