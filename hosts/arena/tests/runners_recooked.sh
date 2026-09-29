@@ -34,11 +34,12 @@ CONF
 (cd "$repository" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson") &
 running=$!
 
-# Recook only once the client's sounds were read from the first cook. The
+# Recook only once the client's sounds were read from the first cook, or
+# the client reads the recooked shot first and has nothing to reload. The
 # run lasts ten seconds, room for a sanitized recook of five on a busy
 # machine.
 for _ in $(seq 1 200); do
-    grep -q '"code":"started"' "$work/log.ndjson" 2>/dev/null && break
+    grep -q '"code":"sounds_read"' "$work/log.ndjson" 2>/dev/null && break
     sleep 0.05
 done
 resource=$(grep -o '"resourceId": "[0-9a-f]*"' "$work/sources/shot.wav.rfmeta" | grep -o '[0-9a-f]\{32\}')

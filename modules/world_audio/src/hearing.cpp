@@ -37,6 +37,7 @@ constexpr EventIdentity kPlaying{"audio", "playing_summary"};
 constexpr EventIdentity kUnheard{"audio", "output_unavailable"};
 constexpr EventIdentity kUnread{"audio", "sounds_unavailable"};
 constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
+constexpr EventIdentity kSoundsRead{"audio", "sounds_read"};
 constexpr EventIdentity kSoundReloaded{"audio", "sound_reloaded"};
 constexpr EventIdentity kSoundNotReloaded{"audio", "sound_reload_failed"};
 constexpr std::string_view kMaybe[] = {
@@ -175,6 +176,10 @@ struct Hearing {
                 settings.sounds.emplace_back(kId, *index);
             }
             loaded = true;
+            emitter.log(diagnostics::Severity::Info,
+                        kSoundsRead,
+                        "the game's sounds were read: the World is heard",
+                        {diagnostics::field("sounds", static_cast<std::uint64_t>(settings.sounds.size()))});
         }
         demand();
         return true;

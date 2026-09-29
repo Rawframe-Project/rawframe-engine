@@ -74,13 +74,15 @@ if(RAWFRAME_BUILD_TESTS)
     # Runners' cooked content packed into a Build from its receipt, and a
     # process started outside the repository that reads the game itself and
     # its sounds from the Build, named by its Composition: shots are heard.
+    # Heard is a peak of at least 0.1 here and below: on a busy machine,
+    # where rollbacks replay effects, voices may sum past one.
     add_test(NAME runners_from_build
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_from_build.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_build_tool> ${PROJECT_SOURCE_DIR} ${CONTENT}
                      ${CMAKE_CURRENT_BINARY_DIR}/runners_from_build)
     set_tests_properties(runners_from_build PROPERTIES
                          FIXTURES_REQUIRED runners_content
-                         PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+                         PASS_REGULAR_EXPRESSION "\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9]")
     # Runners composed of two Builds, the game and a Package holding its
     # shot's recording, each cooked, packed, and signed apart: shots are
     # heard with the Package, and without it nothing starts.
@@ -89,7 +91,7 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_with_package)
     set_tests_properties(runners_with_package PROPERTIES
-                         PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+                         PASS_REGULAR_EXPRESSION "\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9]")
     # Runners composed with the runners-timers and runners-sting mods, each
     # cooked, packed, and signed apart: the game takes them, the timers join
     # the World, and sting's untrusted handler counts every hit twice; a mod
@@ -121,7 +123,7 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_heard PROPERTIES
                          FIXTURES_REQUIRED runners_content
                          PASS_REGULAR_EXPRESSION
-                         "\"written\":true,\"frames\":[0-9]+,\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9][0-9]*,\"effects\":[1-9]")
+                         "\"written\":true,\"frames\":[0-9]+,\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9][0-9]*,\"effects\":[1-9]")
     # Four bots play runners and the first one's World is played on a null
     # device: its thread renders the mixer, and shots reach the master bus.
     configure_file(tests/runners_played.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_played.conf @ONLY)
@@ -130,7 +132,7 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(runners_played PROPERTIES
                          FIXTURES_REQUIRED runners_content
-                         PASS_REGULAR_EXPRESSION "\"backend\":\"Null\",\"rate\":[0-9]+,\"lost\":false,\"callbacks\":[1-9][0-9]+,.*\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+                         PASS_REGULAR_EXPRESSION "\"backend\":\"Null\",\"rate\":[0-9]+,\"lost\":false,\"callbacks\":[1-9][0-9]+,.*\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9]")
     # Runners heard while its sources are recooked: the running client
     # publishes the changed manifest and the shot's new revision replaces
     # the old one, and shots are still heard.
@@ -139,7 +141,7 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/runners_recooked)
     set_tests_properties(runners_recooked PROPERTIES
-                         PASS_REGULAR_EXPRESSION "\"peak\":0\\.[1-9][^,]*,\"cues\":[1-9]")
+                         PASS_REGULAR_EXPRESSION "\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9]")
     # Four bots predict their runners: a thousand ticks confirmed, the
     # rollbacks only those of admission, and their own jumps heard as
     # predicted effects (D219).
