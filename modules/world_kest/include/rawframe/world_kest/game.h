@@ -300,6 +300,14 @@ struct GameMesh {
     std::string path;
 };
 
+/// A picture a `rawframe.canvas.Sprite` shows (D254), by the identity the
+/// sprite names it by. Its source beside the description is an image the
+/// cook makes a texture resource of (`rawframe.texture`).
+struct GameTexture {
+    std::uint64_t id = 0;
+    std::string path;
+};
+
 /// An animator (ADR-0039, D124): a graph an entity's
 /// `rawframe.animation.animator` plays by the identity its line gives it.
 struct GameAnimator {
@@ -400,6 +408,12 @@ struct GameDescription {
     std::vector<GamePrefab> prefabs;
     /// From `mesh <16 hex digits> <file>` lines.
     std::vector<GameMesh> meshes;
+    /// From `texture <16 hex digits> <file>` lines.
+    std::vector<GameTexture> textures;
+    /// How much of the World a client's view shows, from a `camera
+    /// <height>` line: an orthographic camera `height` meters tall,
+    /// following the client's own player (D254).
+    std::optional<float> cameraHeight;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
     /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;
@@ -461,8 +475,10 @@ struct GameDescription {
 
 /// A spawn line's value with the game's names made identities: a collision
 /// class's name as a body's `collisionClass`, a mesh's file as a
-/// `rawframe.physics3d.mesh`'s `mesh`, and an animator's graph file as a
-/// `rawframe.animation.animator`'s `graph`. Anything else as written.
+/// `rawframe.physics3d.mesh`'s `mesh`, an animator's graph file as a
+/// `rawframe.animation.animator`'s `graph`, and a texture's file as the
+/// `texture` of a component of `rawframe.canvas.Sprite`'s type. Anything
+/// else as written.
 [[nodiscard]] std::string
 spawnValue(const GameDescription& game, std::string_view component, const GameFieldValue& value);
 

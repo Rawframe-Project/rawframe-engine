@@ -200,6 +200,31 @@ RAWFRAME_TEST(MeshesAreDeclaredByLineAndNamedByFile) {
     }
 }
 
+RAWFRAME_TEST(TexturesAndTheCameraAreDeclaredByLine) {
+    const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.look Sprite\n";
+    const auto kGame =
+        parseGame(kHead + "texture 00000000000000b1 runner.png\ntexture 00000000000000b2 tiles.png\ncamera 12.5\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->textures.size() == 2 && kGame->textures[1].id == 0xB2 &&
+                    kGame->textures[1].path == "tiles.png" && kGame->cameraHeight == 12.5F);
+    if (kGame.has_value()) {
+        // A sprite names its texture by file; another component keeps it.
+        RAWFRAME_EXPECT(world_kest::spawnValue(*kGame, "g.look", {"texture", "tiles.png"}) == "178");
+        RAWFRAME_EXPECT(world_kest::spawnValue(*kGame, "g.other", {"texture", "tiles.png"}) == "tiles.png");
+    }
+    for (const std::string_view kLines : {"texture 00000000000000b1\n",
+                                          "texture 0000000000000000 runner.png\n",
+                                          "texture 00000000000000b1 a.png\ntexture 00000000000000b1 b.png\n",
+                                          "texture 00000000000000b1 a.png\ntexture 00000000000000b2 a.png\n",
+                                          "camera\n",
+                                          "camera 0\n",
+                                          "camera -3\n",
+                                          "camera 10\ncamera 12\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "4"));
+    }
+}
+
 RAWFRAME_TEST(AGameReadsItsMeshesCooked) {
     const std::filesystem::path kDirectory = test::scratchDirectory("meshes");
     std::filesystem::create_directories(kDirectory);

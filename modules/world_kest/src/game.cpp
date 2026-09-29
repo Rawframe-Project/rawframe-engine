@@ -236,6 +236,25 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a mesh's identity and file are used once");
             }
             game.meshes.push_back(GameMesh{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "texture") {
+            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a texture line is `texture <16 hex digits> <file>`");
+            }
+            if (std::ranges::contains(game.textures, *kId, &GameTexture::id) ||
+                std::ranges::contains(game.textures, kWords[2], &GameTexture::path)) {
+                return badLine(number, WorldKestError::BadGameLine, "a texture's identity and file are used once");
+            }
+            game.textures.push_back(GameTexture{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "camera") {
+            const auto kHeight = kWords.size() == 2 ? parseReal(kWords[1], 0, 1e6) : std::nullopt;
+            if (!kHeight || *kHeight == 0 || game.cameraHeight.has_value()) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a game has at most one camera line, `camera <height in meters above nought>`");
+            }
+            game.cameraHeight = static_cast<float>(*kHeight);
         } else if (kKeyword == "animator") {
             // animator <16 hex digits> <graph file> [parameters <component>]
             //     [subset <32 hex digits>]
@@ -674,6 +693,15 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
         const auto kMesh = std::ranges::find(game.meshes, value.value, &GameMesh::path);
         if (kMesh != game.meshes.end()) {
             return std::to_string(kMesh->id);
+        }
+    }
+    if (value.field == "texture") {
+        const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
+        const auto kTexture = std::ranges::find(game.textures, value.value, &GameTexture::path);
+        if (kComponent != game.components.end() &&
+            (kComponent->kestType == "Sprite" || kComponent->kestType == "canvas.Sprite") &&
+            kTexture != game.textures.end()) {
+            return std::to_string(kTexture->id);
         }
     }
     if (value.field == "graph" && component == world_animation::Animator::kComponentName) {

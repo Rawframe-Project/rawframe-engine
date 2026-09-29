@@ -1,0 +1,29 @@
+module rawframe.canvas
+
+// 2D pictures as World data (SPEC-0024's canvas, D254): what an entity
+// shows, drawn where its pose (rawframe.physics2d's Pose2D) puts it. A game
+// declares a component of this type; clients draw it, and a server carries
+// it as it carries any other value, with no drawing of its own.
+
+// A picture: a region of a texture, by the identity the game's `texture`
+// line gives it, `width` by `height` meters, placed so the point at
+// (`pivotX`, `pivotY`) of it, each from nought (left, bottom) to one, is on
+// the pose, and turned as the pose turns. The region is in the texture's
+// own terms, nought to one from its top left. `color` multiplies it, as
+// 0xRRGGBBAA; nought draws nothing. Higher `layer`s draw over lower ones.
+struct Sprite {
+    texture: u64
+    u0: f32
+    v0: f32
+    u1: f32
+    v1: f32
+    width: f32
+    height: f32
+    pivotX: f32
+    pivotY: f32
+    color: u32
+    layer: i32
+}
+
+// White, untinted: the texture as it is.
+const WHITE: u32 = 0xFFFFFFFF
