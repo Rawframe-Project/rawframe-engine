@@ -102,6 +102,24 @@ bool sameLayout(const kest::TypeLayout& left, const kest::TypeLayout& right) {
     return true;
 }
 
+bool laidOutAs(const kest::Program& program,
+               std::string_view type,
+               std::size_t size,
+               std::initializer_list<std::pair<std::string_view, std::size_t>> fields) {
+    const auto kLayout = program.layout(type);
+    if (!kLayout.has_value() || kLayout->size != size || kLayout->fields.size() != fields.size()) {
+        return false;
+    }
+    std::size_t index = 0;
+    for (const auto& [kName, kOffset] : fields) {
+        if (kLayout->fields[index].name != kName || kLayout->fields[index].offset != kOffset) {
+            return false;
+        }
+        ++index;
+    }
+    return true;
+}
+
 result::Result<kest::TypeLayout>
 componentLayout(const GameDescription& game, const kest::Program& program, const GameComponent& component) {
     auto layout = program.layout(component.kestType);

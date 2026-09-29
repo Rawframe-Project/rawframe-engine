@@ -5,6 +5,7 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_audio/errors.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/layouts.h"
 
 #include <algorithm>
 #include <array>
@@ -266,29 +267,6 @@ const WorldAudioStatistics& WorldAudio::statistics() const noexcept {
     return state_->statistics;
 }
 
-namespace {
-
-/// Whether the program lays `type` out as this module reads it.
-bool laidOut(const kest::Program& program,
-             std::string_view type,
-             std::size_t size,
-             std::initializer_list<std::pair<std::string_view, std::size_t>> fields) {
-    const auto kLayout = program.layout(type);
-    if (!kLayout.has_value() || kLayout->size != size || kLayout->fields.size() != fields.size()) {
-        return false;
-    }
-    std::size_t index = 0;
-    for (const auto& [kName, kOffset] : fields) {
-        if (kLayout->fields[index].name != kName || kLayout->fields[index].offset != kOffset) {
-            return false;
-        }
-        ++index;
-    }
-    return true;
-}
-
-} // namespace
-
 result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const kest::Program& program) {
     const world_kest::GameDescription& kDescription = game.description();
     if (!kDescription.audio) {
@@ -309,14 +287,15 @@ result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const
                       WorldAudioError::BadComponents,
                       "a game with a mixer declares an emitter component");
     }
-    if (!laidOut(program,
-                 "Emitter",
-                 sizeof(Emitter),
-                 {{"sound", offsetof(Emitter, sound)},
-                  {"cue", offsetof(Emitter, cue)},
-                  {"playing", offsetof(Emitter, playing)},
-                  {"despawn", offsetof(Emitter, despawn)}}) ||
-        (listener && !laidOut(program, "Listener", sizeof(Listener), {{"active", offsetof(Listener, active)}}))) {
+    if (!world_kest::laidOutAs(program,
+                               "Emitter",
+                               sizeof(Emitter),
+                               {{"sound", offsetof(Emitter, sound)},
+                                {"cue", offsetof(Emitter, cue)},
+                                {"playing", offsetof(Emitter, playing)},
+                                {"despawn", offsetof(Emitter, despawn)}}) ||
+        (listener &&
+         !world_kest::laidOutAs(program, "Listener", sizeof(Listener), {{"active", offsetof(Listener, active)}}))) {
         return refuse(result::ErrorClass::InvalidArgument,
                       WorldAudioError::BadComponents,
                       "the program lays out rawframe.sound's types otherwise than this engine reads them");

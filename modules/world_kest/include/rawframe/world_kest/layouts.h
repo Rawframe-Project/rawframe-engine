@@ -11,7 +11,11 @@
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
+#include <string_view>
+#include <utility>
 
 namespace rawframe::world_kest {
 
@@ -27,5 +31,14 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
 
 /// Whether two layouts are the same shape, field by field; marks aside.
 [[nodiscard]] bool sameLayout(const kest::TypeLayout& left, const kest::TypeLayout& right);
+
+/// Whether `program` lays `type` out as C++ reads it: `size` bytes, and
+/// exactly `fields`, by name and offset, in order. An engine module that
+/// reads a component of a type of the engine's Kest library (a sound's
+/// emitter, a sprite) checks it so first.
+[[nodiscard]] bool laidOutAs(const kest::Program& program,
+                             std::string_view type,
+                             std::size_t size,
+                             std::initializer_list<std::pair<std::string_view, std::size_t>> fields);
 
 } // namespace rawframe::world_kest
