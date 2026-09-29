@@ -6,7 +6,9 @@
 // `Received.<name>(index: i32) -> T` reads one. A server's doors stage what
 // its systems send, kept only when the run that sent it succeeds; a client's
 // present systems read what arrived since their last tick; a predictor's
-// send nothing and have nothing arrived.
+// send nothing and have nothing arrived. `Players.terminate(player: Entity,
+// note: text)` ends a player's session (ADR-0073, D267), staged and kept the
+// same way; trusted code only, as every door here is.
 
 #include "rawframe/kest/doors.h"
 #include "rawframe/kest/program.h"
@@ -51,6 +53,8 @@ public:
 
     /// Send: appends what kept runs sent since last taken, in order.
     void take(std::vector<world_replication::PostedMessage>& into);
+    /// Send: appends the sessions kept runs ended since last taken.
+    void takeTerminations(std::vector<world_replication::PostedTermination>& into);
     /// Read: what the next tick's present systems read, replacing the last.
     void arrived(std::span<const world_replication::ReceivedMessage> messages);
 
@@ -81,6 +85,7 @@ private:
     static void sendDoor(kest::DoorCall& call, void* context) noexcept;
     static void countDoor(kest::DoorCall& call, void* context) noexcept;
     static void readDoor(kest::DoorCall& call, void* context) noexcept;
+    static void terminateDoor(kest::DoorCall& call, void* context) noexcept;
 
     Role role_;
     std::size_t largest_ = 0;
@@ -88,6 +93,8 @@ private:
     /// Sent by the run under way; kept by the runs that succeeded.
     std::vector<world_replication::PostedMessage> pending_;
     std::vector<world_replication::PostedMessage> kept_;
+    std::vector<world_replication::PostedTermination> pendingTerminations_;
+    std::vector<world_replication::PostedTermination> keptTerminations_;
     std::vector<world_replication::ReceivedMessage> arrived_;
     std::vector<std::byte> scratch_;
 };

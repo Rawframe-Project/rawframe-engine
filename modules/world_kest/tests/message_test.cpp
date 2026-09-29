@@ -1,6 +1,7 @@
 // A game's guaranteed messages at its doors (D266): a server's systems send
 // them, kept only when the run that sent them succeeds, in order; a client's
 // present systems read what arrived; a message holding an entity is refused.
+// Sessions the game ends (D267) are kept the same way.
 
 #include "../src/message_doors.h"
 #include "rawframe/kest_library/library.h"
@@ -42,6 +43,7 @@ struct Moved {
 extern fn Messages.moved(to: world.Entity, value: Moved)
 extern fn ReceivedCount.moved() -> i32
 extern fn Received.moved(index: i32) -> Moved
+extern fn Players.terminate(player: world.Entity, note: text)
 
 // Tells each its place, then refuses past a hundred: what it sent then is
 // not kept.
@@ -49,6 +51,20 @@ fn tell(count: i32, positions: [Position], entities: [world.Entity]) {
     let i = 0
     while i < count {
         Messages.moved(entities[i], Moved(positions[i].x))
+        i = i + 1
+    }
+    if positions[0].x > 100.0 {
+        positions[count].x = 0.0
+    }
+}
+
+// Ends the session of each past two, then refuses past a hundred.
+fn expel(count: i32, positions: [Position], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        if positions[i].x > 2.0 {
+            Players.terminate(entities[i], "too far")
+        }
         i = i + 1
     }
     if positions[0].x > 100.0 {
@@ -211,4 +227,26 @@ RAWFRAME_TEST(AMessageHoldsNoEntity) {
     RAWFRAME_EXPECT(
         !MessageDoors::create(game("rawframe.world.Entity"), *program(), MessageDoors::Role::Send).has_value());
     RAWFRAME_EXPECT(!MessageDoors::create(game("Unknown"), *program(), MessageDoors::Role::Send).has_value());
+}
+
+RAWFRAME_TEST(ASessionTheGameEndsIsKeptWithItsRun) {
+    auto doors = MessageDoors::create(game(), *program(), MessageDoors::Role::Send);
+    RAWFRAME_EXPECT(doors.has_value());
+    if (!doors.has_value()) {
+        return;
+    }
+    const std::array<KestColumn, 2> kColumns = {
+        KestColumn{.component = Position::kComponentTypeId, .element = "Position", .access = world::Access::Write},
+        KestColumn{.component = {}, .element = {}, .entities = true}};
+    Run run{**doors, "expel", kColumns, {1, 3, 5}};
+    RAWFRAME_EXPECT(run.once());
+    std::vector<world_replication::PostedTermination> ended;
+    (*doors)->takeTerminations(ended);
+    RAWFRAME_EXPECT(ended.size() == 2 && ended[0].player == run.entities[1] && ended[1].player == run.entities[2] &&
+                    ended[0].note == "too far");
+    ended.clear();
+    Run refused{**doors, "expel", kColumns, {500, 3}};
+    RAWFRAME_EXPECT(!refused.once());
+    (*doors)->takeTerminations(ended);
+    RAWFRAME_EXPECT(ended.empty());
 }

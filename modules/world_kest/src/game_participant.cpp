@@ -488,6 +488,12 @@ public:
         }
     }
 
+    void takeTerminations(std::vector<world_replication::PostedTermination>& into) noexcept override {
+        if (messages_ != nullptr) {
+            messages_->takeTerminations(into);
+        }
+    }
+
     std::span<const world_replication::EffectClass> effectClasses() const noexcept override {
         return effectClasses_;
     }

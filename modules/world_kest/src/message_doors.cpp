@@ -11,6 +11,8 @@ namespace {
 
 constexpr std::array<kest::Parameter, 1> kCountGives = {kest::Parameter{kest::Slot::I32}};
 constexpr std::array<kest::Parameter, 1> kReadTakes = {kest::Parameter{kest::Slot::I32}};
+constexpr std::array<kest::Parameter, 2> kTerminateTakes = {kest::Parameter{kest::Slot::Value, kEntityType},
+                                                            kest::Parameter{kest::Slot::Text}};
 
 /// Whether a layout holds an entity: `rawframe.world.Entity`'s two pieces,
 /// `slot` and then `generation` four bytes on, under one field's name or
@@ -67,6 +69,8 @@ MessageDoors::create(const GameDescription& game, const kest::Program& program, 
 }
 
 result::Status MessageDoors::addDoors(kest::DoorTable& doors) {
+    RAWFRAME_TRY(doors.add(kest::Door{
+        .name = "Players.terminate", .function = &terminateDoor, .context = this, .takes = kTerminateTakes}));
     for (const std::unique_ptr<Kind>& kind : kinds_) {
         RAWFRAME_TRY(doors.add(
             kest::Door{.name = kind->send, .function = &sendDoor, .context = kind.get(), .takes = kind->sendTakes}));
@@ -83,13 +87,45 @@ result::Status MessageDoors::addDoors(kest::DoorTable& doors) {
 
 void MessageDoors::begin() noexcept {
     pending_.clear();
+    pendingTerminations_.clear();
 }
 
 void MessageDoors::end(bool kept) noexcept {
     if (kept) {
         std::ranges::move(pending_, std::back_inserter(kept_));
+        std::ranges::move(pendingTerminations_, std::back_inserter(keptTerminations_));
     }
     pending_.clear();
+    pendingTerminations_.clear();
+}
+
+void MessageDoors::takeTerminations(std::vector<world_replication::PostedTermination>& into) {
+    std::ranges::move(keptTerminations_, std::back_inserter(into));
+    keptTerminations_.clear();
+}
+
+void MessageDoors::terminateDoor(kest::DoorCall& call, void* context) noexcept {
+    MessageDoors& owner = *static_cast<MessageDoors*>(context);
+    if (owner.role_ != Role::Send) {
+        return;
+    }
+    world::EntityHandle player;
+    const std::string_view kNote = call.text(1);
+    if (!call.value(0, std::as_writable_bytes(std::span{&player, 1})) || player.isNull()) {
+        call.fail("a session is ended for a player that exists");
+        return;
+    }
+    if (kNote.size() > network::kMaximumTerminationNote) {
+        call.fail("a termination's note is at most 256 bytes");
+        return;
+    }
+    if (owner.pendingTerminations_.size() + owner.keptTerminations_.size() >= kMaximumMessagesPerTick) {
+        call.fail("a tick's systems end at most 1024 sessions");
+        return;
+    }
+    call.spendFuel(kNote.size());
+    owner.pendingTerminations_.push_back(
+        world_replication::PostedTermination{.player = player, .note = std::string{kNote}});
 }
 
 void MessageDoors::take(std::vector<world_replication::PostedMessage>& into) {
