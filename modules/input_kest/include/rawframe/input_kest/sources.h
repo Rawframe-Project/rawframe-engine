@@ -4,6 +4,7 @@
 // the game's action set, committed per tick, and the game's Kest sample
 // function turning committed actions into its input component. Client only.
 
+#include "rawframe/input/feed.h"
 #include "rawframe/input/mapper.h"
 #include "rawframe/kest/doors.h"
 #include "rawframe/kest/machine.h"
@@ -30,6 +31,10 @@ struct InputDoorContext {
 /// untrusted code. `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* context);
 
+/// The devices of the process's own player, lent by a client host: what
+/// its window reported between two ticks.
+inline constexpr composition::Capability<input::Feed> kFeed{"rawframe.input.feed"};
+
 struct SourceSettings {
     /// The game, whose description names its actions and sample program;
     /// outlives the call.
@@ -38,10 +43,14 @@ struct SourceSettings {
     kest::MachineLimits limits{.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 1'000'000};
     /// The size of the game's input component, which the sample fills.
     std::size_t inputSize = 0;
+    /// The player's devices, or null where the host lends none; outlives
+    /// the sources.
+    input::Feed* feed = nullptr;
 };
 
 /// Reads the game's controls and compiles its sample program once; each
-/// bot source then has its own mapper, machine, and hand. Refuses
+/// bot source then has its own mapper, machine, and hand, and the player's
+/// source its mapper and machine over the lent devices. Refuses
 /// (`NotFound`, `NoControls`) a game without controls.
 [[nodiscard]] result::Result<std::unique_ptr<world_replication::InputSourcePlan>>
 makeInputSources(const SourceSettings& settings);

@@ -391,7 +391,9 @@ public:
         bots_[index].effects->take(into);
     }
 
-    result::Status load(composition::ParticipantContext& context, std::uint64_t count) {
+    /// `count` clients; with `player`, the first is the process's own
+    /// player, played from the devices its host lends.
+    result::Status load(composition::ParticipantContext& context, std::uint64_t count, bool player) {
         if (!context.has(network::kTransport.name) || !context.has(kReplicationPlan.name)) {
             return missing("bots need a transport and a game's replication plan");
         }
@@ -485,7 +487,12 @@ public:
                     ++unpredicted_;
                 }
             }
-            if (sources != nullptr) {
+            if (player && index == 0) {
+                if (sources == nullptr) {
+                    return missing("bots.player needs the game's input sources");
+                }
+                RAWFRAME_TRY_ASSIGN(bot.source, sources->playerSource());
+            } else if (sources != nullptr) {
                 auto source = sources->botSource(kSeed + index);
                 if (source.has_value()) {
                     bot.source = std::move(*source);
@@ -699,8 +706,13 @@ result::Result<composition::ParticipantOwner> makeBots(composition::ParticipantC
     if (kCount > 4096) {
         return missing("bots.count is at most 4096");
     }
-    if (kCount != 0) {
-        RAWFRAME_TRY(participant->load(context, kCount));
+    const auto kPlayer = context.configuration().text("bots.player");
+    if (kPlayer.has_value() && *kPlayer != "true" && *kPlayer != "false") {
+        return missing("bots.player is true or false");
+    }
+    const bool kPlaying = kPlayer == "true";
+    if (kCount != 0 || kPlaying) {
+        RAWFRAME_TRY(participant->load(context, kCount + (kPlaying ? 1 : 0), kPlaying));
     }
     return composition::ParticipantOwner{participant.release()};
 }

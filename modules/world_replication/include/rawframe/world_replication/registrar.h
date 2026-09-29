@@ -25,6 +25,8 @@ namespace rawframe::world_replication {
 /// each with its own mirror World, steering its player at random:
 ///
 ///   bots.count        how many; 0 or none, nothing (0)
+///   bots.player       one more client, first, playing the process's own
+///                     player from the devices its host lends (false)
 ///   bots.endpoint     the server's endpoint (arena)
 ///   bots.seed         (0)
 ///   bots.predict      predict each bot's player when the game declares

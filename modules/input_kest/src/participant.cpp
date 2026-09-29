@@ -15,12 +15,21 @@ namespace {
 
 constexpr std::string_view kProvides[] = {world_replication::kInputSourcePlan.name};
 constexpr std::string_view kNeeds[] = {world_replication::kReplicationPlan.name, world_kest::kGameFiles.name};
+constexpr std::string_view kMayUse[] = {kFeed.name};
 
 /// Sources for a game without controls: every one refuses, and bots steer
 /// at random.
 class NoSources final : public world_replication::InputSourcePlan {
 public:
     result::Result<std::unique_ptr<world_replication::InputSource>> botSource(std::uint64_t) override {
+        return refuse();
+    }
+    result::Result<std::unique_ptr<world_replication::InputSource>> playerSource() override {
+        return refuse();
+    }
+
+private:
+    static std::unexpected<result::Error> refuse() {
         return result::fail(result::ErrorClass::NotFound,
                             kInputKestDomain,
                             code(InputKestError::NoControls),
@@ -40,6 +49,9 @@ public:
             return {};
         }
         SourceSettings settings{.game = game, .inputSize = plan->input()->size};
+        if (context.has(kFeed.name)) {
+            RAWFRAME_TRY_ASSIGN(settings.feed, context.capability(kFeed));
+        }
         RAWFRAME_TRY_ASSIGN(settings.limits.heapBytes,
                             configuration.unsignedInteger("kest.sample_heap_bytes", settings.limits.heapBytes));
         RAWFRAME_TRY_ASSIGN(settings.limits.fuelPerCall,
@@ -81,6 +93,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .scope = composition::LifetimeScope::World,
         .providedCapabilities = kProvides,
         .requiredCapabilities = kNeeds,
+        .optionalCapabilities = kMayUse,
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "input_kest.sources",
         .budgetOwner = "input",

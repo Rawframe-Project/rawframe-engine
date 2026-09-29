@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <iterator>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -167,20 +168,30 @@ struct Shared {
     std::string entry;
     kest::MachineLimits limits;
     std::size_t inputSize = 0;
+    input::Feed* feed = nullptr;
 };
 
-class BotSource final : public world_replication::InputSource {
+/// A player's controls through the game's mapping and sample function: a
+/// bot's hand on its own devices, or the lent devices of the process's
+/// player, which pair themselves as they connect.
+class Source final : public world_replication::InputSource {
 public:
-    result::Status build(const Shared& shared, std::uint64_t seed) {
+    /// A bot's source with a seed; the player's without.
+    result::Status build(const Shared& shared, std::optional<std::uint64_t> seed) {
         RAWFRAME_TRY_ASSIGN(mapper_, input::Mapper::create(shared.actions, {.players = 1}));
-        RAWFRAME_TRY(mapper_->pair(kKeyboard, input::DeviceClass::Keyboard, {}));
-        RAWFRAME_TRY(mapper_->pair(kMouse, input::DeviceClass::Mouse, {}));
-        RAWFRAME_TRY(mapper_->pair(kGamepad, input::DeviceClass::Gamepad, {}));
-        // A bot is in every context the set declares, in the order declared.
+        if (seed.has_value()) {
+            RAWFRAME_TRY(mapper_->pair(kKeyboard, input::DeviceClass::Keyboard, {}));
+            RAWFRAME_TRY(mapper_->pair(kMouse, input::DeviceClass::Mouse, {}));
+            RAWFRAME_TRY(mapper_->pair(kGamepad, input::DeviceClass::Gamepad, {}));
+            hand_.emplace(shared.actions, *seed);
+        } else {
+            feed_ = shared.feed;
+        }
+        // A player is in every context the set declares, in the order
+        // declared, until a game can switch them.
         for (std::size_t context = 0; context < shared.actions.contexts.size(); ++context) {
             RAWFRAME_TRY(mapper_->activate({}, context));
         }
-        hand_.emplace(shared.actions, seed);
         doors_ = InputDoorContext{.mapper = mapper_.get(), .player = {}};
         kest::DoorTable table;
         RAWFRAME_TRY(kest::addStandardMath(table));
@@ -199,7 +210,11 @@ public:
     }
 
     result::Status next(std::uint64_t tick, std::span<std::byte> input) override {
-        hand_->act(*mapper_);
+        if (hand_.has_value()) {
+            hand_->act(*mapper_);
+        } else {
+            feed_->deliver(*mapper_, {});
+        }
         mapper_->commit(tick);
         mapper_->endFrame();
         std::ranges::fill(input, std::byte{0});
@@ -218,6 +233,7 @@ public:
 private:
     std::unique_ptr<input::Mapper> mapper_;
     std::optional<Hand> hand_;
+    input::Feed* feed_ = nullptr;
     InputDoorContext doors_;
     std::unique_ptr<kest::Machine> machine_;
     kest::Entry entry_;
@@ -231,13 +247,28 @@ public:
     }
 
     result::Result<std::unique_ptr<world_replication::InputSource>> botSource(std::uint64_t seed) override {
-        auto source = std::make_unique<BotSource>();
+        auto source = std::make_unique<Source>();
         RAWFRAME_TRY(source->build(shared_, seed));
+        return std::unique_ptr<world_replication::InputSource>{std::move(source)};
+    }
+
+    result::Result<std::unique_ptr<world_replication::InputSource>> playerSource() override {
+        if (shared_.feed == nullptr) {
+            return refuse(result::ErrorClass::NotFound, InputKestError::NoDevices, "the host lends no devices");
+        }
+        if (playerGiven_) {
+            return refuse(
+                result::ErrorClass::AlreadyExists, InputKestError::NoDevices, "the player's devices have a source");
+        }
+        auto source = std::make_unique<Source>();
+        RAWFRAME_TRY(source->build(shared_, std::nullopt));
+        playerGiven_ = true;
         return std::unique_ptr<world_replication::InputSource>{std::move(source)};
     }
 
 private:
     Shared shared_;
+    bool playerGiven_ = false;
 };
 
 } // namespace
@@ -314,6 +345,7 @@ result::Result<std::unique_ptr<world_replication::InputSourcePlan>> makeInputSou
     shared.entry = kGame.controls->entry;
     shared.limits = settings.limits;
     shared.inputSize = settings.inputSize;
+    shared.feed = settings.feed;
     return std::unique_ptr<world_replication::InputSourcePlan>{new Sources{std::move(shared)}};
 }
 

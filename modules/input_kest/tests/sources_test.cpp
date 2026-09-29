@@ -48,7 +48,8 @@ SourceSettings runners(std::size_t inputSize = sizeof(Stick)) {
 
 std::vector<Stick> play(world_replication::InputSource& source, int ticks) {
     std::vector<Stick> played;
-    std::array<std::byte, sizeof(Stick)> input{};
+    // Aligned as the lent type is; Kest refuses a buffer that is not.
+    alignas(Stick) std::array<std::byte, sizeof(Stick)> input{};
     for (int tick = 1; tick <= ticks; ++tick) {
         RAWFRAME_EXPECT(source.next(static_cast<std::uint64_t>(tick), input).has_value());
         Stick stick{};
@@ -108,4 +109,40 @@ RAWFRAME_TEST(GamesWithoutControlsOrWithAMisfitSampleAreRefused) {
                     kCrates.error().errorClass() == result::ErrorClass::NotFound);
     const auto kMisfit = makeInputSources(runners(sizeof(Stick) + 4));
     RAWFRAME_EXPECT(!kMisfit.has_value() && kMisfit.error().code() == code(InputKestError::BadSample));
+}
+
+RAWFRAME_TEST(ThePlayerPlaysFromTheLentDevices) {
+    // Without devices there is no player; with them, one, whose keys reach
+    // the sample the tick after they were fed, and whose release when focus
+    // goes lets go of what was held.
+    const auto kDeviceless = makeInputSources(runners());
+    RAWFRAME_EXPECT(kDeviceless.has_value() && !(*kDeviceless)->playerSource().has_value());
+    input::Feed feed;
+    SourceSettings settings = runners();
+    settings.feed = &feed;
+    auto sources = makeInputSources(settings);
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto source = (*sources)->playerSource();
+    RAWFRAME_EXPECT(source.has_value());
+    const auto kSecond = (*sources)->playerSource();
+    RAWFRAME_EXPECT(!kSecond.has_value() && kSecond.error().errorClass() == result::ErrorClass::AlreadyExists);
+    if (!source.has_value()) {
+        return;
+    }
+    constexpr input::DeviceId kKeyboard{1};
+    const auto kKey = [](std::string_view name) {
+        return *input::controlNamed(input::DeviceClass::Keyboard, name);
+    };
+    RAWFRAME_EXPECT(play(**source, 1)[0] == Stick{});
+    feed.connect(kKeyboard, input::DeviceClass::Keyboard);
+    feed.submit({.device = kKeyboard, .control = kKey("key_d"), .x = 1});
+    feed.submit({.device = kKeyboard, .control = kKey("space"), .x = 1});
+    const Stick kHeld = play(**source, 1)[0];
+    RAWFRAME_EXPECT(kHeld[0] == 1.0F && kHeld[1] == 1.0F && kHeld[4] == 0.0F);
+    RAWFRAME_EXPECT(play(**source, 1)[0] == kHeld);
+    feed.releaseAll();
+    RAWFRAME_EXPECT(play(**source, 1)[0] == Stick{});
 }

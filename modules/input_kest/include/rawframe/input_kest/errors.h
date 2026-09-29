@@ -19,6 +19,8 @@ enum class InputKestError : std::uint32_t {
     BadSample = 2,
     /// The sample function refused, or ran out of fuel.
     SampleFailed = 3,
+    /// The host lends no devices, or their player already has a source.
+    NoDevices = 4,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(InputKestError error) noexcept {
