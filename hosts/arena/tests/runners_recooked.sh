@@ -3,7 +3,8 @@
 # cooked first to the short-form tier, is recooked to Opus once the host has
 # started, and the tiles, cooked exact, are recooked block-compressed; the
 # running client publishes the changed manifest, hears the new revision of
-# the shot, and draws the new revision of the tiles (D262).
+# the shot, and draws the new revision of the tiles (D262). Runners hit
+# are told so by messages, every one of which arrives (D266).
 #
 # usage: runners_recooked.sh <rawframe-arena> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -57,6 +58,14 @@ grep -q '"code":"content_reloaded"' "$work/log.ndjson"
 grep -q '"code":"sound_reloaded"' "$work/log.ndjson"
 grep -q '"code":"texture_reloaded"' "$work/log.ndjson"
 if grep -q '"code":"sound_reload_failed"\|"code":"texture_reload_failed"' "$work/log.ndjson"; then
+    exit 1
+fi
+# Every runner hit was told so, and each message sent arrived (D266).
+sent=$(grep -o '"messagesSent":[0-9]*' "$work/log.ndjson" | grep -o '[0-9]*$')
+received=$(grep -o '"messagesReceived":[0-9]*' "$work/log.ndjson" | grep -o '[0-9]*$')
+grep -q '"messagesUndelivered":0' "$work/log.ndjson"
+if [ "$sent" -lt 1 ] || [ "$sent" != "$received" ]; then
+    echo "messages sent $sent, received $received"
     exit 1
 fi
 grep -o '"code":"recording_summary".*' "$work/log.ndjson"

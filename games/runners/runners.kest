@@ -41,6 +41,14 @@ struct Hit {
     shots: i32
 }
 
+// What a runner's player is told when it was hit (D266): how many times,
+// all told.
+struct Hurt {
+    taken: i32
+}
+
+extern fn Messages.hurt(to: world.Entity, value: Hurt)
+
 extern fn Hit.insert(entity: world.Entity, value: Hit)
 extern fn Hit.remove(entity: world.Entity)
 
@@ -95,14 +103,20 @@ fn dress(count: i32, sticks: [controls.Stick], looks: [canvas.Sprite], animators
     }
 }
 
+extern fn ReceivedCount.hurt() -> i32
+
 // What a client sees of its own runner (D261): 12 meters of the level,
 // a meter and a half above it, easing toward two meters ahead of the way
-// it runs.
+// it runs. A hit the server tells of (D266) drops the view half a meter,
+// and it eases back.
 fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
     let i = 0
     while i < count {
         views[i].height = 12.0
-        views[i].offsetY = 1.5
+        views[i].offsetY = views[i].offsetY + (1.5 - views[i].offsetY) * 0.1
+        if ReceivedCount.hurt() > 0 {
+            views[i].offsetY = 1.0
+        }
         views[i].offsetX = views[i].offsetX + (sticks[i].run * 2.0 - views[i].offsetX) * 0.05
         i = i + 1
     }
@@ -168,11 +182,13 @@ fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: 
     }
 }
 
-// A runner that was hit counts it, and is ready to be hit again.
+// A runner that was hit counts it, tells its player, and is ready to be
+// hit again.
 fn hurt(count: i32, scores: [Score], hits: [Hit], entities: [world.Entity]) {
     let i = 0
     while i < count {
         scores[i].taken = scores[i].taken + Mods.penalty(Penalty(1)).taken
+        Messages.hurt(entities[i], Hurt(scores[i].taken))
         Hit.remove(entities[i])
         i = i + 1
     }

@@ -95,6 +95,7 @@ animator 4b1c7e29a05d3f86 runner.rfanim parameters runners.stick
 presentation runners.look rawframe.animation.animator on runners.stick
 present runners.dress dress read runners.stick write runners.look write rawframe.animation.animator
 presentation runners.view on player
+message hurt Hurt
 present runners.frame frame read runners.stick write runners.view
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
