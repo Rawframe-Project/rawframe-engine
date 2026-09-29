@@ -4,12 +4,14 @@
 // drive it; it joins a dedicated server over the browser's own
 // WebTransport, trusting the server by its certificate's hash; a key held
 // in the canvas runs the player, and a stop asked of the page ends the run
-// in order. Puppeteer comes from RAWFRAME_NODE_MODULES; without it the
-// test is skipped (77).
+// in order. Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser
+// from where Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test
+// is skipped (77).
 //
 // usage: browser_play.mjs <rawframe-server> <rawframe-web-client.wasm> <maul-window.mjs> <repository>
 import { spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -24,6 +26,11 @@ try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
 } catch {
     console.log('page: puppeteer not found through RAWFRAME_NODE_MODULES: skipped');
+    process.exit(77);
+}
+const browserPath = await puppeteer.executablePath();
+if (!existsSync(browserPath)) {
+    console.log(`page: puppeteer has no browser at ${browserPath}: skipped`);
     process.exit(77);
 }
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
