@@ -5,15 +5,20 @@
 // WebTransport, trusting the server by its certificate's hash; a key held
 // in the canvas runs the player, another makes it jump, a jump the player
 // feels (D251, though the page has no gamepad to feel it on), and a stop
-// asked of the page ends the run in order. Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser
-// from where Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test
-// is skipped (77).
+// asked of the page ends the run in order. The game is as a web game ships
+// (D256): cooked, packed into a signed Build, installed in a library, and
+// named by a Composition, which the server reads from its disk and the page
+// holds, so the client reads its game, scenes, and textures from the Build.
+// Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser from where
+// Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test is
+// skipped (77).
 //
 // usage: browser_play.mjs <rawframe-server> <rawframe-web-client.wasm> <maul-window.mjs> <repository>
-import { spawn } from 'node:child_process';
+//                         <rawframe-cook> <rawframe-build>
+import { execFileSync, spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -21,7 +26,7 @@ import { extname, join, normalize, relative } from 'node:path';
 import { argv, env } from 'node:process';
 import { end } from './verdict.mjs';
 
-const [serverPath, wasmPath, windowPath, repository] = argv.slice(2);
+const [serverPath, wasmPath, windowPath, repository, cookPath, buildPath] = argv.slice(2);
 let puppeteer;
 try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
@@ -38,6 +43,19 @@ const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 const work = await mkdtemp(join(tmpdir(), 'rawframe-play-'));
 const game = join(repository, 'games/runners');
 
+// Runners cooked, packed for the web, signed, installed, and composed. The
+// publisher's secret key is gone before anything is served.
+const run = (path, args) => execFileSync(path, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+const library = join(work, 'library');
+run(cookPath, [game, join(work, 'cooked'), join(work, 'cache')]);
+const kid = run(buildPath, ['key', 'rawframe', join(library, 'keys')]).split(' ')[1].trim();
+run(buildPath, [join(work, 'cooked'), join(work, 'build'), 'rawframe/runners', '0.1.0', 'web', 'wasm32', 'client',
+                'build.development', 'tool', join(library, 'keys', `${kid}.key`)]);
+await unlink(join(library, 'keys', `${kid}.key`));
+const root = run(buildPath, ['install', join(work, 'build'), library]).split(' ')[1].trim();
+run(buildPath, ['compose', library, root, 'tool', join(work, 'runners.composition')]);
+const gameResource = /"resourceId": "([0-9a-f]+)"/.exec(await readFile(join(game, 'runners.game.rfmeta'), 'utf8'))[1];
+
 /** A UDP port nothing holds right now. */
 const port = await new Promise((resolve) => {
     const socket = createSocket('udp4');
@@ -50,7 +68,9 @@ const port = await new Promise((resolve) => {
 await writeFile(join(work, 'server.conf'), [
     'host.iteration_rate = 120',
     'world.tick_rate = 60',
-    `kest.game = ${join(game, 'runners.game')}`,
+    `kest.game_resource = ${gameResource}`,
+    `content.composition = ${join(work, 'runners.composition')}`,
+    `content.library = ${library}`,
     'network.quic.self_signed = true',
     'network.quic.webtransport = true',
     `network.quic.fingerprint_file = ${join(work, 'fingerprint')}`,
@@ -74,7 +94,8 @@ if (fingerprint === undefined) {
 }
 
 // What the page fetches: its modules, the client, the window's page side,
-// and the game, which it hands the client under game/.
+// the Composition's record, and the library, which it hands the client under
+// library/.
 const files = [];
 async function list(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -82,17 +103,19 @@ async function list(directory) {
         if (entry.isDirectory()) {
             await list(path);
         } else {
-            files.push(relative(game, path));
+            files.push(relative(library, path));
         }
     }
 }
-await list(game);
+await list(library);
 const setup = {
     fingerprint,
     files,
     configuration: [
         'host.iteration_rate = 120',
-        'kest.game = game/runners.game',
+        `kest.game_resource = ${gameResource}`,
+        'content.composition = runners.composition',
+        'content.library = library',
         'kest.plan_only = true',
         'bots.player = true',
         `bots.endpoint = https://127.0.0.1:${port}/rawframe`,
@@ -108,10 +131,14 @@ const setup = await (await fetch('/setup.json')).json();
 const transport = new PageTransport({ certificateHashes: [setup.fingerprint] });
 const client = await WebClient.load(await (await fetch('/client.wasm')).arrayBuffer(),
                                     { transport, log: (line) => console.log(line), windowImports: maulWindowImports });
-for (const path of setup.files) {
-    if (!client.hold('game/' + path, new Uint8Array(await (await fetch('/game/' + path)).arrayBuffer()))) {
+const hold = async (path, url) => {
+    if (!client.hold(path, new Uint8Array(await (await fetch(url)).arrayBuffer()))) {
         throw new Error('a file was refused: ' + path);
     }
+};
+await hold('runners.composition', '/runners.composition');
+for (const path of setup.files) {
+    await hold('library/' + path, '/library/' + path);
 }
 console.log('page: play ' + client.play(setup.configuration));
 window.rawframeStop = () => client.requestStop();
@@ -145,8 +172,10 @@ const http = createServer(async (request, response) => {
             await serve(windowPath);
         } else if (url.startsWith('/page/')) {
             await serve(join(repository, 'hosts/web_client/page', normalize(url.slice(6))));
-        } else if (url.startsWith('/game/')) {
-            await serve(join(game, normalize(url.slice(6))));
+        } else if (url === '/runners.composition') {
+            await serve(join(work, 'runners.composition'));
+        } else if (url.startsWith('/library/')) {
+            await serve(join(library, normalize(url.slice(9))));
         } else {
             response.writeHead(404);
             response.end();
@@ -202,12 +231,10 @@ try {
     const drawn =
         /"code":"canvas_summary"[^\n]*"spritesDrawn":(\d+)[^\n]*"unknownTextures":0,[^\n]*"texturesReady":(\d+)/.exec(
             clientLog);
-    // The page holds the game's sources, not its cooked content: its draws
-    // wait for textures it has no way to read.
     console.log(`page: the canvas drew ${drawn ? drawn[1] : 'no'} sprites with ${drawn ? drawn[2] : 'no'} textures`);
     verdict = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
                       field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0 && drawn !== null &&
-                      Number(drawn[1]) > 0
+                      Number(drawn[1]) > 0 && Number(drawn[2]) === 2
                   ? 0
                   : 1;
 } catch (error) {

@@ -97,7 +97,9 @@ else
             tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
             out/clang-development/hosts/dedicated_server/rawframe-server \
             out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
-            out/wasm-development/third_party/maul-window/maul-window.mjs "$PWD" >out/web-play.log 2>&1 ||
+            out/wasm-development/third_party/maul-window/maul-window.mjs "$PWD" \
+            out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
+            >out/web-play.log 2>&1 ||
             play_status=$?
         if [ "$play_status" -eq 77 ]; then
             echo "web play skipped: no Puppeteer or no browser for it"
