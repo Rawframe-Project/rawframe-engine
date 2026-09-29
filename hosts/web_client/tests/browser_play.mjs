@@ -199,8 +199,11 @@ try {
     const field = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(summary?.[0] ?? '')?.[1] ?? -1);
     const felt = /"code":"felt_summary"[^\n]*"effectsFelt":(\d+)/.exec(clientLog);
     console.log(`page: the player felt ${felt ? felt[1] : 'no'} effects`);
+    const drawn = /"code":"canvas_summary"[^\n]*"spritesDrawn":(\d+)[^\n]*"unknownTextures":0,/.exec(clientLog);
+    console.log(`page: the canvas drew ${drawn ? drawn[1] : 'no'} sprites`);
     verdict = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
-                      field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0
+                      field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0 && drawn !== null &&
+                      Number(drawn[1]) > 0
                   ? 0
                   : 1;
 } catch (error) {

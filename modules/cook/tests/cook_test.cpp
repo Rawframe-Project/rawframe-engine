@@ -300,8 +300,8 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     fs::copy(fs::path{RAWFRAME_SAMPLE_GAMES} / "runners", kGame, fs::copy_options::recursive);
     const std::string kSourcesId = "f9f0181057571ecd398d86d2c34a641f";
     writeText(kGame / "runners.game.rfmeta", sidecar("000000000000000000000000000000a5", "", "rawframe.game"));
-    static const std::array<Importer, 5> kImporters = {
-        audioImporter(), gameImporter(), kestImporter(), sceneImporter(), textImporter()};
+    static const std::array<Importer, 6> kImporters = {
+        audioImporter(), gameImporter(), kestImporter(), sceneImporter(), textImporter(), textureImporter()};
     const auto kCook = [&kProject] {
         auto report = cookSources(CookRequest{
             .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
@@ -309,7 +309,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
         return report.has_value() ? std::move(*report) : CookReport{};
     };
     const CookReport kFirst = kCook();
-    RAWFRAME_EXPECT(kFirst.cooked == 11 && kFirst.failures.empty());
+    RAWFRAME_EXPECT(kFirst.cooked == 13 && kFirst.failures.empty());
     const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
         const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
         if (!kManifest.has_value()) {
@@ -342,6 +342,9 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     RAWFRAME_EXPECT(kGameRead->texts.size() == 2 && kGameRead->textDocument("hud.strings") != nullptr &&
                     kGameRead->textDocument("hud.strings")->document ==
                         base::parseBits128Hex("aefdab1e47c086ddf189f56bbb92c4f0").value);
+    RAWFRAME_EXPECT(kGameRead->textures.size() == 2 && kGameRead->texture("runner.png") != nullptr &&
+                    kGameRead->texture("runner.png")->texture ==
+                        base::parseBits128Hex("2cf4e6afa86830492ee14a9e8067986a").value);
     const base::Bits128 kSources = base::parseBits128Hex(kSourcesId).value;
     RAWFRAME_EXPECT(kGameRead->programs.size() == 2 && kGameRead->program("runners.kest") != nullptr &&
                     kGameRead->program("runners.kest")->sources == kSources &&
@@ -371,6 +374,13 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     writeText(kGame / "shot.sound", elsewhere);
     RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
     writeText(kGame / "shot.sound", sound);
+    // A texture whose sidecar names another importer.
+    const std::string kTiles = readText(kGame / "tiles.png.rfmeta");
+    std::string retyped = kTiles;
+    retyped.replace(retyped.find("rawframe.texture"), 16, "rawframe.mesh");
+    writeText(kGame / "tiles.png.rfmeta", retyped);
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
+    writeText(kGame / "tiles.png.rfmeta", kTiles);
     // A project without its sidecar names no sources.
     fs::rename(kGame / "kest.project.rfmeta", kProject.base / "aside");
     RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));

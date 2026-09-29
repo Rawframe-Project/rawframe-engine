@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runners played and heard from its Composition alone: a publisher key is
+# Runners played, heard, and drawn from its Composition alone: a publisher key is
 # made, runners' cooked content is packed into a Build signed with it and
 # installed in a library beside the publisher's key set, a CompositionRecord
 # names it as the Game, and the process, started outside the repository,
@@ -59,3 +59,7 @@ grep -q '"code":"not_started".*"exitCode":65' "$work/log.ndjson"
 run "$work/runners.composition"
 grep -q '"code":"composition_opened"' "$work/log.ndjson"
 grep -o '"code":"recording_summary".*' "$work/log.ndjson"
+# The player's client drew the level's tiles and the runners over them: two
+# draws, every texture one the game declares (D254).
+grep -q '"code":"canvas_summary".*"spritesDrawn":[1-9][0-9]*,.*"unknownTextures":0,"overLimit":0,"mostDraws":2,' \
+    "$work/log.ndjson"

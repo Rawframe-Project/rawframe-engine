@@ -4,7 +4,8 @@
   "schema": {
     "rawframe.physics2d.body": "593035e6aa3af5e7",
     "rawframe.physics2d.pose": "5c5cb2726bb85776",
-    "rawframe.physics2d.velocity": "63c49a3a472d1997"
+    "rawframe.physics2d.velocity": "63c49a3a472d1997",
+    "runners.look": "959669fe91edb3c6"
   },
   "entities": [
     {
@@ -17,7 +18,17 @@
           "width": 40
         },
         "rawframe.physics2d.pose": {},
-        "rawframe.physics2d.velocity": {}
+        "rawframe.physics2d.velocity": {},
+        "runners.look": {
+          "color": 4294967295,
+          "height": 1,
+          "pivotX": 0.5,
+          "pivotY": 0.5,
+          "texture": 11839623990059228360,
+          "u1": 80,
+          "v1": 1,
+          "width": 80
+        }
       }
     },
     {
@@ -33,7 +44,17 @@
           "x": -40,
           "y": 10
         },
-        "rawframe.physics2d.velocity": {}
+        "rawframe.physics2d.velocity": {},
+        "runners.look": {
+          "color": 4294967295,
+          "height": 20,
+          "pivotX": 0.5,
+          "pivotY": 0.5,
+          "texture": 11839623990059228360,
+          "u1": 1,
+          "v1": 20,
+          "width": 1
+        }
       }
     },
     {
@@ -49,7 +70,17 @@
           "x": 40,
           "y": 10
         },
-        "rawframe.physics2d.velocity": {}
+        "rawframe.physics2d.velocity": {},
+        "runners.look": {
+          "color": 4294967295,
+          "height": 20,
+          "pivotX": 0.5,
+          "pivotY": 0.5,
+          "texture": 11839623990059228360,
+          "u1": 1,
+          "v1": 20,
+          "width": 1
+        }
       }
     },
     {
@@ -67,7 +98,17 @@
           "x": -28,
           "y": 1
         },
-        "rawframe.physics2d.velocity": {}
+        "rawframe.physics2d.velocity": {},
+        "runners.look": {
+          "color": 4294967295,
+          "height": 1,
+          "pivotX": 0.5,
+          "pivotY": 0.5,
+          "texture": 11839623990059228360,
+          "u1": 8,
+          "v1": 1,
+          "width": 8
+        }
       }
     },
     {
@@ -85,7 +126,17 @@
           "x": 28,
           "y": 1
         },
-        "rawframe.physics2d.velocity": {}
+        "rawframe.physics2d.velocity": {},
+        "runners.look": {
+          "color": 4294967295,
+          "height": 1,
+          "pivotX": 0.5,
+          "pivotY": 0.5,
+          "texture": 11839623990059228360,
+          "u1": 8,
+          "v1": 1,
+          "width": 8
+        }
       }
     },
     {
@@ -103,7 +154,17 @@
           "x": 34,
           "y": 1.5
         },
-        "rawframe.physics2d.velocity": {}
+        "rawframe.physics2d.velocity": {},
+        "runners.look": {
+          "color": 4294967295,
+          "height": 1,
+          "pivotX": 0.5,
+          "pivotY": 0.5,
+          "texture": 11839623990059228360,
+          "u1": 4,
+          "v1": 1,
+          "width": 4
+        }
       }
     }
   ],
