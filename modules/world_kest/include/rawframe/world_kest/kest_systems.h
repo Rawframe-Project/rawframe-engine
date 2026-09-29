@@ -9,7 +9,8 @@
 // columns are lent as a journal copy that replaces the World's values only
 // when every call of the system that tick succeeded, so a refused or
 // exhausted system changes nothing. Structural changes go through doors into
-// the system's command buffer, discarded with it when the system fails.
+// the system's command buffer, discarded with it when the system fails;
+// what other doors stage beside them follows the same rule (KestStaging).
 
 #include "rawframe/kest/doors.h"
 #include "rawframe/kest/machine.h"
@@ -102,6 +103,21 @@ inline constexpr std::size_t kMaximumJournalBytes = std::size_t{4} << 20U;
 /// commands a machine's systems record in one tick, together (D240).
 inline constexpr std::size_t kMaximumJournalOperations = 65'536;
 
+/// What doors stage beside a system's commands (D266): kept only when the
+/// run that staged it succeeds, as its commands and writes are.
+class KestStaging {
+public:
+    KestStaging() = default;
+    KestStaging(const KestStaging&) = delete;
+    KestStaging& operator=(const KestStaging&) = delete;
+    virtual ~KestStaging() = default;
+
+    /// Before a run's first call.
+    virtual void begin() noexcept = 0;
+    /// After its last: `kept` when the run succeeded.
+    virtual void end(bool kept) noexcept = 0;
+};
+
 struct KestSystemsSettings {
     std::shared_ptr<const kest::Program> program;
     /// Copied: the doors themselves must outlive the systems. `World.create`,
@@ -119,6 +135,8 @@ struct KestSystemsSettings {
     std::span<const KestSystemDeclaration> systems;
     /// Where each system's runs are timed, or nowhere; outlives the systems.
     KestTiming* timing = nullptr;
+    /// Told of each run, in order; each outlives the systems.
+    std::span<KestStaging* const> staging;
     /// Journal bytes all the systems may take in one tick; a system that
     /// would pass it is refused for the tick and changes nothing.
     std::size_t journalBytesPerTick = kMaximumJournalBytes;

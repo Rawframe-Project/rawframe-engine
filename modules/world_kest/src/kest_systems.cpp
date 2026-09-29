@@ -89,6 +89,8 @@ struct KestSystems::Doorway {
     std::uint32_t run = 0;
     /// Where runs are timed, or nowhere (D210).
     KestTiming* timing = nullptr;
+    /// Told of each run (D266).
+    std::vector<KestStaging*> staging;
     std::vector<Component> components;
     std::vector<Prefab> prefabs;
     // Reused by every spawn, sized when the systems are declared, so a
@@ -433,15 +435,29 @@ private:
         doorway_->context = &context;
         ++doorway_->run;
         const std::size_t kCommandsBefore = context.commands.size();
+        for (KestStaging* each : doorway_->staging) {
+            each->begin();
+        }
         result::Status called;
         for (std::size_t at = 0; at < chunks_.size() && called.has_value(); ++at) {
             called = callOnce(chunks_[at], at == 0 ? kest::Fuel::Refill : kest::Fuel::Continue);
         }
         doorway_->context = nullptr;
+        result::Status kept = keep(context, kCommandsBefore, std::move(called));
+        for (KestStaging* each : doorway_->staging) {
+            each->end(kept.has_value());
+        }
+        return kept;
+    }
+
+    /// What a run's calls answered, made the World's when they succeeded
+    /// within the tick's operations.
+    [[nodiscard]] result::Status
+    keep(world::SystemContext& context, std::size_t commandsBefore, result::Status called) noexcept {
         RAWFRAME_TRY(std::move(called));
         // SPEC-0013's journal operations per tick, across the machine's
         // systems: past it, this run's commands and writes are discarded.
-        const std::size_t kRecorded = context.commands.size() - kCommandsBefore;
+        const std::size_t kRecorded = context.commands.size() - commandsBefore;
         if (kRecorded > doorway_->operationLimit - doorway_->operations) {
             return refuse(result::ErrorClass::ResourceExhausted,
                           WorldKestError::JournalExhausted,
@@ -616,6 +632,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
     doorway->timing = settings.timing;
     doorway->journalLimit = settings.journalBytesPerTick;
     doorway->operationLimit = settings.journalOperationsPerTick;
+    doorway->staging.assign(settings.staging.begin(), settings.staging.end());
     doorway->components.reserve(settings.components.size() + 1);
     for (const KestComponent& component : settings.components) {
         Doorway::Component& added = doorway->components.emplace_back();
