@@ -5,6 +5,7 @@
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_animation/components.h"
 #include "rawframe/world_kest/errors.h"
+#include "rawframe/world_kest/layouts.h"
 #include "rawframe/world_replication/perception.h"
 
 #include <algorithm>
@@ -698,8 +699,7 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
     if (value.field == "texture") {
         const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
         const auto kTexture = std::ranges::find(game.textures, value.value, &GameTexture::path);
-        if (kComponent != game.components.end() &&
-            (kComponent->kestType == "Sprite" || kComponent->kestType == "rawframe.canvas.Sprite") &&
+        if (kComponent != game.components.end() && ofEngineType(*kComponent, "rawframe.canvas.Sprite") &&
             kTexture != game.textures.end()) {
             return std::to_string(kTexture->id);
         }

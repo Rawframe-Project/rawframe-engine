@@ -236,7 +236,7 @@ RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
     kWrite("heard.game",
            "program heard.kest\n"
            "component 3c1f0a8e-5b2d-4e7a-9f64-1d8c2b7a0e53 heard.emitter Emitter\n"
-           "component 9e4b7c21-6d0a-4f38-b5e2-7a1c3d9f8b06 heard.listener Listener\n"
+           "component 9e4b7c21-6d0a-4f38-b5e2-7a1c3d9f8b06 heard.listener rawframe.sound.Listener\n"
            "mixer heard.mixer\nsound 00000000000000a2 click.sound\n");
     kWrite("heard.mixer",
            "{\n  \"kind\": \"audio.mixer\",\n  \"formatVersion\": 1,\n  \"master\": {\n    \"busId\": "

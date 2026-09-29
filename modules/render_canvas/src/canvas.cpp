@@ -206,7 +206,7 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
     const world_kest::GameDescription& kDescription = game.description();
     const world_kest::GameComponent* sprite = nullptr;
     for (const world_kest::GameComponent& component : kDescription.components) {
-        if (component.kestType != "Sprite" && component.kestType != "rawframe.canvas.Sprite") {
+        if (!world_kest::ofEngineType(component, "rawframe.canvas.Sprite")) {
             continue;
         }
         if (sprite != nullptr) {

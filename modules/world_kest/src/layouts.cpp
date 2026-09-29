@@ -102,6 +102,12 @@ bool sameLayout(const kest::TypeLayout& left, const kest::TypeLayout& right) {
     return true;
 }
 
+bool ofEngineType(const GameComponent& component, std::string_view qualified) {
+    const std::size_t kLast = qualified.rfind('.');
+    return component.kestType == qualified ||
+           (kLast != std::string_view::npos && component.kestType == qualified.substr(kLast + 1));
+}
+
 bool laidOutAs(const kest::Program& program,
                std::string_view type,
                std::size_t size,

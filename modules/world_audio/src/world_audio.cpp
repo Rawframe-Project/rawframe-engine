@@ -276,9 +276,9 @@ result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const
     std::optional<schema::ComponentTypeId> emitter;
     std::optional<schema::ComponentTypeId> listener;
     for (const world_kest::GameComponent& component : kDescription.components) {
-        if (component.kestType == "Emitter" || component.kestType == "sound.Emitter") {
+        if (world_kest::ofEngineType(component, "rawframe.sound.Emitter")) {
             emitter = component.id;
-        } else if (component.kestType == "Listener" || component.kestType == "sound.Listener") {
+        } else if (world_kest::ofEngineType(component, "rawframe.sound.Listener")) {
             listener = component.id;
         }
     }
@@ -288,14 +288,15 @@ result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const
                       "a game with a mixer declares an emitter component");
     }
     if (!world_kest::laidOutAs(program,
-                               "Emitter",
+                               "rawframe.sound.Emitter",
                                sizeof(Emitter),
                                {{"sound", offsetof(Emitter, sound)},
                                 {"cue", offsetof(Emitter, cue)},
                                 {"playing", offsetof(Emitter, playing)},
                                 {"despawn", offsetof(Emitter, despawn)}}) ||
         (listener &&
-         !world_kest::laidOutAs(program, "Listener", sizeof(Listener), {{"active", offsetof(Listener, active)}}))) {
+         !world_kest::laidOutAs(
+             program, "rawframe.sound.Listener", sizeof(Listener), {{"active", offsetof(Listener, active)}}))) {
         return refuse(result::ErrorClass::InvalidArgument,
                       WorldAudioError::BadComponents,
                       "the program lays out rawframe.sound's types otherwise than this engine reads them");

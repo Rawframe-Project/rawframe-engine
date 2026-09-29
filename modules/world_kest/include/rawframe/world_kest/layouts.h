@@ -32,6 +32,11 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
 /// Whether two layouts are the same shape, field by field; marks aside.
 [[nodiscard]] bool sameLayout(const kest::TypeLayout& left, const kest::TypeLayout& right);
 
+/// Whether `component` is of the engine's Kest type `qualified` (such as
+/// `rawframe.sound.Emitter`): named by that full name, or by its last part
+/// as a component line may name it.
+[[nodiscard]] bool ofEngineType(const GameComponent& component, std::string_view qualified);
+
 /// Whether `program` lays `type` out as C++ reads it: `size` bytes, and
 /// exactly `fields`, by name and offset, in order. An engine module that
 /// reads a component of a type of the engine's Kest library (a sound's
