@@ -67,6 +67,8 @@ struct Field {
     std::string name;
     std::size_t offset = 0;
     FieldKind kind = FieldKind::Other;
+    /// A `Tag`'s enum's cases, by name, in the order of their numbers.
+    std::vector<std::string> cases;
 };
 
 /// How the program lays a type out where memory is shared.

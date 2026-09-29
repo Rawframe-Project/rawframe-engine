@@ -9,5 +9,5 @@ system patrol.watch simulation watch write patrol.guard
 replicate patrol.guard
 
 spawn 2 patrol.guard posts=3
-# One that spawns at the end of its round, its case named (D269).
-spawn 1 patrol.guard posts=3 post=3 at=Done
+# A case the enum does not have, or one by number, refuses the game.
+spawn 1 patrol.guard posts=3 post=3 at=Nowhere

@@ -152,7 +152,9 @@ RAWFRAME_TEST(AGameThatDoesNotLoadFailsTheStart) {
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "broken.game\n",
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "mispredicted.game\n",
                                      std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "misinterested.game\n",
-                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "mislinked.game\n"}) {
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "mislinked.game\n",
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "mispatrolled.game\n",
+                                     std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES + "misnumbered.game\n"}) {
         const auto kConfiguration = composition::Configuration::parse(kText);
         composition::Composition composition{*plan,
                                              composition::HostServices{.clock = &clock,
@@ -810,10 +812,12 @@ RAWFRAME_TEST(AWaitingBodyLivesInAComponent) {
         // Five ticks: to post one, looking twice, to post two, and one look
         // there, so it waits looking with one look left.
         const std::vector<Guard> kAtFive = kGuards();
-        RAWFRAME_EXPECT(simulation->tick().value == 5 && kAtFive.size() == 2);
-        for (const Guard& guard : kAtFive) {
-            RAWFRAME_EXPECT(guard.post == 2 && guard.looks == 1 && guard.at == 2);
+        RAWFRAME_EXPECT(simulation->tick().value == 5 && kAtFive.size() == 3);
+        for (std::size_t index = 0; index < 2 && index < kAtFive.size(); ++index) {
+            RAWFRAME_EXPECT(kAtFive[index].post == 2 && kAtFive[index].looks == 1 && kAtFive[index].at == 2);
         }
+        // One spawned done, by its case's name, stays done.
+        RAWFRAME_EXPECT(kAtFive.size() == 3 && kAtFive[2].post == 3 && kAtFive[2].at == 3);
         composition.stop();
     }
     const auto kConfiguration =
@@ -826,7 +830,7 @@ RAWFRAME_TEST(AWaitingBodyLivesInAComponent) {
                                                                    .configuration = &*kConfiguration}};
     RAWFRAME_EXPECT(composition.start().has_value());
     const std::vector<Guard> kRestored = kGuards();
-    RAWFRAME_EXPECT(kRestored.size() == 2 && kRestored[0].at == 2 && kRestored[0].looks == 1);
+    RAWFRAME_EXPECT(kRestored.size() == 3 && kRestored[0].at == 2 && kRestored[0].looks == 1);
     // And carries on from there: its last look at post two, three steps at
     // post three, then done, the round over.
     clock.advance(execution::MonotonicDuration::fromSeconds(1));

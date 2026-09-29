@@ -19,9 +19,11 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldKestEr
     return result::fail(errorClass, kWorldKestDomain, code(error), why);
 }
 
-/// Writes `text` as a value of `kind` at `into`. False when it does not parse
-/// or does not fit.
-bool writeField(kest::FieldKind kind, std::string_view text, std::byte* into) {
+/// Writes `text` as a value of `field` at `into`: a number, a truth, or, for
+/// an enum's tag, one of its cases by name (D269). False when it does not
+/// parse or does not fit.
+bool writeField(const kest::Field& field, std::string_view text, std::byte* into) {
+    const kest::FieldKind kind = field.kind;
     const auto kParse = [text](auto& value) {
         const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
         return error == std::errc{} && end == text.data() + text.size();
@@ -61,9 +63,13 @@ bool writeField(kest::FieldKind kind, std::string_view text, std::byte* into) {
             return kStore(static_cast<std::uint8_t>(text == "true" ? 1 : 0));
         }
         return false;
-    // A tag would be written by its case's name, which a scene cannot give
-    // yet: an enum starts at its first case (D268).
-    case kest::FieldKind::Tag:
+    case kest::FieldKind::Tag: {
+        // By name only: a case's number is its place, which an edited enum
+        // moves.
+        const auto kCase = std::ranges::find(field.cases, text);
+        return kCase != field.cases.end() &&
+               kStore(static_cast<std::int32_t>(std::distance(field.cases.begin(), kCase)));
+    }
     case kest::FieldKind::Payload:
     case kest::FieldKind::Other:
         return false;
@@ -283,7 +289,7 @@ result::Result<SpawnValues> GameScenes::spawnValues(const GameSpawn& spawn) cons
             for (const kest::Field& candidate : layout.fields) {
                 field = candidate.name == value.field ? &candidate : field;
             }
-            if (field == nullptr || !writeField(field->kind, value.value, bytes.data() + field->offset)) {
+            if (field == nullptr || !writeField(*field, value.value, bytes.data() + field->offset)) {
                 return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
                                                              WorldKestError::UnknownName,
                                                              "a spawn names a field its component lacks, or "

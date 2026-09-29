@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -214,8 +215,20 @@ result::Result<TypeLayout> Program::layout(std::string_view type) const {
     TypeLayout layout{.size = found->size, .alignment = found->align, .mark = kest_layout_mark(found), .fields = {}};
     for (std::uint16_t index = 0; index < found->count; ++index) {
         const KestPiece& piece = found->pieces[index];
-        layout.fields.push_back(Field{
-            .name = piece.name != nullptr ? piece.name : "", .offset = piece.offset, .kind = fieldKind(piece.kind)});
+        Field field{
+            .name = piece.name != nullptr ? piece.name : "", .offset = piece.offset, .kind = fieldKind(piece.kind)};
+        if (field.kind == FieldKind::Tag) {
+            // Kest answers a case's name for each number that is one, and
+            // nothing past the last.
+            for (std::int32_t tag = 0; tag < std::numeric_limits<std::uint16_t>::max(); ++tag) {
+                const char* const kCase = kest_case_of(found, index, tag, nullptr, nullptr);
+                if (kCase == nullptr) {
+                    break;
+                }
+                field.cases.emplace_back(kCase);
+            }
+        }
+        layout.fields.push_back(std::move(field));
     }
     return layout;
 }
