@@ -26,6 +26,10 @@ std::optional<world_save::FieldKind> savedKind(kest::FieldKind kind) noexcept {
         return world_save::FieldKind::F64;
     case kest::FieldKind::Bool:
         return world_save::FieldKind::Bool;
+    // A tag names a case by its place, which an edited enum moves: a save
+    // does not carry one across a migration (D268).
+    case kest::FieldKind::Tag:
+    case kest::FieldKind::Payload:
     case kest::FieldKind::Other:
         return std::nullopt;
     }
@@ -56,6 +60,11 @@ std::optional<world_snapshot::FieldKind> snapshotKind(kest::FieldKind kind) noex
         return world_snapshot::FieldKind::F64;
     case kest::FieldKind::Bool:
         return world_snapshot::FieldKind::Bool;
+    // A checkpoint is restored by the build that wrote it, so a tag is its
+    // number; the machine checks it names a case when it reads it (D268).
+    case kest::FieldKind::Tag:
+        return world_snapshot::FieldKind::I32;
+    case kest::FieldKind::Payload:
     case kest::FieldKind::Other:
         return std::nullopt;
     }

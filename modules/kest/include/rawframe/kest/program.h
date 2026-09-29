@@ -39,8 +39,11 @@ struct CompileSettings {
 /// Immutable once compiled and shared by every machine started from it, which
 /// keep it alive. Compile and start machines from one thread at a time: Kest
 /// writes a failed start's report into the build.
-/// What one scalar of a laid-out type is. `Other` covers what the engine does
-/// not read field by field yet: tags, flags, handles, text.
+/// What one scalar of a laid-out type is. `Tag` is an enum's case, a
+/// four-byte whole number the machine checks names a case wherever it reads
+/// one (D268); `Payload` is what a case carries, which only its tag says the
+/// kind of. `Other` covers what the engine does not read field by field
+/// yet: flags, handles, text.
 enum class FieldKind : std::uint8_t {
     I8,
     I16,
@@ -53,6 +56,8 @@ enum class FieldKind : std::uint8_t {
     F32,
     F64,
     Bool,
+    Tag,
+    Payload,
     Other
 };
 
@@ -71,8 +76,9 @@ struct TypeLayout {
     /// Changes whenever the shape does: a field moved, widened, renamed, or a
     /// case or flag inserted. What a save or schema check keeps beside bytes.
     std::uint64_t mark = 0;
-    /// Every scalar, in memory order. Empty for a type with a tagged union
-    /// inside, which is read by its tag rather than piece by piece.
+    /// Every scalar, in memory order. A type with a `Payload` among them is
+    /// read by its tags, never piece by piece; one whose enums carry nothing
+    /// is pieces like any other, its tags among them (D268).
     std::vector<Field> fields;
 };
 

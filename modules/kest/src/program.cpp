@@ -74,6 +74,10 @@ FieldKind fieldKind(std::uint8_t kind) noexcept {
         return FieldKind::F64;
     case KEST_L_BOOL:
         return FieldKind::Bool;
+    case KEST_L_TAG:
+        return FieldKind::Tag;
+    case KEST_L_PAYLOAD:
+        return FieldKind::Payload;
     default:
         return FieldKind::Other;
     }
@@ -208,13 +212,10 @@ result::Result<TypeLayout> Program::layout(std::string_view type) const {
                             "the program declares no one type of this name");
     }
     TypeLayout layout{.size = found->size, .alignment = found->align, .mark = kest_layout_mark(found), .fields = {}};
-    if (!found->tagged) {
-        for (std::uint16_t index = 0; index < found->count; ++index) {
-            const KestPiece& piece = found->pieces[index];
-            layout.fields.push_back(Field{.name = piece.name != nullptr ? piece.name : "",
-                                          .offset = piece.offset,
-                                          .kind = fieldKind(piece.kind)});
-        }
+    for (std::uint16_t index = 0; index < found->count; ++index) {
+        const KestPiece& piece = found->pieces[index];
+        layout.fields.push_back(Field{
+            .name = piece.name != nullptr ? piece.name : "", .offset = piece.offset, .kind = fieldKind(piece.kind)});
     }
     return layout;
 }

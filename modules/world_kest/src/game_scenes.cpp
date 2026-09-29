@@ -61,6 +61,10 @@ bool writeField(kest::FieldKind kind, std::string_view text, std::byte* into) {
             return kStore(static_cast<std::uint8_t>(text == "true" ? 1 : 0));
         }
         return false;
+    // A tag would be written by its case's name, which a scene cannot give
+    // yet: an enum starts at its first case (D268).
+    case kest::FieldKind::Tag:
+    case kest::FieldKind::Payload:
     case kest::FieldKind::Other:
         return false;
     }

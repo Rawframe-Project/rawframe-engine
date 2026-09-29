@@ -101,6 +101,9 @@ std::optional<authoring::FieldKind> kindOf(rawframe::kest::FieldKind kind) {
         return authoring::FieldKind::Real;
     case K::Bool:
         return authoring::FieldKind::Truth;
+    // Scenes do not write tags yet (D268).
+    case K::Tag:
+    case K::Payload:
     case K::Other:
         return std::nullopt;
     }

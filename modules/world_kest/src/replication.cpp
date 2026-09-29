@@ -34,6 +34,11 @@ std::optional<world_replication::WireKind> wireKind(kest::FieldKind kind) noexce
         return WireKind::F64;
     case kest::FieldKind::Bool:
         return WireKind::Bool;
+    // Both sides run one build, so a tag crosses as its number; the machine
+    // checks it names a case when it reads it (D268).
+    case kest::FieldKind::Tag:
+        return WireKind::I32;
+    case kest::FieldKind::Payload:
     case kest::FieldKind::Other:
         return std::nullopt;
     }
