@@ -92,13 +92,13 @@ RAWFRAME_TEST(StatePayloadsCarryRecordsForTheTable) {
     std::array<std::byte, 64> out{};
     network::Writer writer{out};
     RAWFRAME_EXPECT(
-        encodeStateHeader(writer, {.serverTick = 1000, .consumedInputTick = 998, .playerHeld = true, .recordCount = 2})
+        encodeStateHeader(writer, {.serverTick = 1000, .consumedInputTick = 998, .playerWhole = true, .recordCount = 2})
             .has_value());
     RAWFRAME_EXPECT(encodeStateRecordHead(writer, {.entity = NetEntityId{1}, .component = 0}).has_value());
     RAWFRAME_EXPECT(encodeStateRecordHead(writer, {.entity = NetEntityId{2}, .component = 1}).has_value());
     network::Reader reader{writer.written()};
     const auto kHeader = decodeStateHeader(reader);
-    RAWFRAME_EXPECT(kHeader.has_value() && kHeader->serverTick == 1000 && kHeader->playerHeld &&
+    RAWFRAME_EXPECT(kHeader.has_value() && kHeader->serverTick == 1000 && kHeader->playerWhole &&
                     kHeader->recordCount == 2);
     RAWFRAME_EXPECT(decodeStateRecordHead(reader, 2).has_value());
     RAWFRAME_EXPECT(failedWith(decodeStateRecordHead(reader, 1), ReplicationError::UnknownComponent));

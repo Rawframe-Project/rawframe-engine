@@ -96,7 +96,7 @@ struct Run {
     }
     bool server(std::uint64_t consumed, std::int32_t value) {
         const std::array<std::span<const std::byte>, 1> kValues = {std::as_bytes(std::span{&value, 1})};
-        return prediction.authoritative(consumed, kValues);
+        return prediction.authoritative(consumed, kValues, true);
     }
 };
 

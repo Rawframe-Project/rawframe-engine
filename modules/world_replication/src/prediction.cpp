@@ -135,17 +135,22 @@ void Prediction::command(std::uint64_t tick, std::span<const std::byte> value) {
     }
 }
 
-bool Prediction::unchanged(std::uint64_t consumed) {
-    // A copy: `authoritative` assigns what it is given to `known_`.
-    const State kKnown = known_;
-    std::vector<std::span<const std::byte>> values(kKnown.begin(), kKnown.end());
-    return authoritative(consumed, values);
-}
-
-bool Prediction::authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values) {
-    for (std::size_t index = 0; index < values.size() && index < known_.size(); ++index) {
-        if (!values[index].empty()) {
-            known_[index].assign(values[index].begin(), values[index].end());
+bool Prediction::authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> given, bool whole) {
+    for (std::size_t index = 0; index < given.size() && index < known_.size(); ++index) {
+        if (!given[index].empty()) {
+            known_[index].assign(given[index].begin(), given[index].end());
+        }
+    }
+    // A whole state's missing values are those last heard: compared like
+    // the rest, so a misprediction of a value the server holds still is
+    // caught, not confirmed.
+    std::vector<std::span<const std::byte>> values(given.begin(), given.end());
+    if (whole) {
+        values.resize(known_.size());
+        for (std::size_t index = 0; index < known_.size(); ++index) {
+            if (values[index].empty()) {
+                values[index] = known_[index];
+            }
         }
     }
     if (!started_) {

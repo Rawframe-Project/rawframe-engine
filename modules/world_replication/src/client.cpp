@@ -317,15 +317,17 @@ struct ReplicationClient::State {
         stateSequence = std::max(stateSequence, event.sequence);
         consumedInputTick = std::max(consumedInputTick, kHeader->consumedInputTick);
         if (prediction) {
-            reconcile(kHeader->consumedInputTick, kHeader->serverTick, kHeader->playerHeld);
+            reconcile(kHeader->consumedInputTick, kHeader->serverTick, kHeader->playerWhole);
         }
     }
 
     /// Hands the server's values for the player's predicted components, as
     /// staged from this datagram, to the prediction, and shows its result.
-    /// With `held`, the server says the player's values are the ones this
-    /// client holds, so a state without them still confirms (D249).
-    void reconcile(std::uint64_t consumed, std::uint64_t tick, bool held) {
+    /// With `whole`, the server says the player's values not here are the
+    /// ones this client holds, so a state without them still confirms
+    /// (D249), and a confirmation is of the whole state, the only kind a
+    /// checksum is sent for (D274).
+    void reconcile(std::uint64_t consumed, std::uint64_t tick, bool whole) {
         std::vector<std::span<const std::byte>> values(prediction->count());
         bool any = false;
         for (const Staged& record : staged) {
@@ -336,10 +338,10 @@ struct ReplicationClient::State {
                 any = true;
             }
         }
-        if (any || held) {
+        if (any || whole) {
             const std::uint32_t kInterval = settings.prediction->checksumInterval;
-            const bool kConfirmed = any ? prediction->authoritative(consumed, values) : prediction->unchanged(consumed);
-            if (kConfirmed && kInterval != 0 && ++confirmations % kInterval == 0) {
+            const bool kConfirmed = prediction->authoritative(consumed, values, whole);
+            if (kConfirmed && whole && kInterval != 0 && ++confirmations % kInterval == 0) {
                 sendChecksum(tick);
             }
             present();

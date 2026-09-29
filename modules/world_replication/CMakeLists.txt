@@ -7,5 +7,6 @@ rawframe_module(NAME world_replication
     DEPS game_content world_runtime network world composition schema execution diagnostics result base
 )
 
-rawframe_module_tests(NAME world_replication SOURCES tests/checksums_test.cpp tests/effects_test.cpp tests/records_test.cpp)
+rawframe_module_tests(NAME world_replication SOURCES tests/checksums_test.cpp tests/effects_test.cpp tests/prediction_test.cpp
+                      tests/records_test.cpp)
 rawframe_module_fuzz(NAME world_replication TARGET records SOURCES tests/fuzz_records.cpp)

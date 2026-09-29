@@ -22,14 +22,14 @@ public:
     void command(std::uint64_t tick, std::span<const std::byte> value);
     /// The server's values for some predicted components of the player,
     /// after consuming input `consumed`, in `predicted` order with an empty
-    /// span for one not in this state. True when they confirmed the
-    /// prediction, whose whole state is then `confirmed()`.
-    bool authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values);
-    /// The server consumed input `consumed` and its values of the player
-    /// are still the newest it sent: `authoritative` with those.
-    bool unchanged(std::uint64_t consumed);
+    /// span for one not in this state. With `whole`, the server says an
+    /// empty one is the value last heard, which is compared too (D274).
+    /// True when they confirmed the prediction, whose state is then
+    /// `confirmed()`.
+    bool authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values, bool whole);
     /// Every predicted component's value, in memory layout, at the last
-    /// confirmed input tick: what a checksum record hashes (D204).
+    /// confirmed input tick. After a confirmation of the whole state, it is
+    /// the server's there: what a checksum record hashes (D204, D274).
     [[nodiscard]] const std::vector<std::vector<std::byte>>& confirmed() const noexcept {
         return confirmed_;
     }
