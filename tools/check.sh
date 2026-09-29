@@ -20,7 +20,15 @@ tier="${1:-full}"
 start=$(date +%s)
 failures=0
 
-step() { printf '== %s\n' "$*"; }
+# Each step says how long the one before it took, so a check that grows
+# says where.
+last=$(date +%s)
+step() {
+    local now
+    now=$(date +%s)
+    printf '== %s (previous step %ss)\n' "$*" "$((now - last))"
+    last=$now
+}
 fail() { printf 'FAILED: %s\n' "$*"; failures=$((failures + 1)); }
 
 mkdir -p out
@@ -51,12 +59,16 @@ build_and_test() {
         ! { rm -rf "out/$preset" && cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; }; then
         tail -20 "out/$preset.configure.log"; fail "$preset configure"; return
     fi
+    local began built
+    began=$(date +%s)
     if ! cmake --build "out/$preset" >"out/$preset.build.log" 2>&1; then
         grep -E 'error|FAILED' "out/$preset.build.log" | head -20; fail "$preset build"; return
     fi
+    built=$(date +%s)
     if ! ctest --test-dir "out/$preset" --output-on-failure -j "$jobs" >"out/$preset.test.log" 2>&1; then
         tail -30 "out/$preset.test.log"; fail "$preset tests"; return
     fi
+    printf '   %s: built in %ss, tested in %ss\n' "$preset" "$((built - began))" "$(($(date +%s) - built))"
 }
 
 if [ "$tier" = "fast" ]; then
@@ -118,6 +130,7 @@ else
     fi
 fi
 
+printf '   (last step %ss)\n' "$(($(date +%s) - last))"
 elapsed=$(( $(date +%s) - start ))
 if [ "$failures" -eq 0 ]; then
     printf 'check %s passed in %ss\n' "$tier" "$elapsed"
