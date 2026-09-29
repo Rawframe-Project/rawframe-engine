@@ -44,7 +44,7 @@ PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus
 SERVER = "dedicated_server"
 NOT_IN_SERVER = {
     "audio", "world_audio", "localization", "world_localization", "authoring",
-    "input", "input_kest", "network_loopback", "network_web",
+    "input", "input_kest", "network_loopback", "network_web", "window",
     "cook", "audio_import", "mesh_import", "animation_import", "build",
 }
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
