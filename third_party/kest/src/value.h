@@ -68,6 +68,10 @@ typedef enum {
     // `load2` and then `index` was two dispatches for every `xs[i]` in a loop.
     // See D1155.
     KEST_OP_INDEX_LL,   // u16 run's slot, u16 index's slot, u16 layout
+    // And by an index a local holds out of a run on the stack, which is
+    // what the second half of `cells[y][x]` is: `load` and then `index`.
+    // See D1281.
+    KEST_OP_INDEX_L,    // u16 index's slot, u16 layout
     KEST_OP_POP_LAST,   // u16 layout, leaves an optional
     KEST_OP_TAKE,       // u16 layout, shifts what is after it down
     KEST_OP_CLEAR,
@@ -127,6 +131,11 @@ typedef enum {
     // way the three beside it were in D874. See D876.
     KEST_OP_TEXT_VALUE,
     KEST_OP_CONCAT,     // u16 count
+    // u16 count, u16 which: the same, where each piece whose bit is set in
+    // `which` is a signed whole number in one slot rather than text in two,
+    // written into what is joined rather than into a text of its own first.
+    // Sixteen pieces at the most. See D1277.
+    KEST_OP_CONCAT_I,
     // A number standing for a value, over exactly what `==` applies to.
     KEST_OP_HASH_I,
     KEST_OP_HASH_F,
@@ -245,6 +254,11 @@ typedef enum {
     KEST_OP_DIV_F32,
     KEST_OP_MOD_F32,
     KEST_OP_NEG_F32,
+    // The sine and the cosine of the number on top, answered the way
+    // `std.fdlibm` answers them, bit for bit, where a call to either was
+    // written. See D1279.
+    KEST_OP_SIN_F,
+    KEST_OP_COS_F,
 
     KEST_OP_LT_I,
     KEST_OP_LE_I,
@@ -330,6 +344,10 @@ typedef enum {
     KEST_OP_JUMP_FALSE_GE_K,
     KEST_OP_JUMP_FALSE_EQ_K,
     KEST_OP_JUMP_FALSE_NE_K,
+    // Two locals weighed against each other, and the jump: `load2` and then
+    // `jump.false.lt.i`, which is every `while i < n`. See D1281.
+    KEST_OP_JUMP_FALSE_LT_LL, // u16 slot, u16 slot, u16 forward offset
+    KEST_OP_JUMP_FALSE_LE_LL,
     // And what is on the stack weighed against a constant: `const` and then
     // one of the six whole-number jumps, which is every `xs[i] > 0` and every
     // answer of a call compared with a written number. See D1155.
@@ -827,15 +845,6 @@ int32_t kest_module_entry(const KestModule *module, const char *name);
 // a chunk with nothing in it. See D751.
 uint32_t kest_chunk_origin(const KestChunk *chunk, uint32_t offset);
 
-// How many bytes the instruction at a byte is, which is how a walk of the code
-// finds where the next one starts. Nought for a byte that is no instruction.
-uint32_t kest_op_wide(uint8_t op);
-
-// What an instruction is called. The list of them is `value.c`'s and this is
-// the one way anything else asks it, which is what keeps a machine that says
-// what it ran from holding a second copy of the names. See D870.
-const char *kest_op_name(uint8_t op);
-
 // What the instruction at `at` takes off the operand stack and puts back on
 // it, in slots, read the way the machine's handler for it moves the top of
 // the stack. NULL when that can be said, and why not when it cannot: a call
@@ -844,6 +853,23 @@ const char *kest_op_name(uint8_t op);
 // that checks itself holds it to what the machine moved. See D1239.
 const char *kest_op_stack(const KestModule *module, const KestChunk *chunk,
                           uint32_t at, uint32_t *takes, uint32_t *gives);
+
+// How many of the pieces `concat.i` joins are numbers rather than text: the
+// bits set in what it says. It says it for sixteen pieces at the most, and a
+// piece past the last one said about is not a piece. See D1277.
+#define KEST_NUMBERED_MOST 16u
+uint32_t kest_pieces_numbered(uint32_t which);
+
+// How many times a body written in C goes round a `while` between reading
+// whether the host wants it to stop: `kest_native_asking`. See D1283.
+#define KEST_TURNS_ASKED 1024u
+
+// `std.fdlibm`'s sine and cosine written again in C, the same operations in
+// the same order on the same constants, for the two instructions above: what
+// the library answers is what these answer, which `examples/determinism.kest`
+// holds with the library itself run beside them. See D1279.
+double kest_fdlibm_sin(double value);
+double kest_fdlibm_cos(double value);
 
 // What each number an instruction carries is, which is what the verifier holds
 // it to before anything runs: one of the body's slots or constants, one of the
@@ -866,9 +892,35 @@ typedef enum {
     KEST_OPERAND_BACKWARD,
 } KestOperand;
 
-// What the `k`th number an instruction carries is: nought counts from the
-// first. A number past the last it carries is a number.
-KestOperand kest_op_operand(uint8_t op, uint32_t k);
+// One row of the table of instructions, which is `value.c`'s: what it is
+// called, its shape -- the low four bits of which are how many bytes it takes
+// -- and what each number it carries is. The table is read here rather than
+// asked through a call a field, because the verifier, the lowering and the
+// proofs read a row for every instruction of every body, and a call each was
+// a tenth of the verifier's time. See D1284.
+typedef struct {
+    const char *name;
+    uint8_t shape;
+    uint8_t is[5];
+} KestInstruction;
+extern const KestInstruction *const kest_instructions;
+
+// How many bytes the instruction at a byte is, which is how a walk of the code
+// finds where the next one starts. One for a byte that is no instruction, so a
+// walk over what the verifier has not yet read still ends. D057's bug was a
+// second answer to this question that had a jump seven bytes wide, which is
+// why this is the only one.
+static inline uint32_t kest_op_wide(uint8_t op) {
+    return op <= KEST_OP_STOP ? (uint32_t)(kest_instructions[op].shape & 15u)
+                              : 1u;
+}
+
+// What an instruction is called. The list of them is `value.c`'s and this is
+// the one way anything else asks it, which is what keeps a machine that says
+// what it ran from holding a second copy of the names. See D870.
+static inline const char *kest_op_name(uint8_t op) {
+    return op <= KEST_OP_STOP ? kest_instructions[op].name : "?";
+}
 
 // Whether an instruction reaches the heap. The list is the machine's, read off
 // the cases that call the allocator, and it is what makes a `no.alloc`
@@ -877,7 +929,9 @@ bool kest_op_allocates(uint8_t op);
 
 // The number an instruction carries at a byte of a chunk, read the way the
 // machine reads it.
-uint16_t kest_chunk_u16(const KestChunk *chunk, uint32_t offset);
+static inline uint16_t kest_chunk_u16(const KestChunk *chunk, uint32_t offset) {
+    return (uint16_t)(chunk->code[offset] | (chunk->code[offset + 1] << 8));
+}
 
 // Takes the last instruction back, which the compiler does when a comparison
 // turns out to be what a jump reads. `to` is where that instruction started.

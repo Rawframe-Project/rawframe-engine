@@ -187,6 +187,10 @@ typedef struct {
     // because what is written about a body is read long after the body is
     // gone.
     char said[96];
+    // The operation being written, which is how a branch knows it goes back:
+    // a loop, and so a place a host that has asked the program to stop is
+    // asked about. See D1283.
+    uint32_t at;
 } Walk;
 
 // Where a slot of a body on the machine's stack is kept; see `at_frame` below
@@ -1206,7 +1210,7 @@ static bool write_at(Walk *walk, const KestIrPlace *place, uint32_t value,
 // there leaves less than the operation is written for. The second is the edge
 // no program takes, which `arrives` explains.
 static void write_branch(Walk *walk, uint32_t target, uint32_t leaving,
-                         uint32_t where) {
+                         uint32_t where, bool counted) {
     if (target < walk->body->op_count && walk->known[target] &&
         walk->depth[target] > leaving) {
         // Said in the machine's own words and with the machine's own code for
@@ -1218,7 +1222,35 @@ static void write_branch(Walk *walk, uint32_t target, uint32_t leaving,
             where);
         return;
     }
+    // A counted walk -- a `for` over a range, or over what a store holds --
+    // ends by itself and is not asked, because it is where a frame spends its
+    // time: a check a turn there cost `bench/kernel` a quarter of its cycles.
+    // A loop that never ends is a `while`, and that is where the host is
+    // heard. See D1283.
+    if (target <= walk->at && !counted) {
+        say(walk->c, &walk->into->wrote,
+            "if (--turns == 0) {\n"
+            "        turns = %uu;\n"
+            "        if (*asked != 0) {\n"
+            "            return kest_native_stopped(rt, %u, \"K0660\",\n"
+            "                \"the host asked this program to stop\");\n"
+            "        }\n"
+            "    }\n    ",
+            KEST_TURNS_ASKED, where);
+    }
     say(walk->c, &walk->into->wrote, "goto L%u;\n", target);
+}
+
+// Whether a body goes round anything, which is whether it counts its turns.
+static bool goes_back(const KestIrBody *body) {
+    for (uint32_t i = 0; i < body->op_count; i++) {
+        const KestIrOp *op = &body->ops[i];
+        if ((op->kind == KEST_IR_GO || op->kind == KEST_IR_ASK) &&
+            op->target <= i) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // One operation, as the C it does. `walk->stack` is where the top of the
@@ -1779,15 +1811,31 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
         say(c, out, "    %s.real = (double)%s%s.integer;\n", first,
             kest_is_unsigned(op->type) ? "(uint64_t)" : "", second);
         break;
-    case KEST_IR_TO_WHOLE:
+    case KEST_IR_TO_WHOLE: {
         // Where a number outside the width stops is the library's answer, for
-        // the reason the one above it is. See D669.
+        // the reason the one above it is. See D669. A number strictly inside
+        // the width is the library's middle case, which is C's own
+        // conversion, so that one is written here and only the ends, what is
+        // not a number and a `u64` are asked of the library: a sample mixed
+        // into sixteen bits was a call a sample. See D1280.
         c->wants_library = true;
         at_stack(walk, first, base);
         at_stack(walk, second, base);
+        double low = 0.0;
+        double high = 0.0;
+        if (kest_real_bounds((uint16_t)op->imm[0], &low, &high)) {
+            say(c, out,
+                "    %s.integer = %s.real > %a && %s.real < %a\n"
+                "                     ? (int64_t)%s.real\n"
+                "                     : kest_real_to_int(%u, %s.real);\n",
+                first, second, low, second, high, second,
+                (unsigned)op->imm[0], second);
+            break;
+        }
         say(c, out, "    %s.integer = kest_real_to_int(%u, %s.real);\n", first,
             (unsigned)op->imm[0], second);
         break;
+    }
     case KEST_IR_TO_F32:
         at_stack(walk, first, base);
         at_stack(walk, second, base);
@@ -2055,15 +2103,23 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
     case KEST_IR_TEXT_JOIN: {
         // Pieces joined into one. Two slots each, in the order they are
         // written, and what comes back sits where the first of them was.
-        if (reads != (uint32_t)op->imm[0] * 2 || leaves != 2) {
+        // A piece whose bit is set in the second number is a signed whole
+        // number in one slot, written into the text rather than before it.
+        // See D1277.
+        if (op->imm[0] > KEST_NUMBERED_MOST ||
+            ((uint32_t)op->imm[1] >> op->imm[0]) != 0 ||
+            reads != (uint32_t)op->imm[0] * 2 -
+                         kest_pieces_numbered(op->imm[1]) ||
+            leaves != 2) {
             cannot(walk, "text joined out of something other than pieces");
             break;
         }
         at_stack(walk, first, base);
         say(c, out,
-            "    if (!kest_text_join(rt, &%s, %u, %u, &%s)) {\n"
+            "    if (!kest_text_join(rt, &%s, %u, %u, %u, &%s)) {\n"
             "        return false;\n    }\n",
-            first, (unsigned)op->imm[0], op->span.offset, first);
+            first, (unsigned)op->imm[0], (unsigned)op->imm[1],
+            op->span.offset, first);
         break;
     }
     case KEST_IR_TEXT_FROM: {
@@ -2432,7 +2488,8 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
             first, second, first_one ? 0 : 1, op->span.offset, second);
         say(c, out, "    if (%s.integer %s 0) {\n        ", second,
             first_one ? "<" : ">=");
-        write_branch(walk, op->target, base + leaves, op->span.offset);
+        write_branch(walk, op->target, base + leaves, op->span.offset,
+                     true);
         say(c, out, "    }\n");
         break;
     }
@@ -2661,7 +2718,8 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
     }
     case KEST_IR_GO:
         say(c, out, "    ");
-        write_branch(walk, op->target, base + leaves, op->span.offset);
+        write_branch(walk, op->target, base + leaves, op->span.offset,
+                     false);
         break;
     case KEST_IR_ASK:
         if (reads != leaves + 1) {
@@ -2671,7 +2729,8 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
         at_stack(walk, first, walk->stack - 1);
         say(c, out, "    if (%s%s.integer) {\n        ", op->imm[1] != 0 ? "" : "!",
             first);
-        write_branch(walk, op->target, base + leaves, op->span.offset);
+        write_branch(walk, op->target, base + leaves, op->span.offset,
+                     false);
         say(c, out, "    }\n");
         break;
     case KEST_IR_NEXT: {
@@ -2694,7 +2753,8 @@ static void write_op(Walk *walk, uint32_t index, const KestIrOp *op) {
             kest_is_unsigned(op->type) ? "(uint64_t)" : "", first,
             kest_is_unsigned(op->type) ? "<" : "<",
             kest_is_unsigned(op->type) ? "(uint64_t)" : "", second);
-        write_branch(walk, op->target, base + leaves, op->span.offset);
+        write_branch(walk, op->target, base + leaves, op->span.offset,
+                     true);
         say(c, out, "    }\n");
         break;
     }
@@ -2960,6 +3020,12 @@ bool kest_emitc_body(void *writing, const KestIrBody *body) {
             say(c, &into->wrote, "    %s = a%u;\n", param, (unsigned)p);
         }
         declare_guards(&walk);
+        if (goes_back(body)) {
+            say(c, &into->wrote,
+                "    uint32_t turns = %uu;\n"
+                "    const volatile int *asked = kest_native_asking(rt);\n",
+                KEST_TURNS_ASKED);
+        }
         // Said out loud rather than left to whether the body happens to read
         // them: a frame nothing reads is a warning in somebody else's build,
         // and a warning in a generated file is noise a reader learns to skip.
@@ -3001,6 +3067,7 @@ bool kest_emitc_body(void *writing, const KestIrBody *body) {
                     walk.clean[k] = true;
                 }
             }
+            walk.at = i;
             write_op(&walk, i, &body->ops[i]);
             for (uint32_t k = from; walk.clean != NULL && k < walk.stack &&
                                     k <= walk.deepest;
@@ -3022,6 +3089,23 @@ bool kest_emitc_body(void *writing, const KestIrBody *body) {
                     "it\");\n",
                     body->ops[i].span.offset);
             }
+        }
+        // A body whose last written operation goes back to an earlier one --
+        // a loop that never ends, which is a program, with the `return` after
+        // it never reached and so never written -- runs off the end of
+        // nothing, and the host's compiler is told so rather than asked to
+        // prove it: without this a function that gives back a value ends with
+        // no `return`, which it warns about. Nothing arrives here. See D1274.
+        uint32_t last = body->op_count;
+        while (last > 0 && !walk.known[last - 1]) {
+            last--;
+        }
+        if (walk.why == NULL &&
+            (last == 0 || body->ops[last - 1].kind != KEST_IR_GIVE)) {
+            say(c, &into->wrote,
+                "    return kest_native_stopped(rt, %u, \"K0655\",\n"
+                "        \"a body ran past its end\");\n",
+                last == 0 ? 0 : body->ops[last - 1].span.offset);
         }
         say(c, &into->wrote, "}\n\n");
     }
@@ -3243,6 +3327,7 @@ const char *kest_emitc_done(KestEmitC *c, const char *entry,
         "                                 uint16_t *));\n"
         "bool kest_native_stopped(KestRuntime *runtime, uint32_t offset,\n"
         "                         const char *code, const char *message);\n"
+        "const volatile int *kest_native_asking(KestRuntime *runtime);\n"
         "bool kest_call_body(KestRuntime *runtime, uint32_t which,\n"
         "                    KestValue *base, uint16_t handed,\n"
         "                    uint16_t *gave);\n"
@@ -3335,8 +3420,8 @@ const char *kest_emitc_done(KestEmitC *c, const char *entry,
         "                        const KestValue *slots, uint32_t where,\n"
         "                        KestValue *into);\n"
         "bool kest_text_join(KestRuntime *runtime, const KestValue *pieces,\n"
-        "                    uint16_t count, uint32_t where, "
-        "KestValue *into);\n"
+        "                    uint16_t count, uint16_t which, uint32_t where,\n"
+        "                    KestValue *into);\n"
         "bool kest_text_from(KestRuntime *runtime, KestValue handle,\n"
         "                    uint32_t where, KestValue *into);\n"
         "bool kest_array_fit(KestRuntime *runtime, KestValue handle,\n"

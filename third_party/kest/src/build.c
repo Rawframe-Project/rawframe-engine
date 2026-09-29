@@ -1,6 +1,5 @@
 #include "build.h"
 
-#include "emitc.h"
 #include "verify.h"
 
 #include <stdlib.h>
@@ -125,6 +124,7 @@ bool kest_build_check(KestBuild *build) {
 typedef struct {
     KestLower *lower;
     KestEmitC *c;
+    const KestCWriter *writer;
 } Backends;
 
 static bool write_body(void *reading, const KestIrBody *body) {
@@ -132,7 +132,7 @@ static bool write_body(void *reading, const KestIrBody *body) {
     if (!kest_lower_body(both->lower, body)) {
         return false;
     }
-    return both->c == NULL || kest_emitc_body(both->c, body);
+    return both->c == NULL || both->writer->body(both->c, body);
 }
 
 static void say_what_the_optimizer_found(const KestIrBody *body,
@@ -189,9 +189,9 @@ bool kest_build_emit(KestBuild *build) {
     // arena rather than the bodies' one: a body is let go as soon as it has
     // been written and what was written from it is read after the last of
     // them. See D1093.
-    Backends both = {writes, NULL};
-    if (build->wants_c) {
-        both.c = kest_emitc_new(build->arena, &build->module);
+    Backends both = {writes, NULL, build->c_writer};
+    if (build->c_writer != NULL) {
+        both.c = build->c_writer->begin(build->arena, &build->module);
         if (both.c == NULL) {
             kest_arena_free(bodies);
             kest_diags_starve(&build->diags);
@@ -254,7 +254,7 @@ bool kest_build_emit(KestBuild *build) {
                     strlen(build->units.manifest_text)};
             }
         }
-        build->c_wrote = kest_emitc_done(
+        build->c_wrote = build->c_writer->done(
             both.c, kest_build_name(build, KEST_MAIN),
             build->units.count > 0 ? build->units.items[0].source.path : NULL,
             carried, carried_count, build->units.library);
@@ -631,8 +631,8 @@ bool kest_build_free(KestBuild *build) {
 
 // The name something lives under in the file that was named, which is what a
 // host has to ask for and does not otherwise know.
-void kest_build_writes_c(KestBuild *build, bool on) {
-    build->wants_c = on;
+void kest_build_writes_c(KestBuild *build, const KestCWriter *writer) {
+    build->c_writer = writer;
 }
 
 const char *kest_build_c(const KestBuild *build) {

@@ -389,6 +389,12 @@ typedef struct {
     // file `box` is and reading what it declares — which is what this is for
     // and the only thing it is used for. See D681.
     const KestUnits *files;
+    // The constants each of those files declares, found once a file: a body
+    // being folded asks whether every name in it is one, and walking a file of
+    // seven thousand functions for each was half of compiling it. NULL until
+    // a file is first asked about. See D1273.
+    const KestDecl ***file_constants;
+    uint32_t *file_constant_counts;
     const char **counted;
     uint32_t counted_count;
     uint32_t counted_capacity;
@@ -760,6 +766,12 @@ static inline int64_t kest_narrow_to(uint16_t scalar, int64_t value) {
 }
 
 int64_t kest_real_to_int(uint16_t scalar, double value);
+
+// Where `kest_real_to_int` stops for a width: a number strictly between the
+// two is converted as C converts it, which is that function's middle case, and
+// the other backend writes that case where it is used. False for a `u64`,
+// which is converted another way. See D1280.
+bool kest_real_bounds(uint16_t scalar, double *low, double *high);
 
 // What an expression is worth, worked out where it is written, in as many slots
 // as the value takes. Nought when it is not worked out here, and then `why`

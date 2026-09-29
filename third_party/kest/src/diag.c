@@ -32,11 +32,14 @@ static bool ends_a_line(const char *text, size_t length, size_t at) {
     return text[at] == '\r' && (at + 1 == length || text[at + 1] != '\n');
 }
 
+static uint64_t mark_byte(uint64_t mark, unsigned char byte) {
+    return (mark ^ byte) * 0x100000001b3ULL;
+}
+
 uint64_t kest_mark_bytes(uint64_t mark, const void *bytes, size_t length) {
     const unsigned char *at = bytes;
     for (size_t i = 0; i < length; i++) {
-        mark ^= at[i];
-        mark *= 0x100000001b3ULL;
+        mark = mark_byte(mark, at[i]);
     }
     return mark;
 }
@@ -61,7 +64,6 @@ bool kest_source_init(KestSource *source, KestArena *arena, const char *path,
     // machine: text is its bytes, and so is a file. Taken here because this
     // already walks the file once for its lines, so it costs the walk it was
     // going to make anyway. See D658.
-    source->mark = kest_mark_bytes(KEST_MARK_START, text, length);
 
     // A line ends at a line feed, and at a carriage return that has no line
     // feed after it: a file written where lines end with two characters ends
@@ -69,12 +71,18 @@ bool kest_source_init(KestSource *source, KestArena *arena, const char *path,
     // has lines at all. The lexer reads a return as space either way; this is
     // about where a message points, which is a thing a reader has to be able
     // to find.
+    // The lines are counted in the same walk as the mark is taken: the mark
+    // is a multiplication waiting on the one before, and a byte compared
+    // beside it costs nothing more. See D1276.
+    uint64_t mark = KEST_MARK_START;
     uint32_t lines = 1;
     for (size_t i = 0; i < length; i++) {
+        mark = mark_byte(mark, (unsigned char)text[i]);
         if (ends_a_line(text, length, i)) {
             lines++;
         }
     }
+    source->mark = mark;
 
     source->line_offsets = KEST_ARENA_ARRAY(arena, uint32_t, lines);
     if (source->line_offsets == NULL) {
@@ -152,10 +160,6 @@ uint32_t kest_word_distance(const char *a, size_t a_len, const char *b,
         memcpy(previous, current, sizeof(uint32_t) * (b_len + 1));
     }
     return previous[b_len];
-}
-
-bool kest_word_same(const char *word, const char *bytes, size_t length) {
-    return strlen(word) == length && memcmp(word, bytes, length) == 0;
 }
 
 const char *kest_span_text(const KestSource *source, KestSpan span) {

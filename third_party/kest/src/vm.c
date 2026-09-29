@@ -661,11 +661,78 @@ typedef struct {
     uint32_t length;
 } Said;
 
+// A quotient or a remainder of two whole numbers, neither of them the pair
+// whose quotient does not fit and the right one not nought. Where both are
+// nought or more and fit in 32 bits it is asked in 32 bits, which is the same
+// answer: a 64-bit division is 40 to 90 cycles on an Intel core of Haswell's
+// age and a 32-bit one about 25, and `bench/control` does three a turn. The
+// host's compiler writes the same thing for a divisor it can see, which is
+// why the other backend never paid it. See D1278.
+static inline int64_t divided(int64_t left, int64_t right, bool quotient) {
+    if (((uint64_t)left | (uint64_t)right) <= UINT32_MAX) {
+        uint32_t narrow_left = (uint32_t)left;
+        uint32_t narrow_right = (uint32_t)right;
+        return quotient ? (int64_t)(narrow_left / narrow_right)
+                        : (int64_t)(narrow_left % narrow_right);
+    }
+    return quotient ? left / right : left % right;
+}
+
 static Said said(const KestValue *slots) {
     Said out;
     out.bytes = slots[0].text;
     out.length = (uint32_t)slots[1].integer;
     return out;
+}
+
+// What `concat.i` joins, measured before there is anywhere to put it: each
+// number written out once and kept here until it is copied, so a number in a
+// piece of text costs the text it is in and no text of its own. The pieces
+// are in the order they are written, a number in one slot and text in two.
+// The machine and the compiled bodies both join through these. See D1277.
+typedef struct {
+    char digits[KEST_NUMBERED_MOST][KEST_WHOLE_ROOM];
+    uint8_t written[KEST_NUMBERED_MOST];
+} Numbered;
+
+static size_t numbered_length(const KestValue *pieces, uint16_t count,
+                              uint16_t which, Numbered *numbers) {
+    size_t length = 0;
+    uint32_t at = 0;
+    for (uint16_t i = 0; i < count; i++) {
+        if (i < KEST_NUMBERED_MOST && (((uint32_t)which >> i) & 1u)) {
+            int written = kest_write_whole(numbers->digits[i],
+                                           (uint64_t)pieces[at].integer, true);
+            numbers->written[i] = (uint8_t)written;
+            length += (size_t)written;
+            at += 1;
+        } else {
+            length += (size_t)pieces[at + 1].integer;
+            at += 2;
+        }
+    }
+    return length;
+}
+
+static size_t numbered_copy(char *text, const KestValue *pieces,
+                            uint16_t count, uint16_t which,
+                            const Numbered *numbers) {
+    size_t used = 0;
+    uint32_t at = 0;
+    for (uint16_t i = 0; i < count; i++) {
+        if (i < KEST_NUMBERED_MOST && (((uint32_t)which >> i) & 1u)) {
+            memcpy(text + used, numbers->digits[i], numbers->written[i]);
+            used += numbers->written[i];
+            at += 1;
+        } else {
+            size_t many = (size_t)pieces[at + 1].integer;
+            memcpy(text + used, pieces[at].text, many);
+            used += many;
+            at += 2;
+        }
+    }
+    text[used] = '\0';
+    return used;
 }
 
 typedef struct {
@@ -1044,8 +1111,12 @@ typedef struct KestRuntime Vm;
 
 // How much may be taken before a walk of what can still be reached is worth
 // doing. Under this a program that makes almost nothing would walk on every
-// other allocation, and what it would find is nothing.
-#define WALK_FLOOR (256u * 1024u)
+// other allocation, and what it would find is nothing. A megabyte rather than
+// the quarter it was: `bench/words` holds a fifth of one and walked it every
+// quarter, which was a tenth of what it ran, and a game's heap is megabytes
+// before its first frame. A host that sets a ceiling is walked for at the
+// ceiling whatever this says. See D1277.
+#define WALK_FLOOR (1024u * 1024u)
 
 // What sits in front of the elements of an array, so that a walk that met
 // those elements without meeting the header can still read them. An address of
@@ -3729,6 +3800,7 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         [KEST_OP_FIT_TEXT] = &&thread_KEST_OP_FIT_TEXT,
         [KEST_OP_INDEX] = &&thread_KEST_OP_INDEX,
         [KEST_OP_INDEX_LL] = &&thread_KEST_OP_INDEX_LL,
+        [KEST_OP_INDEX_L] = &&thread_KEST_OP_INDEX_L,
         [KEST_OP_INDEX_TO] = &&thread_KEST_OP_INDEX_TO,
         [KEST_OP_INDEX_TO_LL] = &&thread_KEST_OP_INDEX_TO_LL,
         [KEST_OP_ELEM_FROM_LL] = &&thread_KEST_OP_ELEM_FROM_LL,
@@ -3761,6 +3833,7 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         [KEST_OP_TEXT_F32] = &&thread_KEST_OP_TEXT_F32,
         [KEST_OP_TEXT_B] = &&thread_KEST_OP_TEXT_B,
         [KEST_OP_CONCAT] = &&thread_KEST_OP_CONCAT,
+        [KEST_OP_CONCAT_I] = &&thread_KEST_OP_CONCAT_I,
         [KEST_OP_TEXT_FROM] = &&thread_KEST_OP_TEXT_FROM,
         [KEST_OP_HASH_I] = &&thread_KEST_OP_HASH_I,
         [KEST_OP_HASH_F] = &&thread_KEST_OP_HASH_F,
@@ -3837,6 +3910,8 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         [KEST_OP_DIV_F32] = &&thread_KEST_OP_DIV_F32,
         [KEST_OP_MOD_F32] = &&thread_KEST_OP_MOD_F32,
         [KEST_OP_NEG_F32] = &&thread_KEST_OP_NEG_F32,
+        [KEST_OP_SIN_F] = &&thread_KEST_OP_SIN_F,
+        [KEST_OP_COS_F] = &&thread_KEST_OP_COS_F,
         [KEST_OP_LT_I] = &&thread_KEST_OP_LT_I,
         [KEST_OP_LE_I] = &&thread_KEST_OP_LE_I,
         [KEST_OP_GT_I] = &&thread_KEST_OP_GT_I,
@@ -3893,6 +3968,8 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         [KEST_OP_JUMP_FALSE_GE_K] = &&thread_KEST_OP_JUMP_FALSE_GE_K,
         [KEST_OP_JUMP_FALSE_EQ_K] = &&thread_KEST_OP_JUMP_FALSE_EQ_K,
         [KEST_OP_JUMP_FALSE_NE_K] = &&thread_KEST_OP_JUMP_FALSE_NE_K,
+        [KEST_OP_JUMP_FALSE_LT_LL] = &&thread_KEST_OP_JUMP_FALSE_LT_LL,
+        [KEST_OP_JUMP_FALSE_LE_LL] = &&thread_KEST_OP_JUMP_FALSE_LE_LL,
         [KEST_OP_JUMP_FALSE_LT_I] = &&thread_KEST_OP_JUMP_FALSE_LT_I,
         [KEST_OP_JUMP_FALSE_LE_I] = &&thread_KEST_OP_JUMP_FALSE_LE_I,
         [KEST_OP_JUMP_FALSE_GT_I] = &&thread_KEST_OP_JUMP_FALSE_GT_I,
@@ -4480,6 +4557,29 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
             top += layout->slots;
             NEXT;
         }
+        // `load` and `index` as one: the run is on the stack, where the
+        // index before it left it, and the index is read out of its slot.
+        // See D1281.
+        case KEST_OP_INDEX_L: THREADED(KEST_OP_INDEX_L) {
+            uint16_t at = READ_U16();
+            uint16_t of_which = READ_U16();
+            OF_THE_MODULE(of_which, module->layout_count, "a layout");
+#if KEST_CHECKED
+            if (!own_slots(vmp, frame, instruction, at, at + 1u)) {
+                return false;
+            }
+#endif
+            MOVED(moved_loaded, sizeof(KestValue));
+            const KestLayout *layout = &module->layouts[of_which];
+            int64_t index = mine[at].integer;
+            const Array *array = (--top)->object;
+            HOLD(array, KEST_IS_ARRAY, "an array");
+            IN_ARRAY(index, array);
+            READ_INTO(top, layout,
+                      array->bytes + (size_t)index * array->stride);
+            top += layout->slots;
+            NEXT;
+        }
         // The two above, each with the move at the other end taken into it.
         // `index` unpacks a struct onto the stack and the store that follows
         // copies it off again; this writes it where it is going. See D1012.
@@ -5058,6 +5158,34 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
             TEXT_ON(text, used);
             NEXT;
         }
+        case KEST_OP_CONCAT_I: THREADED(KEST_OP_CONCAT_I) {
+            uint16_t count = READ_U16();
+            uint16_t which = READ_U16();
+            uint32_t slots = 2u * count - kest_pieces_numbered(which);
+            top -= slots;
+            Numbered numbers;
+            size_t length = numbered_length(top, count, which, &numbers);
+            if (length > (size_t)MAX_COUNTED) {
+                fail(vmp, frame, instruction, "K0630",
+                     "this text would hold %zu, which is more than `len` can "
+                     "count",
+                     length);
+                return false;
+            }
+            SPEND_WORK(length);
+            char *text = take(rt, top + slots, length + 1, KEST_GROUND_PLAIN);
+            if (text == NULL) {
+                no_room(vmp, frame, instruction, rt);
+                kest_diags_suggest(vmp->diags,
+                                   "it was joining text into %zu bytes",
+                                   length);
+                return false;
+            }
+            size_t used = numbered_copy(text, top, count, which, &numbers);
+            MOVED(moved_text, used);
+            TEXT_ON(text, used);
+            NEXT;
+        }
         case KEST_OP_TEXT_FROM: THREADED(KEST_OP_TEXT_FROM) {
             const Array *bytes = (--top)->object;
             HOLD(bytes, KEST_IS_ARRAY, "an array");
@@ -5317,9 +5445,8 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
                     instruction[0] == KEST_OP_DIV_I ? INT64_MIN : 0;
                 break;
             }
-            (top++)->integer = instruction[0] == KEST_OP_DIV_I
-                                   ? left.integer / right.integer
-                                   : left.integer % right.integer;
+            (top++)->integer = divided(left.integer, right.integer,
+                                       instruction[0] == KEST_OP_DIV_I);
             NEXT;
         }
 // Whole-number arithmetic with a constant on its right, written out one case
@@ -5341,8 +5468,7 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         }                                                                      \
         (top++)->integer = left == INT64_MIN && right == -1                    \
                                ? ((QUOTIENT) ? INT64_MIN : 0)                  \
-                           : (QUOTIENT) ? left / right                         \
-                                        : left % right;                        \
+                               : divided(left, right, (QUOTIENT));             \
     } while (0)
 #define CUT(KIND, MADE)                                                        \
     ((top++)->integer = kest_narrow_to((KIND), (int64_t)(MADE)))
@@ -5710,6 +5836,12 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         case KEST_OP_NEG_F32: THREADED(KEST_OP_NEG_F32)
             top[-1].real = (double)(-(float)top[-1].real);
             NEXT;
+        case KEST_OP_SIN_F: THREADED(KEST_OP_SIN_F)
+            top[-1].real = kest_fdlibm_sin(top[-1].real);
+            NEXT;
+        case KEST_OP_COS_F: THREADED(KEST_OP_COS_F)
+            top[-1].real = kest_fdlibm_cos(top[-1].real);
+            NEXT;
 
         case KEST_OP_LT_I: THREADED(KEST_OP_LT_I)
             BINARY_I(integer, left.integer < right.integer);
@@ -5997,6 +6129,28 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
         case KEST_OP_JUMP_FALSE_NE_K: THREADED(KEST_OP_JUMP_FALSE_NE_K)
             JUMP_UNLESS_K(left != right);
             NEXT;
+        // Two locals, each read where it is. See D1281.
+#define JUMP_UNLESS_LL(test)                                                   \
+    do {                                                                       \
+        uint16_t first = READ_U16();                                           \
+        uint16_t second = READ_U16();                                          \
+        uint16_t distance = READ_U16();                                        \
+        OWN_SLOT(first);                                                       \
+        OWN_SLOT(second);                                                      \
+        MOVED(moved_loaded, 2 * sizeof(KestValue));                            \
+        int64_t left = mine[first].integer;                                    \
+        int64_t right = mine[second].integer;                                  \
+        if (!(test)) {                                                         \
+            ip += distance;                                                    \
+        }                                                                      \
+    } while (0)
+        case KEST_OP_JUMP_FALSE_LT_LL: THREADED(KEST_OP_JUMP_FALSE_LT_LL)
+            JUMP_UNLESS_LL(left < right);
+            NEXT;
+        case KEST_OP_JUMP_FALSE_LE_LL: THREADED(KEST_OP_JUMP_FALSE_LE_LL)
+            JUMP_UNLESS_LL(left <= right);
+            NEXT;
+#undef JUMP_UNLESS_LL
         case KEST_OP_JUMP_FALSE_LT_I: THREADED(KEST_OP_JUMP_FALSE_LT_I)
             JUMP_UNLESS(left.integer < right.integer);
             NEXT;
@@ -6362,11 +6516,15 @@ static bool run_body(KestRuntime *rt, int32_t entry, uint16_t arg_slots,
             // hundred steps took all three hundred and the call inside it was
             // refused after fifty. Put back here and taken again below, so
             // the number a reentrant call reads is the number that is left.
-            // See D929.
+            // See D929. A machine with no budget has nothing to put back,
+            // and the slice is only how soon it looks for a host asking it
+            // to stop, which is the same thousand instructions either side
+            // of a crossing: taking another after every one was a call a
+            // crossing. See D1285.
             if (rt->fuel_bounded) {
                 rt->fuel_left += slice;
+                slice = 0;
             }
-            slice = 0;
             // And the crossing itself, which is the door a body the host's
             // compiler compiled goes through as well: everything the boundary
             // asks is asked in one place, and both engines cross the same
@@ -8439,6 +8597,10 @@ bool kest_call(KestRuntime *runtime, int32_t entry, KestValue *frame,
         // Read off the layout rather than off its pieces: what has to be
         // walked is a thing about the type, and the type does not change
         // between calls. See D840.
+        if (layout->any_value) {
+            at += layout->slots;
+            continue;
+        }
         if (!layout->by_the_type) {
             // Nothing in it a walk would read, and one thing a look will: a
             // slot holds sixty-four bits and a `u8` holds eight, so a host
@@ -8725,8 +8887,13 @@ bool kest_call_host(KestRuntime *rt, uint16_t index, KestValue *base,
     // Where the crossing is written, on the frame making it. A host may call
     // back in from inside this and what it calls may fail, and then every
     // frame under it says where it made its call -- which a body the host's
-    // compiler compiled has no instruction pointer to answer with. See D1094.
-    frame->said_at = where_asked(rt, where).offset;
+    // compiler compiled has no instruction pointer to answer with, so it is
+    // handed the place and it is kept. The machine's own frame has its
+    // instruction pointer just past this crossing already, and a frame
+    // saying nought is read from there, so the walk that turns an instruction
+    // into a place is left to the one crossing in millions that fails: it was
+    // a sixth of what every crossing cost. See D1094 and D1272.
+    frame->said_at = where == KEST_WHERE_RUNNING ? 0 : where;
     // Read only where the machine holds itself to the declaration, which is
     // the build that checks itself. Named here so that a release build does
     // not have to be told twice that it is a number nobody read.
@@ -8875,7 +9042,16 @@ bool kest_call_host(KestRuntime *rt, uint16_t index, KestValue *base,
     // beforehand: the tag is decided inside the call. This is the one moment
     // it can be said, which is what makes it the machine's to say, the same
     // as the promise above. See D706.
-    if (module->externs[index].gives_value) {
+    // A number sixty-four bits wide is one whatever the host wrote, so there
+    // is nothing in it to walk: the walk below was a sixth of what a crossing
+    // answering one cost. See D1272.
+    const KestType *gives =
+        module->externs[index].gives_value
+            ? module->layouts[module->externs[index].gives].type
+            : NULL;
+    bool anything = gives != NULL && gives->width == 64 &&
+                    (gives->tag == KEST_T_INT || gives->tag == KEST_T_FLOAT);
+    if (module->externs[index].gives_value && !anything) {
         const KestLayout *answers =
             &module->layouts[module->externs[index].gives];
         // Everything in what came back, read the way the door reads what a
@@ -9850,14 +10026,12 @@ bool kest_text_of_value(KestRuntime *rt, uint16_t layout,
 }
 
 bool kest_text_join(KestRuntime *rt, const KestValue *pieces, uint16_t count,
-                    uint32_t where, KestValue *into) {
+                    uint16_t which, uint32_t where, KestValue *into) {
     if (rt == NULL || (pieces == NULL && count != 0) || into == NULL) {
         return false;
     }
-    size_t length = 0;
-    for (uint16_t i = 0; i < count; i++) {
-        length += (size_t)pieces[(uint32_t)i * 2 + 1].integer;
-    }
+    Numbered numbers;
+    size_t length = numbered_length(pieces, count, which, &numbers);
     // The same ceiling an array has, and text is where a program reaches it
     // without meaning to: two of these joined is a new one as long as both.
     if (length > (size_t)MAX_COUNTED) {
@@ -9873,14 +10047,8 @@ bool kest_text_join(KestRuntime *rt, const KestValue *pieces, uint16_t count,
                            length);
         return false;
     }
-    size_t used = 0;
-    for (uint16_t i = 0; i < count; i++) {
-        size_t many = (size_t)pieces[(uint32_t)i * 2 + 1].integer;
-        MOVED(moved_text, many);
-        memcpy(text + used, pieces[(uint32_t)i * 2].text, many);
-        used += many;
-    }
-    text[used] = '\0';
+    size_t used = numbered_copy(text, pieces, count, which, &numbers);
+    MOVED(moved_text, used);
     text_lands(into, text, used);
     return true;
 }
@@ -9932,6 +10100,20 @@ bool kest_native_stopped(KestRuntime *runtime, uint32_t offset,
     // the machine's sentence and a compiled body says the same one.
     said_here(runtime, source, span, code, "%s", message);
     return false;
+}
+
+const volatile int *kest_native_asking(KestRuntime *runtime) {
+    static const volatile int never = 0;
+    if (runtime == NULL) {
+        return &never;
+    }
+    // The word `kest_cancel` stores, read by a compiled body as a plain
+    // volatile load: a call there would be a call inside the loop, which the
+    // host's compiler has to assume writes anything, and it cost
+    // `bench/graph` a fifth of its cycles in loads it could no longer hoist.
+    // An `atomic_int` that is lock-free is an `int` on every compiler this is
+    // built with, and a stale read is one more round of 1024 turns.
+    return (const volatile int *)(uintptr_t)&runtime->cancel_asked;
 }
 
 void kest_collected(KestRuntime *runtime,

@@ -865,22 +865,50 @@ static uint32_t bytes_apart(uint8_t kind) {
     }
 }
 
+// How many words of eight bytes a kind is moved as, a slot each, by a copy
+// that does not look at what they hold: nought for a kind that is converted
+// on the way. A piece of text is two.
+static uint32_t words_of(uint8_t kind) {
+    switch (kind) {
+    case KEST_L_TEXT:
+        return 2;
+    case KEST_L_I64:
+    case KEST_L_U64:
+    case KEST_L_F64:
+    case KEST_L_WORD:
+    case KEST_L_FLAGS64:
+    case KEST_L_FN:
+    case KEST_L_REF:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 // The steps from `first` up to `end` with every step that carries on the run
 // before it -- the same kind, the next slot and the next bytes -- folded into
-// that run. Answers where the steps end now.
+// that run. Every kind that is words copied as they are is one kind here, so
+// a shape of a number, a piece of text, two reals and a reference laid end to
+// end is one copy of six words rather than four steps of a walk, which was a
+// sixth of a frame that moves a store of them. Answers where the steps end
+// now. See D1285.
 static uint32_t merged(KestMoveStep *steps, uint32_t first, uint32_t end) {
     uint32_t kept = first;
     for (uint32_t i = first; i < end; i++) {
         KestMoveStep step = steps[i];
-        step.many = 1;
+        uint32_t words = words_of(step.kind);
+        if (words > 0) {
+            step.kind = KEST_L_WORD;
+        }
+        step.many = (uint16_t)(words > 0 ? words : 1u);
         if (kept > first && step.kind != KEST_MOVE_CASES) {
             KestMoveStep *run = &steps[kept - 1];
             uint32_t apart = bytes_apart(step.kind);
-            uint32_t slots_apart = step.kind == KEST_L_TEXT ? 2u : 1u;
-            if (run->kind == step.kind && run->many < UINT16_MAX &&
+            if (run->kind == step.kind &&
+                run->many + step.many <= UINT16_MAX &&
                 step.byte == run->byte + run->many * apart &&
-                step.slot == run->slot + run->many * slots_apart) {
-                run->many++;
+                step.slot == run->slot + run->many) {
+                run->many = (uint16_t)(run->many + step.many);
                 continue;
             }
         }
@@ -995,6 +1023,13 @@ int32_t kest_module_layout(KestModule *module, const KestType *type) {
     layout->type = type;
     layout->tagged = holds_a_tag(type);
     layout->by_the_type = by_the_type(type);
+    layout->any_value = !layout->by_the_type && layout->count > 0;
+    for (uint16_t p = 0; p < layout->count; p++) {
+        uint8_t kind = pieces[p].kind;
+        if (kind != KEST_L_I64 && kind != KEST_L_U64 && kind != KEST_L_F64) {
+            layout->any_value = false;
+        }
+    }
     // Every value is moved by its walk, a tag or none: what used to be a loop
     // over the pieces moved one piece a turn of a switch, which was most of
     // what reading a struct out of an array cost. See D1177.
@@ -1074,8 +1109,6 @@ void kest_module_extern_shape(KestModule *module, uint32_t at, uint16_t *takes,
     module->externs[at].gives_value = gives_value;
 }
 
-static uint32_t kest_op_width(uint8_t op);
-
 bool kest_chunk_emit(KestModule *module, KestChunk *chunk, uint8_t byte,
                      uint32_t origin) {
     if (chunk->code_count == chunk->code_capacity) {
@@ -1107,7 +1140,7 @@ bool kest_chunk_emit(KestModule *module, KestChunk *chunk, uint8_t byte,
             chunk->origin_capacity = capacity;
         }
         chunk->origins[chunk->origin_count++] = origin;
-        chunk->next_instruction += kest_op_width(byte);
+        chunk->next_instruction += kest_op_wide(byte);
     }
     chunk->code[chunk->code_count++] = byte;
     return true;
@@ -1131,10 +1164,6 @@ void kest_chunk_take_back(KestChunk *chunk, uint32_t to) {
     }
 }
 
-uint32_t kest_op_wide(uint8_t op) {
-    return kest_op_width(op);
-}
-
 uint32_t kest_chunk_origin(const KestChunk *chunk, uint32_t offset) {
     // Walked rather than looked up: a table of where every instruction starts
     // would be the thing this is for getting rid of. What reads one is a
@@ -1146,7 +1175,7 @@ uint32_t kest_chunk_origin(const KestChunk *chunk, uint32_t offset) {
     uint32_t at = 0;
     uint32_t which = 0;
     while (at < chunk->code_count && which < chunk->origin_count) {
-        uint32_t width = kest_op_width(chunk->code[at]);
+        uint32_t width = kest_op_wide(chunk->code[at]);
         if (offset < at + width) {
             return chunk->origins[which];
         }
@@ -1272,25 +1301,28 @@ uint32_t kest_chunk_constant_run(KestModule *module, KestChunk *chunk,
     return first;
 }
 
+// A shape's low four bits are how many bytes an instruction of it takes, which
+// is how `kest_op_wide` reads a width out of a row without a switch; the bits
+// above them tell apart shapes of one width.
 typedef enum {
-    NONE,
-    U16,
-    U16_U16,
-    U16_U16_U16,
-    JUMP,
-    BACK,
-    WALK,
-    FIND,
-    FIND_BACK,
+    NONE = 1,
+    U16 = 3,
+    U16_U16 = 5,
+    U16_U16_U16 = 7,
+    JUMP = 0x13,
+    BACK = 0x23,
+    WALK = 0x17,
+    FIND = 0x27,
+    FIND_BACK = 0x37,
     // A constant and then a forward jump, which is five bytes.
-    WEIGH,
+    WEIGH = 0x15,
     // Four and five numbers: an element moved by a run and an index read
     // where they are. See D1167.
-    U16_X4,
-    U16_X5,
+    U16_X4 = 9,
+    U16_X5 = 11,
     // An element by a run and an index, a constant, and a forward jump,
     // which is eleven bytes. See D1178.
-    WEIGH_ELEMENT,
+    WEIGH_ELEMENT = 0x1B,
 } Operands;
 
 // The table below is written in the header's names for what an operand is,
@@ -1306,11 +1338,7 @@ typedef enum {
 #define IS_FORWARD KEST_OPERAND_FORWARD
 #define IS_BACKWARD KEST_OPERAND_BACKWARD
 
-typedef struct {
-    const char *name;
-    Operands operands;
-    KestOperand is[5];
-} Instruction;
+typedef KestInstruction Instruction;
 
 static const Instruction INSTRUCTIONS[] = {
     {"const", U16, {IS_CONSTANT}},
@@ -1332,6 +1360,7 @@ static const Instruction INSTRUCTIONS[] = {
     {"room", U16, {IS_LAYOUT}},
     {"index", U16, {IS_LAYOUT}},
     {"index.ll", U16_U16_U16, {IS_SLOT, IS_SLOT, IS_LAYOUT}},
+    {"index.l", U16_U16, {IS_SLOT, IS_LAYOUT}},
     {"pop.last", U16, {IS_LAYOUT}},
     {"take", U16, {IS_LAYOUT}},
     {"clear", NONE, {}},
@@ -1357,6 +1386,7 @@ static const Instruction INSTRUCTIONS[] = {
     {"text.flags", U16, {IS_LAYOUT}},
     {"text.value", U16, {IS_LAYOUT}},
     {"concat", U16, {IS_NUMBER}},
+    {"concat.i", U16_U16, {IS_NUMBER, IS_NUMBER}},
     {"hash.i", NONE, {}},
     {"hash.f", NONE, {}},
     {"hash.t", NONE, {}},
@@ -1421,6 +1451,8 @@ static const Instruction INSTRUCTIONS[] = {
     {"div.f32", NONE, {}},
     {"mod.f32", NONE, {}},
     {"neg.f32", NONE, {}},
+    {"sin.f", NONE, {}},
+    {"cos.f", NONE, {}},
     {"lt.i", NONE, {}},
     {"le.i", NONE, {}},
     {"gt.i", NONE, {}},
@@ -1480,6 +1512,8 @@ static const Instruction INSTRUCTIONS[] = {
     {"jump.false.ge.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
     {"jump.false.eq.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
     {"jump.false.ne.k", FIND, {IS_SLOT, IS_CONSTANT, IS_FORWARD}},
+    {"jump.false.lt.ll", FIND, {IS_SLOT, IS_SLOT, IS_FORWARD}},
+    {"jump.false.le.ll", FIND, {IS_SLOT, IS_SLOT, IS_FORWARD}},
     {"jump.false.lt.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
     {"jump.false.le.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
     {"jump.false.gt.c", WEIGH, {IS_CONSTANT, IS_FORWARD}},
@@ -1538,55 +1572,10 @@ _Static_assert(sizeof(INSTRUCTIONS) / sizeof(INSTRUCTIONS[0]) ==
                    KEST_OP_STOP + 1,
                "every instruction has a name and nothing else does");
 
-const char *kest_op_name(uint8_t op) {
-    return op <= KEST_OP_STOP ? INSTRUCTIONS[op].name : "?";
-}
-
-KestOperand kest_op_operand(uint8_t op, uint32_t k) {
-    uint32_t known = (uint32_t)(sizeof(INSTRUCTIONS) / sizeof(INSTRUCTIONS[0]));
-    return op < known && k < 5 ? INSTRUCTIONS[op].is[k] : KEST_OPERAND_NUMBER;
-}
+const KestInstruction *const kest_instructions = INSTRUCTIONS;
 
 static uint16_t read_u16(const KestChunk *chunk, uint32_t offset) {
-    return (uint16_t)(chunk->code[offset] | (chunk->code[offset + 1] << 8));
-}
-
-uint16_t kest_chunk_u16(const KestChunk *chunk, uint32_t offset) {
-    return read_u16(chunk, offset);
-}
-
-// How many bytes an instruction takes. This is the only place that knows, so
-// a walk that prints and a walk that does not cannot come apart: D057's bug
-// was a second answer to this question that had a jump seven bytes wide.
-// How many bytes an instruction takes. Everything in this file that walks a
-// chunk asks this and nothing works it out for itself, because two answers is
-// how a walk goes out of step with the code. Nothing outside walks one; the
-// day something does, this stops being static rather than being copied.
-static uint32_t kest_op_width(uint8_t op) {
-    switch (INSTRUCTIONS[op].operands) {
-    case NONE:
-        return 1;
-    case U16:
-    case JUMP:
-    case BACK:
-        // A jump carries how far as one number, printed as a place to make it
-        // readable. It is the same two bytes.
-        return 3;
-    case U16_U16:
-    case WEIGH:
-        return 5;
-    case U16_U16_U16:
-    case WALK:
-    case FIND:
-    case FIND_BACK:
-        return 7;
-    case U16_X4:
-        return 9;
-    case U16_X5:
-    case WEIGH_ELEMENT:
-        return 11;
-    }
-    return 1;
+    return kest_chunk_u16(chunk, offset);
 }
 
 // The deepest run of frames a call can make, and the slots those frames take
@@ -1775,7 +1764,7 @@ static bool measure_chunk(const KestModule *module, uint32_t which,
                 }
                 return false;
             }
-            at += kest_op_width(op);
+            at += kest_op_wide(op);
             continue;
         }
         if (op == KEST_OP_CALL_HOST) {
@@ -1787,7 +1776,7 @@ static bool measure_chunk(const KestModule *module, uint32_t which,
                             reasons, why, &sums, true)) {
             return false;
         }
-        at += kest_op_width(op);
+        at += kest_op_wide(op);
     }
     // And the bodies carried here rather than called: the other backend
     // still calls them, above this body's own slots, and neither engine gives
@@ -1862,7 +1851,7 @@ static void cycle_walk(const KestModule *module, uint32_t which, uint8_t *state,
                            depth + 1);
             }
         }
-        at += kest_op_width(op);
+        at += kest_op_wide(op);
     }
     state[which] = 2;
 }
@@ -1874,7 +1863,7 @@ static bool calls_a_host(const KestChunk *chunk) {
         if (chunk->code[at] == KEST_OP_CALL_HOST) {
             return true;
         }
-        at += kest_op_width(chunk->code[at]);
+        at += kest_op_wide(chunk->code[at]);
     }
     return false;
 }
@@ -1936,7 +1925,7 @@ void kest_module_cycles(const KestModule *module, KestArena *arena,
                     continue;
                 }
                 for (uint32_t at = 0; at < one->code_count;
-                     at += kest_op_width(one->code[at])) {
+                     at += kest_op_wide(one->code[at])) {
                     uint8_t op = one->code[at];
                     uint32_t first = module->count;
                     uint32_t last = module->count;
@@ -2015,6 +2004,7 @@ bool kest_op_allocates(uint8_t op) {
     case KEST_OP_TEXT_FLAGS:
     case KEST_OP_TEXT_VALUE:
     case KEST_OP_CONCAT:
+    case KEST_OP_CONCAT_I:
     case KEST_OP_TEXT_FROM:
         return true;
     case KEST_OP_CONST:
@@ -2029,6 +2019,7 @@ bool kest_op_allocates(uint8_t op) {
     case KEST_OP_FIELD:
     case KEST_OP_INDEX:
     case KEST_OP_INDEX_LL:
+    case KEST_OP_INDEX_L:
     case KEST_OP_POP_LAST:
     case KEST_OP_TAKE:
     case KEST_OP_CLEAR:
@@ -2129,6 +2120,8 @@ bool kest_op_allocates(uint8_t op) {
     case KEST_OP_DIV_F32:
     case KEST_OP_MOD_F32:
     case KEST_OP_NEG_F32:
+    case KEST_OP_SIN_F:
+    case KEST_OP_COS_F:
     case KEST_OP_LT_I:
     case KEST_OP_LE_I:
     case KEST_OP_GT_I:
@@ -2182,6 +2175,8 @@ bool kest_op_allocates(uint8_t op) {
     case KEST_OP_STORE_K:
     case KEST_OP_ADD_K_SELF:
     case KEST_OP_SUB_K_SELF:
+    case KEST_OP_JUMP_FALSE_LT_LL:
+    case KEST_OP_JUMP_FALSE_LE_LL:
     case KEST_OP_JUMP_FALSE_LT_K:
     case KEST_OP_JUMP_FALSE_LE_K:
     case KEST_OP_JUMP_FALSE_GT_K:
@@ -2229,6 +2224,14 @@ bool kest_op_allocates(uint8_t op) {
     return false;
 }
 
+uint32_t kest_pieces_numbered(uint32_t which) {
+    uint32_t many = 0;
+    for (; which != 0; which &= which - 1) {
+        many++;
+    }
+    return many;
+}
+
 const char *kest_op_stack(const KestModule *module, const KestChunk *chunk,
                           uint32_t at, uint32_t *takes, uint32_t *gives) {
     uint8_t op = chunk->code[at];
@@ -2237,7 +2240,7 @@ const char *kest_op_stack(const KestModule *module, const KestChunk *chunk,
     // read out of it: the verifier has asked by the time it gets here, and
     // the machine that checks itself asks this before the handler's own
     // guard has had its turn.
-    for (uint32_t k = 0; k < (kest_op_width(op) - 1) / 2 && k < 5; k++) {
+    for (uint32_t k = 0; k < (kest_op_wide(op) - 1) / 2 && k < 5; k++) {
         u[k] = read_u16(chunk, at + 1 + 2 * k);
         if ((INSTRUCTIONS[op].is[k] == IS_LAYOUT && u[k] >= module->layout_count) ||
             (INSTRUCTIONS[op].is[k] == IS_FUNCTION && u[k] >= module->count)) {
@@ -2374,6 +2377,10 @@ const char *kest_op_stack(const KestModule *module, const KestChunk *chunk,
     case KEST_OP_INDEX_LL:
         g = LAID(2);
         break;
+    case KEST_OP_INDEX_L:
+        t = 1;
+        g = LAID(1);
+        break;
     case KEST_OP_POP_LAST:
         t = 1;
         g = LAID(0) + 1;
@@ -2454,6 +2461,8 @@ const char *kest_op_stack(const KestModule *module, const KestChunk *chunk,
     case KEST_OP_TO_F32:
     case KEST_OP_NEG_F:
     case KEST_OP_NEG_F32:
+    case KEST_OP_SIN_F:
+    case KEST_OP_COS_F:
     case KEST_OP_NOT:
     case KEST_OP_MOD_I_C:
     case KEST_OP_DIV_I_C:
@@ -2503,6 +2512,14 @@ const char *kest_op_stack(const KestModule *module, const KestChunk *chunk,
         t = 2 * u[0];
         g = 2;
         break;
+    case KEST_OP_CONCAT_I:
+        if (u[0] > KEST_NUMBERED_MOST || (u[1] >> u[0]) != 0) {
+            return "joins more pieces than it can say which are numbers, or "
+                   "says one past the last is";
+        }
+        t = 2 * u[0] - kest_pieces_numbered(u[1]);
+        g = 2;
+        break;
     case KEST_OP_HASH_VALUE:
         t = TYPED(0);
         g = 1;
@@ -2539,6 +2556,8 @@ const char *kest_op_stack(const KestModule *module, const KestChunk *chunk,
     case KEST_OP_STORE_K:
     case KEST_OP_ADD_K_SELF:
     case KEST_OP_SUB_K_SELF:
+    case KEST_OP_JUMP_FALSE_LT_LL:
+    case KEST_OP_JUMP_FALSE_LE_LL:
     case KEST_OP_JUMP_FALSE_LT_K:
     case KEST_OP_JUMP_FALSE_LE_K:
     case KEST_OP_JUMP_FALSE_GT_K:
@@ -2741,7 +2760,7 @@ static uint32_t disassemble_one(const KestModule *module,
     fprintf(out, "  %04u  %-16s%s", offset, instruction->name,
             strlen(instruction->name) >= 16 ? " " : "");
 
-    switch (instruction->operands) {
+    switch ((Operands)instruction->shape) {
     case NONE:
         fputc('\n', out);
         break;
@@ -2840,7 +2859,7 @@ static uint32_t disassemble_one(const KestModule *module,
                 offset + 11 + read_u16(chunk, offset + 9));
         break;
     }
-    return offset + kest_op_width(op);
+    return offset + kest_op_wide(op);
 }
 
 static const char *const SCALARS[] = {"i8",  "i16", "i32",     "i64",
@@ -3349,13 +3368,13 @@ void kest_module_disassemble_json(const KestModule *module,
             fputs(",\"operands\":[", out);
             // How many numbers follow is the width and nothing else, so this
             // cannot come apart from what a walk of the code steps by.
-            uint32_t count = (kest_op_width(op) - 1) / 2;
+            uint32_t count = (kest_op_wide(op) - 1) / 2;
             for (uint32_t k = 0; k < count; k++) {
                 fprintf(out, "%s%u", k == 0 ? "" : ",",
                         read_u16(chunk, offset + 1 + k * 2));
             }
             fputs("]}", out);
-            offset += kest_op_width(op);
+            offset += kest_op_wide(op);
         }
         fputs("]}", out);
     }
@@ -3511,4 +3530,140 @@ void kest_module_disassemble(const KestModule *module,
             offset = disassemble_one(module, chunk, offset, out);
         }
     }
+}
+
+// `std.fdlibm`'s sine and cosine, from `lib/std/fdlibm.kest` a line at a time:
+// each expression here is the one written there, bracketed the way that one
+// parses, because a sum taken in another order is another rounding. A multiply
+// and an add stay two roundings however the host's compiler would have them,
+// as they are in the machine and in the C the other backend writes (D1226).
+// See D1279.
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#elif defined(_MSC_VER)
+#pragma fp_contract(off)
+#endif
+
+static uint64_t bits_of(double value) {
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof bits);
+    return bits;
+}
+
+static double of_bits(uint64_t bits) {
+    double value;
+    memcpy(&value, &bits, sizeof value);
+    return value;
+}
+
+static uint32_t high_word(double value) {
+    return (uint32_t)(bits_of(value) >> 32);
+}
+
+static double negated(double value) {
+    return of_bits(bits_of(value) ^ UINT64_C(0x8000000000000000));
+}
+
+static double sine_kernel(double x, double y, bool with_tail) {
+    double s1 = of_bits(UINT64_C(0xBFC5555555555549));
+    double s2 = of_bits(UINT64_C(0x3F8111111110F8A6));
+    double s3 = of_bits(UINT64_C(0xBF2A01A019C161D5));
+    double s4 = of_bits(UINT64_C(0x3EC71DE357B1FE7D));
+    double s5 = of_bits(UINT64_C(0xBE5AE5E68A2B9CEB));
+    double s6 = of_bits(UINT64_C(0x3DE5D93A5ACFD57C));
+    double z = x * x;
+    double w = z * z;
+    double r = (s2 + z * (s3 + z * s4)) + (z * w) * (s5 + z * s6);
+    double v = z * x;
+    if (!with_tail) {
+        return x + v * (s1 + z * r);
+    }
+    return x - (((z * (0.5 * y - v * r)) - y) - v * s1);
+}
+
+static double cosine_kernel(double x, double y) {
+    double c1 = of_bits(UINT64_C(0x3FA555555555554C));
+    double c2 = of_bits(UINT64_C(0xBF56C16C16C15177));
+    double c3 = of_bits(UINT64_C(0x3EFA01A019CB1590));
+    double c4 = of_bits(UINT64_C(0xBE927E4F809C52AD));
+    double c5 = of_bits(UINT64_C(0x3E21EE9EBDB4B1C4));
+    double c6 = of_bits(UINT64_C(0xBDA8FAE9BE8838D4));
+    double z = x * x;
+    double w = z * z;
+    double r = z * (c1 + z * (c2 + z * c3)) + (w * w) * (c4 + z * (c5 + z * c6));
+    double hz = 0.5 * z;
+    double v = 1.0 - hz;
+    return v + (((1.0 - v) - hz) + (z * r - x * y));
+}
+
+typedef struct {
+    double head;
+    double tail;
+    int32_t quarter;
+} Reduced;
+
+static Reduced reduced(double x) {
+    double to_int = of_bits(UINT64_C(0x4338000000000000));
+    double inv_pio2 = of_bits(UINT64_C(0x3FE45F306DC9C883));
+    double pio2_1 = of_bits(UINT64_C(0x3FF921FB54400000));
+    double pio2_2 = of_bits(UINT64_C(0x3DD0B4611A600000));
+    double pio2_2t = of_bits(UINT64_C(0x3BA3198A2E037073));
+    double pio2_3 = of_bits(UINT64_C(0x3BA3198A2E000000));
+    double pio2_3t = of_bits(UINT64_C(0x397B839A252049C1));
+    double turns = (x * inv_pio2 + to_int) - to_int;
+    int32_t quarter = 0;
+    if (of_bits(bits_of(turns) & UINT64_C(0x7FFFFFFFFFFFFFFF)) < 4.0e18) {
+        quarter = (int32_t)((int64_t)turns & 3);
+    }
+    double t = x - turns * pio2_1;
+    double w = turns * pio2_2;
+    double r = t - w;
+    w = turns * pio2_2t - ((t - r) - w);
+    t = r;
+    w = turns * pio2_3;
+    r = t - w;
+    w = turns * pio2_3t - ((t - r) - w);
+    Reduced out;
+    out.head = r - w;
+    out.tail = (r - out.head) - w;
+    out.quarter = quarter;
+    return out;
+}
+
+double kest_fdlibm_sin(double value) {
+    uint32_t high = high_word(value) & 0x7fffffffu;
+    if (high <= 0x3fe921fbu) {
+        if (high < 0x3e500000u) {
+            return value;
+        }
+        return sine_kernel(value, 0.0, false);
+    }
+    if (high >= 0x7ff00000u) {
+        return value - value;
+    }
+    Reduced r = reduced(value);
+    return r.quarter == 0   ? sine_kernel(r.head, r.tail, true)
+           : r.quarter == 1 ? cosine_kernel(r.head, r.tail)
+           : r.quarter == 2 ? negated(sine_kernel(r.head, r.tail, true))
+                            : negated(cosine_kernel(r.head, r.tail));
+}
+
+double kest_fdlibm_cos(double value) {
+    uint32_t high = high_word(value) & 0x7fffffffu;
+    if (high <= 0x3fe921fbu) {
+        if (high < 0x3e46a09eu) {
+            return 1.0;
+        }
+        return cosine_kernel(value, 0.0);
+    }
+    if (high >= 0x7ff00000u) {
+        return value - value;
+    }
+    Reduced r = reduced(value);
+    return r.quarter == 0   ? cosine_kernel(r.head, r.tail)
+           : r.quarter == 1 ? negated(sine_kernel(r.head, r.tail, true))
+           : r.quarter == 2 ? negated(cosine_kernel(r.head, r.tail))
+                            : sine_kernel(r.head, r.tail, true);
 }

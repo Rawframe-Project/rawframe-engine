@@ -135,7 +135,13 @@ static const char *under_alias(KestProgram *program, const char *name,
             return NULL;
         }
     }
-    snprintf(out, room, "%s.%.*s", program->module, (int)length, name);
+    // Copied rather than printed: this is asked for nearly every name a body
+    // uses, and formatting it was a twentieth of a build. See D1276.
+    size_t head = needed - length - 2;
+    memcpy(out, program->module, head);
+    out[head] = '.';
+    memcpy(out + head + 1, name, length);
+    out[head + 1 + length] = '\0';
     return out;
 }
 
@@ -731,11 +737,64 @@ static bool add_primitives(KestProgram *program) {
 // that is where a name from another file is; then the file being read, because
 // a type is resolved before this file's constants are declared and a count may
 // name one.
+// The constants one of the program's files declares, gathered the first time
+// the file is asked about and kept, or NULL where there is no room to keep
+// them -- which the two callers answer by walking the file as they used to.
+static const KestDecl **constants_of(KestProgram *program,
+                                     const KestUnitInfo *info,
+                                     uint32_t *count) {
+    const KestUnits *files = program->files;
+    if (files == NULL || info < files->items ||
+        info >= files->items + files->count) {
+        return NULL;
+    }
+    size_t at = (size_t)(info - files->items);
+    if (program->file_constants == NULL) {
+        program->file_constants =
+            KEST_ARENA_ARRAY(program->arena, const KestDecl **, files->count);
+        program->file_constant_counts =
+            KEST_ARENA_ARRAY(program->arena, uint32_t, files->count);
+        if (program->file_constants == NULL ||
+            program->file_constant_counts == NULL) {
+            program->file_constants = NULL;
+            return NULL;
+        }
+    }
+    if (program->file_constants[at] == NULL) {
+        uint32_t many = 0;
+        for (uint32_t i = 0; i < info->unit.count; i++) {
+            many += info->unit.items[i]->kind == KEST_DECL_CONST;
+        }
+        const KestDecl **found = KEST_ARENA_ARRAY(
+            program->arena, const KestDecl *, many == 0 ? 1 : many);
+        if (found == NULL) {
+            return NULL;
+        }
+        uint32_t put = 0;
+        for (uint32_t i = 0; i < info->unit.count; i++) {
+            if (info->unit.items[i]->kind == KEST_DECL_CONST) {
+                found[put++] = info->unit.items[i];
+            }
+        }
+        program->file_constants[at] = found;
+        program->file_constant_counts[at] = many;
+    }
+    *count = program->file_constant_counts[at];
+    return program->file_constants[at];
+}
+
 static const KestDecl *constant_in_file(KestProgram *program, const char *name,
                                         uint32_t length) {
-    const KestUnit *unit = program->unit == NULL ? NULL : &program->unit->unit;
-    for (uint32_t i = 0; unit != NULL && i < unit->count; i++) {
-        const KestDecl *decl = unit->items[i];
+    if (program->unit == NULL) {
+        return NULL;
+    }
+    uint32_t many = 0;
+    const KestDecl **constants = constants_of(program, program->unit, &many);
+    const KestUnit *unit = &program->unit->unit;
+    uint32_t count = constants != NULL ? many : unit->count;
+    for (uint32_t i = 0; i < count; i++) {
+        const KestDecl *decl =
+            constants != NULL ? constants[i] : unit->items[i];
         if (decl->kind == KEST_DECL_CONST &&
             decl->name.length == length &&
             memcmp(kest_span_text(program->source, decl->name), name,
@@ -763,8 +822,12 @@ static const KestDecl *constant_in_module(KestProgram *program,
             !kest_word_same(info->alias, module, module_length)) {
             continue;
         }
-        for (uint32_t i = 0; i < info->unit.count; i++) {
-            const KestDecl *decl = info->unit.items[i];
+        uint32_t many = 0;
+        const KestDecl **constants = constants_of(program, info, &many);
+        uint32_t count = constants != NULL ? many : info->unit.count;
+        for (uint32_t i = 0; i < count; i++) {
+            const KestDecl *decl =
+                constants != NULL ? constants[i] : info->unit.items[i];
             if (decl->kind == KEST_DECL_CONST &&
                 decl->name.length == length &&
                 memcmp(kest_span_text(&info->source, decl->name), name,
@@ -1686,6 +1749,43 @@ uint64_t kest_mix(uint64_t bits) {
     bits *= 0xc4ceb9fe1a85ec53ULL;
     bits ^= bits >> 33;
     return bits;
+}
+
+bool kest_real_bounds(uint16_t scalar, double *low, double *high) {
+    if (scalar == KEST_L_U64) {
+        return false;
+    }
+    *low = -9223372036854775808.0;
+    *high = 9223372036854775807.0;
+    switch (scalar) {
+    case KEST_L_I8:
+        *low = -128.0;
+        *high = 127.0;
+        break;
+    case KEST_L_I16:
+        *low = -32768.0;
+        *high = 32767.0;
+        break;
+    case KEST_L_I32:
+        *low = -2147483648.0;
+        *high = 2147483647.0;
+        break;
+    case KEST_L_U8:
+        *low = 0.0;
+        *high = 255.0;
+        break;
+    case KEST_L_U16:
+        *low = 0.0;
+        *high = 65535.0;
+        break;
+    case KEST_L_U32:
+        *low = 0.0;
+        *high = 4294967295.0;
+        break;
+    default:
+        break;
+    }
+    return true;
 }
 
 int64_t kest_real_to_int(uint16_t scalar, double value) {

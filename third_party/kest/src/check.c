@@ -4718,9 +4718,13 @@ static KestType *check_match(Checker *checker, KestExpr *expr,
                                          given != NULL ? given : expected);
             // The first arm that has a type of its own settles what the match
             // is; a literal takes it, the way a literal always does.
+            // What checking an arm gives back is nothing once compiling has
+            // run out of work, and the arms after it are still walked. See
+            // D1248.
             if (given == NULL ||
-                (!is_literal(arm->value) && is_literal(
-                     choose->arms[0].value) && given->tag == value->tag)) {
+                (value != NULL && !is_literal(arm->value) &&
+                 is_literal(choose->arms[0].value) &&
+                 given->tag == value->tag)) {
                 given = value;
             }
         } else {

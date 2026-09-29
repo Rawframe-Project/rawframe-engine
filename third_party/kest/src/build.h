@@ -4,6 +4,7 @@
 #include "check.h"
 #include "compile.h"
 #include "contract.h"
+#include "emitc.h"
 #include "loader.h"
 #include "lower.h"
 #include "vm.h"
@@ -72,7 +73,7 @@ struct KestBuild {
     // came out. Said between opening a build and compiling it: the two
     // backends read one body each time one is made, and a body is let go
     // before the next is built. See D1093.
-    bool wants_c;
+    const struct KestCWriter *c_writer;
     const char *c_wrote;
     // Whether the C written carries every file the program was read from, so
     // that what is built from it needs none of them. See D1172.
@@ -139,7 +140,19 @@ const KestSpent *kest_build_spent(const KestBuild *build);
 // what `kest emit --c` is. Nothing else changes: the same walk hands each body
 // to both backends, so what the C says and what the machine runs came from one
 // reading of the program.
-void kest_build_writes_c(KestBuild *build, bool on);
+//
+// The backend is handed in by whoever asks for it rather than named here: a
+// build that names it is a build every host links, and a host that never
+// writes C carried eighty kilobytes of the writer for nothing. `emitc.h`'s
+// three doors, in that order. See D1282.
+typedef struct KestCWriter {
+    KestEmitC *(*begin)(KestArena *arena, const KestModule *module);
+    bool (*body)(void *writing, const KestIrBody *body);
+    const char *(*done)(KestEmitC *writing, const char *entry,
+                        const char *from, const KestFile *carried,
+                        uint32_t carried_count, const char *library);
+} KestCWriter;
+void kest_build_writes_c(KestBuild *build, const KestCWriter *writer);
 // That C, or NULL for a build that was not asked or did not get that far. It
 // is one translation unit, and every body this backend had no C for is named
 // in it with the reason.

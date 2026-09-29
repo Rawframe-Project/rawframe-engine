@@ -10,6 +10,17 @@
 // of what a diagnostic has room for, so the rest is this.
 #define MORE_SITES (KEST_MOST_PLACES - 1)
 
+// A call through a value: where it is, what the value is written as, and what
+// the value promises. The first walk keeps these, so the other two promises are
+// proved on the graph it built rather than by walking every body again.
+typedef struct Through {
+    KestSpan span;
+    const char *shape;
+    bool no_alloc;
+    bool no_host;
+    bool deterministic;
+} Through;
+
 typedef struct {
     const KestDecl *decl;
     // What it is matched by, which includes what it takes, and what it is
@@ -34,6 +45,12 @@ typedef struct {
     const char *whys[MORE_SITES];
     uint32_t site_count;
     uint32_t more;
+    // Every call this body makes through a value, in the order the walk met
+    // them, which is the one thing a body does that the three promises read
+    // differently. See D1284.
+    struct Through *throughs;
+    uint32_t through_count;
+    uint32_t through_capacity;
     // Indices of the functions this one calls, and where each call is.
     uint32_t *callees;
     KestSpan *calls;
@@ -253,6 +270,50 @@ static void record_call(Graph *graph, Function *caller, uint32_t callee,
     caller->callees[caller->call_count++] = callee;
 }
 
+// What a call through a value is to the promise being proved: nothing, where
+// the value promises it, and otherwise the first place the body reaches.
+static void judge_through(Graph *graph, Function *function,
+                          const Through *through) {
+    if (graph->about == 2   ? through->deterministic
+        : graph->about == 1 ? through->no_host
+                            : through->no_alloc) {
+        return;
+    }
+    if (function->site.length == 0) {
+        function->site = through->span;
+        function->shape = through->shape;
+    }
+    function->allocates = true;
+}
+
+static void call_through(Graph *graph, Function *function, KestSpan span,
+                         const char *shape, bool no_alloc, bool no_host,
+                         bool deterministic) {
+    if (shape == NULL) {
+        graph->out_of_memory = true;
+        return;
+    }
+    if (function->through_count == function->through_capacity) {
+        uint32_t grown =
+            function->through_capacity == 0 ? 4 : function->through_capacity * 2;
+        Through *throughs =
+            KEST_ARENA_ARRAY(graph->program->arena, Through, grown);
+        if (throughs == NULL) {
+            graph->out_of_memory = true;
+            return;
+        }
+        if (function->through_count > 0) {
+            memcpy(throughs, function->throughs,
+                   sizeof(Through) * function->through_count);
+        }
+        function->throughs = throughs;
+        function->through_capacity = grown;
+    }
+    Through *through = &function->throughs[function->through_count++];
+    *through = (Through){span, shape, no_alloc, no_host, deterministic};
+    judge_through(graph, function, through);
+}
+
 static void walk_block(Graph *graph, Function *function,
                        const KestBlock *block);
 
@@ -302,7 +363,8 @@ static void walk_expr(Graph *graph, Function *function, const KestExpr *expr) {
         // Reading through a reference, writing through one and removing what
         // it named do not, which is what makes a frame step able to walk an
         // object graph inside a promise.
-        if (callee->kind == KEST_EXPR_NAME && find_called(graph, callee) < 0) {
+        int32_t index = find_called(graph, callee);
+        if (graph->about == 0 && callee->kind == KEST_EXPR_NAME && index < 0) {
             const char *text = span_text(graph, callee->span);
             // Every name the language answers to on its own, each with what it
             // does to the heap or nothing where it does none. The list is
@@ -372,35 +434,25 @@ static void walk_expr(Graph *graph, Function *function, const KestExpr *expr) {
         // and judged there, as part of the body it was written in. See D1257.
         if (callee->type != NULL && callee->type->tag == KEST_T_FN &&
             callee->type->symbol == NULL && !callee->type->is_foreign &&
-            !callee->type->block &&
-            !(graph->about == 2   ? callee->type->deterministic
-              : graph->about == 1 ? callee->type->no_host
-                                  : callee->type->no_alloc)) {
-            if (function->site.length == 0) {
-                function->site = expr->span;
-                function->shape =
-                    kest_type_name(graph->program->arena, callee->type);
-            }
-            function->allocates = true;
+            !callee->type->block) {
+            call_through(graph, function, expr->span,
+                         kest_type_name(graph->program->arena, callee->type),
+                         callee->type->no_alloc, callee->type->no_host,
+                         callee->type->deterministic);
         }
         if (graph->a_template &&
             (callee->type == NULL || callee->type->tag != KEST_T_FN)) {
             const KestTypeRef *written =
                 written_shape(graph, function, callee);
-            if (written != NULL &&
-                !(graph->about == 2   ? written->deterministic
-                  : graph->about == 1 ? written->no_host
-                                      : written->no_alloc)) {
-                if (function->site.length == 0) {
-                    function->site = expr->span;
-                    function->shape = shape_written(graph, written->span);
-                }
-                function->allocates = true;
+            if (written != NULL) {
+                call_through(graph, function, expr->span,
+                             shape_written(graph, written->span),
+                             written->no_alloc, written->no_host,
+                             written->deterministic);
             }
         }
         // Building a struct is not a call and does not reach anything. A
         // dotted callee is an extern named for its host type.
-        int32_t index = find_called(graph, callee);
         if (index >= 0) {
             record_call(graph, function, (uint32_t)index, expr->span);
         }
@@ -575,8 +627,12 @@ static bool trace(Graph *graph, uint32_t index, Path *path) {
     return false;
 }
 
+// `walked` is the graph an earlier promise built by walking every body, or
+// NULL for the first: the calls a body makes are the same whichever promise
+// is asked about, so the later two read its calls and its calls through a
+// value rather than walking, and typing every copy of a generic, again.
 static bool prove_promise(KestProgram *program, const KestUnits *units,
-                          int about) {
+                          int about, Graph *into, const Graph *walked) {
     Graph graph = {0};
     graph.program = program;
     graph.about = about;
@@ -681,11 +737,25 @@ static bool prove_promise(KestProgram *program, const KestUnits *units,
     // Every node is made and named by here, which is where the table can be
     // built: a name is what a call is looked up by, and nothing is added
     // after. See D1087.
-    if (!graph_index(&graph, program->arena)) {
+    // Made the same way from the same program, so the same nodes in the same
+    // order, which the count says before anything of the first is read.
+    bool walk = walked == NULL || walked->count != graph.count;
+    if (!walk) {
+        for (uint32_t i = 0; i < graph.count; i++) {
+            Function *function = &graph.functions[i];
+            const Function *was = &walked->functions[i];
+            function->callees = was->callees;
+            function->calls = was->calls;
+            function->call_count = was->call_count;
+            for (uint32_t t = 0; t < was->through_count; t++) {
+                judge_through(&graph, function, &was->throughs[t]);
+            }
+        }
+    } else if (!graph_index(&graph, program->arena)) {
         return false;
     }
 
-    for (uint32_t i = 0; i < graph.count; i++) {
+    for (uint32_t i = 0; walk && i < graph.count; i++) {
         Function *function = &graph.functions[i];
         // A generic declaration is read for what its own body reaches and not
         // for what it calls: the first is true whatever the types are, and the
@@ -870,6 +940,7 @@ static bool prove_promise(KestProgram *program, const KestUnits *units,
                             path.names[n]);
         }
     }
+    *into = graph;
     return true;
 }
 
@@ -880,7 +951,12 @@ bool kest_check_contracts(KestProgram *program, const KestUnits *units) {
     // Both are run whatever the first says, because a program with two
     // promises broken has two things to fix and finding out about the second
     // one build later is what a compiler that reports everything is for.
-    bool held = prove_promise(program, units, 0);
-    bool crossing = prove_promise(program, units, 1);
-    return prove_promise(program, units, 2) && crossing && held;
+    // The first walks every body and the other two read the graph it built.
+    Graph walked = {0};
+    Graph other = {0};
+    bool held = prove_promise(program, units, 0, &walked, NULL);
+    const Graph *first = held ? &walked : NULL;
+    bool crossing = prove_promise(program, units, 1, &other, first);
+    return prove_promise(program, units, 2, &other, first) && crossing &&
+           held;
 }

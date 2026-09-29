@@ -539,13 +539,24 @@ fn fittingNumber(out: [u8], value: i32) -> bool no.alloc no.host deterministic {
 }
 
 // The pieces with the separator between them, which is what `split` undoes.
+// Measured first and given its room once, so the bytes are moved once rather
+// than again every time the run doubles, and each piece is pushed where it is
+// rather than through a call. See D1277.
 fn join(pieces: [text], separator: text) -> text no.host deterministic {
     let out: [u8] = array()
+    if len(pieces) == 0 {
+        return text(out)
+    }
+    let total = len(separator) * (len(pieces) - 1)
+    for piece in pieces {
+        total += len(piece)
+    }
+    room(out, total)
     for i in 0..len(pieces) {
         if i > 0 {
-            append(out, separator)
+            push(out, separator)
         }
-        append(out, pieces[i])
+        push(out, pieces[i])
     }
     return text(out)
 }

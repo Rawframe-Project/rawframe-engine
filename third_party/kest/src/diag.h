@@ -161,7 +161,20 @@ uint32_t kest_word_distance(const char *a, size_t a_len, const char *b,
 // a word a program wrote is an offset and a length into the source with no
 // terminator anywhere near it. Asking the question is what everything from the
 // lexer to the machine does with those two once it has them. See D773.
-bool kest_word_same(const char *word, const char *bytes, size_t length);
+//
+// Byte by byte rather than a length and then the bytes, and written here so it
+// is folded into whoever asks: nearly every question asked of this is a no,
+// a no is nearly always the first byte, and measuring the whole of a name and
+// then making a call were most of the cost of asking. See D1276.
+static inline bool kest_word_same(const char *word, const char *bytes,
+                                  size_t length) {
+    for (size_t i = 0; i < length; i++) {
+        if (word[i] == '\0' || word[i] != bytes[i]) {
+            return false;
+        }
+    }
+    return word[length] == '\0';
+}
 
 void kest_source_locate(const KestSource *source, uint32_t offset,
                         uint32_t *line, uint32_t *column);

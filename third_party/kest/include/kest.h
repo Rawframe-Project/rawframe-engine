@@ -317,6 +317,11 @@ typedef struct {
     // width can say. The machine reads this rather than looking at the pieces
     // every call. See D840.
     bool by_the_type;
+    // The machine's own: nothing a host can write into this is a value the
+    // program could not have made -- every piece is sixty-four bits of a
+    // number -- so a call handing one over has nothing to look at. It sits in
+    // what the two above leave over. See D1272.
+    bool any_value;
     // The machine's own: a value written out once as the runs of reads and
     // writes moving one takes, so moving one is a walk of that rather than of
     // its type or of its pieces. Nothing a host reads. See D1159 and D1177.
@@ -1604,6 +1609,11 @@ uint64_t kest_fuel_left(const KestRuntime *runtime);
 // program to stop — an editor cancelling, a process shutting down — sets this
 // and the machine stops the way it stops for fuel, with everything it built
 // intact and a refusal that says which of the two it was.
+//
+// A body the release engine wrote as C spends no budget, and hears this at the
+// back of every `while` it goes round, once in 1024 turns: a `for` over a range
+// or over what a store holds ends by itself and is not asked, because that is
+// where a frame spends its time. See D1283.
 //
 // It is one store of one word, so a host may call it from a signal handler or
 // from another thread while the machine runs. What it may not do is free the

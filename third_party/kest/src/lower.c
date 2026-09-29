@@ -54,6 +54,11 @@ struct KestLower {
     uint16_t carried_slots;
     uint16_t carried_stack;
     uint16_t carried_slack;
+    // Which row of the table of what a carried body may hold each instruction
+    // is, one more than the row and nought for none: whether a body may be
+    // carried is asked at every call to it, one instruction of it at a time,
+    // and a walk down the table each was a tenth of lowering. See D1284.
+    uint8_t carried_row[256];
 };
 
 typedef struct KestLower Lower;
@@ -249,9 +254,45 @@ static uint8_t arithmetic_before(const Lower *lower, uint16_t *kind) {
 static bool two_locals_before(const Lower *lower, uint16_t *first,
                               uint16_t *second);
 
+// Whether the last thing written was `index.ll` of an element this many slots
+// wide, and what it read. The store after it takes it whole. See D1281.
+static bool index_ll_before(const Lower *lower, uint16_t size, uint16_t *holds,
+                            uint16_t *at, uint16_t *layout) {
+    if (lower->last_op != KEST_OP_INDEX_LL ||
+        lower->last_at < lower->pointed_at ||
+        lower->last_at + 7 != lower->chunk->code_count) {
+        return false;
+    }
+    const uint8_t *code = lower->chunk->code + lower->last_at;
+    uint16_t which = (uint16_t)(code[5] | ((uint16_t)code[6] << 8));
+    if (which >= lower->module->layout_count ||
+        lower->module->layouts[which].slots != size) {
+        return false;
+    }
+    *holds = (uint16_t)(code[1] | ((uint16_t)code[2] << 8));
+    *at = (uint16_t)(code[3] | ((uint16_t)code[4] << 8));
+    *layout = which;
+    return true;
+}
+
 static void emit_store(Lower *lower, uint16_t slot, uint16_t size,
                        KestSpan origin) {
     uint16_t layout = 0;
+    uint16_t read_from = 0;
+    uint16_t read_at = 0;
+    if (size != 1 && fusing() &&
+        index_ll_before(lower, size, &read_from, &read_at, &layout)) {
+        take_back(lower);
+        emit(lower, KEST_OP_INDEX_TO_LL, origin);
+        emit_u16(lower, layout, origin);
+        emit_u16(lower, slot, origin);
+        emit_u16(lower, read_from, origin);
+        emit_u16(lower, read_at, origin);
+        if (size + 2u > lower->chunk->fused_slots) {
+            lower->chunk->fused_slots = (uint16_t)(size + 2u);
+        }
+        return;
+    }
     if (size != 1 && fusing() && index_before(lower, size, &layout)) {
         take_back(lower);
         // And the run and the index it was read by, where both are locals
@@ -838,6 +879,8 @@ static const struct {
     {KEST_OP_MUL_F32, {NO_OPERAND}},
     {KEST_OP_DIV_F32, {NO_OPERAND}},
     {KEST_OP_NEG_F32, {NO_OPERAND}},
+    {KEST_OP_SIN_F, {NO_OPERAND}},
+    {KEST_OP_COS_F, {NO_OPERAND}},
     {KEST_OP_LT_I, {NO_OPERAND}},
     {KEST_OP_LE_I, {NO_OPERAND}},
     {KEST_OP_GT_I, {NO_OPERAND}},
@@ -889,6 +932,8 @@ static const struct {
     {KEST_OP_JUMP_FALSE_GE_K, {A_SLOT, A_CONSTANT, A_DISTANCE}},
     {KEST_OP_JUMP_FALSE_EQ_K, {A_SLOT, A_CONSTANT, A_DISTANCE}},
     {KEST_OP_JUMP_FALSE_NE_K, {A_SLOT, A_CONSTANT, A_DISTANCE}},
+    {KEST_OP_JUMP_FALSE_LT_LL, {A_SLOT, A_SLOT, A_DISTANCE}},
+    {KEST_OP_JUMP_FALSE_LE_LL, {A_SLOT, A_SLOT, A_DISTANCE}},
     {KEST_OP_JUMP_FALSE_LT_C, {A_CONSTANT, A_DISTANCE}},
     {KEST_OP_JUMP_FALSE_LE_C, {A_CONSTANT, A_DISTANCE}},
     {KEST_OP_JUMP_FALSE_GT_C, {A_CONSTANT, A_DISTANCE}},
@@ -914,13 +959,9 @@ static const struct {
 
 // The operands of one of those, or NULL for an instruction a body carrying it
 // could not be moved with.
-static const Operand *carried_operands(uint8_t op) {
-    for (size_t i = 0; i < sizeof(CARRIED) / sizeof(CARRIED[0]); i++) {
-        if (CARRIED[i].op == op) {
-            return CARRIED[i].operands;
-        }
-    }
-    return NULL;
+static const Operand *carried_operands(const Lower *lower, uint8_t op) {
+    uint8_t row = lower->carried_row[op];
+    return row == 0 ? NULL : CARRIED[row - 1].operands;
 }
 
 // The most bytes of code a carried body may be. A body is carried to every
@@ -937,6 +978,30 @@ static const Operand *carried_operands(uint8_t op) {
 // nothing but what `CARRIED` names.
 static uint16_t operand_at(const uint8_t *code, uint32_t at);
 
+// The instruction that answers a call of the function at `index` where the
+// machine has one -- the sine and the cosine, which `std.math` hands to
+// `std.fdlibm` -- and nought where it does not. A call of either was a call,
+// a call inside it and a hundred instructions of the library's walked a step
+// at a time; the machine answers the same bits in one. Off with the other
+// fusions, and for a build that is going to be profiled, which counts calls
+// as they were written. See D1279.
+static uint8_t answered_here(const Lower *lower, uint16_t index) {
+    if (!fusing() || lower->module->carrying_off ||
+        index >= lower->module->count) {
+        return 0;
+    }
+    const char *name = lower->module->functions[index]->name;
+    if (strcmp(name, "std.fdlibm.sin#f64") == 0 ||
+        strcmp(name, "std.math.sin#f64") == 0) {
+        return KEST_OP_SIN_F;
+    }
+    if (strcmp(name, "std.fdlibm.cos#f64") == 0 ||
+        strcmp(name, "std.math.cos#f64") == 0) {
+        return KEST_OP_COS_F;
+    }
+    return 0;
+}
+
 static bool may_carry(const Lower *lower, uint16_t index) {
     if (!fusing() || lower->module->carrying_off ||
         index >= lower->next - 1 ||
@@ -951,7 +1016,7 @@ static bool may_carry(const Lower *lower, uint16_t index) {
         return false;
     }
     for (uint32_t at = 0; at < callee->code_count;) {
-        const Operand *operands = carried_operands(callee->code[at]);
+        const Operand *operands = carried_operands(lower, callee->code[at]);
         if (operands == NULL) {
             return false;
         }
@@ -982,7 +1047,7 @@ static bool may_carry(const Lower *lower, uint16_t index) {
     }
     starts[callee->code_count] = true;
     for (uint32_t at = 0; at < callee->code_count;) {
-        const Operand *operands = carried_operands(callee->code[at]);
+        const Operand *operands = carried_operands(lower, callee->code[at]);
         uint32_t wide = kest_op_wide(callee->code[at]);
         uint32_t read = at + 1;
         for (int o = 0; o < 3 && operands[o] != NO_OPERAND; o++) {
@@ -1007,10 +1072,10 @@ static uint16_t operand_at(const uint8_t *code, uint32_t at) {
 // read them where the caller's locals are, which is what a call that pushed
 // them out of a local and a carry that stored them back into a slot was two
 // copies of the same thing for.
-static bool writes_a_parameter(const KestChunk *callee) {
+static bool writes_a_parameter(const Lower *lower, const KestChunk *callee) {
     for (uint32_t at = 0; at < callee->code_count;) {
         uint8_t op = callee->code[at];
-        const Operand *operands = carried_operands(op);
+        const Operand *operands = carried_operands(lower, op);
         bool writes = op == KEST_OP_STORE || op == KEST_OP_STOREN ||
                       op == KEST_OP_STORE_K || op == KEST_OP_ADD_K_SELF ||
                       op == KEST_OP_SUB_K_SELF ||
@@ -1142,7 +1207,7 @@ static void carry(Lower *lower, uint16_t index, uint16_t argument_slots,
     uint16_t from[MOST_ALIASED];
     uint16_t aliased = 0;
     if (argument_slots == callee->param_slots &&
-        !writes_a_parameter(callee)) {
+        !writes_a_parameter(lower, callee)) {
         aliased = loaded_just_now(lower, argument_slots, from);
         if (aliased > 0 &&
             !runs_hold(callee, (uint16_t)(argument_slots - aliased), aliased,
@@ -1195,7 +1260,7 @@ static void carry(Lower *lower, uint16_t index, uint16_t argument_slots,
     bool fused[MOST_CARRIED + 1] = {false};
     uint16_t moved_to[MOST_CARRIED + 1] = {0};
     for (uint32_t at = 0; at < end; at += kest_op_wide(callee->code[at])) {
-        const Operand *operands = carried_operands(callee->code[at]);
+        const Operand *operands = carried_operands(lower, callee->code[at]);
         uint32_t wide = kest_op_wide(callee->code[at]);
         uint32_t read = at + 1;
         for (int o = 0; o < 3 && operands[o] != NO_OPERAND; o++) {
@@ -1233,7 +1298,7 @@ static void carry(Lower *lower, uint16_t index, uint16_t argument_slots,
                               ? callee->origins[which]
                               : span.offset,
                           1};
-        const Operand *operands = carried_operands(op);
+        const Operand *operands = carried_operands(lower, op);
         if (op == KEST_OP_CONST && at + wide < end && fused[at + wide]) {
             if (lower->chunk->fused_slots < 1) {
                 lower->chunk->fused_slots = 1;
@@ -1355,11 +1420,13 @@ static void read_place(Lower *lower, const KestIrOp *op) {
         {
             uint16_t holds = 0;
             uint16_t at = 0;
-            // One slot an element only: a struct read this way is stored
-            // next, and `index.to` takes that store into the read, which
-            // is worth more than this. See D1155.
+            // An element of any width: one of more than a slot that is
+            // stored next is taken into the store as `index.to.ll` there,
+            // which is what this used to stand aside for (D1155), and one
+            // that is not -- a piece of text handed to a call, as every
+            // comparison a sort makes is -- was `load2` and `index`. See
+            // D1281.
             if (fusing() && place->layout < lower->module->layout_count &&
-                lower->module->layouts[place->layout].slots == 1 &&
                 two_locals_before(lower, &holds, &at)) {
                 // The two slots `load2` pushed are never on the stack now.
                 if (lower->chunk->fused_slots < 2) {
@@ -1368,6 +1435,20 @@ static void read_place(Lower *lower, const KestIrOp *op) {
                 take_back(lower);
                 emit(lower, KEST_OP_INDEX_LL, op->span);
                 emit_u16(lower, holds, op->span);
+                emit_u16(lower, at, op->span);
+                emit_u16(lower, place->layout, op->span);
+                return;
+            }
+            // And by a local alone, where the run is what came before it:
+            // the second half of every `cells[y][x]`. See D1281.
+            if (fusing() && place->layout < lower->module->layout_count &&
+                lower->module->layouts[place->layout].slots == 1 &&
+                one_operand_before(lower, KEST_OP_LOAD, &at)) {
+                if (lower->chunk->fused_slots < 1) {
+                    lower->chunk->fused_slots = 1;
+                }
+                take_back(lower);
+                emit(lower, KEST_OP_INDEX_L, op->span);
                 emit_u16(lower, at, op->span);
                 emit_u16(lower, place->layout, op->span);
                 return;
@@ -1743,6 +1824,12 @@ static void lower_op(Lower *lower, uint32_t index, const KestIrOp *op) {
         return;
     }
     case KEST_IR_TEXT_JOIN:
+        if (op->imm[1] != 0) {
+            emit(lower, KEST_OP_CONCAT_I, span);
+            emit_u16(lower, op->imm[0], span);
+            emit_u16(lower, op->imm[1], span);
+            return;
+        }
         emit(lower, KEST_OP_CONCAT, span);
         emit_u16(lower, op->imm[0], span);
         return;
@@ -1845,6 +1932,10 @@ static void lower_op(Lower *lower, uint32_t index, const KestIrOp *op) {
         return;
 
     case KEST_IR_CALL:
+        if (answered_here(lower, op->imm[0]) != 0) {
+            emit(lower, answered_here(lower, op->imm[0]), span);
+            return;
+        }
         if (may_carry(lower, op->imm[0])) {
             uint16_t slot = 0;
             bool one = index + 2 < lower->body->op_count &&
@@ -1894,7 +1985,21 @@ static void lower_op(Lower *lower, uint32_t index, const KestIrOp *op) {
         uint8_t against = fusing() ? weighed(jump, true) : 0;
         uint16_t slot = 0;
         uint16_t which = 0;
-        if (against != 0 && local_and_constant_before(lower, &slot, &which)) {
+        // Two locals: every `while i < n`, and every `<=`. See D1281.
+        uint8_t locals = !fusing()                          ? 0
+                         : jump == KEST_OP_JUMP_FALSE_LT_I ? KEST_OP_JUMP_FALSE_LT_LL
+                         : jump == KEST_OP_JUMP_FALSE_LE_I ? KEST_OP_JUMP_FALSE_LE_LL
+                                                           : 0;
+        if (locals != 0 && two_locals_before(lower, &slot, &which)) {
+            if (lower->chunk->fused_slots < 2) {
+                lower->chunk->fused_slots = 2;
+            }
+            take_back(lower);
+            emit(lower, locals, span);
+            emit_u16(lower, slot, span);
+            emit_u16(lower, which, span);
+        } else if (against != 0 &&
+                   local_and_constant_before(lower, &slot, &which)) {
             // The two values `load.k` pushed are never on the stack now, so
             // the compiler's reckoning may be two more than this body goes:
             // said as slack, the way D1012 says it, rather than taken off a
@@ -2075,6 +2180,12 @@ KestLower *kest_lower_new(KestProgram *program, KestModule *module,
     lower->program = program;
     lower->module = module;
     lower->arena = arena;
+    _Static_assert(sizeof(CARRIED) / sizeof(CARRIED[0]) < 255,
+                   "a row of what is carried is named in a byte");
+    // The first row for an instruction is the one a walk down the table found.
+    for (size_t i = sizeof(CARRIED) / sizeof(CARRIED[0]); i > 0; i--) {
+        lower->carried_row[CARRIED[i - 1].op] = (uint8_t)i;
+    }
     return lower;
 }
 

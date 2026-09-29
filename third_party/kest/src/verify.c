@@ -62,6 +62,14 @@ static bool starts_at(const uint8_t *starts, uint32_t where) {
     return ((unsigned)starts[where / 8] >> (where % 8)) & 1u;
 }
 
+// What the `k`th number an instruction carries is: nought counts from the
+// first. A number past the last it carries is a number.
+static KestOperand operand_of(uint8_t op, uint32_t k) {
+    return op <= KEST_OP_STOP && k < 5
+               ? (KestOperand)kest_instructions[op].is[k]
+               : KEST_OPERAND_NUMBER;
+}
+
 // Whether every number every instruction of a body carries is one the body or
 // the module has, and every jump lands where an instruction starts: what the
 // machine reads without asking, proved before it runs. Answers the code and
@@ -85,7 +93,7 @@ static const char *names_only_what_is_there(const KestModule *module,
             uint32_t value = kest_chunk_u16(chunk, at + 1 + 2 * k);
             const char *wrong = NULL;
             uint32_t has = 0;
-            switch (kest_op_operand(op, k)) {
+            switch (operand_of(op, k)) {
             case KEST_OPERAND_NUMBER:
                 break;
             case KEST_OPERAND_SLOT:
@@ -141,8 +149,8 @@ static const char *names_only_what_is_there(const KestModule *module,
                 snprintf(said, room,
                          "`%s` at %u names %s %u of the %u there are",
                          name, at, wrong,
-                         kest_op_operand(op, k) == KEST_OPERAND_SLOT_RUN ||
-                                 kest_op_operand(op, k) == KEST_OPERAND_CONSTANT_RUN
+                         operand_of(op, k) == KEST_OPERAND_SLOT_RUN ||
+                                 operand_of(op, k) == KEST_OPERAND_CONSTANT_RUN
                              ? previous + value
                              : value,
                          has);
@@ -279,9 +287,9 @@ static const char *stack_on_every_path(const KestModule *module,
             bool falls = op != KEST_OP_JUMP && op != KEST_OP_LOOP;
             for (uint32_t k = 0; k < (wide - 1) / 2; k++) {
                 uint32_t value = kest_chunk_u16(chunk, at + 1 + 2 * k);
-                if (kest_op_operand(op, k) == KEST_OPERAND_FORWARD) {
+                if (operand_of(op, k) == KEST_OPERAND_FORWARD) {
                     lands = at + wide + value;
-                } else if (kest_op_operand(op, k) == KEST_OPERAND_BACKWARD) {
+                } else if (operand_of(op, k) == KEST_OPERAND_BACKWARD) {
                     lands = at + wide - value;
                 }
             }
@@ -1746,6 +1754,16 @@ static const char *kinds_step(Kinds *w) {
         }
         push_laid_at(w, u[2], DEPTH_OF(SLOT(w, u[0])));
         return NULL;
+    case KEST_OP_INDEX_L: {
+        if ((wrong = needs_slot(w, u[0], NEEDS_NUMBER)) != NULL ||
+            (wrong = needs_top_of(w, 1, NEEDS_ARRAY, u[1] + 1)) != NULL) {
+            return wrong;
+        }
+        uint32_t made = DEPTH_OF(FROM_TOP(w, 1));
+        w->depth -= 1;
+        push_laid_at(w, u[1], made);
+        return NULL;
+    }
     case KEST_OP_INDEX_TO:
         if ((wrong = needs_top(w, 1, NEEDS_NUMBER)) != NULL ||
             (wrong = needs_top_of(w, 2, NEEDS_ARRAY, u[0] + 1)) != NULL) {
@@ -1982,6 +2000,40 @@ static const char *kinds_step(Kinds *w) {
         push_made(w, TEXT_KIND);
         push_made(w, LENGTH_KIND);
         return NULL;
+    // The same, with a piece a number in one slot where its bit is set; the
+    // top of the stack is the last piece. See D1277.
+    case KEST_OP_CONCAT_I: {
+        if (u[0] > KEST_NUMBERED_MOST || (u[1] >> u[0]) != 0) {
+            snprintf(w->said, w->room,
+                     "`%s` at %u says which of %u pieces are numbers in %u",
+                     w->name, w->at, u[0], u[1]);
+            return "K0411";
+        }
+        uint32_t down = 0;
+        for (uint32_t i = u[0]; i-- > 0;) {
+            if ((u[1] >> i) & 1u) {
+                if ((wrong = needs_top(w, down + 1, NEEDS_NUMBER)) != NULL) {
+                    return wrong;
+                }
+                down += 1;
+                continue;
+            }
+            if ((wrong = needs_top(w, down + 1, NEEDS_LENGTH)) != NULL ||
+                (wrong = needs_top(w, down + 2, NEEDS_TEXT)) != NULL) {
+                return wrong;
+            }
+            uint32_t at = chunk->slot_count + w->depth - (down + 2);
+            if (!one_piece(resolved(v, w->now, chunk->slot_count, at),
+                           resolved(v, w->now, chunk->slot_count, at + 1))) {
+                return not_one_piece(w, at);
+            }
+            down += 2;
+        }
+        w->depth -= down;
+        push_made(w, TEXT_KIND);
+        push_made(w, LENGTH_KIND);
+        return NULL;
+    }
     case KEST_OP_HASH_VALUE: {
         uint32_t slots = module->layouts[u[0]].slots;
         if ((wrong = fits_top(w, u[0], slots)) != NULL) {
@@ -2142,6 +2194,8 @@ static const char *kinds_step(Kinds *w) {
     case KEST_OP_TO_F32:
     case KEST_OP_NEG_F:
     case KEST_OP_NEG_F32:
+    case KEST_OP_SIN_F:
+    case KEST_OP_COS_F:
     case KEST_OP_NOT:
     case KEST_OP_HASH_I:
     case KEST_OP_HASH_F:
@@ -2262,6 +2316,12 @@ static const char *kinds_step(Kinds *w) {
     case KEST_OP_JUMP_TRUE_EQ_FK:
     case KEST_OP_JUMP_TRUE_NE_FK:
         return needs_slot(w, u[0], NEEDS_NUMBER);
+    case KEST_OP_JUMP_FALSE_LT_LL:
+    case KEST_OP_JUMP_FALSE_LE_LL:
+        if ((wrong = needs_slot(w, u[0], NEEDS_NUMBER)) != NULL) {
+            return wrong;
+        }
+        return needs_slot(w, u[1], NEEDS_NUMBER);
     case KEST_OP_JUMP_FALSE_LT_E:
     case KEST_OP_JUMP_FALSE_LE_E:
     case KEST_OP_JUMP_FALSE_GT_E:
@@ -2516,7 +2576,11 @@ static bool fold_into(Verifying *v, Kind **kept, uint32_t place,
         uint32_t region = s < frame ? 0 : frame;
         Kind was = kept[place][s];
         Kind is = now[s];
-        if (was != is && HOLDS_OF(was) == HOLDS_PAYLOAD) {
+        // Most of a frame is what it was the last time this place was met.
+        if (was == is) {
+            continue;
+        }
+        if (HOLDS_OF(was) == HOLDS_PAYLOAD) {
             was = resolved(v, kept[place], region, s);
         }
         if (was != is && HOLDS_OF(is) == HOLDS_PAYLOAD) {
@@ -2651,6 +2715,45 @@ static const char *same_blocks(uint8_t *opened, uint32_t place,
 // the rest, and folded where two ways meet. Every instruction's reading is
 // held to what it reads; `depth` is where the stack stands at each, which the
 // walk before this one proved. See D1242.
+// The places still to walk, nearest the start first. A walk that takes the
+// newest place first reaches the head of a loop before everything that flows
+// into it has, and walks the loop again for each; nearest first walks what
+// comes before a place before the place, so a body is walked about once.
+// Tetromino's 1,189 instructions took 2,106 steps the other way and 1,607
+// this way. The order is what it costs and not what it proves: the walk ends
+// where everything has stopped changing, whichever way it got there. See
+// D1276.
+static void place_push(uint32_t *work, uint32_t *waiting, uint32_t place) {
+    uint32_t at = (*waiting)++;
+    while (at > 0 && work[(at - 1) / 2] > place) {
+        work[at] = work[(at - 1) / 2];
+        at = (at - 1) / 2;
+    }
+    work[at] = place;
+}
+
+static uint32_t place_pop(uint32_t *work, uint32_t *waiting) {
+    uint32_t first = work[0];
+    uint32_t last = work[--(*waiting)];
+    uint32_t at = 0;
+    for (;;) {
+        uint32_t child = 2 * at + 1;
+        if (child >= *waiting) {
+            break;
+        }
+        if (child + 1 < *waiting && work[child + 1] < work[child]) {
+            child++;
+        }
+        if (work[child] >= last) {
+            break;
+        }
+        work[at] = work[child];
+        at = child;
+    }
+    work[at] = last;
+    return first;
+}
+
 static const char *holds_on_every_path(Verifying *v, const KestChunk *chunk,
                                        const uint16_t *depth, Kind *laid,
                                        uint32_t laid_room,
@@ -2681,7 +2784,7 @@ static const char *holds_on_every_path(Verifying *v, const KestChunk *chunk,
         uint32_t size = kest_op_wide(op);
         for (uint32_t k = 0; k < (size - 1) / 2; k++) {
             uint32_t value = kest_chunk_u16(chunk, at + 1 + 2 * k);
-            KestOperand is = kest_op_operand(op, k);
+            KestOperand is = operand_of(op, k);
             if (is == KEST_OPERAND_FORWARD) {
                 lands[at + size + value] = 1;
             } else if (is == KEST_OPERAND_BACKWARD) {
@@ -2704,13 +2807,13 @@ static const char *holds_on_every_path(Verifying *v, const KestChunk *chunk,
     memset(opened, 0xFF, count + 1);
     opened[0] = 0;
     uint32_t waiting = 0;
-    work[waiting++] = 0;
+    place_push(work, &waiting, 0);
     queued[0] = 1;
     const char *wrong = NULL;
     Kinds w = {module, v, chunk, now, 0, laid, laid_room, spare, 0, 0, NULL,
                said, room};
     while (waiting > 0 && wrong == NULL && !starved) {
-        uint32_t at = work[--waiting];
+        uint32_t at = place_pop(work, &waiting);
         queued[at] = 0;
         memcpy(now, kept[at], sizeof(Kind) * ((size_t)chunk->slot_count + depth[at]));
         w.region = opened[at];
@@ -2779,7 +2882,7 @@ static const char *holds_on_every_path(Verifying *v, const KestChunk *chunk,
             }
             for (uint32_t k = 0; k < (size - 1) / 2; k++) {
                 uint32_t value = kest_chunk_u16(chunk, at + 1 + 2 * k);
-                KestOperand is = kest_op_operand(op, k);
+                KestOperand is = operand_of(op, k);
                 uint32_t place = is == KEST_OPERAND_FORWARD    ? at + size + value
                                  : is == KEST_OPERAND_BACKWARD ? at + size - value
                                                                : UINT32_MAX;
@@ -2793,7 +2896,7 @@ static const char *holds_on_every_path(Verifying *v, const KestChunk *chunk,
                               chunk->slot_count, scratch, &starved) &&
                     !queued[place]) {
                     queued[place] = 1;
-                    work[waiting++] = place;
+                    place_push(work, &waiting, place);
                 }
             }
             if (wrong != NULL || op == KEST_OP_JUMP || op == KEST_OP_LOOP) {
@@ -2813,7 +2916,7 @@ static const char *holds_on_every_path(Verifying *v, const KestChunk *chunk,
                               chunk->slot_count, scratch, &starved) &&
                     !queued[next]) {
                     queued[next] = 1;
-                    work[waiting++] = next;
+                    place_push(work, &waiting, next);
                 }
                 break;
             }
@@ -3002,10 +3105,11 @@ bool kest_module_prove(const KestModule *module, KestArena *arena,
     }
 
     // The promises are walked over code the walks above proved can be
-    // walked: an instruction this machine has not got has no width, and a
-    // walk that asked it for one read past the end of the table that says.
-    // A module refused above is refused, and nothing more is asked of it.
-    // See D1253.
+    // walked. A module refused above is refused, and nothing more is asked
+    // of it: what the promises would say about it is about code nobody will
+    // run. An instruction this machine has not got was once read past the
+    // end of the table of widths here; the table answers one for it now.
+    // See D1253 and D1286.
     if (!held) {
         kest_arena_free(scratch);
         return false;
