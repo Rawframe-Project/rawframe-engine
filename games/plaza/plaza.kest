@@ -80,11 +80,20 @@ fn swing(count: i32, blades: [Blade], targets: [physics3d.Target3D], entities: [
     }
 }
 
+// Where a stroller's round of paces stands.
+enum Stride {
+    Start
+    Idling
+    Walking
+    Running
+}
+
 // A stroller: its pace (nought idles, 1.4 walks, four runs), where its head
 // looks (the plaza's middle, in its own frame), where it is on the plaza,
-// the ticks it has strolled, and how squarely its head faces the middle
-// (the head's forward along the look, which a server's head keeps above
-// nought).
+// the ticks it has strolled, how squarely its head faces the middle (the
+// head's forward along the look, which a server's head keeps above
+// nought), and where it is in its round: the pace it waits in, and the
+// ticks left of it.
 struct Stroller {
     pace: f64
     look_x: f64
@@ -94,6 +103,38 @@ struct Stroller {
     z: f64
     clock: u32
     gaze: f64
+    left: u32
+    at: Stride
+}
+
+const PACE_TICKS: u32 = 240
+
+// Four seconds each it idles, walks, and runs, round and round: a body that
+// waits a tick at a time (Kest's `resumes`), where it waits kept in the
+// stroller itself, so a save, a checkpoint, or a client's mirror holds it
+// as it holds any other value.
+fn stride(s: Stroller) -> Stroller resumes s.at {
+    while true {
+        s.pace = 0.0
+        while s.left > u32(0) {
+            s.left = s.left - u32(1)
+            wait Idling
+        }
+        s.left = PACE_TICKS
+        s.pace = 1.4
+        while s.left > u32(0) {
+            s.left = s.left - u32(1)
+            wait Walking
+        }
+        s.left = PACE_TICKS
+        s.pace = 4.0
+        while s.left > u32(0) {
+            s.left = s.left - u32(1)
+            wait Running
+        }
+        s.left = PACE_TICKS
+    }
+    return s
 }
 
 // Strollers walk by root motion (D134): each step's move, turned from the
@@ -111,17 +152,8 @@ fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], en
         let sin = 2.0 * s * c
         strollers[i].x = strollers[i].x + cos * m.moveX + sin * m.moveZ
         strollers[i].z = strollers[i].z - sin * m.moveX + cos * m.moveZ
-        let clock = strollers[i].clock + u32(1)
-        strollers[i].clock = clock
-        let phase = (clock / u32(240)) % u32(3)
-        let pace = f64(0.0)
-        if phase == u32(1) {
-            pace = 1.4
-        }
-        if phase == u32(2) {
-            pace = 4.0
-        }
-        strollers[i].pace = pace
+        strollers[i].clock = strollers[i].clock + u32(1)
+        strollers[i] = stride(strollers[i])
         // The middle at head height, turned into its frame by its facing now.
         let fc = m.facingW * m.facingW - m.facingY * m.facingY
         let fs = 2.0 * m.facingY * m.facingW
