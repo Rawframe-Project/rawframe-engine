@@ -754,3 +754,88 @@ RAWFRAME_TEST(CheckpointsCarryEntityReferences) {
     simulation = nullptr;
     std::filesystem::remove_all(kDirectory);
 }
+
+RAWFRAME_TEST(AWaitingBodyLivesInAComponent) {
+    // D268: a guard's round is a body that waits a tick at a time, where it
+    // waits a tag among its fields; it replicates, and a checkpoint taken
+    // mid-round restores it waiting where it was.
+    struct Guard {
+        std::int32_t post = 0;
+        std::int32_t posts = 0;
+        std::int32_t looks = 0;
+        std::int32_t at = 0;
+    };
+    const auto kGuards = [] {
+        world::World& world = *simulation->world();
+        const auto kId =
+            world.registry().find(schema::ComponentTypeId::fromText("7c2e9a14-3b58-4d61-9f0a-2e8d5b1c6a73"));
+        const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kId, world::Access::Read}};
+        auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+        std::vector<Guard> found;
+        query->forEachChunk(world, [&found](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                Guard guard;
+                std::memcpy(&guard, chunk.columns[0] + (row * sizeof(Guard)), sizeof(Guard));
+                found.push_back(guard);
+            }
+        });
+        return found;
+    };
+    const std::filesystem::path kDirectory = test::scratchDirectory("patrol");
+    std::filesystem::create_directories(kDirectory);
+    const std::string kGame = std::string{"kest.game = "} + RAWFRAME_WORLD_KEST_GAMES +
+                              "patrol.game\nworld.tick_rate = 10\nworld.maximum_ticks_per_iteration = 100\n";
+    std::vector<composition::Problem> problems;
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kWatched,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    RAWFRAME_EXPECT(plan.has_value());
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    {
+        const auto kConfiguration = composition::Configuration::parse(
+            kGame + "checkpoint.capture_ticks = 5\ncheckpoint.capture_prefix = " + (kDirectory / "p-").string() + "\n");
+        composition::Composition composition{*plan,
+                                             composition::HostServices{.clock = &clock,
+                                                                       .scope = &root,
+                                                                       .cpu = &test::cpuExecutor(),
+                                                                       .blockingIo = &test::blockingIoExecutor(),
+                                                                       .configuration = &*kConfiguration}};
+        RAWFRAME_EXPECT(composition.start().has_value());
+        clock.advance(execution::MonotonicDuration::fromSeconds(1));
+        const composition::HostFrame kFrame{.iteration = 0, .now = clock.now()};
+        composition.runHostPhase(composition::HostPhase::RunWorlds, kFrame);
+        composition.runHostPhase(composition::HostPhase::Maintenance, kFrame);
+        // Five ticks: to post one, looking twice, to post two, and one look
+        // there, so it waits looking with one look left.
+        const std::vector<Guard> kAtFive = kGuards();
+        RAWFRAME_EXPECT(simulation->tick().value == 5 && kAtFive.size() == 2);
+        for (const Guard& guard : kAtFive) {
+            RAWFRAME_EXPECT(guard.post == 2 && guard.looks == 1 && guard.at == 2);
+        }
+        composition.stop();
+    }
+    const auto kConfiguration =
+        composition::Configuration::parse(kGame + "checkpoint.restore = " + (kDirectory / "p-5.rfsn").string() + "\n");
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    const std::vector<Guard> kRestored = kGuards();
+    RAWFRAME_EXPECT(kRestored.size() == 2 && kRestored[0].at == 2 && kRestored[0].looks == 1);
+    // And carries on from there: its last look at post two, three steps at
+    // post three, then done, the round over.
+    clock.advance(execution::MonotonicDuration::fromSeconds(1));
+    composition.runHostPhase(composition::HostPhase::RunWorlds,
+                             composition::HostFrame{.iteration = 1, .now = clock.now()});
+    for (const Guard& guard : kGuards()) {
+        RAWFRAME_EXPECT(guard.post == 3 && guard.looks == 0 && guard.at == 3);
+    }
+    composition.stop();
+    simulation = nullptr;
+    std::filesystem::remove_all(kDirectory);
+}

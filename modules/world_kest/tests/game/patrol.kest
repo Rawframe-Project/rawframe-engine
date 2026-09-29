@@ -1,0 +1,43 @@
+module patrol
+
+// Guards walking a round of posts, a tick a step, looking about twice at
+// each: where one waits is a case of its own enum, kept in the component,
+// so a checkpoint or a client's mirror holds it as it holds a number.
+
+enum GuardAt {
+    Start
+    Walking
+    Looking
+    Done
+}
+
+struct Guard {
+    post: i32
+    posts: i32
+    looks: i32
+    at: GuardAt
+}
+
+fn round(g: Guard) -> Guard resumes g.at {
+    while g.post < g.posts {
+        g.post = g.post + 1
+        wait Walking
+        g.looks = 2
+        while g.looks > 0 {
+            g.looks = g.looks - 1
+            wait Looking
+        }
+    }
+    g.at = GuardAt.Done
+    return g
+}
+
+fn watch(count: i32, guards: [Guard]) {
+    let i = 0
+    while i < count {
+        if guards[i].at != GuardAt.Done {
+            guards[i] = round(guards[i])
+        }
+        i = i + 1
+    }
+}
