@@ -515,6 +515,10 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             }
             break;
         }
+        case network::SessionEventKind::Event:
+            // Replication declares no event lane, so its sessions refuse
+            // every lane stream and none arrives.
+            break;
         case network::SessionEventKind::Frame:
             if (kPeer != state.peers.end()) {
                 state.onFrame(world, kPeer->second, event);

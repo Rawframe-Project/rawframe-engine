@@ -5,7 +5,8 @@
 // control stream, and says hello; the server checks exact compatibility and
 // its own admission rule and answers once. Nothing reaches the owner as
 // gameplay before a connection is admitted, and a peer that breaks the
-// protocol is closed, not trusted.
+// protocol is closed, not trusted. Once admitted, guaranteed events travel
+// on declared event lanes (D265), each a one-way stream of its own.
 
 #include "rawframe/execution/time.h"
 #include "rawframe/network/admission.h"
@@ -41,6 +42,23 @@ struct SessionProfile {
     execution::MonotonicDuration admissionTimeout;
 };
 
+/// SPEC-0013's hard ceilings on guaranteed events: lanes, and one record.
+inline constexpr std::size_t kMaximumEventLanes = 16;
+inline constexpr std::size_t kMaximumEventRecord = std::size_t{64} * 1024;
+
+/// An event lane (SPEC-0010 guaranteed events): reliable and ordered within
+/// itself, independent of every other lane. Both sides declare the same
+/// lanes, which exact compatibility guarantees; admission authorizes them
+/// under the connection's epoch, and a stream for any other is a protocol
+/// violation.
+struct EventLaneDeclaration {
+    std::uint64_t id = 0;
+    /// Whether the server sends on it; the client sends on the others.
+    bool fromServer = true;
+    /// Bytes one record's body may hold, 1 to kMaximumEventRecord.
+    std::size_t maximumRecord = 0;
+};
+
 enum class SessionEventKind : std::uint8_t {
     /// Admission done: `accept` says what both sides now keep.
     Admitted,
@@ -50,6 +68,8 @@ enum class SessionEventKind : std::uint8_t {
     Frame,
     /// A datagram record on the lane this side receives.
     Datagram,
+    /// A record on an event lane this side receives.
+    Event,
     /// The connection is over.
     Ended,
 };
@@ -75,8 +95,11 @@ struct SessionEvent {
     std::vector<std::byte> requestedSession;
     /// Rejected.
     Reject reject;
-    /// Frame: its type and payload. Datagram: the record's fields.
+    /// Frame: its type and payload. Datagram: the record's fields. Event:
+    /// its lane, and its message type and body as `payloadType` and
+    /// `payload`.
     std::uint64_t frameType = 0;
+    std::uint64_t eventLane = 0;
     DatagramLane lane = DatagramLane::Input;
     std::uint64_t laneEpoch = 0;
     std::uint64_t sequence = 0;
@@ -103,6 +126,7 @@ struct ServerSettings {
     std::size_t maximumAdmitted = 0;
     std::uint64_t tickRateTicks = 60;
     std::uint64_t tickRateSeconds = 1;
+    std::vector<EventLaneDeclaration> lanes;
     /// Seeds epochs and nonces, for tests and runs that must repeat. Without
     /// a seed they come from the secure source, which is what a peer on a
     /// real network must meet (D27).
@@ -111,6 +135,7 @@ struct ServerSettings {
 
 struct ClientSettings {
     SessionProfile profile;
+    std::vector<EventLaneDeclaration> lanes;
     std::optional<std::uint64_t> seed;
 };
 
@@ -142,6 +167,12 @@ public:
     sendFrame(ConnectionId connection, ControlFrame type, std::span<const std::byte> payload);
     /// A datagram record to an admitted peer, on the lane this side sends.
     [[nodiscard]] result::Status sendDatagram(ConnectionId connection, const DatagramRecord& record);
+    /// One record on an event lane this side sends to an admitted peer: a
+    /// message type the lane's protocol gives meaning, and a body within the
+    /// lane's bound. Success means the transport owns it; one it cannot
+    /// keep ends the connection (`QueueExhausted`), never drops the record.
+    [[nodiscard]] result::Status
+    sendEvent(ConnectionId connection, std::uint64_t lane, std::uint64_t messageType, std::span<const std::byte> body);
     /// The tick new admissions start from (server).
     void setTickOrigin(std::uint64_t tick) noexcept;
     /// Ends a connection the owner is done with. No `Ended` follows: the

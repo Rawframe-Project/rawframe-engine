@@ -539,6 +539,10 @@ void ReplicationClient::pump() {
                 state.onState(event);
             }
             break;
+        case network::SessionEventKind::Event:
+            // Replication declares no event lane, so its sessions refuse
+            // every lane stream and none arrives.
+            break;
         case network::SessionEventKind::Rejected:
             state.rejection = event.reject.reason;
             break;

@@ -105,6 +105,10 @@ struct StreamPreface {
     std::uint64_t replicationEpoch = 0;
 };
 
+/// The one critical frame of an event-lane stream: `event_record`, whose
+/// payload is a message type (a varint) and the record's body (D265).
+inline constexpr std::uint64_t kEventRecordFrame = 0;
+
 [[nodiscard]] result::Result<StreamPreface> readPreface(Reader& reader);
 [[nodiscard]] result::Status writePreface(Writer& writer, const StreamPreface& preface);
 

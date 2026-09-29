@@ -27,8 +27,21 @@ enum class Phase : std::uint8_t {
     Active,
 };
 
+/// An event lane's stream on one connection, either way.
+struct LaneStream {
+    std::uint64_t lane = 0;
+    StreamId stream;
+    /// Incoming: its preface read. Outgoing: written.
+    bool prefaced = false;
+    std::vector<std::byte> buffer;
+};
+
 struct Connection {
     Phase phase = Phase::Connecting;
+    /// The connection's epoch, which its event lanes carry.
+    std::uint64_t epoch = 0;
+    std::vector<LaneStream> incoming;
+    std::vector<LaneStream> outgoing;
     execution::MonotonicInstant deadline;
     std::optional<StreamId> control;
     /// The control stream's preface: sent, on the client; read, on the server.
@@ -57,6 +70,20 @@ EndReason endReasonOf(CloseReason reason) noexcept {
     return EndReason::Closed;
 }
 
+bool lanesValid(std::span<const EventLaneDeclaration> lanes) noexcept {
+    if (lanes.size() > kMaximumEventLanes) {
+        return false;
+    }
+    for (std::size_t index = 0; index < lanes.size(); ++index) {
+        if (lanes[index].maximumRecord == 0 || lanes[index].maximumRecord > kMaximumEventRecord ||
+            lanes[index].id > kMaximumVarint ||
+            std::ranges::count(lanes.subspan(index + 1), lanes[index].id, &EventLaneDeclaration::id) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool profileComplete(const SessionProfile& profile) noexcept {
     return profile.maximumSessions != 0 && profile.maximumPreAdmissionBytes != 0 && profile.maximumControlBuffer != 0 &&
            profile.maximumFramePayload != 0 && profile.maximumDatagramPayload != 0 &&
@@ -76,6 +103,7 @@ public:
     bool server_;
     SessionProfile profile_;
     ServerSettings serverSettings_;
+    std::vector<EventLaneDeclaration> lanes_;
     bool seeded_ = false;
     std::uint64_t random_ = 0;
     std::uint64_t tickOrigin_ = 0;
@@ -229,14 +257,101 @@ public:
         }
     }
 
+    /// The lane `id` if this side receives it.
+    const EventLaneDeclaration* laneFrom(std::uint64_t id) const noexcept {
+        const auto kFound = std::ranges::find(lanes_, id, &EventLaneDeclaration::id);
+        return kFound != lanes_.end() && kFound->fromServer != server_ ? &*kFound : nullptr;
+    }
+
+    /// Bytes on one of the peer's event-lane streams: its preface names a
+    /// lane this side receives, under the connection's epoch, on no other
+    /// stream; then event records, each at most the lane's bound.
+    void onLaneBytes(const Event& event, Connection& state, std::vector<SessionEvent>& into) {
+        auto lane = std::ranges::find(state.incoming, event.stream, &LaneStream::stream);
+        if (lane == state.incoming.end()) {
+            if (state.incoming.size() >= kMaximumEventLanes) {
+                end(event.connection, EndReason::ProtocolViolation, into);
+                return;
+            }
+            state.incoming.push_back(LaneStream{.stream = event.stream});
+            lane = state.incoming.end() - 1;
+        }
+        const EventLaneDeclaration* declared = lane->prefaced ? laneFrom(lane->lane) : nullptr;
+        // A preface and one whole record with its frame and message type:
+        // the lane's record once its preface is read, the largest before.
+        std::size_t largest = 0;
+        for (const EventLaneDeclaration& each : lanes_) {
+            largest = std::max(largest, each.fromServer != server_ ? each.maximumRecord : 0);
+        }
+        const std::size_t kBound = (declared != nullptr ? declared->maximumRecord : largest) + 64;
+        if (lane->buffer.size() + event.bytes.size() > kBound) {
+            end(event.connection, EndReason::ProtocolViolation, into);
+            return;
+        }
+        lane->buffer.insert(lane->buffer.end(), event.bytes.begin(), event.bytes.end());
+        Reader reader{lane->buffer};
+        if (!lane->prefaced) {
+            auto preface = readPreface(reader);
+            if (!preface.has_value()) {
+                if (preface.error().code() != code(NetworkError::Truncated)) {
+                    end(event.connection, EndReason::ProtocolViolation, into);
+                }
+                return;
+            }
+            declared = laneFrom(preface->eventLaneId);
+            if (preface->kind != StreamKind::EventLane || declared == nullptr ||
+                preface->eventLaneEpoch != state.epoch ||
+                std::ranges::any_of(state.incoming, [&](const LaneStream& other) {
+                    return other.prefaced && other.lane == preface->eventLaneId;
+                })) {
+                end(event.connection, EndReason::ProtocolViolation, into);
+                return;
+            }
+            lane->lane = preface->eventLaneId;
+            lane->prefaced = true;
+        }
+        while (true) {
+            auto frame = readFrame(reader, declared->maximumRecord + varintSize(kMaximumVarint));
+            if (!frame.has_value()) {
+                if (frame.error().code() != code(NetworkError::Truncated)) {
+                    end(event.connection, EndReason::ProtocolViolation, into);
+                    return;
+                }
+                break;
+            }
+            if (!criticalFrame(frame->type)) {
+                continue; // an extension this side does not use
+            }
+            Reader record{frame->payload};
+            const auto kType = record.varint();
+            if (frame->type != kEventRecordFrame || !kType.has_value() ||
+                record.remaining() > declared->maximumRecord) {
+                end(event.connection, EndReason::ProtocolViolation, into);
+                return;
+            }
+            into.push_back(SessionEvent{.kind = SessionEventKind::Event,
+                                        .connection = event.connection,
+                                        .eventLane = lane->lane,
+                                        .payloadType = *kType,
+                                        .payload = {record.rest().begin(), record.rest().end()}});
+        }
+        lane->buffer.erase(lane->buffer.begin(), lane->buffer.begin() + static_cast<std::ptrdiff_t>(reader.consumed()));
+    }
+
     void onStreamBytes(const Event& event, std::vector<SessionEvent>& into) {
         const auto kFound = connections_.find(event.connection.value);
         if (kFound == connections_.end()) {
             return;
         }
         Connection& state = kFound->second;
-        // Generation 1 carries only the control stream so far: it is the
-        // client's first two-way stream, and nothing else may arrive.
+        // The peer's one-way streams are its event lanes, once admitted.
+        const bool kPeers = event.stream.openedByConnector() == server_;
+        if (state.phase == Phase::Active && event.stream.unidirectional() && kPeers) {
+            onLaneBytes(event, state, into);
+            return;
+        }
+        // Otherwise only the control stream: the client's first two-way
+        // stream, and nothing else may arrive.
         if (state.control && !(*state.control == event.stream)) {
             end(event.connection, EndReason::ProtocolViolation, into);
             return;
@@ -372,6 +487,7 @@ public:
             return false;
         }
         state.phase = Phase::Active;
+        state.epoch = accept.connectionEpoch;
         into.push_back(SessionEvent{.kind = SessionEventKind::Admitted,
                                     .connection = connection,
                                     .accept = accept,
@@ -403,6 +519,7 @@ public:
             return false;
         }
         state.phase = Phase::Active;
+        state.epoch = accept->connectionEpoch;
         into.push_back(
             SessionEvent{.kind = SessionEventKind::Admitted, .connection = connection, .accept = std::move(*accept)});
         return true;
@@ -469,13 +586,15 @@ Sessions::~Sessions() {
 
 result::Result<std::unique_ptr<Sessions>>
 Sessions::server(Provider& provider, const execution::MonotonicSource& clock, const ServerSettings& settings) {
-    if (!profileComplete(settings.profile) || settings.tickRateTicks == 0 || settings.tickRateSeconds == 0) {
+    if (!profileComplete(settings.profile) || settings.tickRateTicks == 0 || settings.tickRateSeconds == 0 ||
+        !lanesValid(settings.lanes)) {
         return refuse(result::ErrorClass::InvalidArgument,
                       NetworkError::InvalidProfile,
-                      "every session bound and the tick rate are required");
+                      "every session bound and the tick rate are required, and at most 16 distinct lanes");
     }
     auto core = std::make_unique<SessionCore>(provider, clock, true);
     core->profile_ = settings.profile;
+    core->lanes_ = settings.lanes;
     core->serverSettings_ = settings;
     core->seeded_ = settings.seed.has_value();
     core->random_ = settings.seed.value_or(0);
@@ -484,12 +603,14 @@ Sessions::server(Provider& provider, const execution::MonotonicSource& clock, co
 
 result::Result<std::unique_ptr<Sessions>>
 Sessions::client(Provider& provider, const execution::MonotonicSource& clock, const ClientSettings& settings) {
-    if (!profileComplete(settings.profile)) {
-        return refuse(
-            result::ErrorClass::InvalidArgument, NetworkError::InvalidProfile, "every session bound is required");
+    if (!profileComplete(settings.profile) || !lanesValid(settings.lanes)) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      NetworkError::InvalidProfile,
+                      "every session bound is required, and at most 16 distinct lanes");
     }
     auto core = std::make_unique<SessionCore>(provider, clock, false);
     core->profile_ = settings.profile;
+    core->lanes_ = settings.lanes;
     core->seeded_ = settings.seed.has_value();
     core->random_ = settings.seed.value_or(0);
     return std::make_unique<Sessions>(std::move(core));
@@ -554,6 +675,51 @@ result::Status Sessions::sendDatagram(ConnectionId connection, const DatagramRec
     Writer writer{core_->scratch_};
     RAWFRAME_TRY(writeDatagram(writer, record));
     return core_->provider_->sendDatagram(connection, writer.written());
+}
+
+result::Status Sessions::sendEvent(ConnectionId connection,
+                                   std::uint64_t lane,
+                                   std::uint64_t messageType,
+                                   std::span<const std::byte> body) {
+    const auto kFound = core_->connections_.find(connection.value);
+    if (kFound == core_->connections_.end() || kFound->second.phase != Phase::Active) {
+        return refuse(
+            result::ErrorClass::FailedPrecondition, NetworkError::StaleConnection, "not an admitted connection");
+    }
+    const auto kDeclared = std::ranges::find(core_->lanes_, lane, &EventLaneDeclaration::id);
+    if (kDeclared == core_->lanes_.end() || kDeclared->fromServer != core_->server_ ||
+        body.size() > kDeclared->maximumRecord || messageType > kMaximumVarint) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      NetworkError::WrongStream,
+                      "not a lane this side sends on, or a record past its bound");
+    }
+    Connection& state = kFound->second;
+    auto stream = std::ranges::find(state.outgoing, lane, &LaneStream::lane);
+    if (stream == state.outgoing.end()) {
+        RAWFRAME_TRY_ASSIGN(const StreamId kOpened, core_->provider_->openStream(connection, true));
+        state.outgoing.push_back(LaneStream{.lane = lane, .stream = kOpened});
+        stream = state.outgoing.end() - 1;
+    }
+    core_->scratch_.resize(body.size() + 64);
+    Writer writer{core_->scratch_};
+    if (!stream->prefaced) {
+        RAWFRAME_TRY(writePreface(
+            writer, StreamPreface{.kind = StreamKind::EventLane, .eventLaneId = lane, .eventLaneEpoch = state.epoch}));
+    }
+    std::vector<std::byte> record(varintSize(messageType) + body.size());
+    Writer recordWriter{record};
+    RAWFRAME_TRY(recordWriter.varint(messageType));
+    RAWFRAME_TRY(recordWriter.bytes(body));
+    RAWFRAME_TRY(writeFrame(writer, kEventRecordFrame, record));
+    // A record may be larger than one stream send: it goes in order.
+    std::span<const std::byte> rest = writer.written();
+    while (!rest.empty()) {
+        const std::size_t kPart = std::min<std::size_t>(rest.size(), 1024);
+        RAWFRAME_TRY(core_->provider_->send(connection, stream->stream, rest.first(kPart)));
+        rest = rest.subspan(kPart);
+    }
+    stream->prefaced = true;
+    return {};
 }
 
 void Sessions::setTickOrigin(std::uint64_t tick) noexcept {
