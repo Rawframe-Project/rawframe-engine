@@ -40,12 +40,17 @@ BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
 BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
 # Vendored providers stay behind their module (ADR-0005, ADR-0038): no public
 # header includes one.
-PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h|cgltf\.h)', re.MULTILINE)
+PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h|cgltf\.h|maul-rhi/|maul-window/)', re.MULTILINE)
+# Maul RHI is declared by the rendering cluster alone, and Maul Window by the
+# window module alone (ADR-0045): anywhere else, including one is refused.
+CLUSTERS = {"maul-rhi/": {"render", "render_canvas", "render_scene"}, "maul-window/": {"window"}}
+CLUSTER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](maul-rhi/|maul-window/)', re.MULTILINE)
 SERVER = "dedicated_server"
 NOT_IN_SERVER = {
     "audio", "world_audio", "localization", "world_localization", "authoring",
     "input", "input_kest", "network_loopback", "network_web", "window", "input_window", "window_host",
     "cook", "audio_import", "mesh_import", "animation_import", "texture_import", "build", "render_canvas",
+    "render",
 }
 # Source formats are decoded in import tooling only (ADR-0058): no process
 # that plays reaches an importer or the cook.
@@ -148,6 +153,17 @@ def check_providers(files, findings):
             findings.append(f"{relative}: includes the provider {included} in a public header")
 
 
+def check_clusters(files, findings):
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[0] not in ("modules", "hosts") or path.suffix not in SOURCE_SUFFIXES:
+            continue
+        owner = relative.parts[1] if relative.parts[0] == "modules" else row_of(relative)
+        for included in CLUSTER_INCLUDE.findall(path.read_text(errors="replace")):
+            if owner not in CLUSTERS[included]:
+                findings.append(f"{relative}: includes {included} outside the modules that may declare it")
+
+
 def check_value_calls(files, findings):
     for path in files:
         relative = path.relative_to(ROOT)
@@ -212,6 +228,7 @@ def main():
     check_runtime_closures(modules, findings)
     check_web_closure(modules, findings)
     check_providers(files, findings)
+    check_clusters(files, findings)
     check_value_calls(files, findings)
     check_bounds_literals(files, findings)
     check_sizes(files, findings, notes)

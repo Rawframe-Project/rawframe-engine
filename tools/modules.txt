@@ -27,6 +27,7 @@ build: signature content document result base
 install: content signature document result base
 input: document result base
 window: result base
+render: result base
 input_window: input window result base
 window_host: host input_kest input_window input window composition execution result base
 schema: result base

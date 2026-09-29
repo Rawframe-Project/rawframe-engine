@@ -33,6 +33,17 @@ fail() { printf 'FAILED: %s\n' "$*"; failures=$((failures + 1)); }
 
 mkdir -p out
 
+# Where Mesa's software Vulkan (lavapipe) is installed, as on the machine
+# the CI runs on, a device test that finds no adapter fails instead of
+# skipping (D277): pixels are checked, not assumed. The loader sees lavapipe
+# alone, so every run draws on the same rasterizer, and no other driver
+# probes this machine's hardware from inside a sanitized test (radv did,
+# and leaked).
+lavapipe=$(compgen -G "/usr/share/vulkan/icd.d/lvp_icd*.json" | head -1 || true)
+if [ -n "$lavapipe" ]; then
+    export RAWFRAME_REQUIRE_GPU=1 VK_DRIVER_FILES="$lavapipe"
+fi
+
 step "repository rules"
 python3 tools/check_repo.py || fail "repository rules"
 
