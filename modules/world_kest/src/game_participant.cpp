@@ -147,9 +147,8 @@ public:
         RAWFRAME_TRY(planPrediction(configuration));
         RAWFRAME_TRY(planInterest());
         RAWFRAME_TRY(planPhysics());
-        if (!planOnly_) {
-            RAWFRAME_TRY_ASSIGN(animation_, animationSettings(files, layouts_));
-        }
+        // A process that plays elsewhere animates the World it mirrors.
+        RAWFRAME_TRY_ASSIGN(animation_, animationSettings(files, layouts_));
         for (const std::string& name : game_.interpolated) {
             if (std::ranges::find(game_.replicated, name) == game_.replicated.end()) {
                 return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
@@ -500,6 +499,9 @@ public:
     }
     void attach(const world_replication::InterestHistory* history) noexcept override {
         doorContext_.interest = history;
+    }
+    bool simulated() const noexcept override {
+        return !planOnly_;
     }
     const std::optional<world_animation::AnimationSettings>& animation() const noexcept override {
         return animation_;

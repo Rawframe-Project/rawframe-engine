@@ -149,6 +149,13 @@ public:
     /// enough for its fields.
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;
+    /// Readies it for a World of `registry` that no schedule steps, such as
+    /// a client's mirror of a server's World (D258), refused as
+    /// `declareSystems` refuses.
+    [[nodiscard]] result::Status bind(const schema::SchemaRegistry& registry) noexcept;
+    /// One step of `world`, whose registry it was bound to, `rate`'s tick
+    /// long, outside any schedule: what kStepSystem does in one.
+    [[nodiscard]] result::Status play(world::World& world, world::TickRate rate);
 
     [[nodiscard]] AnimationStatistics statistics() const noexcept;
     /// Every pose and event of the last step, digested in entity order:
@@ -178,6 +185,12 @@ public:
 
     /// None for a game without animators.
     [[nodiscard]] virtual const std::optional<AnimationSettings>& animation() const noexcept = 0;
+    /// Whether the game runs in this process's World: false for a process
+    /// that plays it on a server elsewhere, which animates only the World
+    /// it mirrors (D258).
+    [[nodiscard]] virtual bool simulated() const noexcept {
+        return true;
+    }
     /// Where the game's scripts ask about poses and events, from the
     /// animation made for it until it goes (null).
     virtual void attach(const AnimationQueries* queries) noexcept = 0;

@@ -1,6 +1,7 @@
 // Animation in the World: instances following their entities' Animators,
 // parameters taken from the game's component, poses in model space,
-// events counted, and a server playing only what is relevant.
+// events counted, a server playing only what is relevant, and a World no
+// schedule steps played as one that does.
 
 #include "rawframe/test/test.h"
 #include "rawframe/world/schedule.h"
@@ -363,6 +364,42 @@ RAWFRAME_TEST(ClipsAnimateTheGamesFields) {
     for (const AnimatorSettings& kSettings : {wrong, shortOne}) {
         RAWFRAME_EXPECT(!WorldAnimation::create(AnimationSettings{.animators = {kSettings}}).has_value());
     }
+}
+
+RAWFRAME_TEST(AWorldNoScheduleStepsPlaysAsOneThatDoes) {
+    // A client's mirror (D258): bound to its registry and played step by
+    // step, it poses and counts as the scheduled World does, tick for tick.
+    Stage scheduled;
+    const world::EntityHandle kScheduled = scheduled.walker(1.0F);
+    scheduled.run(45);
+    const std::shared_ptr<const schema::SchemaRegistry> kSchema = registry();
+    world::World mirror{kSchema};
+    const world::EntityHandle kMirrored = *mirror.create();
+    RAWFRAME_EXPECT(mirror.insert(kMirrored, *kSchema->key<Animator>(), Animator{.graph = kLocomotion}).has_value());
+    RAWFRAME_EXPECT(mirror.insert(kMirrored, *kSchema->key<Stride>(), Stride{.move = 1.0F}).has_value());
+    const auto kUnbound = WorldAnimation::create(settings());
+    RAWFRAME_EXPECT(kUnbound.has_value() && !(*kUnbound)->play(mirror, *world::TickRate::of(60)).has_value());
+    auto played = WorldAnimation::create(settings());
+    RAWFRAME_EXPECT(played.has_value() && (*played)->bind(*kSchema).has_value());
+    if (!played.has_value()) {
+        return;
+    }
+    for (int tick = 0; tick < 45; ++tick) {
+        RAWFRAME_EXPECT((*played)->play(mirror, *world::TickRate::of(60)).has_value());
+    }
+    const animation::Pose* kPose = (*played)->pose(kMirrored);
+    const animation::Pose* kExpected = scheduled.animation->pose(kScheduled);
+    RAWFRAME_EXPECT(kPose != nullptr && kExpected != nullptr && kPose->bones.size() == kExpected->bones.size() &&
+                    (*played)->statistics().steps == 45 &&
+                    (*played)->statistics().eventsFired == scheduled.animation->statistics().eventsFired);
+    for (std::size_t bone = 0; kPose != nullptr && kExpected != nullptr && bone < kPose->bones.size(); ++bone) {
+        RAWFRAME_EXPECT(kPose->bones[bone].translation == kExpected->bones[bone].translation &&
+                        kPose->bones[bone].rotation == kExpected->bones[bone].rotation);
+    }
+    // A registry without the Animator cannot be bound.
+    schema::RegistryBuilder bare;
+    bare.add<Stride>();
+    RAWFRAME_EXPECT(!(*WorldAnimation::create(settings()))->bind(**bare.freeze()).has_value());
 }
 
 RAWFRAME_TEST(ParametersNotOfTheirTypeAreRefused) {

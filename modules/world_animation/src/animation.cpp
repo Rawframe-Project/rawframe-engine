@@ -401,6 +401,18 @@ result::Result<std::unique_ptr<WorldAnimation>> WorldAnimation::create(Animation
 
 result::Status WorldAnimation::declareSystems(const schema::SchemaRegistry& registry,
                                               std::vector<world::SystemDeclaration>& systems) noexcept {
+    RAWFRAME_TRY(bind(registry));
+    State& state = *state_;
+    state.system = std::make_unique<Step>(state);
+    systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
+                                               .phase = world::Phase::Simulation,
+                                               .reads = state.reads,
+                                               .writes = state.writes,
+                                               .system = state.system.get()});
+    return {};
+}
+
+result::Status WorldAnimation::bind(const schema::SchemaRegistry& registry) noexcept {
     State& state = *state_;
     const auto kAnimator = registry.find(Animator::kComponentTypeId);
     if (!kAnimator.has_value() || registry.descriptor(*kAnimator).size != sizeof(Animator) ||
@@ -453,13 +465,14 @@ result::Status WorldAnimation::declareSystems(const schema::SchemaRegistry& regi
         RAWFRAME_TRY_ASSIGN(state.rootMotion, registry.key<RootMotion>());
         state.writes.push_back(*kMotion);
     }
-    state.system = std::make_unique<Step>(state);
-    systems.push_back(world::SystemDeclaration{.identity = kStepSystem,
-                                               .phase = world::Phase::Simulation,
-                                               .reads = state.reads,
-                                               .writes = state.writes,
-                                               .system = state.system.get()});
     return {};
+}
+
+result::Status WorldAnimation::play(world::World& world, world::TickRate rate) {
+    if (!state_->query.has_value()) {
+        return invalid("animation is played in a World it was bound to");
+    }
+    return state_->step(world, rate);
 }
 
 AnimationStatistics WorldAnimation::statistics() const noexcept {

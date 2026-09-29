@@ -4,7 +4,7 @@
 # in it, so a dedicated server plays what gameplay declares relevant.
 rawframe_module(NAME world_animation
     SOURCES src/animation.cpp src/components.cpp src/participant.cpp
-    DEPS animation world_runtime world composition schema execution diagnostics result base
+    DEPS animation world_replication world_runtime world composition schema execution diagnostics result base
 )
 
 rawframe_module_tests(NAME world_animation SOURCES tests/animation_test.cpp)
