@@ -5,7 +5,8 @@
 // WebTransport, trusting the server by its certificate's hash; a key held
 // in the canvas runs the player, another makes it jump, a jump the player
 // feels (D251, though the page has no gamepad to feel it on) and hears
-// (D259: the page takes the client's sound and plays it), and a stop
+// (D259: the page takes the client's sound and plays it), seen through the
+// camera the page's own present system places (D261), and a stop
 // asked of the page ends the run in order. The game is as a web game ships
 // (D256): cooked, packed into a signed Build, installed in a library, and
 // named by a Composition, which the server reads from its disk and the page
@@ -239,13 +240,17 @@ try {
     console.log(`page: the player felt ${felt ? felt[1] : 'no'} effects`);
     const drawn = /"code":"canvas_summary"[^\n]*"spritesDrawn":(\d+),"spritesAnimated":(\d+)[^\n]*"unknownTextures":0,[^\n]*"texturesReady":(\d+)/.exec(
         clientLog);
+    const viewed = /"code":"canvas_summary"[^\n]*"framesViewed":(\d+)/.exec(clientLog);
     // The server is dedicated and plays no presentation animator: a runner
-    // drawn past its sheet's first cell was animated by the page (D258).
+    // drawn past its sheet's first cell was animated by the page (D258),
+    // through its own camera, which the page's present system placed (D261).
     console.log(`page: the canvas drew ${drawn ? drawn[1] : 'no'} sprites, ${drawn ? drawn[2] : 'no'} animated, ` +
-                `with ${drawn ? drawn[3] : 'no'} textures`);
+                `with ${drawn ? drawn[3] : 'no'} textures, ${viewed ? viewed[1] : 'no'} frames through the ` +
+                `player's camera`);
     verdict = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
                       field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0 && drawn !== null &&
-                      Number(drawn[1]) > 0 && Number(drawn[2]) > 0 && Number(drawn[3]) === 2 && heard.frames > 48000 &&
+                      Number(drawn[1]) > 0 && Number(drawn[2]) > 0 && Number(drawn[3]) === 2 && viewed !== null &&
+                      Number(viewed[1]) > 0 && heard.frames > 48000 &&
                       heard.peak > 0.05
                   ? 0
                   : 1;
