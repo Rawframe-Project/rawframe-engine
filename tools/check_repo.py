@@ -45,8 +45,12 @@ SERVER = "dedicated_server"
 NOT_IN_SERVER = {
     "audio", "world_audio", "localization", "world_localization", "authoring",
     "input", "input_kest", "network_loopback", "network_web", "window", "input_window", "window_host",
-    "cook", "audio_import", "mesh_import", "animation_import", "build",
+    "cook", "audio_import", "mesh_import", "animation_import", "texture_import", "build",
 }
+# Source formats are decoded in import tooling only (ADR-0058): no process
+# that plays reaches an importer or the cook.
+RUNTIMES = ("dedicated_server", "client", "web_client", "bots", "arena")
+IMPORT_TOOLING = {"cook", "audio_import", "mesh_import", "animation_import", "texture_import"}
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 
 
@@ -107,6 +111,19 @@ def check_server_closure(allowed, findings):
                 pending.append(dependency)
     for module in sorted(reached & NOT_IN_SERVER):
         findings.append(f"tools/modules.txt: the dedicated server's closure reaches module '{module}', which it may not")
+
+
+def check_runtime_closures(allowed, findings):
+    for runtime in RUNTIMES:
+        reached, pending = set(), [runtime]
+        while pending:
+            module = pending.pop()
+            for dependency in allowed.get(module, ()):
+                if dependency not in reached:
+                    reached.add(dependency)
+                    pending.append(dependency)
+        for module in sorted(reached & IMPORT_TOOLING):
+            findings.append(f"tools/modules.txt: {runtime}'s closure reaches import tooling '{module}', which it may not")
 
 
 def check_web_closure(allowed, findings):
@@ -192,6 +209,7 @@ def main():
     modules = read_modules()
     check_boundaries(files, modules, findings)
     check_server_closure(modules, findings)
+    check_runtime_closures(modules, findings)
     check_web_closure(modules, findings)
     check_providers(files, findings)
     check_value_calls(files, findings)

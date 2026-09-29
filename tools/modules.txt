@@ -20,6 +20,7 @@ animation_import: animation result base
 localization: document result base
 mesh: result base
 texture: result base
+texture_import: texture result base
 mesh_import: mesh result base
 cook: localization animation mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
 build: signature content document result base
