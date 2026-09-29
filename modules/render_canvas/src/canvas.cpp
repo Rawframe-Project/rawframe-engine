@@ -221,10 +221,17 @@ std::span<const SpriteInstance> Canvas::extracted() const noexcept {
 
 result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, const kest::Program& program) {
     const world_kest::GameDescription& kDescription = game.description();
-    GameCanvas loaded{.cameraHeight = kDescription.cameraHeight.value_or(10.0F)};
+    GameCanvas loaded;
     for (const world_kest::GameComponent& component : kDescription.components) {
         if (world_kest::ofEngineType(component, "rawframe.canvas.Sprite")) {
             loaded.sprites.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.canvas.Camera")) {
+            if (loaded.camera.has_value()) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              RenderCanvasError::BadComponents,
+                              "a game has at most one camera component: a client has one view");
+            }
+            loaded.camera = component.id;
         }
     }
     if (loaded.sprites.empty()) {
@@ -250,6 +257,16 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
         return refuse(result::ErrorClass::InvalidArgument,
                       RenderCanvasError::BadComponents,
                       "the program lays out rawframe.canvas's Sprite otherwise than this engine reads it");
+    }
+    if (loaded.camera.has_value() && !world_kest::laidOutAs(program,
+                                                            "rawframe.canvas.Camera",
+                                                            sizeof(Camera),
+                                                            {{"offsetX", offsetof(Camera, offsetX)},
+                                                             {"offsetY", offsetof(Camera, offsetY)},
+                                                             {"height", offsetof(Camera, height)}})) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      RenderCanvasError::BadComponents,
+                      "the program lays out rawframe.canvas's Camera otherwise than this engine reads it");
     }
     for (const world_kest::GameTexture& texture : kDescription.textures) {
         loaded.textures.push_back(texture.id);

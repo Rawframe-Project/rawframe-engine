@@ -35,5 +35,18 @@ struct Sprite {
     columns: u32
 }
 
+// A client's view of the World (ADR-0052's camera, D261), on the client's
+// own player: a presentation component (`presentation <camera> on
+// player`) its present systems place. The view is centered `offsetX`,
+// `offsetY` meters from the player's pose and `height` meters tall; its
+// width follows the window's, so a wider window sees more (Hor+). A
+// camera that sees nothing (a height not above nought) draws nothing.
+// Without one, a client's view follows its player, 10 meters tall.
+struct Camera {
+    offsetX: f32
+    offsetY: f32
+    height: f32
+}
+
 // White, untinted: the texture as it is.
 const WHITE: u32 = 0xFFFFFFFF

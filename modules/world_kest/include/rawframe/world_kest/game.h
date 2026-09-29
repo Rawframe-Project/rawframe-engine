@@ -178,9 +178,11 @@ struct GameSystem {
 /// <component>` line: components a client that draws attaches, zeroed, to
 /// each entity it mirrors that has the `on` component, and that only its
 /// `present` systems write. Never replicated, predicted, or on a server.
+/// `on player` attaches them to the client's own player alone (D261).
 struct GamePresentation {
     std::vector<std::string> components;
-    std::string on;
+    /// Nothing for `on player`.
+    std::optional<std::string> on;
 };
 
 /// What the player feels of an effect (D251), from a trailing `felt
@@ -424,10 +426,6 @@ struct GameDescription {
     std::vector<GameMesh> meshes;
     /// From `texture <16 hex digits> <file>` lines.
     std::vector<GameTexture> textures;
-    /// How much of the World a client's view shows, from a `camera
-    /// <height>` line: an orthographic camera `height` meters tall,
-    /// following the client's own player (D254).
-    std::optional<float> cameraHeight;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
     /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;

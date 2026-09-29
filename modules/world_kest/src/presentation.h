@@ -55,11 +55,13 @@ public:
     ClientPresentation& operator=(const ClientPresentation&) = delete;
     ~ClientPresentation();
 
-    /// One game tick of `mirror`, bound afresh when it is another World
-    /// than the last (a client that made a new one). A present system that
+    /// One game tick of `mirror`, whose own player is `player` (or none
+    /// yet), bound afresh when it is another World than the last (a client
+    /// that made a new one). A present system that
     /// is refused or runs out changes nothing that tick, as a system does,
     /// and is counted and logged (`present_failed`) through `emitter`.
-    [[nodiscard]] result::Status present(world::World& mirror, world::TickRate rate, diagnostics::Emitter emitter = {});
+    [[nodiscard]] result::Status
+    present(world::World& mirror, world::EntityHandle player, world::TickRate rate, diagnostics::Emitter emitter = {});
 
     [[nodiscard]] PresentationStatistics statistics() const noexcept;
     [[nodiscard]] world_animation::AnimationStatistics animationStatistics() const noexcept;

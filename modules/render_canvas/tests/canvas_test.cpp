@@ -240,15 +240,23 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
         return loadGameCanvas(*kFiles, **kProgram);
     };
     // A Kest type is laid out when a function uses it.
-    const std::string kUses = "fn draw(sprites: [canvas.Sprite]) {\n}\n";
+    const std::string kUses = "fn draw(sprites: [canvas.Sprite], views: [canvas.Camera]) {\n}\n";
+    const std::string kView = "component 6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.view rawframe.canvas.Camera\n";
     const auto kLoaded = kLoad(kUses,
-                               "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
-                               "texture 00000000000000b2 tiles.png\ntexture 00000000000000b1 runner.png\ncamera 12\n");
+                               "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n" +
+                                   kView + "texture 00000000000000b2 tiles.png\ntexture 00000000000000b1 runner.png\n");
     RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->sprites == (std::vector<schema::ComponentTypeId>{kSpriteId}) &&
-                    kLoaded->textures == (std::vector<std::uint64_t>{kTiles, kRunner}) && kLoaded->cameraHeight == 12);
+                    kLoaded->textures == (std::vector<std::uint64_t>{kTiles, kRunner}) &&
+                    kLoaded->camera == schema::ComponentTypeId::fromText("6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90"));
     const auto kPlain =
         kLoad(kUses, "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n");
-    RAWFRAME_EXPECT(kPlain.has_value() && kPlain->textures.empty() && kPlain->cameraHeight == 10);
+    RAWFRAME_EXPECT(kPlain.has_value() && kPlain->textures.empty() && !kPlain->camera.has_value());
+    // A client has one view (D261).
+    const auto kTwoViews =
+        kLoad(kUses,
+              "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n" + kView +
+                  "component 7b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.other rawframe.canvas.Camera\n");
+    RAWFRAME_EXPECT(!kTwoViews.has_value() && kTwoViews.error().code() == code(RenderCanvasError::BadComponents));
     const auto kNone = kLoad(kUses, "");
     RAWFRAME_EXPECT(!kNone.has_value() && kNone.error().code() == code(RenderCanvasError::NoSprites));
     // A type of the game's own by that name is not rawframe.canvas's.

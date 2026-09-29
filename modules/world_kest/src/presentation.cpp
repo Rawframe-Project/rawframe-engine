@@ -49,9 +49,9 @@ struct ClientPresentation::State {
     std::unique_ptr<KestSystems> systems;
     std::optional<world::Schedule> schedule;
     std::unique_ptr<world_animation::WorldAnimation> animation;
-    /// Each presentation line's components and `on`, in the mirror's terms.
+    /// Each presentation line's components and what has its `on`, in the
+    /// mirror's terms; no query for `on player`.
     struct Attached {
-        schema::ComponentRuntimeId on;
         std::vector<schema::ComponentRuntimeId> components;
         std::optional<world::ColumnQuery> query;
     };
@@ -72,14 +72,17 @@ struct ClientPresentation::State {
         animationDoors.queries = nullptr;
         for (const GamePresentation& presentation : game.presentation) {
             Attached made;
-            RAWFRAME_TRY_ASSIGN(made.on, registry.find(componentNamed(game, presentation.on)->id));
             for (const std::string& name : presentation.components) {
                 RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kComponent,
                                     registry.find(componentNamed(game, name)->id));
                 made.components.push_back(kComponent);
             }
-            const std::array<world::ColumnTerm, 1> kOn = {world::ColumnTerm{made.on, world::Access::Read}};
-            RAWFRAME_TRY_ASSIGN(made.query, world::ColumnQuery::resolve(kOn, registry));
+            if (presentation.on.has_value()) {
+                RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kOn,
+                                    registry.find(componentNamed(game, *presentation.on)->id));
+                const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{kOn, world::Access::Read}};
+                RAWFRAME_TRY_ASSIGN(made.query, world::ColumnQuery::resolve(kTerms, registry));
+            }
             attached.push_back(std::move(made));
         }
         std::vector<world::SystemDeclaration> scheduled;
@@ -126,18 +129,24 @@ struct ClientPresentation::State {
     }
 
     /// Each presentation component, zeroed, onto every entity that has its
-    /// `on` component and lacks it.
-    result::Status attach(world::World& mirror) {
+    /// `on` component (or is `player`) and lacks it.
+    result::Status attach(world::World& mirror, world::EntityHandle player) {
         for (Attached& each : attached) {
             for (const schema::ComponentRuntimeId kComponent : each.components) {
                 missing.clear();
-                each.query->forEachChunk(mirror, [&](const world::ColumnChunk& chunk) {
-                    for (const world::EntityHandle kEntity : chunk.entities) {
-                        if (mirror.getErased(kEntity, kComponent) == nullptr) {
-                            missing.push_back(kEntity);
-                        }
+                if (!each.query.has_value()) {
+                    if (!player.isNull() && mirror.alive(player) && mirror.getErased(player, kComponent) == nullptr) {
+                        missing.push_back(player);
                     }
-                });
+                } else {
+                    each.query->forEachChunk(mirror, [&](const world::ColumnChunk& chunk) {
+                        for (const world::EntityHandle kEntity : chunk.entities) {
+                            if (mirror.getErased(kEntity, kComponent) == nullptr) {
+                                missing.push_back(kEntity);
+                            }
+                        }
+                    });
+                }
                 zero.assign(mirror.registry().descriptor(kComponent).size, std::byte{});
                 for (const world::EntityHandle kEntity : missing) {
                     RAWFRAME_TRY(mirror.insertErased(kEntity, kComponent, zero.data()));
@@ -193,13 +202,16 @@ result::Result<std::unique_ptr<ClientPresentation>> ClientPresentation::create(P
     return std::unique_ptr<ClientPresentation>{new ClientPresentation{std::move(state)}};
 }
 
-result::Status ClientPresentation::present(world::World& mirror, world::TickRate rate, diagnostics::Emitter emitter) {
+result::Status ClientPresentation::present(world::World& mirror,
+                                           world::EntityHandle player,
+                                           world::TickRate rate,
+                                           diagnostics::Emitter emitter) {
     State& state = *state_;
     if (state.bound != &mirror) {
         RAWFRAME_TRY(state.bind(mirror));
     }
     ++state.statistics.ticks;
-    RAWFRAME_TRY(state.attach(mirror));
+    RAWFRAME_TRY(state.attach(mirror, player));
     RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, state.schedule->runTick(mirror, state.tick, rate, emitter));
     for (const world::TickReport::Failure& failure : kReport.failures) {
         ++state.statistics.systemsFailed;
@@ -274,7 +286,7 @@ public:
         owed_.nanoseconds -=
             static_cast<std::int64_t>(kTicks * std::uint64_t{rate_.seconds} * 1'000'000'000U / rate_.ticks);
         for (std::uint64_t tick = 0; tick < std::min(kTicks, kMostTicksPerFrame); ++tick) {
-            const result::Status kPresented = presentation_->present(*kView.world, rate_, emitter_);
+            const result::Status kPresented = presentation_->present(*kView.world, kView.owned, rate_, emitter_);
             if (!kPresented.has_value()) {
                 emitter_.log(diagnostics::Severity::Warning,
                              kUnpresented,

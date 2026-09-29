@@ -24,6 +24,8 @@ constexpr diagnostics::EventIdentity kUnreadTexture{"canvas", "texture_unavailab
 constexpr std::string_view kMaybe[] = {
     world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
 /// The decoded levels the canvas holds at most.
+/// A client's view without a camera of its own: 10 meters tall.
+constexpr float kDefaultViewHeight = 10;
 constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
 
 /// A texture's identity as its game writes it, 16 hexadecimal digits.
@@ -83,7 +85,7 @@ public:
                                                                "canvas.width and canvas.height are 1 to 65536 pixels")
                                                       .error()};
         }
-        camera_.height = game->cameraHeight;
+        cameraComponent_ = game->camera;
         camera_.aspect = static_cast<float>(kWidth) / static_cast<float>(kHeight);
         settings_ = CanvasSettings{.sprites = std::move(game->sprites), .textures = std::move(game->textures)};
         if (context.has(game_content::kGameContent.name) && context.cpuExecutor() != nullptr &&
@@ -168,6 +170,7 @@ public:
                      kCanvasSummary,
                      "what one client's canvas drew",
                      {diagnostics::field("frames", frames_),
+                      diagnostics::field("framesViewed", viewed_),
                       diagnostics::field("spritesDrawn", drawn_),
                       diagnostics::field("spritesAnimated", animated_),
                       diagnostics::field("culled", culled_),
@@ -184,7 +187,8 @@ public:
     }
 
 private:
-    /// The client's World copied out, and the camera moved to its player.
+    /// The client's World copied out, and the view moved to its player,
+    /// through the player's camera if it has one.
     void extract() noexcept {
         const std::size_t kClient = client_.value_or(clients_->playerClient().value_or(0));
         const world_replication::ClientView kView = clients_->client(kClient);
@@ -204,10 +208,20 @@ private:
         if (kView.owned.isNull() || !kView.world->alive(kView.owned)) {
             return;
         }
+        Camera view{.height = kDefaultViewHeight};
+        if (cameraComponent_.has_value()) {
+            if (const auto kCamera = kView.world->registry().find(*cameraComponent_)) {
+                if (const auto* placed = static_cast<const Camera*>(kView.world->getErased(kView.owned, *kCamera))) {
+                    view = *placed;
+                    ++viewed_;
+                }
+            }
+        }
+        camera_.height = view.height;
         if (const auto kPose = kView.world->registry().key<physics2d::Pose2D>()) {
             if (const auto* pose = kView.world->get(kView.owned, *kPose)) {
-                camera_.x = pose->x;
-                camera_.y = pose->y;
+                camera_.x = pose->x + view.offsetX;
+                camera_.y = pose->y + view.offsetY;
             }
         }
     }
@@ -216,6 +230,9 @@ private:
     std::optional<std::size_t> client_;
     CanvasSettings settings_;
     CanvasCamera camera_;
+    std::optional<schema::ComponentTypeId> cameraComponent_;
+    /// Frames seen through the player's own camera.
+    std::uint64_t viewed_ = 0;
     std::unique_ptr<Canvas> canvas_;
     std::unique_ptr<CanvasTextures> textures_;
     std::optional<std::string> unread_;

@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -38,6 +39,15 @@ struct Sprite {
     /// is one), the region the first.
     std::uint32_t frame = 0;
     std::uint32_t columns = 0;
+};
+
+/// `rawframe.canvas.Camera` as C++ reads it (D261): a client's view,
+/// `height` meters tall, centered `offsetX`, `offsetY` meters from its
+/// player's pose.
+struct Camera {
+    float offsetX = 0;
+    float offsetY = 0;
+    float height = 0;
 };
 
 /// A sprite as the extract stage copies it out of the World: owned values,
@@ -147,16 +157,18 @@ private:
 };
 
 /// A game's canvas, declared: its sprite components, its textures, and its
-/// camera's height.
+/// camera component, if it has one.
 struct GameCanvas {
     std::vector<schema::ComponentTypeId> sprites;
     std::vector<std::uint64_t> textures;
-    float cameraHeight = 10;
+    std::optional<schema::ComponentTypeId> camera;
 };
 
-/// Finds the game's components of `rawframe.canvas.Sprite`'s type, whose
-/// layout in `program` must be what this module reads, and its `texture`
-/// and `camera` lines. Refuses (`NotFound`) a game with no sprite component.
+/// Finds the game's components of `rawframe.canvas.Sprite`'s type and its
+/// one of `rawframe.canvas.Camera`'s, whose layouts in `program` must be
+/// what this module reads, and its `texture` lines. Refuses (`NotFound`) a
+/// game with no sprite component, and (`BadComponents`) one with two
+/// cameras.
 [[nodiscard]] result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game,
                                                         const kest::Program& program);
 

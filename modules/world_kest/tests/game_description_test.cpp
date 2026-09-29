@@ -200,12 +200,11 @@ RAWFRAME_TEST(MeshesAreDeclaredByLineAndNamedByFile) {
     }
 }
 
-RAWFRAME_TEST(TexturesAndTheCameraAreDeclaredByLine) {
+RAWFRAME_TEST(TexturesAreDeclaredByLine) {
     const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.look Sprite\n";
-    const auto kGame =
-        parseGame(kHead + "texture 00000000000000b1 runner.png\ntexture 00000000000000b2 tiles.png\ncamera 12.5\n");
+    const auto kGame = parseGame(kHead + "texture 00000000000000b1 runner.png\ntexture 00000000000000b2 tiles.png\n");
     RAWFRAME_EXPECT(kGame.has_value() && kGame->textures.size() == 2 && kGame->textures[1].id == 0xB2 &&
-                    kGame->textures[1].path == "tiles.png" && kGame->cameraHeight == 12.5F);
+                    kGame->textures[1].path == "tiles.png");
     if (kGame.has_value()) {
         // A sprite names its texture by file; another component keeps it.
         RAWFRAME_EXPECT(world_kest::spawnValue(*kGame, "g.look", {"texture", "tiles.png"}) == "178");
@@ -215,10 +214,8 @@ RAWFRAME_TEST(TexturesAndTheCameraAreDeclaredByLine) {
                                           "texture 0000000000000000 runner.png\n",
                                           "texture 00000000000000b1 a.png\ntexture 00000000000000b1 b.png\n",
                                           "texture 00000000000000b1 a.png\ntexture 00000000000000b2 a.png\n",
-                                          "camera\n",
-                                          "camera 0\n",
-                                          "camera -3\n",
-                                          "camera 10\ncamera 12\n"}) {
+                                          // A client's view is a presentation component (D261).
+                                          "camera 12\n"}) {
         const std::string kText = kHead + std::string{kLines};
         RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
                         refusedAt(kText, WorldKestError::BadGameLine, "4"));
@@ -344,11 +341,15 @@ RAWFRAME_TEST(PresentationStateIsAClientsAlone) {
     const std::string kHead = "program p.kest\n"
                               "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.look Sprite\n"
                               "component 6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.stick Stick\n"
-                              "component 7b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.score Score\n";
+                              "component 7b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.score Score\n"
+                              "component 8b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.view Camera\n";
     const auto kGame = parseGame(kHead + "presentation g.look on g.stick\n"
+                                         "presentation g.view on player\n"
                                          "present g.dress dress read g.stick write g.look entities\n"
                                          "replicate g.stick g.score\n");
-    RAWFRAME_EXPECT(kGame.has_value() && kGame->presentation.size() == 1 &&
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->presentation.size() == 2 &&
+                    kGame->presentation[1].components == std::vector<std::string>{"g.view"} &&
+                    !kGame->presentation[1].on.has_value() &&
                     kGame->presentation[0].components == std::vector<std::string>{"g.look"} &&
                     kGame->presentation[0].on == "g.stick" && kGame->presented.size() == 1 &&
                     kGame->presented[0].entry == "dress" && kGame->presented[0].columns.size() == 3 &&
@@ -364,6 +365,7 @@ RAWFRAME_TEST(PresentationStateIsAClientsAlone) {
                                           // Presentation state is a client's alone.
                                           "presentation g.look on g.stick\npresentation g.look on g.score\n",
                                           "presentation g.look on g.look\n",
+                                          "presentation g.look on g.stick\npresentation g.look on player\n",
                                           "presentation g.look on g.stick\nreplicate g.look\n",
                                           "presentation g.look on g.stick\nplayer g.look\n",
                                           "presentation g.look on g.stick\nsystem g.s simulation s read g.look\n",
@@ -373,7 +375,7 @@ RAWFRAME_TEST(PresentationStateIsAClientsAlone) {
         const std::string kText = kHead + std::string{kLines};
         RAWFRAME_EXPECT(!parseGame(kText).has_value());
     }
-    RAWFRAME_EXPECT(refusedAt(kHead + "presentation g.look on g.unknown\n", WorldKestError::UnknownName, "5"));
+    RAWFRAME_EXPECT(refusedAt(kHead + "presentation g.look on g.unknown\n", WorldKestError::UnknownName, "6"));
 }
 
 RAWFRAME_TEST(TexturesAreNamedByTheirSidecars) {

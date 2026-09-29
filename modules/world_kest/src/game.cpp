@@ -248,14 +248,6 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a texture's identity and file are used once");
             }
             game.textures.push_back(GameTexture{.id = *kId, .path = std::string{kWords[2]}});
-        } else if (kKeyword == "camera") {
-            const auto kHeight = kWords.size() == 2 ? parseReal(kWords[1], 0, 1e6) : std::nullopt;
-            if (!kHeight || *kHeight == 0 || game.cameraHeight.has_value()) {
-                return badLine(number,
-                               WorldKestError::BadGameLine,
-                               "a game has at most one camera line, `camera <height in meters above nought>`");
-            }
-            game.cameraHeight = static_cast<float>(*kHeight);
         } else if (kKeyword == "animator") {
             // animator <16 hex digits> <graph file> [parameters <component>]
             //     [subset <32 hex digits>]
@@ -426,14 +418,17 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             if (kWords.size() < 4 || kOn != kWords.end() - 2 || kOn == kWords.begin() + 1) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
-                               "a presentation line is `presentation <component>... on <component>`");
+                               "a presentation line is `presentation <component>... on <component or player>`");
             }
-            GamePresentation presentation{.on = std::string{kWords.back()}};
+            GamePresentation presentation;
+            if (kWords.back() != "player") {
+                presentation.on = std::string{kWords.back()};
+                uses.emplace_back(number, *presentation.on);
+            }
             for (auto word = kWords.begin() + 1; word != kOn; ++word) {
                 presentation.components.emplace_back(*word);
                 uses.emplace_back(number, std::string{*word});
             }
-            uses.emplace_back(number, presentation.on);
             game.presentation.push_back(std::move(presentation));
         } else if (kKeyword == "replicate" || kKeyword == "player" || kKeyword == "predict" ||
                    kKeyword == "interpolate" || kKeyword == "nearby") {
