@@ -128,6 +128,10 @@ public:
     /// not that the peer has them.
     [[nodiscard]] virtual result::Status
     send(ConnectionId connection, StreamId stream, std::span<const std::byte> bytes) = 0;
+    /// Bytes sent on a stream of this side's that its peer has not yet
+    /// received, as far as this provider can tell (D276); none for a stream
+    /// or connection it does not know.
+    [[nodiscard]] virtual std::size_t pendingBytes(ConnectionId connection, StreamId stream) const noexcept = 0;
     /// Queues one datagram, which may be lost, duplicated, or reordered.
     [[nodiscard]] virtual result::Status sendDatagram(ConnectionId connection, std::span<const std::byte> bytes) = 0;
     /// Ends a connection. Both sides see `Closed`; bytes already queued may

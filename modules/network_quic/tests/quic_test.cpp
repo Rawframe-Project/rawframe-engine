@@ -168,6 +168,11 @@ RAWFRAME_TEST(TheContractOverQuic) {
     }));
     const Event* heard = find(serverEvents, EventKind::StreamBytes);
     RAWFRAME_EXPECT(heard != nullptr && heard->stream.value == 0 && heard->bytes == bytesOf("hello"));
+    // What the peer acknowledged is no longer pending on the stream (D276).
+    RAWFRAME_EXPECT(pumpUntil({{client.get(), &clientEvents}}, [&] {
+        return client->pendingBytes(*kConnection, *kStream) == 0;
+    }));
+    RAWFRAME_EXPECT(client->pendingBytes(*kConnection, network::StreamId{8}) == 0);
     RAWFRAME_EXPECT(server->send(kPeer, network::StreamId{0}, bytesOf("world")).has_value());
     RAWFRAME_EXPECT(pumpUntil({{client.get(), &clientEvents}}, [&] {
         return find(clientEvents, EventKind::StreamBytes) != nullptr;

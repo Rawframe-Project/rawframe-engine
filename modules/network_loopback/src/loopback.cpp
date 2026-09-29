@@ -3,6 +3,7 @@
 #include "rawframe/base/threads.h"
 #include "rawframe/network/errors.h"
 
+#include <deque>
 #include <map>
 #include <mutex>
 #include <string>
@@ -37,6 +38,9 @@ struct Link {
     /// What waits for this side's owner on this connection.
     std::size_t queuedEvents = 0;
     std::size_t queuedBytes = 0;
+    /// This side's stream sends on their way, by stream: when each arrives,
+    /// in that order, and its size. Those arrived go at the next send.
+    std::map<std::uint64_t, std::deque<std::pair<std::int64_t, std::size_t>>> inFlight;
 };
 
 /// One provider's part of the network.
@@ -234,6 +238,11 @@ public:
         }
         const std::int64_t kAt = std::max(state_->now() + state_->conditions.latency.nanoseconds, other.lastArrival);
         other.lastArrival = kAt;
+        auto& flying = link->inFlight[stream.value];
+        while (!flying.empty() && flying.front().first <= state_->now()) {
+            flying.pop_front();
+        }
+        flying.emplace_back(kAt, bytes.size());
         side_.statistics.streamBytesSent += bytes.size();
         state_->deliver(peer,
                         link->peerId,
@@ -308,6 +317,26 @@ public:
             ++moved;
         }
         return moved;
+    }
+
+    std::size_t pendingBytes(ConnectionId connection, StreamId stream) const noexcept override {
+        const std::lock_guard kLock{state_->mutex};
+        const auto kLink = side_.links.find(connection.value);
+        if (kLink == side_.links.end()) {
+            return 0;
+        }
+        const auto kStream = kLink->second.inFlight.find(stream.value);
+        if (kStream == kLink->second.inFlight.end()) {
+            return 0;
+        }
+        // Arrived is received; sends arrive in order, so the newest are
+        // those still on their way.
+        const std::int64_t kNow = state_->now();
+        std::size_t pending = 0;
+        for (auto at = kStream->second.rbegin(); at != kStream->second.rend() && at->first > kNow; ++at) {
+            pending += at->second;
+        }
+        return pending;
     }
 
     network::ProviderStatistics statistics() const noexcept override {

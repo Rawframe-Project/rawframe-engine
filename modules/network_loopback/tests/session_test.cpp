@@ -62,28 +62,39 @@ std::optional<network::Reject> ticketCheck(const network::Hello& offered, void*)
     return network::Reject{.reason = network::RejectReason::TicketInvalid, .message = "no valid ticket"};
 }
 
+/// What a world's network is like besides its lanes.
+struct Setup {
+    MonotonicDuration latency = MonotonicDuration::fromMilliseconds(10);
+    network::ProviderProfile transport = kTransport;
+    network::SessionProfile sessions = kSessions;
+};
+
 struct World {
     ManualClock clock;
-    LoopbackNetwork network{clock, {.latency = MonotonicDuration::fromMilliseconds(10)}};
-    std::unique_ptr<network::Provider> serverTransport = *network.provider(kTransport);
-    std::unique_ptr<network::Provider> clientTransport = *network.provider(kTransport);
+    LoopbackNetwork network;
+    std::unique_ptr<network::Provider> serverTransport;
+    std::unique_ptr<network::Provider> clientTransport;
     std::unique_ptr<network::Sessions> server;
     std::unique_ptr<network::Sessions> client;
     std::vector<SessionEvent> serverEvents;
     std::vector<SessionEvent> clientEvents;
 
-    explicit World(std::size_t maximumAdmitted = 0, std::vector<network::EventLaneDeclaration> lanes = {}) {
+    explicit World(std::size_t maximumAdmitted = 0,
+                   std::vector<network::EventLaneDeclaration> lanes = {},
+                   const Setup& setup = {})
+        : network(clock, {.latency = setup.latency}), serverTransport(*network.provider(setup.transport)),
+          clientTransport(*network.provider(setup.transport)) {
         server = *network::Sessions::server(*serverTransport,
                                             clock,
-                                            network::ServerSettings{.profile = kSessions,
+                                            network::ServerSettings{.profile = setup.sessions,
                                                                     .expected = compatibility(),
                                                                     .admit = &ticketCheck,
                                                                     .maximumAdmitted = maximumAdmitted,
                                                                     .tickRateTicks = 30,
                                                                     .lanes = lanes,
                                                                     .seed = 11});
-        client =
-            *network::Sessions::client(*clientTransport, clock, {.profile = kSessions, .lanes = lanes, .seed = 12});
+        client = *network::Sessions::client(
+            *clientTransport, clock, {.profile = setup.sessions, .lanes = lanes, .seed = 12});
         RAWFRAME_EXPECT(server->listen({"game"}).has_value());
     }
 
@@ -371,9 +382,9 @@ struct Admitted {
     std::uint64_t epoch = 0;
 };
 
-Admitted admit(World& world) {
+Admitted admit(World& world, int steps = 20) {
     const auto kConnection = world.client->connect({"game"}, hello());
-    world.run(20);
+    world.run(steps);
     const SessionEvent* granted = world.find(world.serverEvents, SessionEventKind::Admitted);
     RAWFRAME_EXPECT(kConnection.has_value() && granted != nullptr);
     return granted == nullptr ? Admitted{}
@@ -506,4 +517,80 @@ RAWFRAME_TEST(LaneStreamsAPeerMayNotOpenCloseIt) {
         many.push_back({.id = lane, .maximumRecord = 8});
     }
     RAWFRAME_EXPECT(kRefused(many));
+}
+
+RAWFRAME_TEST(LanesThePeerDoesNotTakeEndTheConnection) {
+    // SPEC-0013's queued guaranteed events (D276): records the peer has not
+    // received, at most 1,024 and 128 KiB, none older than two seconds.
+    // Past any of them the connection ends as exhausted; nothing is dropped.
+    const std::vector<network::EventLaneDeclaration> kLarge = {
+        {.id = 1, .fromServer = true, .maximumRecord = network::kMaximumEventRecord}};
+    const Setup kRoomy{.latency = MonotonicDuration::fromMilliseconds(100),
+                       .transport = {.maximumConnections = 8,
+                                     .maximumStreamsPerConnection = 4,
+                                     .maximumStreamSend = 1024,
+                                     .maximumDatagram = 1200,
+                                     .maximumQueuedEvents = 8192,
+                                     .maximumQueuedBytes = 1 << 22},
+                       .sessions = kSessions};
+    const auto kEnded = [](World& world, const Admitted& peer) {
+        world.serverEvents.clear();
+        world.server->pump(world.serverEvents);
+        const SessionEvent* ended = world.find(world.serverEvents, SessionEventKind::Ended);
+        return ended != nullptr && ended->connection == peer.server &&
+               ended->reason == network::EndReason::QueueExhausted;
+    };
+    const std::vector<std::byte> kOne(1);
+    {
+        // A thousand and twenty-four on their way are held; one more is not.
+        World world{0, kLarge, kRoomy};
+        const Admitted kPeer = admit(world, 60);
+        for (int record = 0; record < 1024; ++record) {
+            RAWFRAME_EXPECT(world.server->sendEvent(kPeer.server, 1, 1, kOne).has_value());
+        }
+        RAWFRAME_EXPECT(!world.server->sendEvent(kPeer.server, 1, 1, kOne).has_value());
+        RAWFRAME_EXPECT(!world.server->sendEvent(kPeer.server, 1, 1, kOne).has_value() && kEnded(world, kPeer));
+    }
+    {
+        // Received records are let go: a thousand more once those arrived.
+        World world{0, kLarge, kRoomy};
+        const Admitted kPeer = admit(world, 60);
+        for (int round = 0; round < 3; ++round) {
+            for (int record = 0; record < 1000; ++record) {
+                RAWFRAME_EXPECT(world.server->sendEvent(kPeer.server, 1, 1, kOne).has_value());
+            }
+            world.run(25);
+        }
+        RAWFRAME_EXPECT(world.find(world.serverEvents, SessionEventKind::Ended) == nullptr);
+    }
+    {
+        // Two records of 60 KiB are held; a third passes 128 KiB.
+        World world{0, kLarge, kRoomy};
+        const Admitted kPeer = admit(world, 60);
+        const std::vector<std::byte> kLargeBody(std::size_t{60} * 1024);
+        RAWFRAME_EXPECT(world.server->sendEvent(kPeer.server, 1, 1, kLargeBody).has_value() &&
+                        world.server->sendEvent(kPeer.server, 1, 1, kLargeBody).has_value());
+        RAWFRAME_EXPECT(!world.server->sendEvent(kPeer.server, 1, 1, kLargeBody).has_value() && kEnded(world, kPeer));
+    }
+    // A record the peer has not received in two seconds ends it; one that
+    // takes a second and a half does not.
+    const auto kEndsAt = [&](MonotonicDuration latency) {
+        Setup slow = kRoomy;
+        slow.latency = latency;
+        slow.sessions.admissionTimeout = MonotonicDuration::fromSeconds(30);
+        World world{0, kLarge, slow};
+        const Admitted kPeer = admit(world, 2000);
+        RAWFRAME_EXPECT(world.server->sendEvent(kPeer.server, 1, 1, kOne).has_value());
+        world.serverEvents.clear();
+        for (int step = 0; step < 50; ++step) {
+            world.clock.advance(MonotonicDuration::fromMilliseconds(50));
+            world.server->pump(world.serverEvents);
+            if (world.find(world.serverEvents, SessionEventKind::Ended) != nullptr) {
+                return step + 1;
+            }
+        }
+        return 0;
+    };
+    RAWFRAME_EXPECT(kEndsAt(MonotonicDuration::fromMilliseconds(2500)) == 41);
+    RAWFRAME_EXPECT(kEndsAt(MonotonicDuration::fromMilliseconds(1500)) == 0);
 }

@@ -278,6 +278,8 @@ public:
             return {};
         }
         auto* sending = copy(*link, bytes);
+        sending->stream = stream.value;
+        kStream->second->sendingBytes += bytes.size();
         if (QUIC_FAILED(
                 core_->api->StreamSend(kStream->second->handle, &sending->buffer, 1, QUIC_SEND_FLAG_NONE, sending))) {
             releaseSending(*core_, sending);
@@ -350,6 +352,16 @@ public:
             ++moved;
         }
         return moved;
+    }
+
+    std::size_t pendingBytes(ConnectionId connection, StreamId stream) const noexcept override {
+        const std::lock_guard kLock{core_->mutex};
+        const Connection* link = core_->find(connection.value);
+        if (link == nullptr) {
+            return 0;
+        }
+        const auto kStream = link->streams.find(stream.value);
+        return kStream == link->streams.end() ? 0 : kStream->second->sendingBytes;
     }
 
     network::ProviderStatistics statistics() const noexcept override {

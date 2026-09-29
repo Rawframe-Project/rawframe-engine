@@ -126,6 +126,11 @@ void finishConnection(Core& core, Connection& connection) noexcept {
 void releaseSending(Core& core, Sending* sending) noexcept {
     if (Connection* connection = core.find(sending->connection)) {
         connection->sendingBytes -= sending->bytes.size();
+        if (sending->stream.has_value()) {
+            if (const auto kStream = connection->streams.find(*sending->stream); kStream != connection->streams.end()) {
+                kStream->second->sendingBytes -= sending->bytes.size();
+            }
+        }
     }
     core.sendingBytesInAll -= sending->bytes.size();
     delete sending;

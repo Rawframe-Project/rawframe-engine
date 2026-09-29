@@ -45,6 +45,13 @@ struct SessionProfile {
 /// SPEC-0013's hard ceilings on guaranteed events: lanes, and one record.
 inline constexpr std::size_t kMaximumEventLanes = 16;
 inline constexpr std::size_t kMaximumEventRecord = std::size_t{64} * 1024;
+/// SPEC-0013's queued guaranteed events per connection: records sent that
+/// the peer has not yet received, their bytes, and how long one may wait
+/// (D276). Past any of them the lane cannot keep its promise, and the
+/// connection ends as exhausted: no promised event is dropped.
+inline constexpr std::size_t kMaximumQueuedEventRecords = 1024;
+inline constexpr std::size_t kMaximumQueuedEventBytes = std::size_t{128} * 1024;
+inline constexpr execution::MonotonicDuration kMaximumEventAge = execution::MonotonicDuration::fromSeconds(2);
 
 /// An event lane (SPEC-0010 guaranteed events): reliable and ordered within
 /// itself, independent of every other lane. Both sides declare the same

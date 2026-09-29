@@ -16,6 +16,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <optional>
 // The global execution configuration (D214) is a preview feature of the
 // MsQuic this engine pins; the library takes it whatever the header shows.
 #define QUIC_API_ENABLE_PREVIEW_FEATURES 1
@@ -48,6 +49,9 @@ struct Stream {
     std::uint64_t connection = 0;
     HQUIC handle = nullptr;
     std::uint64_t id = 0;
+    /// The owner's bytes handed to MsQuic on it and not yet released, which
+    /// MsQuic does once the peer acknowledges them (D276).
+    std::size_t sendingBytes = 0;
 };
 
 /// Bytes MsQuic reads until it says it is done with them.
@@ -55,6 +59,9 @@ struct Sending {
     QUIC_BUFFER buffer{};
     std::vector<std::uint8_t> bytes;
     std::uint64_t connection = 0;
+    /// The owner's stream they were sent on; none for this side's own
+    /// (HTTP/3's) bytes.
+    std::optional<std::uint64_t> stream;
 };
 
 struct Connection {

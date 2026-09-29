@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <deque>
 #include <map>
 
 namespace rawframe::network {
@@ -28,12 +29,24 @@ enum class Phase : std::uint8_t {
 };
 
 /// An event lane's stream on one connection, either way.
+/// An event record sent and not yet received: where it ends in its
+/// stream's bytes, its size, and when it was sent.
+struct QueuedRecord {
+    std::uint64_t end = 0;
+    std::size_t bytes = 0;
+    execution::MonotonicInstant sent;
+};
+
 struct LaneStream {
     std::uint64_t lane = 0;
     StreamId stream;
     /// Incoming: its preface read. Outgoing: written.
     bool prefaced = false;
     std::vector<std::byte> buffer;
+    /// Outgoing: every byte written to it, and its records not yet received
+    /// (D276).
+    std::uint64_t written = 0;
+    std::deque<QueuedRecord> queued;
 };
 
 struct Connection {
@@ -52,6 +65,9 @@ struct Connection {
     /// there have been.
     std::array<execution::MonotonicInstant, kMaximumStrikes> strikes{};
     std::uint64_t struck = 0;
+    /// Its event lanes could not keep their promise: it ends at the next
+    /// pump (D276).
+    bool exhausted = false;
 };
 
 EndReason endReasonOf(CloseReason reason) noexcept {
@@ -550,16 +566,48 @@ public:
                                     .payload = {record->payload.begin(), record->payload.end()}});
     }
 
+    /// Lets go of a connection's event records its peer has received, and
+    /// says how many are left and their bytes.
+    std::pair<std::size_t, std::size_t> settle(ConnectionId connection, Connection& state) {
+        std::size_t records = 0;
+        std::size_t bytes = 0;
+        for (LaneStream& lane : state.outgoing) {
+            const std::uint64_t kReceived = lane.written - provider_->pendingBytes(connection, lane.stream);
+            while (!lane.queued.empty() && lane.queued.front().end <= kReceived) {
+                lane.queued.pop_front();
+            }
+            records += lane.queued.size();
+            for (const QueuedRecord& record : lane.queued) {
+                bytes += record.bytes;
+            }
+        }
+        return {records, bytes};
+    }
+
+    /// Whether an event record has waited past SPEC-0013's age for its peer.
+    bool overdue(ConnectionId connection, Connection& state, execution::MonotonicInstant now) {
+        static_cast<void>(settle(connection, state));
+        return std::ranges::any_of(state.outgoing, [now](const LaneStream& lane) {
+            return !lane.queued.empty() && kMaximumEventAge < now - lane.queued.front().sent;
+        });
+    }
+
     void expire(std::vector<SessionEvent>& into) {
         const execution::MonotonicInstant kNow = clock_->now();
         std::vector<std::uint64_t> late;
-        for (const auto& [id, state] : connections_) {
+        std::vector<std::uint64_t> exhausted;
+        for (auto& [id, state] : connections_) {
             if (state.phase != Phase::Active && !(kNow < state.deadline)) {
                 late.push_back(id);
+            } else if (state.phase == Phase::Active && (state.exhausted || overdue(ConnectionId{id}, state, kNow))) {
+                exhausted.push_back(id);
             }
         }
         for (const std::uint64_t kId : late) {
             end(ConnectionId{kId}, EndReason::TimedOut, into);
+        }
+        for (const std::uint64_t kId : exhausted) {
+            end(ConnectionId{kId}, EndReason::QueueExhausted, into);
         }
         for (auto held = rejected_.begin(); held != rejected_.end();) {
             if (kNow < held->second) {
@@ -694,6 +742,11 @@ result::Status Sessions::sendEvent(ConnectionId connection,
                       "not a lane this side sends on, or a record past its bound");
     }
     Connection& state = kFound->second;
+    if (state.exhausted) {
+        return refuse(result::ErrorClass::ResourceExhausted,
+                      NetworkError::Exhausted,
+                      "the connection's event lanes could not keep their promise; it is ending");
+    }
     auto stream = std::ranges::find(state.outgoing, lane, &LaneStream::lane);
     if (stream == state.outgoing.end()) {
         RAWFRAME_TRY_ASSIGN(const StreamId kOpened, core_->provider_->openStream(connection, true));
@@ -711,13 +764,25 @@ result::Status Sessions::sendEvent(ConnectionId connection,
     RAWFRAME_TRY(recordWriter.varint(messageType));
     RAWFRAME_TRY(recordWriter.bytes(body));
     RAWFRAME_TRY(writeFrame(writer, kEventRecordFrame, record));
+    // SPEC-0013's queued events: one more than the peer can hold unread
+    // ends the connection rather than wait or drop it.
+    const auto [kRecords, kBytes] = core_->settle(connection, state);
+    if (kRecords + 1 > kMaximumQueuedEventRecords || kBytes + writer.written().size() > kMaximumQueuedEventBytes) {
+        state.exhausted = true;
+        return refuse(result::ErrorClass::ResourceExhausted,
+                      NetworkError::Exhausted,
+                      "the peer has not received what its event lanes hold; the connection is ending");
+    }
     // A record may be larger than one stream send: it goes in order.
     std::span<const std::byte> rest = writer.written();
     while (!rest.empty()) {
         const std::size_t kPart = std::min<std::size_t>(rest.size(), 1024);
         RAWFRAME_TRY(core_->provider_->send(connection, stream->stream, rest.first(kPart)));
+        stream->written += kPart;
         rest = rest.subspan(kPart);
     }
+    stream->queued.push_back(
+        QueuedRecord{.end = stream->written, .bytes = writer.written().size(), .sent = core_->clock_->now()});
     stream->prefaced = true;
     return {};
 }

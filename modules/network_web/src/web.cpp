@@ -194,6 +194,12 @@ public:
         return moved;
     }
 
+    /// The browser keeps what it is given and says nothing of what its
+    /// peer received, so nothing is known pending here.
+    std::size_t pendingBytes(network::ConnectionId, network::StreamId) const noexcept override {
+        return 0;
+    }
+
     network::ProviderStatistics statistics() const noexcept override {
         return statistics_;
     }
