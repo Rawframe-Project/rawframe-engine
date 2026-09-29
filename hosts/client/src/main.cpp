@@ -17,6 +17,7 @@
 #include "rawframe/game_content/registrar.h"
 #include "rawframe/input_kest/registrar.h"
 #include "rawframe/network_quic/registrar.h"
+#include "rawframe/render_canvas/registrar.h"
 #include "rawframe/window/windows.h"
 #include "rawframe/window_host/window_host.h"
 #include "rawframe/world_audio/registrar.h"
@@ -32,10 +33,11 @@ namespace {
 
 using namespace rawframe;
 
-constexpr std::array<composition::RegistrarEntry, 8> kRegistrars = {
+constexpr std::array<composition::RegistrarEntry, 9> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"network_quic", &network_quic::registerParticipants, network_quic::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
+    composition::RegistrarEntry{"render_canvas", &render_canvas::registerParticipants, render_canvas::kScopes},
     composition::RegistrarEntry{"world_audio", &world_audio::registerParticipants, world_audio::kScopes},
     composition::RegistrarEntry{"world_kest", &world_kest::registerParticipants, world_kest::kScopes},
     composition::RegistrarEntry{

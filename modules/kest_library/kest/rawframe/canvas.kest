@@ -9,8 +9,10 @@ module rawframe.canvas
 // line gives it, `width` by `height` meters, placed so the point at
 // (`pivotX`, `pivotY`) of it, each from nought (left, bottom) to one, is on
 // the pose, and turned as the pose turns. The region is in the texture's
-// own terms, nought to one from its top left. `color` multiplies it, as
-// 0xRRGGBBAA; nought draws nothing. Higher `layer`s draw over lower ones.
+// own terms, nought to one from its top left; past one the texture repeats,
+// so a region four wide tiles it four times. `color` multiplies it, as
+// 0xRRGGBBAA; an alpha of nought draws nothing, as does texture nought.
+// Higher `layer`s draw over lower ones.
 struct Sprite {
     texture: u64
     u0: f32

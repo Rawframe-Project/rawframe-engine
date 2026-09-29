@@ -35,6 +35,7 @@
 #include "rawframe/network_web/registrar.h"
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/physics3d/registrar.h"
+#include "rawframe/render_canvas/registrar.h"
 #include "rawframe/window/windows.h"
 #include "rawframe/window_host/window_host.h"
 #include "rawframe/world_animation/registrar.h"
@@ -61,12 +62,13 @@ using namespace rawframe;
 // A client playing a game from its content or held sources: the World, a
 // Kest game, 2D and 3D physics, the simulation's animation, and replication
 // over the page's WebTransport with the game's input sources.
-constexpr std::array<composition::RegistrarEntry, 9> kRegistrars = {
+constexpr std::array<composition::RegistrarEntry, 10> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
     composition::RegistrarEntry{"network_web", &network_web::registerParticipants, network_web::kScopes},
     composition::RegistrarEntry{"physics2d", &physics2d::registerParticipants, physics2d::kScopes},
     composition::RegistrarEntry{"physics3d", &physics3d::registerParticipants, physics3d::kScopes},
+    composition::RegistrarEntry{"render_canvas", &render_canvas::registerParticipants, render_canvas::kScopes},
     composition::RegistrarEntry{"world_animation", &world_animation::registerParticipants, world_animation::kScopes},
     composition::RegistrarEntry{"world_kest", &world_kest::registerParticipants, world_kest::kScopes},
     composition::RegistrarEntry{
