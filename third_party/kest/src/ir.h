@@ -92,6 +92,19 @@ typedef struct {
     uint16_t guard_held;
     uint16_t guard_counter;
     uint16_t guard_limit;
+    // ELEM, guarded: the index is the count times `guard_scale` and plus
+    // `guard_plus`, so the guard asks for one more than the last of those
+    // rather than for the limit. One and nought for the count itself. See
+    // D1288.
+    uint16_t guard_scale;
+    uint16_t guard_plus;
+    // ELEM, in bounds or guarded: nothing in the walk calls, allocates or
+    // moves what a handle points at, so where the array's elements are and
+    // how far apart they sit are read once where the walk begins. An element
+    // proved in bounds says its count in `guard_counter` for this, and the
+    // operation the walk goes back to in `guard_from`. See D1288.
+    bool still;
+    uint32_t guard_from;
     KestSpan span;
 } KestIrPlace;
 

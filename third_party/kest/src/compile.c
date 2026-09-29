@@ -4050,6 +4050,96 @@ static bool stored_into(const Compiler *compiler, uint32_t from,
     return false;
 }
 
+// A small whole number the body holds and nothing below nought: `k` in
+// `i * k` and `c` in `i + c`.
+static bool small_constant(const KestIrBody *body, KestIrRef value,
+                           uint32_t *into) {
+    const KestIrOp *op = made_by(body, value);
+    if (op == NULL || op->kind != KEST_IR_CONST || op->imm[1] != 1 ||
+        op->imm[0] >= body->constant_count ||
+        body->constant_classes[op->imm[0]] != KEST_CONST_INT) {
+        return false;
+    }
+    int64_t held = body->constants[op->imm[0]].integer;
+    if (held < 0 || held > UINT16_MAX) {
+        return false;
+    }
+    *into = (uint32_t)held;
+    return true;
+}
+
+// Whether a whole number is thirty-two bits wide or more, which is what a
+// count times a small number and plus another is cut to without changing
+// when the guard has asked that the largest of them fits in thirty-one.
+static bool wide_whole(const KestType *type) {
+    return type != NULL && type->tag == KEST_T_INT && type->width >= 32;
+}
+
+// The index an element is read at, when it is the count in `counter` times a
+// small number and plus another -- `i * 2 + 1` -- with nothing between but
+// cutting to a width it fits in: the scale and what is added. The largest the
+// index is, is then the last turn's, and one question asked where the walk
+// begins says it is inside the array. See D1288.
+static bool counted_at(const KestIrBody *body, KestIrRef value,
+                       uint16_t counter, uint32_t *scale, uint32_t *plus,
+                       int depth) {
+    const KestIrOp *op = made_by(body, value);
+    if (op == NULL || depth > 6) {
+        return false;
+    }
+    if (op->kind == KEST_IR_LOAD) {
+        *scale = 1;
+        *plus = 0;
+        return read_out_of(body, value) == (int32_t)counter;
+    }
+    if (op->kind == KEST_IR_NARROW && op->arg_count == 1 &&
+        wide_whole(op->type)) {
+        return counted_at(body, body->args[op->first_arg], counter, scale,
+                          plus, depth + 1);
+    }
+    if ((op->kind != KEST_IR_MUL && op->kind != KEST_IR_ADD) ||
+        op->arg_count != 2 || !wide_whole(op->type)) {
+        return false;
+    }
+    for (int side = 0; side < 2; side++) {
+        uint32_t k = 0;
+        if (!small_constant(body, body->args[op->first_arg + (uint32_t)side],
+                            &k) ||
+            !counted_at(body, body->args[op->first_arg + 1u - (uint32_t)side],
+                        counter, scale, plus, depth + 1)) {
+            continue;
+        }
+        if (op->kind == KEST_IR_MUL) {
+            if (k == 0) {
+                return false;
+            }
+            *scale *= k;
+            *plus *= k;
+        } else {
+            *plus += k;
+        }
+        return *scale <= UINT16_MAX && *plus <= UINT16_MAX;
+    }
+    return false;
+}
+
+// Whether nothing from `from` on calls anything, reaches the heap or moves
+// what a handle points at: where the elements of an array held there are,
+// and how far apart, stay what they were where the walk began. See D1288.
+static bool walk_still(const Compiler *compiler, uint32_t from) {
+    const KestIrBody *body = compiler->body;
+    for (uint32_t i = from; i < body->op_count; i++) {
+        const KestIrOp *op = &body->ops[i];
+        if (op->kind == KEST_IR_CALL || op->kind == KEST_IR_CALL_VALUE ||
+            op->kind == KEST_IR_CALL_HOST ||
+            (op->effects & (KEST_IR_EFFECT_ALLOCATES | KEST_IR_EFFECT_MOVES |
+                            KEST_IR_EFFECT_HOST)) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Every element read or written from `from` on at the count in `counter`, of
 // an array held in a slot nothing from there on stores into, in a walk that
 // counts from nought or more up to what `limit` holds and keeps its arrays:
@@ -4065,6 +4155,7 @@ static void prove_walk(Compiler *compiler, uint32_t from, int32_t measured,
         !walk_keeps(compiler, from, counter)) {
         return;
     }
+    bool still = walk_still(compiler, from);
     for (uint32_t i = from; i < body->op_count; i++) {
         const KestIrOp *op = &body->ops[i];
         if ((op->kind != KEST_IR_LOAD && op->kind != KEST_IR_PUT &&
@@ -4073,21 +4164,32 @@ static void prove_walk(Compiler *compiler, uint32_t from, int32_t measured,
             continue;
         }
         KestIrPlace *place = &body->places[op->place];
+        uint32_t scale = 1;
+        uint32_t plus = 0;
         if (place->kind != KEST_IR_PLACE_ELEM || place->type == NULL ||
-            read_out_of(body, place->index) != (int32_t)counter) {
+            place->in_bounds || place->guarded ||
+            !counted_at(body, place->index, counter, &scale, &plus, 0)) {
             continue;
         }
         int32_t held = read_out_of(body, place->base);
         if (held < 0 || stored_into(compiler, from, (uint16_t)held)) {
             continue;
         }
-        if (held == measured) {
+        if (held == measured && scale == 1 && plus == 0) {
             place->in_bounds = true;
+            place->guard_held = (uint16_t)held;
+            place->guard_counter = counter;
+            place->still = still;
+            place->guard_from = from;
         } else if (limit >= 0) {
             place->guarded = true;
             place->guard_held = (uint16_t)held;
             place->guard_counter = counter;
             place->guard_limit = (uint16_t)limit;
+            place->guard_scale = (uint16_t)scale;
+            place->guard_plus = (uint16_t)plus;
+            place->still = still;
+            place->guard_from = from;
         }
     }
 }

@@ -1071,6 +1071,36 @@ static void write_const(Walk *walk, const KestIrOp *op) {
     }
 }
 
+// Whether a still walk's arrays are read where it begins: only where the walk
+// goes back to what it begins at, which is where that is written. A walk
+// whose every turn leaves has nowhere it begins again, and its elements are
+// read the way any other is. See D1288.
+static bool still_here(const Walk *walk, const KestIrPlace *place) {
+    if (!place->still || place->guard_from >= walk->body->op_count ||
+        !walk->landed[place->guard_from] || !walk->known[place->guard_from]) {
+        return false;
+    }
+    for (uint32_t i = 0; i < walk->body->op_count; i++) {
+        const KestIrOp *op = &walk->body->ops[i];
+        if (op->kind == KEST_IR_NEXT && op->target == place->guard_from &&
+            op->imm[0] == place->guard_counter) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// What a guard is called: the array, the count, the limit, and the scale and
+// what is added to the count for an index worked out of it (D1288).
+typedef char Guard[64];
+
+static void guard_name(Guard into, const KestIrPlace *place) {
+    snprintf(into, sizeof(Guard), "fast_%u_%u_%u_%u_%u",
+             (unsigned)place->guard_held, (unsigned)place->guard_counter,
+             (unsigned)place->guard_limit, (unsigned)place->guard_scale,
+             (unsigned)place->guard_plus);
+}
+
 // One of an array, read into slots or written out of them. The two things
 // the machine asks before it touches one -- that the handle is an array and
 // that the index is inside it -- are a call, because they are the same two
@@ -1126,13 +1156,28 @@ static bool write_elem(Walk *walk, const KestIrOp *op,
     // And where it is inside the array whenever the array is as long as the
     // walk's limit, which was asked where the walk began: one flag held in a
     // register rather than three things read out of memory. See D1189.
+    // In a still walk the elements are where they were when it began, which
+    // is what was read there (D1288).
+    char base[48];
+    char gap[48];
+    if (still_here(walk, place)) {
+        snprintf(base, sizeof base, "at_%u_%u", (unsigned)place->guard_held,
+                 (unsigned)place->guard_from);
+        snprintf(gap, sizeof gap, "gap_%u_%u", (unsigned)place->guard_held,
+                 (unsigned)place->guard_from);
+    } else {
+        snprintf(base, sizeof base, "run->bytes");
+        snprintf(gap, sizeof gap, "run->stride");
+    }
     if (place->guarded && !place->in_bounds) {
+        Guard name;
+        guard_name(name, place);
         say(c, out,
             "    {\n        const KestRun *run = (const KestRun *)%s.object;\n"
             "        int64_t which = %s.integer;\n"
             "        unsigned char *at;\n"
-            "        if (fast_%u_%u_%u) {\n"
-            "            at = run->bytes + (size_t)which * run->stride + %u;\n"
+            "        if (%s) {\n"
+            "            at = %s + (size_t)which * %s + %u;\n"
             "        } else if (run != NULL && run->what == KEST_RUN_IS &&\n"
             "            (uint64_t)which < (uint64_t)run->length) {\n"
             "            at = run->bytes + (size_t)which * run->stride + %u;\n"
@@ -1140,16 +1185,16 @@ static bool write_elem(Walk *walk, const KestIrOp *op,
             "            at = kest_elem_at(rt, %s, which, %u, %u);\n"
             "            if (at == NULL) {\n                return false;\n"
             "            }\n        }\n",
-            held, index, (unsigned)place->guard_held,
-            (unsigned)place->guard_counter, (unsigned)place->guard_limit,
-            (unsigned)place->offset, (unsigned)place->offset, held,
-            (unsigned)place->offset, op->span.offset);
+            held, index, name, base, gap, (unsigned)place->offset,
+            (unsigned)place->offset, held, (unsigned)place->offset,
+            op->span.offset);
     } else if (place->in_bounds) {
         say(c, out,
             "    {\n        const KestRun *run = (const KestRun *)%s.object;\n"
-            "        unsigned char *at = run->bytes +\n"
-            "            (size_t)%s.integer * run->stride + %u;\n",
-            held, index, (unsigned)place->offset);
+            "        (void)run;\n"
+            "        unsigned char *at = %s +\n"
+            "            (size_t)%s.integer * %s + %u;\n",
+            held, base, index, gap, (unsigned)place->offset);
     } else {
         say(c, out,
             "    {\n        const KestRun *run = (const KestRun *)%s.object;\n"
@@ -1279,7 +1324,24 @@ static bool goes_back(const KestIrBody *body) {
 static bool same_guard(const KestIrPlace *a, const KestIrPlace *b) {
     return a->guard_held == b->guard_held &&
            a->guard_counter == b->guard_counter &&
-           a->guard_limit == b->guard_limit;
+           a->guard_limit == b->guard_limit &&
+           a->guard_scale == b->guard_scale && a->guard_plus == b->guard_plus;
+}
+
+
+// Where the elements of an array are and how far apart, read where a still
+// walk begins, for every element of it the walk reads (D1288): one pair an
+// array and a walk.
+static bool still_seen_before(const KestIrBody *body, uint32_t which) {
+    const KestIrPlace *place = &body->places[which];
+    for (uint32_t p = 0; p < which; p++) {
+        const KestIrPlace *other = &body->places[p];
+        if (other->still && other->guard_held == place->guard_held &&
+            other->guard_from == place->guard_from) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static bool guard_seen_before(const KestIrBody *body, uint32_t which) {
@@ -1296,14 +1358,23 @@ static void declare_guards(Walk *walk) {
     const KestIrBody *body = walk->body;
     for (uint32_t p = 0; p < body->place_count; p++) {
         const KestIrPlace *place = &body->places[p];
+        if (still_here(walk, place) && !still_seen_before(body, p)) {
+            say(walk->c, &walk->into->wrote,
+                "    unsigned char *at_%u_%u = NULL;\n"
+                "    size_t gap_%u_%u = 0;\n"
+                "    (void)at_%u_%u;\n    (void)gap_%u_%u;\n",
+                (unsigned)place->guard_held, (unsigned)place->guard_from,
+                (unsigned)place->guard_held, (unsigned)place->guard_from,
+                (unsigned)place->guard_held, (unsigned)place->guard_from,
+                (unsigned)place->guard_held, (unsigned)place->guard_from);
+        }
         if (!place->guarded || place->in_bounds || guard_seen_before(body, p)) {
             continue;
         }
+        Guard name;
+        guard_name(name, place);
         say(walk->c, &walk->into->wrote,
-            "    bool fast_%u_%u_%u = false;\n    (void)fast_%u_%u_%u;\n",
-            (unsigned)place->guard_held, (unsigned)place->guard_counter,
-            (unsigned)place->guard_limit, (unsigned)place->guard_held,
-            (unsigned)place->guard_counter, (unsigned)place->guard_limit);
+            "    bool %s = false;\n    (void)%s;\n", name, name);
     }
 }
 
@@ -1324,17 +1395,58 @@ static void ask_guards(Walk *walk, uint32_t head) {
             }
             Where held;
             Where limit;
+            Guard name;
             at_frame(walk, held, place->guard_held);
             at_frame(walk, limit, place->guard_limit);
+            guard_name(name, place);
+            if (place->guard_scale == 1 && place->guard_plus == 0) {
+                say(walk->c, &walk->into->wrote,
+                    "    {\n        const KestRun *run = (const KestRun *)"
+                    "%s.object;\n"
+                    "        %s = run != NULL && run->what == KEST_RUN_IS &&\n"
+                    "            (uint64_t)%s.integer <= (uint64_t)run->length;\n"
+                    "    }\n",
+                    held, name, limit);
+                continue;
+            }
+            // The last turn's index is the largest, and it has to be inside
+            // the array and fit in thirty-one bits, so that nothing it was
+            // worked out through was cut. A limit of nought or less is a walk
+            // that does not turn, and says no.
             say(walk->c, &walk->into->wrote,
-                "    {\n        const KestRun *run = (const KestRun *)%s.object;\n"
-                "        fast_%u_%u_%u = run != NULL && run->what == "
-                "KEST_RUN_IS &&\n"
-                "            (uint64_t)%s.integer <= (uint64_t)run->length;\n"
+                "    {\n        const KestRun *run = (const KestRun *)"
+                "%s.object;\n"
+                "        uint64_t last = (uint64_t)%s.integer - 1u;\n"
+                "        uint64_t most = last * %uu + %uu;\n"
+                "        %s = run != NULL && run->what == KEST_RUN_IS &&\n"
+                "            last < UINT32_MAX && most <= INT32_MAX &&\n"
+                "            most < (uint64_t)run->length;\n"
                 "    }\n",
+                held, limit, (unsigned)place->guard_scale,
+                (unsigned)place->guard_plus, name);
+        }
+        // And where a still walk's arrays keep their elements: every array
+        // one of its elements is read out of, once, whether or not a guard
+        // said the reads are inside it, because an element proved inside
+        // its array reads from here too. See D1288.
+        for (uint32_t p = 0; p < body->place_count; p++) {
+            const KestIrPlace *place = &body->places[p];
+            if (place->guard_from != head || !still_here(walk, place) ||
+                place->guard_counter != next->imm[0] ||
+                still_seen_before(body, p)) {
+                continue;
+            }
+            Where held;
+            at_frame(walk, held, place->guard_held);
+            say(walk->c, &walk->into->wrote,
+                "    {\n        const KestRun *run = (const KestRun *)"
+                "%s.object;\n"
+                "        if (run != NULL) {\n"
+                "            at_%u_%u = run->bytes;\n"
+                "            gap_%u_%u = run->stride;\n        }\n    }\n",
                 held, (unsigned)place->guard_held,
-                (unsigned)place->guard_counter, (unsigned)place->guard_limit,
-                limit);
+                (unsigned)place->guard_from, (unsigned)place->guard_held,
+                (unsigned)place->guard_from);
         }
     }
 }

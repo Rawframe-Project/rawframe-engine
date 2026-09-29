@@ -46,6 +46,19 @@ double kest_left_over(double left, double right) {
     if (rest < divisor) {
         return left;
     }
+    // Two whole numbers under two to the fifty-third are whole numbers, and
+    // what one leaves over from the other is what a whole number's `%` says,
+    // which every double under that holds exactly. A frame's `x % 1000.0` of
+    // a count is that, and the walk below was a tenth of `bench/kernel`. See
+    // D1288.
+    if (rest < 9007199254740992.0) {
+        int64_t whole = (int64_t)rest;
+        int64_t by = (int64_t)divisor;
+        if ((double)whole == rest && (double)by == divisor) {
+            double over = (double)(whole % by);
+            return left < 0.0 ? -over : over;
+        }
+    }
     // Double the divisor until one more would pass what is left, then take it
     // away and halve back down. Every step is exact in binary: doubling and
     // halving only move the exponent, and every subtraction here is of two
