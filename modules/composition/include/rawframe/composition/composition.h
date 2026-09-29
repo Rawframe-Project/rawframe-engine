@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -38,6 +39,9 @@ struct HostServices {
     /// The files the Host holds, from which every path the configuration
     /// names is read; null where paths name the file system.
     const HeldFiles* files = nullptr;
+    /// What the Host lends, each outliving the composition; the plan was
+    /// composed with their names.
+    std::span<const LentCapability> lent;
 };
 
 /// The health reason of a World behind by more than it can catch up, for

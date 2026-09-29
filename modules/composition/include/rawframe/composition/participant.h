@@ -64,6 +64,13 @@ template <typename Interface> [[nodiscard]] CapabilityObject provideAs(Interface
     return CapabilityObject{&detail::kTypeTag<Interface>, &object};
 }
 
+/// An object a Host owns and lends its participants under a capability's
+/// name, the way a participant provides one (CompositionRequest::lent).
+struct LentCapability {
+    std::string_view name;
+    CapabilityObject object;
+};
+
 /// A runtime participant: a service or system that composition constructs,
 /// starts, quiesces, stops, and destroys (SPEC-0005 service lifecycle).
 /// Construction happens in its factory and must not start work; running

@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -58,6 +59,10 @@ struct CompositionRequest {
     TargetRole role = TargetRole::Test;
     Platform platform = Platform::Linux;
     std::span<const Selection> selections;
+    /// Capabilities the host lends itself (HostServices::lent): objects it
+    /// owns, such as the frame's raw input, that no participant could make.
+    /// A participant providing one too is ambiguous.
+    std::span<const std::string_view> lent;
     bool cpuExecutor = true;
     bool blockingIoExecutor = true;
     /// The whole composition's stop budget. Participant budgets nest inside it.
@@ -84,8 +89,10 @@ struct PlannedParticipant {
 
     struct Resolved {
         std::string capability;
-        std::size_t provider; // index into Plan::participants()
+        std::size_t provider; // index into Plan::participants(), or kLent
     };
+    /// A capability the host lends rather than a participant provides.
+    static constexpr std::size_t kLent = std::numeric_limits<std::size_t>::max();
     /// Required capabilities, and the optional ones that are present.
     std::vector<Resolved> capabilities;
     /// Plan indices this participant needs constructed and started first.

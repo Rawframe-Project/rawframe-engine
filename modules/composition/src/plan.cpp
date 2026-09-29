@@ -208,6 +208,16 @@ result::Result<Plan> compose(const CompositionRequest& request, std::vector<Prob
             }
         }
     }
+    const auto kLent = [&](std::string_view capability) {
+        return std::find(request.lent.begin(), request.lent.end(), capability) != request.lent.end();
+    };
+    for (const std::string_view capability : request.lent) {
+        if (providers.contains(capability)) {
+            collector.report(ProblemKind::AmbiguousProvider,
+                             std::string{capability},
+                             "the host lends it and an eligible participant provides it");
+        }
+    }
     for (const auto& [capability, candidates] : providers) {
         if (candidates.size() > 1) {
             collector.report(ProblemKind::AmbiguousProvider,
@@ -248,6 +258,8 @@ result::Result<Plan> compose(const CompositionRequest& request, std::vector<Prob
             if (kFound != providers.end() && kFound->second.size() == 1) {
                 participant.capabilities.push_back({capability, kFound->second.front()});
                 kDependOn(kFound->second.front());
+            } else if (kFound == providers.end() && kLent(capability)) {
+                participant.capabilities.push_back({capability, PlannedParticipant::kLent});
             } else if (kFound == providers.end()) {
                 collector.report(kProvidedByAnyone(capability) ? ProblemKind::IneligibleProvider
                                                                : ProblemKind::MissingProvider,
@@ -260,6 +272,8 @@ result::Result<Plan> compose(const CompositionRequest& request, std::vector<Prob
             if (kFound != providers.end() && kFound->second.size() == 1) {
                 participant.capabilities.push_back({capability, kFound->second.front()});
                 kDependOn(kFound->second.front());
+            } else if (kFound == providers.end() && kLent(capability)) {
+                participant.capabilities.push_back({capability, PlannedParticipant::kLent});
             }
         }
         for (const std::string& required : participant.requiredParticipants) {
@@ -354,7 +368,9 @@ result::Result<Plan> compose(const CompositionRequest& request, std::vector<Prob
         }
         std::sort(participant.dependencies.begin(), participant.dependencies.end());
         for (PlannedParticipant::Resolved& resolved : participant.capabilities) {
-            resolved.provider = position[resolved.provider];
+            if (resolved.provider != PlannedParticipant::kLent) {
+                resolved.provider = position[resolved.provider];
+            }
         }
         plan.participants_.push_back(std::move(participant));
     }

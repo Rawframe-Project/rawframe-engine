@@ -5,6 +5,7 @@
 #include "rawframe/composition/declaration.h"
 #include "rawframe/composition/held_files.h"
 #include "rawframe/composition/host_lifecycle.h"
+#include "rawframe/composition/participant.h"
 #include "rawframe/composition/registrar.h"
 #include "rawframe/diagnostics/ndjson_sink.h"
 #include "rawframe/execution/time.h"
@@ -101,6 +102,9 @@ struct HostRequest {
     /// The files the Host holds, from which every configured path is read
     /// (D167); null where paths name the file system.
     const composition::HeldFiles* files = nullptr;
+    /// Objects the caller owns and lends the participants by capability,
+    /// such as a client's raw input from its window; each outlives the Host.
+    std::span<const composition::LentCapability> lent;
 };
 
 /// One Host run, driven by its caller one iteration at a time: a process's

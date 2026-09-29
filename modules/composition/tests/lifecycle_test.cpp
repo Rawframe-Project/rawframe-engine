@@ -200,6 +200,50 @@ RAWFRAME_TEST(AWrongCapabilityTypeFailsTyped) {
     RAWFRAME_EXPECT(!kStarted.has_value() && kStarted.error().code() == code(CompositionError::CapabilityTypeMismatch));
 }
 
+RAWFRAME_TEST(ALentCapabilityReachesItsConsumersFromTheHost) {
+    // The consumer requires the counter and nobody provides it: the host
+    // lends it. Planned without the lend, it is missing; with a provider
+    // too, it is ambiguous.
+    Fixture& setup = resetFixture();
+    auto consumer = declare("consumer");
+    consumer.factory = &makeConsumer;
+    consumer.requiredCapabilities = kCounterName;
+    consumer.executor = {.cpu = true, .quota = {.maximumPendingTasks = 4}};
+    setup.moduleA = {consumer};
+    std::vector<Problem> problems;
+    RAWFRAME_EXPECT(!compose(request(kModuleA), problems).has_value() && problems.size() == 1 &&
+                    problems[0].kind == ProblemKind::MissingProvider);
+    problems.clear();
+    CompositionRequest lending = request(kModuleA);
+    lending.lent = kCounterName;
+    auto plan = compose(lending, problems);
+    RAWFRAME_EXPECT(plan.has_value() && problems.empty());
+    if (plan.has_value()) {
+        ManualClock clock;
+        CancellationScope root{clock};
+        rawframe::execution::Executor cpu{
+            rawframe::execution::ExecutorSettings{.kind = rawframe::execution::ExecutorKind::Cpu, .workers = 1}};
+        Counter counter{.value = 41};
+        const std::array<LentCapability, 1> kLent = {LentCapability{"counter", provideAs(counter)}};
+        Composition composition{*plan, HostServices{.clock = &clock, .scope = &root, .cpu = &cpu, .lent = kLent}};
+        RAWFRAME_EXPECT(composition.start().has_value());
+        composition.stop();
+        RAWFRAME_EXPECT(counter.value == 42);
+        // A host that composed with the name but lends nothing fails typed.
+        Composition forgetful{*plan, HostServices{.clock = &clock, .scope = &root, .cpu = &cpu}};
+        const auto kStarted = forgetful.start();
+        RAWFRAME_EXPECT(!kStarted.has_value() &&
+                        kStarted.error().code() == code(CompositionError::CapabilityNotProvided));
+    }
+    auto provider = declare("provider");
+    provider.factory = &makeProvider;
+    provider.providedCapabilities = kCounterName;
+    fixture().moduleA = {provider, consumer};
+    problems.clear();
+    RAWFRAME_EXPECT(!compose(lending, problems).has_value() && problems.size() == 1 &&
+                    problems[0].kind == ProblemKind::AmbiguousProvider);
+}
+
 namespace {
 
 struct Captured final : rawframe::diagnostics::Sink {

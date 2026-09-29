@@ -98,6 +98,17 @@ result::Result<CapabilityObject> ParticipantContext::resolve(std::string_view ca
         if (resolved.capability != capability) {
             continue;
         }
+        if (resolved.provider == PlannedParticipant::kLent) {
+            for (const LentCapability& lent : composition_->services_.lent) {
+                if (lent.name == capability && lent.object.object != nullptr) {
+                    return lent.object;
+                }
+            }
+            return result::fail(result::ErrorClass::Internal,
+                                kCompositionDomain,
+                                code(CompositionError::CapabilityNotProvided),
+                                "the plan names a capability the host did not lend");
+        }
         // Providers come earlier in plan order, so this one is constructed.
         Participant& provider = *composition_->slots_[resolved.provider].object;
         const CapabilityObject kObject = provider.provide(capability);

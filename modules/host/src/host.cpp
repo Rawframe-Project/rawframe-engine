@@ -333,9 +333,14 @@ struct Host::State {
         root.emplace(clock);
 
         std::vector<composition::Problem> problems;
+        std::vector<std::string_view> lent;
+        for (const composition::LentCapability& each : request.lent) {
+            lent.push_back(each.name);
+        }
         auto composed = composition::compose(composition::CompositionRequest{.registrars = request.registrars,
                                                                              .role = request.role,
                                                                              .platform = request.platform,
+                                                                             .lent = lent,
                                                                              .shutdownBudget = settings.shutdownBudget},
                                              problems);
         if (!composed.has_value()) {
@@ -364,7 +369,8 @@ struct Host::State {
                                                       .emitter = emitter,
                                                       .configuration = &configuration,
                                                       .lifecycle = &lifecycle,
-                                                      .files = request.files});
+                                                      .files = request.files,
+                                                      .lent = request.lent});
         if (auto started = composition->start(); !started.has_value()) {
             // What the failure was about, as its owners recorded it: `key:
             // value` pairs, such as a Kest program's first diagnostic.
