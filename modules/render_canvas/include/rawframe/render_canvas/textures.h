@@ -3,8 +3,9 @@
 // A game's textures read by resource identity (ADR-0025, D255): each
 // texture its `texture` lines declare asked of the content store once,
 // decoded into its levels on a CPU worker, and held while this lives, so
-// nothing a device draws from is evicted under it. The upload to a device
-// is `rawframe.render`'s, when it exists.
+// nothing a device draws from is evicted under it. A texture recooked while
+// this lives follows the store's reload to its new revision (D262). The
+// upload to a device is `rawframe.render`'s, when it exists.
 
 #include "rawframe/assets/assets.h"
 #include "rawframe/content/store.h"
@@ -34,6 +35,19 @@ struct TextureCounts {
     std::uint64_t bytes = 0;
 };
 
+/// What changed in one update, each texture by the identity the game gives
+/// it.
+struct TextureChanges {
+    /// Failed since the last update, each once, with why.
+    std::vector<std::pair<std::uint64_t, result::Error>> failed;
+    /// Replaced by a new revision the store published.
+    std::vector<std::uint64_t> reloaded;
+    /// Whose new revision could not be made: the old one stays, with why.
+    std::vector<std::pair<std::uint64_t, result::Error>> notReloaded;
+    /// Every declared texture ready: true once, in the update it became so.
+    bool read = false;
+};
+
 class CanvasTextures {
 public:
     /// Asks for every texture of `declared` at once, decoding on `cpu` as
@@ -53,10 +67,9 @@ public:
     CanvasTextures& operator=(const CanvasTextures&) = delete;
     ~CanvasTextures();
 
-    /// Once a frame, on the owner's thread: takes finished reads and
-    /// decodes. Returns the textures that failed since the last call, each
-    /// once, by the identity the game gives it, with why.
-    [[nodiscard]] std::vector<std::pair<std::uint64_t, result::Error>> update(std::uint64_t tick);
+    /// Once a frame, on the owner's thread: takes finished reads, decodes,
+    /// and reloads, and says what changed.
+    [[nodiscard]] TextureChanges update(std::uint64_t tick);
 
     /// The texture the game names `id`, decoded, once ready; none before,
     /// for one that failed, or for one the game does not declare.

@@ -21,6 +21,9 @@ namespace {
 constexpr diagnostics::EventIdentity kCanvasSummary{"canvas", "canvas_summary"};
 constexpr diagnostics::EventIdentity kUnread{"canvas", "textures_unavailable"};
 constexpr diagnostics::EventIdentity kUnreadTexture{"canvas", "texture_unavailable"};
+constexpr diagnostics::EventIdentity kTextureReloaded{"canvas", "texture_reloaded"};
+constexpr diagnostics::EventIdentity kTextureNotReloaded{"canvas", "texture_reload_failed"};
+constexpr diagnostics::EventIdentity kTexturesRead{"canvas", "textures_read"};
 constexpr std::string_view kMaybe[] = {
     world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
 /// The decoded levels the canvas holds at most.
@@ -129,12 +132,34 @@ public:
         if (phase == composition::HostPhase::PresentationExtract) {
             ++tick_;
             if (textures_ != nullptr) {
-                for (const auto& [kId, kError] : textures_->update(tick_)) {
+                const TextureChanges kChanges = textures_->update(tick_);
+                for (const auto& [kId, kError] : kChanges.failed) {
                     emitter_.log(diagnostics::Severity::Warning,
                                  kUnreadTexture,
                                  "a texture could not be read: its draws wait for it",
                                  {diagnostics::field("texture", identityText(kId)),
                                   diagnostics::field("reason", std::string{kError.description()})});
+                }
+                for (const std::uint64_t kId : kChanges.reloaded) {
+                    ++reloaded_;
+                    emitter_.log(diagnostics::Severity::Info,
+                                 kTextureReloaded,
+                                 "a texture was replaced by its new revision",
+                                 {diagnostics::field("texture", identityText(kId))});
+                }
+                for (const auto& [kId, kError] : kChanges.notReloaded) {
+                    emitter_.log(diagnostics::Severity::Warning,
+                                 kTextureNotReloaded,
+                                 "a texture's new revision could not be used: the old one is drawn on",
+                                 {diagnostics::field("texture", identityText(kId)),
+                                  diagnostics::field("reason", std::string{kError.description()})});
+                }
+                if (kChanges.read) {
+                    emitter_.log(
+                        diagnostics::Severity::Info,
+                        kTexturesRead,
+                        "the game's textures were read: every draw has its texture",
+                        {diagnostics::field("textures", static_cast<std::uint64_t>(textures_->counts().ready))});
                 }
             }
             extract();
@@ -183,6 +208,7 @@ public:
                       diagnostics::field("drawsWaiting", drawsWaiting_),
                       diagnostics::field("texturesReady", static_cast<std::uint64_t>(kTextures.ready)),
                       diagnostics::field("texturesFailed", static_cast<std::uint64_t>(kTextures.failed)),
+                      diagnostics::field("texturesReloaded", reloaded_),
                       diagnostics::field("textureBytes", kTextures.bytes)});
     }
 
@@ -233,6 +259,7 @@ private:
     std::optional<schema::ComponentTypeId> cameraComponent_;
     /// Frames seen through the player's own camera.
     std::uint64_t viewed_ = 0;
+    std::uint64_t reloaded_ = 0;
     std::unique_ptr<Canvas> canvas_;
     std::unique_ptr<CanvasTextures> textures_;
     std::optional<std::string> unread_;

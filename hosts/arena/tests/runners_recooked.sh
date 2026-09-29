@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Runners is heard while its sources are recooked: the shot, cooked first to
-# the short-form tier, is recooked to Opus once the host has started, and
-# the running client publishes the changed manifest and hears the new
-# revision of the shot.
+# Runners is heard and drawn while its sources are recooked: the shot,
+# cooked first to the short-form tier, is recooked to Opus once the host has
+# started, and the tiles, cooked exact, are recooked block-compressed; the
+# running client publishes the changed manifest, hears the new revision of
+# the shot, and draws the new revision of the tiles (D262).
 #
 # usage: runners_recooked.sh <rawframe-arena> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -34,23 +35,28 @@ CONF
 (cd "$repository" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson") &
 running=$!
 
-# Recook only once the client's sounds were read from the first cook, or
-# the client reads the recooked shot first and has nothing to reload. The
-# run lasts ten seconds, room for a sanitized recook of five on a busy
-# machine.
+# Recook only once the client's sounds and textures were read from the
+# first cook, or the client reads the recooked ones first and has nothing
+# to reload. The run lasts ten seconds, room for a sanitized recook of five
+# on a busy machine.
 for _ in $(seq 1 200); do
-    grep -q '"code":"sounds_read"' "$work/log.ndjson" 2>/dev/null && break
+    grep -q '"code":"sounds_read"' "$work/log.ndjson" 2>/dev/null &&
+        grep -q '"code":"textures_read"' "$work/log.ndjson" && break
     sleep 0.05
 done
 resource=$(grep -o '"resourceId": "[0-9a-f]*"' "$work/sources/shot.wav.rfmeta" | grep -o '[0-9a-f]\{32\}')
 printf '{\n  "schema": 1,\n  "resourceId": "%s",\n  "importer": "rawframe.audio",\n  "settings": {\n    "tier": "opus"\n  }\n}\n' \
     "$resource" >"$work/sources/shot.wav.rfmeta"
+resource=$(grep -o '"resourceId": "[0-9a-f]*"' "$work/sources/tiles.png.rfmeta" | grep -o '[0-9a-f]\{32\}')
+printf '{\n  "schema": 1,\n  "resourceId": "%s",\n  "importer": "rawframe.texture",\n  "settings": {}\n}\n' \
+    "$resource" >"$work/sources/tiles.png.rfmeta"
 "$cook" "$work/sources" "$work/content" "$work/cache" >/dev/null
 
 wait "$running"
 grep -q '"code":"content_reloaded"' "$work/log.ndjson"
 grep -q '"code":"sound_reloaded"' "$work/log.ndjson"
-if grep -q '"code":"sound_reload_failed"' "$work/log.ndjson"; then
+grep -q '"code":"texture_reloaded"' "$work/log.ndjson"
+if grep -q '"code":"sound_reload_failed"\|"code":"texture_reload_failed"' "$work/log.ndjson"; then
     exit 1
 fi
 grep -o '"code":"recording_summary".*' "$work/log.ndjson"

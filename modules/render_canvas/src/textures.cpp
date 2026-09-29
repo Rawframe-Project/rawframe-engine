@@ -21,6 +21,7 @@ result::Result<assets::DecodedForm> decodeTexture(const content::VerifiedContent
 
 struct Wanted {
     std::uint64_t id = 0;
+    content::ResourceId resource;
     assets::RequesterId requester;
     bool reported = false;
 };
@@ -35,6 +36,7 @@ std::vector<content::AdmittedRepresentation> textureRepresentations() {
 struct CanvasTextures::State {
     std::unique_ptr<assets::AssetSet> set;
     std::vector<Wanted> wanted;
+    bool read = false;
 };
 
 CanvasTextures::CanvasTextures(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
@@ -62,22 +64,40 @@ CanvasTextures::create(content::ContentStore& store,
     for (const world_kest::GameTextureResource& texture : declared) {
         const content::ResourceRef kReference{.id = content::ResourceId{texture.texture}, .type = kTextureType};
         RAWFRAME_TRY_ASSIGN(const assets::RequesterId kRequester, state->set->request(kReference));
-        state->wanted.push_back(Wanted{.id = texture.id, .requester = kRequester});
+        state->wanted.push_back(Wanted{.id = texture.id, .resource = kReference.id, .requester = kRequester});
     }
     return std::unique_ptr<CanvasTextures>{new CanvasTextures{std::move(state)}};
 }
 
-std::vector<std::pair<std::uint64_t, result::Error>> CanvasTextures::update(std::uint64_t tick) {
+TextureChanges CanvasTextures::update(std::uint64_t tick) {
     State& state = *state_;
     state.set->update(tick);
-    std::vector<std::pair<std::uint64_t, result::Error>> failed;
+    TextureChanges changes;
     for (Wanted& wanted : state.wanted) {
         if (!wanted.reported && state.set->readiness(wanted.requester) == assets::Readiness::Failed) {
             wanted.reported = true;
-            failed.emplace_back(wanted.id, state.set->failure(wanted.requester)->clone());
+            changes.failed.emplace_back(wanted.id, state.set->failure(wanted.requester)->clone());
         }
     }
-    return failed;
+    // Taken every update, so they never pile up: the canvas asks for each
+    // texture's handle as it draws, so it draws the new revision anyway.
+    for (const assets::ReloadEvent& event : state.set->takeReloadEvents()) {
+        for (const Wanted& wanted : state.wanted) {
+            if (wanted.resource != event.id) {
+                continue;
+            }
+            if (event.outcome == assets::ReloadOutcome::Published) {
+                changes.reloaded.push_back(wanted.id);
+            } else {
+                changes.notReloaded.emplace_back(wanted.id, event.failure->clone());
+            }
+        }
+    }
+    if (!state.read && counts().ready == state.wanted.size()) {
+        state.read = true;
+        changes.read = true;
+    }
+    return changes;
 }
 
 std::shared_ptr<const texture::Texture> CanvasTextures::texture(std::uint64_t id, std::uint64_t tick) const {
