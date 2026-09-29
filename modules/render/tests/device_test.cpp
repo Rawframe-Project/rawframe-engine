@@ -106,13 +106,14 @@ RAWFRAME_TEST(ADeviceClearsATargetAndReadsItBack) {
     mrhiRequestId token{};
     RAWFRAME_EXPECT(mrhiSubmitFrame(device, &token) == mrhi_success);
     RAWFRAME_EXPECT(mrhiWaitFrame(device, token, 10'000'000'000ULL) == mrhi_success);
-    // The readback is answered through the device's queue.
-    mrhiDeviceNotification record{};
-    bool answered = false;
-    while (mrhiNextDeviceNotification(device, &record) == mrhi_success) {
-        answered = answered || (record.requestId.index1 == pixels.index1 && record.outcome == mrhi_success);
-    }
-    RAWFRAME_EXPECT(answered);
+    // The readback is answered through the device's queue, taken by the
+    // one that asked; the frame's own answer waits for its asker.
+    kDevice->pump();
+    const auto kAnswer = kDevice->answer(render::requestKey(pixels.index1, pixels.generation));
+    RAWFRAME_EXPECT(kAnswer.has_value() && kAnswer->has_value());
+    RAWFRAME_EXPECT(!kDevice->answer(render::requestKey(pixels.index1, pixels.generation)).has_value());
+    const auto kDone = kDevice->answer(render::requestKey(token.index1, token.generation));
+    RAWFRAME_EXPECT(kDone.has_value() && kDone->has_value() && !kDevice->lost());
     std::array<std::uint8_t, std::size_t{kSide} * kSide * 4> image{};
     std::size_t taken = 0;
     RAWFRAME_EXPECT(mrhiTakeReadback(device, pixels, image.data(), image.size(), &taken) == mrhi_success &&

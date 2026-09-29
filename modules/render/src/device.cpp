@@ -2,7 +2,10 @@
 
 #include "rawframe/render/errors.h"
 
+#include <map>
+#include <maul-rhi/capabilities.h>
 #include <maul-rhi/device.h>
+#include <maul-rhi/frame.h>
 #include <maul-rhi/instance.h>
 #include <string_view>
 
@@ -40,6 +43,10 @@ struct Device::State {
     Phase phase = Phase::Finding;
     std::optional<AdapterDescription> adapter;
     std::optional<result::Error> failure;
+    /// Answers not yet taken, by request, with their outcomes; at most the
+    /// device's own notification bound, since each asker takes its own.
+    std::map<std::uint64_t, mrhiResult> answers;
+    bool lost = false;
 
     ~State() {
         // The device goes before the instance that made it.
@@ -72,10 +79,16 @@ struct Device::State {
         if (const mrhiResult kRead = mrhiGetAdapterInfo(instance, chosen, &info); kRead != mrhi_success) {
             return fail(failed("the adapter could not be read", kRead).error());
         }
+        mrhiFeatures features{};
+        if (const mrhiResult kRead = mrhiGetAdapterFeatures(instance, chosen, &features); kRead != mrhi_success) {
+            return fail(failed("the adapter's features could not be read", kRead).error());
+        }
         adapter = AdapterDescription{.name = std::string{info.name, info.nameLength},
-                                     .software = info.kind == mrhi_adapterSoftware};
+                                     .software = info.kind == mrhi_adapterSoftware,
+                                     .blockCompression = features.textureCompressionBc};
         mrhiDeviceDef def = mrhiDefaultDeviceDef();
         def.adapter = chosen;
+        def.features.textureCompressionBc = features.textureCompressionBc;
         constexpr std::string_view kLabel = "rawframe.render";
         def.label = kLabel.data();
         def.labelLength = kLabel.size();
@@ -136,6 +149,37 @@ const std::optional<AdapterDescription>& Device::adapter() const noexcept {
 
 mrhiDevice* Device::native() const noexcept {
     return state_->phase == Phase::Ready ? state_->device : nullptr;
+}
+
+void Device::pump() {
+    if (state_->phase != Phase::Ready) {
+        return;
+    }
+    mrhiDeviceNotification record{};
+    while (mrhiNextDeviceNotification(state_->device, &record) == mrhi_success) {
+        if (record.kind == mrhi_deviceLostNotice) {
+            state_->lost = true;
+            continue;
+        }
+        state_->answers[requestKey(record.requestId.index1, record.requestId.generation)] = record.outcome;
+    }
+}
+
+std::optional<result::Status> Device::answer(std::uint64_t request) {
+    const auto kFound = state_->answers.find(request);
+    if (kFound == state_->answers.end()) {
+        return std::nullopt;
+    }
+    const mrhiResult kOutcome = kFound->second;
+    state_->answers.erase(kFound);
+    if (kOutcome != mrhi_success) {
+        return result::Status{failed("the device's work failed", kOutcome)};
+    }
+    return result::Status{};
+}
+
+bool Device::lost() const noexcept {
+    return state_->lost;
 }
 
 } // namespace rawframe::render

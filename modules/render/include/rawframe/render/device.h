@@ -32,7 +32,16 @@ struct AdapterDescription {
     std::string name;
     /// A rasterizer running on the CPU.
     bool software = false;
+    /// Whether it takes BC-compressed textures (BC7 is the desktop form a
+    /// cooked texture may have, D253); asked for whenever it does.
+    bool blockCompression = false;
 };
+
+/// A request of the device's, as the rendering cluster names it to find its
+/// answer: Maul RHI's request id, index and generation.
+[[nodiscard]] constexpr std::uint64_t requestKey(std::uint32_t index1, std::uint32_t generation) noexcept {
+    return (std::uint64_t{index1} << 32U) | generation;
+}
 
 class Device {
 public:
@@ -53,6 +62,18 @@ public:
 
     /// The device, once ready; for the rendering cluster only.
     [[nodiscard]] mrhiDevice* native() const noexcept;
+
+    /// Takes every answer the device has for its requests (a frame done, a
+    /// pipeline made, a readback ready) and keeps each until its asker takes
+    /// it: one queue, several clients. Once a frame, and before looking for
+    /// an answer.
+    void pump();
+    /// The answer to `request`, taken: success, or the error that ended it;
+    /// none while it is owed.
+    [[nodiscard]] std::optional<result::Status> answer(std::uint64_t request);
+    /// Whether the device was lost: SPEC-0024's terminal failure of
+    /// presentation in generation 1.
+    [[nodiscard]] bool lost() const noexcept;
 
     struct State;
 
