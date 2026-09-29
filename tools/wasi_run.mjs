@@ -3,6 +3,7 @@
 // the host's environment, and the whole file system, as a native test has;
 // and, for a program that uses the web transport, a relay standing in for
 // the page's WebTransport (tools/web_transport_relay.mjs).
+import { noWindowPage } from './no_window_page.mjs';
 import { readFile } from 'node:fs/promises';
 import { WASI } from 'node:wasi';
 import { argv, env, exit } from 'node:process';
@@ -16,5 +17,6 @@ const relay = new WebTransportRelay();
 instance = await WebAssembly.instantiate(module, {
     wasi_snapshot_preview1: wasi.wasiImport,
     rawframe_web_transport: relay.importsFor(() => instance.exports.memory),
+    env: noWindowPage,
 });
 exit(wasi.start(instance));

@@ -6,6 +6,8 @@
 #                         the address and thread sanitizers, the web build
 #                         (wasm32 without threads, tests under Node), the web
 #                         page against the dedicated server over WebTransport,
+#                         a real browser playing from a canvas where Puppeteer
+#                         is installed,
 #                         and the tick budget (tools/bench.sh check) and the
 #                         web client's download and start budget
 #                         (tools/web_budget.sh check) once all pass
@@ -83,6 +85,23 @@ else
             tail -30 out/web-page.log; fail "web page"
         else
             grep '^page:' out/web-page.log
+        fi
+        # A real browser plays from a canvas (D250), where Puppeteer is
+        # installed: RAWFRAME_NODE_MODULES, or /opt/webtest/node_modules.
+        step "web play"
+        play_status=0
+        RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
+            tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
+            out/clang-development/hosts/dedicated_server/rawframe-server \
+            out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
+            out/wasm-development/third_party/maul-window/maul-window.mjs "$PWD" >out/web-play.log 2>&1 ||
+            play_status=$?
+        if [ "$play_status" -eq 77 ]; then
+            echo "web play skipped: no Puppeteer"
+        elif [ "$play_status" -ne 0 ]; then
+            tail -30 out/web-play.log; fail "web play"
+        else
+            grep '^page:' out/web-play.log
         fi
     fi
     # Measured last, alone, so the builds do not share the machine with it.

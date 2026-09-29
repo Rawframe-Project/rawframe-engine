@@ -1,12 +1,13 @@
 # Maul Unicode and Maul Window, vendored at the exact revisions recorded in
 # third_party/README.md and built by their own CMake, unchanged. Only a
 # client that has windows builds them: never the dedicated server's closure,
-# never the web build (the web backend is Emscripten's; the engine's web
-# client is wasm32-wasi), and not on Apple platforms, which have no backend
-# yet. Maul Window finds Maul Unicode through FetchContent; the source
-# directory below points it at the vendored copy, and nothing is fetched.
+# and not on Apple platforms, which have no backend yet. On the web (the
+# engine's wasm32-wasi client) the build also writes maul-window.mjs, the
+# page's side of the backend (Maul Window's mwin-0022). Maul Window finds
+# Maul Unicode through FetchContent; the source directory below points it
+# at the vendored copy, and nothing is fetched.
 set(RAWFRAME_MAUL_WINDOW OFF)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR WIN32)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(RAWFRAME_MAUL_WINDOW ON)
 endif()
 if(NOT RAWFRAME_MAUL_WINDOW)

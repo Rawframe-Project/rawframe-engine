@@ -2,11 +2,13 @@
 # whose exports a page's JavaScript calls. Built only for the web.
 rawframe_host(NAME web_client OUTPUT rawframe-web-client
     SOURCES src/main.cpp
-    DEPS host game_content input_kest network_web physics2d physics3d world_animation world_replication world_kest world_runtime
-         composition execution diagnostics result base
+    DEPS window_host window host game_content input_kest network_web physics2d physics3d world_animation world_replication
+         world_kest world_runtime composition execution diagnostics result base
 )
-# A reactor: no `main`; the page calls `_initialize`, then the exports.
-target_link_options(rawframe_host_web_client PRIVATE -mexec-model=reactor)
+# A reactor: no `main`; the page calls `_initialize`, then the exports. The
+# page's side of the window calls back into the client through its table
+# (Maul Window's mwin-0022).
+target_link_options(rawframe_host_web_client PRIVATE -mexec-model=reactor -Wl,--export-table)
 
 if(RAWFRAME_BUILD_TESTS)
     # Node plays the page: it holds a test game's files, starts the client,

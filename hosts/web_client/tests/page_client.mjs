@@ -2,6 +2,7 @@
 // imports (here the relay, tools/web_transport_relay.mjs), handed fetched
 // files, started, driven a frame at a time, and stopped. What a browser page
 // does, without the browser; the client is lent no file system.
+import { noWindowPage } from '../../../tools/no_window_page.mjs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { WASI } from 'node:wasi';
@@ -16,6 +17,7 @@ export class PageClient {
         instance = await WebAssembly.instantiate(module, {
             wasi_snapshot_preview1: wasi.wasiImport,
             rawframe_web_transport: relay.importsFor(() => instance.exports.memory),
+            env: noWindowPage,
         });
         wasi.initialize(instance);
         return new PageClient(instance.exports);

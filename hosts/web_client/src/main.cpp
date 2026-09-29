@@ -15,6 +15,16 @@
 //   rawframe_client_stop(client) -> an exit code (host::exitCode)
 //   rawframe_client_destroy(client)
 //   rawframe_allocate(size) -> memory the page writes into; rawframe_release
+//
+// Or the page lets a canvas run the client (D250): `play` instead of
+// `start` makes a window of a canvas and plays the player from its input,
+// and the window system's frames, not the page's, drive the Host:
+//
+//   rawframe_client_play(client, configuration, length) -> 0 or an exit code
+//   rawframe_client_ended(client) -> -1 while it plays, then its exit code
+//   rawframe_client_stop(client) -> -1: asks it to stop; `ended` says when
+//
+// A client that plays is destroyed once it has ended.
 
 #include "rawframe/composition/held_files.h"
 #include "rawframe/composition/registrar.h"
@@ -25,12 +35,15 @@
 #include "rawframe/network_web/registrar.h"
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/physics3d/registrar.h"
+#include "rawframe/window/windows.h"
+#include "rawframe/window_host/window_host.h"
 #include "rawframe/world_animation/registrar.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -77,6 +90,36 @@ struct Client {
     std::unique_ptr<host::Host> host;
     execution::SteadyClock clock;
     bool running = false;
+    /// A client that plays: the window's program, which outlives its run.
+    std::unique_ptr<window_host::WindowHost> player;
+    std::atomic<bool> stopRequested{false};
+
+    /// Takes the held files and the configuration: false when either is
+    /// refused.
+    bool prepare(std::string_view text) {
+        auto held = composition::HeldFiles::of(std::move(fetched));
+        auto parsed = composition::Configuration::parse(text);
+        if (!held.has_value() || !parsed.has_value()) {
+            return false;
+        }
+        files = std::move(*held);
+        configuration = std::move(*parsed);
+        return true;
+    }
+
+    [[nodiscard]] host::HostRequest request() {
+        return host::HostRequest{.role = composition::TargetRole::Client,
+                                 .platform = composition::Platform::Web,
+                                 .registrars = kRegistrars,
+                                 .configuration = &*configuration,
+                                 .log = {.write = &writeStandardOutput},
+                                 .stopRequested = &stopRequested,
+                                 .files = &files};
+    }
+
+    [[nodiscard]] bool used() const noexcept {
+        return host != nullptr || player != nullptr;
+    }
 };
 
 } // namespace
@@ -98,7 +141,7 @@ __attribute__((export_name("rawframe_client_create"))) Client* rawframeClientCre
 /// Holds one fetched file by its path; refused (1) once started.
 __attribute__((export_name("rawframe_client_hold"))) int rawframeClientHold(
     Client* client, const char* path, std::size_t pathLength, const std::byte* bytes, std::size_t length) {
-    if (client == nullptr || client->host != nullptr) {
+    if (client == nullptr || client->used()) {
         return 1;
     }
     client->fetched.emplace_back(std::string{path, pathLength}, std::vector<std::byte>{bytes, bytes + length});
@@ -109,22 +152,13 @@ __attribute__((export_name("rawframe_client_hold"))) int rawframeClientHold(
 /// it runs, otherwise how it ended.
 __attribute__((export_name("rawframe_client_start"))) int
 rawframeClientStart(Client* client, const char* configuration, std::size_t length) {
-    if (client == nullptr || client->host != nullptr) {
+    if (client == nullptr || client->used()) {
         return host::exitCode(host::HostExit::InvalidInvocation);
     }
-    auto held = composition::HeldFiles::of(std::move(client->fetched));
-    auto parsed = composition::Configuration::parse(std::string_view{configuration, length});
-    if (!held.has_value() || !parsed.has_value()) {
+    if (!client->prepare(std::string_view{configuration, length})) {
         return host::exitCode(host::HostExit::InvalidLaunchDescriptor);
     }
-    client->files = std::move(*held);
-    client->configuration = std::move(*parsed);
-    client->host = std::make_unique<host::Host>(host::HostRequest{.role = composition::TargetRole::Client,
-                                                                  .platform = composition::Platform::Web,
-                                                                  .registrars = kRegistrars,
-                                                                  .configuration = &*client->configuration,
-                                                                  .log = {.write = &writeStandardOutput},
-                                                                  .files = &client->files});
+    client->host = std::make_unique<host::Host>(client->request());
     // A refused start has ended already; its first iteration says so.
     client->running = client->host->iterate();
     return client->running ? 0 : host::exitCode(client->host->stop());
@@ -145,7 +179,38 @@ __attribute__((export_name("rawframe_client_frame"))) int rawframeClientFrame(Cl
     return 1;
 }
 
+/// Plays from a canvas with the configuration's text: 0 when it plays, or
+/// how it ended; ResourceUnavailable where there is no page to play in.
+__attribute__((export_name("rawframe_client_play"))) int
+rawframeClientPlay(Client* client, const char* configuration, std::size_t length) {
+    if (client == nullptr || client->used()) {
+        return host::exitCode(host::HostExit::InvalidInvocation);
+    }
+    if (!client->prepare(std::string_view{configuration, length})) {
+        return host::exitCode(host::HostExit::InvalidLaunchDescriptor);
+    }
+    client->player = std::make_unique<window_host::WindowHost>(client->request());
+    if (!window::run(*client->player, window::RunSettings{}).has_value() && !client->player->exit().has_value()) {
+        return host::exitCode(host::HostExit::ResourceUnavailable);
+    }
+    return 0;
+}
+
+/// How a client that plays ended, or -1 while it plays.
+__attribute__((export_name("rawframe_client_ended"))) int rawframeClientEnded(Client* client) {
+    if (client == nullptr || client->player == nullptr) {
+        return host::exitCode(host::HostExit::InvalidInvocation);
+    }
+    const auto kExit = client->player->exit();
+    return kExit.has_value() ? host::exitCode(*kExit) : -1;
+}
+
 __attribute__((export_name("rawframe_client_stop"))) int rawframeClientStop(Client* client) {
+    if (client != nullptr && client->player != nullptr) {
+        // The Host drains and ends at a frame of the window's.
+        client->stopRequested.store(true);
+        return -1;
+    }
     if (client == nullptr || client->host == nullptr) {
         return host::exitCode(host::HostExit::InvalidInvocation);
     }
@@ -154,6 +219,10 @@ __attribute__((export_name("rawframe_client_stop"))) int rawframeClientStop(Clie
 }
 
 __attribute__((export_name("rawframe_client_destroy"))) void rawframeClientDestroy(Client* client) {
+    // A client still playing is the window system's until it ends.
+    if (client != nullptr && client->player != nullptr && !client->player->exit().has_value()) {
+        return;
+    }
     delete client;
 }
 
