@@ -11,12 +11,15 @@
 // (D256): cooked, packed into a signed Build, installed in a library, and
 // named by a Composition, which the server reads from its disk and the page
 // holds, so the client reads its game, scenes, and textures from the Build.
+// Native players share the server with the page (D263): a bots process of
+// two runners joins from the same Composition over QUIC, pinning the
+// server's certificate, and plays beside the browser throughout.
 // Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser from where
 // Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test is
 // skipped (77).
 //
 // usage: browser_play.mjs <rawframe-server> <rawframe-web-client.wasm> <maul-window.mjs> <repository>
-//                         <rawframe-cook> <rawframe-build>
+//                         <rawframe-cook> <rawframe-build> <rawframe-bots>
 import { execFileSync, spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
@@ -28,7 +31,7 @@ import { extname, join, normalize, relative } from 'node:path';
 import { argv, env } from 'node:process';
 import { end } from './verdict.mjs';
 
-const [serverPath, wasmPath, windowPath, repository, cookPath, buildPath] = argv.slice(2);
+const [serverPath, wasmPath, windowPath, repository, cookPath, buildPath, botsPath] = argv.slice(2);
 let puppeteer;
 try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
@@ -94,6 +97,25 @@ if (fingerprint === undefined) {
     console.log('page: the server wrote no fingerprint');
     end(1);
 }
+
+// Two native runners from the same Composition, until asked to stop.
+await writeFile(join(work, 'bots.conf'), [
+    'host.iteration_rate = 120',
+    `kest.game_resource = ${gameResource}`,
+    `content.composition = ${join(work, 'runners.composition')}`,
+    `content.library = ${library}`,
+    'kest.plan_only = true',
+    `network.quic.pin_file = ${join(work, 'fingerprint')}`,
+    'bots.count = 2',
+    `bots.endpoint = 127.0.0.1:${port}`,
+    '',
+].join('\n'));
+const natives = spawn(botsPath, ['--config', join(work, 'bots.conf')], { stdio: ['ignore', 'pipe', 'inherit'], cwd: repository });
+process.on('exit', () => natives.kill('SIGKILL'));
+let nativeLog = '';
+natives.stdout.on('data', (chunk) => {
+    nativeLog += chunk;
+});
 
 // What the page fetches: its modules, the client, the window's page side,
 // the Composition's record, and the library, which it hands the client under
@@ -260,6 +282,8 @@ try {
     await browser.close();
     http.close();
 }
+natives.kill('SIGTERM');
+await new Promise((resolve) => natives.on('exit', resolve));
 server.kill('SIGTERM');
 await new Promise((resolve) => server.on('exit', resolve));
 await rm(work, { recursive: true, force: true });
@@ -267,7 +291,18 @@ await rm(work, { recursive: true, force: true });
 const sent = /"recordsSent":(\d+)/.exec(serverLog);
 const consumed = /"inputsConsumed":(\d+)/.exec(serverLog);
 console.log(`page: the server sent ${sent ? sent[1] : 'no'} records and consumed ${consumed ? consumed[1] : 'no'} inputs`);
+// The natives' side, and the players the server held at once: the page's
+// and the natives' together.
+const native = /"bots":\d+,"admitted":\d+[^}]*/.exec(nativeLog);
+const nativeField = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(native?.[0] ?? '')?.[1] ?? -1);
+const most = Number(/"mostConnections":(\d+)/.exec(serverLog)?.[1] ?? -1);
+console.log(`page: native bots admitted ${nativeField('admitted')}, confirmed ${nativeField('confirmed')}; ` +
+            `the server held ${most} players at once`);
+if (nativeField('admitted') !== 2 || nativeField('confirmed') <= 100 || nativeField('stalled') !== 0 || most < 3) {
+    verdict = 1;
+}
 if (verdict !== 0) {
     process.stdout.write(clientLog.slice(-6000));
+    process.stdout.write(nativeLog.slice(-3000));
 }
 end(verdict);
