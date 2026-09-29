@@ -73,9 +73,9 @@ fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], chara
     }
 }
 
-// A runner is drawn as its capsule is, over the level, its sheet's frame
-// stepped by its animator, facing the way it last ran: the region mirrored
-// to face left.
+// Where a runner is drawn (D260): as its capsule is, over the level, its
+// sheet's frame stepped by its animator, facing the way it last ran, the
+// region mirrored to face left.
 fn dress(count: i32, sticks: [controls.Stick], looks: [canvas.Sprite], animators: [animation.Animator]) {
     let i = 0
     while i < count {

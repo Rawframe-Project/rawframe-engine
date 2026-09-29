@@ -13,7 +13,7 @@ component 4a1a3d29-28e9-46fe-aae0-6bb3576ca9b3 runners.hit Hit
 component 5f3691c6-292c-4054-b868-142fe8a4448f runners.emitter Emitter
 component 3d8b6f21-7c4e-4a95-b0d3-e6f1a2c95b78 runners.penalty Penalty
 # The level's look, drawn by nothing here.
-component 1e7c5a93-4f28-4b6d-8a01-c3d9e2f4b7a5 runners.look rawframe.canvas.Sprite
+component 9d3e61b2-7a4c-4f05-b8e1-2c6a0f9d4b37 runners.tile rawframe.canvas.Sprite
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
