@@ -212,6 +212,20 @@ struct GameEffect {
 /// Effect kinds a game declares at most.
 inline constexpr std::size_t kMaximumEffects = 64;
 
+/// A guaranteed message (D266), from a `message <lower_snake name> <Kest
+/// type>` line: a value of the type a server system sends one player
+/// through `Messages.<name>(to, value)`, which arrives on the game's event
+/// lane after the tick commits, and which the player's present systems read
+/// through `ReceivedCount.<name>()` and `Received.<name>(index)`. It holds
+/// no entity: one would name the server's World.
+struct GameMessage {
+    std::string name;
+    std::string kestType;
+};
+
+/// Messages a game declares at most.
+inline constexpr std::size_t kMaximumMessages = 64;
+
 struct GameFieldValue {
     std::string field;
     std::string value;
@@ -415,6 +429,7 @@ struct GameDescription {
     std::vector<GameSystem> presented;
     std::vector<GamePresentation> presentation;
     std::vector<GameEffect> effects;
+    std::vector<GameMessage> messages;
     std::vector<GameSpawn> spawns;
     /// Scene documents (rawframe/scene/scene.h) whose entities the World
     /// starts with, beside any `spawn` lines, from `scene <file>` lines.

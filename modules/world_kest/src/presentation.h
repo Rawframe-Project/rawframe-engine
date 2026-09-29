@@ -17,6 +17,7 @@
 #include "rawframe/world/world.h"
 #include "rawframe/world_animation/animation.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_replication/messages.h"
 
 #include <cstdint>
 #include <memory>
@@ -56,12 +57,16 @@ public:
     ~ClientPresentation();
 
     /// One game tick of `mirror`, whose own player is `player` (or none
-    /// yet), bound afresh when it is another World than the last (a client
-    /// that made a new one). A present system that
-    /// is refused or runs out changes nothing that tick, as a system does,
-    /// and is counted and logged (`present_failed`) through `emitter`.
-    [[nodiscard]] result::Status
-    present(world::World& mirror, world::EntityHandle player, world::TickRate rate, diagnostics::Emitter emitter = {});
+    /// yet), its present systems reading the messages `arrived` for it
+    /// (D266), bound afresh when it is another World than the last (a
+    /// client that made a new one). A present system that is refused or
+    /// runs out changes nothing that tick, as a system does, and is counted
+    /// and logged (`present_failed`) through `emitter`.
+    [[nodiscard]] result::Status present(world::World& mirror,
+                                         world::EntityHandle player,
+                                         std::span<const world_replication::ReceivedMessage> arrived,
+                                         world::TickRate rate,
+                                         diagnostics::Emitter emitter = {});
 
     [[nodiscard]] PresentationStatistics statistics() const noexcept;
     [[nodiscard]] world_animation::AnimationStatistics animationStatistics() const noexcept;

@@ -155,7 +155,7 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
     const world::EntityHandle kLevel = *mirror.create();
     // The look attached, zeroed, to what has a stick, then dressed and sized
     // in line order, and checked; the player's view framed.
-    RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, {}, *world::TickRate::of(60)).has_value());
     RAWFRAME_EXPECT(kLookOf(kRunner) != nullptr && kLookOf(kRunner)->texture == 7 &&
                     kLookOf(kRunner)->placed[4] == 2.0F && kLookOf(kRunner)->placed[5] == 1.0F &&
                     kLookOf(kLevel) == nullptr && kViewOf(kRunner) != nullptr && kViewOf(kRunner)->height == 8.0F &&
@@ -163,14 +163,14 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
     // A runner that joins gets its look the next tick, but no view: it is
     // not this client's player. Nothing is attached twice.
     const world::EntityHandle kLate = kSpawn(1.0F);
-    RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, {}, *world::TickRate::of(60)).has_value());
     RAWFRAME_EXPECT(kLookOf(kLate) != nullptr && kLookOf(kLate)->placed[4] == 1.0F &&
                     kLookOf(kRunner)->placed[4] == 4.0F && kViewOf(kLate) == nullptr &&
                     kViewOf(kRunner)->offsetX == 2.0F && (*presentation)->statistics().attached == 3);
     // Past ten meters wide, the check runs out of fuel: its writes are
     // discarded, the others' stand.
     for (int tick = 0; tick < 4; ++tick) {
-        RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, *world::TickRate::of(60)).has_value());
+        RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, {}, *world::TickRate::of(60)).has_value());
     }
     RAWFRAME_EXPECT(kLookOf(kRunner)->placed[4] == 12.0F && kLookOf(kRunner)->placed[5] == 1.0F &&
                     (*presentation)->statistics().systemsFailed >= 1);
@@ -180,7 +180,7 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
     const world::EntityHandle kAgain = *again.create();
     Stick stick{.run = 1.0F};
     RAWFRAME_EXPECT(again.insertErased(kAgain, kStick, &stick).has_value());
-    RAWFRAME_EXPECT((*presentation)->present(again, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT((*presentation)->present(again, {}, {}, *world::TickRate::of(60)).has_value());
     RAWFRAME_EXPECT((*presentation)->statistics().bound == 2 &&
                     static_cast<const Sprite*>(again.getErased(kAgain, kLook))->texture == 7 &&
                     again.getErased(kAgain, kView) == nullptr);

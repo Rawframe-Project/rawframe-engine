@@ -440,3 +440,16 @@ RAWFRAME_TEST(HostileGameDescriptionsAreReadOrRefusedAtALine) {
     std::printf("  %zu of %zu read\n", read, read + refused);
     RAWFRAME_EXPECT(read > 0 && refused > 0);
 }
+
+RAWFRAME_TEST(MessagesAreDeclaredByLine) {
+    const std::string kHead = "program p.kest\n";
+    const auto kGame = parseGame(kHead + "message hurt Hurt\nmessage round_over rules.Round\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->messages.size() == 2 && kGame->messages[1].name == "round_over" &&
+                    kGame->messages[1].kestType == "rules.Round");
+    for (const std::string_view kLines : {"message hurt\n",
+                                          "message Hurt Hurt\n",
+                                          "message hurt Hurt extra\n",
+                                          "message hurt Hurt\nmessage hurt Other\n"}) {
+        RAWFRAME_EXPECT(!parseGame(kHead + std::string{kLines}).has_value());
+    }
+}

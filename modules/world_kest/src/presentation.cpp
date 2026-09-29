@@ -2,6 +2,7 @@
 
 #include "animation_doors.h"
 #include "effect_doors.h"
+#include "message_doors.h"
 #include "mod_services.h"
 #include "physics_doors.h"
 #include "rawframe/composition/composition.h"
@@ -43,6 +44,7 @@ struct ClientPresentation::State {
     PhysicsDoorContext physicsDoors;
     std::unique_ptr<ModServices> services;
     std::unique_ptr<EffectDoors> effects;
+    std::unique_ptr<MessageDoors> messages;
 
     /// What is bound to the mirror, made again for another one.
     const world::World* bound = nullptr;
@@ -104,6 +106,7 @@ struct ClientPresentation::State {
             RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors));
             RAWFRAME_TRY(services->addDoors(doors));
             RAWFRAME_TRY(effects->addDoors(doors));
+            RAWFRAME_TRY(messages->addDoors(doors));
             if (game.physics.has_value()) {
                 RAWFRAME_TRY(addPhysicsDoors(doors, game.physics->dimensions, &physicsDoors));
             }
@@ -198,12 +201,14 @@ result::Result<std::unique_ptr<ClientPresentation>> ClientPresentation::create(P
     // simulation's to emit: a present system emits none it keeps.
     state->services = std::make_unique<ModServices>(game, sizes);
     state->effects = std::make_unique<EffectDoors>(game, false);
+    RAWFRAME_TRY_ASSIGN(state->messages, MessageDoors::create(game, *settings.program, MessageDoors::Role::Read));
     state->settings = std::move(settings);
     return std::unique_ptr<ClientPresentation>{new ClientPresentation{std::move(state)}};
 }
 
 result::Status ClientPresentation::present(world::World& mirror,
                                            world::EntityHandle player,
+                                           std::span<const world_replication::ReceivedMessage> arrived,
                                            world::TickRate rate,
                                            diagnostics::Emitter emitter) {
     State& state = *state_;
@@ -212,6 +217,7 @@ result::Status ClientPresentation::present(world::World& mirror,
     }
     ++state.statistics.ticks;
     RAWFRAME_TRY(state.attach(mirror, player));
+    state.messages->arrived(arrived);
     RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, state.schedule->runTick(mirror, state.tick, rate, emitter));
     for (const world::TickReport::Failure& failure : kReport.failures) {
         ++state.statistics.systemsFailed;
@@ -272,7 +278,8 @@ public:
         if (phase != composition::HostPhase::RunWorlds || clients_ == nullptr) {
             return;
         }
-        const world_replication::ClientView kView = clients_->client(clients_->playerClient().value_or(0));
+        const std::size_t kClient = clients_->playerClient().value_or(0);
+        const world_replication::ClientView kView = clients_->client(kClient);
         if (kView.world == nullptr) {
             last_.reset();
             return;
@@ -285,8 +292,16 @@ public:
         const std::uint64_t kTicks = rate_.ticksIn(owed_);
         owed_.nanoseconds -=
             static_cast<std::int64_t>(kTicks * std::uint64_t{rate_.seconds} * 1'000'000'000U / rate_.ticks);
+        // What arrived since the last frame is read by its first tick; a
+        // frame with no tick leaves it for the next.
+        if (kTicks != 0) {
+            seenMessages_ = clients_->readMessages(kClient, seenMessages_, arrived_);
+        }
         for (std::uint64_t tick = 0; tick < std::min(kTicks, kMostTicksPerFrame); ++tick) {
-            const result::Status kPresented = presentation_->present(*kView.world, kView.owned, rate_, emitter_);
+            const std::span<const world_replication::ReceivedMessage> kArrived =
+                tick == 0 ? std::span{arrived_} : std::span<const world_replication::ReceivedMessage>{};
+            const result::Status kPresented =
+                presentation_->present(*kView.world, kView.owned, kArrived, rate_, emitter_);
             if (!kPresented.has_value()) {
                 emitter_.log(diagnostics::Severity::Warning,
                              kUnpresented,
@@ -325,6 +340,8 @@ private:
     std::optional<execution::MonotonicInstant> last_;
     execution::MonotonicDuration owed_;
     std::uint64_t dropped_ = 0;
+    std::uint64_t seenMessages_ = 0;
+    std::vector<world_replication::ReceivedMessage> arrived_;
     diagnostics::Emitter emitter_;
 };
 

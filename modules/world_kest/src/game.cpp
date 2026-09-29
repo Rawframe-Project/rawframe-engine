@@ -554,6 +554,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                "<hertz> <milliseconds>`, each name once, at most 64");
             }
             game.effects.push_back(std::move(*effect));
+        } else if (kKeyword == "message") {
+            if (kWords.size() != 3 || !lowerSnake(kWords[1]) ||
+                std::ranges::contains(game.messages, kWords[1], &GameMessage::name) ||
+                game.messages.size() >= kMaximumMessages) {
+                return badLine(
+                    number,
+                    WorldKestError::BadGameLine,
+                    "a message line is `message <lower_snake name> <Kest type>`, each name once, at most 64");
+            }
+            game.messages.push_back(GameMessage{.name = std::string{kWords[1]}, .kestType = std::string{kWords[2]}});
         } else if (kKeyword == "interest") {
             // interest <component> <field>... within <radius>
             double radius = 0;

@@ -5,6 +5,7 @@
 #include "game_files_participant.h"
 #include "game_persistence.h"
 #include "game_scenes.h"
+#include "message_doors.h"
 #include "mod_handlers.h"
 #include "mod_services.h"
 #include "physics_doors.h"
@@ -165,6 +166,11 @@ public:
             interpolated_.push_back(componentNamed(name)->id);
         }
         RAWFRAME_TRY_ASSIGN(persistence_, planPersistence(game_, layouts_));
+        // Both sides declare the game's message lane, so a process that
+        // plays elsewhere measures the messages too (D266). These systems,
+        // where they run, run where the World is authoritative: what they
+        // send goes out after the tick.
+        RAWFRAME_TRY_ASSIGN(messages_, MessageDoors::create(game_, *program_, MessageDoors::Role::Send));
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
             // not the game running here.
@@ -239,6 +245,8 @@ public:
         // A server presents nothing: its effect doors keep nothing (D219).
         effects_ = std::make_unique<EffectDoors>(game_, false);
         RAWFRAME_TRY(effects_->addDoors(doors));
+        RAWFRAME_TRY(messages_->addDoors(doors));
+        staging_[0] = messages_.get();
         for (const GameEffect& effect : game_.effects) {
             effectClasses_.push_back(effect.effectClass);
         }
@@ -259,7 +267,8 @@ public:
                                 .prefabs = prefabs_,
                                 .limits = {.heapBytes = static_cast<std::size_t>(kHeap), .fuelPerCall = kFuel},
                                 .systems = declarations,
-                                .timing = timing_.get()}));
+                                .timing = timing_.get(),
+                                .staging = staging_}));
         if (!game_.admission.empty()) {
             RAWFRAME_TRY_ASSIGN(const std::uint64_t kAdmissionHeap,
                                 configuration.unsignedInteger("kest.admission_heap_bytes", 1U << 20U));
@@ -469,6 +478,16 @@ public:
     std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept override {
         return interpolated_;
     }
+    std::size_t messageRecord() const noexcept override {
+        return messages_ != nullptr ? messages_->largest() : 0;
+    }
+
+    void takeMessages(std::vector<world_replication::PostedMessage>& into) noexcept override {
+        if (messages_ != nullptr) {
+            messages_->take(into);
+        }
+    }
+
     std::span<const world_replication::EffectClass> effectClasses() const noexcept override {
         return effectClasses_;
     }
@@ -903,6 +922,8 @@ private:
     /// Every Kest system's time per tick, the game's and its mods' (D210).
     std::unique_ptr<KestTiming> timing_;
     std::unique_ptr<EffectDoors> effects_;
+    std::unique_ptr<MessageDoors> messages_;
+    std::array<KestStaging*, 1> staging_{};
     std::vector<world_replication::EffectClass> effectClasses_;
     std::unique_ptr<KestSystems> systems_;
     /// Each taken mod's handlers, on its own machine.
