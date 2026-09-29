@@ -516,8 +516,8 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             break;
         }
         case network::SessionEventKind::Event:
-            // Replication declares no event lane, so its sessions refuse
-            // every lane stream and none arrives.
+            // A server declares no lane a client sends on, so its sessions
+            // refuse every such stream and none arrives.
             break;
         case network::SessionEventKind::Frame:
             if (kPeer != state.peers.end()) {
@@ -643,6 +643,22 @@ void ReplicationServer::noticeStopping() noexcept {
         static_cast<void>(
             state_->sessions->sendFrame(peer.connection, network::ControlFrame::GracefulClose, writer.written()));
     }
+}
+
+void ReplicationServer::post(const PostedMessage& message) noexcept {
+    State& state = *state_;
+    const auto kPeer = std::ranges::find_if(state.peers, [&](const auto& peer) {
+        return !peer.second.gone && peer.second.player == message.player;
+    });
+    // A record the transport cannot keep ends its connection there, which
+    // the next pump hears of: nothing sent reliably is dropped.
+    if (kPeer == state.peers.end() ||
+        !state.sessions->sendEvent(kPeer->second.connection, kGameMessageLane, message.kind, message.value)
+             .has_value()) {
+        ++state.statistics.messagesUndelivered;
+        return;
+    }
+    ++state.statistics.messagesSent;
 }
 
 world::EntityHandle ReplicationServer::player(network::ConnectionId connection) const noexcept {

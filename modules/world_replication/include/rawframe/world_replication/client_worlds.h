@@ -7,6 +7,7 @@
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/world/world.h"
+#include "rawframe/world_replication/messages.h"
 #include "rawframe/world_replication/prediction.h"
 
 #include <cstddef>
@@ -46,6 +47,14 @@ public:
     /// many are kept: a reader further behind misses the oldest. None by
     /// default.
     virtual std::uint64_t readEffects(std::size_t index, std::uint64_t seen, std::vector<EffectEvent>& into) noexcept {
+        static_cast<void>(index);
+        into.clear();
+        return seen;
+    }
+    /// Client `index`'s game messages (D266) after the first `seen`, oldest
+    /// first, as `readEffects` reads effects. None by default.
+    virtual std::uint64_t
+    readMessages(std::size_t index, std::uint64_t seen, std::vector<ReceivedMessage>& into) noexcept {
         static_cast<void>(index);
         into.clear();
         return seen;

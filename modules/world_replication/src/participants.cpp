@@ -56,6 +56,15 @@ network::SessionProfile sessionProfile(std::size_t sessions) {
                                    .admissionTimeout = execution::MonotonicDuration::fromSeconds(5)};
 }
 
+/// The event lanes both sides declare: the game's, when it sends messages
+/// (D266), its bound checked when the game loaded.
+std::vector<network::EventLaneDeclaration> lanesOf(const ReplicationPlan& plan) {
+    if (plan.messageRecord() == 0) {
+        return {};
+    }
+    return {gameMessageLane(plan.messageRecord())};
+}
+
 network::ProviderProfile providerProfile(std::size_t connections) {
     return network::ProviderProfile{.maximumConnections = connections,
                                     .maximumStreamsPerConnection = 8,
@@ -129,7 +138,8 @@ public:
                                                         .admitContext = this,
                                                         .maximumAdmitted = kPlayers,
                                                         .tickRateTicks = simulation_->rate().ticks,
-                                                        .tickRateSeconds = simulation_->rate().seconds}));
+                                                        .tickRateSeconds = simulation_->rate().seconds,
+                                                        .lanes = lanesOf(*plan)}));
         // State at most so many times a second, every tick by default; the
         // period is the whole number of ticks that keeps under the rate
         // (D222).
@@ -191,6 +201,12 @@ public:
             server_->forgetWorld();
         }
         server_->pump(*simulation_->world(), simulation_->tick());
+        // What the ticks since the last pump sent, now they have committed.
+        posted_.clear();
+        plan_->takeMessages(posted_);
+        for (const PostedMessage& message : posted_) {
+            server_->post(message);
+        }
         // A detection for operators and the game, never a response (SPEC-0041).
         for (const Divergence& divergence : server_->takeDivergences()) {
             emitter_.log(diagnostics::Severity::Warning,
@@ -250,7 +266,9 @@ public:
                       diagnostics::field("inputsLimited", kStatistics.inputsLimited),
                       diagnostics::field("struckOut", sessions_->struckOut()),
                       diagnostics::field("admissionsRefused", refused_),
-                      diagnostics::field("mostConnections", static_cast<std::uint64_t>(mostConnections_))});
+                      diagnostics::field("mostConnections", static_cast<std::uint64_t>(mostConnections_)),
+                      diagnostics::field("messagesSent", kStatistics.messagesSent),
+                      diagnostics::field("messagesUndelivered", kStatistics.messagesUndelivered)});
     }
 
 private:
@@ -285,6 +303,7 @@ private:
     std::uint64_t refused_ = 0;
     /// The most players connected at once.
     std::size_t mostConnections_ = 0;
+    std::vector<PostedMessage> posted_;
     std::set<world_runtime::PlayerIdentity> admitting_;
     bool noticed_ = false;
     std::string endpoint_;
@@ -304,6 +323,31 @@ result::Result<composition::ParticipantOwner> makeServer(composition::Participan
     }
     return composition::ParticipantOwner{participant.release()};
 }
+
+/// A client's game messages for presentation to read, as EffectQueue keeps
+/// effects: the latest kMessagesKept, each read once by each reader's count.
+class MessageQueue final : public MessageSink {
+public:
+    static constexpr std::size_t kMessagesKept = 1024;
+
+    void deliver(ReceivedMessage message) noexcept override {
+        messages_[count_ % kMessagesKept] = std::move(message);
+        ++count_;
+    }
+
+    std::uint64_t read(std::uint64_t seen, std::vector<ReceivedMessage>& into) const noexcept {
+        into.clear();
+        const std::uint64_t kOldest = count_ > kMessagesKept ? count_ - kMessagesKept : 0;
+        for (std::uint64_t number = std::max(seen, kOldest); number < count_; ++number) {
+            into.push_back(messages_[number % kMessagesKept]);
+        }
+        return count_;
+    }
+
+private:
+    std::vector<ReceivedMessage> messages_ = std::vector<ReceivedMessage>(kMessagesKept);
+    std::uint64_t count_ = 0;
+};
 
 /// A client's effect events for presentation to read: the latest
 /// kEffectsKept, each numbered in order, so every reader reads each once
@@ -347,6 +391,7 @@ struct Bot {
     /// Declared before the client that points at them, so they outlive it.
     std::unique_ptr<Predictor> predictor;
     std::unique_ptr<EffectQueue> effects;
+    std::unique_ptr<MessageQueue> messages;
     std::unique_ptr<ReplicationClient> client;
     world::Pcg32 random;
     /// The game's input mapping with a hand on its controls, when the game
@@ -388,6 +433,15 @@ public:
             return seen;
         }
         return bots_[index].effects->read(seen, into);
+    }
+
+    std::uint64_t
+    readMessages(std::size_t index, std::uint64_t seen, std::vector<ReceivedMessage>& into) noexcept override {
+        if (index >= bots_.size() || bots_[index].messages == nullptr) {
+            into.clear();
+            return seen;
+        }
+        return bots_[index].messages->read(seen, into);
     }
 
     [[nodiscard]] std::optional<std::size_t> playerClient() const noexcept override {
@@ -462,9 +516,13 @@ public:
             Bot bot{.random =
                         world::deriveStream(world::RootSeed{kSeed + index}, "rawframe.replication.bots", "steer")};
             RAWFRAME_TRY_ASSIGN(bot.provider, transport->provider(providerProfile(1)));
-            RAWFRAME_TRY_ASSIGN(
-                bot.sessions,
-                network::Sessions::client(*bot.provider, context.clock(), {.profile = sessionProfile(1)}));
+            RAWFRAME_TRY_ASSIGN(bot.sessions,
+                                network::Sessions::client(*bot.provider,
+                                                          context.clock(),
+                                                          {.profile = sessionProfile(1), .lanes = lanesOf(*plan_)}));
+            if (plan_->messageRecord() != 0) {
+                bot.messages = std::make_unique<MessageQueue>();
+            }
             bot.world = std::make_unique<world::World>(registry_);
             std::optional<PredictionSettings> prediction;
             if (kPredicting) {
@@ -512,7 +570,8 @@ public:
                                                                     .input = plan_->input(),
                                                                     .perception = plan_->perceivedInput(),
                                                                     .prediction = prediction,
-                                                                    .interpolation = interpolation}));
+                                                                    .interpolation = interpolation,
+                                                                    .messages = bot.messages.get()}));
             if (plan_->input()) {
                 bot.input.assign(plan_->input()->size, std::byte{0});
             }
@@ -594,6 +653,7 @@ public:
         std::uint64_t ticketInvalid = 0;
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
+        std::uint64_t messagesReceived = 0;
         PredictionStatistics predicted;
         InterpolationStatistics interpolated;
         std::uint64_t handed = 0;
@@ -608,6 +668,7 @@ public:
             ticketInvalid += bot.client->rejection() == network::RejectReason::TicketInvalid ? 1 : 0;
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
+            messagesReceived += bot.client->statistics().messagesReceived;
             const PredictionStatistics kBot = bot.client->predictionStatistics();
             predicted.predictedTicks += kBot.predictedTicks;
             predicted.confirmed += kBot.confirmed;
@@ -648,6 +709,7 @@ public:
                       diagnostics::field("effectsSuppressed", predicted.effectsSuppressed),
                       diagnostics::field("effectsCancelled", predicted.effectsCancelled),
                       diagnostics::field("effectsDropped", predicted.effectsDropped),
+                      diagnostics::field("messagesReceived", messagesReceived),
                       diagnostics::field("blended", interpolated.blended),
                       diagnostics::field("shownNewest", interpolated.newest)});
     }

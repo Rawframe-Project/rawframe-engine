@@ -12,6 +12,7 @@
 #include "rawframe/world/schedule.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_replication/codec.h"
+#include "rawframe/world_replication/messages.h"
 #include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/records.h"
 #include "rawframe/world_runtime/players.h"
@@ -154,6 +155,10 @@ struct ServerReplicationStatistics {
     /// Input-lane records dropped unread past SPEC-0013's input ceilings
     /// (D225).
     std::uint64_t inputsLimited = 0;
+    /// Game messages sent on the game's lane, and those whose player was
+    /// not connected (D266).
+    std::uint64_t messagesSent = 0;
+    std::uint64_t messagesUndelivered = 0;
 };
 
 class ReplicationServer final : public world_runtime::SystemContributor, public InterestHistory {
@@ -195,6 +200,10 @@ public:
     /// The server is stopping: each player with an identity is told of as
     /// leaving, their entity still there.
     void leaveAll(world::World& world) noexcept;
+    /// A game message to its player's connection, on the game's lane, which
+    /// the sessions must declare; after the tick that sent it, never during
+    /// one. None goes to a player not connected.
+    void post(const PostedMessage& message) noexcept;
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
     /// Divergences found since last asked, the oldest first, at most 64; a

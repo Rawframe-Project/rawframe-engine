@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <utility>
 #include <vector>
@@ -540,8 +541,14 @@ void ReplicationClient::pump() {
             }
             break;
         case network::SessionEventKind::Event:
-            // Replication declares no event lane, so its sessions refuse
-            // every lane stream and none arrives.
+            // The game's lane is the one a client declares, and only when
+            // it has somewhere to put what arrives.
+            if (state.accept && event.eventLane == kGameMessageLane && state.settings.messages != nullptr &&
+                event.payloadType <= std::numeric_limits<std::uint32_t>::max()) {
+                ++state.statistics.messagesReceived;
+                state.settings.messages->deliver(
+                    ReceivedMessage{.kind = static_cast<std::uint32_t>(event.payloadType), .value = event.payload});
+            }
             break;
         case network::SessionEventKind::Rejected:
             state.rejection = event.reject.reason;

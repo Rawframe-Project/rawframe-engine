@@ -4,6 +4,7 @@
 #include "rawframe/network/admission.h"
 #include "rawframe/schema/component.h"
 #include "rawframe/world_replication/codec.h"
+#include "rawframe/world_replication/messages.h"
 #include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/prediction.h"
 #include "rawframe/world_replication/server.h"
@@ -43,6 +44,16 @@ public:
     /// (D219); none for a game without effects.
     [[nodiscard]] virtual std::span<const EffectClass> effectClasses() const noexcept {
         return {};
+    }
+    /// The largest of the game's messages, in bytes, or nought for a game
+    /// that sends none (D266).
+    [[nodiscard]] virtual std::size_t messageRecord() const noexcept {
+        return 0;
+    }
+    /// Appends the messages the game's systems sent since last asked, in
+    /// the order sent. Asked on the Host thread between ticks.
+    virtual void takeMessages(std::vector<PostedMessage>& into) noexcept {
+        static_cast<void>(into);
     }
     /// The components a client shows remote entities' values of between
     /// states; empty for a game that shows every state as it arrives.

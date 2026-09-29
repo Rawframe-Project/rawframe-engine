@@ -13,6 +13,7 @@
 #include "rawframe/world/world.h"
 #include "rawframe/world_replication/codec.h"
 #include "rawframe/world_replication/interpolation.h"
+#include "rawframe/world_replication/messages.h"
 #include "rawframe/world_replication/prediction.h"
 #include "rawframe/world_replication/records.h"
 #include "rawframe/world_replication/server.h"
@@ -41,6 +42,9 @@ struct ClientReplicationSettings {
     /// Showing remote entities between states; none shows each state as
     /// it arrives.
     std::optional<InterpolationSettings> interpolation;
+    /// Where the game's messages go (D266), when it sends any; the sessions
+    /// must declare its lane. Outlives the client.
+    MessageSink* messages = nullptr;
 };
 
 struct ClientReplicationStatistics {
@@ -54,6 +58,8 @@ struct ClientReplicationStatistics {
     std::uint64_t datagramsRefused = 0;
     std::uint64_t inputWindowsSent = 0;
     std::uint64_t acknowledgementsSent = 0;
+    /// Game messages received (D266).
+    std::uint64_t messagesReceived = 0;
 };
 
 class ReplicationClient {
