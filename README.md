@@ -2,11 +2,11 @@
 
 A performance-oriented, network-first engine for 2D and 3D games and real-time simulations. The core is C++23. Gameplay and tooling are written in [Kest](https://github.com/Rawframe-Project/kest), a deterministic, statically typed game language. Physics comes from [Maul2D](https://github.com/Rawframe-Project/maul2d) and [Maul3D](https://github.com/Rawframe-Project/maul3d).
 
-The engine is at the start of its first milestone, a headless, networked, Kest-scripted World with a dedicated server. There are no releases yet, and every surface is unstable.
+Its first milestone, a headless, networked, Kest-scripted World with a dedicated server, is done. Clients now play from a real window on the desktop and from a canvas in a browser, heard and felt through a gamepad, but nothing is drawn yet: the renderer waits for Maul RHI. There are no releases yet, and every surface is unstable.
 
 ## Building
 
-Requirements: CMake 3.28, Ninja, and GCC 13 or Clang 19 or newer (MSVC 17.10 on Windows).
+Requirements: CMake 3.28, Ninja, and GCC 14 or Clang 19 or newer (MSVC 17.10 on Windows). On Linux, the window module's backends need the development files of Wayland and X11: `libwayland-dev`, `wayland-protocols`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`, `libxcb1-dev`, `libxcb-randr0-dev`, `libxcb-xkb-dev`, `libxcb-cursor-dev`, and `libxcb-xinput-dev`.
 
 ```sh
 cmake --preset clang-development
@@ -23,8 +23,9 @@ Presets exist for `gcc` and `clang` in each of the three configurations (`debug`
 The full check needs, beyond GCC and Clang 20 with `clang-format-20`:
 
 - the web build's toolchain: `libc++-20-dev-wasm32`, `libclang-rt-20-dev-wasm32`, `wasi-libc`, `lld-20`, and Node.js 18 or later;
-- Python 3 with `python3-aioquic`, an independent HTTP/3 and WebTransport implementation that plays the browser in `network_quic`'s tests.
-- `brotli`, which compresses the web client as a server would send it for its download budget (`tools/web_budget.sh`).
+- Python 3 with `python3-aioquic`, an independent HTTP/3 and WebTransport implementation that plays the browser in `network_quic`'s tests;
+- `brotli`, which compresses the web client as a server would send it for its download budget (`tools/web_budget.sh`);
+- optionally `xvfb`, in whose display the desktop client plays a dedicated server (`client_plays_runners`), and Puppeteer with its browser under `/opt/webtest` (or `RAWFRAME_NODE_MODULES` and `PUPPETEER_CACHE_DIR`), with which a real browser plays from a canvas. Without them those tests are skipped.
 
 On Debian or Ubuntu, `apt-get install` installs each of them under the name given.
 
