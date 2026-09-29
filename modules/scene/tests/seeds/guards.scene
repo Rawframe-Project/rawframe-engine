@@ -1,0 +1,35 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "patrol.guard": "7dd55d31db417d51"
+  },
+  "entities": [
+    {
+      "id": "2197be45-b62c-4756-a4d6-744b05b97268",
+      "components": {
+        "patrol.guard": {
+          "posts": 3
+        }
+      }
+    },
+    {
+      "id": "82846218-af54-4389-ad03-70bff12f711b",
+      "components": {
+        "patrol.guard": {
+          "posts": 3
+        }
+      }
+    },
+    {
+      "id": "bfeb95e0-930d-4dce-981f-8de039ed77f4",
+      "components": {
+        "patrol.guard": {
+          "at": "Done",
+          "post": 3,
+          "posts": 3
+        }
+      }
+    }
+  ]
+}

@@ -32,6 +32,15 @@ std::string markText(std::uint64_t mark) {
     return std::string{digits.data(), digits.size()};
 }
 
+/// A Kest identifier, at most 64 bytes: what a case is named.
+bool caseNamed(std::string_view text) {
+    return !text.empty() && text.size() <= 64 && !(text[0] >= '0' && text[0] <= '9') &&
+           std::ranges::all_of(text, [](char each) {
+               return (each >= 'a' && each <= 'z') || (each >= 'A' && each <= 'Z') || (each >= '0' && each <= '9') ||
+                      each == '_';
+           });
+}
+
 /// A number's text as the profile writes it.
 bool canonicalNumber(std::string_view text) {
     auto parsed = document::parse(text);
@@ -67,6 +76,8 @@ bool fieldsInForm(const std::vector<SceneField>& fields, bool defaults) {
         case FieldValue::Kind::True:
         case FieldValue::Kind::Entity:
             return true;
+        case FieldValue::Kind::Case:
+            return caseNamed(field.value.caseName);
         }
         return false;
     });
@@ -179,14 +190,18 @@ result::Result<FieldValue> fieldOf(const Value& value, bool defaults) {
         }
         return invalid("a field at its default, false, is not written");
     case Value::Kind::String: {
+        // An id has dashes, which a name never has: the two never meet.
         const base::Bits128Parse kId = schema::parseStableIdText(*value.text());
-        if (!kId.parsed) {
-            return invalid("a text field is an entity of the document, by its id");
+        if (kId.parsed) {
+            return FieldValue{.kind = FieldValue::Kind::Entity, .entity = kId.value};
         }
-        return FieldValue{.kind = FieldValue::Kind::Entity, .entity = kId.value};
+        if (caseNamed(*value.text())) {
+            return FieldValue{.kind = FieldValue::Kind::Case, .caseName = std::string{*value.text()}};
+        }
+        return invalid("a text field is an entity of the document, by its id, or a case, by its name");
     }
     default:
-        return invalid("a field is a number, true, or an entity");
+        return invalid("a field is a number, true, an entity, or a case");
     }
 }
 
@@ -217,6 +232,9 @@ Value valueOf(const std::vector<SceneField>& fields) {
             break;
         case FieldValue::Kind::Entity:
             made.add(field.name, Value::string(idText(field.value.entity)));
+            break;
+        case FieldValue::Kind::Case:
+            made.add(field.name, Value::string(field.value.caseName));
             break;
         }
     }

@@ -275,3 +275,24 @@ RAWFRAME_TEST(HostileScenesReadOnlyAsTheyWrite) {
     std::printf("  %d of 20000 read\n", accepted);
     RAWFRAME_EXPECT(accepted > 0);
 }
+
+RAWFRAME_TEST(ACaseIsWrittenByItsName) {
+    // D270: an enum's case, by its name; an id and a name never meet, since
+    // an id has dashes.
+    Scene scene = sample();
+    scene.entities[0].components[0].fields.insert(
+        scene.entities[0].components[0].fields.begin(),
+        SceneField{.name = "at", .value = {.kind = FieldValue::Kind::Case, .caseName = "Walking"}});
+    const auto kWritten = writeScene(scene);
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->find("\"at\": \"Walking\"") != std::string::npos);
+    const auto kRead = kWritten.has_value() ? readScene(*kWritten) : std::unexpected{kWritten.error().clone()};
+    RAWFRAME_EXPECT(kRead.has_value() && *kRead == scene);
+    for (const std::string_view kName : {"", "9lives", "a-b", "has space", "été"}) {
+        Scene broken = scene;
+        broken.entities[0].components[0].fields[0].value.caseName = std::string{kName};
+        RAWFRAME_EXPECT(refused(writeScene(broken)));
+    }
+    Scene tooLong = scene;
+    tooLong.entities[0].components[0].fields[0].value.caseName = std::string(65, 'A');
+    RAWFRAME_EXPECT(refused(writeScene(tooLong)));
+}

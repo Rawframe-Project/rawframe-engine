@@ -108,11 +108,15 @@ struct FieldValue {
         /// The truth value `false`: only in an override's `set`, where a
         /// default is a change.
         False,
+        /// A case of an enum, by its name (`caseName`), a Kest identifier
+        /// (D270). Which cases a field has is its program's to say.
+        Case,
     };
 
     Kind kind = Kind::Number;
     std::string number;
     base::Bits128 entity{};
+    std::string caseName;
 
     friend bool operator==(const FieldValue&, const FieldValue&) = default;
 };
