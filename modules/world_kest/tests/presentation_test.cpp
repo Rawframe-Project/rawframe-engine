@@ -144,7 +144,8 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
     for (int tick = 0; tick < 4; ++tick) {
         RAWFRAME_EXPECT((*presentation)->present(mirror, *world::TickRate::of(60)).has_value());
     }
-    RAWFRAME_EXPECT(kLookOf(kRunner)->placed[4] == 12.0F && kLookOf(kRunner)->placed[5] == 1.0F);
+    RAWFRAME_EXPECT(kLookOf(kRunner)->placed[4] == 12.0F && kLookOf(kRunner)->placed[5] == 1.0F &&
+                    (*presentation)->statistics().systemsFailed >= 1);
     // A new mirror (a client that made its World again) is bound afresh.
     world::World again{kRegistry};
     const world::EntityHandle kAgain = *again.create();

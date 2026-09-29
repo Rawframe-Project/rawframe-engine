@@ -21,6 +21,8 @@ namespace rawframe::world_kest {
 
 namespace {
 
+constexpr diagnostics::EventIdentity kPresentFailed{"world_kest", "present_failed"};
+
 const GameComponent* componentNamed(const GameDescription& game, std::string_view name) {
     const auto kFound = std::ranges::find(game.components, name, &GameComponent::name);
     return kFound == game.components.end() ? nullptr : &*kFound;
@@ -198,7 +200,16 @@ result::Status ClientPresentation::present(world::World& mirror, world::TickRate
     }
     ++state.statistics.ticks;
     RAWFRAME_TRY(state.attach(mirror));
-    RAWFRAME_TRY(state.schedule->runTick(mirror, state.tick, rate, emitter));
+    RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, state.schedule->runTick(mirror, state.tick, rate, emitter));
+    for (const world::TickReport::Failure& failure : kReport.failures) {
+        ++state.statistics.systemsFailed;
+        emitter.log(diagnostics::Severity::Warning,
+                    kPresentFailed,
+                    "a present system returned an error; its commands were discarded",
+                    {diagnostics::field("system", std::string_view{failure.system}),
+                     diagnostics::field("tick", kReport.tick.value),
+                     diagnostics::field("error", failure.error.description())});
+    }
     if (state.animation != nullptr) {
         RAWFRAME_TRY(state.animation->play(mirror, rate));
     }
@@ -289,6 +300,7 @@ public:
                       diagnostics::field("ticksDropped", dropped_),
                       diagnostics::field("attached", kPresented.attached),
                       diagnostics::field("bound", kPresented.bound),
+                      diagnostics::field("systemsFailed", kPresented.systemsFailed),
                       diagnostics::field("animationSteps", kAnimated.steps),
                       diagnostics::field("instancesMade", kAnimated.instancesMade),
                       diagnostics::field("animatorsRefused", kAnimated.animatorsRefused)});

@@ -39,6 +39,8 @@ struct PresentationStatistics {
     std::uint64_t ticks = 0;
     /// Presentation components attached to mirrored entities.
     std::uint64_t attached = 0;
+    /// Present systems refused or run out, each changing nothing that tick.
+    std::uint64_t systemsFailed = 0;
     /// Mirrors bound, one per World the client made.
     std::uint64_t bound = 0;
 };
@@ -56,7 +58,7 @@ public:
     /// One game tick of `mirror`, bound afresh when it is another World
     /// than the last (a client that made a new one). A present system that
     /// is refused or runs out changes nothing that tick, as a system does,
-    /// and says so through `emitter`.
+    /// and is counted and logged (`present_failed`) through `emitter`.
     [[nodiscard]] result::Status present(world::World& mirror, world::TickRate rate, diagnostics::Emitter emitter = {});
 
     [[nodiscard]] PresentationStatistics statistics() const noexcept;
