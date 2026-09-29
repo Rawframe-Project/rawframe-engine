@@ -228,13 +228,15 @@ try {
     const field = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(summary?.[0] ?? '')?.[1] ?? -1);
     const felt = /"code":"felt_summary"[^\n]*"effectsFelt":(\d+)/.exec(clientLog);
     console.log(`page: the player felt ${felt ? felt[1] : 'no'} effects`);
-    const drawn =
-        /"code":"canvas_summary"[^\n]*"spritesDrawn":(\d+)[^\n]*"unknownTextures":0,[^\n]*"texturesReady":(\d+)/.exec(
-            clientLog);
-    console.log(`page: the canvas drew ${drawn ? drawn[1] : 'no'} sprites with ${drawn ? drawn[2] : 'no'} textures`);
+    const drawn = /"code":"canvas_summary"[^\n]*"spritesDrawn":(\d+),"spritesAnimated":(\d+)[^\n]*"unknownTextures":0,[^\n]*"texturesReady":(\d+)/.exec(
+        clientLog);
+    // The server is dedicated and plays no presentation animator: a runner
+    // drawn past its sheet's first cell was animated by the page (D258).
+    console.log(`page: the canvas drew ${drawn ? drawn[1] : 'no'} sprites, ${drawn ? drawn[2] : 'no'} animated, ` +
+                `with ${drawn ? drawn[3] : 'no'} textures`);
     verdict = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
                       field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0 && drawn !== null &&
-                      Number(drawn[1]) > 0 && Number(drawn[2]) === 2
+                      Number(drawn[1]) > 0 && Number(drawn[2]) > 0 && Number(drawn[3]) === 2
                   ? 0
                   : 1;
 } catch (error) {

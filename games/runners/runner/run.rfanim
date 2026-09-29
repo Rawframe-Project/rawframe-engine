@@ -1,0 +1,45 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.clip",
+  "duration": 0.4,
+  "loop": "loop",
+  "tracks": [
+    {
+      "component": "1e7c5a934f284b6d8a01c3d9e2f4b7a5",
+      "field": "frame",
+      "channel": "discrete",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            1
+          ],
+          "interpolation": "step"
+        },
+        {
+          "time": 0.1,
+          "value": [
+            2
+          ],
+          "interpolation": "step"
+        },
+        {
+          "time": 0.2,
+          "value": [
+            3
+          ],
+          "interpolation": "step"
+        },
+        {
+          "time": 0.3,
+          "value": [
+            4
+          ],
+          "interpolation": "step"
+        }
+      ]
+    }
+  ],
+  "events": [],
+  "syncMarkers": []
+}

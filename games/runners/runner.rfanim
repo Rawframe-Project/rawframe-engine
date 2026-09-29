@@ -1,0 +1,136 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.graph",
+  "interface": {
+    "parameters": {
+      "jump": {
+        "parameter": "52b3000000000002",
+        "type": "float",
+        "default": 0,
+        "replication": "server_authoritative"
+      },
+      "run": {
+        "parameter": "52b3000000000001",
+        "type": "float",
+        "default": 0,
+        "replication": "server_authoritative"
+      }
+    }
+  },
+  "graph": {
+    "52b4000000000001": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "4d253652a926704529bdea7a6c82d0ea"
+      },
+      "inputs": {}
+    },
+    "52b4000000000002": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "5291af21077c8ddd2a09fb33b42db27c"
+      },
+      "inputs": {}
+    },
+    "52b4000000000003": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "9c951b3f2b2312ced33337821f13fdc0"
+      },
+      "inputs": {}
+    },
+    "52b4000000000004": {
+      "type": "rawframe/state_machine@1",
+      "params": {
+        "entry": "idle",
+        "transitions": [
+          {
+            "to": "air",
+            "priority": 3,
+            "conditions": [
+              {
+                "parameter": "52b3000000000002",
+                "comparison": "greater",
+                "value": 0.5
+              }
+            ]
+          },
+          {
+            "from": "air",
+            "to": "idle",
+            "conditions": [
+              {
+                "parameter": "52b3000000000002",
+                "comparison": "less_or_equal",
+                "value": 0.5
+              }
+            ]
+          },
+          {
+            "from": "idle",
+            "to": "run",
+            "priority": 1,
+            "conditions": [
+              {
+                "parameter": "52b3000000000001",
+                "comparison": "greater",
+                "value": 0.1
+              }
+            ]
+          },
+          {
+            "from": "idle",
+            "to": "run",
+            "conditions": [
+              {
+                "parameter": "52b3000000000001",
+                "comparison": "less",
+                "value": -0.1
+              }
+            ]
+          },
+          {
+            "from": "run",
+            "to": "idle",
+            "conditions": [
+              {
+                "parameter": "52b3000000000001",
+                "comparison": "less_or_equal",
+                "value": 0.1
+              },
+              {
+                "parameter": "52b3000000000001",
+                "comparison": "greater_or_equal",
+                "value": -0.1
+              }
+            ]
+          }
+        ]
+      },
+      "inputs": {
+        "air": {
+          "node": "52b4000000000001",
+          "output": "pose"
+        },
+        "idle": {
+          "node": "52b4000000000002",
+          "output": "pose"
+        },
+        "run": {
+          "node": "52b4000000000003",
+          "output": "pose"
+        }
+      }
+    },
+    "52b4000000000005": {
+      "type": "rawframe/output@1",
+      "params": {},
+      "inputs": {
+        "pose": {
+          "node": "52b4000000000004",
+          "output": "pose"
+        }
+      }
+    }
+  }
+}

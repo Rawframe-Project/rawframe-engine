@@ -65,3 +65,5 @@ grep -o '"code":"recording_summary".*' "$work/log.ndjson"
 grep -q '"code":"canvas_summary".*"spritesDrawn":[1-9][0-9]*,.*"unknownTextures":0,"overLimit":0,"mostDraws":2,' \
     "$work/log.ndjson"
 grep -q '"code":"canvas_summary".*"texturesReady":2,"texturesFailed":0,' "$work/log.ndjson"
+# Its runners ran through their sheets' frames (D258).
+grep -q '"code":"canvas_summary".*"spritesAnimated":[1-9]' "$work/log.ndjson"

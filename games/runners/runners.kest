@@ -4,6 +4,7 @@ module runners
 // Character2D) that run, jump, and shoot along the level.
 
 import controls
+import rawframe.animation
 import rawframe.canvas
 import rawframe.physics2d
 import rawframe.random
@@ -17,8 +18,14 @@ const RUNNER: u64 = 0x2ebcd16c10c5f6a4
 // The shot's sound (runners.game's `sound` line).
 const SHOT: u64 = 0x950e09337d03de69
 
-// What a runner looks like (runners.game's `texture` line).
+// What a runner looks like (runners.game's `texture` line): a sheet of six
+// cells in a row, standing, four strides, and in the air.
 const RUNNER_LOOK: u64 = 0xeddbc014cab63eb2
+const CELL: f32 = 0.16666667
+
+// The runner's animator (runners.game's `animator` line): where the runner
+// is drawn, it steps the sheet's frame from the runner's stick.
+const RUNNER_ANIMATOR: u64 = 0x4b1c7e29a05d3f86
 
 // Shots fired, shots that met another runner, the ticks until the next may
 // be fired, and the ticks this runner was hit on.
@@ -52,10 +59,8 @@ struct Age {
 }
 
 // A player's entity arrives with its components zeroed: here it becomes a
-// runner standing somewhere on the ground, drawn as its capsule is, over
-// the level.
-fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], characters: [physics2d.Character2D],
-        looks: [canvas.Sprite]) {
+// runner standing somewhere on the ground.
+fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], characters: [physics2d.Character2D]) {
     let i = 0
     while i < count {
         if bodies[i].width == 0.0 {
@@ -63,7 +68,28 @@ fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], chara
                                          0.4, 0.0, 0.0, 0.0, 0.0, 0.0)
             poses[i] = physics2d.Pose2D(random.unit(0) * 40.0 - 20.0, 1.3, 1.0, 0.0)
             characters[i] = physics2d.Character2D(0.7, 0.2, physics2d.AIRBORNE, 0.0, 0.0)
-            looks[i] = canvas.Sprite(RUNNER_LOOK, 0.0, 0.0, 1.0, 1.0, 0.6, 1.4, 0.5, 0.5, canvas.WHITE, 1)
+        }
+        i = i + 1
+    }
+}
+
+// A runner is drawn as its capsule is, over the level, its sheet's frame
+// stepped by its animator, facing the way it last ran: the region mirrored
+// to face left.
+fn dress(count: i32, sticks: [controls.Stick], looks: [canvas.Sprite], animators: [animation.Animator]) {
+    let i = 0
+    while i < count {
+        if looks[i].texture == u64(0) {
+            looks[i] = canvas.Sprite(RUNNER_LOOK, 0.0, 0.0, CELL, 1.0, 0.6, 1.4, 0.5, 0.5, canvas.WHITE, 1, u32(0), u32(6))
+            animators[i].graph = RUNNER_ANIMATOR
+        }
+        if sticks[i].run < -0.1 {
+            looks[i].u0 = CELL
+            looks[i].u1 = 0.0
+        }
+        if sticks[i].run > 0.1 {
+            looks[i].u0 = 0.0
+            looks[i].u1 = CELL
         }
         i = i + 1
     }

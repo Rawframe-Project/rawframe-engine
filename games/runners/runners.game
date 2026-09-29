@@ -17,7 +17,8 @@ component 8c4e2a17-5b90-4d3f-a6e8-1f7c9d0b2e53 runners.age Age
 component 3d8b6f21-7c4e-4a95-b0d3-e6f1a2c95b78 runners.penalty Penalty
 component 1e7c5a93-4f28-4b6d-8a01-c3d9e2f4b7a5 runners.look rawframe.canvas.Sprite
 
-system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character write runners.look with runners.stick random spawn before rawframe.physics2d.step
+system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
+system runners.dress simulation dress read runners.stick write runners.look write rawframe.animation.animator
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
 system runners.shoot simulation shoot read runners.stick read rawframe.physics2d.pose read rawframe.replication.perception write runners.score write runners.emitter before rawframe.physics2d.step
 system runners.hurt simulation hurt write runners.score read runners.hit entities
@@ -58,8 +59,8 @@ extension penalty service runners.penalty exclusive
 prefer penalty rawframe/runners-penalty
 extension aging replacement runners.age exclusive
 
-replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter runners.look
-player runners.stick runners.score runners.emitter runners.look rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
+replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character runners.stick runners.score runners.emitter runners.look rawframe.animation.animator
+player runners.stick runners.score runners.emitter runners.look rawframe.animation.animator rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.character rawframe.replication.perception
 input runners.stick perceived
 # A client makes its stick from its player's actions (runners.actions) with
 # sample.kest; bots press the same keys and buttons.
@@ -85,6 +86,9 @@ locale en
 
 # What a client draws (D254): runners (runner.png) over the level's tiles
 # (tiles.png), through a camera 12 meters tall following its own runner.
+# Where a runner is drawn, its animator (runner.rfanim) steps its sheet's
+# frame from its stick: standing, running, or in the air (D258).
+animator 4b1c7e29a05d3f86 runner.rfanim parameters runners.stick
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
 camera 12
