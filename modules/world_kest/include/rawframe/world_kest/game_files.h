@@ -44,6 +44,14 @@ struct GameText {
     base::Bits128 document{};
 };
 
+/// A texture a `texture` line names, by the identity the line gives it and
+/// the resource it is (D255).
+struct GameTextureResource {
+    std::uint64_t id = 0;
+    std::string path;
+    base::Bits128 texture{};
+};
+
 /// A scene a mod contributes to one of the game's points (D179): the mod's
 /// subject, the point, the scene's text, and its resource identity.
 struct GameModScene {
@@ -136,6 +144,14 @@ public:
     /// resources, and a dedicated server never does.
     [[nodiscard]] const std::vector<GameText>& texts() const noexcept {
         return texts_;
+    }
+    /// Every texture the description names, by its resource, in the order
+    /// of its lines: in development the identity its sidecar gives, which
+    /// must name `rawframe.texture`, and from content the one the record
+    /// names. Only the identities are read here; a client reads the
+    /// resources, and a dedicated server never does.
+    [[nodiscard]] const std::vector<GameTextureResource>& textures() const noexcept {
+        return textures_;
     }
     /// Every mesh the description names, decoded, by the identity its line
     /// gives it, in the order of its lines.
@@ -241,6 +257,7 @@ private:
     std::vector<Program> programs_;
     std::vector<physics3d::BodyMesh> meshes_;
     std::vector<GameText> texts_;
+    std::vector<GameTextureResource> textures_;
     std::vector<content::BuildReference> modBuilds_;
     std::vector<SetAsideClaim> setAside_;
     std::vector<GameModScene> modScenes_;

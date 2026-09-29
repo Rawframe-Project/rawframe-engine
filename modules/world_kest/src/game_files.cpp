@@ -221,6 +221,10 @@ void GameFiles::seal() {
         field(digest, text.path);
         field(digest, hexOf(text.document));
     }
+    for (const GameTextureResource& texture : textures_) {
+        field(digest, texture.path);
+        field(digest, hexOf(texture.texture));
+    }
     for (const Named& graph : graphs_) {
         field(digest, graph.name);
         field(digest, graph.text);
@@ -589,6 +593,18 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
         }
         game.texts_.push_back(GameText{.path = text, .document = (*kSidecarRead)->id.value});
     }
+    // Each texture, by the resource its sidecar names.
+    for (const GameTexture& texture : game.description_.textures) {
+        const auto kSidecarText = reader.read(texture.path + std::string{content::kSidecarSuffix});
+        const auto kSidecarRead =
+            kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
+        if (!kSidecarRead.has_value() || !kSidecarRead->has_value() ||
+            (*kSidecarRead)->importer != "rawframe.texture") {
+            return unreadable("a texture the game names has a sidecar naming rawframe.texture", texture.path);
+        }
+        game.textures_.push_back(
+            GameTextureResource{.id = texture.id, .path = texture.path, .texture = (*kSidecarRead)->id.value});
+    }
     RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesOf(reader));
     game.sources_.push_back(std::move(files));
     for (std::string& name : programNames(game.description_)) {
@@ -721,6 +737,14 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
             return invalid("the cooked description does not name the resource of a text document it names", path);
         }
         game.texts_.push_back(GameText{.path = path, .document = kText->document});
+    }
+    for (const GameTexture& texture : game.description_.textures) {
+        const CookedGameTexture* const kTexture = kCooked.texture(texture.path);
+        if (kTexture == nullptr) {
+            return invalid("the cooked description does not name the resource of a texture it names", texture.path);
+        }
+        game.textures_.push_back(
+            GameTextureResource{.id = texture.id, .path = texture.path, .texture = kTexture->texture});
     }
     for (const GameAnimator& animator : game.description_.animators) {
         const CookedGameAnimator* const kAnimator = kCooked.animator(animator.path);

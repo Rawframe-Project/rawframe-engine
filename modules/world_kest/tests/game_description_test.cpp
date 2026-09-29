@@ -340,6 +340,28 @@ RAWFRAME_TEST(TextLinesNameDocumentsByTheirSidecars) {
     std::filesystem::remove_all(kDirectory);
 }
 
+RAWFRAME_TEST(TexturesAreNamedByTheirSidecars) {
+    // In development, each by the identity its sidecar gives, which must
+    // name rawframe.texture; its bytes are not read here.
+    const auto kHeld = [](std::string_view importer) {
+        std::vector<std::pair<std::string, std::string>> held = {
+            {"look.game", "program p.kest\ntexture 00000000000000b2 tiles.png\n"}, {"p.kest", "module p\n"}};
+        if (!importer.empty()) {
+            held.emplace_back("tiles.png.rfmeta",
+                              "{\n  \"schema\": 1,\n  \"resourceId\": \"a6478ea1aa844c683e293a9754feeb95\",\n  "
+                              "\"importer\": \"" +
+                                  std::string{importer} + "\"\n}\n");
+        }
+        return world_kest::GameFiles::fromHeld("look.game", std::move(held));
+    };
+    const auto kFiles = kHeld("rawframe.texture");
+    RAWFRAME_EXPECT(kFiles.has_value() && kFiles->textures().size() == 1 && kFiles->textures()[0].id == 0xB2 &&
+                    kFiles->textures()[0].path == "tiles.png" &&
+                    kFiles->textures()[0].texture == base::parseBits128Hex("a6478ea1aa844c683e293a9754feeb95").value);
+    RAWFRAME_EXPECT(!kHeld("rawframe.mesh").has_value());
+    RAWFRAME_EXPECT(!kHeld("").has_value());
+}
+
 RAWFRAME_TEST(HostileGameDescriptionsAreReadOrRefusedAtALine) {
     // A game's description comes with content a client fetched, from a
     // publisher the player may never have met.
