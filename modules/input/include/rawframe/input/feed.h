@@ -4,7 +4,9 @@
 // devices that came and went, their control events, and the moments every
 // held control was let go. A client host writes it from its platform's
 // records between Host iterations; a player's input source delivers it to
-// its mapper at the player's tick. Nothing here knows a window system.
+// its mapper at the player's tick. The other way, what the client asks its
+// devices to feel waits for the host to take it (D251). Nothing here knows
+// a window system.
 
 #include "rawframe/input/controls.h"
 #include "rawframe/input/mapper.h"
@@ -35,12 +37,26 @@ public:
     /// and its events count as unpaired there.
     void deliver(Mapper& mapper, PlayerSlot player);
 
+    /// Asks a device to feel a haptic. One still waiting for the same
+    /// device is replaced, as the device would replace it; past
+    /// `kMostFelt` devices waiting, the command is dropped.
+    void feel(const HapticCommand& command);
+    /// The haptic commands waiting, oldest first, into `into`, cleared
+    /// first; none wait after.
+    void takeFelt(std::vector<HapticCommand>& into);
+
+    static constexpr std::size_t kMostFelt = 64;
+
     /// Control events dropped for want of room since the feed was made.
     [[nodiscard]] std::uint64_t dropped() const noexcept {
         return dropped_;
     }
     [[nodiscard]] std::size_t waiting() const noexcept {
         return records_.size();
+    }
+    /// Haptic commands dropped for want of room.
+    [[nodiscard]] std::uint64_t feltDropped() const noexcept {
+        return feltDropped_;
     }
 
 private:
@@ -61,6 +77,8 @@ private:
     std::size_t capacity_;
     std::vector<Record> records_;
     std::uint64_t dropped_ = 0;
+    std::vector<HapticCommand> felt_;
+    std::uint64_t feltDropped_ = 0;
 };
 
 } // namespace rawframe::input

@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <vector>
 
 namespace rawframe::input {
 
@@ -53,6 +54,21 @@ struct Edge {
     std::size_t action = 0;
     bool pressed = false;
     std::uint32_t ordinal = 0;
+};
+
+/// A haptic output asked for (D251): its amplitude from nought to one, its
+/// frequency in hertz (nought leaves it to the device), and how long.
+/// Asking again before it ends replaces it: the latest wins.
+struct Haptic {
+    float amplitude = 1;
+    float frequency = 0;
+    std::uint32_t milliseconds = 0;
+};
+
+/// What one device is asked to feel.
+struct HapticCommand {
+    DeviceId device;
+    Haptic haptic;
 };
 
 /// SPEC-0029's named limit points for the runtime.
@@ -124,6 +140,11 @@ public:
     // The frame domain: the state now, and the edges since the last frame.
     [[nodiscard]] const ActionState& current(PlayerSlot player, std::size_t action) const noexcept;
     [[nodiscard]] std::span<const Edge> frameEdges(PlayerSlot player) const noexcept;
+
+    /// Haptic output `haptic` of `player`, felt: a command for each device
+    /// paired to the player of a class the output's bindings name, appended
+    /// to `into`. None for an output or player the mapper does not have.
+    void feel(PlayerSlot player, std::size_t haptic, const Haptic& felt, std::vector<HapticCommand>& into) const;
 
     [[nodiscard]] const MapperStatistics& statistics() const noexcept;
 

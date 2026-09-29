@@ -76,6 +76,26 @@ struct Action {
     std::vector<Binding> bindings;
 };
 
+/// Where a haptic output is felt: every device of one class paired to the
+/// player, by one slot as an action's bindings are. Gamepads only in
+/// generation 1, felt through their grips' motors (D251).
+struct HapticBinding {
+    std::uint32_t slot = 0;
+    DeviceClass device = DeviceClass::Gamepad;
+};
+
+/// An output action (ADR-0037's haptics as ADR-0081 shapes it): a feeling
+/// the game asks for by name, with its amplitude, frequency, and duration
+/// given each time, felt on the devices its bindings name.
+struct HapticOutput {
+    /// Durable identity, as an action's.
+    std::uint64_t id = 0;
+    std::string name;
+    std::string displayName;
+    std::string group;
+    std::vector<HapticBinding> bindings;
+};
+
 struct Context {
     std::uint64_t id = 0;
     std::string name;
@@ -90,11 +110,13 @@ struct ActionSet {
     std::vector<Context> contexts;
     /// Controls the product keeps for itself; no override may bind them.
     std::vector<Control> reserved;
+    std::vector<HapticOutput> haptics;
 
     /// The index of the action of that name, or of that identity.
     [[nodiscard]] std::optional<std::size_t> actionNamed(std::string_view name) const noexcept;
     [[nodiscard]] std::optional<std::size_t> actionWithId(std::uint64_t id) const noexcept;
     [[nodiscard]] std::optional<std::size_t> contextNamed(std::string_view name) const noexcept;
+    [[nodiscard]] std::optional<std::size_t> hapticNamed(std::string_view name) const noexcept;
 };
 
 /// SPEC-0029's named limit points for an action set. Values are the
@@ -102,6 +124,7 @@ struct ActionSet {
 struct ActionSetLimits {
     std::size_t maximumActions = 256;
     std::size_t maximumContexts = 64;
+    std::size_t maximumHaptics = 64;
     std::size_t maximumSlotsPerDeviceClass = 4;
     std::size_t maximumNameLength = 64;
     std::size_t maximumDisplayLength = 128;
@@ -109,7 +132,9 @@ struct ActionSetLimits {
 
 /// Reads an `input.actions` document of format version 1, in SPEC-0029's
 /// order: canonical bytes, the version, each record's fields, identities
-/// and names, controls and composites, ranges, references, limits. Refusals
+/// and names, controls and composites, ranges, references, limits. Haptic
+/// outputs are an optional `haptics` list of `hapticId`, `name`,
+/// `displayName`, `group`, and `bindings` of `slot` and `device` (D251). Refusals
 /// are `rawframe.document` errors naming the field by its path.
 [[nodiscard]] result::Result<ActionSet> readActionSet(std::string_view text, const ActionSetLimits& limits = {});
 

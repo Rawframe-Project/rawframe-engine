@@ -423,6 +423,20 @@ const ActionSet& Mapper::actions() const noexcept {
     return state_->set;
 }
 
+void Mapper::feel(PlayerSlot player, std::size_t haptic, const Haptic& felt, std::vector<HapticCommand>& into) const {
+    const State& state = *state_;
+    if (player.value >= state.players.size() || haptic >= state.set.haptics.size()) {
+        return;
+    }
+    const std::vector<HapticBinding>& bindings = state.set.haptics[haptic].bindings;
+    for (const Device& device : state.devices) {
+        if (device.player == player.value &&
+            std::ranges::contains(bindings, device.deviceClass, &HapticBinding::device)) {
+            into.push_back(HapticCommand{.device = device.id, .haptic = felt});
+        }
+    }
+}
+
 result::Status Mapper::pair(DeviceId device, DeviceClass deviceClass, PlayerSlot player) {
     State& state = *state_;
     if (player.value >= state.players.size()) {

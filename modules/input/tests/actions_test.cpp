@@ -115,6 +115,22 @@ constexpr std::string_view kSet = R"({
       "device": "keyboard",
       "physicalKey": "escape"
     }
+  ],
+  "haptics": [
+    {
+      "hapticId": "c3d4e5f607182930",
+      "name": "thump",
+      "displayName": "Landing",
+      "bindings": [
+        {
+          "device": "gamepad"
+        }
+      ]
+    },
+    {
+      "hapticId": "d4e5f60718293a4b",
+      "name": "buzz"
+    }
   ]
 }
 )";
@@ -173,6 +189,10 @@ RAWFRAME_TEST(AnActionSetReads) {
                     set.contexts[0].textEditGated);
     RAWFRAME_EXPECT(set.contexts[1].priority == 10 && !set.contexts[1].textEditGated);
     RAWFRAME_EXPECT(set.reserved[0] == *controlNamed(DeviceClass::Keyboard, "escape"));
+    RAWFRAME_EXPECT(set.haptics.size() == 2 && set.haptics[0].id == 0xc3d4e5f607182930ULL &&
+                    set.haptics[0].displayName == "Landing" && set.haptics[0].bindings.size() == 1 &&
+                    set.haptics[0].bindings[0].device == DeviceClass::Gamepad && set.haptics[1].bindings.empty());
+    RAWFRAME_EXPECT(set.hapticNamed("buzz") == 1 && !set.hapticNamed("jump"));
 }
 
 RAWFRAME_TEST(EveryRuleIsRefusedAtItsField) {
@@ -271,6 +291,21 @@ RAWFRAME_TEST(EveryRuleIsRefusedAtItsField) {
          DocumentError::Invalid,
          "$.contexts[0].actions[1]"},
         {"\"physicalKey\": \"escape\"", "\"control\": \"escape\"", DocumentError::Invalid, "$.reserved[0].control"},
+        // Haptic outputs (D251).
+        {"\"device\": \"gamepad\"\n        }\n      ]\n    },\n    {\n      \"hapticId\"",
+         "\"device\": \"keyboard\"\n        }\n      ]\n    },\n    {\n      \"hapticId\"",
+         DocumentError::Invalid,
+         "$.haptics[0].bindings[0].device"},
+        {"\"d4e5f60718293a4b\"", "\"0f3a9c2e7b1d4e58\"", DocumentError::Invalid, "$.haptics[1].hapticId"},
+        {"\"name\": \"buzz\"", "\"name\": \"thump\"", DocumentError::Invalid, "$.haptics[1].name"},
+        {"\"name\": \"buzz\"",
+         "\"name\": \"buzz\",\n      \"bindings\": []",
+         DocumentError::NotCanonical,
+         "$.haptics[1].bindings"},
+        {"\"name\": \"buzz\"",
+         "\"name\": \"buzz\",\n      \"motor\": \"grips\"",
+         DocumentError::Invalid,
+         "$.haptics[1].motor"},
     };
     RAWFRAME_EXPECT(refusalOf(std::string{kSet}) == std::pair(DocumentError{}, std::string{}));
     for (const Case& each : kCases) {

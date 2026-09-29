@@ -347,3 +347,38 @@ RAWFRAME_TEST(AFeedDeliversInOrderAndLetsGoWhenItOverflows) {
     mapper->commit(3);
     RAWFRAME_EXPECT(mapper->committed(kFirst, kMove).x == 0 && mapper->committed(kFirst, kMove).y == 0);
 }
+
+RAWFRAME_TEST(AHapticIsFeltOnThePlayersGamepadsAndTheLatestWins) {
+    ActionSet set = actionSet();
+    set.haptics.push_back(HapticOutput{.id = 90, .name = "thump", .bindings = {HapticBinding{}}});
+    set.haptics.push_back(HapticOutput{.id = 91, .name = "unbound"});
+    auto mapper = *Mapper::create(std::move(set), {.players = 2});
+    RAWFRAME_EXPECT(mapper->pair(kKeyboard, DeviceClass::Keyboard, kFirst).has_value() &&
+                    mapper->pair(kPad, DeviceClass::Gamepad, kFirst).has_value() &&
+                    mapper->pair(kSecondPad, DeviceClass::Gamepad, kSecond).has_value());
+    std::vector<HapticCommand> commands;
+    const Haptic kFelt{.amplitude = 0.5F, .frequency = 80, .milliseconds = 120};
+    mapper->feel(kFirst, 0, kFelt, commands);
+    // The first player's pad only: not the keyboard, not the other's pad.
+    RAWFRAME_EXPECT(commands.size() == 1 && commands[0].device == kPad && commands[0].haptic.amplitude == 0.5F &&
+                    commands[0].haptic.milliseconds == 120);
+    mapper->feel(kFirst, 1, kFelt, commands);
+    mapper->feel(kFirst, 2, kFelt, commands);
+    mapper->feel(PlayerSlot{5}, 0, kFelt, commands);
+    RAWFRAME_EXPECT(commands.size() == 1);
+    // A feed holds one command a device, the latest.
+    Feed feed;
+    feed.feel(commands[0]);
+    feed.feel({.device = kPad, .haptic = {.amplitude = 1, .milliseconds = 40}});
+    feed.feel({.device = kSecondPad, .haptic = kFelt});
+    std::vector<HapticCommand> taken;
+    feed.takeFelt(taken);
+    RAWFRAME_EXPECT(taken.size() == 2 && taken[0].device == kPad && taken[0].haptic.amplitude == 1 &&
+                    taken[0].haptic.milliseconds == 40 && taken[1].device == kSecondPad);
+    feed.takeFelt(taken);
+    RAWFRAME_EXPECT(taken.empty() && feed.feltDropped() == 0);
+    for (std::uint32_t each = 0; each <= Feed::kMostFelt; ++each) {
+        feed.feel({.device = DeviceId{100 + each}, .haptic = kFelt});
+    }
+    RAWFRAME_EXPECT(feed.feltDropped() == 1);
+}

@@ -20,8 +20,8 @@ using document::invalid;
 using document::Record;
 using document::Value;
 
-constexpr std::array<std::string_view, 5> kDocumentFields = {
-    "kind", "formatVersion", "actions", "contexts", "reserved"};
+constexpr std::array<std::string_view, 6> kDocumentFields = {
+    "kind", "formatVersion", "actions", "contexts", "reserved", "haptics"};
 constexpr std::array<std::string_view, 9> kActionFields = {"actionId",
                                                            "name",
                                                            "valueType",
@@ -51,6 +51,8 @@ constexpr std::array<std::string_view, 4> kQuadFields = {"up", "down", "left", "
 constexpr std::array<std::string_view, 5> kContextFields = {
     "contextId", "name", "priority", "actions", "textEditGated"};
 constexpr std::array<std::string_view, 3> kReservedFields = {"device", "physicalKey", "control"};
+constexpr std::array<std::string_view, 5> kHapticFields = {"hapticId", "name", "displayName", "group", "bindings"};
+constexpr std::array<std::string_view, 2> kHapticBindingFields = {"slot", "device"};
 
 std::string indexed(const std::string& path, std::size_t index) {
     return path + "[" + std::to_string(index) + "]";
@@ -338,6 +340,14 @@ document::Value bindingDocument(const Binding& binding, bool keyed) {
 
 namespace {
 
+result::Result<std::string> displayText(const Record& record, std::string_view field, const ActionSetLimits& limits) {
+    RAWFRAME_TRY_ASSIGN(const std::optional<std::string_view> kText, record.optionalText(field));
+    if (kText && (kText->empty() || kText->size() > limits.maximumDisplayLength)) {
+        return invalid(record.pathOf(field), "display text is not empty and within its limit");
+    }
+    return std::string{kText.value_or("")};
+}
+
 result::Result<Action> readAction(const Value& value, const std::string& path, const ActionSetLimits& limits) {
     RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kActionFields, path));
     Action action;
@@ -353,14 +363,8 @@ result::Result<Action> readAction(const Value& value, const std::string& path, c
     } else {
         return invalid(kRecord.pathOf("valueType"), "a value type is bool, axis1d, or axis2d");
     }
-    for (const auto& [kField, kInto] : {std::pair{std::string_view{"displayName"}, &action.displayName},
-                                        std::pair{std::string_view{"group"}, &action.group}}) {
-        RAWFRAME_TRY_ASSIGN(const std::optional<std::string_view> kText, kRecord.optionalText(kField));
-        if (kText && (kText->empty() || kText->size() > limits.maximumDisplayLength)) {
-            return invalid(kRecord.pathOf(kField), "display text is not empty and within its limit");
-        }
-        *kInto = std::string{kText.value_or("")};
-    }
+    RAWFRAME_TRY_ASSIGN(action.displayName, displayText(kRecord, "displayName", limits));
+    RAWFRAME_TRY_ASSIGN(action.group, displayText(kRecord, "group", limits));
     RAWFRAME_TRY_ASSIGN(const double kPress, kRecord.real("pressThreshold", 0.5));
     RAWFRAME_TRY_ASSIGN(const double kRelease, kRecord.real("releaseThreshold", kPress));
     if (!(kRelease >= 0 && kRelease <= kPress && kPress > 0 && kPress <= 1)) {
@@ -389,6 +393,42 @@ result::Result<Action> readAction(const Value& value, const std::string& path, c
         }
     }
     return action;
+}
+
+result::Result<HapticOutput> readHaptic(const Value& value, const std::string& path, const ActionSetLimits& limits) {
+    RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kHapticFields, path));
+    HapticOutput haptic;
+    RAWFRAME_TRY_ASSIGN(haptic.id, identityOf(kRecord, "hapticId"));
+    RAWFRAME_TRY_ASSIGN(haptic.name, nameOf(kRecord, "name", limits.maximumNameLength));
+    RAWFRAME_TRY_ASSIGN(haptic.displayName, displayText(kRecord, "displayName", limits));
+    RAWFRAME_TRY_ASSIGN(haptic.group, displayText(kRecord, "group", limits));
+    RAWFRAME_TRY_ASSIGN(const Value* bindings, kRecord.optional("bindings", Value::Kind::Array));
+    if (bindings == nullptr) {
+        return haptic;
+    }
+    if (bindings->items().empty()) {
+        return document::notCanonical(kRecord.pathOf("bindings"), "a field at its default is omitted");
+    }
+    for (std::size_t index = 0; index < bindings->items().size(); ++index) {
+        const std::string kPath = indexed(kRecord.pathOf("bindings"), index);
+        RAWFRAME_TRY_ASSIGN(const Record kBinding, Record::of(bindings->items()[index], kHapticBindingFields, kPath));
+        HapticBinding binding;
+        RAWFRAME_TRY_ASSIGN(binding.slot, readSlot(kBinding));
+        RAWFRAME_TRY_ASSIGN(binding.device, readDeviceClass(kBinding));
+        if (binding.device != DeviceClass::Gamepad) {
+            return invalid(kBinding.pathOf("device"), "a haptic output is felt on a gamepad");
+        }
+        if (std::ranges::any_of(haptic.bindings, [&binding](const HapticBinding& each) {
+                return each.device == binding.device && each.slot == binding.slot;
+            })) {
+            return invalid(kPath, "a slot of a device class holds one binding");
+        }
+        if (haptic.bindings.size() >= limits.maximumSlotsPerDeviceClass) {
+            return invalid(kPath, "more binding slots for one device class than allowed");
+        }
+        haptic.bindings.push_back(binding);
+    }
+    return haptic;
 }
 
 result::Result<Context>
@@ -456,6 +496,15 @@ std::optional<std::size_t> ActionSet::actionWithId(std::uint64_t id) const noexc
 std::optional<std::size_t> ActionSet::contextNamed(std::string_view name) const noexcept {
     for (std::size_t index = 0; index < contexts.size(); ++index) {
         if (contexts[index].name == name) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::size_t> ActionSet::hapticNamed(std::string_view name) const noexcept {
+    for (std::size_t index = 0; index < haptics.size(); ++index) {
+        if (haptics[index].name == name) {
             return index;
         }
     }
@@ -535,6 +584,26 @@ result::Result<ActionSet> readActionSet(std::string_view text, const ActionSetLi
                 return invalid(kPath, "a control is reserved once");
             }
             set.reserved.push_back(*kControl);
+        }
+    }
+    RAWFRAME_TRY_ASSIGN(const Value* haptics, kRecord.optional("haptics", Value::Kind::Array));
+    if (haptics != nullptr) {
+        if (haptics->items().empty()) {
+            return document::notCanonical(kRecord.pathOf("haptics"), "a field at its default is omitted");
+        }
+        if (haptics->items().size() > limits.maximumHaptics) {
+            return invalid(kRecord.pathOf("haptics"), "more haptic outputs than allowed");
+        }
+        for (std::size_t index = 0; index < haptics->items().size(); ++index) {
+            const std::string kPath = indexed(kRecord.pathOf("haptics"), index);
+            RAWFRAME_TRY_ASSIGN(HapticOutput haptic, readHaptic(haptics->items()[index], kPath, limits));
+            if (!identities.insert(haptic.id).second) {
+                return invalid(kPath + ".hapticId", "an identity is used once in a document");
+            }
+            if (set.hapticNamed(haptic.name)) {
+                return invalid(kPath + ".name", "a haptic output's name is used once");
+            }
+            set.haptics.push_back(std::move(haptic));
         }
     }
     return set;

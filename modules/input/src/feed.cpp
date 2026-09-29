@@ -65,4 +65,20 @@ void Feed::deliver(Mapper& mapper, PlayerSlot player) {
     records_.clear();
 }
 
+void Feed::feel(const HapticCommand& command) {
+    const auto kWaiting = std::ranges::find(felt_, command.device, &HapticCommand::device);
+    if (kWaiting != felt_.end()) {
+        kWaiting->haptic = command.haptic;
+    } else if (felt_.size() < kMostFelt) {
+        felt_.push_back(command);
+    } else {
+        ++feltDropped_;
+    }
+}
+
+void Feed::takeFelt(std::vector<HapticCommand>& into) {
+    into.clear();
+    into.swap(felt_);
+}
+
 } // namespace rawframe::input
