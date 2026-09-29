@@ -5,7 +5,8 @@
 //
 // Or it plays (D250): the window's side on the page, Maul Window's
 // maul-window.mjs, makes a window of a canvas, and the window's frames
-// drive the client until it ends.
+// drive the client until it ends. Its sound is the page's to take and play
+// (sound.mjs, D259).
 import { browserWasi } from './wasi.mjs';
 
 /** The window's imports where the page gives none: there is no page. */
@@ -88,6 +89,24 @@ export class WebClient {
     /** Asks a client that plays to stop; ended() says when it has. */
     requestStop() {
         this.exports.rawframe_client_stop(this.handle);
+    }
+
+    /** Frames a second of the client's sound. */
+    soundRate() {
+        return this.exports.rawframe_client_sound_rate(this.handle);
+    }
+
+    /**
+     * Takes up to `frames` frames of the client's sound, oldest first, as
+     * interleaved stereo samples copied out of its memory (D259).
+     */
+    takeSound(frames) {
+        const taken = this.exports.rawframe_client_sound_take(this.handle, frames);
+        if (taken === 0) {
+            return new Float32Array(0);
+        }
+        const at = this.exports.rawframe_client_sound_frames(this.handle);
+        return new Float32Array(this.exports.memory.buffer, at, taken * 2).slice();
     }
 
     /** Lets go of a client that played and ended. */

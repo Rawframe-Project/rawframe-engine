@@ -39,6 +39,8 @@
 #include "rawframe/window/windows.h"
 #include "rawframe/window_host/window_host.h"
 #include "rawframe/world_animation/registrar.h"
+#include "rawframe/world_audio/frame_sink.h"
+#include "rawframe/world_audio/registrar.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
@@ -60,9 +62,10 @@ namespace {
 using namespace rawframe;
 
 // A client playing a game from its content or held sources: the World, a
-// Kest game, 2D and 3D physics, the simulation's animation, and replication
-// over the page's WebTransport with the game's input sources.
-constexpr std::array<composition::RegistrarEntry, 10> kRegistrars = {
+// Kest game, 2D and 3D physics, the simulation's animation, replication
+// over the page's WebTransport with the game's input sources, and its sound,
+// which the page takes and plays (D259).
+constexpr std::array<composition::RegistrarEntry, 11> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
     composition::RegistrarEntry{"network_web", &network_web::registerParticipants, network_web::kScopes},
@@ -70,6 +73,7 @@ constexpr std::array<composition::RegistrarEntry, 10> kRegistrars = {
     composition::RegistrarEntry{"physics3d", &physics3d::registerParticipants, physics3d::kScopes},
     composition::RegistrarEntry{"render_canvas", &render_canvas::registerParticipants, render_canvas::kScopes},
     composition::RegistrarEntry{"world_animation", &world_animation::registerParticipants, world_animation::kScopes},
+    composition::RegistrarEntry{"world_audio", &world_audio::registerParticipants, world_audio::kScopes},
     composition::RegistrarEntry{"world_kest", &world_kest::registerParticipants, world_kest::kScopes},
     composition::RegistrarEntry{
         "world_replication", &world_replication::registerParticipants, world_replication::kScopes},
@@ -79,6 +83,41 @@ constexpr std::array<composition::RegistrarEntry, 10> kRegistrars = {
 // The most iterations one frame runs to catch up: a page hidden for a while
 // is not replayed in one frame.
 constexpr int kMostIterationsPerFrame = 4;
+
+/// The page's sound (D259): the frames the world audio player renders each
+/// frame, held until the page takes them for the browser's own audio
+/// thread. Half a second of room: a page that stops taking loses sound, not
+/// memory.
+class PageSound final : public world_audio::FrameSink {
+public:
+    static constexpr std::uint32_t kRate = 48'000;
+    static constexpr std::size_t kRoomFrames = kRate / 2;
+
+    [[nodiscard]] std::uint32_t rate() const noexcept override {
+        return kRate;
+    }
+    [[nodiscard]] std::size_t room() const noexcept override {
+        return kRoomFrames - (held_.size() / 2);
+    }
+    void write(std::span<const float> frames) noexcept override {
+        held_.insert(held_.end(),
+                     frames.begin(),
+                     frames.begin() + static_cast<std::ptrdiff_t>(std::min(frames.size(), room() * 2)));
+    }
+    /// Moves up to `frames` of the oldest into `taken`: how many it moved.
+    std::size_t take(std::size_t frames) {
+        const std::size_t kMoved = std::min(frames, held_.size() / 2);
+        taken.assign(held_.begin(), held_.begin() + static_cast<std::ptrdiff_t>(kMoved * 2));
+        held_.erase(held_.begin(), held_.begin() + static_cast<std::ptrdiff_t>(kMoved * 2));
+        return kMoved;
+    }
+
+    /// What the last `take` moved, interleaved stereo, for the page to copy.
+    std::vector<float> taken;
+
+private:
+    std::vector<float> held_;
+};
 
 bool writeStandardOutput(void*, std::span<const char> bytes) noexcept {
     const bool kWritten = std::fwrite(bytes.data(), 1, bytes.size(), stdout) == bytes.size();
@@ -94,6 +133,9 @@ struct Client {
     bool running = false;
     /// A client that plays: the window's program, which outlives its run.
     std::unique_ptr<window_host::WindowHost> player;
+    PageSound sound;
+    std::array<composition::LentCapability, 1> lent{composition::LentCapability{
+        world_audio::kFrameSink.name, composition::provideAs<world_audio::FrameSink>(sound)}};
     std::atomic<bool> stopRequested{false};
 
     /// Takes the held files and the configuration: false when either is
@@ -116,7 +158,8 @@ struct Client {
                                  .configuration = &*configuration,
                                  .log = {.write = &writeStandardOutput},
                                  .stopRequested = &stopRequested,
-                                 .files = &files};
+                                 .files = &files,
+                                 .lent = lent};
     }
 
     [[nodiscard]] bool used() const noexcept {
@@ -191,7 +234,8 @@ rawframeClientPlay(Client* client, const char* configuration, std::size_t length
     if (!client->prepare(std::string_view{configuration, length})) {
         return host::exitCode(host::HostExit::InvalidLaunchDescriptor);
     }
-    client->player = std::make_unique<window_host::WindowHost>(client->request());
+    client->player = std::make_unique<window_host::WindowHost>(
+        client->request(), window_host::WindowHostSettings{.lent = {client->lent.begin(), client->lent.end()}});
     if (!window::run(*client->player, window::RunSettings{}).has_value() && !client->player->exit().has_value()) {
         return host::exitCode(host::HostExit::ResourceUnavailable);
     }
@@ -218,6 +262,23 @@ __attribute__((export_name("rawframe_client_stop"))) int rawframeClientStop(Clie
     }
     client->running = false;
     return host::exitCode(client->host->stop());
+}
+
+/// The rate the page plays the client's sound at, in frames a second.
+__attribute__((export_name("rawframe_client_sound_rate"))) std::uint32_t rawframeClientSoundRate(Client* /*client*/) {
+    return PageSound::kRate;
+}
+
+/// Takes up to `frames` of the client's sound, oldest first, for
+/// `rawframe_client_sound_frames` to point at: how many it took.
+__attribute__((export_name("rawframe_client_sound_take"))) std::size_t rawframeClientSoundTake(Client* client,
+                                                                                               std::size_t frames) {
+    return client == nullptr ? 0 : client->sound.take(frames);
+}
+
+/// Where the frames the last take took are, interleaved stereo floats.
+__attribute__((export_name("rawframe_client_sound_frames"))) const float* rawframeClientSoundFrames(Client* client) {
+    return client == nullptr ? nullptr : client->sound.taken.data();
 }
 
 __attribute__((export_name("rawframe_client_destroy"))) void rawframeClientDestroy(Client* client) {

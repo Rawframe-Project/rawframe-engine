@@ -4,7 +4,8 @@
 // drive it; it joins a dedicated server over the browser's own
 // WebTransport, trusting the server by its certificate's hash; a key held
 // in the canvas runs the player, another makes it jump, a jump the player
-// feels (D251, though the page has no gamepad to feel it on), and a stop
+// feels (D251, though the page has no gamepad to feel it on) and hears
+// (D259: the page takes the client's sound and plays it), and a stop
 // asked of the page ends the run in order. The game is as a web game ships
 // (D256): cooked, packed into a signed Build, installed in a library, and
 // named by a Composition, which the server reads from its disk and the page
@@ -117,6 +118,7 @@ const setup = {
         'content.composition = runners.composition',
         'content.library = library',
         'kest.plan_only = true',
+        'audio.play = sink',
         'bots.player = true',
         `bots.endpoint = https://127.0.0.1:${port}/rawframe`,
         '',
@@ -126,6 +128,7 @@ const page = `<!doctype html><html><head><meta charset="utf-8"></head><body>
 <script type="module">
 import { WebClient } from '/page/client.mjs';
 import { PageTransport } from '/page/transport.mjs';
+import { PageSound } from '/page/sound.mjs';
 import { maulWindowImports } from '/maul-window.mjs';
 const setup = await (await fetch('/setup.json')).json();
 const transport = new PageTransport({ certificateHashes: [setup.fingerprint] });
@@ -141,7 +144,10 @@ for (const path of setup.files) {
     await hold('library/' + path, '/library/' + path);
 }
 console.log('page: play ' + client.play(setup.configuration));
+const sound = new PageSound(client);
+document.addEventListener('pointerdown', () => sound.resume());
 window.rawframeStop = () => client.requestStop();
+window.rawframeSound = () => ({ frames: sound.frames, peak: sound.peak, state: sound.context.state });
 const watch = () => {
     const code = client.ended();
     if (code === null) {
@@ -187,7 +193,7 @@ const http = createServer(async (request, response) => {
 });
 await new Promise((resolve) => http.listen(0, '127.0.0.1', resolve));
 
-const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({ args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] });
 let clientLog = '';
 let verdict = 1;
 try {
@@ -226,6 +232,9 @@ try {
     const summary = /"bots":\d+,"admitted":\d+[^}]*/.exec(clientLog);
     console.log(summary ? summary[0] : 'page: no bots summary');
     const field = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(summary?.[0] ?? '')?.[1] ?? -1);
+    // What the page took of the client's sound and played.
+    const heard = await tab.evaluate(() => window.rawframeSound());
+    console.log(`page: the page played ${heard.frames} frames of sound, peak ${heard.peak.toFixed(3)} (${heard.state})`);
     const felt = /"code":"felt_summary"[^\n]*"effectsFelt":(\d+)/.exec(clientLog);
     console.log(`page: the player felt ${felt ? felt[1] : 'no'} effects`);
     const drawn = /"code":"canvas_summary"[^\n]*"spritesDrawn":(\d+),"spritesAnimated":(\d+)[^\n]*"unknownTextures":0,[^\n]*"texturesReady":(\d+)/.exec(
@@ -236,7 +245,8 @@ try {
                 `with ${drawn ? drawn[3] : 'no'} textures`);
     verdict = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
                       field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0 && drawn !== null &&
-                      Number(drawn[1]) > 0 && Number(drawn[2]) > 0 && Number(drawn[3]) === 2
+                      Number(drawn[1]) > 0 && Number(drawn[2]) > 0 && Number(drawn[3]) === 2 && heard.frames > 48000 &&
+                      heard.peak > 0.05
                   ? 0
                   : 1;
 } catch (error) {
