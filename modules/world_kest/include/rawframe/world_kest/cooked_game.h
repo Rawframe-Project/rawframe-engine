@@ -3,24 +3,25 @@
 // A game description cooked (D88, D95): its text, the documents it names
 // beside it (actions, mixer, sounds), each Kest program it names as a file
 // of the game's Kest sources resource (D87), and each scene, mesh,
-// animator's graph, and text document (D147) it names as a resource, all in
-// one record. A process
+// animator's graph, text document (D147), and texture (D254) it names as a
+// resource, all in one record. A process
 // reads the game from it and opens no path: every name the text uses is
 // answered from the record.
 //
 // The record is canonical:
 //
 //   {"animators": [{"graph", "path"}], "files": [{"path", "text"}],
-//    "formatVersion": 5, "kind": "game.description", "meshes": [{"mesh", "path"}],
+//    "formatVersion": 6, "kind": "game.description", "meshes": [{"mesh", "path"}],
 //    "programs": [{"entry", "path", "sources"}], "scenes": [{"path", "scene"}], "text",
-//    "texts": [{"document", "path"}]}
+//    "texts": [{"document", "path"}], "textures": [{"path", "texture"}]}
 //
 // `path` is as the description writes it; `sources` is the Kest sources
 // resource, `scene` the scene resource, `mesh` the mesh resource, and
 // `graph` the animation graph resource, `document` the string table or
-// translation resource, as 32 hex digits, and `entry` the program's path
-// among its files. Animators, files, meshes, programs, scenes, and texts are
-// each in path order, each path once.
+// translation resource, `texture` the texture resource, as 32 hex digits,
+// and `entry` the program's path among its files. Animators, files,
+// meshes, programs, scenes, texts, and textures are each in path order,
+// each path once.
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
@@ -36,7 +37,8 @@ namespace rawframe::world_kest {
 /// representation.
 inline constexpr base::Bits128 kCookedGameType = base::parseBits128Hex("94011cff710065644e0f466b35941608").value;
 inline constexpr std::string_view kCookedGameRepresentation = "rawframe.game.description";
-/// The most animators, files, meshes, programs, scenes, or texts one names.
+/// The most animators, files, meshes, programs, scenes, texts, or textures
+/// one names.
 inline constexpr std::size_t kMaximumCookedGameNames = 1024;
 
 /// A document the description names, by the name it uses.
@@ -77,6 +79,12 @@ struct CookedGameText {
     base::Bits128 document{};
 };
 
+/// A texture the description names (D254), by the resource it is.
+struct CookedGameTexture {
+    std::string path;
+    base::Bits128 texture{};
+};
+
 struct CookedGame {
     std::string text;
     std::vector<CookedGameFile> files;
@@ -85,6 +93,7 @@ struct CookedGame {
     std::vector<CookedGameMesh> meshes;
     std::vector<CookedGameAnimator> animators;
     std::vector<CookedGameText> texts;
+    std::vector<CookedGameTexture> textures;
 
     /// The document the description names `path`, or none.
     [[nodiscard]] const CookedGameFile* file(std::string_view path) const noexcept;
@@ -96,13 +105,15 @@ struct CookedGame {
     [[nodiscard]] const CookedGameMesh* mesh(std::string_view path) const noexcept;
     /// The text document it names `path`, or none.
     [[nodiscard]] const CookedGameText* textDocument(std::string_view path) const noexcept;
+    /// The texture it names `path`, or none.
+    [[nodiscard]] const CookedGameTexture* texture(std::string_view path) const noexcept;
     /// The animator graph it names `path`, or none.
     [[nodiscard]] const CookedGameAnimator* animator(std::string_view path) const noexcept;
 };
 
 /// The record's bytes, its lists each put in path order; refused
 /// (`cooked_game_invalid`) for a path empty or named twice, a program with
-/// no entry or no sources, a scene, mesh, graph, or text of no resource, or more
+/// no entry or no sources, a scene, mesh, graph, text, or texture of no resource, or more
 /// than kMaximumCookedGameNames of any.
 [[nodiscard]] result::Result<std::string> writeCookedGame(const CookedGame& game);
 /// Refuses (`cooked_game_invalid`) anything `writeCookedGame` would not have

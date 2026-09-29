@@ -1,7 +1,7 @@
 // A cooked game description: its text, the documents it names, its
 // programs as files of Kest sources, and its scenes, meshes, animators'
-// graphs, and text documents as resources, written in one form and read
-// back exactly; anything else, mutated text included, refused.
+// graphs, text documents, and textures as resources, written in one form
+// and read back exactly; anything else, mutated text included, refused.
 
 #include "rawframe/test/mutations.h"
 #include "rawframe/test/test.h"
@@ -35,7 +35,9 @@ CookedGame sample() {
                        .graph = base::parseBits128Hex("7d4f2a90c1b3e5d6a8f0e2c4b6d8fa1c").value}},
         .texts = {{.path = "hud.strings", .document = base::parseBits128Hex("749e2ba7d0067a4db2348b183fc4d55f").value},
                   {.path = "hud.tr.translations",
-                   .document = base::parseBits128Hex("0123456789abcdef0123456789abcdef").value}}};
+                   .document = base::parseBits128Hex("0123456789abcdef0123456789abcdef").value}},
+        .textures = {
+            {.path = "tiles.png", .texture = base::parseBits128Hex("a6478ea1aa844c683e293a9754feeb95").value}}};
 }
 
 } // namespace
@@ -62,6 +64,9 @@ RAWFRAME_TEST(ACookedGameRoundTripsInOneForm) {
     RAWFRAME_EXPECT(kRead->texts.size() == 2 && kRead->textDocument("hud.strings") != nullptr &&
                     kRead->textDocument("hud.strings")->document == sample().texts[0].document &&
                     kRead->textDocument("level.scene") == nullptr);
+    RAWFRAME_EXPECT(kRead->texture("tiles.png") != nullptr &&
+                    kRead->texture("tiles.png")->texture == sample().textures[0].texture &&
+                    kRead->texture("hud.strings") == nullptr);
     // Names answered from the record, in path order.
     RAWFRAME_EXPECT(kRead->files[0].path == "runners.mixer" && kRead->file("shot.sound") != nullptr &&
                     kRead->file("shot.sound")->text == sample().files[0].text && kRead->file("other") == nullptr);
@@ -98,28 +103,32 @@ RAWFRAME_TEST(ACookedGameIsRefusedInAnyOtherForm) {
     CookedGame noText = sample();
     noText.texts[1].document = {};
     RAWFRAME_EXPECT(refused(writeCookedGame(noText)));
+    CookedGame noTexture = sample();
+    noTexture.textures[0].texture = {};
+    RAWFRAME_EXPECT(refused(writeCookedGame(noTexture)));
 
     const std::string kGood = *writeCookedGame(sample());
-    const std::string kTail = ",\"formatVersion\":5,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[],"
-                              "\"scenes\":[],\"text\":\"\",\"texts\":[]}";
+    const std::string kTail = ",\"formatVersion\":6,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[],"
+                              "\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}";
     const std::string kProgramsHead =
-        "{\"animators\":[],\"files\":[],\"formatVersion\":5,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[";
-    const std::string kProgramsTail = "],\"scenes\":[],\"text\":\"\",\"texts\":[]}";
-    const std::string kScenesHead = "{\"animators\":[],\"files\":[],\"formatVersion\":5,\"kind\":\"game.description\","
+        "{\"animators\":[],\"files\":[],\"formatVersion\":6,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[";
+    const std::string kProgramsTail = "],\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}";
+    const std::string kScenesHead = "{\"animators\":[],\"files\":[],\"formatVersion\":6,\"kind\":\"game.description\","
                                     "\"meshes\":[],\"programs\":[],"
                                     "\"scenes\":[";
-    const std::string kScenesTail = "],\"text\":\"\",\"texts\":[]}";
+    const std::string kScenesTail = "],\"text\":\"\",\"texts\":[],\"textures\":[]}";
     const std::vector<std::string> kBad = {
         kGood.substr(0, kGood.size() - 1),
         "{\"animators\":[],\"files\": []" + kTail,
         "{\"animators\":[],\"files\":[]" +
             std::string{",\"formatVersion\":3,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[]"
-                        ",\"scenes\":[],\"text\":\"\",\"texts\":[]}"},
-        "{\"animators\":[],\"files\":[],\"formatVersion\":5,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[]"
-        ",\"text\":\"\",\"texts\":[]}",
+                        ",\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}"},
+        "{\"animators\":[],\"files\":[],\"formatVersion\":6,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[]"
+        ",\"text\":\"\",\"texts\":[],\"textures\":[]}",
         "{\"animators\":[],\"extra\":0,\"files\":[]" + kTail,
-        "{\"animators\":[],\"files\":[{\"path\":\"b\",\"text\":\"\",\"texts\":[]},{\"path\":\"a\",\"text\":\"\","
-        "\"texts\":[]}]" +
+        "{\"animators\":[],\"files\":[{\"path\":\"b\",\"text\":\"\",\"texts\":[],\"textures\":[]},{\"path\":\"a\","
+        "\"text\":\"\","
+        "\"texts\":[],\"textures\":[]}]" +
             kTail,
         "{\"animators\":[],\"files\":[{\"path\":\"a\",\"text\":\"\",\"x\":\"\"}]" + kTail,
         kProgramsHead + "{\"entry\":\"a\",\"path\":\"a\",\"sources\":\"F9F0181057571ECD398D86D2C34A641F\"}" +
@@ -132,22 +141,29 @@ RAWFRAME_TEST(ACookedGameIsRefusedInAnyOtherForm) {
             "\"52771075251e7361deaecf4939c72e56\"}" +
             kScenesTail,
         kScenesHead + "{\"path\":\"a\"}" + kScenesTail,
-        "{\"animators\":[],\"files\":[],\"formatVersion\":5,\"kind\":\"game.description\",\"programs\":[],\"scenes\":[]"
-        ",\"text\":\"\",\"texts\":[]}",
-        "{\"animators\":[],\"files\":[],\"formatVersion\":5,\"kind\":\"game.description\",\"meshes\":[{\"mesh\":"
+        "{\"animators\":[],\"files\":[],\"formatVersion\":6,\"kind\":\"game.description\",\"programs\":[],\"scenes\":[]"
+        ",\"text\":\"\",\"texts\":[],\"textures\":[]}",
+        "{\"animators\":[],\"files\":[],\"formatVersion\":6,\"kind\":\"game.description\",\"meshes\":[{\"mesh\":"
         "\"00000000000000000000000000000000\",\"path\":\"a\"}],\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[]"
-        "}",
+        ","
+        "\"textures\":[]}",
         // Format 3 had no animators.
-        "{\"files\":[]" + std::string{",\"formatVersion\":5,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[]"
-                                      ",\"scenes\":[],\"text\":\"\",\"texts\":[]}"},
+        "{\"files\":[]" + std::string{",\"formatVersion\":6,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[]"
+                                      ",\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}"},
         "{\"animators\":[{\"graph\":\"00000000000000000000000000000000\",\"path\":\"a\"}]" +
             std::string{",\"files\":[]"} + kTail,
         // Format 4 had no texts.
         "{\"animators\":[],\"files\":[],\"formatVersion\":4,\"kind\":\"game.description\",\"meshes\":[],"
         "\"programs\":[],\"scenes\":[],\"text\":\"\"}",
-        "{\"animators\":[],\"files\":[],\"formatVersion\":5,\"kind\":\"game.description\",\"meshes\":[],"
+        "{\"animators\":[],\"files\":[],\"formatVersion\":6,\"kind\":\"game.description\",\"meshes\":[],"
         "\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[{\"document\":\"00000000000000000000000000000000\","
-        "\"path\":\"a\"}]}",
+        "\"path\":\"a\"}],\"textures\":[]}",
+        // Format 5 had no textures.
+        "{\"animators\":[],\"files\":[],\"formatVersion\":5,\"kind\":\"game.description\",\"meshes\":[],"
+        "\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[]}",
+        "{\"animators\":[],\"files\":[],\"formatVersion\":6,\"kind\":\"game.description\",\"meshes\":[],"
+        "\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[{\"path\":\"a\","
+        "\"texture\":\"00000000000000000000000000000000\"}]}",
     };
     for (const std::string& bad : kBad) {
         RAWFRAME_EXPECT(refused(readCookedGame(bad)));
