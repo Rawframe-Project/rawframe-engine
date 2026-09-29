@@ -4,23 +4,33 @@
 #include "rawframe/input_kest/registrar.h"
 #include "rawframe/input_kest/sources.h"
 #include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_replication/client_worlds.h"
 #include "rawframe/world_replication/plan.h"
 
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace rawframe::input_kest {
 
 namespace {
 
-constexpr std::string_view kProvides[] = {world_replication::kInputSourcePlan.name};
+constexpr std::string_view kProvides[] = {world_replication::kInputSourcePlan.name, kPlayerHaptics.name};
 constexpr std::string_view kNeeds[] = {world_replication::kReplicationPlan.name, world_kest::kGameFiles.name};
 constexpr std::string_view kMayUse[] = {kFeed.name};
 
-/// Sources for a game without controls: every one refuses, and bots steer
-/// at random.
-class NoSources final : public world_replication::InputSourcePlan {
+/// Sources for a game without controls: every one refuses, bots steer at
+/// random, and nothing is felt.
+class NoSources final : public InputSources {
 public:
+    [[nodiscard]] bool feelsEffects() const noexcept override {
+        return false;
+    }
+    std::optional<std::size_t> feelEffect(std::uint32_t) override {
+        return std::nullopt;
+    }
+
     result::Result<std::unique_ptr<world_replication::InputSource>> botSource(std::uint64_t) override {
         return refuse();
     }
@@ -71,15 +81,83 @@ public:
         if (capability == world_replication::kInputSourcePlan.name) {
             return composition::provideAs<world_replication::InputSourcePlan>(*sources_);
         }
+        if (capability == kPlayerHaptics.name) {
+            return composition::provideAs<PlayerHaptics>(*sources_);
+        }
         return {};
     }
 
 private:
-    std::unique_ptr<world_replication::InputSourcePlan> sources_;
+    std::unique_ptr<InputSources> sources_;
 };
 
-result::Result<composition::ParticipantOwner> makeSources(composition::ParticipantContext& context) noexcept {
-    auto participant = std::make_unique<SourcesParticipant>();
+constexpr std::string_view kFeltNeeds[] = {kPlayerHaptics.name};
+constexpr std::string_view kFeltMayUse[] = {world_replication::kClientWorlds.name};
+
+/// The process's own player feels its effects (D251): each presentation
+/// frame, the effects its client delivered since the last are felt as the
+/// game says. An effect taken back after it was felt runs its course, as
+/// its sound does.
+class Felt final : public composition::Participant {
+public:
+    result::Status load(composition::ParticipantContext& context) {
+        RAWFRAME_TRY_ASSIGN(haptics_, context.capability(kPlayerHaptics));
+        if (haptics_->feelsEffects() && context.has(world_replication::kClientWorlds.name)) {
+            RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
+        }
+        return {};
+    }
+
+    void runHostPhase(composition::HostPhase phase, const composition::HostFrame& /*frame*/) noexcept override {
+        if (phase != composition::HostPhase::PresentationExtract || clients_ == nullptr) {
+            return;
+        }
+        const auto kPlayer = clients_->playerClient();
+        if (!kPlayer.has_value()) {
+            return;
+        }
+        seen_ = clients_->readEffects(*kPlayer, seen_, effects_);
+        for (const world_replication::EffectEvent& event : effects_) {
+            if (!event.cancelled) {
+                if (const auto kAsked = haptics_->feelEffect(event.effect.kind); kAsked.has_value()) {
+                    ++effectsFelt_;
+                    devicesAsked_ += *kAsked;
+                }
+            }
+        }
+    }
+
+    result::Status start(composition::ParticipantContext& context) noexcept override {
+        emitter_ = context.emitter();
+        return {};
+    }
+
+    void stop() noexcept override {
+        if (clients_ == nullptr) {
+            return;
+        }
+        emitter_.log(
+            diagnostics::Severity::Info,
+            kFeltSummary,
+            "what the player felt",
+            {diagnostics::field("effectsFelt", effectsFelt_), diagnostics::field("devicesAsked", devicesAsked_)});
+    }
+
+private:
+    static constexpr diagnostics::EventIdentity kFeltSummary{"input", "felt_summary"};
+
+    PlayerHaptics* haptics_ = nullptr;
+    diagnostics::Emitter emitter_;
+    std::uint64_t effectsFelt_ = 0;
+    std::uint64_t devicesAsked_ = 0;
+    world_replication::ClientWorlds* clients_ = nullptr;
+    std::vector<world_replication::EffectEvent> effects_;
+    std::uint64_t seen_ = 0;
+};
+
+template <typename T>
+result::Result<composition::ParticipantOwner> make(composition::ParticipantContext& context) noexcept {
+    auto participant = std::make_unique<T>();
     RAWFRAME_TRY(participant->load(context));
     return composition::ParticipantOwner{participant.release()};
 }
@@ -89,7 +167,7 @@ result::Result<composition::ParticipantOwner> makeSources(composition::Participa
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
     registrar.submit(composition::ParticipantDeclaration{
         .identity = "rawframe.input_kest.sources",
-        .factory = &makeSources,
+        .factory = &make<SourcesParticipant>,
         .scope = composition::LifetimeScope::World,
         .providedCapabilities = kProvides,
         .requiredCapabilities = kNeeds,
@@ -97,6 +175,17 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "input_kest.sources",
         .budgetOwner = "input",
+    });
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = "rawframe.input_kest.felt",
+        .factory = &make<Felt>,
+        .scope = composition::LifetimeScope::World,
+        .requiredCapabilities = kFeltNeeds,
+        .optionalCapabilities = kFeltMayUse,
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
+        .observabilityIdentity = "input_kest.felt",
+        .budgetOwner = "input",
+        .hostPhases = composition::hostPhaseBit(composition::HostPhase::PresentationExtract),
     });
 }
 

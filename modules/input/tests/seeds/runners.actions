@@ -93,5 +93,17 @@
         "fire"
       ]
     }
+  ],
+  "haptics": [
+    {
+      "hapticId": "5e2b9d07c41a8f36",
+      "name": "thump",
+      "displayName": "Jump",
+      "bindings": [
+        {
+          "device": "gamepad"
+        }
+      ]
+    }
   ]
 }

@@ -169,6 +169,8 @@ struct Shared {
     kest::MachineLimits limits;
     std::size_t inputSize = 0;
     input::Feed* feed = nullptr;
+    /// Each effect kind's haptic output and how it is felt, by kind.
+    std::vector<std::optional<std::pair<std::size_t, input::Haptic>>> felt;
 };
 
 /// A player's controls through the game's mapping and sample function: a
@@ -230,8 +232,13 @@ public:
         return {};
     }
 
+    /// The mapper, which the player's haptics share.
+    [[nodiscard]] std::shared_ptr<input::Mapper> mapper() const noexcept {
+        return mapper_;
+    }
+
 private:
-    std::unique_ptr<input::Mapper> mapper_;
+    std::shared_ptr<input::Mapper> mapper_;
     std::optional<Hand> hand_;
     input::Feed* feed_ = nullptr;
     InputDoorContext doors_;
@@ -241,7 +248,7 @@ private:
     std::string element_;
 };
 
-class Sources final : public world_replication::InputSourcePlan {
+class Sources final : public InputSources {
 public:
     explicit Sources(Shared shared) noexcept : shared_(std::move(shared)) {
     }
@@ -263,12 +270,35 @@ public:
         auto source = std::make_unique<Source>();
         RAWFRAME_TRY(source->build(shared_, std::nullopt));
         playerGiven_ = true;
+        player_ = source->mapper();
         return std::unique_ptr<world_replication::InputSource>{std::move(source)};
+    }
+
+    [[nodiscard]] bool feelsEffects() const noexcept override {
+        return std::ranges::any_of(shared_.felt, [](const auto& each) {
+            return each.has_value();
+        });
+    }
+
+    std::optional<std::size_t> feelEffect(std::uint32_t kind) override {
+        if (player_ == nullptr || kind >= shared_.felt.size() || !shared_.felt[kind].has_value()) {
+            return std::nullopt;
+        }
+        const auto& [kHaptic, kFelt] = *shared_.felt[kind];
+        commands_.clear();
+        player_->feel({}, kHaptic, kFelt, commands_);
+        for (const input::HapticCommand& command : commands_) {
+            shared_.feed->feel(command);
+        }
+        return commands_.size();
     }
 
 private:
     Shared shared_;
     bool playerGiven_ = false;
+    /// The player's mapper, shared with its source: which devices it has.
+    std::shared_ptr<input::Mapper> player_;
+    std::vector<input::HapticCommand> commands_;
 };
 
 } // namespace
@@ -308,7 +338,7 @@ result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* con
     return {};
 }
 
-result::Result<std::unique_ptr<world_replication::InputSourcePlan>> makeInputSources(const SourceSettings& settings) {
+result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSettings& settings) {
     if (settings.game == nullptr || !settings.game->named()) {
         return refuse(result::ErrorClass::NotFound, InputKestError::NoControls, "no game is named");
     }
@@ -323,6 +353,25 @@ result::Result<std::unique_ptr<world_replication::InputSourcePlan>> makeInputSou
         return std::unexpected<result::Error>{std::move(actions).error().withContext("name", kGame.controls->actions)};
     }
     shared.actions = std::move(*actions);
+    for (const world_kest::GameEffect& effect : kGame.effects) {
+        if (!effect.felt.has_value()) {
+            shared.felt.emplace_back();
+            continue;
+        }
+        const auto kHaptic = shared.actions.hapticNamed(effect.felt->haptic);
+        if (!kHaptic.has_value()) {
+            return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                         InputKestError::UnknownHaptic,
+                                                         "an effect is felt by a haptic output the actions lack")
+                                                      .error()
+                                                      .withContext("effect", effect.name)
+                                                      .withContext("haptic", effect.felt->haptic)};
+        }
+        shared.felt.emplace_back(std::pair{*kHaptic,
+                                           input::Haptic{.amplitude = effect.felt->amplitude,
+                                                         .frequency = effect.felt->frequency,
+                                                         .milliseconds = effect.felt->milliseconds}});
+    }
     std::string report;
     auto program = settings.game->compile(kGame.controls->program, settings.compile, &report);
     if (!program.has_value()) {
@@ -346,7 +395,7 @@ result::Result<std::unique_ptr<world_replication::InputSourcePlan>> makeInputSou
     shared.limits = settings.limits;
     shared.inputSize = settings.inputSize;
     shared.feed = settings.feed;
-    return std::unique_ptr<world_replication::InputSourcePlan>{new Sources{std::move(shared)}};
+    return std::unique_ptr<InputSources>{new Sources{std::move(shared)}};
 }
 
 } // namespace rawframe::input_kest

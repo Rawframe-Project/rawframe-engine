@@ -1,6 +1,7 @@
 // Bot input made as a player's is: a hand on the controls the sample game
 // binds, its action set, and its Kest sample function, deterministic by
-// seed; games without controls, or whose sample does not fit, refused.
+// seed; games without controls, or whose sample does not fit, refused; the
+// player's effects felt on its gamepads (D251).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -25,17 +26,22 @@ namespace {
 using Stick = std::array<float, 5>;
 
 /// The sample game `path` names, its directory's files held in memory as a
-/// web client holds them (D166).
-const world_kest::GameFiles& gameAt(std::string_view path) {
+/// web client holds them (D166), with `from` replaced by `to` in its
+/// description.
+const world_kest::GameFiles& gameAt(std::string_view path, std::string_view from = {}, std::string_view to = {}) {
     static std::vector<std::unique_ptr<world_kest::GameFiles>> read;
     const std::size_t kSlash = path.rfind('/');
     const std::string kDirectory = std::string{RAWFRAME_SAMPLE_GAMES} + std::string{path.substr(0, kSlash + 1)};
+    const std::string_view kName = path.substr(kSlash + 1);
     std::vector<std::pair<std::string, std::string>> held;
     for (std::string& name : test::filesUnder(kDirectory, "")) {
         std::string text = test::readFile(kDirectory + name);
+        if (const std::size_t kAt = text.find(from); !from.empty() && name == kName && kAt != std::string::npos) {
+            text.replace(kAt, from.size(), to);
+        }
         held.emplace_back(std::move(name), std::move(text));
     }
-    auto files = world_kest::GameFiles::fromHeld(path.substr(kSlash + 1), std::move(held));
+    auto files = world_kest::GameFiles::fromHeld(kName, std::move(held));
     RAWFRAME_EXPECT(files.has_value());
     read.push_back(
         std::make_unique<world_kest::GameFiles>(files.has_value() ? std::move(*files) : world_kest::GameFiles{}));
@@ -145,4 +151,41 @@ RAWFRAME_TEST(ThePlayerPlaysFromTheLentDevices) {
     RAWFRAME_EXPECT(play(**source, 1)[0] == kHeld);
     feed.releaseAll();
     RAWFRAME_EXPECT(play(**source, 1)[0] == Stick{});
+}
+
+RAWFRAME_TEST(ThePlayerFeelsAnEffectOnItsGamepads) {
+    input::Feed feed;
+    SourceSettings settings = runners();
+    settings.feed = &feed;
+    auto sources = makeInputSources(settings);
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    // Runners' jump (its one effect, kind nought) is felt as a thump.
+    RAWFRAME_EXPECT((*sources)->feelsEffects());
+    std::vector<input::HapticCommand> felt;
+    RAWFRAME_EXPECT(!(*sources)->feelEffect(0).has_value());
+    feed.takeFelt(felt);
+    RAWFRAME_EXPECT(felt.empty());
+    auto source = (*sources)->playerSource();
+    RAWFRAME_EXPECT(source.has_value());
+    if (!source.has_value()) {
+        return;
+    }
+    constexpr input::DeviceId kKeyboard{1};
+    constexpr input::DeviceId kPad{2};
+    feed.connect(kKeyboard, input::DeviceClass::Keyboard);
+    feed.connect(kPad, input::DeviceClass::Gamepad);
+    play(**source, 1);
+    RAWFRAME_EXPECT((*sources)->feelEffect(0) == 1 && !(*sources)->feelEffect(1).has_value());
+    feed.takeFelt(felt);
+    RAWFRAME_EXPECT(felt.size() == 1 && felt[0].device == kPad && felt[0].haptic.amplitude == 0.4F &&
+                    felt[0].haptic.frequency == 60 && felt[0].haptic.milliseconds == 90);
+}
+
+RAWFRAME_TEST(AnEffectFeltByAnUndeclaredHapticIsRefused) {
+    const auto kSources = makeInputSources(SourceSettings{
+        .game = &gameAt("runners/runners.game", "felt thump", "felt rumble"), .inputSize = sizeof(Stick)});
+    RAWFRAME_EXPECT(!kSources.has_value() && kSources.error().code() == code(InputKestError::UnknownHaptic));
 }

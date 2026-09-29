@@ -21,6 +21,9 @@ enum class InputKestError : std::uint32_t {
     SampleFailed = 3,
     /// The host lends no devices, or their player already has a source.
     NoDevices = 4,
+    /// An effect is felt by a haptic output the game's action set does not
+    /// declare (D251).
+    UnknownHaptic = 5,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(InputKestError error) noexcept {

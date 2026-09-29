@@ -14,7 +14,9 @@
 #include "rawframe/world_replication/input_source.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace rawframe::input_kest {
@@ -35,6 +37,27 @@ struct InputDoorContext {
 /// its window reported between two ticks.
 inline constexpr composition::Capability<input::Feed> kFeed{"rawframe.input.feed"};
 
+/// What the process's own player feels (D251): an effect the game says is
+/// felt, through the devices its host lends. Provided with the input
+/// sources, which hold the player's pairing.
+class PlayerHaptics {
+public:
+    PlayerHaptics() = default;
+    PlayerHaptics(const PlayerHaptics&) = delete;
+    PlayerHaptics& operator=(const PlayerHaptics&) = delete;
+    virtual ~PlayerHaptics() = default;
+
+    /// Whether any effect of the game is felt.
+    [[nodiscard]] virtual bool feelsEffects() const noexcept = 0;
+    /// Effect kind `kind` delivered to the player: its haptic output is
+    /// asked of the player's devices, and how many were asked is returned
+    /// (none without a gamepad). Nothing for an effect not felt, or before
+    /// the player has a source.
+    virtual std::optional<std::size_t> feelEffect(std::uint32_t kind) = 0;
+};
+
+inline constexpr composition::Capability<PlayerHaptics> kPlayerHaptics{"rawframe.input_kest.player_haptics"};
+
 struct SourceSettings {
     /// The game, whose description names its actions and sample program;
     /// outlives the call.
@@ -48,11 +71,14 @@ struct SourceSettings {
     input::Feed* feed = nullptr;
 };
 
+/// The input sources of a game, and its player's haptics.
+class InputSources : public world_replication::InputSourcePlan, public PlayerHaptics {};
+
 /// Reads the game's controls and compiles its sample program once; each
 /// bot source then has its own mapper, machine, and hand, and the player's
 /// source its mapper and machine over the lent devices. Refuses
-/// (`NotFound`, `NoControls`) a game without controls.
-[[nodiscard]] result::Result<std::unique_ptr<world_replication::InputSourcePlan>>
-makeInputSources(const SourceSettings& settings);
+/// (`NotFound`, `NoControls`) a game without controls, and
+/// (`UnknownHaptic`) an effect felt by a haptic output its actions lack.
+[[nodiscard]] result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSettings& settings);
 
 } // namespace rawframe::input_kest

@@ -3,8 +3,9 @@
 // client plays (`play`), so a canvas is its window and the window's frames
 // drive it; it joins a dedicated server over the browser's own
 // WebTransport, trusting the server by its certificate's hash; a key held
-// in the canvas runs the player, and a stop asked of the page ends the run
-// in order. Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser
+// in the canvas runs the player, another makes it jump, a jump the player
+// feels (D251, though the page has no gamepad to feel it on), and a stop
+// asked of the page ends the run in order. Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser
 // from where Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test
 // is skipped (77).
 //
@@ -183,7 +184,11 @@ try {
     // The canvas takes the focus, then D is held: the runner runs.
     await tab.click('canvas');
     await tab.keyboard.down('KeyD');
-    await sleep(2000);
+    await sleep(1000);
+    await tab.keyboard.down('Space');
+    await sleep(200);
+    await tab.keyboard.up('Space');
+    await sleep(800);
     await tab.keyboard.up('KeyD');
     await sleep(500);
     await tab.evaluate(() => window.rawframeStop());
@@ -192,8 +197,10 @@ try {
     const summary = /"bots":\d+,"admitted":\d+[^}]*/.exec(clientLog);
     console.log(summary ? summary[0] : 'page: no bots summary');
     const field = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(summary?.[0] ?? '')?.[1] ?? -1);
+    const felt = /"code":"felt_summary"[^\n]*"effectsFelt":(\d+)/.exec(clientLog);
+    console.log(`page: the player felt ${felt ? felt[1] : 'no'} effects`);
     verdict = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
-                      field('confirmed') > 100
+                      field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0
                   ? 0
                   : 1;
 } catch (error) {
