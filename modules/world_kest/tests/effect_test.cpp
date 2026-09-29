@@ -1,7 +1,7 @@
 // Effects in a game (D219): `effect` lines and the `emits` pairs of
 // predicted systems, and the `Effects.<name>` doors a predictor keeps what
 // a step emitted through, each with its kind, emitter, and ordinal; an
-// effect's sound.
+// effect's sound, and what the player feels of it.
 
 #include "../src/effect_doors.h"
 #include "rawframe/kest_library/library.h"
@@ -89,6 +89,36 @@ RAWFRAME_TEST(AnEffectsSoundIsOneTheGameDeclares) {
     RAWFRAME_EXPECT(!parses(std::string{kAudio} + "effect jump predicted sound 0000000000000000\n"));
     RAWFRAME_EXPECT(!parses(std::string{kAudio} + "effect jump predicted sound jump\n"));
     RAWFRAME_EXPECT(!parses(std::string{kAudio} + "effect jump predicted sound\n"));
+}
+
+// An effect may say what the player feels of it (D251).
+RAWFRAME_TEST(AnEffectIsFeltByAHapticWithinItsRanges) {
+    constexpr std::string_view kAudio = "mixer game.mixer\nsound 57164ad59d5b6a23 jump.sound\n";
+    const auto kGame = parseGame(std::string{kHead} + std::string{kAudio} +
+                                 "effect jump predicted sound 57164ad59d5b6a23 felt thump 0.6 80 120\n"
+                                 "effect land predicted felt thump 1 0 5000\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->effects[0].sound == 0x57164ad59d5b6a23 &&
+                    kGame->effects[0].felt.has_value() && kGame->effects[1].felt.has_value());
+    if (kGame.has_value() && kGame->effects[0].felt.has_value()) {
+        const GameFelt& felt = *kGame->effects[0].felt;
+        RAWFRAME_EXPECT(felt.haptic == "thump" && felt.amplitude == 0.6F && felt.frequency == 80 &&
+                        felt.milliseconds == 120 && kGame->effects[1].felt->frequency == 0);
+    }
+    // Out of range, not whole, half said, badly named, before the sound.
+    for (const std::string_view kFelt : {"felt thump 0 80 120",
+                                         "felt thump 1.5 80 120",
+                                         "felt thump 0.5 1001 120",
+                                         "felt thump 0.5 -1 120",
+                                         "felt thump 0.5 80 0",
+                                         "felt thump 0.5 80 5001",
+                                         "felt thump 0.5 80 12.5",
+                                         "felt thump 0.5 80",
+                                         "felt Thump 0.5 80 120",
+                                         "felt thump 0.5 80 120 extra"}) {
+        RAWFRAME_EXPECT(!parses("effect jump predicted " + std::string{kFelt} + "\n"));
+    }
+    RAWFRAME_EXPECT(
+        !parses(std::string{kAudio} + "effect jump predicted felt thump 0.5 80 120 sound 57164ad59d5b6a23\n"));
 }
 
 RAWFRAME_TEST(APredictorsDoorsKeepWhatAStepEmitted) {

@@ -27,6 +27,59 @@ std::optional<std::uint64_t> parseHex64(std::string_view word) noexcept {
     return value;
 }
 
+/// A finite number within a range, as a word.
+std::optional<double> parseReal(std::string_view word, double lowest, double highest) noexcept {
+    double value = 0;
+    const auto kRead = std::from_chars(word.data(), word.data() + word.size(), value);
+    if (kRead.ec != std::errc{} || kRead.ptr != word.data() + word.size() || !std::isfinite(value) || value < lowest ||
+        value > highest) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+bool lowerSnake(std::string_view word) noexcept {
+    return !word.empty() && std::ranges::all_of(word, [](char each) {
+        return (each >= 'a' && each <= 'z') || (each >= '0' && each <= '9') || each == '_';
+    });
+}
+
+/// An `effect <name> predicted|confirmed_only [sound <16 hex digits>]
+/// [felt <haptic> <amplitude> <hertz> <milliseconds>]` line's words, or
+/// nothing when they are not that.
+std::optional<GameEffect> parseEffect(const std::vector<std::string_view>& words) {
+    if (words.size() < 3 || !lowerSnake(words[1]) || (words[2] != "predicted" && words[2] != "confirmed_only")) {
+        return std::nullopt;
+    }
+    GameEffect effect{.name = std::string{words[1]},
+                      .effectClass = words[2] == "predicted" ? world_replication::EffectClass::Predicted
+                                                             : world_replication::EffectClass::ConfirmedOnly};
+    std::size_t at = 3;
+    if (at + 1 < words.size() && words[at] == "sound") {
+        const auto kSound = parseHex64(words[at + 1]);
+        if (!kSound.has_value() || *kSound == 0) {
+            return std::nullopt;
+        }
+        effect.sound = *kSound;
+        at += 2;
+    }
+    if (at + 5 == words.size() && words[at] == "felt") {
+        const auto kAmplitude = parseReal(words[at + 2], 0, 1);
+        const auto kFrequency = parseReal(words[at + 3], 0, 1000);
+        const auto kMilliseconds = parseReal(words[at + 4], 1, 5000);
+        if (!lowerSnake(words[at + 1]) || !kAmplitude.has_value() || *kAmplitude == 0 || !kFrequency.has_value() ||
+            !kMilliseconds.has_value() || *kMilliseconds != std::floor(*kMilliseconds)) {
+            return std::nullopt;
+        }
+        effect.felt = GameFelt{.haptic = std::string{words[at + 1]},
+                               .amplitude = static_cast<float>(*kAmplitude),
+                               .frequency = static_cast<float>(*kFrequency),
+                               .milliseconds = static_cast<std::uint32_t>(*kMilliseconds)};
+        at += 5;
+    }
+    return at == words.size() ? std::optional{std::move(effect)} : std::nullopt;
+}
+
 std::vector<std::string_view> words(std::string_view line) {
     std::vector<std::string_view> found;
     std::size_t at = 0;
@@ -435,25 +488,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                "<class> collide|trigger|ignore`, or one `collision default <rule>`");
             }
         } else if (kKeyword == "effect") {
-            const auto kSound =
-                kWords.size() == 5 && kWords[3] == "sound" ? parseHex64(kWords[4]) : std::optional<std::uint64_t>{};
-            const bool kShaped = (kWords.size() == 3 || (kSound.has_value() && *kSound != 0)) &&
-                                 (kWords[2] == "predicted" || kWords[2] == "confirmed_only") && !kWords[1].empty() &&
-                                 std::ranges::all_of(kWords[1], [](char each) {
-                                     return (each >= 'a' && each <= 'z') || (each >= '0' && each <= '9') || each == '_';
-                                 });
-            if (!kShaped || std::ranges::contains(game.effects, kWords[1], &GameEffect::name) ||
+            std::optional<GameEffect> effect = parseEffect(kWords);
+            if (!effect.has_value() || std::ranges::contains(game.effects, effect->name, &GameEffect::name) ||
                 game.effects.size() >= kMaximumEffects) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
                                "an effect line is `effect <lower_snake name> predicted|confirmed_only`, then "
-                               "optionally `sound <16 hex digits>`, each name once, at most 64");
+                               "optionally `sound <16 hex digits>`, then optionally `felt <haptic> <amplitude> "
+                               "<hertz> <milliseconds>`, each name once, at most 64");
             }
-            game.effects.push_back(GameEffect{.name = std::string{kWords[1]},
-                                              .effectClass = kWords[2] == "predicted"
-                                                                 ? world_replication::EffectClass::Predicted
-                                                                 : world_replication::EffectClass::ConfirmedOnly,
-                                              .sound = kSound.value_or(0)});
+            game.effects.push_back(std::move(*effect));
         } else if (kKeyword == "interest") {
             // interest <component> <field>... within <radius>
             double radius = 0;

@@ -174,6 +174,18 @@ struct GameSystem {
     std::vector<std::string> emits;
 };
 
+/// What the player feels of an effect (D251), from a trailing `felt
+/// <haptic> <amplitude> <hertz> <milliseconds>`: the haptic output of the
+/// game's action set, its amplitude above nought and at most one, its
+/// frequency from nought (the device's own) to 1000 hertz, and 1 to 5000
+/// milliseconds.
+struct GameFelt {
+    std::string haptic;
+    float amplitude = 1;
+    float frequency = 0;
+    std::uint32_t milliseconds = 0;
+};
+
 /// A presentation effect predicted systems emit (SPEC-0041, D219), from an
 /// `effect <name> predicted|confirmed_only` line: a program emits it with
 /// `Effects.<name>(entity)`, and a predicting client delivers it once.
@@ -183,6 +195,7 @@ struct GameEffect {
     /// The declared sound a client plays where the effect's player is, from
     /// a trailing `sound <16 hex digits>`; nought for none.
     std::uint64_t sound = 0;
+    std::optional<GameFelt> felt;
 };
 
 /// Effect kinds a game declares at most.
