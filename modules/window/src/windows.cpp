@@ -47,6 +47,9 @@ mwinLimits toMaul(const Limits& limits, mwinLimits defaults) noexcept {
 }
 
 /// The id a request call gave, or its failure.
+/// A request's identity once the call that made it has returned: the status
+/// is taken first, since arguments are evaluated in no fixed order and on
+/// Windows' ABI the last first.
 result::Result<RequestId> requested(mwinResult status, mwinRequestId request, std::string_view what) {
     if (status != mwin_success) {
         return failure(status, what);
@@ -164,62 +167,58 @@ result::Result<WindowState> Windows::state(WindowId window) const {
 
 result::Result<RequestId> Windows::requestTitle(WindowId window, std::string_view title) {
     mwinRequestId request{};
-    return requested(mwinRequestTitle(platform_->context, toMaul(window), title.data(), title.size(), &request),
-                     request,
-                     "a title request");
+    const mwinResult kStatus =
+        mwinRequestTitle(platform_->context, toMaul(window), title.data(), title.size(), &request);
+    return requested(kStatus, request, "a title request");
 }
 
 result::Result<RequestId> Windows::requestSize(WindowId window, LogicalSize size) {
     mwinRequestId request{};
-    return requested(
-        mwinRequestSize(
-            platform_->context, toMaul(window), mwinSize{.width = size.width, .height = size.height}, &request),
-        request,
-        "a size request");
+    const mwinResult kStatus = mwinRequestSize(
+        platform_->context, toMaul(window), mwinSize{.width = size.width, .height = size.height}, &request);
+    return requested(kStatus, request, "a size request");
 }
 
 result::Result<RequestId> Windows::requestPosition(WindowId window, Position position) {
     mwinRequestId request{};
-    return requested(mwinRequestPosition(
-                         platform_->context, toMaul(window), mwinPosition{.x = position.x, .y = position.y}, &request),
-                     request,
-                     "a position request");
+    const mwinResult kStatus = mwinRequestPosition(
+        platform_->context, toMaul(window), mwinPosition{.x = position.x, .y = position.y}, &request);
+    return requested(kStatus, request, "a position request");
 }
 
 result::Result<RequestId> Windows::requestMode(WindowId window, Mode mode) {
     mwinRequestId request{};
-    return requested(
-        mwinRequestMode(platform_->context, toMaul(window), toMaul(mode), &request), request, "a mode request");
+    const mwinResult kStatus = mwinRequestMode(platform_->context, toMaul(window), toMaul(mode), &request);
+    return requested(kStatus, request, "a mode request");
 }
 
 result::Result<RequestId> Windows::requestVisible(WindowId window, bool visible) {
     mwinRequestId request{};
-    return requested(
-        mwinRequestVisible(platform_->context, toMaul(window), visible, &request), request, "a visibility request");
+    const mwinResult kStatus = mwinRequestVisible(platform_->context, toMaul(window), visible, &request);
+    return requested(kStatus, request, "a visibility request");
 }
 
 result::Result<RequestId> Windows::requestFocus(WindowId window) {
     mwinRequestId request{};
-    return requested(mwinRequestFocus(platform_->context, toMaul(window), &request), request, "a focus request");
+    const mwinResult kStatus = mwinRequestFocus(platform_->context, toMaul(window), &request);
+    return requested(kStatus, request, "a focus request");
 }
 
 result::Result<RequestId> Windows::requestCursorMode(WindowId window, CursorMode mode) {
     mwinRequestId request{};
-    return requested(mwinRequestCursorMode(platform_->context, toMaul(window), toMaul(mode), &request),
-                     request,
-                     "a cursor mode request");
+    const mwinResult kStatus = mwinRequestCursorMode(platform_->context, toMaul(window), toMaul(mode), &request);
+    return requested(kStatus, request, "a cursor mode request");
 }
 
 result::Result<RequestId> Windows::requestTextInput(WindowId window, bool enabled, Rect caret) {
     mwinRequestId request{};
-    return requested(
+    const mwinResult kStatus =
         mwinRequestTextInput(platform_->context,
                              toMaul(window),
                              enabled,
                              mwinRect{.x = caret.x, .y = caret.y, .width = caret.width, .height = caret.height},
-                             &request),
-        request,
-        "a text input request");
+                             &request);
+    return requested(kStatus, request, "a text input request");
 }
 
 result::Status Windows::rumble(GamepadId gamepad, float low, float high, std::uint32_t milliseconds) {
