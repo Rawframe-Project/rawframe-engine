@@ -25,7 +25,10 @@ first=2197be45-b62c-4756-a4d6-744b05b97268
 second=82846218-af54-4389-ad03-70bff12f711b
 
 "$author" describe "$game" >"$work/discovery.json"
-grep -A8 '"name": "at"' "$work/discovery.json" | tr -d ' \n' | grep -q '"kind":"case","cases":\["Start","Walking","Looking","Done"\]'
+# Whole lines joined, without the carriage returns a Windows build writes;
+# written to a file first, since grep -q stops reading early.
+grep -A8 '"name": "at"' "$work/discovery.json" | tr -d ' \r\n' >"$work/at.txt"
+grep -q '"kind":"case","cases":\["Start","Walking","Looking","Done"\]' "$work/at.txt"
 
 cat >"$work/guards.json" <<JSON
 {"formatVersion": 1, "kind": "authoring.request", "batch": "atomic", "operations": [
@@ -53,7 +56,8 @@ cat >"$work/read.json" <<JSON
   {"operation": "scene.read_entity", "entity": "$second"}]}
 JSON
 "$author" read "$game" "$work/guards.scene" "$work/read.json" >"$work/read.out"
-tr -d ' \n' <"$work/read.out" | grep -q '"name":"at","value":{"case":"Done"}'
+tr -d ' \r\n' <"$work/read.out" >"$work/read.txt"
+grep -q '"name":"at","value":{"case":"Done"}' "$work/read.txt"
 
 cp "$work/guards.scene" "$work/made.scene"
 cat >"$work/lost.json" <<JSON
