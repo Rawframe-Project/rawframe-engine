@@ -5,14 +5,14 @@
 
 #include "web_services.h"
 
-#include <emscripten/em_js.h>
+#include "web_js.h"
 
 EM_JS_DEPS(mwin_web_services, "$UTF8ToString");
 
 // clang-format off
 // A new tab, cut from the page before it loads. With noopener the page
 // could not learn whether a blocker stopped the tab; this way it can.
-EM_JS(int, OpenAddress, (const char* address, uint32_t length), {
+EM_JS(int, mwinWebOpenAddress, (const char* address, uint32_t length), {
     if (typeof window === 'undefined' || !window.open) {
         return 1;
     }
@@ -24,13 +24,13 @@ EM_JS(int, OpenAddress, (const char* address, uint32_t length), {
     return 0;
 });
 
-EM_JS(bool, HasWakeLock, (void), {
+EM_JS(bool, mwinWebHasWakeLock, (void), {
     return typeof navigator !== 'undefined' && !!navigator.wakeLock;
 });
 
 // The wish, the lock held and whether one is asked for live on the
 // page; a lock is asked for while wished and the page shows.
-EM_JS(void, Hold, (const mwinContext* context, bool wanted), {
+EM_JS(void, mwinPageHoldAwake, (const mwinContext* context, bool wanted), {
     const state = Module.mwinWeb.get(context);
     if (!state.wake) {
         const wake = {wanted: false, lock: null, asking: false};
@@ -83,19 +83,19 @@ EM_JS(void, Hold, (const mwinContext* context, bool wanted), {
 
 mwinOutcome mwinWebOpenUrl(const mwinRequest* request)
 {
-    return (mwinOutcome)OpenAddress(request->value.text.bytes, request->value.text.length);
+    return (mwinOutcome)mwinWebOpenAddress(request->value.text.bytes, request->value.text.length);
 }
 
 mwinOutcome mwinWebCanKeepAwake(void)
 {
-    return HasWakeLock() ? mwin_outcomeDone : mwin_outcomeUnsupported;
+    return mwinWebHasWakeLock() ? mwin_outcomeDone : mwin_outcomeUnsupported;
 }
 
 void mwinWebKeepAwake(mwinWebPlatform* platform, bool wanted)
 {
-    if (wanted != platform->awake && (!wanted || HasWakeLock()))
+    if (wanted != platform->awake && (!wanted || mwinWebHasWakeLock()))
     {
         platform->awake = wanted;
-        Hold(platform->context, wanted);
+        mwinPageHoldAwake(platform->context, wanted);
     }
 }

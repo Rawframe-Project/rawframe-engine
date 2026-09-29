@@ -132,8 +132,10 @@ extern "C"
     /// Runs a program: creates the context, calls init, then frame until a
     /// frame returns mwin_frameStop, then quit, and destroys the context.
     /// Where the platform owns the loop (the web, iOS) this function may
-    /// never return; put cleanup in quit. It is never called from inside
-    /// a running program's functions.
+    /// never return, or, on the web without Emscripten, return
+    /// `mwin_success` once init has succeeded while the page's frames run
+    /// the program on; either way put cleanup in quit. It is never called
+    /// from inside a running program's functions.
     ///
     /// @param def  The program: a valid cookie, init and frame set.
     /// @return init's status when it failed; `mwin_success` after a stop;

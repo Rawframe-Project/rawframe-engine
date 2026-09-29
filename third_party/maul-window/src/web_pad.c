@@ -5,7 +5,8 @@
 
 #include "web_pad.h"
 
-#include <emscripten/em_js.h>
+#include "web_js.h"
+
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
@@ -41,7 +42,7 @@ static const uint8_t s_standard[MWIN_GAMEPAD_BUTTONS] = {
 EM_JS_DEPS(mwin_web_pad, "$stringToUTF8");
 
 // clang-format off
-EM_JS(void, AttachPads, (const mwinContext* context), {
+EM_JS(void, mwinPageAttachPads, (const mwinContext* context), {
     const state = Module.mwinWeb.get(context);
     state.padLosses = [];
     const lost = event => {
@@ -52,7 +53,7 @@ EM_JS(void, AttachPads, (const mwinContext* context), {
     state.listeners.push(() => window.removeEventListener('gamepaddisconnected', lost));
 });
 
-EM_JS(bool, ReadPad, (const mwinContext* context, uint32_t index, PadState* out), {
+EM_JS(bool, mwinPageReadPad, (const mwinContext* context, uint32_t index, PadState* out), {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     const pad = pads[index];
     if (!pad || !pad.connected) {
@@ -78,7 +79,7 @@ EM_JS(bool, ReadPad, (const mwinContext* context, uint32_t index, PadState* out)
 // of ids[0] where its id tells them: Chrome's "Name (... Vendor: 045e
 // Product: 028e)", Firefox's and Safari's "45e-28e-Name". ids[1] is 1
 // when it has a dual-rumble actuator.
-EM_JS(uint32_t, PadFacts, (uint32_t index, char* name, uint32_t capacity, uint32_t* ids), {
+EM_JS(uint32_t, mwinWebPadFacts, (uint32_t index, char* name, uint32_t capacity, uint32_t* ids), {
     const pad = navigator.getGamepads()[index];
     let text = pad.id;
     let vendor = 0;
@@ -106,7 +107,7 @@ EM_JS(uint32_t, PadFacts, (uint32_t index, char* name, uint32_t capacity, uint32
 
 // Plays the dual-rumble effect, or stops it for a duration of 0; the
 // effect's promise, settled when it ends or gives way, is let go.
-EM_JS(bool, PadRumble, (uint32_t index, float low, float high, uint32_t durationMs), {
+EM_JS(bool, mwinWebPadRumble, (uint32_t index, float low, float high, uint32_t durationMs), {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     const actuator = pads[index] && pads[index].vibrationActuator;
     if (!actuator) {
@@ -123,7 +124,7 @@ EM_JS(bool, PadRumble, (uint32_t index, float low, float high, uint32_t duration
 void mwinWebPadsStart(mwinWebPads* pads, mwinContext* context)
 {
     *pads = (mwinWebPads){.context = context};
-    AttachPads(context);
+    mwinPageAttachPads(context);
 }
 
 // A value in its range; NaN, which a page may report, as 0.
@@ -169,7 +170,7 @@ static bool Found(mwinWebPads* pads, uint32_t index, const PadState* state, uint
 {
     char name[MWIN_GAMEPAD_NAME_BYTES + 1];
     uint32_t ids[2] = {0, 0};
-    uint32_t length = PadFacts(index, name, sizeof(name), ids);
+    uint32_t length = mwinWebPadFacts(index, name, sizeof(name), ids);
     mwinGamepadInfo info = {
         .vendor = (uint16_t)(ids[0] >> 16),
         .product = (uint16_t)ids[0],
@@ -196,7 +197,7 @@ void mwinWebPadsPump(mwinWebPads* pads, uint64_t nowNs)
     for (uint32_t index = 0; index < MWIN_WEB_PADS; index++)
     {
         PadState state;
-        bool present = ReadPad(pads->context, index, &state);
+        bool present = mwinPageReadPad(pads->context, index, &state);
         mwinWebPad* pad = &pads->pads[index];
         // Gone, or disconnected since and another there.
         if (pad->connected && (!present || state.losses != pad->losses))
@@ -224,7 +225,8 @@ mwinResult mwinWebPadsRumble(const mwinWebPads* pads, uint32_t slot, float low, 
         const mwinWebPad* pad = &pads->pads[index];
         if (pad->connected && pad->slot == slot)
         {
-            return PadRumble(index, low, high, durationMs) ? mwin_success : mwin_errorPlatform;
+            return mwinWebPadRumble(index, low, high, durationMs) ? mwin_success
+                                                                  : mwin_errorPlatform;
         }
     }
     return mwin_errorPlatform;

@@ -6,8 +6,7 @@
 #include "web_clipboard.h"
 
 #include "allocator.h"
-
-#include <emscripten/em_js.h>
+#include "web_js.h"
 
 EM_JS_DEPS(mwin_web_clipboard, "$UTF8ToString");
 
@@ -15,7 +14,7 @@ EM_JS_DEPS(mwin_web_clipboard, "$UTF8ToString");
 // Each starts the promise and says whether the page has the API. Its
 // record carries the window's generation, and a rejection as an
 // mwinOutcome: denied or failed.
-EM_JS(bool, StartWrite, (const mwinContext* context, uint32_t slot, uint32_t generation,
+EM_JS(bool, mwinPageClipboardWrite, (const mwinContext* context, uint32_t slot, uint32_t generation,
                          const char* text, uint32_t length), {
     const clipboard = navigator.clipboard;
     if (!clipboard || !clipboard.writeText) {
@@ -30,7 +29,7 @@ EM_JS(bool, StartWrite, (const mwinContext* context, uint32_t slot, uint32_t gen
 });
 
 // The text read waits as UTF-8, a lone surrogate encoded as U+FFFD.
-EM_JS(bool, StartRead, (const mwinContext* context, uint32_t slot, uint32_t generation), {
+EM_JS(bool, mwinPageClipboardRead, (const mwinContext* context, uint32_t slot, uint32_t generation), {
     const clipboard = navigator.clipboard;
     if (!clipboard || !clipboard.readText) {
         return false;
@@ -46,12 +45,12 @@ EM_JS(bool, StartRead, (const mwinContext* context, uint32_t slot, uint32_t gene
     return true;
 });
 
-EM_JS(uint32_t, WaitingLength, (const mwinContext* context), {
+EM_JS(uint32_t, mwinPageClipboardWaiting, (const mwinContext* context), {
     return Module.mwinWeb.get(context).clipboardTexts[0].length;
 });
 
 // Takes the waiting text, into out unless it is NULL.
-EM_JS(void, TakeWaiting, (const mwinContext* context, char* out), {
+EM_JS(void, mwinPageClipboardTake, (const mwinContext* context, char* out), {
     const bytes = Module.mwinWeb.get(context).clipboardTexts.shift();
     if (out) {
         HEAPU8.set(bytes, out);
@@ -61,26 +60,27 @@ EM_JS(void, TakeWaiting, (const mwinContext* context, char* out), {
 
 int mwinWebWriteClipboard(mwinContext* context, uint32_t slot)
 {
-    return StartWrite(context, slot, context->windows[slot].generation, context->clipboardOffer,
-                      context->clipboardOfferLength)
+    return mwinPageClipboardWrite(context, slot, context->windows[slot].generation,
+                                  context->clipboardOffer, context->clipboardOfferLength)
                ? -1
                : mwin_outcomeUnsupported;
 }
 
 int mwinWebReadClipboard(mwinContext* context, uint32_t slot)
 {
-    return StartRead(context, slot, context->windows[slot].generation) ? -1
-                                                                       : mwin_outcomeUnsupported;
+    return mwinPageClipboardRead(context, slot, context->windows[slot].generation)
+               ? -1
+               : mwin_outcomeUnsupported;
 }
 
 // Takes a done read's text into the context: the outcome.
 static mwinOutcome Take(mwinContext* context)
 {
-    uint32_t length = WaitingLength(context);
+    uint32_t length = mwinPageClipboardWaiting(context);
     char* bytes = length > 0 && length <= context->limits.clipboardBytes
                       ? mwinAllocate(&context->allocator, length, 1)
                       : nullptr;
-    TakeWaiting(context, bytes);
+    mwinPageClipboardTake(context, bytes);
     if (length > context->limits.clipboardBytes)
     {
         return mwin_outcomeTooLarge;

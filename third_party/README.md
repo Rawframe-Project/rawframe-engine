@@ -11,7 +11,7 @@ apply to vendored files; the code is upstream's, not ours.
 | Maul2D 0.0.1 | `Rawframe-Project/maul2d` | `42676bf8798be03b8436a040ca3c60bad4d13b8c` | MIT | `include/`, `src/`, `LICENSE` |
 | Maul3D 0.0.1 | `Rawframe-Project/maul3d` | `a8f590b6d38afcf75133dd3d63777d09ba984c7a` | MIT | `include/`, `src/`, `LICENSE` |
 | Maul Unicode 0.2.0 | `Rawframe-Project/maul-unicode` | `de28bfc4cdd7a38993bfa0492ee1ac0cb7e9ace5` | MIT (its UCD tables: Unicode-3.0) | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
-| Maul Window 0.1.0 | `Rawframe-Project/maul-window` | `e8347920c9973eede675fd90570e85352ae80dfe` | MIT (its gamepad tables: SDL_GameControllerDB, zlib) | `include/`, `src/`, `cmake/`, `protocols/`, `CMakeLists.txt`, `LICENSE` |
+| Maul Window 0.1.0 and main to `47a02f5` (the web without Emscripten, mwin-0022; D250) | `Rawframe-Project/maul-window` | `47a02f592139d2fba3a4db70f66bd1e19c5ab067` | MIT (its gamepad tables: SDL_GameControllerDB, zlib) | `include/`, `src/`, `cmake/`, `protocols/`, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |
 | miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 (stb_vorbis v1.22: public domain or MIT) | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |
 | MsQuic 2.6.1 | `microsoft/msquic` | `a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83` | MIT | build files, `src/` without tests, tools, or Windows PGO data, notices |
 | XDP for Windows, MsQuic's submodule | `microsoft/xdp-for-windows` | `d372b52577a724e04fa4c06acb90bbfa4719fc25`, the revision MsQuic's pin names | MIT | `published/external` (headers MsQuic's Windows datapath includes), `LICENSE`, at `msquic/submodules/xdp-for-windows` |

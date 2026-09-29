@@ -8,11 +8,11 @@
 #include "web_clipboard.h"
 #include "web_drop.h"
 #include "web_input.h"
+#include "web_js.h"
 #include "web_page.h"
 #include "web_services.h"
 #include "web_text.h"
 
-#include <emscripten/emscripten.h>
 #include <string.h>
 
 static mwinWebPlatform* PlatformOf(const mwinContext* context)
@@ -99,7 +99,7 @@ void mwinWebCreateWindow(mwinContext* context, uint32_t slot)
     window->open = true;
     mwinWebWatchCanvas(context, slot);
     mwinWebWatchDrops(context, slot);
-    uint64_t now = mwinWebNanoseconds(emscripten_get_now());
+    uint64_t now = mwinWebNanoseconds(mwinWebNow());
     PostType(platform, slot, mwin_eventWindowCreated, now);
     if (platform->monitor >= 0)
     {
@@ -164,7 +164,7 @@ static int CarryOut(mwinContext* context, uint32_t slot, const mwinRequest* requ
         mwinWebSetVisible(context, slot, request->value.visible);
         PostType(PlatformOf(context), slot,
                  request->value.visible ? mwin_eventShown : mwin_eventHidden,
-                 mwinWebNanoseconds(emscripten_get_now()));
+                 mwinWebNanoseconds(mwinWebNow()));
         return mwin_outcomeDone;
     case mwin_requestFocus:
         return mwinWebFocus(context, slot) ? mwin_outcomeDone : mwin_outcomeDenied;

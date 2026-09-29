@@ -14,13 +14,13 @@
 #include "web_clipboard.h"
 #include "web_drop.h"
 #include "web_input.h"
+#include "web_js.h"
 #include "web_pad.h"
 #include "web_page.h"
 #include "web_services.h"
 #include "web_text.h"
 #include "web_window.h"
 
-#include <emscripten/emscripten.h>
 #include <math.h>
 #include <string.h>
 
@@ -37,7 +37,7 @@ static size_t PlatformBytes(const mwinContext* context)
 
 static uint64_t NowNs(void)
 {
-    return mwinWebNanoseconds(emscripten_get_now());
+    return mwinWebNanoseconds(mwinWebNow());
 }
 
 // The screen as a monitor, in device pixels.
@@ -85,6 +85,51 @@ static void PostLifecycle(mwinContext* context, mwinEventType type)
     mwinPostGlobal(context, &event);
 }
 
+#ifdef __EMSCRIPTEN__
+static void StopLoop(mwinContext* context)
+{
+    (void)context;
+    emscripten_cancel_main_loop();
+}
+#else
+// The page's loop without Emscripten (mwin-0022): each animation frame
+// calls step with the context until it returns false, or until the loop
+// is stopped.
+typedef bool (*mwinWebStep)(mwinContext* context);
+
+// clang-format off
+EM_JS(void, mwinWebLoop, (mwinContext* context, mwinWebStep step), {
+    const loops = Module.mwinWebLoops || (Module.mwinWebLoops = new Map());
+    const loop = {running: true};
+    loops.set(context, loop);
+    const frame = () => {
+        if (!loop.running) {
+            return;
+        }
+        if (getWasmTableEntry(step)(context)) {
+            requestAnimationFrame(frame);
+        } else {
+            loops.delete(context);
+        }
+    };
+    requestAnimationFrame(frame);
+});
+
+EM_JS(void, mwinWebStopLoop, (const mwinContext* context), {
+    const loop = Module.mwinWebLoops && Module.mwinWebLoops.get(context);
+    if (loop) {
+        loop.running = false;
+        Module.mwinWebLoops.delete(context);
+    }
+});
+// clang-format on
+
+static void StopLoop(mwinContext* context)
+{
+    mwinWebStopLoop(context);
+}
+#endif
+
 // A frame the page's loop may not run for a while, or may never run
 // again, where the program can save what must survive. False when the
 // frame stopped the program, which is over and its context freed.
@@ -95,7 +140,7 @@ static bool RunCriticalFrame(mwinContext* context)
     {
         return true;
     }
-    emscripten_cancel_main_loop();
+    StopLoop(context);
     (void)mwinEndProgram(context);
     mwinFinishRun(context);
     return false;
@@ -249,17 +294,26 @@ static void Pump(mwinContext* context)
 #endif
 }
 
-// A frame of the browser's: the program's frame, or its end.
-static void Step(void* data)
+// A frame of the browser's: the program's frame, or its end. False once
+// the program has ended and its context is freed.
+static bool Step(mwinContext* context)
 {
-    mwinContext* context = data;
-    if (!mwinStepProgram(context, Pump))
+    if (mwinStepProgram(context, Pump))
     {
-        emscripten_cancel_main_loop();
-        (void)mwinEndProgram(context);
-        mwinFinishRun(context);
+        return true;
     }
+    StopLoop(context);
+    (void)mwinEndProgram(context);
+    mwinFinishRun(context);
+    return false;
 }
+
+#ifdef __EMSCRIPTEN__
+static void EmscriptenStep(void* data)
+{
+    (void)Step(data);
+}
+#endif
 
 static mwinResult Run(mwinContext* context)
 {
@@ -267,8 +321,15 @@ static mwinResult Run(mwinContext* context)
     {
         return mwinEndProgram(context);
     }
+#ifdef __EMSCRIPTEN__
     // Unwinds the stack: mwinRun does not return.
-    emscripten_set_main_loop_arg(Step, context, 0, true);
+    emscripten_set_main_loop_arg(EmscriptenStep, context, 0, true);
+#else
+    // Nothing can unwind the stack: mwinRun returns while the page's
+    // frames run the program on, and the last of them frees the context.
+    context->loopOutlivesRun = true;
+    mwinWebLoop(context, Step);
+#endif
     return mwin_success;
 }
 

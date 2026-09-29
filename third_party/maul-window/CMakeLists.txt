@@ -33,7 +33,13 @@ endif()
 option(MAUL_WINDOW_WAYLAND "Build the Wayland backend" ${MAUL_WINDOW_LINUX})
 option(MAUL_WINDOW_X11 "Build the X11 backend" ${MAUL_WINDOW_LINUX})
 option(MAUL_WINDOW_WIN32 "Build the Win32 backend" ${WIN32})
-option(MAUL_WINDOW_WEB "Build the web backend" ${EMSCRIPTEN})
+# The web: Emscripten's, or a plain WebAssembly toolchain's (mwin-0022).
+if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
+    set(MAUL_WINDOW_WEB_DEFAULT ON)
+else()
+    set(MAUL_WINDOW_WEB_DEFAULT OFF)
+endif()
+option(MAUL_WINDOW_WEB "Build the web backend" ${MAUL_WINDOW_WEB_DEFAULT})
 option(MAUL_WINDOW_GAMEPAD "Build the gamepad component" ON)
 
 # Maul Unicode validates every string that crosses the library: the
@@ -263,38 +269,31 @@ if(MAUL_WINDOW_BUILD_TESTS)
     endif()
     if(MAUL_WINDOW_WEB)
         # Runs in headless Chrome through puppeteer, which the runner
-        # finds through MWIN_NODE_MODULES: skipped without it.
-        maul_add_test(web MANUAL)
-        add_test(NAME web COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
-                 $<TARGET_FILE:test_web>)
-        maul_add_test(web_input MANUAL)
-        add_test(NAME web_input COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
-                 $<TARGET_FILE:test_web_input>)
-        maul_add_test(web_ime MANUAL)
-        add_test(NAME web_ime COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
-                 $<TARGET_FILE:test_web_ime>)
-        maul_add_test(web_lifecycle MANUAL)
-        add_test(NAME web_lifecycle COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
-                 $<TARGET_FILE:test_web_lifecycle>)
-        set_tests_properties(web web_input web_ime web_lifecycle PROPERTIES SKIP_RETURN_CODE 77)
+        # finds through MWIN_NODE_MODULES: skipped without it. Without
+        # Emscripten a test is a reactor whose main the runner calls, with
+        # its imports beside it (mwin-0022).
+        function(mwin_add_web_test name)
+            maul_add_test(${name} MANUAL WHITEBOX)
+            add_test(NAME ${name} COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
+                     $<TARGET_FILE:test_${name}>)
+            set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
+            if(NOT EMSCRIPTEN)
+                target_link_options(test_${name} PRIVATE -mexec-model=reactor -Wl,--stack-first -Wl,--export-table
+                                    -Wl,--export=main)
+                mwin_web_glue(test_${name}_glue ${PROJECT_BINARY_DIR}/test_${name}.mjs test/test_${name}.c)
+                add_dependencies(test_${name} test_${name}_glue)
+            endif()
+        endfunction()
+        mwin_add_web_test(web)
+        mwin_add_web_test(web_input)
+        mwin_add_web_test(web_ime)
+        mwin_add_web_test(web_lifecycle)
         if(MAUL_WINDOW_GAMEPAD)
-            maul_add_test(web_gamepad MANUAL)
-            add_test(NAME web_gamepad COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
-                     $<TARGET_FILE:test_web_gamepad>)
-            set_tests_properties(web_gamepad PROPERTIES SKIP_RETURN_CODE 77)
+            mwin_add_web_test(web_gamepad)
         endif()
-        maul_add_test(web_clipboard MANUAL)
-        add_test(NAME web_clipboard COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
-                 $<TARGET_FILE:test_web_clipboard>)
-        set_tests_properties(web_clipboard PROPERTIES SKIP_RETURN_CODE 77)
-        maul_add_test(web_services MANUAL)
-        add_test(NAME web_services COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
-                 $<TARGET_FILE:test_web_services>)
-        set_tests_properties(web_services PROPERTIES SKIP_RETURN_CODE 77)
-        maul_add_test(web_drop MANUAL)
-        add_test(NAME web_drop COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
-                 $<TARGET_FILE:test_web_drop>)
-        set_tests_properties(web_drop PROPERTIES SKIP_RETURN_CODE 77)
+        mwin_add_web_test(web_clipboard)
+        mwin_add_web_test(web_services)
+        mwin_add_web_test(web_drop)
     endif()
     if(MAUL_WINDOW_WIN32)
         maul_add_test(win32)

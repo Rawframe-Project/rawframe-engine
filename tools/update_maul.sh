@@ -16,7 +16,7 @@ engine="$1"
 case "$engine" in
 maul2d | maul3d) paths=(include src LICENSE) ;;
 maul-unicode) paths=(include src cmake CMakeLists.txt LICENSE) ;;
-maul-window) paths=(include src cmake protocols CMakeLists.txt LICENSE) ;;
+maul-window) paths=(include src cmake protocols tools/gen_web_glue.py CMakeLists.txt LICENSE) ;;
 *)
     echo "update_maul.sh: the library is maul2d, maul3d, maul-unicode, or maul-window" >&2
     exit 2

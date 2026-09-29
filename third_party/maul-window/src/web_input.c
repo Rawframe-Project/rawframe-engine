@@ -5,14 +5,14 @@
 
 #include "web_input.h"
 
-#include "maul-unicode/encoding.h"
+#include "web_js.h"
 
-#include <emscripten/em_js.h>
+#include "maul-unicode/encoding.h"
 
 EM_JS_DEPS(mwin_web_input, "$UTF8ToString");
 
 // clang-format off
-EM_JS(void, AttachInput, (const mwinContext* context), {
+EM_JS(void, mwinPageAttachInput, (const mwinContext* context), {
     const state = Module.mwinWeb.get(context);
     // KeyboardEvent.code to mwinKeyCode: the enum's names are the codes.
     const codes = {KeyA: 4, KeyB: 5, KeyC: 6, KeyD: 7, KeyE: 8, KeyF: 9, KeyG: 10, KeyH: 11,
@@ -75,7 +75,7 @@ EM_JS(void, AttachInput, (const mwinContext* context), {
     state.listeners.push(() => document.removeEventListener('pointerlockchange', locked));
 });
 
-EM_JS(void, WatchKeys, (const mwinContext* context, uint32_t slot), {
+EM_JS(void, mwinPageWatchKeys, (const mwinContext* context, uint32_t slot), {
     const state = Module.mwinWeb.get(context);
     const entry = state.canvases[slot];
     const input = state.input;
@@ -116,7 +116,7 @@ EM_JS(void, WatchKeys, (const mwinContext* context, uint32_t slot), {
     });
 });
 
-EM_JS(void, WatchPointer, (const mwinContext* context, uint32_t slot), {
+EM_JS(void, mwinPageWatchPointer, (const mwinContext* context, uint32_t slot), {
     const state = Module.mwinWeb.get(context);
     const entry = state.canvases[slot];
     const canvas = entry.canvas;
@@ -174,7 +174,7 @@ EM_JS(void, WatchPointer, (const mwinContext* context, uint32_t slot), {
     listen('contextmenu', e => e.preventDefault());
 });
 
-EM_JS(int, LockPointer, (const mwinContext* context, uint32_t slot, bool lock), {
+EM_JS(int, mwinPageLockPointer, (const mwinContext* context, uint32_t slot, bool lock), {
     const state = Module.mwinWeb.get(context);
     const canvas = state.canvases[slot].canvas;
     if ((document.pointerLockElement === canvas) === !!lock) {
@@ -199,14 +199,14 @@ EM_JS(int, LockPointer, (const mwinContext* context, uint32_t slot, bool lock), 
     return 0;
 });
 
-EM_JS(void, SetCursor, (const mwinContext* context, uint32_t slot, int shape, bool hidden), {
+EM_JS(void, mwinPageSetCursor, (const mwinContext* context, uint32_t slot, int shape, bool hidden), {
     const shapes = ['default', 'text', 'pointer', 'crosshair', 'move', 'ew-resize', 'ns-resize',
                     'nesw-resize', 'nwse-resize', 'not-allowed', 'wait', 'progress'];
     Module.mwinWeb.get(context).canvases[slot].canvas.style.cursor =
         hidden ? 'none' : shapes[shape];
 });
 
-EM_JS(int, Meaning, (const mwinContext* context, int code), {
+EM_JS(int, mwinPageKeyMeaning, (const mwinContext* context, int code), {
     const input = Module.mwinWeb.get(context).input;
     const name = input.names[code];
     // Without a layout map, what a US layout would say.
@@ -219,13 +219,13 @@ EM_JS(int, Meaning, (const mwinContext* context, int code), {
 
 void mwinWebAttachInput(const mwinContext* context)
 {
-    AttachInput(context);
+    mwinPageAttachInput(context);
 }
 
 void mwinWebWatchCanvas(const mwinContext* context, uint32_t slot)
 {
-    WatchKeys(context, slot);
-    WatchPointer(context, slot);
+    mwinPageWatchKeys(context, slot);
+    mwinPageWatchPointer(context, slot);
 }
 
 static void Post(mwinWebPlatform* platform, uint32_t slot, mwinEvent* event, double timeMs)
@@ -343,7 +343,8 @@ static void AnswerLock(mwinWebPlatform* platform, uint32_t slot, bool locked, bo
     if (!failed && locked == wanted)
     {
         platform->windows[slot].cursorMode = mode;
-        SetCursor(context, slot, platform->windows[slot].cursorShape, mode != mwin_cursorVisible);
+        mwinPageSetCursor(context, slot, platform->windows[slot].cursorShape,
+                          mode != mwin_cursorVisible);
         mwinComplete(context, slot, (uint32_t)request, mwin_outcomeDone);
     }
     else if (failed)
@@ -395,14 +396,14 @@ int mwinWebSetCursorMode(mwinWebPlatform* platform, uint32_t slot, mwinCursorMod
     {
         return mwin_outcomeUnsupported;
     }
-    int answer = LockPointer(platform->context, slot, mode == mwin_cursorCaptured);
+    int answer = mwinPageLockPointer(platform->context, slot, mode == mwin_cursorCaptured);
     if (answer <= 0)
     {
         return answer < 0 ? mwin_outcomeUnsupported : -1;
     }
     platform->windows[slot].cursorMode = mode;
-    SetCursor(platform->context, slot, platform->windows[slot].cursorShape,
-              mode != mwin_cursorVisible);
+    mwinPageSetCursor(platform->context, slot, platform->windows[slot].cursorShape,
+                      mode != mwin_cursorVisible);
     return mwin_outcomeDone;
 }
 
@@ -410,12 +411,12 @@ int mwinWebSetCursorShape(mwinWebPlatform* platform, uint32_t slot, mwinCursorSh
 {
     mwinWebWindow* window = &platform->windows[slot];
     window->cursorShape = shape;
-    SetCursor(platform->context, slot, shape, window->cursorMode != mwin_cursorVisible);
+    mwinPageSetCursor(platform->context, slot, shape, window->cursorMode != mwin_cursorVisible);
     return mwin_outcomeDone;
 }
 
 mwinKey mwinWebMapKeyCode(const mwinContext* context, mwinKeyCode code)
 {
-    int meaning = Meaning(context, (int)code);
+    int meaning = mwinPageKeyMeaning(context, (int)code);
     return meaning > 0 ? (mwinKey)meaning : MWIN_KEY_NAMED | code;
 }

@@ -193,7 +193,7 @@ struct mwinContext
     mwinLimits limits;
     const mwinBackendOps* backend;
     void* backendData;
-    const mwinAppDef* app;
+    mwinAppDef app;
     uint64_t sequence;
     mwinWindow* windows;
     // Slots like the windows': free, live, or removed with its record
@@ -234,6 +234,10 @@ struct mwinContext
     bool stopping;
     // The program's functions are running; a critical frame waits.
     bool inProgram;
+    // The platform's loop runs the program's frames after the backend's
+    // run returned; its last frame ends the program and frees the
+    // context (mwin-0022).
+    bool loopOutlivesRun;
     // What init returned.
     mwinResult status;
 };

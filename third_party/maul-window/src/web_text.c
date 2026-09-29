@@ -5,14 +5,13 @@
 
 #include "web_text.h"
 
-#include <emscripten/em_js.h>
-#include <emscripten/emscripten.h>
+#include "web_js.h"
 
 EM_JS_DEPS(mwin_web_text, "$stringToUTF8,$lengthBytesUTF8");
 
 // clang-format off
 // The canvas's text field, made the first time it is needed.
-EM_JS(void, MakeField, (const mwinContext* context, uint32_t slot), {
+EM_JS(void, mwinPageMakeField, (const mwinContext* context, uint32_t slot), {
     const state = Module.mwinWeb.get(context);
     const entry = state.canvases[slot];
     if (entry.textarea) {
@@ -63,7 +62,7 @@ EM_JS(void, MakeField, (const mwinContext* context, uint32_t slot), {
     entry.listeners.push(() => field.remove());
 });
 
-EM_JS(void, PlaceField, (const mwinContext* context, uint32_t slot, float x, float y,
+EM_JS(void, mwinPagePlaceField, (const mwinContext* context, uint32_t slot, float x, float y,
                          float width, float height), {
     const entry = Module.mwinWeb.get(context).canvases[slot];
     const box = entry.canvas.getBoundingClientRect();
@@ -77,7 +76,7 @@ EM_JS(void, PlaceField, (const mwinContext* context, uint32_t slot, float x, flo
 });
 
 // Moves the focus into the field when the canvas has it, or back.
-EM_JS(void, FocusField, (const mwinContext* context, uint32_t slot, bool into), {
+EM_JS(void, mwinPageFocusField, (const mwinContext* context, uint32_t slot, bool into), {
     const entry = Module.mwinWeb.get(context).canvases[slot];
     const from = into ? entry.canvas : entry.textarea;
     if (document.activeElement === from) {
@@ -88,14 +87,14 @@ EM_JS(void, FocusField, (const mwinContext* context, uint32_t slot, bool into), 
     }
 });
 
-EM_JS(void, SetPurpose, (const mwinContext* context, uint32_t slot, int purpose), {
+EM_JS(void, mwinPageSetPurpose, (const mwinContext* context, uint32_t slot, int purpose), {
     const modes = ['text', 'numeric', 'email', 'text', 'url'];
     Module.mwinWeb.get(context).canvases[slot].textarea.setAttribute('inputmode', modes[purpose]);
 });
 
 // Takes the string of the record being handled: its length, or -1 when
 // it does not fit.
-EM_JS(int, TakeString, (const mwinContext* context, char* out, uint32_t capacity), {
+EM_JS(int, mwinPageTakeString, (const mwinContext* context, char* out, uint32_t capacity), {
     const text = Module.mwinWeb.get(context).strings.shift() || "";
     const length = lengthBytesUTF8(text);
     if (length >= capacity) {
@@ -128,12 +127,12 @@ mwinOutcome mwinWebSetTextInput(mwinWebPlatform* platform, uint32_t slot, bool e
                                 mwinRect caret)
 {
     mwinContext* context = platform->context;
-    MakeField(context, slot);
-    PlaceField(context, slot, caret.x, caret.y, caret.width, caret.height);
-    FocusField(context, slot, enabled);
+    mwinPageMakeField(context, slot);
+    mwinPagePlaceField(context, slot, caret.x, caret.y, caret.width, caret.height);
+    mwinPageFocusField(context, slot, enabled);
     if (!enabled)
     {
-        EndComposition(platform, slot, emscripten_get_now());
+        EndComposition(platform, slot, mwinWebNow());
     }
     return mwin_outcomeDone;
 }
@@ -142,9 +141,9 @@ mwinOutcome mwinWebSetVirtualKeyboard(mwinWebPlatform* platform, uint32_t slot, 
                                       mwinInputPurpose purpose)
 {
     mwinContext* context = platform->context;
-    MakeField(context, slot);
-    SetPurpose(context, slot, (int)purpose);
-    FocusField(context, slot, visible);
+    mwinPageMakeField(context, slot);
+    mwinPageSetPurpose(context, slot, (int)purpose);
+    mwinPageFocusField(context, slot, visible);
     return mwin_outcomeDone;
 }
 
@@ -152,7 +151,7 @@ void mwinWebHandleTextRecord(mwinWebPlatform* platform, const mwinWebRecord* rec
 {
     uint32_t slot = (uint32_t)record->slot;
     uint32_t capacity = platform->context->limits.textBytesPerWindow;
-    int length = TakeString(platform->context, platform->text, capacity + 1);
+    int length = mwinPageTakeString(platform->context, platform->text, capacity + 1);
     mwinEvent event = {0};
     if (length < 0)
     {

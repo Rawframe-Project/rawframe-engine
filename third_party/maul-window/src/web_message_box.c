@@ -6,14 +6,13 @@
 // their own. Without a page there is none.
 
 #include "message_box.h"
-
-#include <emscripten/em_js.h>
+#include "web_js.h"
 
 EM_JS_DEPS(mwin_web_message_box, "$UTF8ToString");
 
 // clang-format off
 // -1 without a page, else whether it was accepted.
-EM_JS(int, Show, (const char* title, uint32_t titleLength, const char* text,
+EM_JS(int, mwinWebShowMessage, (const char* title, uint32_t titleLength, const char* text,
                   uint32_t textLength, bool question), {
     if (typeof window === 'undefined' || !window.alert) {
         return -1;
@@ -31,8 +30,8 @@ EM_JS(int, Show, (const char* title, uint32_t titleLength, const char* text,
 
 mwinResult mwinPlatformMessageBox(const mwinMessageBoxDef* def, bool* acceptedOut)
 {
-    int answer = Show(def->title, (uint32_t)def->titleLength, def->message,
-                      (uint32_t)def->messageLength, def->buttons != mwin_buttonsOk);
+    int answer = mwinWebShowMessage(def->title, (uint32_t)def->titleLength, def->message,
+                                    (uint32_t)def->messageLength, def->buttons != mwin_buttonsOk);
     if (answer < 0)
     {
         return mwin_errorUnsupported;

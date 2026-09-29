@@ -6,13 +6,12 @@
 #include "web_drop.h"
 
 #include "allocator.h"
-
-#include <emscripten/em_js.h>
+#include "web_js.h"
 
 EM_JS_DEPS(mwin_web_drop, "$stringToUTF8,$lengthBytesUTF8");
 
 // clang-format off
-EM_JS(void, WatchDrops, (const mwinContext* context, uint32_t slot), {
+EM_JS(void, mwinPageWatchDrops, (const mwinContext* context, uint32_t slot), {
     const state = Module.mwinWeb.get(context);
     const entry = state.canvases[slot];
     const canvas = entry.canvas;
@@ -64,12 +63,12 @@ EM_JS(void, WatchDrops, (const mwinContext* context, uint32_t slot), {
     listen('drop', drop);
 });
 
-EM_JS(uint32_t, NameCount, (const mwinContext* context), {
+EM_JS(uint32_t, mwinPageDropNameCount, (const mwinContext* context), {
     return Module.mwinWeb.get(context).drops[0].names.length;
 });
 
 // A file's name into out: its length, or -1 when it does not fit.
-EM_JS(int, Name, (const mwinContext* context, uint32_t index, char* out, uint32_t capacity), {
+EM_JS(int, mwinPageDropName, (const mwinContext* context, uint32_t index, char* out, uint32_t capacity), {
     const name = Module.mwinWeb.get(context).drops[0].names[index];
     if (lengthBytesUTF8(name) >= capacity) {
         return -1;
@@ -78,13 +77,13 @@ EM_JS(int, Name, (const mwinContext* context, uint32_t index, char* out, uint32_
 });
 
 // The text's bytes, or -1 for none.
-EM_JS(int, TextLength, (const mwinContext* context), {
+EM_JS(int, mwinPageDropTextLength, (const mwinContext* context), {
     const bytes = Module.mwinWeb.get(context).drops[0].bytes;
     return bytes === null ? -1 : bytes.length;
 });
 
 // Takes the drop off the page, its text into out unless it is NULL.
-EM_JS(void, TakeDrop, (const mwinContext* context, char* out), {
+EM_JS(void, mwinPageTakeDrop, (const mwinContext* context, char* out), {
     const drop = Module.mwinWeb.get(context).drops.shift();
     if (out && drop.bytes) {
         HEAPU8.set(drop.bytes, out);
@@ -94,7 +93,7 @@ EM_JS(void, TakeDrop, (const mwinContext* context, char* out), {
 
 void mwinWebWatchDrops(const mwinContext* context, uint32_t slot)
 {
-    WatchDrops(context, slot);
+    mwinPageWatchDrops(context, slot);
 }
 
 // Gathers the drop the page took, into the context's drop.
@@ -103,10 +102,10 @@ static void Gather(mwinWebPlatform* platform)
     mwinContext* context = platform->context;
     uint32_t capacity = context->limits.textBytesPerWindow + 1u;
     mwinBeginDrop(context);
-    uint32_t count = NameCount(context);
+    uint32_t count = mwinPageDropNameCount(context);
     for (uint32_t i = 0; i < count; i++)
     {
-        int length = Name(context, i, platform->text, capacity);
+        int length = mwinPageDropName(context, i, platform->text, capacity);
         if (length < 0)
         {
             context->dropping.truncated = true;
@@ -114,11 +113,11 @@ static void Gather(mwinWebPlatform* platform)
         }
         mwinAddDroppedFile(context, platform->text, (size_t)length);
     }
-    int length = TextLength(context);
+    int length = mwinPageDropTextLength(context);
     char* bytes = length > 0 && (uint32_t)length <= context->limits.dropBytes
                       ? mwinAllocate(&context->allocator, (size_t)length, 1)
                       : nullptr;
-    TakeDrop(context, bytes);
+    mwinPageTakeDrop(context, bytes);
     if (length >= 0 && (length == 0 || bytes != nullptr))
     {
         mwinSetDroppedText(context, bytes, (size_t)length);

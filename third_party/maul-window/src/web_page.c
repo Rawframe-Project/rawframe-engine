@@ -8,7 +8,8 @@
 
 #include "web_page.h"
 
-#include <emscripten/em_js.h>
+#include "web_js.h"
+
 #include <stddef.h>
 
 static_assert(offsetof(mwinWebRecord, x) == 16 && offsetof(mwinWebRecord, timeMs) == 40,
@@ -22,7 +23,11 @@ EM_JS_DEPS(mwin_web_page, "$UTF8ToString,$stringToUTF8,$lengthBytesUTF8,$getWasm
 bool mwinWebHasPage(void);
 
 // clang-format off
-EM_JS(bool, HasDocument, (void), {
+EM_JS(double, mwinWebNow, (void), {
+    return performance.now();
+});
+
+EM_JS(bool, mwinWebHasDocument, (void), {
     return typeof document !== 'undefined' && typeof window !== 'undefined';
 });
 
@@ -313,5 +318,5 @@ EM_JS(uint32_t, mwinWebLocales, (char* out, uint32_t capacity), {
 
 bool mwinWebHasPage(void)
 {
-    return HasDocument();
+    return mwinWebHasDocument();
 }
