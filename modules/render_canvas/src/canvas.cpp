@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstring>
 #include <optional>
+#include <tuple>
 
 namespace rawframe::render_canvas {
 
@@ -45,7 +46,7 @@ bool wellFormed(const SpriteInstance& instance) noexcept {
 
 struct Canvas::State {
     CanvasSettings settings;
-    std::optional<world::ColumnQuery> sprites;
+    std::vector<world::ColumnQuery> sprites;
     std::optional<schema::ComponentRuntimeId> pose;
     std::vector<SpriteInstance> extracted;
     std::vector<const SpriteInstance*> order;
@@ -104,7 +105,8 @@ struct Canvas::State {
             order.push_back(&instance);
         }
         std::ranges::sort(order, [](const SpriteInstance* left, const SpriteInstance* right) {
-            return std::pair{left->sprite.layer, left->entity} < std::pair{right->sprite.layer, right->entity};
+            return std::tuple{left->sprite.layer, left->entity, left->component} <
+                   std::tuple{right->sprite.layer, right->entity, right->component};
         });
         // A camera that sees nothing culls everything.
         const bool kSees = std::isfinite(camera.x) && std::isfinite(camera.y) && std::isfinite(camera.height) &&
@@ -165,17 +167,20 @@ Canvas::~Canvas() = default;
 
 result::Result<std::unique_ptr<Canvas>> Canvas::create(const schema::SchemaRegistry& registry,
                                                        CanvasSettings settings) {
-    RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kSprite, registry.find(settings.sprite));
-    if (registry.descriptor(kSprite).size != sizeof(Sprite)) {
-        return refuse(result::ErrorClass::InvalidArgument,
-                      RenderCanvasError::BadComponents,
-                      "the sprite component is not rawframe.canvas's size");
-    }
     auto state = std::make_unique<State>();
+    for (const schema::ComponentTypeId kId : settings.sprites) {
+        RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kSprite, registry.find(kId));
+        if (registry.descriptor(kSprite).size != sizeof(Sprite)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          RenderCanvasError::BadComponents,
+                          "a sprite component is not rawframe.canvas's size");
+        }
+        const std::array<world::ColumnTerm, 1> kSprites = {world::ColumnTerm{kSprite, world::Access::Read}};
+        RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(kSprites, registry));
+        state->sprites.push_back(std::move(query));
+    }
     std::ranges::sort(settings.textures);
     state->settings = std::move(settings);
-    const std::array<world::ColumnTerm, 1> kSprites = {world::ColumnTerm{kSprite, world::Access::Read}};
-    RAWFRAME_TRY_ASSIGN(state->sprites, world::ColumnQuery::resolve(kSprites, registry));
     if (const auto kPose = registry.find(physics2d::Pose2D::kComponentTypeId)) {
         state->pose = *kPose;
     }
@@ -185,22 +190,25 @@ result::Result<std::unique_ptr<Canvas>> Canvas::create(const schema::SchemaRegis
 void Canvas::extract(world::World& world) {
     State& state = *state_;
     state.extracted.clear();
-    state.sprites->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-        for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-            SpriteInstance instance{.entity = chunk.entities[row]};
-            std::memcpy(&instance.sprite, chunk.columns[0] + (row * sizeof(Sprite)), sizeof(Sprite));
-            if (state.pose) {
-                if (const auto* pose =
-                        static_cast<const physics2d::Pose2D*>(world.getErased(instance.entity, *state.pose))) {
-                    instance.x = pose->x;
-                    instance.y = pose->y;
-                    instance.c = pose->c;
-                    instance.s = pose->s;
+    for (std::size_t component = 0; component < state.sprites.size(); ++component) {
+        state.sprites[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                SpriteInstance instance{.entity = chunk.entities[row],
+                                        .component = static_cast<std::uint32_t>(component)};
+                std::memcpy(&instance.sprite, chunk.columns[0] + (row * sizeof(Sprite)), sizeof(Sprite));
+                if (state.pose) {
+                    if (const auto* pose =
+                            static_cast<const physics2d::Pose2D*>(world.getErased(instance.entity, *state.pose))) {
+                        instance.x = pose->x;
+                        instance.y = pose->y;
+                        instance.c = pose->c;
+                        instance.s = pose->s;
+                    }
                 }
+                state.extracted.push_back(instance);
             }
-            state.extracted.push_back(instance);
-        }
-    });
+        });
+    }
 }
 
 const CanvasFrame& Canvas::queue(const CanvasCamera& camera) {
@@ -213,19 +221,13 @@ std::span<const SpriteInstance> Canvas::extracted() const noexcept {
 
 result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, const kest::Program& program) {
     const world_kest::GameDescription& kDescription = game.description();
-    const world_kest::GameComponent* sprite = nullptr;
+    GameCanvas loaded{.cameraHeight = kDescription.cameraHeight.value_or(10.0F)};
     for (const world_kest::GameComponent& component : kDescription.components) {
-        if (!world_kest::ofEngineType(component, "rawframe.canvas.Sprite")) {
-            continue;
+        if (world_kest::ofEngineType(component, "rawframe.canvas.Sprite")) {
+            loaded.sprites.push_back(component.id);
         }
-        if (sprite != nullptr) {
-            return refuse(result::ErrorClass::InvalidArgument,
-                          RenderCanvasError::BadComponents,
-                          "a game declares one sprite component");
-        }
-        sprite = &component;
     }
-    if (sprite == nullptr) {
+    if (loaded.sprites.empty()) {
         return refuse(result::ErrorClass::NotFound, RenderCanvasError::NoSprites, "the game declares no sprites");
     }
     // By its full name: a game's own type called `Sprite` is not this one.
@@ -249,7 +251,6 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
                       RenderCanvasError::BadComponents,
                       "the program lays out rawframe.canvas's Sprite otherwise than this engine reads it");
     }
-    GameCanvas loaded{.sprite = sprite->id, .cameraHeight = kDescription.cameraHeight.value_or(10.0F)};
     for (const world_kest::GameTexture& texture : kDescription.textures) {
         loaded.textures.push_back(texture.id);
     }

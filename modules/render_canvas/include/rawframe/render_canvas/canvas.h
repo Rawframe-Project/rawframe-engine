@@ -45,6 +45,8 @@ struct Sprite {
 /// unturned, without one).
 struct SpriteInstance {
     world::EntityHandle entity;
+    /// Which of the game's sprite components it is, by its place.
+    std::uint32_t component = 0;
     Sprite sprite;
     double x = 0;
     double y = 0;
@@ -109,8 +111,9 @@ struct CanvasLimits {
 };
 
 struct CanvasSettings {
-    /// The game's component of `rawframe.canvas.Sprite`'s type.
-    schema::ComponentTypeId sprite;
+    /// The game's components of `rawframe.canvas.Sprite`'s type, in its
+    /// order: an entity may show one of each.
+    std::vector<schema::ComponentTypeId> sprites;
     /// The textures the game declares, by identity.
     std::vector<std::uint64_t> textures;
     CanvasLimits limits;
@@ -131,7 +134,8 @@ public:
     void extract(world::World& world);
 
     /// The queue stage, in `present`: the extracted sprites seen through
-    /// `camera`, drawn in the order of their layers, then of their entities.
+    /// `camera`, drawn in the order of their layers, then of their entities,
+    /// then of their components.
     const CanvasFrame& queue(const CanvasCamera& camera);
 
     [[nodiscard]] std::span<const SpriteInstance> extracted() const noexcept;
@@ -142,15 +146,15 @@ private:
     std::unique_ptr<State> state_;
 };
 
-/// A game's canvas, declared: its sprite component, its textures, and its
+/// A game's canvas, declared: its sprite components, its textures, and its
 /// camera's height.
 struct GameCanvas {
-    schema::ComponentTypeId sprite;
+    std::vector<schema::ComponentTypeId> sprites;
     std::vector<std::uint64_t> textures;
     float cameraHeight = 10;
 };
 
-/// Finds the game's component of `rawframe.canvas.Sprite`'s type, whose
+/// Finds the game's components of `rawframe.canvas.Sprite`'s type, whose
 /// layout in `program` must be what this module reads, and its `texture`
 /// and `camera` lines. Refuses (`NotFound`) a game with no sprite component.
 [[nodiscard]] result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game,

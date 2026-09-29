@@ -31,11 +31,14 @@ using namespace rawframe::render_canvas;
 namespace {
 
 constexpr auto kSpriteId = schema::ComponentTypeId::fromText("5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
+constexpr auto kHatId = schema::ComponentTypeId::fromText("6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
 constexpr std::uint64_t kRunner = 0xb1;
 constexpr std::uint64_t kTiles = 0xb2;
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
+    builder.add(schema::ComponentDescriptor{
+        .id = kHatId, .name = "test.hat", .size = sizeof(Sprite), .alignment = alignof(Sprite), .plainData = true});
     builder.add(schema::ComponentDescriptor{.id = kSpriteId,
                                             .name = "test.sprite",
                                             .size = sizeof(Sprite),
@@ -51,7 +54,8 @@ struct Rig {
     std::unique_ptr<Canvas> canvas;
 
     explicit Rig(CanvasLimits limits = {}) {
-        canvas = *Canvas::create(*schema, {.sprite = kSpriteId, .textures = {kTiles, kRunner}, .limits = limits});
+        canvas =
+            *Canvas::create(*schema, {.sprites = {kSpriteId, kHatId}, .textures = {kTiles, kRunner}, .limits = limits});
     }
 
     world::EntityHandle spawn(Sprite sprite, std::optional<physics2d::Pose2D> pose) {
@@ -181,6 +185,20 @@ RAWFRAME_TEST(SpritesDrawInOrderAndBatchOnlyWhereTheOrderAllows) {
                     kAgain.vertices.size() == 12);
 }
 
+RAWFRAME_TEST(AnEntityShowsOneSpriteOfEachComponent) {
+    // A body and its hat on one entity, one layer: the body first, as the
+    // game orders its components; a hat alone draws too.
+    Rig rig;
+    const auto kEntity = rig.spawn(Sprite{.texture = kRunner}, physics2d::Pose2D{});
+    Sprite hat{.texture = kTiles, .height = 0.5F};
+    RAWFRAME_EXPECT(rig.world.insertErased(kEntity, *rig.schema->find(kHatId), &hat).has_value());
+    const world::EntityHandle kHatOnly = *rig.world.create();
+    RAWFRAME_EXPECT(rig.world.insertErased(kHatOnly, *rig.schema->find(kHatId), &hat).has_value());
+    const CanvasFrame& kFrame = rig.frame({.height = 10});
+    RAWFRAME_EXPECT(kFrame.drawn == 3 && kFrame.draws.size() == 2 && kFrame.draws[0].texture == kRunner &&
+                    kFrame.draws[1].texture == kTiles && kFrame.draws[1].indexCount == 12);
+}
+
 RAWFRAME_TEST(TheLimitsLeaveOutTheLastInOrder) {
     Rig sprites{{.maximumSprites = 2}};
     for (std::int32_t layer = 0; layer < 4; ++layer) {
@@ -226,7 +244,7 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
     const auto kLoaded = kLoad(kUses,
                                "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
                                "texture 00000000000000b2 tiles.png\ntexture 00000000000000b1 runner.png\ncamera 12\n");
-    RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->sprite == kSpriteId &&
+    RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->sprites == (std::vector<schema::ComponentTypeId>{kSpriteId}) &&
                     kLoaded->textures == (std::vector<std::uint64_t>{kTiles, kRunner}) && kLoaded->cameraHeight == 12);
     const auto kPlain =
         kLoad(kUses, "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n");
@@ -240,7 +258,7 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
     const auto kTwo = kLoad(kUses,
                             "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
                             "component 6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.other rawframe.canvas.Sprite\n");
-    RAWFRAME_EXPECT(!kTwo.has_value() && kTwo.error().code() == code(RenderCanvasError::BadComponents));
+    RAWFRAME_EXPECT(kTwo.has_value() && kTwo->sprites == (std::vector<schema::ComponentTypeId>{kSpriteId, kHatId}));
 }
 
 namespace {

@@ -85,7 +85,7 @@ public:
         }
         camera_.height = game->cameraHeight;
         camera_.aspect = static_cast<float>(kWidth) / static_cast<float>(kHeight);
-        settings_ = CanvasSettings{.sprite = game->sprite, .textures = std::move(game->textures)};
+        settings_ = CanvasSettings{.sprites = std::move(game->sprites), .textures = std::move(game->textures)};
         if (context.has(game_content::kGameContent.name) && context.cpuExecutor() != nullptr &&
             !files->textures().empty()) {
             RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
