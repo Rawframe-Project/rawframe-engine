@@ -61,6 +61,15 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldAudioE
     return std::unexpected<result::Error>{result::fail(errorClass, kWorldAudioDomain, code(error), why).error()};
 }
 
+/// Each emitter component's cues, in the game's order, for a summary.
+std::string emitterCuesOf(const WorldAudioStatistics& heard) {
+    std::string made;
+    for (const std::uint64_t kCues : heard.emitterCues) {
+        made += (made.empty() ? "" : " ") + std::to_string(kCues);
+    }
+    return made;
+}
+
 /// One client's mirrored World heard as its player would hear it: the
 /// game's sounds on a mixer at a rate, the listener bound to the player.
 struct Hearing {
@@ -132,7 +141,7 @@ struct Hearing {
         streamer = kExecutor != nullptr ? std::make_unique<audio::Streamer>(*kExecutor, context.owner())
                                         : std::make_unique<audio::Streamer>();
         RAWFRAME_TRY_ASSIGN(sounds, audio::Sounds::create(*mixer, game.layout, {.streamer = streamer.get()}));
-        settings.emitter = game.emitter;
+        settings.emitters = game.emitters;
         settings.listener = game.listener;
         for (const world_kest::GameEffect& effect : files->description().effects) {
             effectSounds.push_back(effect.sound);
@@ -344,6 +353,7 @@ public:
                       diagnostics::field("frames", clip.frames()),
                       diagnostics::field("peak", static_cast<double>(peak)),
                       diagnostics::field("cues", kHeard.cues),
+                      diagnostics::field("emitterCues", emitterCuesOf(kHeard)),
                       diagnostics::field("effects", kHeard.once),
                       diagnostics::field("effectsTakenBack", hearing_.takenBack),
                       diagnostics::field("refused", kHeard.refused),
@@ -459,6 +469,7 @@ public:
                           diagnostics::field("framesDropped", dropped_),
                           diagnostics::field("peak", static_cast<double>(peak_)),
                           diagnostics::field("cues", kHeard.cues),
+                          diagnostics::field("emitterCues", emitterCuesOf(kHeard)),
                           diagnostics::field("effects", kHeard.once),
                           diagnostics::field("refused", kHeard.refused)});
             return;
@@ -481,6 +492,7 @@ public:
                       diagnostics::field("longestCallbackNanoseconds", kOutput.longestCallbackNanoseconds),
                       diagnostics::field("peak", static_cast<double>(peak_)),
                       diagnostics::field("cues", kHeard.cues),
+                      diagnostics::field("emitterCues", emitterCuesOf(kHeard)),
                       diagnostics::field("effects", kHeard.once),
                       diagnostics::field("refused", kHeard.refused)});
     }

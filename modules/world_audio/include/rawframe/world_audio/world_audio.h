@@ -47,9 +47,12 @@ inline constexpr std::uint8_t kDetachToCompletion = 2;
 inline constexpr std::uint32_t kMaximumCuesPerUpdate = 4;
 
 struct WorldAudioSettings {
-    /// The game's components of the two types; a game whose clients bind
-    /// their listener to their player may have no listener component.
-    schema::ComponentTypeId emitter;
+    /// The game's emitter components, at least one: a replicated one the
+    /// server sets, and a client's own that its present systems set (D272),
+    /// each heard apart, so one entity may hold several.
+    std::vector<schema::ComponentTypeId> emitters;
+    /// Its listener component; a game whose clients bind their listener to
+    /// their player may have none.
     std::optional<schema::ComponentTypeId> listener;
     /// Each declared sound's identity and its index in the Sounds.
     std::vector<std::pair<std::uint64_t, std::size_t>> sounds;
@@ -61,6 +64,8 @@ struct WorldAudioStatistics {
     /// Emitters naming a sound the game does not declare, each update.
     std::uint64_t unknownSounds = 0;
     std::uint64_t cues = 0;
+    /// The cues each emitter component played, in the settings' order.
+    std::vector<std::uint64_t> emitterCues;
     /// Cues of looping sounds, which only `playing` plays.
     std::uint64_t loopingCues = 0;
     /// Plays the Sounds refused (a full concurrency set, no voice).
@@ -108,13 +113,14 @@ private:
 struct GameAudio {
     audio::Layout layout;
     std::vector<std::pair<std::uint64_t, audio::SoundDeclaration>> sounds;
-    schema::ComponentTypeId emitter;
+    /// In the order the game declares them.
+    std::vector<schema::ComponentTypeId> emitters;
     std::optional<schema::ComponentTypeId> listener;
 };
 
 /// Reads the mixer layout and sound declarations the game's `mixer` and
 /// `sound` lines name, from its files, and finds its
-/// components of `rawframe.sound`'s types (an emitter, and a listener if it
+/// components of `rawframe.sound`'s types (emitters, and a listener if it
 /// has one), whose layouts in `program` must be what this module reads.
 /// Refuses (`NotFound`) a game with no mixer line.
 [[nodiscard]] result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const kest::Program& program);

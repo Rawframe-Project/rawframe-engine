@@ -33,6 +33,8 @@ namespace {
 
 constexpr auto kEmitterId = schema::ComponentTypeId::fromText("3c1f0a8e-5b2d-4e7a-9f64-1d8c2b7a0e53");
 constexpr auto kListenerId = schema::ComponentTypeId::fromText("9e4b7c21-6d0a-4f38-b5e2-7a1c3d9f8b06");
+/// A second emitter component, as a client's present systems set (D272).
+constexpr auto kOwnEmitterId = schema::ComponentTypeId::fromText("5b0e2d7c-1a93-4c68-8f2e-6d4a9b1c3e70");
 constexpr std::uint64_t kHum = 0xa1;
 constexpr std::uint64_t kClick = 0xa2;
 constexpr base::Bits128 kClickClip{.high = 0, .low = 0xc1};
@@ -41,6 +43,11 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
     builder.add(schema::ComponentDescriptor{.id = kEmitterId,
                                             .name = "test.emitter",
+                                            .size = sizeof(Emitter),
+                                            .alignment = alignof(Emitter),
+                                            .plainData = true});
+    builder.add(schema::ComponentDescriptor{.id = kOwnEmitterId,
+                                            .name = "test.own_emitter",
                                             .size = sizeof(Emitter),
                                             .alignment = alignof(Emitter),
                                             .plainData = true});
@@ -80,10 +87,11 @@ struct Rig {
     Rig() {
         const std::size_t kHumIndex = *sounds->add(constant(0.5F, true));
         const std::size_t kClickIndex = *sounds->add(constant(0.1F, false));
-        heard = *WorldAudio::create(
-            *schema,
-            *sounds,
-            {.emitter = kEmitterId, .listener = kListenerId, .sounds = {{kHum, kHumIndex}, {kClick, kClickIndex}}});
+        heard = *WorldAudio::create(*schema,
+                                    *sounds,
+                                    {.emitters = {kEmitterId, kOwnEmitterId},
+                                     .listener = kListenerId,
+                                     .sounds = {{kHum, kHumIndex}, {kClick, kClickIndex}}});
     }
 
     world::EntityHandle spawn(std::optional<Emitter> emitter, std::optional<Listener> listener, double x) {
@@ -160,6 +168,28 @@ RAWFRAME_TEST(CuesPlayOneShotsFromWhenFirstSeen) {
     rig.emitterOf(kHummer).cue = 1;
     static_cast<void>(rig.frame());
     RAWFRAME_EXPECT(rig.heard->statistics().loopingCues == 1);
+}
+
+RAWFRAME_TEST(TwoEmittersOnOneEntityAreHeardApart) {
+    // D272: a replicated emitter and a client's own on one player, each
+    // with its own cue count and continuous sound.
+    Rig rig;
+    rig.spawn(std::nullopt, Listener{.active = true}, 0);
+    const auto kPlayer = rig.spawn(Emitter{.sound = kHum, .cue = 5, .playing = true}, std::nullopt, 0);
+    Emitter own{.sound = kClick};
+    RAWFRAME_EXPECT(rig.world.insertErased(kPlayer, *rig.schema->find(kOwnEmitterId), &own).has_value());
+    static_cast<void>(rig.frame());
+    RAWFRAME_EXPECT(rig.heard->statistics().cues == 0);
+    static_cast<Emitter*>(rig.world.getErased(kPlayer, *rig.schema->find(kOwnEmitterId)))->cue = 1;
+    static_cast<void>(rig.frame());
+    RAWFRAME_EXPECT(rig.heard->statistics().cues == 1 &&
+                    (rig.heard->statistics().emitterCues == std::vector<std::uint64_t>{0, 1}));
+    // The replicated one stops; the hum goes and the client's stays quiet.
+    rig.emitterOf(kPlayer).playing = false;
+    for (int frame = 0; frame < 20; ++frame) {
+        static_cast<void>(rig.frame());
+    }
+    RAWFRAME_EXPECT(rig.frame() == std::pair(0.0F, 0.0F) && rig.heard->statistics().cues == 1);
 }
 
 RAWFRAME_TEST(DespawnPoliciesDoWhatTheyName) {
@@ -254,9 +284,9 @@ RAWFRAME_TEST(AGamesAudioLoadsAgainstItsProgram) {
     RAWFRAME_EXPECT(kProgram.has_value());
     if (kProgram.has_value()) {
         const auto kAudio = loadGameAudio(*kFiles, **kProgram);
-        RAWFRAME_EXPECT(kAudio.has_value() && kAudio->emitter == kEmitterId && kAudio->listener == kListenerId &&
-                        kAudio->sounds.size() == 1 && kAudio->sounds[0].first == kClick &&
-                        kAudio->sounds[0].second.variants.size() == 1 &&
+        RAWFRAME_EXPECT(kAudio.has_value() && kAudio->emitters == std::vector{kEmitterId} &&
+                        kAudio->listener == kListenerId && kAudio->sounds.size() == 1 &&
+                        kAudio->sounds[0].first == kClick && kAudio->sounds[0].second.variants.size() == 1 &&
                         kAudio->sounds[0].second.variants[0].resource == kClickClip &&
                         kAudio->layout.buses.size() == 1);
     } else {

@@ -38,11 +38,13 @@ struct WorldAudio::State {
     audio::Sounds* sounds = nullptr;
     WorldAudioSettings settings;
     WorldAudioStatistics statistics;
-    std::optional<world::ColumnQuery> emitters;
+    /// One per emitter component, in the settings' order.
+    std::vector<world::ColumnQuery> emitters;
     std::optional<world::ColumnQuery> listeners;
     std::optional<schema::ComponentRuntimeId> pose2d;
     std::optional<schema::ComponentRuntimeId> pose3d;
-    std::map<world::EntityHandle, Tracked> followed;
+    /// By entity and emitter component, its place in `emitters`.
+    std::map<std::pair<world::EntityHandle, std::size_t>, Tracked> followed;
     std::optional<world::EntityHandle> bound;
 
     [[nodiscard]] std::optional<std::size_t> soundOf(std::uint64_t id) const noexcept {
@@ -115,16 +117,19 @@ struct WorldAudio::State {
         for (auto& [entity, follow] : followed) {
             follow.seen = false;
         }
-        std::vector<std::pair<world::EntityHandle, Emitter>> present;
-        emitters->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                Emitter value;
-                std::memcpy(&value, chunk.columns[0] + (row * sizeof(Emitter)), sizeof value);
-                present.emplace_back(chunk.entities[row], value);
-            }
-        });
-        for (const auto& [kEntity, kEmitter] : present) {
-            const auto [kFound, kNew] = followed.try_emplace(kEntity);
+        std::vector<std::pair<std::pair<world::EntityHandle, std::size_t>, Emitter>> present;
+        for (std::size_t component = 0; component < emitters.size(); ++component) {
+            emitters[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+                for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                    Emitter value;
+                    std::memcpy(&value, chunk.columns[0] + (row * sizeof(Emitter)), sizeof value);
+                    present.emplace_back(std::pair{chunk.entities[row], component}, value);
+                }
+            });
+        }
+        for (const auto& [kKey, kEmitter] : present) {
+            const world::EntityHandle kEntity = kKey.first;
+            const auto [kFound, kNew] = followed.try_emplace(kKey);
             Tracked& follow = kFound->second;
             follow.seen = true;
             follow.despawn = kEmitter.despawn;
@@ -155,6 +160,7 @@ struct WorldAudio::State {
                 } else {
                     for (std::uint32_t cue = 0; cue < std::min(kCues, kMaximumCuesPerUpdate); ++cue) {
                         ++statistics.cues;
+                        ++statistics.emitterCues[kKey.second];
                         play(follow, *kSound, kAt, false);
                     }
                 }
@@ -208,16 +214,24 @@ WorldAudio::~WorldAudio() = default;
 
 result::Result<std::unique_ptr<WorldAudio>>
 WorldAudio::create(const schema::SchemaRegistry& registry, audio::Sounds& sounds, WorldAudioSettings settings) {
-    RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kEmitter, registry.find(settings.emitter));
+    std::vector<schema::ComponentRuntimeId> emitters;
+    for (const schema::ComponentTypeId kId : settings.emitters) {
+        RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kEmitter, registry.find(kId));
+        if (registry.descriptor(kEmitter).size != sizeof(Emitter)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          WorldAudioError::BadComponents,
+                          "an emitter component is not rawframe.sound's size");
+        }
+        emitters.push_back(kEmitter);
+    }
     std::optional<schema::ComponentRuntimeId> listener;
     if (settings.listener) {
         RAWFRAME_TRY_ASSIGN(listener, registry.find(*settings.listener));
     }
-    if (registry.descriptor(kEmitter).size != sizeof(Emitter) ||
-        (listener && registry.descriptor(*listener).size != sizeof(Listener))) {
+    if (emitters.empty() || (listener && registry.descriptor(*listener).size != sizeof(Listener))) {
         return refuse(result::ErrorClass::InvalidArgument,
                       WorldAudioError::BadComponents,
-                      "the emitter or listener component is not rawframe.sound's size");
+                      "a World is heard through an emitter component, and a listener of rawframe.sound's size");
     }
     for (const auto& [kId, kIndex] : settings.sounds) {
         if (sounds.declaration(kIndex) == nullptr) {
@@ -228,8 +242,12 @@ WorldAudio::create(const schema::SchemaRegistry& registry, audio::Sounds& sounds
     auto state = std::make_unique<State>();
     state->sounds = &sounds;
     state->settings = std::move(settings);
-    const std::array<world::ColumnTerm, 1> kEmitters = {world::ColumnTerm{kEmitter, world::Access::Read}};
-    RAWFRAME_TRY_ASSIGN(state->emitters, world::ColumnQuery::resolve(kEmitters, registry));
+    state->statistics.emitterCues.assign(emitters.size(), 0);
+    for (const schema::ComponentRuntimeId kEmitter : emitters) {
+        const std::array<world::ColumnTerm, 1> kEmitters = {world::ColumnTerm{kEmitter, world::Access::Read}};
+        RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(kEmitters, registry));
+        state->emitters.push_back(std::move(query));
+    }
     if (listener) {
         const std::array<world::ColumnTerm, 1> kListeners = {world::ColumnTerm{*listener, world::Access::Read}};
         RAWFRAME_TRY_ASSIGN(state->listeners, world::ColumnQuery::resolve(kListeners, registry));
@@ -273,16 +291,15 @@ result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const
         return refuse(result::ErrorClass::NotFound, WorldAudioError::NoAudio, "the game declares no mixer");
     }
     GameAudio loaded;
-    std::optional<schema::ComponentTypeId> emitter;
     std::optional<schema::ComponentTypeId> listener;
     for (const world_kest::GameComponent& component : kDescription.components) {
         if (world_kest::ofEngineType(component, "rawframe.sound.Emitter")) {
-            emitter = component.id;
+            loaded.emitters.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.sound.Listener")) {
             listener = component.id;
         }
     }
-    if (!emitter) {
+    if (loaded.emitters.empty()) {
         return refuse(result::ErrorClass::InvalidArgument,
                       WorldAudioError::BadComponents,
                       "a game with a mixer declares an emitter component");
@@ -301,7 +318,6 @@ result::Result<GameAudio> loadGameAudio(const world_kest::GameFiles& game, const
                       WorldAudioError::BadComponents,
                       "the program lays out rawframe.sound's types otherwise than this engine reads them");
     }
-    loaded.emitter = *emitter;
     loaded.listener = listener;
     RAWFRAME_TRY_ASSIGN(const std::string_view kMixer, game.document(kDescription.audio->mixer));
     auto layout = audio::readLayout(kMixer);
