@@ -148,6 +148,7 @@ public:
             }
             ++frames_;
             drawn_ += kFrame.drawn;
+            animated_ += kFrame.animated;
             culled_ += kFrame.culled;
             hidden_ += kFrame.hidden;
             malformed_ += kFrame.malformed;
@@ -168,6 +169,7 @@ public:
                      "what one client's canvas drew",
                      {diagnostics::field("frames", frames_),
                       diagnostics::field("spritesDrawn", drawn_),
+                      diagnostics::field("spritesAnimated", animated_),
                       diagnostics::field("culled", culled_),
                       diagnostics::field("hidden", hidden_),
                       diagnostics::field("malformed", malformed_),
@@ -222,6 +224,7 @@ private:
     bool extracted_ = false;
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
+    std::uint64_t animated_ = 0;
     std::uint64_t culled_ = 0;
     std::uint64_t hidden_ = 0;
     std::uint64_t malformed_ = 0;

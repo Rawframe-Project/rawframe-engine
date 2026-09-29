@@ -34,6 +34,10 @@ struct Sprite {
     float pivotY = 0.5F;
     std::uint32_t color = 0xFFFFFFFF;
     std::int32_t layer = 0;
+    /// The cell of a sprite sheet, counted along rows of `columns` (nought
+    /// is one), the region the first.
+    std::uint32_t frame = 0;
+    std::uint32_t columns = 0;
 };
 
 /// A sprite as the extract stage copies it out of the World: owned values,
@@ -87,6 +91,8 @@ struct CanvasFrame {
     /// nought, a value not finite), naming a texture the game does not
     /// declare, or past a limit.
     std::size_t drawn = 0;
+    /// Of those drawn, the ones showing a sheet's cell past its first.
+    std::size_t animated = 0;
     std::size_t culled = 0;
     std::size_t hidden = 0;
     std::size_t malformed = 0;

@@ -66,6 +66,13 @@ struct Canvas::State {
         // origin, a float would lose the sprite's place before it is small.
         const auto kDx = static_cast<float>(instance.x - camera.x);
         const auto kDy = static_cast<float>(instance.y - camera.y);
+        // The frame's cell: the region moved along its row by its width,
+        // then down by its height; a mirrored region moves the same way.
+        const std::uint32_t kColumns = std::max(kSprite.columns, 1U);
+        const auto kColumn = static_cast<float>(kSprite.frame % kColumns);
+        const auto kRow = static_cast<float>(kSprite.frame / kColumns);
+        const float kU = kColumn * std::abs(kSprite.u1 - kSprite.u0);
+        const float kV = kRow * std::abs(kSprite.v1 - kSprite.v0);
         const float kHalfHeight = camera.height / 2;
         const float kHalfWidth = kHalfHeight * camera.aspect;
         const auto kCorner = [&](float x, float y, float u, float v) {
@@ -75,10 +82,10 @@ struct Canvas::State {
                                 .v = v,
                                 .color = kSprite.color};
         };
-        return {kCorner(kLeft, kBottom, kSprite.u0, kSprite.v1),
-                kCorner(kRight, kBottom, kSprite.u1, kSprite.v1),
-                kCorner(kRight, kTop, kSprite.u1, kSprite.v0),
-                kCorner(kLeft, kTop, kSprite.u0, kSprite.v0)};
+        return {kCorner(kLeft, kBottom, kSprite.u0 + kU, kSprite.v1 + kV),
+                kCorner(kRight, kBottom, kSprite.u1 + kU, kSprite.v1 + kV),
+                kCorner(kRight, kTop, kSprite.u1 + kU, kSprite.v0 + kV),
+                kCorner(kLeft, kTop, kSprite.u0 + kU, kSprite.v0 + kV)};
     }
 
     const CanvasFrame& queue(const CanvasCamera& camera) {
@@ -86,6 +93,7 @@ struct Canvas::State {
         frame.indices.clear();
         frame.draws.clear();
         frame.drawn = 0;
+        frame.animated = 0;
         frame.culled = 0;
         frame.hidden = 0;
         frame.malformed = 0;
@@ -144,6 +152,7 @@ struct Canvas::State {
             }
             frame.draws.back().indexCount += 6;
             ++frame.drawn;
+            frame.animated += kSprite.frame != 0 ? 1 : 0;
         }
         return frame;
     }
@@ -233,7 +242,9 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
                                 {"pivotX", offsetof(Sprite, pivotX)},
                                 {"pivotY", offsetof(Sprite, pivotY)},
                                 {"color", offsetof(Sprite, color)},
-                                {"layer", offsetof(Sprite, layer)}})) {
+                                {"layer", offsetof(Sprite, layer)},
+                                {"frame", offsetof(Sprite, frame)},
+                                {"columns", offsetof(Sprite, columns)}})) {
         return refuse(result::ErrorClass::InvalidArgument,
                       RenderCanvasError::BadComponents,
                       "the program lays out rawframe.canvas's Sprite otherwise than this engine reads it");

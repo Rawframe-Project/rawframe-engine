@@ -13,6 +13,12 @@ module rawframe.canvas
 // so a region four wide tiles it four times. `color` multiplies it, as
 // 0xRRGGBBAA; an alpha of nought draws nothing, as does texture nought.
 // Higher `layer`s draw over lower ones.
+//
+// A sprite sheet is a grid of equal cells, the region its first: `frame`
+// counts cells along a row of `columns` (nought is one), then down the
+// next, so frame 5 of a sheet four wide is the second row's second cell. A
+// region mirrored (`u0` past `u1`) moves along the sheet as it is.
+// An animator's discrete track (D139) steps it, a flipbook.
 struct Sprite {
     texture: u64
     u0: f32
@@ -25,6 +31,8 @@ struct Sprite {
     pivotY: f32
     color: u32
     layer: i32
+    frame: u32
+    columns: u32
 }
 
 // White, untinted: the texture as it is.

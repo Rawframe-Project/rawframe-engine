@@ -1,10 +1,11 @@
 // The canvas's CPU half: a sprite's quad is where its pose and pivot put it,
-// turned as the pose turns, seen through the camera; what is off the view,
-// draws nothing, is malformed, or names an undeclared texture is left out
-// and counted; sprites draw in the order of their layers, then entities,
-// and batch only where the order allows; the limits leave out a suffix of
-// the order; a game's canvas loads against its program; and its textures
-// are read decoded by identity from cooked content.
+// turned as the pose turns, seen through the camera; a sheet's frame is its
+// cell; what is off the view, draws nothing, is malformed, or names an
+// undeclared texture is left out and counted; sprites draw in the order of
+// their layers, then entities, and batch only where the order allows; the
+// limits leave out a suffix of the order; a game's canvas loads against its
+// program; and its textures are read decoded by identity from cooked
+// content.
 
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
@@ -110,6 +111,25 @@ RAWFRAME_TEST(ASpriteTurnsAsItsPoseTurns) {
     const CanvasFrame& kUnposed = unposed.frame({.x = 1, .height = 10, .aspect = 1});
     RAWFRAME_EXPECT(kUnposed.vertices.size() == 4 && near(kUnposed.vertices[0].x, -0.4F) &&
                     near(kUnposed.vertices[0].y, -0.2F));
+}
+
+RAWFRAME_TEST(ASheetsFrameIsItsCell) {
+    Rig rig;
+    // A sheet of cells a quarter wide and half high, four to a row: frame
+    // 5 is the second row's second cell. Mirrored, the same cell turned.
+    rig.spawn(Sprite{.texture = kRunner, .u1 = 0.25F, .v1 = 0.5F, .frame = 5, .columns = 4}, physics2d::Pose2D{});
+    rig.spawn(Sprite{.texture = kRunner, .u0 = 0.25F, .u1 = 0, .v1 = 0.5F, .layer = 1, .frame = 5, .columns = 4},
+              physics2d::Pose2D{});
+    rig.spawn(Sprite{.texture = kRunner, .u1 = 0.25F, .layer = 2, .frame = 7}, physics2d::Pose2D{});
+    const CanvasFrame& kFrame = rig.frame({.height = 10});
+    RAWFRAME_EXPECT(kFrame.vertices.size() == 12 && kFrame.animated == 3);
+    if (kFrame.vertices.size() == 12) {
+        RAWFRAME_EXPECT(near(kFrame.vertices[0].u, 0.25F) && near(kFrame.vertices[0].v, 1.0F) &&
+                        near(kFrame.vertices[2].u, 0.5F) && near(kFrame.vertices[2].v, 0.5F));
+        RAWFRAME_EXPECT(near(kFrame.vertices[4].u, 0.5F) && near(kFrame.vertices[5].u, 0.25F));
+        // Columns nought is one: frame 7 is seven cells along, row by row.
+        RAWFRAME_EXPECT(near(kFrame.vertices[8].u, 0.0F) && near(kFrame.vertices[8].v, 8.0F));
+    }
 }
 
 RAWFRAME_TEST(WhatCannotBeSeenIsLeftOutAndCounted) {
