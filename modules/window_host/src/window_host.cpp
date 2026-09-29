@@ -52,6 +52,8 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             return end();
         }
     }
+    // What the iterations asked the player's gamepads to feel.
+    bridge_->feel(windows);
 #if RAWFRAME_THREADS
     const execution::MonotonicDuration kUntilDue = host_->due() - clock_.now();
     const auto kWait =

@@ -1,16 +1,21 @@
 // A window's raw input reaching actions as a player's would: keys by HID
 // usage, mouse buttons, the wheel, and captured motion; a gamepad's two
 // stick axes combined and turned up positive; focus loss letting go of
-// everything; a gamepad that goes letting go of what it held.
+// everything; a gamepad that goes letting go of what it held; a haptic
+// output felt through a gamepad's motors (D251).
 
 #include "rawframe/input/mapper.h"
 #include "rawframe/input_window/bridge.h"
 #include "rawframe/test/test.h"
+#include "rawframe/window/testing.h"
 
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string_view>
+#include <tuple>
+#include <vector>
 
 using namespace rawframe;
 using namespace rawframe::input;
@@ -153,4 +158,69 @@ RAWFRAME_TEST(AGamepadsSticksCombineAndItsDepartureLetsGo) {
     rig.take(pad(window::EventKind::GamepadRemoved, kPad, 0));
     rig.commit();
     RAWFRAME_EXPECT(!rig.state(kJump).on && near(rig.state(kMove).x, 0) && near(rig.state(kMove).y, 0));
+}
+
+namespace {
+
+/// Connects a gamepad, feeds its arrival to the bridge, asks the player's
+/// haptic output of it three ways, and reads the motors after each.
+class Felt final : public window::Program {
+public:
+    result::Status start(window::Windows& windows) override {
+        RAWFRAME_TRY_ASSIGN(pad, window::testing::addGamepad(windows));
+        return {};
+    }
+
+    window::FrameOutcome frame(window::Windows& windows) override {
+        while (std::optional<window::Event> event = windows.next()) {
+            rig.take(*event);
+        }
+        rig.commit();
+        if (step == felt.size()) {
+            return window::FrameOutcome::Stop;
+        }
+        std::vector<HapticCommand> commands;
+        rig.mapper->feel({}, 0, felt[step++], commands);
+        for (const HapticCommand& command : commands) {
+            rig.feed.feel(command);
+        }
+        // A command for a device the window system does not have.
+        rig.feed.feel({.device = DeviceId{99}, .haptic = {.milliseconds = 10}});
+        rig.bridge.feel(windows);
+        rumbles.push_back(window::testing::rumbleOf(windows, pad).value_or(window::testing::Rumble{}));
+        return window::FrameOutcome::Continue;
+    }
+
+    void stop(window::Windows& /*windows*/, const result::Status& /*status*/) override {
+    }
+
+    Rig rig;
+    window::GamepadId pad;
+    std::vector<Haptic> felt;
+    std::size_t step = 0;
+    std::vector<window::testing::Rumble> rumbles;
+};
+
+} // namespace
+
+RAWFRAME_TEST(AHapticOutputRunsAGamepadsMotors) {
+    Felt program;
+    ActionSet set = actions();
+    set.haptics.push_back(HapticOutput{.id = 20, .name = "thump", .bindings = {HapticBinding{}}});
+    program.rig.mapper = *Mapper::create(std::move(set), {.players = 1});
+    RAWFRAME_EXPECT(program.rig.mapper->activate({}, 0).has_value());
+    program.felt = {Haptic{.amplitude = 0.75F, .milliseconds = 120},
+                    Haptic{.amplitude = 0.5F, .frequency = 60, .milliseconds = 90},
+                    Haptic{.amplitude = 2.0F, .frequency = 320, .milliseconds = 40}};
+    RAWFRAME_EXPECT(window::testing::run(program, window::RunSettings{}).has_value());
+    RAWFRAME_EXPECT(program.rumbles.size() == 3);
+    if (program.rumbles.size() == 3) {
+        // No frequency: both motors. A low one: the heavy motor. A high
+        // one, its amplitude held to one: the light motor.
+        const auto& [kBoth, kLow, kHigh] = std::tie(program.rumbles[0], program.rumbles[1], program.rumbles[2]);
+        RAWFRAME_EXPECT(kBoth.low == 0.75F && kBoth.high == 0.75F && kBoth.milliseconds == 120 && kBoth.count == 1);
+        RAWFRAME_EXPECT(kLow.low == 0.5F && kLow.high == 0 && kLow.milliseconds == 90 && kLow.count == 2);
+        RAWFRAME_EXPECT(kHigh.low == 0 && kHigh.high == 1.0F && kHigh.milliseconds == 40 && kHigh.count == 3);
+    }
+    RAWFRAME_EXPECT(program.rig.bridge.unfelt() == 3);
 }

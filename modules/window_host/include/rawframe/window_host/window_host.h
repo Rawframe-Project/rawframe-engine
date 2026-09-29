@@ -2,7 +2,8 @@
 
 // A Host driven from a window's frames (D249, D250): the process's one
 // window, whose raw input the Host's participants get as the player's
-// devices (`rawframe.input.feed`), and each frame every Host iteration due.
+// devices (`rawframe.input.feed`), and each frame every Host iteration due,
+// then what they asked the player's gamepads to feel (D251).
 // The window system owns the loop on every platform, so a desktop client
 // and a page run the same program: `window::run` returns when it stops on
 // a desktop, and at once on the web, where the page's frames go on.

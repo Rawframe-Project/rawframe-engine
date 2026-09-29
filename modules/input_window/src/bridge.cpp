@@ -164,4 +164,19 @@ void Bridge::gamepadAxis(const window::Event& event) {
     }
 }
 
+void Bridge::feel(window::Windows& windows) {
+    feed_->takeFelt(felt_);
+    for (const input::HapticCommand& command : felt_) {
+        const auto kPad = std::ranges::find(pads_, command.device, &Pad::device);
+        const float kAmplitude = std::clamp(command.haptic.amplitude, 0.0F, 1.0F);
+        const float kFrequency = command.haptic.frequency;
+        const float kLow = kFrequency == 0 || kFrequency < kLowMotorHertz ? kAmplitude : 0.0F;
+        const float kHigh = kFrequency == 0 || kFrequency >= kLowMotorHertz ? kAmplitude : 0.0F;
+        if (kPad == pads_.end() ||
+            !windows.rumble(kPad->gamepad, kLow, kHigh, command.haptic.milliseconds).has_value()) {
+            ++unfelt_;
+        }
+    }
+}
+
 } // namespace rawframe::input_window
