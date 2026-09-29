@@ -18,6 +18,7 @@ component 3d8b6f21-7c4e-4a95-b0d3-e6f1a2c95b78 runners.penalty Penalty
 component 1e7c5a93-4f28-4b6d-8a01-c3d9e2f4b7a5 runners.look rawframe.canvas.Sprite
 component 9d3e61b2-7a4c-4f05-b8e1-2c6a0f9d4b37 runners.tile rawframe.canvas.Sprite
 component 3149b7ac-718f-4686-a572-6241d54af2a3 runners.view rawframe.canvas.Camera
+component b668075a-c5b2-45fa-af7e-0aa7f62c8808 runners.wince rawframe.sound.Emitter
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
@@ -73,10 +74,13 @@ predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.veloc
 
 # Each shot sounds from the runner that fired it (runners.mixer, shot.sound);
 # clients hear them, a server carries only the counts. A jump sounds from
-# the runner that jumped, heard by its own player only.
+# the runner that jumped, heard by its own player only. A hit runner's
+# player hears it wince (hurt.sound) from an emitter of its client's own
+# (D272), cued when the server tells of the hit.
 mixer runners.mixer
 sound 950e09337d03de69 shot.sound
 sound 57164ad59d5b6a23 jump.sound
+sound 81012dde2ad3952f hurt.sound
 
 # What a client shows: the HUD's words in English and Turkish (hud.strings,
 # hud.tr.translations), English unless the player asks otherwise. A server
@@ -97,5 +101,7 @@ present runners.dress dress read runners.stick write runners.look write rawframe
 presentation runners.view on player
 message hurt Hurt
 present runners.frame frame read runners.stick write runners.view
+presentation runners.wince on player
+present runners.wince wince write runners.wince
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png

@@ -18,6 +18,9 @@ const RUNNER: u64 = 0x2ebcd16c10c5f6a4
 // The shot's sound (runners.game's `sound` line).
 const SHOT: u64 = 0x950e09337d03de69
 
+// A hit's sound, heard by the runner hit (runners.game's `sound` line).
+const HURT: u64 = 0x81012dde2ad3952f
+
 // What a runner looks like (runners.game's `texture` line): a sheet of six
 // cells in a row, standing, four strides, and in the air.
 const RUNNER_LOOK: u64 = 0xeddbc014cab63eb2
@@ -118,6 +121,17 @@ fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
             views[i].offsetY = 1.0
         }
         views[i].offsetX = views[i].offsetX + (sticks[i].run * 2.0 - views[i].offsetX) * 0.05
+        i = i + 1
+    }
+}
+
+// A hit runner's wince (D272): its player's emitter, the client's own and
+// carried by no server, cued once for each hit told this tick.
+fn wince(count: i32, emitters: [sound.Emitter]) {
+    let i = 0
+    while i < count {
+        emitters[i].sound = HURT
+        emitters[i].cue = emitters[i].cue + u32(ReceivedCount.hurt())
         i = i + 1
     }
 }

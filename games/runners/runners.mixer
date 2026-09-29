@@ -47,6 +47,10 @@
     {
       "name": "jumps",
       "maximumInstances": 4
+    },
+    {
+      "name": "hurts",
+      "maximumInstances": 2
     }
   ]
 }
