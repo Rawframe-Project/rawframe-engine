@@ -210,6 +210,7 @@ public:
             server_->noticeStopping();
         }
         context_->reportConnections(server_->connections());
+        mostConnections_ = std::max(mostConnections_, server_->connections());
         // Its memory walks every connection's mappings: twice a second at
         // 120 iterations (D216).
         if (frame.iteration % 60 == 0) {
@@ -248,7 +249,8 @@ public:
                       diagnostics::field("strikes", kStatistics.strikes),
                       diagnostics::field("inputsLimited", kStatistics.inputsLimited),
                       diagnostics::field("struckOut", sessions_->struckOut()),
-                      diagnostics::field("admissionsRefused", refused_)});
+                      diagnostics::field("admissionsRefused", refused_),
+                      diagnostics::field("mostConnections", static_cast<std::uint64_t>(mostConnections_))});
     }
 
 private:
@@ -281,6 +283,8 @@ private:
 
     composition::ParticipantContext* context_ = nullptr;
     std::uint64_t refused_ = 0;
+    /// The most players connected at once.
+    std::size_t mostConnections_ = 0;
     std::set<world_runtime::PlayerIdentity> admitting_;
     bool noticed_ = false;
     std::string endpoint_;
