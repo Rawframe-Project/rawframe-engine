@@ -161,15 +161,15 @@ if(RAWFRAME_BUILD_TESTS)
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "rollback_rate_alarm.*\"rollbackAlarms\":[1-9]")
     if(NOT RAWFRAME_SHIPPING)
-        add_test(NAME runners_divergence_drill
-                 COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_divergence_drill.conf
-                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         # Every record sent is found diverged, none is taken for verified,
-        # and the players stay.
+        # and the players stay; both sides' captures of a diverged record
+        # differ in the drill's one bit (D275).
+        add_test(NAME runners_divergence_drill
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_divergence_drill.sh $<TARGET_FILE:rawframe_host_arena>
+                         ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_divergence_drill)
         set_tests_properties(runners_divergence_drill PROPERTIES
                              PROCESSORS 6
-                             PASS_REGULAR_EXPRESSION
-                             "prediction_divergence.*\"checksumsVerified\":0,\"checksumsUnverifiable\":0,\"checksumsDiverged\":[1-9]")
+                             PASS_REGULAR_EXPRESSION "captured both sides of [1-9][0-9]* diverged records")
     endif()
     # The plaza's sources cooked into the build tree: its mound's mesh.
     set(PLAZA_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/plaza_content)

@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
+#include <vector>
 
 namespace rawframe::world_replication {
 
@@ -20,6 +22,22 @@ public:
     /// The server's checksum at `tick`, which it published.
     void keep(std::uint64_t tick, std::uint64_t checksum) noexcept {
         kept_[static_cast<std::size_t>(tick % kKept)] = Kept{.tick = tick, .checksum = checksum, .set = true};
+    }
+
+    /// What was hashed at `tick`, each value's wire form, for a
+    /// development capture (D275): kept only when asked for.
+    void keepScope(std::uint64_t tick, std::span<const std::span<const std::byte>> values) {
+        std::vector<std::vector<std::byte>>& scope = scopes_[static_cast<std::size_t>(tick % kKept)];
+        scope.resize(values.size());
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            scope[index].assign(values[index].begin(), values[index].end());
+        }
+    }
+
+    /// What was hashed at `tick`, if kept with its checksum.
+    [[nodiscard]] std::vector<std::vector<std::byte>> scopeAt(std::uint64_t tick) const {
+        return at(tick).has_value() ? scopes_[static_cast<std::size_t>(tick % kKept)]
+                                    : std::vector<std::vector<std::byte>>{};
     }
 
     /// The server's checksum at `tick`, if it is still kept.
@@ -71,6 +89,7 @@ private:
         bool set = false;
     };
     std::array<Kept, kKept> kept_{};
+    std::array<std::vector<std::vector<std::byte>>, kKept> scopes_{};
     std::uint64_t second_ = 0;
     std::uint32_t taken_ = 0;
 };

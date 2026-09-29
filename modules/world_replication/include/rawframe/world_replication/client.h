@@ -98,6 +98,9 @@ public:
     [[nodiscard]] ClientReplicationStatistics statistics() const noexcept;
     /// All zero without prediction.
     [[nodiscard]] PredictionStatistics predictionStatistics() const noexcept;
+    /// With `captureChecksums`, the latest checksum records sent, oldest
+    /// first (D275); else none.
+    [[nodiscard]] std::vector<ChecksumCapture> checksumCaptures() const;
     /// The server tick remote entities are shown at, fractional; none
     /// without interpolation or before the first state.
     [[nodiscard]] std::optional<double> perceivedTick() const noexcept;

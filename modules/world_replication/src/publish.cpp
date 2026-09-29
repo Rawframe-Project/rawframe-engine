@@ -279,6 +279,9 @@ void ReplicationServer::State::keepChecksum(Peer& peer, world::TickIndex tick) {
         }
     }
     peer.checksums.keep(tick.value, predictedChecksum(scopeValues));
+    if (settings.captureDivergences) {
+        peer.checksums.keepScope(tick.value, scopeValues);
+    }
 }
 
 void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {

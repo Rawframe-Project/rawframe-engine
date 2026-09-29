@@ -291,7 +291,10 @@ void ReplicationServer::State::onChecksum(Peer& peer, const network::SessionEven
                                              .tick = kRecord->tick,
                                              .scope = kRecord->scope,
                                              .expected = *kExpected,
-                                             .received = kRecord->checksum});
+                                             .received = kRecord->checksum,
+                                             .committed = settings.captureDivergences
+                                                              ? peer.checksums.scopeAt(kRecord->tick)
+                                                              : std::vector<std::vector<std::byte>>{}});
         }
     }
 }

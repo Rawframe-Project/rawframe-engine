@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <deque>
 #include <limits>
 #include <map>
 #include <utility>
@@ -83,6 +84,8 @@ struct ReplicationClient::State {
     std::uint64_t scope = 0;
     std::uint64_t confirmations = 0;
     std::uint64_t checksumsSent = 0;
+    /// The latest checksum records sent, for a development capture.
+    std::deque<ChecksumCapture> captures;
     std::uint64_t serverTick = 0;
     std::uint64_t stateSequence = 0;
     std::uint64_t consumedInputTick = 0;
@@ -373,10 +376,19 @@ struct ReplicationClient::State {
             const std::size_t kFrom = index == 0 ? 0 : ends[index - 1];
             values.push_back(std::span{wire}.subspan(kFrom, ends[index] - kFrom));
         }
+        const std::uint64_t kChecksum = predictedChecksum(values);
+        if (settings.prediction->captureChecksums) {
+            ChecksumCapture& kept = captures.emplace_back(ChecksumCapture{.tick = tick, .checksum = kChecksum});
+            for (const std::span<const std::byte> kValue : values) {
+                kept.values.emplace_back(kValue.begin(), kValue.end());
+            }
+            if (captures.size() > kChecksumsCaptured) {
+                captures.pop_front();
+            }
+        }
         scratch.resize(32);
         network::Writer writer{scratch};
-        if (encodeChecksum(writer, ChecksumRecord{.tick = tick, .scope = scope, .checksum = predictedChecksum(values)})
-                .has_value() &&
+        if (encodeChecksum(writer, ChecksumRecord{.tick = tick, .scope = scope, .checksum = kChecksum}).has_value() &&
             sessions
                 ->sendDatagram(*connection,
                                network::DatagramRecord{.lane = network::DatagramLane::Input,
@@ -699,6 +711,10 @@ PredictionStatistics ReplicationClient::predictionStatistics() const noexcept {
     PredictionStatistics statistics = state_->prediction->statistics();
     statistics.checksumsSent = state_->checksumsSent;
     return statistics;
+}
+
+std::vector<ChecksumCapture> ReplicationClient::checksumCaptures() const {
+    return {state_->captures.begin(), state_->captures.end()};
 }
 
 std::optional<double> ReplicationClient::perceivedTick() const noexcept {

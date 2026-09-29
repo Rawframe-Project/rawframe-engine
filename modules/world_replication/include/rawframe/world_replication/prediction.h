@@ -137,7 +137,23 @@ struct PredictionSettings {
     /// every state hashed is flipped, so the server must find each record
     /// diverged.
     bool divergenceDrill = false;
+    /// SPEC-0041's development capture (D275): the latest checksum records
+    /// are kept with what they hashed, to be set beside the server's side
+    /// of a divergence. Never in a shipping build.
+    bool captureChecksums = false;
 };
+
+/// A checksum record as the client made it, kept for a development capture
+/// (D275).
+struct ChecksumCapture {
+    std::uint64_t tick = 0;
+    std::uint64_t checksum = 0;
+    /// Each predicted component's wire form as hashed, in the scope's order.
+    std::vector<std::vector<std::byte>> values;
+};
+
+/// Checksum records kept for a capture: the latest, the oldest dropped.
+inline constexpr std::size_t kChecksumsCaptured = 64;
 
 struct PredictionStatistics {
     std::uint64_t predictedTicks = 0;

@@ -34,6 +34,8 @@ constexpr EventIdentity kDivergence{"replication", "prediction_divergence"};
 constexpr EventIdentity kRollbackAlarm{"replication", "rollback_rate_alarm"};
 constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
 constexpr EventIdentity kBotsAdmitted{"replication", "bots_admitted"};
+constexpr EventIdentity kDivergenceCapture{"replication", "divergence_capture"};
+constexpr EventIdentity kChecksumCapture{"replication", "checksum_capture"};
 
 constexpr std::string_view kServerNeeds[] = {world_runtime::kSimulation.name};
 constexpr std::string_view kMaybe[] = {network::kTransport.name,
@@ -43,6 +45,33 @@ constexpr std::string_view kMaybe[] = {network::kTransport.name,
 constexpr std::string_view kBotsProvide[] = {kClientWorlds.name};
 constexpr std::string_view kBotsMaybe[] = {
     network::kTransport.name, kReplicationPlan.name, kInputSourcePlan.name, game_content::kGameContent.name};
+
+/// Bytes as lower-case hexadecimal, for a capture's log.
+std::string hexOf(std::span<const std::byte> bytes) {
+    std::string made;
+    made.reserve(bytes.size() * 2);
+    for (const std::byte kByte : bytes) {
+        made += "0123456789abcdef"[std::to_integer<unsigned>(kByte) >> 4U];
+        made += "0123456789abcdef"[std::to_integer<unsigned>(kByte) & 0xFU];
+    }
+    return made;
+}
+
+/// SPEC-0041's two-sided capture is a development capability (D275): a
+/// shipping build refuses the key that asks for it.
+result::Result<bool> captureAsked(const composition::Configuration& configuration, std::string_view key) {
+    const auto kAsked = configuration.text(key);
+    if (kAsked.has_value() && (RAWFRAME_SHIPPING || (*kAsked != "true" && *kAsked != "false"))) {
+        return std::unexpected<result::Error>{
+            result::fail(result::ErrorClass::FailedPrecondition,
+                         kReplicationDomain,
+                         code(ReplicationError::Malformed),
+                         "a divergence capture is true or false, and only in a development build")
+                .error()
+                .withContext("key", std::string{key})};
+    }
+    return kAsked == "true";
+}
 
 /// The session bounds both sides use: a datagram fits one path MTU.
 network::SessionProfile sessionProfile(std::size_t sessions) {
@@ -157,6 +186,8 @@ public:
                             context.configuration().unsignedInteger("replication.egress_bytes_per_second", 65'536));
         const std::uint64_t kPerPublish =
             kEgress > (std::uint64_t{1} << 30U) ? 0 : kEgress * kRate.seconds * kPeriod / kRate.ticks;
+        RAWFRAME_TRY_ASSIGN(const bool kCapture,
+                            captureAsked(context.configuration(), "replication.divergence_capture"));
         if (kPerPublish < 64) {
             return missing(
                 "replication.egress_bytes_per_second allows at least 64 bytes a publish, and at most 1 GiB/s");
@@ -174,7 +205,8 @@ public:
                     .statePeriod = static_cast<std::uint32_t>(kPeriod),
                     .stateBytesPerPublish = static_cast<std::size_t>(kPerPublish),
                     .presence = presence,
-                    .predicted = {plan->predictedComponents().begin(), plan->predictedComponents().end()}}));
+                    .predicted = {plan->predictedComponents().begin(), plan->predictedComponents().end()},
+                    .captureDivergences = kCapture}));
         return simulation_->addSystems(*server_);
     }
 
@@ -224,6 +256,18 @@ public:
                           diagnostics::field("scope", divergence.scope),
                           diagnostics::field("expected", divergence.expected),
                           diagnostics::field("received", divergence.received)});
+            // The server's side of a development capture, a value a record.
+            for (std::size_t index = 0; index < divergence.committed.size(); ++index) {
+                const std::string kValue = hexOf(divergence.committed[index]);
+                emitter_.log(diagnostics::Severity::Info,
+                             kDivergenceCapture,
+                             "what the server committed at a diverged tick",
+                             {diagnostics::field("connection", divergence.connection.value),
+                              diagnostics::field("tick", divergence.tick),
+                              diagnostics::field("received", divergence.received),
+                              diagnostics::field("component", index),
+                              diagnostics::field("value", std::string_view{kValue})});
+            }
         }
         admitting_.clear();
         // Host phases run once the Host is active, so admission closed here
@@ -502,6 +546,7 @@ public:
             return missing("bots.divergence_drill is true or false, and only in a development build");
         }
         divergenceDrill_ = kDrill == "true";
+        RAWFRAME_TRY_ASSIGN(captureChecksums_, captureAsked(configuration, "bots.divergence_capture"));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kAlarmLimit, configuration.unsignedInteger("bots.rollback_alarm", 30));
         if (kAlarmLimit > 1'000'000) {
             return missing("bots.rollback_alarm is at most a million rollbacks a second");
@@ -552,7 +597,8 @@ public:
                         .rollbackAlarm = rollbackAlarm_,
                         .effects = bot.effects.get(),
                         .effectClasses = {plan_->effectClasses().begin(), plan_->effectClasses().end()},
-                        .divergenceDrill = divergenceDrill_};
+                        .divergenceDrill = divergenceDrill_,
+                        .captureChecksums = captureChecksums_};
                 } else {
                     ++unpredicted_;
                 }
@@ -667,6 +713,24 @@ public:
         PredictionStatistics predicted;
         InterpolationStatistics interpolated;
         std::uint64_t handed = 0;
+        // The clients' side of a development capture: each bot's latest
+        // records, a value a record, matched to the server's by tick and
+        // checksum.
+        for (std::size_t index = 0; index < bots_.size() && captureChecksums_; ++index) {
+            for (const ChecksumCapture& kept : bots_[index].client->checksumCaptures()) {
+                for (std::size_t component = 0; component < kept.values.size(); ++component) {
+                    const std::string kValue = hexOf(kept.values[component]);
+                    emitter_.log(diagnostics::Severity::Info,
+                                 kChecksumCapture,
+                                 "what a bot hashed for a checksum record",
+                                 {diagnostics::field("bot", index),
+                                  diagnostics::field("tick", kept.tick),
+                                  diagnostics::field("checksum", kept.checksum),
+                                  diagnostics::field("component", component),
+                                  diagnostics::field("value", std::string_view{kValue})});
+                }
+            }
+        }
         for (Bot& bot : bots_) {
             handed += bot.source != nullptr ? 1 : 0;
             interpolated.blended += bot.client->interpolationStatistics().blended;
@@ -773,6 +837,7 @@ private:
     std::uint32_t checksumInterval_ = 60;
     std::uint32_t rollbackAlarm_ = 30;
     bool divergenceDrill_ = false;
+    bool captureChecksums_ = false;
     /// Bots that would predict but could not have a predictor.
     std::uint64_t unpredicted_ = 0;
     bool allAdmitted_ = false;

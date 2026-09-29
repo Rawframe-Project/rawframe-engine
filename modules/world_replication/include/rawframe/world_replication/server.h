@@ -105,6 +105,10 @@ struct ServerReplicationSettings {
     /// SPEC-0041's checksum_rate_max: records looked at per connection per
     /// second; the rest are dropped unread.
     std::uint32_t checksumsPerSecond = 8;
+    /// SPEC-0041's development capture (D275): each published tick's
+    /// predicted scope is kept with its checksum, and a divergence carries
+    /// the server's side of it. Never in a shipping build.
+    bool captureDivergences = false;
     /// SPEC-0013's input ceilings per connection a second: payload bytes on
     /// the input lane, and input windows, at most one a tick by default
     /// (nought). What passes either is dropped unread (D225).
@@ -120,6 +124,9 @@ struct Divergence {
     std::uint64_t scope = 0;
     std::uint64_t expected = 0;
     std::uint64_t received = 0;
+    /// With `captureDivergences`, each predicted component's wire form as
+    /// the server committed it at `tick`, in the scope's order; else none.
+    std::vector<std::vector<std::byte>> committed;
 };
 
 /// What the server counted.
