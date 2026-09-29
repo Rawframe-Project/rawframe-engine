@@ -111,6 +111,13 @@ else()
         # build machine's directories.
         -fmacro-prefix-map=${PROJECT_SOURCE_DIR}/=
     )
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC 14's optimizer warns of these inside the standard library (an
+        # optional in a variant, a vector grown after reserve) where nothing
+        # is wrong; -Wuninitialized, which is certain, stays, and Clang and
+        # the sanitizers check the rest (D247).
+        target_compile_options(rawframe_policy INTERFACE -Wno-maybe-uninitialized -Wno-free-nonheap-object)
+    endif()
     if(RAWFRAME_SANITIZE STREQUAL "address")
         target_compile_options(rawframe_policy INTERFACE -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
         # Coverage for the fuzz targets' guidance inside every module they

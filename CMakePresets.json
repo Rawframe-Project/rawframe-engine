@@ -12,7 +12,7 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
-    { "name": "gcc", "hidden": true, "inherits": "base", "cacheVariables": { "CMAKE_C_COMPILER": "gcc", "CMAKE_CXX_COMPILER": "g++" } },
+    { "name": "gcc", "hidden": true, "inherits": "base", "cacheVariables": { "CMAKE_C_COMPILER": "gcc-14", "CMAKE_CXX_COMPILER": "g++-14" } },
     { "name": "clang", "hidden": true, "inherits": "base", "cacheVariables": { "CMAKE_C_COMPILER": "clang-20", "CMAKE_CXX_COMPILER": "clang++-20" } },
     { "name": "debug", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "RAWFRAME_CONFIGURATION": "debug" } },
     { "name": "development", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo", "RAWFRAME_CONFIGURATION": "development" } },

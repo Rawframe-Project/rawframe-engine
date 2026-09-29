@@ -402,7 +402,8 @@ public:
         endpoint_ = std::string{configuration.text("bots.endpoint").value_or("arena")};
         // What every bot offers as its join ticket, byte for byte; none by
         // default.
-        for (const char kCharacter : configuration.text("bots.ticket").value_or("")) {
+        const std::string_view kTicket = configuration.text("bots.ticket").value_or("");
+        for (const char kCharacter : kTicket) {
             ticket_.push_back(static_cast<std::byte>(kCharacter));
         }
         // Bot n asks for the session `<bots.session>-n`, so it plays as the

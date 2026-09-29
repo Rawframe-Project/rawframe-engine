@@ -43,7 +43,10 @@ jobs=$(nproc)
 build_and_test() {
     local preset="$1"
     step "$preset"
-    if ! cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; then
+    # A tree whose cache no longer fits its preset (a compiler moved, say)
+    # is made again from nothing, once.
+    if ! cmake --preset "$preset" >"out/$preset.configure.log" 2>&1 &&
+        ! { rm -rf "out/$preset" && cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; }; then
         tail -20 "out/$preset.configure.log"; fail "$preset configure"; return
     fi
     if ! cmake --build "out/$preset" >"out/$preset.build.log" 2>&1; then
