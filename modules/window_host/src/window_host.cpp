@@ -26,8 +26,9 @@ constexpr int kMostIterationsPerFrame = 4;
 } // namespace
 
 WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings settings)
-    : request_(request), settings_(std::move(settings)),
-      lent_{composition::LentCapability{input_kest::kFeed.name, composition::provideAs(feed_)}} {
+    : request_(request), settings_(std::move(settings)) {
+    lent_.push_back(composition::LentCapability{input_kest::kFeed.name, composition::provideAs(feed_)});
+    lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
 }
 
