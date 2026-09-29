@@ -115,13 +115,14 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
         return exitCode(HostExit::InvalidLaunchDescriptor);
     }
     installStopBridge();
-    const HostExit kExit = runHost(HostRequest{
+    const HostRequest kRequest{
         .role = entry.role,
         .registrars = entry.registrars,
         .configuration = &*kConfiguration,
         .log = {.write = &writeStandardOutput, .context = nullptr},
         .stopRequested = &stopRequested,
-    });
+    };
+    const HostExit kExit = entry.drive != nullptr ? entry.drive(kRequest) : runHost(kRequest);
     return exitCode(kExit);
 }
 

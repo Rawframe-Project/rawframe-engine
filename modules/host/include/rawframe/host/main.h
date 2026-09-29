@@ -14,6 +14,7 @@
 #include "rawframe/base/platform.h"
 #include "rawframe/composition/declaration.h"
 #include "rawframe/composition/registrar.h"
+#include "rawframe/host/host.h"
 
 #include <span>
 #include <string_view>
@@ -21,11 +22,17 @@
 #if RAWFRAME_THREADS && RAWFRAME_FILE_SYSTEM
 namespace rawframe::host {
 
+/// Runs the Host the entry describes and says how it ended. `runHost` by
+/// default; a client whose window system owns the loop drives the Host from
+/// its frames instead.
+using HostDriver = HostExit (*)(const HostRequest& request) noexcept;
+
 struct ProcessEntry {
     /// The executable's name, for launch errors.
     std::string_view name;
     composition::TargetRole role = composition::TargetRole::DedicatedServer;
     std::span<const composition::RegistrarEntry> registrars;
+    HostDriver drive = nullptr;
 };
 
 [[nodiscard]] int hostMain(int argc, char** argv, const ProcessEntry& entry);
