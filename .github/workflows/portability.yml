@@ -55,7 +55,9 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-20 ninja-build ccache python3-aioquic
+          sudo apt-get install -y clang-20 ninja-build ccache python3-aioquic \
+            libwayland-dev wayland-protocols libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev \
+            libxcb-randr0-dev libxcb-xkb-dev libxcb-cursor-dev libxcb-xinput-dev
       - name: Configure
         run: cmake --preset clang-development
       - name: Build
@@ -75,7 +77,9 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-20 ninja-build ccache python3-aioquic
+          sudo apt-get install -y clang-20 ninja-build ccache python3-aioquic \
+            libwayland-dev wayland-protocols libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev \
+            libxcb-randr0-dev libxcb-xkb-dev libxcb-cursor-dev libxcb-xinput-dev
       - name: Configure
         run: cmake --preset clang-sanitize
       - name: Build
