@@ -49,7 +49,8 @@ struct KestColumn {
 /// A component programs may add and take away through the doors
 /// `<kestType>.insert(entity: Entity, value: <kestType>)` and
 /// `<kestType>.remove(entity: Entity)`, recorded in the running system's
-/// command buffer. It must be plain data shaped like its Kest type.
+/// command buffer. It must be plain data shaped like its Kest type. A Kest
+/// type two components share has no such doors (D260).
 struct KestComponent {
     schema::ComponentTypeId component;
     std::string_view kestType;

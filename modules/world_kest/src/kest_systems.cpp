@@ -662,6 +662,11 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
     RAWFRAME_TRY(doors.add(kest::Door{
         .name = "Random.unit", .function = &unitDoor, .context = doorway.get(), .takes = kStream, .gives = kF64}));
     for (Doorway::Component& component : doorway->components) {
+        // A Kest type two components share has no doors: which of them an
+        // insert would add is not the program's to say (D260).
+        if (std::ranges::count(doorway->components, component.kestType, &Doorway::Component::kestType) > 1) {
+            continue;
+        }
         component.insertTakes[1] = kest::Parameter{kest::Slot::Value, component.kestType};
         RAWFRAME_TRY(doors.add(kest::Door{.name = component.insertName,
                                           .function = &insertDoor,
