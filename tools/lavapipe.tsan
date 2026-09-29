@@ -1,0 +1,7 @@
+# ThreadSanitizer suppressions for the render cluster's tests (D278). Mesa's
+# software Vulkan driver runs its rasterizer on threads of its own and
+# compiles shaders with LLVM, all built without ThreadSanitizer, which cannot
+# see how they order their threads and locks; they are Mesa's to check, not
+# the engine's or Maul RHI's (Maul RHI's own suite suppresses the same).
+called_from_lib:libvulkan_lvp.so
+called_from_lib:libLLVM

@@ -216,6 +216,12 @@ function(rawframe_module_tests)
     add_executable(${target} ${arg_SOURCES})
     target_link_libraries(${target} PRIVATE rawframe::${arg_NAME} rawframe::test)
     add_test(NAME ${arg_NAME} COMMAND ${target})
+    # Tests that draw run Mesa's lavapipe, whose own threads the thread
+    # sanitizer cannot see ordered (D278).
+    if(RAWFRAME_SANITIZE STREQUAL "thread")
+        set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT
+                             "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
+    endif()
 endfunction()
 
 # Declares a coverage-guided fuzz target for one module's hostile input

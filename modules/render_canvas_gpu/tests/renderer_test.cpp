@@ -1,0 +1,167 @@
+// The canvas's GPU half (D278) on lavapipe: a frame the queue stage could
+// have built drawn into an offscreen target and read back. A 2 by 2 texture
+// lands the right way up, each texel whole (exact textures are sampled
+// nearest); a half-clear sprite drawn after it blends over it in linear
+// light; a draw whose texture is not ready is left out; and a texture is
+// uploaded once, and again only when a reload replaces it. Skips where no
+// adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
+
+#include "rawframe/render/device.h"
+#include "rawframe/render/errors.h"
+#include "rawframe/render_canvas_gpu/renderer.h"
+#include "rawframe/test/test.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
+
+using namespace rawframe;
+using render_canvas::CanvasDraw;
+using render_canvas::CanvasFrame;
+using render_canvas::CanvasVertex;
+
+namespace {
+
+bool required() {
+    const char* value = std::getenv("RAWFRAME_REQUIRE_GPU");
+    return value != nullptr && value[0] != '\0';
+}
+
+std::unique_ptr<render::Device> opened() {
+    auto device = render::Device::request({.allowSoftware = true});
+    if (!device.has_value()) {
+        return nullptr;
+    }
+    for (int poll = 0; poll < 1000; ++poll) {
+        const auto kOpen = (*device)->open();
+        if (!kOpen.has_value()) {
+            RAWFRAME_EXPECT(!required());
+            std::puts("skip: no adapter");
+            return nullptr;
+        }
+        if (*kOpen) {
+            return std::move(*device);
+        }
+    }
+    return nullptr;
+}
+
+constexpr std::uint32_t kSide = 64;
+constexpr std::uint64_t kQuarters = 7;
+constexpr std::uint64_t kWhite = 8;
+constexpr std::uint64_t kMissing = 9;
+
+/// A quad from (`left`, `top`) to (`right`, `bottom`) in the canvas's clip
+/// space, y up, the whole texture across it.
+void quad(
+    CanvasFrame& frame, std::uint64_t texture, float left, float top, float right, float bottom, std::uint32_t color) {
+    const auto kFirst = static_cast<std::uint32_t>(frame.vertices.size());
+    frame.vertices.push_back(CanvasVertex{.x = left, .y = top, .u = 0, .v = 0, .color = color});
+    frame.vertices.push_back(CanvasVertex{.x = right, .y = top, .u = 1, .v = 0, .color = color});
+    frame.vertices.push_back(CanvasVertex{.x = right, .y = bottom, .u = 1, .v = 1, .color = color});
+    frame.vertices.push_back(CanvasVertex{.x = left, .y = bottom, .u = 0, .v = 1, .color = color});
+    const auto kIndex = static_cast<std::uint32_t>(frame.indices.size());
+    for (const std::uint32_t kCorner : {0U, 1U, 2U, 0U, 2U, 3U}) {
+        frame.indices.push_back(kFirst + kCorner);
+    }
+    frame.draws.push_back(CanvasDraw{.texture = texture, .firstIndex = kIndex, .indexCount = 6});
+}
+
+std::shared_ptr<const texture::Texture> image(std::uint32_t side, std::initializer_list<std::uint8_t> texels) {
+    auto made = std::make_shared<texture::Texture>();
+    made->format = texture::Format::Rgba8Srgb;
+    made->levels.push_back(texture::Level{.width = side, .height = side, .bytes = {}});
+    for (const std::uint8_t kByte : texels) {
+        made->levels[0].bytes.push_back(static_cast<std::byte>(kByte));
+    }
+    return made;
+}
+
+bool near(const std::vector<std::byte>& pixels, std::uint32_t x, std::uint32_t y, std::array<int, 4> expected) {
+    for (std::size_t channel = 0; channel < 4; ++channel) {
+        const int kValue = std::to_integer<int>(pixels[((std::size_t{y} * kSide + x) * 4) + channel]);
+        if (kValue < expected[channel] - 3 || kValue > expected[channel] + 3) {
+            std::printf("pixel (%u, %u) channel %zu: %d, not %d\n", x, y, channel, kValue, expected[channel]);
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+RAWFRAME_TEST(TheCanvasDrawsItsFrameInOrder) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    render_canvas_gpu::CanvasRenderer& renderer = **made;
+    // Red, green; blue, white: rows top first.
+    auto quarters = image(2, {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255});
+    const auto kWhiteTexel = image(1, {255, 255, 255, 255});
+    const render_canvas_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == kQuarters ? quarters : id == kWhite ? kWhiteTexel : nullptr;
+    };
+    CanvasFrame frame;
+    // The top-left quarter of the view, then a half-clear blue square over
+    // its middle, then a quad whose texture never comes.
+    quad(frame, kQuarters, -1, 1, 0, 0, 0xFFFFFFFF);
+    quad(frame, kWhite, -0.5F, 0.5F, 0.5F, -0.5F, 0x0000FF80);
+    quad(frame, kMissing, 0.5F, 1, 1, 0.5F, 0xFFFFFFFF);
+    const render_canvas_gpu::OffscreenTarget kTarget{
+        .width = kSide, .height = kSide, .clear = {0, 0, 0, 1}, .readBack = true};
+    const auto kDraw = [&] {
+        // The pipeline is made as the device answers: a few frames at most.
+        for (int attempt = 0; attempt < 1000; ++attempt) {
+            const auto kRendered = renderer.render(frame, kTextures, kTarget);
+            RAWFRAME_EXPECT(kRendered.has_value());
+            if (!kRendered.has_value() || *kRendered) {
+                break;
+            }
+        }
+        RAWFRAME_EXPECT(renderer.finish(10'000'000'000ULL).has_value());
+        auto pixels = renderer.pixels();
+        RAWFRAME_EXPECT(pixels.has_value() && pixels->size() == std::size_t{kSide} * kSide * 4);
+        return pixels.value_or(std::vector<std::byte>(std::size_t{kSide} * kSide * 4));
+    };
+    const std::vector<std::byte> kPixels = kDraw();
+    // Each texel whole, the right way up, where the half-clear square is
+    // not.
+    RAWFRAME_EXPECT(near(kPixels, 4, 4, {255, 0, 0, 255}) && near(kPixels, 28, 4, {0, 255, 0, 255}) &&
+                    near(kPixels, 4, 28, {0, 0, 255, 255}) && near(kPixels, 12, 12, {255, 0, 0, 255}));
+    // Half blue over white, and over the black behind, blended in linear
+    // light: sRGB 0.498 is 187, 0.502 is 188.
+    RAWFRAME_EXPECT(near(kPixels, 28, 28, {187, 187, 255, 255}) && near(kPixels, 40, 40, {0, 0, 188, 255}));
+    // The missing texture drew nothing; the rest is the clear color.
+    RAWFRAME_EXPECT(near(kPixels, 56, 4, {0, 0, 0, 255}) && near(kPixels, 60, 60, {0, 0, 0, 255}));
+    RAWFRAME_EXPECT(renderer.statistics().draws == 2 && renderer.statistics().drawsLeftOut == 1 &&
+                    renderer.statistics().texturesUploaded == 2);
+
+    // The same textures again are not uploaded again; a reload's new one is.
+    static_cast<void>(kDraw());
+    RAWFRAME_EXPECT(renderer.statistics().texturesUploaded == 2 && renderer.statistics().texturesReplaced == 0);
+    quarters = image(2, {0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255});
+    const std::vector<std::byte> kReloaded = kDraw();
+    RAWFRAME_EXPECT(renderer.statistics().texturesUploaded == 3 && renderer.statistics().texturesReplaced == 1);
+    RAWFRAME_EXPECT(near(kReloaded, 4, 4, {0, 255, 0, 255}));
+}
+
+RAWFRAME_TEST(ATargetPastItsLimitIsRefused) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice, {.maximumSide = 128});
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    const render_canvas_gpu::TextureSource kNone;
+    RAWFRAME_EXPECT(!(*made)->render(CanvasFrame{}, kNone, {.width = 129, .height = 8}).has_value());
+    RAWFRAME_EXPECT(!(*made)->render(CanvasFrame{}, kNone, {.width = 0, .height = 8}).has_value());
+}
