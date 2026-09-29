@@ -13,6 +13,7 @@
 #include <openssl/pkcs12.h>
 #include <openssl/rand.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 namespace rawframe::network_quic {
 
@@ -72,6 +73,44 @@ bool setSerial(X509* certificate) {
     return kSerial != nullptr && BN_to_ASN1_INTEGER(kSerial.get(), X509_get_serialNumber(certificate)) != nullptr;
 }
 
+/// The common name as the certificate's one DNS subject alternative name.
+/// Some verifiers read only a certificate with extensions: Chromium's
+/// WebTransport by hash refuses one without (D250).
+bool addSubjectName(X509* certificate, std::string_view commonName) {
+    GENERAL_NAMES* const kNames = GENERAL_NAMES_new();
+    GENERAL_NAME* const kName = GENERAL_NAME_new();
+    ASN1_IA5STRING* const kText = ASN1_IA5STRING_new();
+    const bool kBuilt = kNames != nullptr && kName != nullptr && kText != nullptr &&
+                        ASN1_STRING_set(kText, commonName.data(), static_cast<int>(commonName.size())) == 1;
+    if (!kBuilt) {
+        ASN1_IA5STRING_free(kText);
+        GENERAL_NAME_free(kName);
+        GENERAL_NAMES_free(kNames);
+        return false;
+    }
+    GENERAL_NAME_set0_value(kName, GEN_DNS, kText);
+    if (sk_GENERAL_NAME_push(kNames, kName) == 0) {
+        GENERAL_NAME_free(kName);
+        GENERAL_NAMES_free(kNames);
+        return false;
+    }
+    const bool kAdded = X509_add1_ext_i2d(certificate, NID_subject_alt_name, kNames, 0, X509V3_ADD_DEFAULT) == 1;
+    GENERAL_NAMES_free(kNames);
+    return kAdded;
+}
+
+/// Not a certificate authority: the key signs this certificate alone.
+bool addNotAuthority(X509* certificate) {
+    BASIC_CONSTRAINTS* const kConstraints = BASIC_CONSTRAINTS_new();
+    if (kConstraints == nullptr) {
+        return false;
+    }
+    kConstraints->ca = 0;
+    const bool kAdded = X509_add1_ext_i2d(certificate, NID_basic_constraints, kConstraints, 1, X509V3_ADD_DEFAULT) == 1;
+    BASIC_CONSTRAINTS_free(kConstraints);
+    return kAdded;
+}
+
 } // namespace
 
 result::Result<Certificate> makeSelfSignedCertificate(std::string_view commonName, unsigned validDays) {
@@ -98,7 +137,8 @@ result::Result<Certificate> makeSelfSignedCertificate(std::string_view commonNam
                                    static_cast<int>(commonName.size()),
                                    -1,
                                    0) == 1 &&
-        X509_set_issuer_name(kRaw, kName) == 1 && X509_sign(kRaw, kKey.get(), EVP_sha256()) > 0;
+        X509_set_issuer_name(kRaw, kName) == 1 && addSubjectName(kRaw, commonName) && addNotAuthority(kRaw) &&
+        X509_sign(kRaw, kKey.get(), EVP_sha256()) > 0;
     const Bio kCertificateText{BIO_new(BIO_s_mem())};
     const Bio kKeyText{BIO_new(BIO_s_mem())};
     if (!kMade || kCertificateText == nullptr || kKeyText == nullptr ||

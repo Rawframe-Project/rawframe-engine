@@ -3,18 +3,42 @@ HTTP/3 implementation: it opens a session on the server at the port given,
 sends on a two-way stream and as a datagram, and waits for the server's
 answers on that stream, on a one-way stream of the server's, and as a
 datagram. Prints `webtransport: answered` and exits 0 when all three came.
+It also asks of the server's certificate what a browser pinning it by hash
+asks (D250): a P-256 key, at most 14 days of validity, and extensions.
 
 usage: webtransport_client.py <port>
 """
 import asyncio
 import ssl
 import sys
+from datetime import timedelta
+
+from cryptography import x509
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h3.connection import H3_ALPN, FrameType, H3Connection, H3Stream
 from aioquic.h3.events import DatagramReceived, HeadersReceived, WebTransportStreamDataReceived
 from aioquic.quic.configuration import QuicConfiguration
+
+
+def refused_by_hash(certificate):
+    """Why a browser would refuse to pin `certificate` by its hash, or None.
+    Chromium also refuses a certificate without extensions."""
+    key = certificate.public_key()
+    if not isinstance(key, ec.EllipticCurvePublicKey) or key.curve.name != "secp256r1":
+        return "its key is not P-256"
+    # cryptography 42 renamed the bounds; the older names are gone in 45.
+    after = getattr(certificate, "not_valid_after_utc", None) or certificate.not_valid_after
+    before = getattr(certificate, "not_valid_before_utc", None) or certificate.not_valid_before
+    if after - before > timedelta(days=14):
+        return "it is valid for more than 14 days"
+    try:
+        certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+    except x509.ExtensionNotFound:
+        return "it names no subject alternative name"
+    return None
 
 
 class Browser(QuicConnectionProtocol):
@@ -60,6 +84,10 @@ async def main(port):
             ],
         )
         browser.transmit()
+        refused = refused_by_hash(browser._quic.tls._peer_certificate)
+        if refused is not None:
+            print(f"webtransport: a browser would not pin the certificate: {refused}")
+            return 1
         status = await asyncio.wait_for(browser.status, 5)
         if status != b"200":
             print(f"webtransport: refused with {status}")
