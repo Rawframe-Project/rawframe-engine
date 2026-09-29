@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <functional>
 #include <optional>
 #include <string>
@@ -171,6 +172,28 @@ RAWFRAME_TEST(ARequestIsAnsweredAfterWhatItCausedAndSupersededWhenReplaced) {
     RAWFRAME_EXPECT(first && first->second == Outcome::Superseded);
     RAWFRAME_EXPECT(second && second->second == Outcome::Done);
     RAWFRAME_EXPECT(denied && denied->second == Outcome::Denied);
+    if (!sized || !first || !second || !denied) {
+        // What came instead, for a platform where this fails.
+        std::fprintf(stderr,
+                     "  asked: size %u.%u, titles %u.%u and %u.%u, mode %u.%u\n",
+                     size.index,
+                     size.generation,
+                     firstTitle.index,
+                     firstTitle.generation,
+                     secondTitle.index,
+                     secondTitle.generation,
+                     mode.index,
+                     mode.generation);
+        for (const Event& event : script.events) {
+            std::fprintf(stderr,
+                         "  record %u: request %u.%u kind %u outcome %u\n",
+                         static_cast<unsigned>(event.kind),
+                         event.completion.request.index,
+                         event.completion.request.generation,
+                         static_cast<unsigned>(event.completion.kind),
+                         static_cast<unsigned>(event.completion.outcome));
+        }
+    }
     // Refused: the mode the window was created in is the only one it had.
     RAWFRAME_EXPECT(std::ranges::none_of(script.events, [](const Event& event) {
         return event.kind == EventKind::ModeChanged && event.mode != Mode::Windowed;
