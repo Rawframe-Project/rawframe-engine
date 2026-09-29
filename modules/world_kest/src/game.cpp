@@ -699,7 +699,7 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
         const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
         const auto kTexture = std::ranges::find(game.textures, value.value, &GameTexture::path);
         if (kComponent != game.components.end() &&
-            (kComponent->kestType == "Sprite" || kComponent->kestType == "canvas.Sprite") &&
+            (kComponent->kestType == "Sprite" || kComponent->kestType == "rawframe.canvas.Sprite") &&
             kTexture != game.textures.end()) {
             return std::to_string(kTexture->id);
         }
