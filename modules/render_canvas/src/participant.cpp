@@ -1,9 +1,11 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
+#include "rawframe/game_content/game_content.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
 #include "rawframe/render_canvas/errors.h"
 #include "rawframe/render_canvas/registrar.h"
+#include "rawframe/render_canvas/textures.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/client_worlds.h"
 
@@ -17,11 +19,28 @@ namespace rawframe::render_canvas {
 namespace {
 
 constexpr diagnostics::EventIdentity kCanvasSummary{"canvas", "canvas_summary"};
-constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name, world_kest::kGameFiles.name};
+constexpr diagnostics::EventIdentity kUnread{"canvas", "textures_unavailable"};
+constexpr diagnostics::EventIdentity kUnreadTexture{"canvas", "texture_unavailable"};
+constexpr std::string_view kMaybe[] = {
+    world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
+/// The decoded levels the canvas holds at most.
+constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
+
+/// A texture's identity as its game writes it, 16 hexadecimal digits.
+std::string identityText(std::uint64_t id) {
+    std::string text(16, '0');
+    for (std::size_t at = 0; at < 16; ++at) {
+        text[15 - at] = "0123456789abcdef"[(id >> (4 * at)) & 0xFU];
+    }
+    return text;
+}
 
 /// Draws one client's mirrored World each frame through a camera following
 /// its player: the extract stage in `presentation_extract`, the queue stage
 /// in `present`. Idle without a game that has sprites or without clients.
+/// It reads the game's textures from the Runtime's cooked content
+/// (`rawframe.content.game`) when the process has some; without it, it
+/// draws on, every draw waiting for its texture.
 class CanvasParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
@@ -67,11 +86,37 @@ public:
         camera_.height = game->cameraHeight;
         camera_.aspect = static_cast<float>(kWidth) / static_cast<float>(kHeight);
         settings_ = CanvasSettings{.sprite = game->sprite, .textures = std::move(game->textures)};
+        if (context.has(game_content::kGameContent.name) && context.cpuExecutor() != nullptr &&
+            !files->textures().empty()) {
+            RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
+            if (!content->held()) {
+                return {};
+            }
+            RAWFRAME_TRY(content->admit(textureRepresentations()));
+            auto textures = CanvasTextures::create(content->store(),
+                                                   *context.cpuExecutor(),
+                                                   context.owner(),
+                                                   context.scope(),
+                                                   context.clock(),
+                                                   files->textures(),
+                                                   kTextureBudgetBytes);
+            if (textures.has_value()) {
+                textures_ = std::move(*textures);
+            } else {
+                unread_ = std::string{textures.error().description()};
+            }
+        }
         return {};
     }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        if (unread_.has_value()) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kUnread,
+                         "the game's textures could not be asked for: every draw waits for its texture",
+                         {diagnostics::field("reason", *unread_)});
+        }
         return {};
     }
 
@@ -80,10 +125,27 @@ public:
             return;
         }
         if (phase == composition::HostPhase::PresentationExtract) {
+            ++tick_;
+            if (textures_ != nullptr) {
+                for (const auto& [kId, kError] : textures_->update(tick_)) {
+                    emitter_.log(diagnostics::Severity::Warning,
+                                 kUnreadTexture,
+                                 "a texture could not be read: its draws wait for it",
+                                 {diagnostics::field("texture", identityText(kId)),
+                                  diagnostics::field("reason", std::string{kError.description()})});
+                }
+            }
             extract();
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
             const CanvasFrame& kFrame = canvas_->queue(camera_);
+            // What a device would draw this frame: the draws whose texture
+            // is decoded and held.
+            for (const CanvasDraw& draw : kFrame.draws) {
+                if (textures_ == nullptr || textures_->texture(draw.texture, tick_) == nullptr) {
+                    ++drawsWaiting_;
+                }
+            }
             ++frames_;
             drawn_ += kFrame.drawn;
             culled_ += kFrame.culled;
@@ -100,6 +162,7 @@ public:
         if (clients_ == nullptr) {
             return;
         }
+        const TextureCounts kTextures = textures_ != nullptr ? textures_->counts() : TextureCounts{};
         emitter_.log(diagnostics::Severity::Info,
                      kCanvasSummary,
                      "what one client's canvas drew",
@@ -111,7 +174,11 @@ public:
                       diagnostics::field("unknownTextures", unknownTextures_),
                       diagnostics::field("overLimit", overLimit_),
                       diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
-                      diagnostics::field("mostVertices", static_cast<std::uint64_t>(mostVertices_))});
+                      diagnostics::field("mostVertices", static_cast<std::uint64_t>(mostVertices_)),
+                      diagnostics::field("drawsWaiting", drawsWaiting_),
+                      diagnostics::field("texturesReady", static_cast<std::uint64_t>(kTextures.ready)),
+                      diagnostics::field("texturesFailed", static_cast<std::uint64_t>(kTextures.failed)),
+                      diagnostics::field("textureBytes", kTextures.bytes)});
     }
 
 private:
@@ -148,6 +215,10 @@ private:
     CanvasSettings settings_;
     CanvasCamera camera_;
     std::unique_ptr<Canvas> canvas_;
+    std::unique_ptr<CanvasTextures> textures_;
+    std::optional<std::string> unread_;
+    std::uint64_t tick_ = 0;
+    std::uint64_t drawsWaiting_ = 0;
     bool extracted_ = false;
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
@@ -175,6 +246,8 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .factory = &make,
         .scope = composition::LifetimeScope::World,
         .optionalCapabilities = kMaybe,
+        // Textures are decoded on the CPU executor.
+        .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "render_canvas.canvas",
         .budgetOwner = "render",

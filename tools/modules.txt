@@ -50,7 +50,7 @@ world_kest: world_animation animation mesh scene game_content content kest_libra
 world_replication: game_content world_runtime network world composition schema execution diagnostics result base
 input_kest: input document world_kest world_replication kest world composition execution diagnostics result base
 world_audio: game_content assets content audio physics2d physics3d world_replication world_kest kest world composition schema execution diagnostics document result base
-render_canvas: physics2d world_replication world_kest kest world composition schema execution diagnostics result base
+render_canvas: game_content assets content texture physics2d world_replication world_kest kest world composition schema execution diagnostics result base
 world_localization: localization world_kest game_content content composition execution diagnostics result base
 host: composition execution diagnostics result base
 dedicated_server: host game_content network_quic physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base

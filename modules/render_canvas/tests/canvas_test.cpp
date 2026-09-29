@@ -3,19 +3,26 @@
 // draws nothing, is malformed, or names an undeclared texture is left out
 // and counted; sprites draw in the order of their layers, then entities,
 // and batch only where the order allows; the limits leave out a suffix of
-// the order; and a game's canvas loads against its program.
+// the order; a game's canvas loads against its program; and its textures
+// are read decoded by identity from cooked content.
 
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
 #include "rawframe/render_canvas/errors.h"
+#include "rawframe/render_canvas/textures.h"
 #include "rawframe/test/test.h"
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <limits>
 #include <string>
 #include <utility>
 #include <vector>
+
+#if RAWFRAME_THREADS
+#include <thread>
+#endif
 
 using namespace rawframe;
 using namespace rawframe::render_canvas;
@@ -179,6 +186,11 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
         std::vector<std::pair<std::string, std::string>> held;
         held.emplace_back("drawn.kest", std::string{"module drawn\n\nimport rawframe.canvas\n\n"} + std::string{kest});
         held.emplace_back("drawn.game", std::string{"program drawn.kest\n"} + std::string{gameLines});
+        for (const char* kImage : {"tiles.png", "runner.png"}) {
+            held.emplace_back(std::string{kImage} + ".rfmeta",
+                              "{\n  \"schema\": 1,\n  \"resourceId\": \"a6478ea1aa844c683e293a9754feeb95\",\n  "
+                              "\"importer\": \"rawframe.texture\"\n}\n");
+        }
         const auto kFiles = world_kest::GameFiles::fromHeld("drawn.game", std::move(held));
         RAWFRAME_EXPECT(kFiles.has_value());
         std::string report;
@@ -209,4 +221,107 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
                             "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
                             "component 6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.other rawframe.canvas.Sprite\n");
     RAWFRAME_EXPECT(!kTwo.has_value() && kTwo.error().code() == code(RenderCanvasError::BadComponents));
+}
+
+namespace {
+
+/// A content store over two cooked textures, as a client composes it from a
+/// game's cooked output: 1 is a 2 by 2 texture, 2's bytes are no texture.
+struct Content {
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    execution::Executor io{execution::ExecutorSettings{.kind = execution::ExecutorKind::BlockingIo, .workers = 1}};
+    execution::Executor cpu{execution::ExecutorSettings{.kind = execution::ExecutorKind::Cpu, .workers = 1}};
+    std::unique_ptr<content::ContentStore> store;
+
+    static std::vector<std::byte> cooked() {
+        texture::Texture made{.format = texture::Format::Rgba8Srgb};
+        made.levels.push_back(
+            texture::Level{.width = 2, .height = 2, .bytes = std::vector<std::byte>(16, std::byte{9})});
+        return *texture::encode(made);
+    }
+
+    static content::ManifestEntry
+    entryOf(std::uint64_t id, const std::string& locator, const std::vector<std::byte>& bytes) {
+        return content::ManifestEntry{.id = content::ResourceId{base::Bits128{.high = 0, .low = id}},
+                                      .type = content::ResourceTypeId{texture::kTextureType},
+                                      .representation =
+                                          *content::RepresentationId::parse(texture::kTextureRepresentation),
+                                      .byteLength = bytes.size(),
+                                      .digest = content::ContentDigest::of(bytes),
+                                      .locator = locator};
+    }
+
+    Content() {
+        RAWFRAME_EXPECT(io.admitOwner(execution::OwnerId{1}, {.maximumPendingTasks = 16}).has_value());
+        RAWFRAME_EXPECT(cpu.admitOwner(execution::OwnerId{1}, {.maximumPendingTasks = 16}).has_value());
+        const std::vector<std::byte> kGood = cooked();
+        const std::vector<std::byte> kBroken(64, std::byte{7});
+        std::vector<content::ContentSource> sources;
+        sources.push_back(std::move(*content::ContentSource::memory({{"a", kGood}, {"b", kBroken}})));
+        store = std::move(*content::ContentStore::create(io, execution::OwnerId{1}, root, clock, std::move(sources)));
+        const std::vector<content::BoundManifest> kManifests = {
+            {.entries = {entryOf(1, "a", kGood), entryOf(2, "b", kBroken)}, .source = 0}};
+        store->publish(*content::ContentCatalog::build(kManifests, textureRepresentations(), 1, 1));
+    }
+    ~Content() {
+        store.reset();
+        cpu.stop();
+        io.stop();
+    }
+    Content(const Content&) = delete;
+    Content& operator=(const Content&) = delete;
+
+    result::Result<std::unique_ptr<CanvasTextures>> textures(std::vector<world_kest::GameTextureResource> declared) {
+        return CanvasTextures::create(*store, cpu, execution::OwnerId{1}, root, clock, std::move(declared), 1U << 20U);
+    }
+
+    /// Updates `textures` until none is pending, within ten seconds; the
+    /// failures it reported.
+    std::vector<std::pair<std::uint64_t, result::Error>> settle(CanvasTextures& textures) {
+        std::vector<std::pair<std::uint64_t, result::Error>> failed;
+        const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (std::chrono::steady_clock::now() < kDeadline) {
+            for (auto& each : textures.update(1)) {
+                failed.push_back(std::move(each));
+            }
+            if (textures.counts().pending == 0) {
+                break;
+            }
+#if RAWFRAME_THREADS
+            std::this_thread::yield();
+#else
+            while (io.runOne() || cpu.runOne()) {
+            }
+#endif
+        }
+        return failed;
+    }
+};
+
+world_kest::GameTextureResource declared(std::uint64_t id, std::uint64_t resource) {
+    return {.id = id, .path = "t" + std::to_string(id) + ".png", .texture = base::Bits128{.high = 0, .low = resource}};
+}
+
+} // namespace
+
+RAWFRAME_TEST(TexturesAreReadByIdentityFromCookedContent) {
+    Content content;
+    auto textures = content.textures({declared(kRunner, 1), declared(kTiles, 2)});
+    RAWFRAME_EXPECT(textures.has_value());
+    if (!textures.has_value()) {
+        return;
+    }
+    // The good one decodes to its levels; the broken one fails, reported
+    // once, by the identity the game gives it.
+    const auto kFailed = content.settle(**textures);
+    RAWFRAME_EXPECT(kFailed.size() == 1 && kFailed[0].first == kTiles && (*textures)->update(1).empty());
+    const auto kRunnerTexture = (*textures)->texture(kRunner, 1);
+    RAWFRAME_EXPECT(kRunnerTexture != nullptr && kRunnerTexture->levels.size() == 1 &&
+                    kRunnerTexture->levels[0].width == 2 && kRunnerTexture->format == texture::Format::Rgba8Srgb);
+    RAWFRAME_EXPECT((*textures)->texture(kTiles, 1) == nullptr && (*textures)->texture(0xdead, 1) == nullptr);
+    const TextureCounts kCounts = (*textures)->counts();
+    RAWFRAME_EXPECT(kCounts.ready == 1 && kCounts.failed == 1 && kCounts.pending == 0 && kCounts.bytes == 16);
+    // A texture the content does not hold is refused when asked for.
+    RAWFRAME_EXPECT(!content.textures({declared(kRunner, 9)}).has_value());
 }
