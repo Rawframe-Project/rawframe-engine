@@ -159,6 +159,8 @@ struct ServerReplicationStatistics {
     /// not connected (D266).
     std::uint64_t messagesSent = 0;
     std::uint64_t messagesUndelivered = 0;
+    /// Sessions ended by the game or an operator (D267).
+    std::uint64_t terminated = 0;
 };
 
 class ReplicationServer final : public world_runtime::SystemContributor, public InterestHistory {
@@ -204,6 +206,11 @@ public:
     /// the sessions must declare; after the tick that sent it, never during
     /// one. None goes to a player not connected.
     void post(const PostedMessage& message) noexcept;
+    /// Ends the session of the player whose entity `player` is (ADR-0073):
+    /// its termination goes on the engine's lane, the connection is held
+    /// only for that to arrive, and the player leaves the World at once, as
+    /// if it had gone. False for a player not connected.
+    bool terminate(world::World& world, world::EntityHandle player, const network::Termination& termination) noexcept;
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
     /// Divergences found since last asked, the oldest first, at most 64; a

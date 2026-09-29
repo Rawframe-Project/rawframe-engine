@@ -82,6 +82,8 @@ public:
     [[nodiscard]] std::optional<network::RejectReason> rejection() const noexcept;
     /// Whether the server said it is stopping.
     [[nodiscard]] bool serverStopping() const noexcept;
+    /// Why the server ended this session, if it did (ADR-0073).
+    [[nodiscard]] const std::optional<network::Termination>& termination() const noexcept;
     /// Whether the session is over, admitted or not.
     [[nodiscard]] bool ended() const noexcept;
     /// The mirror of the entity this client plays, once declared.

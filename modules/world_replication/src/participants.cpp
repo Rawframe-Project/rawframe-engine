@@ -56,13 +56,13 @@ network::SessionProfile sessionProfile(std::size_t sessions) {
                                    .admissionTimeout = execution::MonotonicDuration::fromSeconds(5)};
 }
 
-/// The event lanes both sides declare: the game's, when it sends messages
-/// (D266), its bound checked when the game loaded.
+/// The event lanes both sides declare: the engine's (D267), and the game's
+/// when it sends messages (D266), its bound checked when the game loaded.
 std::vector<network::EventLaneDeclaration> lanesOf(const ReplicationPlan& plan) {
     if (plan.messageRecord() == 0) {
-        return {};
+        return {engineLane()};
     }
-    return {gameMessageLane(plan.messageRecord())};
+    return {engineLane(), gameMessageLane(plan.messageRecord())};
 }
 
 network::ProviderProfile providerProfile(std::size_t connections) {
@@ -207,6 +207,13 @@ public:
         for (const PostedMessage& message : posted_) {
             server_->post(message);
         }
+        // Sessions the game ended, after what it sent them (ADR-0073).
+        ended_.clear();
+        plan_->takeTerminations(ended_);
+        for (const PostedTermination& ended : ended_) {
+            static_cast<void>(server_->terminate(
+                *simulation_->world(), ended.player, {.reason = network::TerminationReason::Game, .note = ended.note}));
+        }
         // A detection for operators and the game, never a response (SPEC-0041).
         for (const Divergence& divergence : server_->takeDivergences()) {
             emitter_.log(diagnostics::Severity::Warning,
@@ -268,7 +275,8 @@ public:
                       diagnostics::field("admissionsRefused", refused_),
                       diagnostics::field("mostConnections", static_cast<std::uint64_t>(mostConnections_)),
                       diagnostics::field("messagesSent", kStatistics.messagesSent),
-                      diagnostics::field("messagesUndelivered", kStatistics.messagesUndelivered)});
+                      diagnostics::field("messagesUndelivered", kStatistics.messagesUndelivered),
+                      diagnostics::field("terminated", kStatistics.terminated)});
     }
 
 private:
@@ -304,6 +312,7 @@ private:
     /// The most players connected at once.
     std::size_t mostConnections_ = 0;
     std::vector<PostedMessage> posted_;
+    std::vector<PostedTermination> ended_;
     std::set<world_runtime::PlayerIdentity> admitting_;
     bool noticed_ = false;
     std::string endpoint_;
@@ -654,6 +663,7 @@ public:
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
         std::uint64_t messagesReceived = 0;
+        std::uint64_t terminated = 0;
         PredictionStatistics predicted;
         InterpolationStatistics interpolated;
         std::uint64_t handed = 0;
@@ -669,6 +679,7 @@ public:
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
             messagesReceived += bot.client->statistics().messagesReceived;
+            terminated += bot.client->termination().has_value() ? 1 : 0;
             const PredictionStatistics kBot = bot.client->predictionStatistics();
             predicted.predictedTicks += kBot.predictedTicks;
             predicted.confirmed += kBot.confirmed;
@@ -710,6 +721,7 @@ public:
                       diagnostics::field("effectsCancelled", predicted.effectsCancelled),
                       diagnostics::field("effectsDropped", predicted.effectsDropped),
                       diagnostics::field("messagesReceived", messagesReceived),
+                      diagnostics::field("terminated", terminated),
                       diagnostics::field("blended", interpolated.blended),
                       diagnostics::field("shownNewest", interpolated.newest)});
     }

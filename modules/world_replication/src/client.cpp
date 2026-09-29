@@ -63,6 +63,7 @@ struct ReplicationClient::State {
     std::optional<network::Accept> accept;
     std::optional<network::RejectReason> rejection;
     bool serverStopping = false;
+    std::optional<network::Termination> termination;
     bool ended = false;
     std::map<std::uint32_t, world::EntityHandle> mirrored;
     MirrorNames names{mirrored};
@@ -107,6 +108,28 @@ struct ReplicationClient::State {
                 .has_value()) {
             static_cast<void>(sessions->sendFrame(*connection, type, writer.written()));
         }
+    }
+
+    /// The session is over: nothing mirrored stays, and a new one starts
+    /// from nothing.
+    void end() {
+        ended = true;
+        for (const auto& [id, entity] : mirrored) {
+            static_cast<void>(world->destroy(entity));
+        }
+        mirrored.clear();
+        appliedAt.clear();
+        owned = {};
+        ownedNet = 0;
+        if (prediction) {
+            prediction->reset();
+        }
+        if (interpolation) {
+            interpolation->reset();
+        }
+        accept.reset();
+        received = {};
+        acknowledgementDue = false;
     }
 
     void onFrame(const network::SessionEvent& event) {
@@ -541,6 +564,17 @@ void ReplicationClient::pump() {
             }
             break;
         case network::SessionEventKind::Event:
+            // The engine's lane says the session is over: this side closes
+            // and forgets the connection, as when it ends.
+            if (state.accept && event.eventLane == network::kEngineLane &&
+                event.payloadType == network::kSessionTerminated) {
+                if (auto termination = network::decodeTermination(event.payload)) {
+                    state.termination = std::move(*termination);
+                }
+                state.sessions->close(event.connection);
+                state.end();
+                break;
+            }
             // The game's lane is the one a client declares, and only when
             // it has somewhere to put what arrives.
             if (state.accept && event.eventLane == kGameMessageLane && state.settings.messages != nullptr &&
@@ -554,23 +588,7 @@ void ReplicationClient::pump() {
             state.rejection = event.reject.reason;
             break;
         case network::SessionEventKind::Ended:
-            state.ended = true;
-            for (const auto& [id, entity] : state.mirrored) {
-                static_cast<void>(state.world->destroy(entity));
-            }
-            state.mirrored.clear();
-            state.appliedAt.clear();
-            state.owned = {};
-            state.ownedNet = 0;
-            if (state.prediction) {
-                state.prediction->reset();
-            }
-            if (state.interpolation) {
-                state.interpolation->reset();
-            }
-            state.accept.reset();
-            state.received = {};
-            state.acknowledgementDue = false;
+            state.end();
             break;
         }
     }
@@ -593,6 +611,10 @@ std::optional<network::RejectReason> ReplicationClient::rejection() const noexce
 
 bool ReplicationClient::serverStopping() const noexcept {
     return state_->serverStopping;
+}
+
+const std::optional<network::Termination>& ReplicationClient::termination() const noexcept {
+    return state_->termination;
 }
 
 const std::optional<network::Accept>& ReplicationClient::accept() const noexcept {

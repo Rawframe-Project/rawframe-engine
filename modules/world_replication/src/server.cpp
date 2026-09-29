@@ -661,6 +661,29 @@ void ReplicationServer::post(const PostedMessage& message) noexcept {
     ++state.statistics.messagesSent;
 }
 
+bool ReplicationServer::terminate(world::World& world,
+                                  world::EntityHandle player,
+                                  const network::Termination& termination) noexcept {
+    State& state = *state_;
+    const auto kPeer = std::ranges::find_if(state.peers, [&](const auto& peer) {
+        return !peer.second.gone && peer.second.player == player;
+    });
+    if (kPeer == state.peers.end()) {
+        return false;
+    }
+    std::array<std::byte, network::kMaximumEngineRecord> record{};
+    network::Writer writer{record};
+    // What cannot be sent is not waited for: the session ends either way.
+    if (network::encodeTermination(writer, termination).has_value()) {
+        static_cast<void>(state.sessions->sendEvent(
+            kPeer->second.connection, network::kEngineLane, network::kSessionTerminated, writer.written()));
+    }
+    state.sessions->closeAfterSending(kPeer->second.connection);
+    state.forget(world, kPeer);
+    ++state.statistics.terminated;
+    return true;
+}
+
 world::EntityHandle ReplicationServer::player(network::ConnectionId connection) const noexcept {
     const auto kPeer = state_->peers.find(connection.value);
     return kPeer == state_->peers.end() ? world::EntityHandle{} : kPeer->second.player;

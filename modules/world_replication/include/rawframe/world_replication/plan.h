@@ -55,6 +55,11 @@ public:
     virtual void takeMessages(std::vector<PostedMessage>& into) noexcept {
         static_cast<void>(into);
     }
+    /// Appends the sessions the game's systems ended since last asked
+    /// (ADR-0073, D267). Asked on the Host thread between ticks.
+    virtual void takeTerminations(std::vector<PostedTermination>& into) noexcept {
+        static_cast<void>(into);
+    }
     /// The components a client shows remote entities' values of between
     /// states; empty for a game that shows every state as it arrives.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept = 0;

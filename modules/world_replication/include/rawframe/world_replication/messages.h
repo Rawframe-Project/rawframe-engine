@@ -6,11 +6,13 @@
 // it has committed. Messages to a player who is not connected are counted
 // and go nowhere: the promise is to a connection, not to an identity.
 
+#include "rawframe/network/close.h"
 #include "rawframe/network/session.h"
 #include "rawframe/world/entity.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace rawframe::world_replication {
@@ -23,6 +25,18 @@ inline constexpr std::uint64_t kGameMessageLane = 1;
 [[nodiscard]] inline network::EventLaneDeclaration gameMessageLane(std::size_t record) noexcept {
     return {.id = kGameMessageLane, .fromServer = true, .maximumRecord = record};
 }
+
+/// The engine's own lane, which both sides always declare: a session's
+/// termination (ADR-0073, D267).
+[[nodiscard]] inline network::EventLaneDeclaration engineLane() noexcept {
+    return {.id = network::kEngineLane, .fromServer = true, .maximumRecord = network::kMaximumEngineRecord};
+}
+
+/// A session a server's systems ended: whose, and the words for them.
+struct PostedTermination {
+    world::EntityHandle player;
+    std::string note;
+};
 
 /// What a server's systems sent in a tick: to which player, which of the
 /// game's messages, by its place among them, and its value's bytes.

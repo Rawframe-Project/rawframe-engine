@@ -191,7 +191,9 @@ struct Scenario {
     explicit Scenario(network_loopback::LoopbackConditions conditions, Options options = {})
         : network(clock, conditions), stepLength(options.stepLength) {
         serverSessions = *network::Sessions::server(
-            *serverTransport, clock, {.profile = kSessions, .expected = compatibility(), .seed = 1});
+            *serverTransport,
+            clock,
+            {.profile = kSessions, .expected = compatibility(), .lanes = {world_replication::engineLane()}, .seed = 1});
         RAWFRAME_EXPECT(serverSessions->listen({"server"}).has_value());
         server = *world_replication::ReplicationServer::create(
             *serverSessions,
@@ -207,7 +209,8 @@ struct Scenario {
         declarations.push_back(world::SystemDeclaration{.identity = "scenario.move", .system = move.get()});
         schedule.emplace(*world::Schedule::compile(declarations, *schema));
 
-        clientSessions = *network::Sessions::client(*clientTransport, clock, {.profile = kSessions, .seed = 2});
+        clientSessions = *network::Sessions::client(
+            *clientTransport, clock, {.profile = kSessions, .lanes = {world_replication::engineLane()}, .seed = 2});
         client = *world_replication::ReplicationClient::create(
             *clientSessions,
             clientWorld,
@@ -316,6 +319,30 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
         scenario.step(Steer{});
     }
     RAWFRAME_EXPECT(scenario.mirrored() == 3);
+}
+
+RAWFRAME_TEST(ATerminatedPlayerIsToldWhyAndLeaves) {
+    // ADR-0073 (D267): the reason arrives on the engine's lane, the player
+    // leaves the server's World at once, and the client ends its session.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{1, 0});
+    }
+    const world::EntityHandle kPlayer = scenario.server->player(network::ConnectionId{1});
+    RAWFRAME_EXPECT(scenario.client->admitted() && !kPlayer.isNull() && scenario.mirrored() == 1);
+    RAWFRAME_EXPECT(scenario.server->terminate(
+        scenario.serverWorld, kPlayer, {.reason = network::TerminationReason::Game, .note = "out of bounds"}));
+    RAWFRAME_EXPECT(!scenario.serverWorld.alive(kPlayer) && scenario.server->connections() == 0 &&
+                    scenario.server->statistics().terminated == 1);
+    // Ended once: a second asks for no one.
+    RAWFRAME_EXPECT(!scenario.server->terminate(scenario.serverWorld, kPlayer, {}));
+    for (int step = 0; step < 10; ++step) {
+        scenario.step(Steer{});
+    }
+    const auto& kTermination = scenario.client->termination();
+    RAWFRAME_EXPECT(kTermination.has_value() && kTermination->reason == network::TerminationReason::Game &&
+                    kTermination->note == "out of bounds");
+    RAWFRAME_EXPECT(scenario.client->ended() && !scenario.client->admitted() && scenario.mirrored() == 0);
 }
 
 RAWFRAME_TEST(AnEntityNamedInAValueIsTheClientsMirrorOfIt) {
