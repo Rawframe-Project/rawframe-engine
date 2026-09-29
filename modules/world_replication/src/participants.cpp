@@ -301,12 +301,12 @@ result::Result<composition::ParticipantOwner> makeServer(composition::Participan
     return composition::ParticipantOwner{participant.release()};
 }
 
-/// A client's effect events until presentation takes them: at most
-/// kEffectsWaiting, the oldest let go past them, so a client nothing
-/// presents holds a bounded few.
+/// A client's effect events for presentation to read: the latest
+/// kEffectsKept, each numbered in order, so every reader reads each once
+/// by its own count, and a client nothing presents holds a bounded few.
 class EffectQueue final : public EffectSink {
 public:
-    static constexpr std::size_t kEffectsWaiting = 256;
+    static constexpr std::size_t kEffectsKept = 256;
 
     void deliver(const PredictedEffect& effect) noexcept override {
         push({.effect = effect});
@@ -316,28 +316,23 @@ public:
         push({.effect = effect, .cancelled = true});
     }
 
-    void take(std::vector<EffectEvent>& into) noexcept {
+    std::uint64_t read(std::uint64_t seen, std::vector<EffectEvent>& into) const noexcept {
         into.clear();
-        for (std::size_t index = 0; index < size_; ++index) {
-            into.push_back(events_[(first_ + index) % kEffectsWaiting]);
+        const std::uint64_t kOldest = count_ > kEffectsKept ? count_ - kEffectsKept : 0;
+        for (std::uint64_t number = std::max(seen, kOldest); number < count_; ++number) {
+            into.push_back(events_[number % kEffectsKept]);
         }
-        first_ = 0;
-        size_ = 0;
+        return count_;
     }
 
 private:
     void push(const EffectEvent& event) noexcept {
-        events_[(first_ + size_) % kEffectsWaiting] = event;
-        if (size_ < kEffectsWaiting) {
-            ++size_;
-        } else {
-            first_ = (first_ + 1) % kEffectsWaiting;
-        }
+        events_[count_ % kEffectsKept] = event;
+        ++count_;
     }
 
-    std::array<EffectEvent, kEffectsWaiting> events_{};
-    std::size_t first_ = 0;
-    std::size_t size_ = 0;
+    std::array<EffectEvent, kEffectsKept> events_{};
+    std::uint64_t count_ = 0;
 };
 
 /// One headless client.
@@ -383,12 +378,16 @@ public:
         return ClientView{.world = bots_[index].world.get(), .owned = bots_[index].client->owned()};
     }
 
-    void takeEffects(std::size_t index, std::vector<EffectEvent>& into) noexcept override {
+    std::uint64_t readEffects(std::size_t index, std::uint64_t seen, std::vector<EffectEvent>& into) noexcept override {
         if (index >= bots_.size() || bots_[index].effects == nullptr) {
             into.clear();
-            return;
+            return seen;
         }
-        bots_[index].effects->take(into);
+        return bots_[index].effects->read(seen, into);
+    }
+
+    [[nodiscard]] std::optional<std::size_t> playerClient() const noexcept override {
+        return player_ && !bots_.empty() ? std::optional<std::size_t>{0} : std::nullopt;
     }
 
     /// `count` clients; with `player`, the first is the process's own
@@ -488,6 +487,7 @@ public:
                 }
             }
             if (player && index == 0) {
+                player_ = true;
                 if (sources == nullptr) {
                     return missing("bots.player needs the game's input sources");
                 }
@@ -690,6 +690,8 @@ private:
     std::string sessionPrefix_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     std::vector<Bot> bots_;
+    /// Whether the first bot is the process's own player.
+    bool player_ = false;
     std::uint32_t checksumInterval_ = 60;
     std::uint32_t rollbackAlarm_ = 30;
     bool divergenceDrill_ = false;

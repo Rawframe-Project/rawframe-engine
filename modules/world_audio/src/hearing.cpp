@@ -73,6 +73,8 @@ struct Hearing {
     /// Each effect kind's sound, by kind; nought for none (D220).
     std::vector<std::uint64_t> effectSounds;
     std::vector<world_replication::EffectEvent> effects;
+    /// How many of the client's effect events this hearing has read.
+    std::uint64_t effectsSeen = 0;
     /// Effects taken back after they were heard: a one-shot already
     /// sounding plays on.
     std::uint64_t takenBack = 0;
@@ -237,7 +239,7 @@ struct Hearing {
         last = frame.now;
         heard->bindListener(kView.owned.isNull() ? std::nullopt : std::optional{kView.owned});
         // The client's predicted effects, where its player is.
-        clients->takeEffects(client, effects);
+        effectsSeen = clients->readEffects(client, effectsSeen, effects);
         for (const world_replication::EffectEvent& event : effects) {
             if (event.cancelled) {
                 ++takenBack;
