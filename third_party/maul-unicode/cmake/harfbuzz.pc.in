@@ -1,0 +1,8 @@
+# Relocatable: every path derives from this file's own location.
+libdir=${pcfiledir}/..
+
+Name: maul-unicode-harfbuzz
+Description: Unicode functions for HarfBuzz from Maul Unicode
+Version: @PROJECT_VERSION@
+Requires: maul-unicode = @PROJECT_VERSION@, harfbuzz
+Libs: -L${libdir} -lmaul-unicode-harfbuzz

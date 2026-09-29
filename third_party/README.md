@@ -10,6 +10,8 @@ apply to vendored files; the code is upstream's, not ours.
 | Kest | `Rawframe-Project/kest` | `f45099f6d23f4323aa879361d9e9b7758ffa95ad` | MIT | `include/`, `src/` except `main.c`, `lib/`, `LICENSE` |
 | Maul2D 0.0.1 | `Rawframe-Project/maul2d` | `42676bf8798be03b8436a040ca3c60bad4d13b8c` | MIT | `include/`, `src/`, `LICENSE` |
 | Maul3D 0.0.1 | `Rawframe-Project/maul3d` | `a8f590b6d38afcf75133dd3d63777d09ba984c7a` | MIT | `include/`, `src/`, `LICENSE` |
+| Maul Unicode 0.2.0 | `Rawframe-Project/maul-unicode` | `de28bfc4cdd7a38993bfa0492ee1ac0cb7e9ace5` | MIT (its UCD tables: Unicode-3.0) | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
+| Maul Window 0.1.0 | `Rawframe-Project/maul-window` | `e8347920c9973eede675fd90570e85352ae80dfe` | MIT (its gamepad tables: SDL_GameControllerDB, zlib) | `include/`, `src/`, `cmake/`, `protocols/`, `CMakeLists.txt`, `LICENSE` |
 | miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 (stb_vorbis v1.22: public domain or MIT) | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |
 | MsQuic 2.6.1 | `microsoft/msquic` | `a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83` | MIT | build files, `src/` without tests, tools, or Windows PGO data, notices |
 | XDP for Windows, MsQuic's submodule | `microsoft/xdp-for-windows` | `d372b52577a724e04fa4c06acb90bbfa4719fc25`, the revision MsQuic's pin names | MIT | `published/external` (headers MsQuic's Windows datapath includes), `LICENSE`, at `msquic/submodules/xdp-for-windows` |
@@ -29,9 +31,12 @@ To move the Kest pin, run `tools/update_kest.sh <kest checkout> <revision>`,
 build, run the full check, and commit the result with the new revision in this
 table.
 
-To move a Maul pin, run `tools/update_maul.sh <maul2d|maul3d> <checkout> <revision>`,
+To move a Maul pin, run `tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window> <checkout> <revision>`,
 bring the source list in `third_party/<engine>/CMakeLists.txt` in line with
-upstream's, and proceed as for Kest. Maul snapshots and journals refuse
+upstream's (Maul2D and Maul3D; Maul Unicode and Maul Window keep their own
+CMake, configured by `third_party/maul_window.cmake`), and proceed as for Kest.
+Maul Window's pin names the Maul Unicode release it was made with; move both
+together. Maul snapshots and journals refuse
 another build, so both sides of anything that exchanges them need the same pin.
 
 To move the cgltf pin, run `tools/update_cgltf.sh <checkout> <revision>` and

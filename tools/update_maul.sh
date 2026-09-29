@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Replaces third_party/<engine> with the library sources of one exact Maul2D
-# or Maul3D revision, taken from a checkout's object store, never from its
-# working tree.
+# Replaces third_party/<library> with the library sources of one exact Maul
+# revision, taken from a checkout's object store, never from its working
+# tree. Maul2D and Maul3D keep the build file we write beside their sources;
+# Maul Unicode and Maul Window bring their own CMake, which the engine
+# configures with its options (third_party/maul_window.cmake).
 #
-#   tools/update_maul.sh <maul2d|maul3d> <checkout> <revision>
+#   tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window> <checkout> <revision>
 #
 # Files are extracted with the time they are written, not their commit's,
 # so a build that already ran builds everything from them again.
@@ -12,9 +14,11 @@ cd "$(dirname "$0")/.."
 
 engine="$1"
 case "$engine" in
-maul2d | maul3d) ;;
+maul2d | maul3d) paths=(include src LICENSE) ;;
+maul-unicode) paths=(include src cmake CMakeLists.txt LICENSE) ;;
+maul-window) paths=(include src cmake protocols CMakeLists.txt LICENSE) ;;
 *)
-    echo "update_maul.sh: the engine is maul2d or maul3d" >&2
+    echo "update_maul.sh: the library is maul2d, maul3d, maul-unicode, or maul-window" >&2
     exit 2
     ;;
 esac
@@ -23,15 +27,17 @@ revision="$(git -C "$checkout" rev-parse --verify "$3^{commit}")"
 target="third_party/$engine"
 
 keep="$(mktemp)"
-if [[ -f "$target/CMakeLists.txt" ]]; then
+if [[ "$engine" == maul2d || "$engine" == maul3d ]] && [[ -f "$target/CMakeLists.txt" ]]; then
     cp "$target/CMakeLists.txt" "$keep"
 fi
 rm -rf "$target"
 mkdir -p "$target"
-git -C "$checkout" archive "$revision" include src LICENSE | tar -x -m -C "$target"
+git -C "$checkout" archive "$revision" "${paths[@]}" | tar -x -m -C "$target"
 if [[ -s "$keep" ]]; then
     cp "$keep" "$target/CMakeLists.txt"
 fi
 rm "$keep"
-echo "$target is now $revision; update the table in third_party/README.md and the source list in"
-echo "$target/CMakeLists.txt if upstream's changed"
+echo "$target is now $revision; update the table in third_party/README.md"
+if [[ "$engine" == maul2d || "$engine" == maul3d ]]; then
+    echo "and the source list in $target/CMakeLists.txt if upstream's changed"
+fi

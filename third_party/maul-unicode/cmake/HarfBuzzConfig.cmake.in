@@ -1,0 +1,22 @@
+@PACKAGE_INIT@
+
+# The adapter is built for one version of the library, and needs HarfBuzz
+# found the way its build found it: its CMake package, or pkg-config.
+include(CMakeFindDependencyMacro)
+find_dependency(maul-unicode @PROJECT_VERSION@ EXACT)
+if(NOT TARGET harfbuzz::harfbuzz)
+    find_package(harfbuzz CONFIG QUIET)
+endif()
+if(NOT TARGET harfbuzz::harfbuzz)
+    find_dependency(PkgConfig)
+    pkg_check_modules(MUNI_HARFBUZZ QUIET IMPORTED_TARGET GLOBAL harfbuzz)
+    if(NOT TARGET PkgConfig::MUNI_HARFBUZZ)
+        set(maul-unicode-harfbuzz_FOUND FALSE)
+        set(maul-unicode-harfbuzz_NOT_FOUND_MESSAGE "HarfBuzz was not found")
+        return()
+    endif()
+    add_library(harfbuzz::harfbuzz ALIAS PkgConfig::MUNI_HARFBUZZ)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/maul-unicode-harfbuzzTargets.cmake")
+check_required_components(maul-unicode-harfbuzz)
