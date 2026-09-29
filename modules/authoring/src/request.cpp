@@ -304,6 +304,8 @@ Value readingValue(const FieldReading& field) {
         return singleMember("recorded", Value::boolean(value.kind == scene::FieldValue::Kind::True));
     case scene::FieldValue::Kind::Entity:
         return singleMember("recorded", singleMember("entity", Value::string(idText(value.entity))));
+    case scene::FieldValue::Kind::Case:
+        return singleMember("recorded", singleMember("case", Value::string(value.caseName)));
     }
     return {};
 }

@@ -42,6 +42,11 @@ Value fieldValue(const scene::FieldValue& value) {
         return Value::boolean(true);
     case scene::FieldValue::Kind::False:
         return Value::boolean(false);
+    case scene::FieldValue::Kind::Case: {
+        Value made = Value::object();
+        made.add("case", Value::string(value.caseName));
+        return made;
+    }
     }
     return {};
 }
@@ -179,6 +184,9 @@ std::optional<scene::FieldValue> fieldOf(const Value& value) {
         if (kEntity.has_value()) {
             return scene::FieldValue{.kind = scene::FieldValue::Kind::Entity, .entity = *kEntity};
         }
+    }
+    if (hasMembers(value, {"case"}) && textOf(value.find("case")) != nullptr) {
+        return scene::FieldValue{.kind = scene::FieldValue::Kind::Case, .caseName = *value.find("case")->text()};
     }
     return std::nullopt;
 }

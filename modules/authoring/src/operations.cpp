@@ -371,6 +371,9 @@ bool fits(const scene::FieldValue& value, FieldKind kind) {
         return kind == FieldKind::Truth;
     case scene::FieldValue::Kind::Entity:
         return kind == FieldKind::Reference;
+    // Authoring sets no case yet: its catalog has no enum kind (D270).
+    case scene::FieldValue::Kind::Case:
+        return false;
     case scene::FieldValue::Kind::Number:
         break;
     }

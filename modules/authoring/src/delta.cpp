@@ -77,7 +77,8 @@ bool fieldOfKind(const std::optional<scene::FieldValue>& value, bool reference) 
         return true;
     }
     return reference ? value->kind == scene::FieldValue::Kind::Entity
-                     : value->kind == scene::FieldValue::Kind::Number || value->kind == scene::FieldValue::Kind::True;
+                     : value->kind == scene::FieldValue::Kind::Number || value->kind == scene::FieldValue::Kind::True ||
+                           value->kind == scene::FieldValue::Kind::Case;
 }
 
 } // namespace
