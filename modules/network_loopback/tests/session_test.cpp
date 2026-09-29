@@ -11,6 +11,7 @@
 #include "rawframe/test/test.h"
 
 #include <algorithm>
+#include <iterator>
 #include <span>
 #include <utility>
 #include <vector>

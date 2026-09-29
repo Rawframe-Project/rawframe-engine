@@ -1,6 +1,7 @@
 #include "prediction.h"
 
 #include <algorithm>
+#include <iterator>
 
 namespace rawframe::world_replication {
 
