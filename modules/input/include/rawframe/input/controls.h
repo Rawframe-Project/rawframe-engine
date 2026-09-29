@@ -45,6 +45,9 @@ struct Control {
 /// controls are SPEC-0029's standard locations.
 [[nodiscard]] std::optional<Control> controlNamed(DeviceClass device, std::string_view name) noexcept;
 [[nodiscard]] std::string_view nameOf(Control control) noexcept;
+/// The key at a USB HID keyboard usage (page 7), the number a window system
+/// reports for a key's place; nothing for a usage no key here has.
+[[nodiscard]] std::optional<Control> keyOfUsage(std::uint16_t usage) noexcept;
 [[nodiscard]] ControlShape shapeOf(Control control) noexcept;
 /// Whether a control reports motion since the last report rather than a
 /// position: the wheel and the mouse's delta. What such a control reports

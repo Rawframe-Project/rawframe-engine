@@ -2,7 +2,7 @@
 # device controls to per-player action state. Client only: the dedicated
 # server links none of it.
 rawframe_module(NAME input
-    SOURCES src/controls.cpp src/actions.cpp src/mapper.cpp src/overrides.cpp src/conflicts.cpp
+    SOURCES src/controls.cpp src/actions.cpp src/mapper.cpp src/overrides.cpp src/conflicts.cpp src/feed.cpp
     DEPS document result base
 )
 

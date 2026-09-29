@@ -1,6 +1,7 @@
 #include "rawframe/input/controls.h"
 
 #include <array>
+#include <cstdint>
 #include <span>
 
 namespace rawframe::input {
@@ -118,6 +119,20 @@ constexpr std::array<std::string_view, 105> kKeys = {
     "pause",
 };
 
+/// Each key's USB HID keyboard usage (page 7), the number window systems
+/// report for a key's place, in kKeys's order.
+constexpr std::array<std::uint16_t, kKeys.size()> kKeyUsages = {
+    53,  49,  47, 48, 54,  39,  30,  31, 32,  33,  34,  35,  36, 37, 38, 46, 100, // writing system, to intl_backslash
+    4,   5,   6,  7,  8,   9,   10,  11, 12,  13,  14,  15,  16, 17, 18, 19, 20,
+    21,  22,  23, 24, 25,  26,  27,  28, 29,                                     // key_a to key_z
+    45,  55,  52, 51, 56,                                                        // minus to slash
+    226, 230, 42, 57, 101, 224, 228, 40, 227, 231, 225, 229, 44, 43,             // functional
+    76,  77,  74, 73, 78,  75,                                                   // control pad
+    81,  80,  79, 82,                                                            // arrows
+    83,  98,  89, 90, 91,  92,  93,  94, 95,  96,  97,  87,  99, 84, 88, 85, 86, // numpad
+    41,  58,  59, 60, 61,  62,  63,  64, 65,  66,  67,  68,  69, 70, 71, 72,     // function
+};
+
 constexpr std::array<std::string_view, 8> kMouse = {
     "left",
     "right",
@@ -155,6 +170,15 @@ std::optional<Control> controlNamed(DeviceClass device, std::string_view name) n
     for (std::size_t index = 0; index < kTable.size(); ++index) {
         if (kTable[index] == name) {
             return Control{.device = device, .code = static_cast<std::uint16_t>(index + 1)};
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<Control> keyOfUsage(std::uint16_t usage) noexcept {
+    for (std::size_t index = 0; index < kKeyUsages.size(); ++index) {
+        if (usage != 0 && kKeyUsages[index] == usage) {
+            return Control{.device = DeviceClass::Keyboard, .code = static_cast<std::uint16_t>(index + 1)};
         }
     }
     return std::nullopt;

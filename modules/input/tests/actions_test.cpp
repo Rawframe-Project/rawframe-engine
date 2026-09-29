@@ -5,7 +5,10 @@
 #include "rawframe/input/actions.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -301,4 +304,25 @@ RAWFRAME_TEST(ControlsHaveOneNameAndOneShape) {
     RAWFRAME_EXPECT(!relative(*controlNamed(DeviceClass::Gamepad, "stick_left")));
     RAWFRAME_EXPECT(modifierOf(*controlNamed(DeviceClass::Keyboard, "shift_right")) == Modifier::Shift);
     RAWFRAME_EXPECT(!controlNamed(DeviceClass::Gamepad, "key_a").has_value());
+}
+
+RAWFRAME_TEST(EveryKeyHasItsOwnHidUsage) {
+    // A window system names a key by its HID usage; each of the 105 keys is
+    // reached by exactly one, and a few are checked against the HID tables.
+    std::vector<std::uint16_t> reached;
+    for (std::uint16_t usage = 0; usage < 256; ++usage) {
+        if (const std::optional<Control> key = keyOfUsage(usage)) {
+            RAWFRAME_EXPECT(key->device == DeviceClass::Keyboard);
+            reached.push_back(key->code);
+        }
+    }
+    std::ranges::sort(reached);
+    RAWFRAME_EXPECT(reached.size() == 105 && std::ranges::adjacent_find(reached) == reached.end());
+    const auto named = [](std::uint16_t usage) {
+        return nameOf(*keyOfUsage(usage));
+    };
+    RAWFRAME_EXPECT(named(4) == "key_a" && named(26) == "key_w" && named(39) == "digit_0" && named(44) == "space");
+    RAWFRAME_EXPECT(named(82) == "arrow_up" && named(98) == "numpad_0" && named(88) == "numpad_enter");
+    RAWFRAME_EXPECT(named(100) == "intl_backslash" && named(229) == "shift_right" && named(72) == "pause");
+    RAWFRAME_EXPECT(!keyOfUsage(0).has_value() && !keyOfUsage(0x68).has_value());
 }

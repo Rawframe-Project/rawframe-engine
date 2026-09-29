@@ -3,6 +3,7 @@
 // thresholds as declared, routing by priority and recency with consumption
 // that blocks, the hygiene set, the text gate, and players kept apart.
 
+#include "rawframe/input/feed.h"
 #include "rawframe/input/mapper.h"
 #include "rawframe/test/test.h"
 
@@ -315,4 +316,34 @@ RAWFRAME_TEST(AFullQueueDropsTheOldestAndReleases) {
     }
     mapper->update();
     RAWFRAME_EXPECT(mapper->statistics().droppedEvents == 2 && !mapper->current(kFirst, kJump).on);
+}
+
+RAWFRAME_TEST(AFeedDeliversInOrderAndLetsGoWhenItOverflows) {
+    auto mapper = *Mapper::create(actionSet(), {.players = 1});
+    RAWFRAME_EXPECT(mapper->activate(kFirst, kOnFoot).has_value());
+    Feed feed{8};
+    constexpr DeviceId kNewKeyboard{7};
+    // An event before its device connects is unpaired; after, it counts.
+    feed.submit({.device = kNewKeyboard, .control = key("space"), .x = 1});
+    feed.connect(kNewKeyboard, DeviceClass::Keyboard);
+    feed.submit({.device = kNewKeyboard, .control = key("space"), .x = 1});
+    feed.deliver(*mapper, kFirst);
+    mapper->commit(1);
+    RAWFRAME_EXPECT(feed.waiting() == 0 && mapper->committed(kFirst, kJump).on &&
+                    mapper->statistics().unpairedEvents == 1);
+    // Space is held when the feed overflows: the eight waiting events go,
+    // everything is let go, and what came after the gap still arrives.
+    for (int each = 0; each < 10; ++each) {
+        feed.submit({.device = kNewKeyboard, .control = key("key_w"), .x = static_cast<float>(each % 2)});
+    }
+    RAWFRAME_EXPECT(feed.dropped() == 8 && feed.waiting() == 3);
+    feed.deliver(*mapper, kFirst);
+    mapper->commit(2);
+    RAWFRAME_EXPECT(!mapper->committed(kFirst, kJump).on && mapper->releasedThisTick(kFirst, kJump));
+    RAWFRAME_EXPECT(mapper->committed(kFirst, kMove).y != 0);
+    // A device that goes lets go of what it held.
+    feed.disconnect(kNewKeyboard);
+    feed.deliver(*mapper, kFirst);
+    mapper->commit(3);
+    RAWFRAME_EXPECT(mapper->committed(kFirst, kMove).x == 0 && mapper->committed(kFirst, kMove).y == 0);
 }
