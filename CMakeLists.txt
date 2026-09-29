@@ -66,12 +66,14 @@ endif()
 # Every module is listed here and in tools/modules.txt. A module is never
 # discovered from the directory tree. network_web and the web_client host
 # are the web's alone, built above.
+add_subdirectory(third_party/bc7enc)
 add_subdirectory(third_party/cgltf)
 add_subdirectory(third_party/kest)
 add_subdirectory(third_party/maul2d)
 add_subdirectory(third_party/maul3d)
 add_subdirectory(third_party/miniaudio)
 add_subdirectory(third_party/opus)
+add_subdirectory(third_party/wuffs)
 add_subdirectory(third_party/zstd)
 include(third_party/quic.cmake)
 include(third_party/maul_window.cmake)
