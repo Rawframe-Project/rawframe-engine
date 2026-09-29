@@ -25,6 +25,7 @@ build: signature content document result base
 install: content signature document result base
 input: document result base
 window: result base
+input_window: input window result base
 schema: result base
 world: schema execution diagnostics result base
 kest: execution result base
