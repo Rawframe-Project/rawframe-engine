@@ -57,9 +57,12 @@ std::vector<scene::SceneField> withField(std::vector<scene::SceneField> fields,
 
 /// A default written out, as a `set` entry gives it: a patch that sets a
 /// field to its default is a change from the source's value.
-scene::FieldValue writtenDefault(FieldKind kind) {
-    if (kind == FieldKind::Truth) {
+scene::FieldValue writtenDefault(const FieldSchema& field) {
+    if (field.kind == FieldKind::Truth) {
         return scene::FieldValue{.kind = scene::FieldValue::Kind::False};
+    }
+    if (field.kind == FieldKind::Case) {
+        return scene::FieldValue{.kind = scene::FieldValue::Kind::Case, .caseName = field.cases.front()};
     }
     return scene::FieldValue{.kind = scene::FieldValue::Kind::Number, .number = "0"};
 }
@@ -199,9 +202,9 @@ result::Result<Journal> derivePatch(const scene::Scene& scene,
             return invalid(operation, "an instance's patch sets a reference only to an entity");
         }
     } else {
-        RAWFRAME_TRY_ASSIGN(value, valueOf(operation, std::get<SetField>(operation).value, kField->kind));
+        RAWFRAME_TRY_ASSIGN(value, valueOf(operation, std::get<SetField>(operation).value, *kField));
         if (!value.has_value() && !kAdded) {
-            value = writtenDefault(kField->kind);
+            value = writtenDefault(*kField);
         }
     }
     // An added component's fields are in the one form of a component's,

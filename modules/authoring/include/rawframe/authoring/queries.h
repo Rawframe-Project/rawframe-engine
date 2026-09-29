@@ -57,6 +57,8 @@ struct FieldReading {
     std::string name;
     /// None when the catalog's layout has no such field.
     std::optional<FieldKind> kind;
+    /// A case field's cases, as the catalog has them.
+    std::vector<std::string> cases;
     scene::FieldValue value;
 };
 

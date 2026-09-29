@@ -98,6 +98,9 @@ std::optional<FieldInput> fieldInputOf(const Value& value) {
     if (kind == "truth" && held.kind() == Value::Kind::Bool) {
         return FieldInput{.kind = FieldInput::Kind::Truth, .truth = *held.truth()};
     }
+    if (const std::string* name = textOf(&held); kind == "case" && name != nullptr) {
+        return FieldInput{.kind = FieldInput::Kind::Case, .caseName = *name};
+    }
     return std::nullopt;
 }
 
@@ -245,7 +248,8 @@ result::Result<Operation> operationOf(const Value& value) {
     }
 }
 
-constexpr std::array<std::string_view, 5> kFieldKindNames = {"signed", "unsigned", "real", "truth", "reference"};
+constexpr std::array<std::string_view, 6> kFieldKindNames = {
+    "signed", "unsigned", "real", "truth", "reference", "case"};
 constexpr std::array<std::string_view, 3> kPatchNames = {"set", "add", "remove"};
 
 std::string idText(base::Bits128 id) {
@@ -277,7 +281,7 @@ Value singleMember(std::string_view name, Value value) {
 /// records it when the catalog cannot type it.
 Value readingValue(const FieldReading& field) {
     const scene::FieldValue& value = field.value;
-    if (field.kind.has_value() && fits(value, *field.kind)) {
+    if (field.kind.has_value() && fits(value, *field.kind, field.cases)) {
         switch (*field.kind) {
         case FieldKind::Signed:
             return singleMember("signed", Value::string(value.number));
@@ -294,6 +298,8 @@ Value readingValue(const FieldReading& field) {
             return singleMember("truth", Value::boolean(value.kind == scene::FieldValue::Kind::True));
         case FieldKind::Reference:
             return singleMember("entity", Value::string(idText(value.entity)));
+        case FieldKind::Case:
+            return singleMember("case", Value::string(value.caseName));
         }
     }
     switch (value.kind) {
@@ -466,6 +472,13 @@ std::string writeDiscovery(const ComponentCatalog* catalog) {
                 Value each = Value::object();
                 each.add("name", Value::string(field.name));
                 each.add("kind", Value::string(std::string{kFieldKindNames[static_cast<std::size_t>(field.kind)]}));
+                if (!field.cases.empty()) {
+                    Value cases = Value::array();
+                    for (const std::string& name : field.cases) {
+                        cases.push(Value::string(name));
+                    }
+                    each.add("cases", std::move(cases));
+                }
                 fields.push(std::move(each));
             }
             Value each = Value::object();

@@ -101,8 +101,9 @@ std::optional<authoring::FieldKind> kindOf(rawframe::kest::FieldKind kind) {
         return authoring::FieldKind::Real;
     case K::Bool:
         return authoring::FieldKind::Truth;
-    // Scenes do not write tags yet (D268).
     case K::Tag:
+        return authoring::FieldKind::Case;
+    // A case's data is the game's to set, not a scene's (D271).
     case K::Payload:
     case K::Other:
         return std::nullopt;
@@ -137,7 +138,10 @@ result::Result<authoring::ComponentCatalog> catalogOf(const rawframe::world_kest
             });
             const std::optional<authoring::FieldKind> kKind = kindOf(field.kind);
             if (!kPartOfReference && kKind.has_value()) {
-                schema.fields.push_back(authoring::FieldSchema{.name = field.name, .kind = *kKind});
+                schema.fields.push_back(authoring::FieldSchema{
+                    .name = field.name,
+                    .kind = *kKind,
+                    .cases = *kKind == authoring::FieldKind::Case ? field.cases : std::vector<std::string>{}});
             }
         }
         RAWFRAME_TRY(catalog.add(std::move(schema)));

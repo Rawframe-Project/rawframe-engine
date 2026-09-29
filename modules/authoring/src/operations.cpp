@@ -129,7 +129,7 @@ std::vector<std::string> residualOf(const scene::Scene& scene, const ComponentSc
     const auto kCheck = [&residual, &component](const std::vector<scene::SceneField>& fields) {
         for (const scene::SceneField& field : fields) {
             const auto kNow = std::ranges::find(component.fields, field.name, &FieldSchema::name);
-            if (kNow == component.fields.end() || !fits(field.value, kNow->kind)) {
+            if (kNow == component.fields.end() || !fits(field.value, kNow->kind, kNow->cases)) {
                 residual.insert(field.name);
             }
         }
@@ -306,7 +306,7 @@ result::Result<Journal> derive(const scene::Scene& scene,
                 after = scene::FieldValue{.kind = scene::FieldValue::Kind::Entity, .entity = *target};
             }
         } else {
-            RAWFRAME_TRY_ASSIGN(after, valueOf(operation, std::get<SetField>(operation).value, kField->kind));
+            RAWFRAME_TRY_ASSIGN(after, valueOf(operation, std::get<SetField>(operation).value, *kField));
         }
         std::optional<scene::FieldValue> before;
         const auto kNow = std::ranges::find(kTarget.component->fields, fieldName, &scene::SceneField::name);
@@ -364,16 +364,15 @@ result::Status sameLayout(const scene::Scene& scene, const Operation& operation,
     return {};
 }
 
-bool fits(const scene::FieldValue& value, FieldKind kind) {
+bool fits(const scene::FieldValue& value, FieldKind kind, std::span<const std::string> cases) {
     switch (value.kind) {
     case scene::FieldValue::Kind::True:
     case scene::FieldValue::Kind::False:
         return kind == FieldKind::Truth;
     case scene::FieldValue::Kind::Entity:
         return kind == FieldKind::Reference;
-    // Authoring sets no case yet: its catalog has no enum kind (D270).
     case scene::FieldValue::Kind::Case:
-        return false;
+        return kind == FieldKind::Case && std::ranges::contains(cases, value.caseName);
     case scene::FieldValue::Kind::Number:
         break;
     }
@@ -431,12 +430,14 @@ bool present(const scene::Scene& scene, base::Bits128 entity) {
 }
 
 result::Result<std::optional<scene::FieldValue>>
-valueOf(const Operation& operation, const FieldInput& input, FieldKind kind) {
+valueOf(const Operation& operation, const FieldInput& input, const FieldSchema& field) {
     using Kind = FieldInput::Kind;
+    const FieldKind kind = field.kind;
     const bool kFits = input.kind == Kind::Default || (input.kind == Kind::Signed && kind == FieldKind::Signed) ||
                        (input.kind == Kind::Unsigned && kind == FieldKind::Unsigned) ||
                        (input.kind == Kind::Real && kind == FieldKind::Real) ||
-                       (input.kind == Kind::Truth && kind == FieldKind::Truth);
+                       (input.kind == Kind::Truth && kind == FieldKind::Truth) ||
+                       (input.kind == Kind::Case && kind == FieldKind::Case);
     if (!kFits) {
         return invalid(operation, "a field's value is of the field's kind");
     }
@@ -447,6 +448,15 @@ valueOf(const Operation& operation, const FieldInput& input, FieldKind kind) {
     case Kind::Truth:
         return input.truth ? std::optional{scene::FieldValue{.kind = scene::FieldValue::Kind::True}}
                            : std::optional<scene::FieldValue>{};
+    case Kind::Case:
+        if (!std::ranges::contains(field.cases, input.caseName)) {
+            return invalid(operation, "a case field's value is one of its enum's cases");
+        }
+        // The first case is the default, left out as every default is.
+        return input.caseName == field.cases.front()
+                   ? std::optional<scene::FieldValue>{}
+                   : std::optional{
+                         scene::FieldValue{.kind = scene::FieldValue::Kind::Case, .caseName = input.caseName}};
     case Kind::Signed:
         text = std::to_string(input.integer);
         break;
@@ -475,6 +485,14 @@ result::Status ComponentCatalog::add(ComponentSchema component) {
                                 kAuthoringDomain,
                                 code(AuthoringError::ValidationFailed),
                                 "a component's fields have names, each once");
+        }
+        std::set<std::string_view> cases{field.cases.begin(), field.cases.end()};
+        if ((field.kind == FieldKind::Case) == field.cases.empty() || cases.size() != field.cases.size() ||
+            cases.contains("")) {
+            return result::fail(result::ErrorClass::InvalidArgument,
+                                kAuthoringDomain,
+                                code(AuthoringError::ValidationFailed),
+                                "a case field has cases, each once, and no other field has any");
         }
     }
     if (component.name.empty() || std::ranges::contains(components_, component.id, &ComponentSchema::id) ||

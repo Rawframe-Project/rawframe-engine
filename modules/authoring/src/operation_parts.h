@@ -9,6 +9,8 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
+#include <string>
 #include <string_view>
 
 namespace rawframe::authoring {
@@ -36,12 +38,13 @@ sameLayout(const scene::Scene& scene, const Operation& operation, const Componen
 
 /// Whether a recorded value is one a field of `kind` holds: numbers by
 /// their text, so an integer field takes no fraction and an unsigned one no
-/// sign; a truth for a truth; an entity for a reference.
-[[nodiscard]] bool fits(const scene::FieldValue& value, FieldKind kind);
+/// sign; a truth for a truth; an entity for a reference; one of `cases`
+/// for a case.
+[[nodiscard]] bool fits(const scene::FieldValue& value, FieldKind kind, std::span<const std::string> cases);
 
 /// The value a field input writes; none for the field's default.
 [[nodiscard]] result::Result<std::optional<scene::FieldValue>>
-valueOf(const Operation& operation, const FieldInput& input, FieldKind kind);
+valueOf(const Operation& operation, const FieldInput& input, const FieldSchema& field);
 
 /// The deltas of `operation` on `entity`, which `instance` brings.
 [[nodiscard]] result::Result<Journal> derivePatch(const scene::Scene& scene,

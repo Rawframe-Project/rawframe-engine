@@ -450,3 +450,57 @@ RAWFRAME_TEST(AnInstanceIsAddedAndRemovedWhole) {
     RAWFRAME_EXPECT(refusedWith(kRun(RemoveInstance{.entity = kSpawn}), AuthoringError::TargetNotFound));
     RAWFRAME_EXPECT(scene::readScene(room.text()).has_value());
 }
+
+RAWFRAME_TEST(ACaseFieldIsSetByItsCasesName) {
+    // D271: an enum's field takes one of its cases by name, the first being
+    // its default and so no field at all; any other name is refused.
+    constexpr schema::ComponentTypeId kGuard =
+        schema::ComponentTypeId::fromText("5f3a0c2d-9e81-4b74-8a1d-000000000003");
+    ComponentCatalog catalog;
+    RAWFRAME_EXPECT(catalog
+                        .add(ComponentSchema{
+                            .id = kGuard,
+                            .name = "game.guard",
+                            .mark = 0xc3,
+                            .fields = {{.name = "at", .kind = FieldKind::Case, .cases = {"Start", "Walking", "Done"}},
+                                       {.name = "posts", .kind = FieldKind::Signed}}})
+                        .has_value());
+    const auto kScene = empty();
+    const std::vector<Operation> kMade = {CreateEntity{.entity = kSpawn, .name = "guard"},
+                                          AddComponent{.entity = kSpawn, .component = kGuard}};
+    RAWFRAME_EXPECT(executeAtomic(*kScene, 0, kMade, catalog).has_value());
+    const auto kSet = [&](std::string name, std::string_view field = "at") {
+        return execute(*kScene,
+                       kScene->generation(),
+                       SetField{.entity = kSpawn,
+                                .component = kGuard,
+                                .field = std::string{field},
+                                .value = FieldInput{.kind = FieldInput::Kind::Case, .caseName = std::move(name)}},
+                       catalog);
+    };
+    RAWFRAME_EXPECT(kSet("Done").has_value());
+    const auto& kFields = kScene->scene().entities[0].components[0].fields;
+    RAWFRAME_EXPECT(kFields.size() == 1 && kFields[0].value.kind == scene::FieldValue::Kind::Case &&
+                    kFields[0].value.caseName == "Done");
+    const auto kRead = scene::readScene(kScene->text());
+    RAWFRAME_EXPECT(kRead.has_value() && *kRead == kScene->scene());
+    RAWFRAME_EXPECT(kSet("Start").has_value() && kScene->scene().entities[0].components[0].fields.empty());
+    RAWFRAME_EXPECT(refusedWith(kSet("Lost"), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(kSet("done"), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(kSet("Done", "posts"), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(
+        refusedWith(execute(*kScene,
+                            kScene->generation(),
+                            SetField{.entity = kSpawn, .component = kGuard, .field = "at", .value = real(2)},
+                            catalog),
+                    AuthoringError::ValidationFailed));
+    // A case field has cases, each once, and no other field has any.
+    const auto kRefused = [kGuard](std::vector<FieldSchema> fields) {
+        ComponentCatalog made;
+        return refusedWith(made.add(ComponentSchema{.id = kGuard, .name = "game.guard", .fields = std::move(fields)}),
+                           AuthoringError::ValidationFailed);
+    };
+    RAWFRAME_EXPECT(kRefused({{.name = "at", .kind = FieldKind::Case}}));
+    RAWFRAME_EXPECT(kRefused({{.name = "at", .kind = FieldKind::Case, .cases = {"Start", "Start"}}}));
+    RAWFRAME_EXPECT(kRefused({{.name = "posts", .kind = FieldKind::Signed, .cases = {"Start"}}}));
+}

@@ -55,11 +55,16 @@ enum class FieldKind : std::uint8_t {
     Real,
     Truth,
     Reference,
+    /// One of an enum's cases, by name (D271).
+    Case,
 };
 
 struct FieldSchema {
     std::string name;
     FieldKind kind = FieldKind::Real;
+    /// A case field's cases in the order of their numbers; the first is its
+    /// default. Empty for every other kind.
+    std::vector<std::string> cases;
 };
 
 /// A component as authoring knows it: its identity, the name and layout
@@ -74,7 +79,8 @@ struct ComponentSchema {
 class ComponentCatalog {
 public:
     /// Refuses (`ValidationFailed`) a component whose id or name is
-    /// already here, or whose fields repeat a name.
+    /// already here, whose fields repeat a name, or whose case field has
+    /// no cases or repeats one.
     [[nodiscard]] result::Status add(ComponentSchema component);
     [[nodiscard]] const ComponentSchema* find(schema::ComponentTypeId id) const noexcept;
     /// By the name a scene records it by: for tools reading a document,
@@ -89,8 +95,8 @@ private:
     std::vector<ComponentSchema> components_;
 };
 
-/// A field's new value: its default, or a number or truth of the field's
-/// kind.
+/// A field's new value: its default, or a number, truth, or case of the
+/// field's kind.
 struct FieldInput {
     enum class Kind : std::uint8_t {
         Default,
@@ -98,12 +104,14 @@ struct FieldInput {
         Unsigned,
         Real,
         Truth,
+        Case,
     };
     Kind kind = Kind::Default;
     std::int64_t integer = 0;
     std::uint64_t whole = 0;
     double real = 0.0;
     bool truth = false;
+    std::string caseName;
 };
 
 struct CreateEntity {

@@ -44,14 +44,15 @@ ComponentReading readingOf(const ComponentCatalog& catalog,
                           .patch = patch,
                           .fields = {}};
     for (const scene::SceneField& field : fields) {
-        std::optional<FieldKind> kind;
+        FieldReading reading{.name = field.name, .kind = std::nullopt, .cases = {}, .value = field.value};
         if (schema != nullptr) {
             const auto kFound = std::ranges::find(schema->fields, field.name, &FieldSchema::name);
             if (kFound != schema->fields.end()) {
-                kind = kFound->kind;
+                reading.kind = kFound->kind;
+                reading.cases = kFound->cases;
             }
         }
-        made.fields.push_back(FieldReading{.name = field.name, .kind = kind, .value = field.value});
+        made.fields.push_back(std::move(reading));
     }
     return made;
 }
