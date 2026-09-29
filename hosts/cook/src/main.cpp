@@ -14,6 +14,7 @@
 #include "rawframe/cook/mod.h"
 #include "rawframe/cook/scene.h"
 #include "rawframe/cook/text.h"
+#include "rawframe/cook/texture.h"
 
 #include <array>
 #include <cstdio>
@@ -87,14 +88,15 @@ int main(int argc, char** argv) {
         std::fputs("rawframe-cook: cannot read its own executable\n", stderr);
         return 1;
     }
-    const std::array<rawframe::cook::Importer, 8> kImporters = {rawframe::cook::animationImporter(),
+    const std::array<rawframe::cook::Importer, 9> kImporters = {rawframe::cook::animationImporter(),
                                                                 rawframe::cook::audioImporter(),
                                                                 rawframe::cook::gameImporter(),
                                                                 rawframe::cook::kestImporter(),
                                                                 rawframe::cook::meshImporter(),
                                                                 rawframe::cook::modImporter(),
                                                                 rawframe::cook::sceneImporter(),
-                                                                rawframe::cook::textImporter()};
+                                                                rawframe::cook::textImporter(),
+                                                                rawframe::cook::textureImporter()};
     rawframe::cook::CookRequest request{.sources = argv[1],
                                         .output = argv[2],
                                         .cache = std::nullopt,

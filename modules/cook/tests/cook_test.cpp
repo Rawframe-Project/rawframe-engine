@@ -21,12 +21,14 @@
 #include "rawframe/cook/mod.h"
 #include "rawframe/cook/scene.h"
 #include "rawframe/cook/text.h"
+#include "rawframe/cook/texture.h"
 #include "rawframe/kest_library/library.h"
 #include "rawframe/localization/table.h"
 #include "rawframe/mesh/errors.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
+#include "rawframe/texture/texture.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/cooked_mod.h"
 
@@ -561,6 +563,58 @@ RAWFRAME_TEST(AGltfCooksIntoAMeshWithItsBuffers) {
     writeText(kProps / "shard.gltf", gltf);
     const CookReport kOutside = kCook();
     RAWFRAME_EXPECT(kOutside.failures.size() == 1 && kOutside.failures[0].domain() == mesh::kMeshDomain);
+}
+
+RAWFRAME_TEST(AnImageCooksIntoATextureAsItsSettingsSay) {
+    const Project kProject;
+    const fs::path kImages = kProject.sources / "images";
+    fs::create_directories(kImages);
+    fs::copy_file(fs::path{RAWFRAME_TEXTURE_DATA} / "pattern.png", kImages / "sprite.png");
+    fs::copy_file(fs::path{RAWFRAME_TEXTURE_DATA} / "pattern.tga", kImages / "mask.tga");
+    writeText(kImages / "sprite.png.rfmeta", sidecar("000000000000000000000000000000b1", "", "rawframe.texture"));
+    writeText(kImages / "mask.tga.rfmeta",
+              sidecar("000000000000000000000000000000b2",
+                      "\"color\": \"linear\",\n    \"exact\": true,\n    \"levels\": false",
+                      "rawframe.texture"));
+    static const std::array<Importer, 2> kImporters = {audioImporter(), textureImporter()};
+    const auto kCook = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+        RAWFRAME_EXPECT(report.has_value());
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    const CookReport kReport = kCook();
+    RAWFRAME_EXPECT(kReport.cooked == 4 && kReport.failures.empty());
+    std::vector<texture::Texture> textures;
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value());
+    for (const content::ManifestEntry& each : kManifest.value_or(std::vector<content::ManifestEntry>{})) {
+        if (each.type.value == texture::kTextureType && each.representation.text() == texture::kTextureRepresentation) {
+            const std::string kBytes = readText(kProject.output / each.locator);
+            auto read = texture::decode(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
+            RAWFRAME_EXPECT(read.has_value());
+            if (read.has_value()) {
+                textures.push_back(std::move(*read));
+            }
+        }
+    }
+    // The sprite as BC7 in sRGB with every level; the mask exact, linear,
+    // and alone.
+    RAWFRAME_EXPECT(textures.size() == 2 &&
+                    std::ranges::any_of(textures,
+                                        [](const texture::Texture& each) {
+                                            return each.format == texture::Format::Bc7Srgb && each.levels.size() == 4;
+                                        }) &&
+                    std::ranges::any_of(textures, [](const texture::Texture& each) {
+                        return each.format == texture::Format::Rgba8 && each.levels.size() == 1;
+                    }));
+    // A default written out, or a color neither, fails its sidecar.
+    writeText(kImages / "mask.tga.rfmeta",
+              sidecar("000000000000000000000000000000b2", "\"color\": \"srgb\"", "rawframe.texture"));
+    RAWFRAME_EXPECT(kCook().failures.size() == 1);
+    writeText(kImages / "mask.tga.rfmeta",
+              sidecar("000000000000000000000000000000b2", "\"color\": \"rgb\"", "rawframe.texture"));
+    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadSidecar));
 }
 
 RAWFRAME_TEST(AnimationDocumentsCookIntoResourcesOfTheirKind) {
