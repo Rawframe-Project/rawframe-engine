@@ -52,6 +52,7 @@ result::Status setTime(Windows& windows, std::uint64_t timeNs) {
 result::Result<GamepadId> addGamepad(Windows& windows) {
     mwinGamepadInfo info{};
     info.mapped = true;
+    info.capabilities = mwin_padRumble;
     info.battery = -1;
     mwinGamepadId gamepad{};
     RAWFRAME_TRY(checked(mwinTestAddGamepad(Platform::contextOf(windows), &info, &gamepad), "a test gamepad"));
@@ -72,6 +73,18 @@ result::Status moveGamepad(Windows& windows, GamepadId gamepad, GamepadAxis axis
     return checked(
         mwinTestGamepadAxis(Platform::contextOf(windows), toMaul(gamepad), static_cast<std::uint8_t>(axis), value),
         "a test gamepad axis");
+}
+
+result::Result<Rumble> rumbleOf(Windows& windows, GamepadId gamepad) {
+    Rumble rumble;
+    RAWFRAME_TRY(checked(mwinTestGetRumble(Platform::contextOf(windows),
+                                           toMaul(gamepad),
+                                           &rumble.low,
+                                           &rumble.high,
+                                           &rumble.milliseconds,
+                                           &rumble.count),
+                         "a test gamepad's rumble"));
+    return rumble;
 }
 
 } // namespace rawframe::window::testing

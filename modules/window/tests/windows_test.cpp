@@ -240,7 +240,7 @@ RAWFRAME_TEST(DroppedFilesArriveAsInertPaths) {
     }
 }
 
-RAWFRAME_TEST(GamepadsAreAboutNoWindow) {
+RAWFRAME_TEST(GamepadsAreAboutNoWindowAndRumble) {
     GamepadId pad;
     Script script{{
         [&](Windows& windows, Script&) {
@@ -248,7 +248,15 @@ RAWFRAME_TEST(GamepadsAreAboutNoWindow) {
             RAWFRAME_EXPECT(testing::pressGamepad(windows, pad, GamepadButton::FaceSouth, true).has_value());
             RAWFRAME_EXPECT(testing::moveGamepad(windows, pad, GamepadAxis::StickLeftX, -0.5f).has_value());
             RAWFRAME_EXPECT(testing::pressGamepad(windows, pad, GamepadButton::FaceSouth, false).has_value());
+            // Its motors run as asked; the latest wins.
+            RAWFRAME_EXPECT(windows.rumble(pad, 1.0f, 0.25f, 200).has_value() &&
+                            windows.rumble(pad, 0.5f, 0.0f, 80).has_value());
+            const auto kRumble = testing::rumbleOf(windows, pad);
+            RAWFRAME_EXPECT(kRumble.has_value() && kRumble->low == 0.5f && kRumble->high == 0.0f &&
+                            kRumble->milliseconds == 80 && kRumble->count == 2);
+            RAWFRAME_EXPECT(!windows.rumble(pad, 2.0f, 0.0f, 80).has_value());
             RAWFRAME_EXPECT(testing::removeGamepad(windows, pad).has_value());
+            RAWFRAME_EXPECT(!windows.rumble(pad, 1.0f, 0.0f, 80).has_value());
         },
         [](Windows&, Script&) {},
     }};

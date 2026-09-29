@@ -119,6 +119,12 @@ public:
     /// list. Ask again to move the caret.
     [[nodiscard]] result::Result<RequestId> requestTextInput(WindowId window, bool enabled, Rect caret);
 
+    /// Runs a gamepad's motors, the heavy low-frequency one and the light
+    /// high-frequency one, each from nought to one, for `milliseconds` or
+    /// until asked again: the latest wins, and nought milliseconds stops
+    /// them. Unsupported for a gamepad without motors, Stale for one gone.
+    [[nodiscard]] result::Status rumble(GamepadId gamepad, float low, float high, std::uint32_t milliseconds);
+
     /// Takes the next record in the order the platform gave them, across
     /// windows; nothing once the frame's records are drained. A frame drains
     /// them all, or the next frame starts behind.

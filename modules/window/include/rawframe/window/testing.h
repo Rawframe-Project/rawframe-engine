@@ -39,10 +39,19 @@ namespace rawframe::window::testing {
 /// Sets the clock that stamps every record; it never goes back.
 [[nodiscard]] result::Status setTime(Windows& windows, std::uint64_t timeNs);
 
-/// Connects a mapped gamepad at once.
+/// Connects a mapped gamepad with motors at once.
 [[nodiscard]] result::Result<GamepadId> addGamepad(Windows& windows);
 [[nodiscard]] result::Status removeGamepad(Windows& windows, GamepadId gamepad);
 [[nodiscard]] result::Status pressGamepad(Windows& windows, GamepadId gamepad, GamepadButton button, bool down);
 [[nodiscard]] result::Status moveGamepad(Windows& windows, GamepadId gamepad, GamepadAxis axis, float value);
+
+/// The last rumble a test gamepad was given, and how many it was given.
+struct Rumble {
+    float low = 0;
+    float high = 0;
+    std::uint32_t milliseconds = 0;
+    std::uint32_t count = 0;
+};
+[[nodiscard]] result::Result<Rumble> rumbleOf(Windows& windows, GamepadId gamepad);
 
 } // namespace rawframe::window::testing

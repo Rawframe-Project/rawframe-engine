@@ -1,5 +1,6 @@
 #include "platform.h"
 
+#include <maul-window/gamepad.h>
 #include <maul-window/input.h>
 #include <maul-window/window.h>
 #include <utility>
@@ -219,6 +220,14 @@ result::Result<RequestId> Windows::requestTextInput(WindowId window, bool enable
                              &request),
         request,
         "a text input request");
+}
+
+result::Status Windows::rumble(GamepadId gamepad, float low, float high, std::uint32_t milliseconds) {
+    const mwinResult status = mwinSetGamepadRumble(platform_->context, toMaul(gamepad), low, high, milliseconds);
+    if (status != mwin_success) {
+        return failure(status, "a gamepad's rumble");
+    }
+    return {};
 }
 
 std::optional<Event> Windows::next() {
