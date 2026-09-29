@@ -340,6 +340,42 @@ RAWFRAME_TEST(TextLinesNameDocumentsByTheirSidecars) {
     std::filesystem::remove_all(kDirectory);
 }
 
+RAWFRAME_TEST(PresentationStateIsAClientsAlone) {
+    const std::string kHead = "program p.kest\n"
+                              "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.look Sprite\n"
+                              "component 6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.stick Stick\n"
+                              "component 7b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 g.score Score\n";
+    const auto kGame = parseGame(kHead + "presentation g.look on g.stick\n"
+                                         "present g.dress dress read g.stick write g.look entities\n"
+                                         "replicate g.stick g.score\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->presentation.size() == 1 &&
+                    kGame->presentation[0].components == std::vector<std::string>{"g.look"} &&
+                    kGame->presentation[0].on == "g.stick" && kGame->presented.size() == 1 &&
+                    kGame->presented[0].entry == "dress" && kGame->presented[0].columns.size() == 3 &&
+                    kGame->presented[0].columns[2].entities);
+    for (const std::string_view kLines : {// The shape of each line.
+                                          "presentation g.look\n",
+                                          "presentation on g.stick\n",
+                                          "presentation g.look on\n",
+                                          "presentation g.look on g.stick g.score\n",
+                                          "present g.dress\n",
+                                          "present g.dress dress random r\n",
+                                          "present g.dress dress read\n",
+                                          // Presentation state is a client's alone.
+                                          "presentation g.look on g.stick\npresentation g.look on g.score\n",
+                                          "presentation g.look on g.look\n",
+                                          "presentation g.look on g.stick\nreplicate g.look\n",
+                                          "presentation g.look on g.stick\nplayer g.look\n",
+                                          "presentation g.look on g.stick\nsystem g.s simulation s read g.look\n",
+                                          // And only present systems write it, and only it.
+                                          "presentation g.look on g.stick\npresent g.d d write g.score\n",
+                                          "present g.d d read g.stick\npresent g.d e read g.stick\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(!parseGame(kText).has_value());
+    }
+    RAWFRAME_EXPECT(refusedAt(kHead + "presentation g.look on g.unknown\n", WorldKestError::UnknownName, "5"));
+}
+
 RAWFRAME_TEST(TexturesAreNamedByTheirSidecars) {
     // In development, each by the identity its sidecar gives, which must
     // name rawframe.texture; its bytes are not read here.

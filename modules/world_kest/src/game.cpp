@@ -394,6 +394,47 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 }
             }
             game.systems.push_back(std::move(system));
+        } else if (kKeyword == "present") {
+            if (kWords.size() < 3) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a present line is `present <identity> <entry>` then columns");
+            }
+            GameSystem system{.identity = std::string{kWords[1]}, .entry = std::string{kWords[2]}};
+            for (std::size_t at = 3; at < kWords.size(); at += 2) {
+                if (kWords[at] == "entities") {
+                    system.columns.push_back(
+                        GameColumn{.access = world::Access::Read, .component = {}, .entities = true});
+                    --at;
+                    continue;
+                }
+                const auto kAccess = accessNamed(kWords[at]);
+                if (!kAccess.has_value() || at + 1 == kWords.size()) {
+                    return badLine(number,
+                                   WorldKestError::BadGameLine,
+                                   "a present system's column is entities, or read, write, with, or without a "
+                                   "component");
+                }
+                system.columns.push_back(GameColumn{.access = *kAccess, .component = std::string{kWords[at + 1]}});
+                uses.emplace_back(number, std::string{kWords[at + 1]});
+            }
+            if (std::ranges::contains(game.presented, system.identity, &GameSystem::identity)) {
+                return badLine(number, WorldKestError::BadGameLine, "a present system's identity is its own");
+            }
+            game.presented.push_back(std::move(system));
+        } else if (kKeyword == "presentation") {
+            const auto kOn = std::ranges::find(kWords, std::string_view{"on"});
+            if (kWords.size() < 4 || kOn != kWords.end() - 2 || kOn == kWords.begin() + 1) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a presentation line is `presentation <component>... on <component>`");
+            }
+            GamePresentation presentation{.on = std::string{kWords.back()}};
+            for (auto word = kWords.begin() + 1; word != kOn; ++word) {
+                presentation.components.emplace_back(*word);
+                uses.emplace_back(number, std::string{*word});
+            }
+            uses.emplace_back(number, presentation.on);
+            game.presentation.push_back(std::move(presentation));
         } else if (kKeyword == "replicate" || kKeyword == "player" || kKeyword == "predict" ||
                    kKeyword == "interpolate" || kKeyword == "nearby") {
             std::vector<std::string>& into =
@@ -666,6 +707,38 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                "a system emits a declared effect, is predicted, and is the effect's one emitter");
             }
             emitted.push_back(effect);
+        }
+    }
+    // Presentation state is a client's alone (D260): no server carries,
+    // sends, predicts, or runs a system over it, and only present systems
+    // write it.
+    std::vector<std::string_view> presentational;
+    for (const GamePresentation& presentation : game.presentation) {
+        for (const std::string& component : presentation.components) {
+            if (std::ranges::contains(presentational, component) || component == presentation.on) {
+                return badLine(number, WorldKestError::BadGameLine, "a component is presentation state once");
+            }
+            presentational.push_back(component);
+        }
+    }
+    for (const std::string_view kComponent : presentational) {
+        const bool kCarried =
+            std::ranges::contains(game.replicated, kComponent) || std::ranges::contains(game.player, kComponent) ||
+            std::ranges::contains(game.predicted, kComponent) || std::ranges::contains(game.interpolated, kComponent) ||
+            std::ranges::any_of(game.systems, [&](const GameSystem& system) {
+                return std::ranges::contains(system.columns, kComponent, &GameColumn::component);
+            });
+        if (kCarried) {
+            return badLine(number,
+                           WorldKestError::BadGameLine,
+                           "presentation state is not replicated, predicted, held by players, or used by a system");
+        }
+    }
+    for (const GameSystem& system : game.presented) {
+        for (const GameColumn& column : system.columns) {
+            if (column.access == world::Access::Write && !std::ranges::contains(presentational, column.component)) {
+                return badLine(number, WorldKestError::BadGameLine, "a present system writes only presentation state");
+            }
         }
     }
     RAWFRAME_TRY(checkModApi(game, modLines));

@@ -174,6 +174,15 @@ struct GameSystem {
     std::vector<std::string> emits;
 };
 
+/// Presentation state (D260), from a `presentation <component>... on
+/// <component>` line: components a client that draws attaches, zeroed, to
+/// each entity it mirrors that has the `on` component, and that only its
+/// `present` systems write. Never replicated, predicted, or on a server.
+struct GamePresentation {
+    std::vector<std::string> components;
+    std::string on;
+};
+
 /// What the player feels of an effect (D251), from a trailing `felt
 /// <haptic> <amplitude> <hertz> <milliseconds>`: the haptic output of the
 /// game's action set, its amplitude above nought and at most one, its
@@ -398,6 +407,11 @@ struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
     std::vector<GameSystem> systems;
+    /// Systems of `present <identity> <entry> <pairs>` lines (D260): run by
+    /// a client that draws over the World it mirrors, once a game tick, in
+    /// line order, writing only presentation components.
+    std::vector<GameSystem> presented;
+    std::vector<GamePresentation> presentation;
     std::vector<GameEffect> effects;
     std::vector<GameSpawn> spawns;
     /// Scene documents (rawframe/scene/scene.h) whose entities the World
