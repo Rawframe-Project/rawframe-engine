@@ -18,10 +18,11 @@ set(MWIN_WIN32_SOURCES
     src/win32_services.c
     src/win32_system.c
     src/win32_window.c)
-# XInput is loaded at run time: the gamepads need no library to link.
+# Windows.Gaming.Input and XInput are loaded at run time: the gamepads
+# need no library to link.
 if(MAUL_WINDOW_GAMEPAD)
-    list(APPEND MWIN_WIN32_SOURCES src/win32_pad.c src/win32_hid.c src/pad_db.c src/pad_map.c
-        src/generated/pad_windows.c)
+    list(APPEND MWIN_WIN32_SOURCES src/win32_pad.c src/win32_hid.c src/win32_wgi.c
+        src/win32_xbox.c src/pad_db.c src/pad_map.c src/generated/pad_windows.c)
 endif()
 target_sources(maul-window PRIVATE ${MWIN_WIN32_SOURCES})
 target_compile_definitions(maul-window PRIVATE MAUL_WINDOW_WIN32)

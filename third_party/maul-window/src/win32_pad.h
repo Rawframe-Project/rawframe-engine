@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Win32 gamepads through XInput, loaded when a context starts from
-// xinput1_4.dll, or xinput1_3.dll or xinput9_1_0.dll on older Windows:
-// up to four Xbox-compatible pads, mapped. Connected pads are read at
+// Win32 gamepads. Xbox-compatible pads come through Windows.Gaming.Input
+// (win32_xbox.h) where the runtime is found when a context starts, and
+// otherwise through XInput, loaded from xinput1_4.dll, or xinput1_3.dll
+// or xinput9_1_0.dll on older Windows: up to four pads, mapped. Connected pads are read at
 // each pump; the free player slots are looked at every half second, as
 // asking about a slot with no pad costs time. XInput has no durations,
 // so a rumble is stopped at the pump after its time runs out. The
@@ -16,6 +17,7 @@
 
 #include "core.h"
 #include "win32_hid.h"
+#include "win32_xbox.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -59,9 +61,14 @@ typedef struct mwinWin32Pads
     // The generic gamepads, and the window Raw Input brings them to.
     mwinWin32Hid hid;
     HWND listener;
+    // Windows.Gaming.Input and its pads, while the runtime is there.
+    mwinWgi wgi;
+    mwinWin32Xbox xbox;
+    bool runtime;
 } mwinWin32Pads;
 
-// Loads XInput; without it there are no gamepads, and no error.
+// Finds Windows.Gaming.Input, else loads XInput; without either there
+// are no Xbox pads, and no error.
 void mwinWin32PadsStart(mwinWin32Pads* pads, mwinContext* context);
 void mwinWin32PadsStop(mwinWin32Pads* pads);
 

@@ -113,6 +113,13 @@ void mwinWin32PadsStart(mwinWin32Pads* pads, mwinContext* context)
     *pads = (mwinWin32Pads){.context = context};
     StartListening(pads);
     mwinWin32HidStart(&pads->hid, context, mwinWin32Now());
+    mwinWgiApi runtime;
+    if (mwinWgiStart(&pads->wgi, &runtime))
+    {
+        pads->runtime = true;
+        mwinWin32XboxStart(&pads->xbox, context, &runtime);
+        return;
+    }
     static const LPCWSTR libraries[] = {L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll"};
     for (size_t i = 0; i < 3 && pads->api.library == nullptr; i++)
     {
@@ -132,6 +139,11 @@ void mwinWin32PadsStart(mwinWin32Pads* pads, mwinContext* context)
 
 void mwinWin32PadsStop(mwinWin32Pads* pads)
 {
+    if (pads->runtime)
+    {
+        mwinWin32XboxStop(&pads->xbox);
+        mwinWgiStop(&pads->wgi);
+    }
     for (DWORD i = 0; i < MWIN_WIN32_PADS && pads->api.setState != nullptr; i++)
     {
         if (pads->pads[i].connected && pads->pads[i].rumbleEndsNs != 0)
@@ -239,6 +251,11 @@ static void Read(mwinWin32Pads* pads, DWORD user, uint64_t nowNs)
 
 void mwinWin32PadsPump(mwinWin32Pads* pads, uint64_t nowNs)
 {
+    if (pads->runtime)
+    {
+        mwinWin32XboxPump(&pads->xbox, nowNs);
+        return;
+    }
     if (pads->api.getState == nullptr)
     {
         return;
@@ -264,6 +281,10 @@ void mwinWin32PadsPump(mwinWin32Pads* pads, uint64_t nowNs)
 mwinResult mwinWin32PadsRumble(mwinWin32Pads* pads, uint32_t slot, float low, float high,
                                uint32_t durationMs, uint64_t nowNs)
 {
+    if (pads->runtime)
+    {
+        return mwinWin32XboxRumble(&pads->xbox, slot, low, high, durationMs, nowNs);
+    }
     for (DWORD user = 0; user < MWIN_WIN32_PADS && pads->api.setState != nullptr; user++)
     {
         mwinWin32Pad* pad = &pads->pads[user];

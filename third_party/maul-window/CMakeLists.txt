@@ -311,6 +311,10 @@ if(MAUL_WINDOW_BUILD_TESTS)
             # Generic gamepads against a stand-in for Raw Input and the HID
             # parser.
             maul_add_test(win32_hid WHITEBOX)
+            # Xbox gamepads against a stand-in for Windows.Gaming.Input, then
+            # the runtime itself where the system has it.
+            maul_add_test(win32_xbox WHITEBOX)
+            target_link_libraries(test_win32_xbox PRIVATE ole32)
         endif()
         # Composes through the input context: skipped with no input method.
         maul_add_test(win32_ime)
