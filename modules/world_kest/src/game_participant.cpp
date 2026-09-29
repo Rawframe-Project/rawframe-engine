@@ -10,6 +10,7 @@
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "predictor.h"
+#include "presentation.h"
 #include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
@@ -51,7 +52,10 @@ constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.na
                                           world_runtime::kSavePlan.name,
                                           physics2d::kPhysics2DPlan.name,
                                           physics3d::kPhysics3DPlan.name,
-                                          world_animation::kAnimationPlan.name};
+                                          world_animation::kAnimationPlan.name,
+                                          kPresentationPlan.name};
+/// A presenting client's machine (D260): its heap, and the fuel of one call.
+constexpr kest::MachineLimits kPresentationLimits{.heapBytes = std::size_t{4} << 20U, .fuelPerCall = 1'000'000};
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
 constexpr diagnostics::EventIdentity kGameReloaded{"world_kest", "game_reloaded"};
@@ -94,7 +98,8 @@ class GameParticipant final : public composition::Participant,
                               public world_runtime::SavePlan,
                               public physics2d::Physics2DPlan,
                               public physics3d::Physics3DPlan,
-                              public world_animation::AnimationPlan {
+                              public world_animation::AnimationPlan,
+                              public PresentationPlan {
 public:
     GameParticipant() noexcept = default;
 
@@ -509,6 +514,13 @@ public:
     void attach(const world_animation::AnimationQueries* queries) noexcept override {
         animationDoors_.queries = queries;
     }
+    result::Result<std::unique_ptr<ClientPresentation>> presentation() const override {
+        return ClientPresentation::create(PresentationSettings{.program = program_,
+                                                               .game = &game_,
+                                                               .descriptors = descriptors_,
+                                                               .limits = kPresentationLimits,
+                                                               .animation = animation_});
+    }
 
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
         if (persistence_.unwritable.has_value()) {
@@ -555,6 +567,9 @@ public:
         }
         if (capability == world_animation::kAnimationPlan.name) {
             return composition::provideAs<world_animation::AnimationPlan>(*this);
+        }
+        if (capability == kPresentationPlan.name) {
+            return composition::provideAs<PresentationPlan>(*this);
         }
         return {};
     }
@@ -910,6 +925,7 @@ result::Result<composition::ParticipantOwner> makeGame(composition::ParticipantC
 
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
     registerGameFiles(registrar);
+    registerPresented(registrar);
     registrar.submit(composition::ParticipantDeclaration{
         .identity = kIdentity,
         .factory = &makeGame,
