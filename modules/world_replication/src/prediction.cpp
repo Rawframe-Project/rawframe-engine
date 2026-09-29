@@ -135,6 +135,13 @@ void Prediction::command(std::uint64_t tick, std::span<const std::byte> value) {
     }
 }
 
+bool Prediction::unchanged(std::uint64_t consumed) {
+    // A copy: `authoritative` assigns what it is given to `known_`.
+    const State kKnown = known_;
+    std::vector<std::span<const std::byte>> values(kKnown.begin(), kKnown.end());
+    return authoritative(consumed, values);
+}
+
 bool Prediction::authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values) {
     for (std::size_t index = 0; index < values.size() && index < known_.size(); ++index) {
         if (!values[index].empty()) {

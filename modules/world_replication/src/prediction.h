@@ -25,6 +25,9 @@ public:
     /// span for one not in this state. True when they confirmed the
     /// prediction, whose whole state is then `confirmed()`.
     bool authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values);
+    /// The server consumed input `consumed` and its values of the player
+    /// are still the newest it sent: `authoritative` with those.
+    bool unchanged(std::uint64_t consumed);
     /// Every predicted component's value, in memory layout, at the last
     /// confirmed input tick: what a checksum record hashes (D204).
     [[nodiscard]] const std::vector<std::vector<std::byte>>& confirmed() const noexcept {
@@ -76,8 +79,7 @@ private:
     std::size_t inputSize_;
     std::map<std::uint64_t, std::vector<std::byte>> commands_;
     std::map<std::uint64_t, State> history_;
-    /// The newest authoritative value of each predicted component, until the
-    /// prediction starts.
+    /// The newest authoritative value of each predicted component.
     State known_;
     bool started_ = false;
     std::uint64_t predictedTick_ = 0;

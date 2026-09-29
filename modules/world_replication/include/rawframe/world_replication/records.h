@@ -53,6 +53,10 @@ struct StateHeader {
     std::uint64_t serverTick = 0;
     /// The newest input tick consumed for this connection by then.
     std::uint64_t consumedInputTick = 0;
+    /// The client holds every value of its player as it was at `serverTick`,
+    /// so what the client holds is the server's state there even with no
+    /// record of the player here (D249).
+    bool playerHeld = false;
     std::uint64_t recordCount = 0;
 };
 

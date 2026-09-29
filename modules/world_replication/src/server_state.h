@@ -46,7 +46,7 @@ inline constexpr std::size_t kMaximumTombstones = 16'384;
 inline constexpr std::size_t kNowhere = SIZE_MAX;
 
 /// Bytes a state datagram's framing takes around its payload, at most.
-inline constexpr std::size_t kStateHeaderRoom = 3 * 8;
+inline constexpr std::size_t kStateHeaderRoom = 4 * 8;
 
 struct ReplicationServer::State {
     network::Sessions* sessions = nullptr;

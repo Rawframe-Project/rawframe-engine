@@ -48,6 +48,7 @@ result::Result<MappingRecord> decodeMapping(std::span<const std::byte> payload) 
 result::Status encodeStateHeader(network::Writer& writer, const StateHeader& header) {
     RAWFRAME_TRY(writer.varint(header.serverTick));
     RAWFRAME_TRY(writer.varint(header.consumedInputTick));
+    RAWFRAME_TRY(writer.varint(header.playerHeld ? 1 : 0));
     return writer.varint(header.recordCount);
 }
 
@@ -55,6 +56,8 @@ result::Result<StateHeader> decodeStateHeader(network::Reader& reader) {
     StateHeader header;
     RAWFRAME_TRY_ASSIGN(header.serverTick, reader.varint());
     RAWFRAME_TRY_ASSIGN(header.consumedInputTick, reader.varint());
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeld, reader.varintAtMost(1));
+    header.playerHeld = kHeld == 1;
     // Every record is at least two bytes, which bounds the count by what is
     // left before anything is read for it.
     RAWFRAME_TRY_ASSIGN(header.recordCount, reader.varintAtMost(reader.remaining() / 2));

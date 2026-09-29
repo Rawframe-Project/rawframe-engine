@@ -443,8 +443,9 @@ RAWFRAME_TEST(APredictingClientRunsAheadAndIsConfirmed) {
     RAWFRAME_EXPECT(kStatistics.predictedTicks > 90 && kStatistics.confirmed > 60);
     // On a clean network only admission and the first pace adjustments
     // mispredict: the server held or went neutral on ticks the client had
-    // not labelled yet.
-    RAWFRAME_EXPECT(kStatistics.rollbacks <= 3);
+    // not labelled yet. Each such tick is told as it happens, even while
+    // the player stands still there (D249), so a few, not one.
+    RAWFRAME_EXPECT(kStatistics.rollbacks <= 6);
     // The player is shown where its own input has taken it, ahead of the
     // server, which has not consumed the newest commands yet.
     const Position* shown = scenario.clientWorld.get(scenario.client->owned(), kPosition);
@@ -457,6 +458,23 @@ RAWFRAME_TEST(APredictingClientRunsAheadAndIsConfirmed) {
     shown = scenario.clientWorld.get(scenario.client->owned(), kPosition);
     server = scenario.firstPlayerPosition();
     RAWFRAME_EXPECT(shown != nullptr && server != nullptr && shown->x == server->x && shown->y == server->y);
+}
+
+RAWFRAME_TEST(AnIdlePlayerIsConfirmedAndMovesAtOnce) {
+    // A player standing still changes nothing the server would send, yet
+    // its predictions are confirmed all along, so none waits for a full
+    // window when it starts to move (D249).
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(40)}, {.predicting = true}};
+    for (int step = 0; step < 200; ++step) {
+        scenario.step(Steer{});
+    }
+    const auto kIdle = scenario.client->predictionStatistics();
+    RAWFRAME_EXPECT(kIdle.stalled == 0 && kIdle.confirmed > 150);
+    for (int step = 0; step < 10; ++step) {
+        scenario.step(Steer{1, 0});
+    }
+    const auto kMoving = scenario.client->predictionStatistics();
+    RAWFRAME_EXPECT(kMoving.stalled == 0 && kMoving.predictedTicks >= kIdle.predictedTicks + 10);
 }
 
 RAWFRAME_TEST(StateGoesOutOnceAPeriodAndPredictionHolds) {

@@ -92,12 +92,14 @@ RAWFRAME_TEST(StatePayloadsCarryRecordsForTheTable) {
     std::array<std::byte, 64> out{};
     network::Writer writer{out};
     RAWFRAME_EXPECT(
-        encodeStateHeader(writer, {.serverTick = 1000, .consumedInputTick = 998, .recordCount = 2}).has_value());
+        encodeStateHeader(writer, {.serverTick = 1000, .consumedInputTick = 998, .playerHeld = true, .recordCount = 2})
+            .has_value());
     RAWFRAME_EXPECT(encodeStateRecordHead(writer, {.entity = NetEntityId{1}, .component = 0}).has_value());
     RAWFRAME_EXPECT(encodeStateRecordHead(writer, {.entity = NetEntityId{2}, .component = 1}).has_value());
     network::Reader reader{writer.written()};
     const auto kHeader = decodeStateHeader(reader);
-    RAWFRAME_EXPECT(kHeader.has_value() && kHeader->serverTick == 1000 && kHeader->recordCount == 2);
+    RAWFRAME_EXPECT(kHeader.has_value() && kHeader->serverTick == 1000 && kHeader->playerHeld &&
+                    kHeader->recordCount == 2);
     RAWFRAME_EXPECT(decodeStateRecordHead(reader, 2).has_value());
     RAWFRAME_EXPECT(failedWith(decodeStateRecordHead(reader, 1), ReplicationError::UnknownComponent));
     // A count that the rest could not hold is refused before any record.
@@ -106,6 +108,10 @@ RAWFRAME_TEST(StatePayloadsCarryRecordsForTheTable) {
     RAWFRAME_EXPECT(encodeStateHeader(liar, {.serverTick = 1, .consumedInputTick = 0, .recordCount = 50}).has_value());
     network::Reader lyingReader{liar.written()};
     RAWFRAME_EXPECT(!decodeStateHeader(lyingReader).has_value());
+    // The held flag is a truth, nothing else.
+    const std::array<std::byte, 4> kTwo = {std::byte{1}, std::byte{0}, std::byte{2}, std::byte{0}};
+    network::Reader twoReader{kTwo};
+    RAWFRAME_EXPECT(!decodeStateHeader(twoReader).has_value());
 }
 
 RAWFRAME_TEST(InputWindowsAreBounded) {

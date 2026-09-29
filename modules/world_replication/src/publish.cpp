@@ -371,8 +371,12 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     std::size_t used = 0;
     std::size_t spent = 0;
     inDatagram.clear();
-    const auto kFlush = [&] {
-        if (count == 0) {
+    std::uint64_t flushed = 0;
+    // Whether the client holds every value of its player as it is now.
+    bool playerCurrent = false;
+    // A datagram of what the records hold, or, with `empty`, of none.
+    const auto kFlush = [&](bool empty = false) {
+        if (count == 0 && !empty) {
             return;
         }
         datagram.resize(kRoom + kStateHeaderRoom);
@@ -380,6 +384,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         if (encodeStateHeader(writer,
                               StateHeader{.serverTick = tick.value,
                                           .consumedInputTick = peer.consumedInputTick,
+                                          .playerHeld = playerCurrent,
                                           .recordCount = count})
                 .has_value() &&
             writer.bytes(std::span{records}.first(used)).has_value() && writer.written().size() <= kRoom) {
@@ -390,6 +395,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
                                                  .payload = writer.written()};
             spent += writer.written().size();
             if (sessions->sendDatagram(peer.connection, kState).has_value()) {
+                ++flushed;
                 ++statistics.stateDatagrams;
                 statistics.stateBytes += writer.written().size();
                 peer.sent.push_back(
@@ -421,6 +427,8 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         if (!held.acknowledged || !isPresent(entity)) {
             continue;
         }
+        const bool kPlayer = entity == peer.player;
+        playerCurrent = playerCurrent || kPlayer;
         held.replicas.resize(settings.table.components.size());
         for (std::size_t kIndex = valuesAt[entity.slot]; kIndex != valuesAt[entity.slot + 1]; ++kIndex) {
             const PresentValue& value = present[kIndex];
@@ -438,6 +446,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
                 ++statistics.recordsHeld;
                 continue;
             }
+            playerCurrent = playerCurrent && !kPlayer;
             if (replica.sent && tick.value - replica.sentAt < settings.resendAfter &&
                 sameBytes(replica.lastSent.bytes(), kValue)) {
                 continue;
@@ -488,6 +497,14 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         ++statistics.recordsSent;
     }
     kFlush();
+    // Nothing changed, yet the client still needs to hear which of its
+    // input the server consumed: without it an idle player's predictions
+    // are never confirmed, fill their window, and the first move after
+    // waits for a state (D249). Only while the client holds every value of
+    // its player, so what its mirror holds is the server's state.
+    if (flushed == 0 && settings.input && peer.heardInput && playerCurrent) {
+        kFlush(true);
+    }
 }
 
 } // namespace rawframe::world_replication
