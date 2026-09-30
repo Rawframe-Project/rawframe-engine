@@ -4,12 +4,13 @@ rawframe_host(NAME arena OUTPUT rawframe-arena
     SOURCES src/main.cpp
     DEPS host game_content input_kest world_audio world_localization network_loopback render_canvas render_scene physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 )
-# Where Maul RHI is built, the arena can draw a client's canvas offscreen on
-# the one device (D279); elsewhere it counts draws without one.
+# Where Maul RHI is built, the arena can draw a client's canvas (D279) and
+# scene (D284) offscreen on the one device; elsewhere it counts draws
+# without one.
 set(RAWFRAME_ARENA_DRAWS OFF)
 if(TARGET rawframe_render_canvas_gpu)
     set(RAWFRAME_ARENA_DRAWS ON)
-    target_link_libraries(rawframe_host_arena PRIVATE rawframe::render rawframe::render_canvas_gpu)
+    target_link_libraries(rawframe_host_arena PRIVATE rawframe::render rawframe::render_canvas_gpu rawframe::render_scene_gpu)
 endif()
 target_compile_definitions(rawframe_host_arena PRIVATE RAWFRAME_ARENA_DRAWS=$<BOOL:${RAWFRAME_ARENA_DRAWS}>)
 
@@ -235,6 +236,26 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(plaza_seen PROPERTIES
                          FIXTURES_REQUIRED plaza_content
                          PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":1")
+    if(RAWFRAME_ARENA_DRAWS)
+        # The plaza drawn on the one device offscreen (D284): frames drawn,
+        # its models in instanced calls, its meshes uploaded once each, and
+        # the pictures read back lit in many shades.
+        set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.tga)
+        configure_file(tests/plaza_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf @ONLY)
+        add_test(NAME plaza_drawn
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
+                         $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(plaza_drawn PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"frames\":[1-9][0-9]+,.*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],.*\"readBacks\":[1-9][0-9]*,\"colors\":([1-9][0-9][0-9]+),\"captured\":true")
+        if(RAWFRAME_SANITIZE STREQUAL "thread")
+            set_tests_properties(plaza_drawn PROPERTIES ENVIRONMENT
+                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
+        endif()
+    endif()
     # Four bots predict their walkers in 3D: at least a thousand ticks
     # confirmed, the rollbacks only those of admission, and no checksum
     # diverged (D274).

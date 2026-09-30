@@ -26,6 +26,7 @@
 #if RAWFRAME_ARENA_DRAWS
 #include "rawframe/render/registrar.h"
 #include "rawframe/render_canvas_gpu/registrar.h"
+#include "rawframe/render_scene_gpu/registrar.h"
 #endif
 
 #include <array>
@@ -33,7 +34,7 @@
 namespace {
 
 #if RAWFRAME_ARENA_DRAWS
-constexpr std::size_t kDrawing = 2;
+constexpr std::size_t kDrawing = 3;
 #else
 constexpr std::size_t kDrawing = 0;
 #endif
@@ -72,6 +73,8 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 14 + kDrawing> kRegi
     rawframe::composition::RegistrarEntry{"render", &rawframe::render::registerParticipants, rawframe::render::kScopes},
     rawframe::composition::RegistrarEntry{
         "render_canvas_gpu", &rawframe::render_canvas_gpu::registerParticipants, rawframe::render_canvas_gpu::kScopes},
+    rawframe::composition::RegistrarEntry{
+        "render_scene_gpu", &rawframe::render_scene_gpu::registerParticipants, rawframe::render_scene_gpu::kScopes},
 #endif
 };
 
