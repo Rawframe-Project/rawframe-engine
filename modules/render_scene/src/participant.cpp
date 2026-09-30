@@ -34,6 +34,11 @@ constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
 constexpr std::string_view kMaybe[] = {
     world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
 
+/// A material's texture as the scene binds it.
+SceneTexture sceneTextureOf(const material::SampledTexture& texture) {
+    return {.id = texture.id, .filter = texture.filter, .address = texture.address};
+}
+
 /// A material's cooked bytes, read and waited for, decoded (D303).
 result::Result<material::Material> readMaterial(content::ContentStore& store, base::Bits128 id) {
     RAWFRAME_TRY_ASSIGN(execution::AsyncHandle<content::VerifiedContent> read,
@@ -181,9 +186,9 @@ public:
                         materials.push_back({.id = each.id,
                                              .blob = material::blobOf(*read),
                                              .translucent = read->blend == material::Blend::Translucent,
-                                             .texture = {.id = read->texture.id,
-                                                         .filter = read->texture.filter,
-                                                         .address = read->texture.address}});
+                                             .textures = {.base = sceneTextureOf(read->textures.base),
+                                                          .packed = sceneTextureOf(read->textures.packed),
+                                                          .emission = sceneTextureOf(read->textures.emission)}});
                     } else {
                         unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});
                     }
@@ -342,18 +347,21 @@ private:
                                 std::vector<SceneMaterial>& materials) {
         std::set<std::uint64_t> sampled;
         for (SceneMaterial& each : materials) {
-            if (each.texture.id == 0) {
-                continue;
+            for (SceneTexture* texture : {&each.textures.base, &each.textures.packed, &each.textures.emission}) {
+                if (texture->id == 0) {
+                    continue;
+                }
+                if (std::ranges::find(files.textures(), texture->id, &world_kest::GameTextureResource::id) ==
+                    files.textures().end()) {
+                    const auto kPath =
+                        std::ranges::find(files.materials(), each.id, &world_kest::GameMaterialResource::id);
+                    unknownTextures_.emplace_back(kPath != files.materials().end() ? kPath->path : std::string{},
+                                                  graph::nodeIdText(texture->id));
+                    texture->id = 0;
+                    continue;
+                }
+                sampled.insert(texture->id);
             }
-            if (std::ranges::find(files.textures(), each.texture.id, &world_kest::GameTextureResource::id) ==
-                files.textures().end()) {
-                const auto kPath = std::ranges::find(files.materials(), each.id, &world_kest::GameMaterialResource::id);
-                unknownTextures_.emplace_back(kPath != files.materials().end() ? kPath->path : std::string{},
-                                              graph::nodeIdText(each.texture.id));
-                each.texture.id = 0;
-                continue;
-            }
-            sampled.insert(each.texture.id);
         }
         sampled_ = sampled.size();
         if (sampled.empty() || !context.has(game_content::kGameContent.name) || context.cpuExecutor() == nullptr) {

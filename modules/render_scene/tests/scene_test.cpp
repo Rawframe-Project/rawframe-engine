@@ -808,8 +808,8 @@ RAWFRAME_TEST(OpaqueModelsAreGroupedByTheirMaterialsTexture) {
     const SceneTexture kBark{.id = 0x55, .address = material::Address::Clamp};
     auto scene = *Scene::create(*schema,
                                 {.models = {kModelId},
-                                 .materials = {{.id = 0xa1, .blob = noMaterial(), .texture = kTiles},
-                                               {.id = 0xa2, .blob = noMaterial(), .texture = kBark},
+                                 .materials = {{.id = 0xa1, .blob = noMaterial(), .textures = {.base = kTiles}},
+                                               {.id = 0xa2, .blob = noMaterial(), .textures = {.packed = kBark}},
                                                {.id = 0xa3, .blob = noMaterial()}}});
     // Boxes and spheres of each material, in no order.
     std::uint32_t at = 0;
@@ -828,11 +828,11 @@ RAWFRAME_TEST(OpaqueModelsAreGroupedByTheirMaterialsTexture) {
     scene->extract(world);
     const SceneFrame& kFrame = scene->queue({.fovY = 1.5F, .near = 0.1F, .aspect = 1});
     // Each material's texture at its blob's place: none's, then the game's.
-    RAWFRAME_EXPECT(kFrame.textures == (std::vector<SceneTexture>{{}, kTiles, kBark, {}}));
+    RAWFRAME_EXPECT(kFrame.textures == (std::vector<SceneTextures>{{}, {.base = kTiles}, {.packed = kBark}, {}}));
     // No texture, then bark, then tiles; by mesh within each.
-    std::vector<std::pair<std::uint64_t, std::uint64_t>> order;
+    std::vector<std::pair<SceneTextures, std::uint64_t>> order;
     for (const SceneDraw& draw : kFrame.draws) {
-        order.emplace_back(kFrame.textures[draw.material].id, draw.mesh);
+        order.emplace_back(kFrame.textures[draw.material], draw.mesh);
     }
     RAWFRAME_EXPECT(kFrame.draws.size() == 12 && std::ranges::is_sorted(order));
 }

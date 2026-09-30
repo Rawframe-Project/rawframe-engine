@@ -25,6 +25,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <tuple>
 #include <vector>
 
 namespace rawframe::render_scene {
@@ -153,6 +154,20 @@ struct SceneTexture {
     friend bool operator==(const SceneTexture&, const SceneTexture&) = default;
 };
 
+/// A material's textures (D312): its base, packed, and emission textures,
+/// each none when its identity is nought.
+struct SceneTextures {
+    SceneTexture base;
+    SceneTexture packed;
+    SceneTexture emission;
+
+    friend bool operator==(const SceneTextures&, const SceneTextures&) = default;
+    friend auto operator<=>(const SceneTextures& left, const SceneTextures& right) noexcept {
+        return std::tuple{left.base.id, left.packed.id, left.emission.id} <=>
+               std::tuple{right.base.id, right.packed.id, right.emission.id};
+    }
+};
+
 /// A game's material, by the identity its `material` line gives it.
 struct SceneMaterial {
     std::uint64_t id = 0;
@@ -160,7 +175,7 @@ struct SceneMaterial {
     /// Whether it blends over what is behind it (SPEC-0026's `translucent`,
     /// D305).
     bool translucent = false;
-    SceneTexture texture;
+    SceneTextures textures;
 };
 
 struct SceneMesh {
@@ -456,7 +471,7 @@ struct SceneFrame {
     /// first none's, then the game's in the order they were given.
     std::vector<MaterialBlob> materials;
     /// Every material's texture, at its blob's place (D309).
-    std::vector<SceneTexture> textures;
+    std::vector<SceneTextures> textures;
     std::size_t overLimit = 0;
 };
 
