@@ -2,7 +2,7 @@
 # whose exports a page's JavaScript calls. Built only for the web.
 rawframe_host(NAME web_client OUTPUT rawframe-web-client
     SOURCES src/main.cpp
-    DEPS window_host window host game_content input_kest network_web render_canvas physics2d physics3d world_animation world_audio world_replication
+    DEPS window_host window host game_content input_kest network_web render render_canvas render_canvas_gpu physics2d physics3d world_animation world_audio world_replication
          world_kest world_runtime composition execution diagnostics result base
 )
 # A reactor: no `main`; the page calls `_initialize`, then the exports. The

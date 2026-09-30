@@ -6,7 +6,8 @@
 // Or it plays (D250): the window's side on the page, Maul Window's
 // maul-window.mjs, makes a window of a canvas, and the window's frames
 // drive the client until it ends. Its sound is the page's to take and play
-// (sound.mjs, D259).
+// (sound.mjs, D259). With Maul RHI's side too, maul-rhi.mjs, it draws in
+// the canvas through the browser's WebGPU (D282).
 import { browserWasi } from './wasi.mjs';
 
 /** The window's imports where the page gives none: there is no page. */
@@ -22,23 +23,31 @@ export class WebClient {
      * already compiled (as `WebAssembly.compileStreaming` gives it while it
      * downloads), with `transport`'s imports; `log` receives each line the
      * client writes. `windowImports`, the `maulWindowImports` of
-     * maul-window.mjs, lets it play.
+     * maul-window.mjs, lets it play; `deviceImports`, the `maulRhiImports`
+     * of maul-rhi.mjs, lets it draw.
      */
-    static async load(module, { transport, log, windowImports }) {
+    static async load(module, { transport, log, windowImports, deviceImports }) {
         let instance;
         const memory = () => instance.exports.memory;
+        const exports = () => instance.exports;
+        // Where Maul RHI keeps the device's state: `gpu.mrhiGpu.errors`
+        // holds what WebGPU reported.
+        const gpu = {};
+        // What the page does not give answers as where there is no page.
+        const given = Object.assign({}, windowImports?.(exports), deviceImports?.(exports, gpu));
         const made = await WebAssembly.instantiate(module, {
             wasi_snapshot_preview1: browserWasi(memory, log),
             rawframe_web_transport: transport.importsFor(memory),
-            env: windowImports ? windowImports(() => instance.exports) : noPage,
+            env: new Proxy(given, { get: (target, name) => target[name] ?? noPage[name] }),
         });
         instance = made instanceof WebAssembly.Instance ? made : made.instance;
         instance.exports._initialize();
-        return new WebClient(instance.exports);
+        return new WebClient(instance.exports, gpu);
     }
 
-    constructor(exports) {
+    constructor(exports, gpu = {}) {
         this.exports = exports;
+        this.gpu = gpu;
         this.handle = exports.rawframe_client_create();
     }
 

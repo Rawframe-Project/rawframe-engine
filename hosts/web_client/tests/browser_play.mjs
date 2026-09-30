@@ -13,13 +13,16 @@
 // holds, so the client reads its game, scenes, and textures from the Build.
 // Native players share the server with the page (D263): a bots process of
 // two runners joins from the same Composition over QUIC, pinning the
-// server's certificate, and plays beside the browser throughout.
+// server's certificate, and plays beside the browser throughout. The game
+// is drawn in the canvas through the browser's WebGPU with Maul RHI's page
+// side (D282): frames are shown, WebGPU reports no error, and a screenshot
+// of the canvas shows what was drawn.
 // Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser from where
 // Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test is
 // skipped (77).
 //
 // usage: browser_play.mjs <rawframe-server> <rawframe-web-client.wasm> <maul-window.mjs> <repository>
-//                         <rawframe-cook> <rawframe-build> <rawframe-bots>
+//                         <rawframe-cook> <rawframe-build> <rawframe-bots> <maul-rhi.mjs>
 import { execFileSync, spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
@@ -27,11 +30,12 @@ import { mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promi
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { extname, join, normalize, relative } from 'node:path';
+import { dirname, extname, join, normalize, relative } from 'node:path';
 import { argv, env } from 'node:process';
+import { inflateSync } from 'node:zlib';
 import { end } from './verdict.mjs';
 
-const [serverPath, wasmPath, windowPath, repository, cookPath, buildPath, botsPath] = argv.slice(2);
+const [serverPath, wasmPath, windowPath, repository, cookPath, buildPath, botsPath, devicePath] = argv.slice(2);
 let puppeteer;
 try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
@@ -143,6 +147,7 @@ const setup = {
         'kest.plan_only = true',
         'audio.play = sink',
         'bots.player = true',
+        'render.device = any',
         `bots.endpoint = https://127.0.0.1:${port}/rawframe`,
         '',
     ].join('\n'),
@@ -153,10 +158,12 @@ import { WebClient } from '/page/client.mjs';
 import { PageTransport } from '/page/transport.mjs';
 import { PageSound } from '/page/sound.mjs';
 import { maulWindowImports } from '/maul-window.mjs';
+import { maulRhiImports } from '/maul-rhi.mjs';
 const setup = await (await fetch('/setup.json')).json();
 const transport = new PageTransport({ certificateHashes: [setup.fingerprint] });
 const client = await WebClient.load(await (await fetch('/client.wasm')).arrayBuffer(),
-                                    { transport, log: (line) => console.log(line), windowImports: maulWindowImports });
+                                    { transport, log: (line) => console.log(line), windowImports: maulWindowImports,
+                                      deviceImports: maulRhiImports });
 const hold = async (path, url) => {
     if (!client.hold(path, new Uint8Array(await (await fetch(url)).arrayBuffer()))) {
         throw new Error('a file was refused: ' + path);
@@ -170,6 +177,14 @@ console.log('page: play ' + client.play(setup.configuration));
 const sound = new PageSound(client);
 document.addEventListener('pointerdown', () => sound.resume());
 window.rawframeStop = () => client.requestStop();
+// WebGPU's errors, which Maul RHI reads as the device closes.
+window.rawframeGpuErrors = async () => {
+    const gpu = client.gpu.mrhiGpu;
+    for (let waited = 0; gpu && gpu.closing > 0 && waited < 10000; waited += 10) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return gpu?.errors ?? [];
+};
 window.rawframeSound = () => ({ frames: sound.frames, peak: sound.peak, state: sound.context.state });
 const watch = () => {
     const code = client.ended();
@@ -199,6 +214,8 @@ const http = createServer(async (request, response) => {
             await serve(wasmPath);
         } else if (url === '/maul-window.mjs') {
             await serve(windowPath);
+        } else if (url === '/maul-rhi.mjs') {
+            await serve(devicePath);
         } else if (url.startsWith('/page/')) {
             await serve(join(repository, 'hosts/web_client/page', normalize(url.slice(6))));
         } else if (url === '/runners.composition') {
@@ -216,7 +233,53 @@ const http = createServer(async (request, response) => {
 });
 await new Promise((resolve) => http.listen(0, '127.0.0.1', resolve));
 
-const browser = await puppeteer.launch({ args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] });
+// WebGPU in headless Chrome: its Vulkan path over the SwiftShader Chrome
+// ships, which presents to a canvas, as Maul RHI's web runner does.
+const swiftShader = join(dirname(browserPath), 'vk_swiftshader_icd.json');
+const browser = await puppeteer.launch({
+    args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-webgpu',
+           '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-angle=vulkan'],
+    env: Object.assign({}, env, { VK_ICD_FILENAMES: swiftShader, VK_DRIVER_FILES: swiftShader }),
+});
+
+// The pixels of a PNG screenshot that are not black: Chrome's are 8-bit
+// RGB or RGBA, not interlaced.
+const litPixels = (png) => {
+    const width = png.readUInt32BE(16);
+    const height = png.readUInt32BE(20);
+    const channels = png[25] === 6 ? 4 : 3;
+    const parts = [];
+    for (let at = 8; at < png.length;) {
+        const length = png.readUInt32BE(at);
+        if (png.toString('latin1', at + 4, at + 8) === 'IDAT') {
+            parts.push(png.subarray(at + 8, at + 8 + length));
+        }
+        at += 12 + length;
+    }
+    const raw = inflateSync(Buffer.concat(parts));
+    const stride = width * channels;
+    let previous = Buffer.alloc(stride);
+    let lit = 0;
+    for (let y = 0; y < height; y++) {
+        const filter = raw[y * (stride + 1)];
+        const row = Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+        for (let x = 0; x < stride; x++) {
+            const left = x >= channels ? row[x - channels] : 0;
+            const up = previous[x];
+            const corner = x >= channels ? previous[x - channels] : 0;
+            const guess = left + up - corner;
+            const nearest = Math.abs(guess - left) <= Math.abs(guess - up) && Math.abs(guess - left) <= Math.abs(guess - corner)
+                ? left
+                : Math.abs(guess - up) <= Math.abs(guess - corner) ? up : corner;
+            row[x] = (row[x] + [0, left, up, (left + up) >> 1, nearest][filter]) & 255;
+        }
+        for (let x = 0; x < stride; x += channels) {
+            lit += row[x] || row[x + 1] || row[x + 2] ? 1 : 0;
+        }
+        previous = row;
+    }
+    return lit;
+};
 let clientLog = '';
 let verdict = 1;
 try {
@@ -249,9 +312,12 @@ try {
     await sleep(800);
     await tab.keyboard.up('KeyD');
     await sleep(500);
+    // What the canvas shows before the stop.
+    const shown = litPixels(await (await tab.$('canvas')).screenshot({ type: 'png' }));
     await tab.evaluate(() => window.rawframeStop());
     await until(/page: ended/, 30000);
     const ended = Number(/page: ended (\d+)/.exec(clientLog)[1]);
+    const gpuErrors = await tab.evaluate(() => window.rawframeGpuErrors());
     const summary = /"bots":\d+,"admitted":\d+[^}]*/.exec(clientLog);
     console.log(summary ? summary[0] : 'page: no bots summary');
     const field = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(summary?.[0] ?? '')?.[1] ?? -1);
@@ -263,6 +329,12 @@ try {
     const drawn = /"code":"canvas_summary"[^\n]*"spritesDrawn":(\d+),"spritesAnimated":(\d+)[^\n]*"unknownTextures":0,[^\n]*"texturesReady":(\d+)/.exec(
         clientLog);
     const viewed = /"code":"canvas_summary"[^\n]*"framesViewed":(\d+)/.exec(clientLog);
+    const drawing = /"code":"drawing_summary"[^\n]*"framesShown":(\d+)/.exec(clientLog);
+    console.log(`page: the device showed ${drawing ? drawing[1] : 'no'} frames in the canvas, whose screenshot ` +
+                `lit ${shown} pixels; WebGPU reported ${gpuErrors.length} errors`);
+    for (const error of gpuErrors) {
+        console.log(`page: WebGPU: ${error}`);
+    }
     // The server is dedicated and plays no presentation animator: a runner
     // drawn past its sheet's first cell was animated by the page (D258),
     // through its own camera, which the page's present system placed (D261).
@@ -272,7 +344,8 @@ try {
     verdict = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
                       field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0 && drawn !== null &&
                       Number(drawn[1]) > 0 && Number(drawn[2]) > 0 && Number(drawn[3]) === 2 && viewed !== null &&
-                      Number(viewed[1]) > 0 && heard.frames > 48000 &&
+                      Number(viewed[1]) > 0 && heard.frames > 48000 && drawing !== null &&
+                      Number(drawing[1]) > 0 && shown > 1000 && gpuErrors.length === 0 &&
                       heard.peak > 0.05
                   ? 0
                   : 1;
