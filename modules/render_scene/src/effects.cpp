@@ -29,4 +29,11 @@ SceneScreenReflections reflectionsOf(const std::optional<ScreenSpaceReflections>
     return SceneScreenReflections{.enabled = true, .distance = std::clamp(asked->distance, 0.1F, 100.0F)};
 }
 
+SceneMotionBlur motionBlurOf(const std::optional<MotionBlur>& asked) noexcept {
+    if (!asked.has_value() || !std::isfinite(asked->shutter) || asked->shutter <= 0) {
+        return {};
+    }
+    return SceneMotionBlur{.enabled = true, .shutter = std::min(asked->shutter, 1.0F)};
+}
+
 } // namespace rawframe::render_scene

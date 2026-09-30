@@ -314,7 +314,7 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky],\n"
         "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
         "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion],\n"
-        "        blooms: [model.Bloom], mirrors: [model.ScreenSpaceReflections]) {\n}\n";
+        "        blooms: [model.Bloom], mirrors: [model.ScreenSpaceReflections], blurs: [model.MotionBlur]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
@@ -329,7 +329,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                               "rawframe.model.AmbientOcclusion\n"
                               "component fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.bloom rawframe.model.Bloom\n"
                               "component 0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.mirror "
-                              "rawframe.model.ScreenSpaceReflections\n";
+                              "rawframe.model.ScreenSpaceReflections\n"
+                              "component 1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.blur rawframe.model.MotionBlur\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
                     kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
@@ -342,7 +343,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                     kLoaded->grading == schema::ComponentTypeId::fromText("cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->occlusion == schema::ComponentTypeId::fromText("ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->bloom == schema::ComponentTypeId::fromText("fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->reflections == schema::ComponentTypeId::fromText("0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
+                    kLoaded->reflections == schema::ComponentTypeId::fromText("0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+                    kLoaded->motionBlur == schema::ComponentTypeId::fromText("1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -975,6 +977,17 @@ RAWFRAME_TEST(ACamerasScreenSpaceReflectionsAreMadeSound) {
     Rig rig;
     RAWFRAME_EXPECT(rig.frame({.reflections = ScreenSpaceReflections{.distance = 5}}).reflections.enabled &&
                     !rig.frame({}).reflections.enabled);
+}
+
+RAWFRAME_TEST(ACamerasMotionBlurIsMadeSound) {
+    RAWFRAME_EXPECT(!motionBlurOf(std::nullopt).enabled && !motionBlurOf(MotionBlur{.shutter = 0}).enabled &&
+                    !motionBlurOf(MotionBlur{.shutter = -1}).enabled &&
+                    !motionBlurOf(MotionBlur{.shutter = std::nanf("")}).enabled);
+    const SceneMotionBlur kAsked = motionBlurOf(MotionBlur{.shutter = 0.5F});
+    RAWFRAME_EXPECT(kAsked.enabled && kAsked.shutter == 0.5F && motionBlurOf(MotionBlur{.shutter = 4}).shutter == 1);
+    Rig rig;
+    RAWFRAME_EXPECT(rig.frame({.motionBlur = MotionBlur{.shutter = 0.5F}}).motionBlur.enabled &&
+                    !rig.frame({}).motionBlur.enabled);
 }
 
 RAWFRAME_TEST(ACamerasBloomIsMadeSound) {

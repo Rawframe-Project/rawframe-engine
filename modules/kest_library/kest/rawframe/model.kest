@@ -123,6 +123,16 @@ struct ScreenSpaceReflections {
     distance: f32
 }
 
+// A camera's motion blur (ADR-0051, D334), on the same entity as its
+// camera: what moves across the view is smeared along its motion as a
+// camera's shutter open for `shutter` of each frame's time would smear it
+// (a half is a 180 degree shutter), what stands in front kept sharp over
+// what moves behind it. A shutter not above nought blurs nothing; one past
+// a whole frame is taken as a whole frame.
+struct MotionBlur {
+    shutter: f32
+}
+
 // A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
 // the same entity as its camera, whose `exposure` it starts from: the
 // frame's light measured in a histogram of its luminance, the darkest
