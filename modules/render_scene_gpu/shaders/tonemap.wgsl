@@ -3,6 +3,15 @@
 
 @group(0) @binding(0) var scene: texture_2d<f32>;
 
+struct Grade {
+    balance: array<vec4f, 3>,
+    slope: vec4f,
+    offset: vec4f,
+    power: vec4f,
+}
+
+@group(0) @binding(1) var<uniform> grade: Grade;
+
 struct Corner {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
@@ -23,6 +32,18 @@ fn contrast(x: vec3f) -> vec3f {
     return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
 }
 
+fn graded(light: vec3f) -> vec3f {
+    if (grade.power.w < 0.5) {
+        return light;
+    }
+    var color = vec3f(dot(grade.balance[0].xyz, light), dot(grade.balance[1].xyz, light),
+                      dot(grade.balance[2].xyz, light));
+    color = pow(max(color * grade.slope.xyz + grade.offset.xyz, vec3f(0.0)), grade.power.xyz);
+    let luma = dot(color, vec3f(0.2126, 0.7152, 0.0722));
+    color = max(vec3f(luma) + (color - vec3f(luma)) * grade.slope.w, vec3f(0.0));
+    return 0.18 * pow(color / 0.18, vec3f(grade.offset.w));
+}
+
 @fragment
 fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
     let inset = mat3x3f(0.842479062253094, 0.0423282422610123, 0.0423756549057051, 0.0784335999999992,
@@ -34,7 +55,7 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
     let highest = 4.026069;
     let size = vec2i(textureDimensions(scene, 0));
     let texel = min(vec2i(uv * vec2f(size)), size - 1);
-    var color = inset * max(textureLoad(scene, texel, 0).rgb, vec3f(1e-10));
+    var color = inset * max(graded(textureLoad(scene, texel, 0).rgb), vec3f(1e-10));
     color = (clamp(log2(color), vec3f(lowest), vec3f(highest)) - lowest) / (highest - lowest);
     color = outset * contrast(color);
     return vec4f(pow(max(color, vec3f(0.0)), vec3f(2.2)), 1.0);

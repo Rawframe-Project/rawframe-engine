@@ -9,7 +9,8 @@
   ],
   "bindings": [
     {"table": 0, "slot": 0, "kind": "sampled_texture", "stages": ["fragment"],
-     "sample_type": "float", "view_dimension": "2d", "multisampled": false}
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 1, "kind": "uniform_buffer", "stages": ["fragment"], "min_size": 96}
   ],
   "constants": []
 }

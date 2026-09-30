@@ -6,7 +6,8 @@
 // draws of one mesh one instanced call; the sun casts shadows; a point
 // light lights what is near it, a spot only what its cone reaches, and
 // both cast shadows through their squares of one atlas; a metered camera
-// finds the exposure the scene's light asks for; and,
+// finds the exposure the scene's light asks for; a camera's grade
+// brightens, warms, and greys the picture as asked; and,
 // antialiased over time, an edge's texels blend what the jittered frames
 // saw of it, and a moving box leaves no ghost where it was. Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
@@ -531,4 +532,54 @@ RAWFRAME_TEST(AMeteredExposureFindsTheScenesLight) {
         // with the one measured.
         RAWFRAME_EXPECT(at(*kAtOnce, 32, 32)[0] < 10 && std::abs(at(*kThen, 32, 32)[0] - shades.back()) < 3);
     }
+}
+
+RAWFRAME_TEST(ACamerasGradeShapesThePicture) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A white sky exposed to middle grey, then a straw-coloured one.
+    SceneFrame frame = looking();
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.sky = {50, 50, 50};
+    frame.shadows.count = 0;
+    frame.exposure = std::log2(50.0F) + 3;
+    const auto kSky = [&](const std::optional<render_scene::Grading>& grade) {
+        frame.grading = render_scene::gradingOf(grade);
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        return kPixels.has_value() ? at(*kPixels, 32, 32) : std::array<int, 3>{};
+    };
+    const std::array<int, 3> kPlain = kSky(std::nullopt);
+    const std::array<int, 3> kNeutral = kSky(render_scene::Grading{});
+    const std::array<int, 3> kBrighter = kSky(render_scene::Grading{.slopeR = 2, .slopeG = 2, .slopeB = 2});
+    const std::array<int, 3> kWarmer = kSky(render_scene::Grading{.temperature = 1});
+    frame.lights.sky = {60, 50, 20};
+    const std::array<int, 3> kStraw = kSky(std::nullopt);
+    const std::array<int, 3> kGrey = kSky(render_scene::Grading{.saturation = 0});
+    std::printf("plain %d, neutral %d, brighter %d, warmer %d %d, straw %d %d %d, grey %d %d %d\n",
+                kPlain[0],
+                kNeutral[0],
+                kBrighter[0],
+                kWarmer[0],
+                kWarmer[2],
+                kStraw[0],
+                kStraw[1],
+                kStraw[2],
+                kGrey[0],
+                kGrey[1],
+                kGrey[2]);
+    RAWFRAME_EXPECT(std::abs(kNeutral[0] - kPlain[0]) <= 1 && kBrighter[0] > kPlain[0] + 20);
+    RAWFRAME_EXPECT(kWarmer[0] > kWarmer[2] + 20 && kStraw[0] > kStraw[2] + 40);
+    RAWFRAME_EXPECT(std::abs(kGrey[0] - kGrey[2]) <= 2 && std::abs(kGrey[0] - kGrey[1]) <= 2);
 }

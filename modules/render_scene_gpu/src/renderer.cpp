@@ -4,6 +4,7 @@
 #include "metering.h"
 #include "pipelines.h"
 #include "rawframe/render_scene_gpu/errors.h"
+#include "temporal.h"
 
 #include <algorithm>
 #include <cmath>
@@ -58,14 +59,8 @@ struct SceneRenderer::State {
     RendererStatistics statistics;
     /// Its shaders, samplers, and pipelines.
     Pipelines pipelines;
-    /// The temporal pass's pictures (D291), kept from frame to frame: one
-    /// written, the other the picture before; their size; which was written
-    /// last, and whether it holds a picture a submitted frame drew.
-    std::array<mrhiTextureId, 2> resolved{};
-    std::uint32_t resolvedWidth = 0;
-    std::uint32_t resolvedHeight = 0;
-    std::size_t lastResolved = 0;
-    bool resolvedReady = false;
+    /// The temporal pass and its pictures (D291).
+    std::optional<TemporalPass> temporal;
     /// The exposure the device holds, and its metering (D293).
     std::optional<Metering> metering;
     std::map<std::uint64_t, Held> held;
@@ -82,42 +77,6 @@ struct SceneRenderer::State {
             static_cast<void>(mrhiDestroyBuffer(native, made.vertices));
             static_cast<void>(mrhiDestroyBuffer(native, made.indices));
         }
-        dropResolved();
-    }
-
-    void dropResolved() noexcept {
-        for (mrhiTextureId& texture : resolved) {
-            if (texture.index1 != 0) {
-                static_cast<void>(mrhiDestroyTexture(native, texture));
-            }
-            texture = {};
-        }
-        resolvedWidth = 0;
-        resolvedHeight = 0;
-        resolvedReady = false;
-    }
-
-    /// The temporal pass's pictures at `width` by `height`, made anew when
-    /// the size changes; nothing to reuse then.
-    result::Status resolvedAt(std::uint32_t width, std::uint32_t height) {
-        if (resolvedWidth == width && resolvedHeight == height) {
-            return {};
-        }
-        dropResolved();
-        for (mrhiTextureId& texture : resolved) {
-            mrhiTextureDef def = mrhiDefaultTextureDef();
-            def.format = kSceneFormat;
-            def.width = width;
-            def.height = height;
-            def.usage = mrhi_textureSampled | mrhi_textureRenderTarget;
-            if (const mrhiResult kMade = mrhiCreateTexture(native, &def, &texture); kMade != mrhi_success) {
-                dropResolved();
-                return failed("the temporal pictures could not be made", kMade);
-            }
-        }
-        resolvedWidth = width;
-        resolvedHeight = height;
-        return {};
     }
 
     /// The meshes this frame draws, made on the device as needed; those
@@ -248,49 +207,6 @@ struct SceneRenderer::State {
 
     struct Declared;
 
-    /// The temporal pass recorded: the frame, the picture before, and the
-    /// motion, blended into the kept picture.
-    result::Status resolve(const Declared& now) {
-        const auto kTexture = [](std::uint32_t slot, mrhiResourceId resource) {
-            return mrhiBinding{
-                .slot = slot,
-                .resource = resource,
-                .offset = 0,
-                .size = 0,
-                .viewKind = mrhi_texture2d,
-                .viewFormat = mrhi_formatNone,
-                .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
-                .sampler = {}};
-        };
-        const std::array<mrhiBinding, 5> kBindings = {kTexture(0, now.scene),
-                                                      kTexture(1, now.before),
-                                                      kTexture(2, now.motion),
-                                                      mrhiBinding{.slot = 3,
-                                                                  .resource = {},
-                                                                  .offset = 0,
-                                                                  .size = 0,
-                                                                  .viewKind = mrhi_texture2d,
-                                                                  .viewFormat = mrhi_formatNone,
-                                                                  .range = {},
-                                                                  .sampler = pipelines.historySampler},
-                                                      mrhiBinding{.slot = 4,
-                                                                  .resource = now.temporalResource,
-                                                                  .offset = 0,
-                                                                  .size = sizeof(TemporalBlock),
-                                                                  .viewKind = mrhi_texture2d,
-                                                                  .viewFormat = mrhi_formatNone,
-                                                                  .range = {},
-                                                                  .sampler = {}}};
-        if (mrhiBeginPass(native, now.temporalPass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native, now.temporalPass, pipelines.temporal.pipeline) != mrhi_success ||
-            mrhiSetBindings(native, now.temporalPass, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-            mrhiDraw(native, now.temporalPass, 3, 1, 0, 0) != mrhi_success ||
-            mrhiEndPass(native, now.temporalPass) != mrhi_success) {
-            return failed("the temporal pass could not be drawn", mrhi_errorState);
-        }
-        return {};
-    }
-
     /// A square of a shadow map: its view, where it lies, and its casters.
     struct Square {
         mrhiResourceId view{};
@@ -410,22 +326,16 @@ struct SceneRenderer::State {
         mrhiResourceId lightsResource{};
         mrhiResourceId rangesResource{};
         mrhiResourceId indicesResource{};
+        /// The camera's grade, as the picture's pass reads it (D294).
+        GradeBlock grade;
+        mrhiResourceId gradeResource{};
         /// The sky's light, as its pass reads it (D293); the target's size.
         SkyBlock sky;
         mrhiResourceId skyResource{};
         std::uint32_t width = 0;
         std::uint32_t height = 0;
-        /// The temporal pass (D291): the motion target, what the pass
-        /// reads, the picture it writes and the one before, and which of
-        /// the kept pictures it writes.
-        bool temporal = false;
-        TemporalBlock temporalBlock;
+        /// Where each texel's point moved, the temporal pass's input (D291).
         mrhiResourceId motion{};
-        mrhiResourceId temporalResource{};
-        mrhiResourceId resolved{};
-        mrhiResourceId before{};
-        std::size_t resolving = 0;
-        mrhiPassId temporalPass{};
         bool draws = false;
         bool casters = false;
     };
@@ -487,6 +397,12 @@ struct SceneRenderer::State {
         now.width = open.width;
         now.height = open.height;
         now.sky.light = now.block.sky;
+        now.grade = gradeOf(*frame);
+        mrhiBufferDef gradeDef = mrhiDefaultBufferDef();
+        gradeDef.size = sizeof(GradeBlock);
+        if (mrhiDeclareBuffer(native, &gradeDef, &now.gradeResource) != mrhi_success) {
+            return failed("the grade could not be declared", mrhi_errorCapacity);
+        }
         mrhiBufferDef skyDef = mrhiDefaultBufferDef();
         skyDef.size = sizeof(SkyBlock);
         if (mrhiDeclareBuffer(native, &skyDef, &now.skyResource) != mrhi_success) {
@@ -558,28 +474,6 @@ struct SceneRenderer::State {
                                          .maxDepth = 1});
         }
         mrhiResourceId depthTarget{};
-        // Antialiased over time, the models' pass also writes their motion,
-        // and the temporal pass blends the frame with the picture before
-        // into the other kept picture (D291).
-        now.temporal = frame->temporal.enabled;
-        if (now.temporal) {
-            RAWFRAME_TRY(resolvedAt(open.width, open.height));
-            now.resolving = resolvedReady ? 1 - lastResolved : 0;
-            now.temporalBlock.state = {frame->temporal.history && resolvedReady ? 1.0F : 0.0F, 0, 0, 0};
-            if (const mrhiResult kImported = mrhiImportTexture(native, resolved[now.resolving], &now.resolved);
-                kImported != mrhi_success) {
-                return failed("a temporal picture could not join the frame", kImported);
-            }
-            if (const mrhiResult kImported = mrhiImportTexture(native, resolved[1 - now.resolving], &now.before);
-                kImported != mrhi_success) {
-                return failed("a temporal picture could not join the frame", kImported);
-            }
-            mrhiBufferDef def = mrhiDefaultBufferDef();
-            def.size = sizeof(TemporalBlock);
-            if (mrhiDeclareBuffer(native, &def, &now.temporalResource) != mrhi_success) {
-                return failed("the temporal pass's state could not be declared", mrhi_errorCapacity);
-            }
-        }
         // The models' pipeline writes the motion whether or not it is read.
         for (const auto& [kFormat, kMade] : {std::pair{kSceneFormat, &now.scene},
                                              std::pair{kMotionFormat, &now.motion},
@@ -604,11 +498,12 @@ struct SceneRenderer::State {
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
             writes.push_back(wholeOf(now.cascades[at], mrhi_accessCopyDestination));
         }
-        if (now.temporal) {
-            writes.push_back(wholeOf(now.temporalResource, mrhi_accessCopyDestination));
-        }
+        // Antialiased over time, the temporal pass blends the frame with the
+        // picture before into the other kept picture (D291).
+        RAWFRAME_TRY(temporal->declare(*frame, open.width, open.height, writes));
         writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
+        writes.push_back(wholeOf(now.gradeResource, mrhi_accessCopyDestination));
         RAWFRAME_TRY(metering->declare(*frame, writes));
         for (const mrhiResourceId kView : now.slotViews) {
             writes.push_back(wholeOf(kView, mrhi_accessCopyDestination));
@@ -724,35 +619,18 @@ struct SceneRenderer::State {
             return failed("the models' pass could not be added", kAdded);
         }
         RAWFRAME_TRY(metering->addPasses(now.scene));
-        // The temporal pass reads the frame, its motion, and the picture
-        // before, and writes the picture kept for the next frame.
-        if (now.temporal) {
-            const std::array<mrhiAccess, 4> kTemporalReads = {wholeOf(now.scene, mrhi_accessSampled),
-                                                              wholeOf(now.before, mrhi_accessSampled),
-                                                              wholeOf(now.motion, mrhi_accessSampled),
-                                                              wholeOf(now.temporalResource, mrhi_accessUniform)};
-            mrhiPassDef temporalDef = mrhiDefaultPassDef();
-            temporalDef.colorTargets[0].resource = now.resolved;
-            temporalDef.colorTargets[0].load = mrhi_loadDiscard;
-            temporalDef.colorTargets[0].store = mrhi_storeKeep;
-            temporalDef.colorTargetCount = 1;
-            temporalDef.accesses = kTemporalReads.data();
-            temporalDef.accessCount = static_cast<std::uint32_t>(kTemporalReads.size());
-            if (const mrhiResult kAdded = mrhiAddPass(native, &temporalDef, &now.temporalPass);
-                kAdded != mrhi_success) {
-                return failed("the temporal pass could not be added", kAdded);
-            }
-        }
+        RAWFRAME_TRY(temporal->addPass(now.scene, now.motion));
         // The picture: every pixel of it written, over whatever was there.
-        const mrhiAccess kScene = wholeOf(now.temporal ? now.resolved : now.scene, mrhi_accessSampled);
+        const mrhiAccess kScene = wholeOf(temporal->shown(now.scene), mrhi_accessSampled);
         mrhiPassDef pictureDef = mrhiDefaultPassDef();
         pictureDef.colorTargets[0].resource = resourceOf(open.picture);
         pictureDef.colorTargets[0].load = open.clearsPicture() ? mrhi_loadClear : mrhi_loadKeep;
         pictureDef.colorTargets[0].store = mrhi_storeKeep;
         pictureDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
         pictureDef.colorTargetCount = 1;
-        pictureDef.accesses = &kScene;
-        pictureDef.accessCount = 1;
+        const std::array<mrhiAccess, 2> kPictureReads = {kScene, wholeOf(now.gradeResource, mrhi_accessUniform)};
+        pictureDef.accesses = kPictureReads.data();
+        pictureDef.accessCount = static_cast<std::uint32_t>(kPictureReads.size());
         pictureDef.neverCull = true;
         if (const mrhiResult kAdded = mrhiAddPass(native, &pictureDef, &now.picturePass); kAdded != mrhi_success) {
             return failed("the picture's pass could not be added", kAdded);
@@ -794,15 +672,12 @@ struct SceneRenderer::State {
                             now.indices.size() * sizeof(std::uint32_t)) != mrhi_success) {
             return failed("the frame's lights could not be written", mrhi_errorCapacity);
         }
-        if (mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock)) != mrhi_success) {
+        if (mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock)) != mrhi_success ||
+            mrhiWriteBuffer(native, now.upload, now.gradeResource, 0, &now.grade, sizeof(GradeBlock)) != mrhi_success) {
             return failed("the sky's light could not be written", mrhi_errorCapacity);
         }
         RAWFRAME_TRY(metering->write(now.upload));
-        if (now.temporal &&
-            mrhiWriteBuffer(native, now.upload, now.temporalResource, 0, &now.temporalBlock, sizeof(TemporalBlock)) !=
-                mrhi_success) {
-            return failed("the temporal pass's state could not be written", mrhi_errorCapacity);
-        }
+        RAWFRAME_TRY(temporal->write(now.upload));
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
             if (mrhiWriteBuffer(native, now.upload, now.cascades[at], 0, &now.block.cascades[at], sizeof(Matrix4)) !=
                 mrhi_success) {
@@ -934,18 +809,25 @@ struct SceneRenderer::State {
             }
         }
         RAWFRAME_TRY(metering->record(pipelines, now.scene, now.width, now.height));
-        if (now.temporal) {
-            RAWFRAME_TRY(resolve(now));
-        }
-        const std::array<mrhiBinding, 1> kSceneBinding = {mrhiBinding{
-            .slot = 0,
-            .resource = now.temporal ? now.resolved : now.scene,
-            .offset = 0,
-            .size = 0,
-            .viewKind = mrhi_texture2d,
-            .viewFormat = mrhi_formatNone,
-            .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
-            .sampler = {}}};
+        RAWFRAME_TRY(temporal->record(pipelines, now.scene, now.motion));
+        const std::array<mrhiBinding, 2> kSceneBinding = {
+            mrhiBinding{
+                .slot = 0,
+                .resource = temporal->shown(now.scene),
+                .offset = 0,
+                .size = 0,
+                .viewKind = mrhi_texture2d,
+                .viewFormat = mrhi_formatNone,
+                .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
+                .sampler = {}},
+            mrhiBinding{.slot = 1,
+                        .resource = now.gradeResource,
+                        .offset = 0,
+                        .size = sizeof(GradeBlock),
+                        .viewKind = mrhi_texture2d,
+                        .viewFormat = mrhi_formatNone,
+                        .range = {},
+                        .sampler = {}}};
         if (mrhiBeginPass(native, now.picturePass) != mrhi_success ||
             mrhiSetGraphicsPipeline(native, now.picturePass, pipelines.tonemap.pipeline) != mrhi_success ||
             mrhiSetBindings(native, now.picturePass, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
@@ -967,23 +849,18 @@ struct SceneRenderer::State {
                 statistics.uploadBytes += bytesOf(*mesh->source);
             }
             ++statistics.frames;
-            if (declared->temporal) {
+            if (temporal->enabled()) {
                 ++statistics.framesResolved;
-                statistics.historyReused += declared->temporalBlock.state[0] > 0 ? 1 : 0;
+                statistics.historyReused += temporal->reused() ? 1 : 0;
             }
             statistics.models += declared->placed.instances.size() * sizeof(float) / kInstanceBytes;
             statistics.drawCalls += declared->placed.runs.size();
         }
-        // The picture written is the next frame's picture before only when
-        // the frame was submitted and antialiased over time.
-        resolvedReady = submitted && declared->temporal;
+        temporal->ended(submitted);
         if (submitted && metering->metered()) {
             ++statistics.framesMetered;
         }
         metering->ended(submitted);
-        if (resolvedReady) {
-            lastResolved = declared->resolving;
-        }
         declared.reset();
     }
 
@@ -1008,6 +885,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->pipelines.native = device.native();
     RAWFRAME_TRY(state->pipelines.make());
     state->metering.emplace(device.native());
+    state->temporal.emplace(device.native());
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }

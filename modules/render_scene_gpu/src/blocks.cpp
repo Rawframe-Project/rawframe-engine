@@ -21,6 +21,18 @@ ExposureBlock exposureOf(float ev100) noexcept {
     return {.value = {ev100, factorOf(ev100), 0, 0}};
 }
 
+GradeBlock gradeOf(const render_scene::SceneFrame& frame) noexcept {
+    const render_scene::SceneGrading& kGrade = frame.grading;
+    GradeBlock block;
+    for (std::size_t row = 0; row < 3; ++row) {
+        block.balance[row] = {kGrade.balance[row * 3], kGrade.balance[(row * 3) + 1], kGrade.balance[(row * 3) + 2], 0};
+    }
+    block.slope = {kGrade.slope[0], kGrade.slope[1], kGrade.slope[2], kGrade.saturation};
+    block.offset = {kGrade.offset[0], kGrade.offset[1], kGrade.offset[2], kGrade.contrast};
+    block.power = {kGrade.power[0], kGrade.power[1], kGrade.power[2], kGrade.enabled ? 1.0F : 0.0F};
+    return block;
+}
+
 MeterBlock meterOf(const render_scene::SceneFrame& frame) noexcept {
     const render_scene::SceneMetering& kMetering = frame.metering;
     const render_scene::AutoExposure& kAsked = kMetering.settings;
