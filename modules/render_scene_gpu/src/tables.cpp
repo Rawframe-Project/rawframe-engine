@@ -49,4 +49,19 @@ mrhiBinding samplerAt(std::uint32_t slot, mrhiSamplerId sampler) noexcept {
                        .sampler = sampler};
 }
 
+mrhiResourceId resourceOf(std::uint64_t key) noexcept {
+    return mrhiResourceId{.index1 = static_cast<std::uint32_t>(key >> 32U),
+                          .generation = static_cast<std::uint32_t>(key)};
+}
+
+void bindTexture(const render::DeviceTextures& textures,
+                 const Pipelines& pipelines,
+                 mrhiBinding& image,
+                 mrhiBinding& filter,
+                 const render_scene::SceneTexture& texture) noexcept {
+    const std::uint64_t kHeld = textures.resource(texture.id);
+    image.resource = resourceOf(kHeld != 0 ? kHeld : textures.resource(0));
+    filter.sampler = pipelines.materialSamplers[samplerOf(texture.filter, texture.address)];
+}
+
 } // namespace rawframe::render_scene_gpu

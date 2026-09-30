@@ -2,6 +2,7 @@
 
 #include "blocks.h"
 #include "capture.h"
+#include "casting.h"
 #include "environment.h"
 #include "meshes.h"
 #include "metering.h"
@@ -33,12 +34,6 @@ namespace {
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, SceneGpuError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kSceneGpuDomain, code(error), why).error()};
-}
-
-/// A resource of the open frame from the key `render` names it by.
-mrhiResourceId resourceOf(std::uint64_t key) noexcept {
-    return mrhiResourceId{.index1 = static_cast<std::uint32_t>(key >> 32U),
-                          .generation = static_cast<std::uint32_t>(key)};
 }
 
 mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
@@ -103,14 +98,6 @@ struct SceneRenderer::State {
         return usable;
     }
 
-    /// A texture and its sampler into two slots of a table: the texture
-    /// held this frame, or white for none and for one not held.
-    void bindTexture(mrhiBinding& image, mrhiBinding& filter, const render_scene::SceneTexture& texture) const {
-        const std::uint64_t kHeld = textures->resource(texture.id);
-        image.resource = resourceOf(kHeld != 0 ? kHeld : textures->resource(0));
-        filter.sampler = pipelines.materialSamplers[samplerOf(texture.filter, texture.address)];
-    }
-
     /// The textures this frame's materials sample, white first, chosen
     /// within `budget`; a material whose texture is not chosen samples
     /// white.
@@ -158,73 +145,15 @@ struct SceneRenderer::State {
 
     struct Declared;
 
-    /// A square of a shadow map: its view, where it lies, and its casters.
-    struct Square {
-        mrhiResourceId view{};
-        mrhiViewport viewport{};
-        const Casters* casters = nullptr;
-    };
-
-    /// A shadow pass recorded: each square drawn from its view, its solid
-    /// casters in their runs, then its masked ones cut by their material's
-    /// texture (D310).
-    result::Status cast(const Declared& now, mrhiPassId pass, std::span<const Square> squares) {
-        if (mrhiBeginPass(native, pass) != mrhi_success) {
-            return failed("a shadow pass could not begin", mrhi_errorState);
-        }
-        const auto kDraw = [this, pass](const Run& run) -> result::Status {
-            RAWFRAME_TRY(held->bind(pass, *run.mesh));
-            if (mrhiDrawIndexed(native, pass, run.indexCount, run.count, run.firstIndex, 0, run.first) !=
-                mrhi_success) {
-                return failed("a caster could not be drawn", mrhi_errorState);
-            }
-            return {};
-        };
-        for (const Square& kSquare : squares) {
-            if (kSquare.casters->empty()) {
-                continue;
-            }
-            std::array<mrhiBinding, 4> binding = {
-                bufferAt(0, kSquare.view, sizeof(Matrix4)),
-                bufferAt(1, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob)),
-                textureAt(2, resourceOf(textures->resource(0))),
-                samplerAt(3, pipelines.materialSamplers[0])};
-            if (mrhiSetViewport(native, pass, &kSquare.viewport) != mrhi_success) {
-                return failed("a shadow square could not be set up", mrhi_errorState);
-            }
-            if (!kSquare.casters->solid.empty()) {
-                if (mrhiSetGraphicsPipeline(native, pass, pipelines.casting.pipeline) != mrhi_success ||
-                    mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
-                    mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
-                    return failed("the casters could not be set up", mrhi_errorState);
-                }
-                for (const Run& run : kSquare.casters->solid) {
-                    RAWFRAME_TRY(kDraw(run));
-                }
-            }
-            if (kSquare.casters->masked.empty()) {
-                continue;
-            }
-            if (mrhiSetGraphicsPipeline(native, pass, pipelines.cutCasting.pipeline) != mrhi_success ||
-                mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
-                return failed("the masked casters could not be set up", mrhi_errorState);
-            }
-            std::optional<render_scene::SceneTexture> bound;
-            for (const Run& run : kSquare.casters->masked) {
-                if (bound != run.texture.base) {
-                    bindTexture(binding[2], binding[3], run.texture.base);
-                    if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
-                        return failed("a masked caster's texture could not be bound", mrhi_errorState);
-                    }
-                    bound = run.texture.base;
-                }
-                RAWFRAME_TRY(kDraw(run));
-            }
-        }
-        if (mrhiEndPass(native, pass) != mrhi_success) {
-            return failed("a shadow pass could not end", mrhi_errorState);
-        }
-        return {};
+    /// What the shadow passes draw with this frame.
+    [[nodiscard]] Casting castingOf(const Declared& now) const noexcept {
+        return Casting{.native = native,
+                       .pipelines = &pipelines,
+                       .held = &*held,
+                       .textures = textures.get(),
+                       .instances = now.instances,
+                       .materials = now.materialsResource,
+                       .materialsBytes = now.materials.size() * sizeof(render_scene::MaterialBlob)};
     }
 
     /// The sun's cascades, each its square of the map two by two; and the
@@ -242,13 +171,13 @@ struct SceneRenderer::State {
                                             .maxDepth = 1},
                                .casters = &now.placed.cascadeRuns[at]});
         }
-        RAWFRAME_TRY(cast(now, now.shadowPass, squares));
+        RAWFRAME_TRY(cast(castingOf(now), now.shadowPass, squares));
         squares.clear();
         for (std::size_t at = 0; at < now.slotViews.size(); ++at) {
             squares.push_back(
                 {.view = now.slotViews[at], .viewport = now.slotViewports[at], .casters = &now.placed.slotRuns[at]});
         }
-        return cast(now, now.lightShadowPass, squares);
+        return cast(castingOf(now), now.lightShadowPass, squares);
     }
 
     /// What the open frame declared, until it is recorded and ends.
@@ -822,10 +751,10 @@ struct SceneRenderer::State {
             std::optional<std::pair<render_scene::SceneTextures, std::uint32_t>> bound;
             for (const Run& run : runs) {
                 if (bound != std::pair{run.texture, run.probe}) {
-                    bindTexture(binding[10], binding[11], run.texture.base);
-                    bindTexture(binding[12], binding[13], run.texture.packed);
-                    bindTexture(binding[14], binding[15], run.texture.emission);
-                    bindTexture(binding[16], binding[17], run.texture.normal);
+                    bindTexture(*textures, pipelines, binding[10], binding[11], run.texture.base);
+                    bindTexture(*textures, pipelines, binding[12], binding[13], run.texture.packed);
+                    bindTexture(*textures, pipelines, binding[14], binding[15], run.texture.emission);
+                    bindTexture(*textures, pipelines, binding[16], binding[17], run.texture.normal);
                     const std::vector<std::uint64_t>& kCubes = now.reflections.cubes;
                     binding[18].resource =
                         resourceOf(textures->resource(run.probe < kCubes.size() ? kCubes[run.probe] : kCubes[0]));
