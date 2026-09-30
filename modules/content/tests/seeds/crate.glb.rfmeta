@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "resourceId": "5a0e2f3c7d914b86a1c4e8f20b6d9a37",
+  "importer": "rawframe.mesh",
+  "subassets": {
+    "material/Painted wood": "8c41d7e2a95b4f03b6e1c9a4d7f20e58",
+    "texture/Wood": "e2b9054fa3c84d17a6f0b8c3e1d95a42"
+  }
+}

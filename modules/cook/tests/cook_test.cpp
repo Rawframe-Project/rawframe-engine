@@ -250,6 +250,129 @@ RAWFRAME_TEST(WhatAnImporterReadsIsAnInputToo) {
     }
 }
 
+namespace {
+
+/// An importer whose source is lines of `name=text`: each line a subasset
+/// `part/<name>` of the text, the source's own resource the last byte of
+/// each part's identity, in order.
+result::Result<Artifact> split(std::span<const std::byte> source, std::string_view, Reads& reads) {
+    std::string_view text{reinterpret_cast<const char*>(source.data()), source.size()};
+    Artifact made{.type = kSoundClipType, .representation = *content::RepresentationId::parse("test.split")};
+    while (!text.empty()) {
+        const std::string_view kLine = text.substr(0, text.find('\n'));
+        text.remove_prefix(std::min(text.size(), kLine.size() + 1));
+        const std::size_t kEquals = kLine.find('=');
+        const std::string kKey = "part/" + std::string{kLine.substr(0, kEquals)};
+        RAWFRAME_TRY_ASSIGN(const content::ResourceId kPart, reads.subasset(kKey));
+        made.bytes.push_back(static_cast<std::byte>(kPart.value.low));
+        const auto kText = std::as_bytes(std::span{kLine.substr(kEquals + 1)});
+        made.subassets.push_back(Subasset{.key = kKey,
+                                          .type = kSoundClipType,
+                                          .representation = *content::RepresentationId::parse("test.part"),
+                                          .bytes = {kText.begin(), kText.end()}});
+    }
+    std::ranges::sort(made.subassets, {}, &Subasset::key);
+    return made;
+}
+
+CookReport cookSplit(const Project& project) {
+    static const std::array<Importer, 2> kImporters = {
+        audioImporter(),
+        Importer{.identity = "test.split",
+                 .normalize = [](const document::Value*) -> result::Result<std::string> {
+                     return std::string{};
+                 },
+                 .cook = &split}};
+    auto report = cookSources(CookRequest{
+        .sources = project.sources, .output = project.output, .cache = project.cache, .importers = kImporters});
+    RAWFRAME_EXPECT(report.has_value());
+    return report.has_value() ? std::move(*report) : CookReport{};
+}
+
+std::string splitSidecar(std::string_view subassets) {
+    return "{\n  \"schema\": 1,\n  \"resourceId\": \"000000000000000000000000000000b0\",\n  \"importer\": "
+           "\"test.split\",\n  \"subassets\": {\n" +
+           std::string{subassets} + "\n  }\n}\n";
+}
+
+} // namespace
+
+RAWFRAME_TEST(ASourcesSubassetsAreResourcesItsSidecarNames) {
+    const Project kProject;
+    writeText(kProject.sources / "parts.txt", "left=one\nright=two");
+    // A subasset the sidecar does not map is refused by its key: a cook
+    // never gives an identity.
+    writeText(kProject.sources / "parts.txt.rfmeta",
+              splitSidecar("    \"part/left\": \"000000000000000000000000000000b1\""));
+    const CookReport kUnmapped = cookSplit(kProject);
+    RAWFRAME_EXPECT(failedWith(kUnmapped, CookError::UnmappedSubasset));
+    RAWFRAME_EXPECT(std::ranges::any_of(kUnmapped.failures, [](const result::Error& each) {
+        return std::ranges::any_of(each.context(), [](const result::ContextField& field) {
+            return field.value == "part/right";
+        });
+    }));
+    RAWFRAME_EXPECT(!fs::exists(kProject.output / "content.manifest"));
+
+    // Mapped, each is a resource of its own, and a key the source no longer
+    // has keeps its identity unused.
+    writeText(kProject.sources / "parts.txt.rfmeta",
+              splitSidecar("    \"part/gone\": \"000000000000000000000000000000b9\",\n"
+                           "    \"part/left\": \"000000000000000000000000000000b1\",\n"
+                           "    \"part/right\": \"000000000000000000000000000000b2\""));
+    const CookReport kCooked = cookSplit(kProject);
+    RAWFRAME_EXPECT(kCooked.failures.empty() && kCooked.cooked == 1 && kCooked.reused == 2);
+    const auto kRead = [&kProject](std::string_view id) {
+        const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+        RAWFRAME_EXPECT(kManifest.has_value());
+        const auto kFound = std::ranges::find(
+            *kManifest, content::ResourceId{base::parseBits128Hex(id).value}, &content::ManifestEntry::id);
+        return kFound == kManifest->end() ? std::string{} : readText(kProject.output / kFound->locator);
+    };
+    RAWFRAME_EXPECT(kRead("000000000000000000000000000000b1") == "one" &&
+                    kRead("000000000000000000000000000000b2") == "two" &&
+                    kRead("000000000000000000000000000000b9").empty());
+    const std::string kOwn = kRead("000000000000000000000000000000b0");
+    RAWFRAME_EXPECT(kOwn == "\xb1\xb2");
+    RAWFRAME_EXPECT(readText(kProject.output / "cook.receipt").find("\"subasset\": \"part/right\"") !=
+                    std::string::npos);
+
+    // Reused whole from the cache, subassets too.
+    RAWFRAME_EXPECT(cookSplit(kProject).reused == 3);
+    fs::remove_all(kProject.output);
+    RAWFRAME_EXPECT(cookSplit(kProject).reused == 3 && kRead("000000000000000000000000000000b2") == "two");
+
+    // Reordered in the source, each part keeps its identity.
+    writeText(kProject.sources / "parts.txt", "right=two\nleft=one");
+    RAWFRAME_EXPECT(cookSplit(kProject).failures.empty() && kRead("000000000000000000000000000000b1") == "one");
+
+    // The map changed: cooked again, what names the parts following it.
+    writeText(kProject.sources / "parts.txt.rfmeta",
+              splitSidecar("    \"part/left\": \"000000000000000000000000000000b1\",\n"
+                           "    \"part/right\": \"000000000000000000000000000000b3\""));
+    const CookReport kRemapped = cookSplit(kProject);
+    RAWFRAME_EXPECT(kRemapped.cooked == 1 && kRead("000000000000000000000000000000b3") == "two");
+
+    // A subasset claiming another source's resource is refused.
+    writeText(kProject.sources / "parts.txt.rfmeta",
+              splitSidecar("    \"part/left\": \"000000000000000000000000000000b1\",\n"
+                           "    \"part/right\": \"" +
+                           kToneId + "\""));
+    RAWFRAME_EXPECT(failedWith(cookSplit(kProject), CookError::DuplicateResource));
+
+    // A map that is not one refuses the sidecar: a key without a family,
+    // keys out of order, an identity twice or the source's own.
+    for (const std::string_view kBad : {"    \"left\": \"000000000000000000000000000000b1\"",
+                                        "    \"part/right\": \"000000000000000000000000000000b2\",\n"
+                                        "    \"part/left\": \"000000000000000000000000000000b1\"",
+                                        "    \"part/left\": \"000000000000000000000000000000b1\",\n"
+                                        "    \"part/right\": \"000000000000000000000000000000b1\"",
+                                        "    \"part/left\": \"000000000000000000000000000000b0\"",
+                                        "    \"part/left\": \"00000000000000000000000000000000\""}) {
+        writeText(kProject.sources / "parts.txt.rfmeta", splitSidecar(kBad));
+        RAWFRAME_EXPECT(failedWith(cookSplit(kProject), CookError::BadSidecar));
+    }
+}
+
 RAWFRAME_TEST(AKestProjectCooksIntoItsFiles) {
     const Project kProject;
     const fs::path kGame = kProject.sources / "game";

@@ -140,6 +140,7 @@ struct Planned {
     std::string settings;
     std::vector<std::byte> bytes;
     base::Sha256Digest digest{};
+    std::map<std::string, content::ResourceId, std::less<>> subassets;
 };
 
 /// The cook key: every input the artifact depends on (ADR-0024), and the
@@ -160,14 +161,48 @@ base::Sha256Digest keyOf(const CookRequest& request, const Planned& planned) {
     kField(planned.importer->identity);
     kField(planned.settings);
     key.update(planned.digest);
+    // The subasset map: what the artifacts name each other by.
+    for (const auto& [kSubasset, kId] : planned.subassets) {
+        kField(kSubasset);
+        kField(hexOf(kId.value));
+    }
     kField(request.target);
     kField("primary");
     return key.finish();
 }
 
+/// A cached object's bytes, if they are there and have `digest`.
+std::optional<std::vector<std::byte>> cachedObject(const std::filesystem::path& cache, const Value* digest) {
+    const auto kDigest =
+        digest != nullptr && digest->text() != nullptr ? content::ContentDigest::parse(*digest->text()) : std::nullopt;
+    if (!kDigest.has_value()) {
+        return std::nullopt;
+    }
+    auto bytes = readFile(cache / "objects" / hexOf(kDigest->bytes));
+    if (!bytes.has_value() || !content::sameDigest(content::ContentDigest::of(*bytes), *kDigest)) {
+        return std::nullopt;
+    }
+    return bytes;
+}
+
+/// What a cache record says an object is, if it says it.
+std::optional<std::pair<content::ResourceTypeId, content::RepresentationId>> kindOf(const Value& record) {
+    const Value* type = record.find("type");
+    const Value* representation = record.find("representation");
+    if (type == nullptr || representation == nullptr || type->text() == nullptr || representation->text() == nullptr) {
+        return std::nullopt;
+    }
+    const auto kRepresentation = content::RepresentationId::parse(*representation->text());
+    const base::Bits128Parse kType = base::parseBits128Hex(*type->text());
+    if (!kRepresentation.has_value() || !kType.parsed) {
+        return std::nullopt;
+    }
+    return std::pair{content::ResourceTypeId{kType.value}, *kRepresentation};
+}
+
 /// A cached artifact, if the cache has one for this key that verifies: the
-/// key names a digest, the object under it has that digest, and every read
-/// that made it would read the same now.
+/// key names a digest, the object under it has that digest, each subasset's
+/// too, and every read that made it would read the same now.
 struct Cached {
     Artifact artifact;
     std::vector<Reads::Read> reads;
@@ -184,45 +219,59 @@ fromCache(const std::filesystem::path& sources, const std::filesystem::path& cac
     if (!parsed.has_value()) {
         return std::nullopt;
     }
-    const Value* type = parsed->find("type");
-    const Value* representation = parsed->find("representation");
-    const Value* digest = parsed->find("digest");
-    if (type == nullptr || representation == nullptr || digest == nullptr || type->text() == nullptr ||
-        representation->text() == nullptr || digest->text() == nullptr) {
+    const auto kKind = kindOf(*parsed);
+    auto bytes = cachedObject(cache, parsed->find("digest"));
+    const Value* subassets = parsed->find("subassets");
+    if (!kKind.has_value() || !bytes.has_value() || subassets == nullptr || subassets->kind() != Value::Kind::Array) {
         return std::nullopt;
     }
-    const auto kDigest = content::ContentDigest::parse(*digest->text());
-    const auto kRepresentation = content::RepresentationId::parse(*representation->text());
-    const base::Bits128Parse kType = base::parseBits128Hex(*type->text());
-    if (!kDigest.has_value() || !kRepresentation.has_value() || !kType.parsed) {
-        return std::nullopt;
+    Artifact artifact{.type = kKind->first, .representation = kKind->second, .bytes = std::move(*bytes)};
+    for (const Value& subasset : subassets->items()) {
+        const Value* named = subasset.find("key");
+        const auto kSubassetKind = kindOf(subasset);
+        auto subassetBytes = cachedObject(cache, subasset.find("digest"));
+        if (named == nullptr || named->text() == nullptr || !kSubassetKind.has_value() || !subassetBytes.has_value()) {
+            return std::nullopt;
+        }
+        artifact.subassets.push_back(Subasset{.key = *named->text(),
+                                              .type = kSubassetKind->first,
+                                              .representation = kSubassetKind->second,
+                                              .bytes = std::move(*subassetBytes)});
     }
     auto reads = readAgain(sources, parsed->find("reads"));
     if (!reads.has_value()) {
         return std::nullopt;
     }
-    auto bytes = readFile(cache / "objects" / hexOf(kDigest->bytes));
-    if (!bytes.has_value() || !content::sameDigest(content::ContentDigest::of(*bytes), *kDigest)) {
-        return std::nullopt;
-    }
-    return Cached{.artifact = Artifact{.type = content::ResourceTypeId{kType.value},
-                                       .representation = *kRepresentation,
-                                       .bytes = std::move(*bytes)},
-                  .reads = std::move(*reads)};
+    return Cached{.artifact = std::move(artifact), .reads = std::move(*reads)};
 }
 
 void toCache(const std::filesystem::path& cache,
              const std::string& key,
              const Artifact& artifact,
              std::span<const Reads::Read> reads) {
-    const content::ContentDigest kDigest = content::ContentDigest::of(artifact.bytes);
-    Value record = Value::object();
-    record.add("type", Value::string(hexOf(artifact.type.value)));
-    record.add("representation", Value::string(std::string{artifact.representation.text()}));
-    record.add("digest", Value::string(kDigest.text()));
-    record.add("reads", valueOf(reads));
     // A cache is only ever a saving: failing to fill it fails nothing.
-    if (writeAtomically(cache / "objects" / hexOf(kDigest.bytes), artifact.bytes)) {
+    const auto kKept = [&cache](Value& record,
+                                content::ResourceTypeId type,
+                                const content::RepresentationId& representation,
+                                std::span<const std::byte> bytes) {
+        const content::ContentDigest kDigest = content::ContentDigest::of(bytes);
+        record.add("type", Value::string(hexOf(type.value)));
+        record.add("representation", Value::string(std::string{representation.text()}));
+        record.add("digest", Value::string(kDigest.text()));
+        return writeAtomically(cache / "objects" / hexOf(kDigest.bytes), bytes);
+    };
+    Value record = Value::object();
+    bool kept = kKept(record, artifact.type, artifact.representation, artifact.bytes);
+    Value subassets = Value::array();
+    for (const Subasset& subasset : artifact.subassets) {
+        Value made = Value::object();
+        made.add("key", Value::string(subasset.key));
+        kept = kept && kKept(made, subasset.type, subasset.representation, subasset.bytes);
+        subassets.push(std::move(made));
+    }
+    record.add("subassets", std::move(subassets));
+    record.add("reads", valueOf(reads));
+    if (kept) {
         static_cast<void>(writeText(cache / "keys" / key, document::write(record)));
     }
 }
@@ -237,8 +286,20 @@ result::Result<base::Sha256Digest> digestOfFile(const std::filesystem::path& pat
     return base::sha256(*kBytes);
 }
 
-Reads::Reads(std::filesystem::path sources, std::filesystem::path directory)
-    : sources_(std::move(sources)), directory_(std::move(directory)) {
+Reads::Reads(std::filesystem::path sources,
+             std::filesystem::path directory,
+             std::map<std::string, content::ResourceId, std::less<>> subassets)
+    : sources_(std::move(sources)), directory_(std::move(directory)), subassets_(std::move(subassets)) {
+}
+
+result::Result<content::ResourceId> Reads::subasset(std::string_view key) const {
+    const auto kFound = subassets_.find(key);
+    if (kFound == subassets_.end()) {
+        return std::unexpected<result::Error>{
+            failure(CookError::UnmappedSubasset, "a subasset the sidecar maps to no resource", "")
+                .withContext("subasset", std::string{key})};
+    }
+    return kFound->second;
 }
 
 result::Result<std::filesystem::path> Reads::resolve(std::string_view path) const {
@@ -374,6 +435,7 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
             continue;
         }
         planned.importer = &*kFound;
+        planned.subassets = std::move(read->subassets);
         const Value* settingsValue = read->settings ? &*read->settings : nullptr;
         auto settings = planned.importer->normalize(settingsValue);
         if (!settings.has_value()) {
@@ -413,16 +475,31 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
         } else {
             // Twice, and the same both times, or it is not published. One
             // Reads for both, so both see one input.
-            Reads reads{kSources, std::filesystem::path{planned.source}.parent_path()};
+            Reads reads{kSources, std::filesystem::path{planned.source}.parent_path(), planned.subassets};
             auto first = planned.importer->cook(planned.bytes, planned.settings, reads);
             if (!first.has_value()) {
                 report.failures.push_back(std::move(first).error().withContext("path", planned.source));
                 continue;
             }
             const auto kSecond = planned.importer->cook(planned.bytes, planned.settings, reads);
-            if (!kSecond.has_value() || kSecond->bytes != first->bytes) {
+            if (!kSecond.has_value() || *kSecond != *first) {
                 report.failures.push_back(
                     failure(CookError::Nondeterministic, "two cooks of one source differ", planned.source));
+                continue;
+            }
+            // Each subasset once, in key order, under a resource its sidecar
+            // maps it to.
+            const auto kUnmapped = std::ranges::find_if(first->subassets, [&reads](const Subasset& subasset) {
+                return !reads.subasset(subasset.key).has_value();
+            });
+            if (kUnmapped != first->subassets.end()) {
+                report.failures.push_back(reads.subasset(kUnmapped->key).error().withContext("path", planned.source));
+                continue;
+            }
+            if (std::ranges::adjacent_find(first->subassets, std::ranges::greater_equal{}, &Subasset::key) !=
+                first->subassets.end()) {
+                report.failures.push_back(
+                    failure(CookError::BadReference, "an importer's subassets out of key order", planned.source));
                 continue;
             }
             artifact = std::move(*first);
@@ -431,22 +508,50 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
                 toCache(*request.cache, kKey, *artifact, readsMade);
             }
         }
-        const content::ContentDigest kDigest = content::ContentDigest::of(artifact->bytes);
-        const std::string kLocator = "objects/" + hexOf(kDigest.bytes);
-        const auto kExisting = readFile(kOutput / kLocator);
-        const bool kPresent =
-            kExisting.has_value() && content::sameDigest(content::ContentDigest::of(*kExisting), kDigest);
-        if (!kPresent && !writeAtomically(kOutput / kLocator, artifact->bytes)) {
-            report.failures.push_back(failure(CookError::WriteFailed, "an artifact cannot be written", kLocator));
+        // The source's resource, then each subasset's.
+        const auto kPublished = [&](const content::ResourceId& id,
+                                    content::ResourceTypeId type,
+                                    const content::RepresentationId& representation,
+                                    std::span<const std::byte> bytes,
+                                    std::string_view subasset) {
+            const content::ContentDigest kDigest = content::ContentDigest::of(bytes);
+            const std::string kLocator = "objects/" + hexOf(kDigest.bytes);
+            const auto kExisting = readFile(kOutput / kLocator);
+            const bool kPresent =
+                kExisting.has_value() && content::sameDigest(content::ContentDigest::of(*kExisting), kDigest);
+            if (!kPresent && !writeAtomically(kOutput / kLocator, bytes)) {
+                report.failures.push_back(failure(CookError::WriteFailed, "an artifact cannot be written", kLocator));
+                return false;
+            }
+            entries.push_back(content::ManifestEntry{.id = id,
+                                                     .type = type,
+                                                     .representation = representation,
+                                                     .byteLength = bytes.size(),
+                                                     .digest = kDigest,
+                                                     .locator = kLocator});
+            Value made = Value::object();
+            made.add("resourceId", Value::string(hexOf(id.value)));
+            if (!subasset.empty()) {
+                made.add("subasset", Value::string(std::string{subasset}));
+            }
+            made.add("representation", Value::string(std::string{representation.text()}));
+            made.add("digest", Value::string(kDigest.text()));
+            made.add("byteLength", Value::integer(static_cast<std::int64_t>(bytes.size())));
+            artifacts.push(std::move(made));
+            return true;
+        };
+        bool published = kPublished(planned.id, artifact->type, artifact->representation, artifact->bytes, "");
+        for (const Subasset& subasset : artifact->subassets) {
+            published = published && kPublished(planned.subassets.find(subasset.key)->second,
+                                                subasset.type,
+                                                subasset.representation,
+                                                subasset.bytes,
+                                                subasset.key);
+        }
+        if (!published) {
             continue;
         }
         (kReused ? report.reused : report.cooked) += 1;
-        entries.push_back(content::ManifestEntry{.id = planned.id,
-                                                 .type = artifact->type,
-                                                 .representation = artifact->representation,
-                                                 .byteLength = artifact->bytes.size(),
-                                                 .digest = kDigest,
-                                                 .locator = kLocator});
         Value input = Value::object();
         input.add("resourceId", Value::string(hexOf(planned.id.value)));
         input.add("source", Value::string(planned.source));
@@ -456,12 +561,15 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
         input.add("key", Value::string("sha256:" + kKey));
         input.add("reused", Value::boolean(kReused));
         inputs.push(std::move(input));
-        Value made = Value::object();
-        made.add("resourceId", Value::string(hexOf(planned.id.value)));
-        made.add("representation", Value::string(std::string{artifact->representation.text()}));
-        made.add("digest", Value::string(kDigest.text()));
-        made.add("byteLength", Value::integer(static_cast<std::int64_t>(artifact->bytes.size())));
-        artifacts.push(std::move(made));
+    }
+    // A subasset's resource is no other's.
+    std::ranges::sort(entries, {}, &content::ManifestEntry::id);
+    for (std::size_t index = 1; index < entries.size() && report.failures.empty(); ++index) {
+        if (entries[index].id == entries[index - 1].id) {
+            report.failures.push_back(failure(CookError::DuplicateResource,
+                                              "two sources or subassets claim one resource",
+                                              hexOf(entries[index].id.value)));
+        }
     }
     if (!report.failures.empty()) {
         return report;

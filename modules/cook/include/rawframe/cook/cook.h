@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <span>
@@ -25,11 +26,26 @@
 
 namespace rawframe::cook {
 
-/// What an importer makes of one source.
+/// A subasset an importer finds in a source and cooks (ADR-0024, D314):
+/// its key, which the source's sidecar maps to the resource it becomes.
+struct Subasset {
+    std::string key;
+    content::ResourceTypeId type;
+    content::RepresentationId representation;
+    std::vector<std::byte> bytes;
+
+    friend bool operator==(const Subasset&, const Subasset&) = default;
+};
+
+/// What an importer makes of one source: the source's own resource, and
+/// its subassets in key order.
 struct Artifact {
     content::ResourceTypeId type;
     content::RepresentationId representation;
     std::vector<std::byte> bytes;
+    std::vector<Subasset> subassets;
+
+    friend bool operator==(const Artifact&, const Artifact&) = default;
 };
 
 /// What one cook reads besides its source: other files under the sources,
@@ -52,8 +68,11 @@ public:
         base::Sha256Digest digest{};
     };
 
-    /// `sources` is canonical; `directory` is the source's, relative to it.
-    Reads(std::filesystem::path sources, std::filesystem::path directory);
+    /// `sources` is canonical; `directory` is the source's, relative to it;
+    /// `subassets` is the source's sidecar's map.
+    Reads(std::filesystem::path sources,
+          std::filesystem::path directory,
+          std::map<std::string, content::ResourceId, std::less<>> subassets = {});
 
     /// The bytes of the file at `path`, relative to the source's directory.
     /// Refused (`BadRead`) when it is absolute, lies outside the sources, or
@@ -63,6 +82,12 @@ public:
     /// name ends in `suffix`: paths relative to that directory, with `/`,
     /// sorted. Refused as `file` is.
     [[nodiscard]] result::Result<std::vector<std::string>> files(std::string_view path, std::string_view suffix);
+
+    /// The resource the sidecar maps the subasset `key` to, so what an
+    /// importer cooks can name another of the source's subassets. Refused
+    /// (`UnmappedSubasset`, naming the key) when it maps it to none: an
+    /// identity is given by whoever authors the sidecar, never by a cook.
+    [[nodiscard]] result::Result<content::ResourceId> subasset(std::string_view key) const;
 
     /// Every read so far, in path order.
     [[nodiscard]] std::vector<Read> reads() const;
@@ -77,6 +102,7 @@ private:
     std::filesystem::path directory_;
     std::map<std::string, std::vector<std::byte>> files_;
     std::map<std::pair<std::string, std::string>, std::vector<std::string>> listings_;
+    std::map<std::string, content::ResourceId, std::less<>> subassets_;
 };
 
 /// One registered importer: who it is, what settings it takes, and how it
@@ -119,8 +145,10 @@ struct CookReport {
 
 /// Scans `sources` for sidecars (`<source file>.rfmeta`) in path order,
 /// cooks each source with its importer (twice, compared) or takes its
-/// artifact from the cache after verifying it and every read that made it, writes each artifact to
-/// `objects/<digest>` under the output, and, only if nothing failed,
+/// artifact from the cache after verifying it and every read that made it,
+/// writes each artifact and subasset to `objects/<digest>` under the output
+/// (each subasset under the resource its sidecar maps it to, and refused as
+/// `UnmappedSubasset` when it maps it to none), and, only if nothing failed,
 /// publishes `content.manifest` and `cook.receipt` there. Errors are the
 /// request's own (an unreadable sources directory, an output inside it);
 /// what failed while cooking is in the report.

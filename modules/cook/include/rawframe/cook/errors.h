@@ -31,6 +31,8 @@ enum class CookError : std::uint32_t {
     /// A name a source uses that resolves to nothing, or to what does not
     /// do: a program that does not compile, a document that does not read.
     BadReference = 9,
+    /// A subasset a source's sidecar maps to no resource (D314).
+    UnmappedSubasset = 10,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(CookError error) noexcept {
