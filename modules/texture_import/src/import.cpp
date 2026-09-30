@@ -206,6 +206,9 @@ result::Result<Image> texelsOf(const texture::Texture& cooked, std::size_t level
         return bad("no such level");
     }
     const texture::Level& kLevel = cooked.levels[level];
+    if (cooked.format == Format::Rgba16Float) {
+        return bad("half floats are not a byte a channel");
+    }
     Image image{.width = kLevel.width, .height = kLevel.height};
     if (cooked.format == Format::Rgba8 || cooked.format == Format::Rgba8Srgb) {
         image.rgba = kLevel.bytes;
