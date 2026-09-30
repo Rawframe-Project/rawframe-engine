@@ -188,7 +188,8 @@ public:
                                              .translucent = read->blend == material::Blend::Translucent,
                                              .textures = {.base = sceneTextureOf(read->textures.base),
                                                           .packed = sceneTextureOf(read->textures.packed),
-                                                          .emission = sceneTextureOf(read->textures.emission)}});
+                                                          .emission = sceneTextureOf(read->textures.emission),
+                                                          .normal = sceneTextureOf(read->textures.normal)}});
                     } else {
                         unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});
                     }
@@ -347,7 +348,8 @@ private:
                                 std::vector<SceneMaterial>& materials) {
         std::set<std::uint64_t> sampled;
         for (SceneMaterial& each : materials) {
-            for (SceneTexture* texture : {&each.textures.base, &each.textures.packed, &each.textures.emission}) {
+            for (SceneTexture* texture :
+                 {&each.textures.base, &each.textures.packed, &each.textures.emission, &each.textures.normal}) {
                 if (texture->id == 0) {
                     continue;
                 }

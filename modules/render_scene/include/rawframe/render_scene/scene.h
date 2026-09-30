@@ -154,17 +154,18 @@ struct SceneTexture {
     friend bool operator==(const SceneTexture&, const SceneTexture&) = default;
 };
 
-/// A material's textures (D312): its base, packed, and emission textures,
-/// each none when its identity is nought.
+/// A material's textures (D312, D313): its base, packed, emission, and
+/// normal textures, each none when its identity is nought.
 struct SceneTextures {
     SceneTexture base;
     SceneTexture packed;
     SceneTexture emission;
+    SceneTexture normal;
 
     friend bool operator==(const SceneTextures&, const SceneTextures&) = default;
     friend auto operator<=>(const SceneTextures& left, const SceneTextures& right) noexcept {
-        return std::tuple{left.base.id, left.packed.id, left.emission.id} <=>
-               std::tuple{right.base.id, right.packed.id, right.emission.id};
+        return std::tuple{left.base.id, left.packed.id, left.emission.id, left.normal.id} <=>
+               std::tuple{right.base.id, right.packed.id, right.emission.id, right.normal.id};
     }
 };
 
