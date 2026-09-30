@@ -116,8 +116,10 @@ struct PictureBlock {
     std::array<float, 4> tonemapper{};
     /// The bloom's share, and one over its chain's levels (D328).
     std::array<float, 4> bloom{};
+    /// One where the picture is dithered (D332).
+    std::array<float, 4> display{};
 };
-static_assert(sizeof(PictureBlock) == 128, "the picture's shader reads its block as 128 bytes");
+static_assert(sizeof(PictureBlock) == 144, "the picture's shader reads its block as 144 bytes");
 
 /// The frame's grade and tonemapper as the picture's pass reads them.
 PictureBlock pictureOf(const render_scene::SceneFrame& frame) noexcept;

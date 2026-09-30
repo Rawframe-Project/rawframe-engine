@@ -43,6 +43,7 @@ PictureBlock pictureOf(const render_scene::SceneFrame& frame) noexcept {
         block.tonemapper = {2, 1.19149F, 0, 0};
         break;
     }
+    block.display = {frame.dither ? 1.0F : 0.0F, 0, 0, 0};
     return block;
 }
 

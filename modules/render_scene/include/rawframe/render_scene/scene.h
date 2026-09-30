@@ -556,6 +556,10 @@ struct SceneFrame {
     /// Whether the tonemapped picture is antialiased by FXAA (D296): never
     /// with the temporal inputs, which are then off.
     bool fxaa = false;
+    /// Whether the picture is dithered by under one step of its eight-bit
+    /// encoding (ADR-0051's debanding, D332): on unless a test compares
+    /// pixels exactly.
+    bool dither = true;
     /// The punctual lights that reach the view, and the clusters they are
     /// culled into (D290).
     std::vector<SceneLight> lights3d;

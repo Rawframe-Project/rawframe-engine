@@ -10,6 +10,7 @@ struct Grade {
     power: vec4f,
     tonemapper: vec4f,
     bloom: vec4f,
+    display: vec4f,
 }
 
 @group(0) @binding(1) var<uniform> grade: Grade;
@@ -69,8 +70,26 @@ fn neutral(light: vec3f) -> vec3f {
     return mix(color, vec3f(newPeak), grey);
 }
 
+fn encoded(linear: vec3f) -> vec3f {
+    return mix(linear * 12.92, 1.055 * pow(linear, vec3f(1.0 / 2.4)) - 0.055, step(vec3f(0.0031308), linear));
+}
+
+fn decoded(encoding: vec3f) -> vec3f {
+    return mix(encoding / 12.92, pow((encoding + 0.055) / 1.055, vec3f(2.4)), step(vec3f(0.04045), encoding));
+}
+
+// tonemap.frag's debanding (D332).
+fn shown(light: vec3f, position: vec2f) -> vec4f {
+    var color = clamp(light, vec3f(0.0), vec3f(1.0));
+    if (grade.display.x > 0.5) {
+        let noise = fract(vec3f(dot(vec2f(171.0, 231.0), floor(position))) / vec3f(103.0, 71.0, 97.0));
+        color = decoded(clamp(encoded(color) + (noise - 0.5) / 255.0, vec3f(0.0), vec3f(1.0)));
+    }
+    return vec4f(color, 1.0);
+}
+
 @fragment
-fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+fn fs(@builtin(position) position: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
     let inset = mat3x3f(0.842479062253094, 0.0423282422610123, 0.0423756549057051, 0.0784335999999992,
                         0.878468636469772, 0.0784336, 0.0792237451477643, 0.0791661274605434, 0.879142973793104);
     let outset = mat3x3f(1.19687900512017, -0.0528968517574562, -0.0529716355144438, -0.0980208811401368,
@@ -87,13 +106,13 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
     }
     let light = graded(seen) * grade.tonemapper.y;
     if (grade.tonemapper.x > 1.5) {
-        return vec4f(clamp(light, vec3f(0.0), vec3f(1.0)), 1.0);
+        return shown(light, position.xy);
     }
     if (grade.tonemapper.x > 0.5) {
-        return vec4f(clamp(neutral(max(light, vec3f(0.0))), vec3f(0.0), vec3f(1.0)), 1.0);
+        return shown(neutral(max(light, vec3f(0.0))), position.xy);
     }
     var color = inset * max(light, vec3f(1e-10));
     color = (clamp(log2(color), vec3f(lowest), vec3f(highest)) - lowest) / (highest - lowest);
     color = outset * contrast(color);
-    return vec4f(pow(max(color, vec3f(0.0)), vec3f(2.2)), 1.0);
+    return shown(pow(max(color, vec3f(0.0)), vec3f(2.2)), position.xy);
 }

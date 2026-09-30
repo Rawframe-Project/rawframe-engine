@@ -165,10 +165,41 @@ RAWFRAME_TEST(AnEmptySceneIsTheSky) {
     if (!made.has_value() || !framer.has_value()) {
         return;
     }
-    const auto kPixels = drawn(**framer, **made, looking(), {});
-    RAWFRAME_EXPECT(kPixels.has_value());
-    if (kPixels.has_value()) {
-        RAWFRAME_EXPECT(at(*kPixels, 0, 0) == at(*kPixels, kSide - 1, kSide - 1) && at(*kPixels, 0, 0)[0] > 20);
+    // Undithered, the sky is one color; dithered (D332), each channel
+    // takes the two eight-bit steps about it somewhere, and never another.
+    render_scene::SceneFrame plain = looking();
+    plain.dither = false;
+    const auto kPlain = drawn(**framer, **made, plain, {});
+    const auto kDithered = drawn(**framer, **made, looking(), {});
+    RAWFRAME_EXPECT(kPlain.has_value() && kDithered.has_value());
+    if (!kPlain.has_value() || !kDithered.has_value()) {
+        return;
+    }
+    const std::array<int, 3> kSky = at(*kPlain, 0, 0);
+    RAWFRAME_EXPECT(kSky == at(*kPlain, kSide - 1, kSide - 1) && kSky[0] > 20);
+    std::array<int, 3> lowest = kSky;
+    std::array<int, 3> highest = kSky;
+    for (std::uint32_t y = 0; y < kSide; ++y) {
+        for (std::uint32_t x = 0; x < kSide; ++x) {
+            for (std::size_t channel = 0; channel < 3; ++channel) {
+                lowest[channel] = std::min(lowest[channel], at(*kDithered, x, y)[channel]);
+                highest[channel] = std::max(highest[channel], at(*kDithered, x, y)[channel]);
+            }
+        }
+    }
+    std::printf("the sky %d %d %d; dithered from %d %d %d to %d %d %d\n",
+                kSky[0],
+                kSky[1],
+                kSky[2],
+                lowest[0],
+                lowest[1],
+                lowest[2],
+                highest[0],
+                highest[1],
+                highest[2]);
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+        RAWFRAME_EXPECT(highest[channel] - lowest[channel] == 1 && lowest[channel] >= kSky[channel] - 1 &&
+                        highest[channel] <= kSky[channel] + 1);
     }
     // A picture past the limit is refused.
     const std::array<render::FrameRecorder*, 1> kRecorders = {made->get()};
@@ -307,6 +338,8 @@ RAWFRAME_TEST(TemporalAntiAliasingBlendsEdgesWithoutGhosts) {
     SceneFrame frame = looking(true);
     RAWFRAME_EXPECT(frame.temporal.enabled && !frame.temporal.history);
     frame.shadows.count = 0;
+    // Pixels compared exactly: undithered.
+    frame.dither = false;
     SceneDraw still = box(8, 0.9379F, {1, 1, 1, 1});
     still.previous = still.model;
     frame.draws = {still};
@@ -950,6 +983,8 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
     // the first row at the top.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
+    // Pixels compared exactly: undithered (D332).
+    frame.dither = false;
     SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
     shown.material = 1;
     frame.draws = {shown};

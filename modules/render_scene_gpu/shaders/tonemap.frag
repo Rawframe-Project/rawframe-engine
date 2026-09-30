@@ -5,7 +5,8 @@
 // middle grey), then mapped for display by the camera's tonemapper (D295,
 // ADR-0047's closed set: AgX, the default; Khronos PBR Neutral; linear),
 // each keeping middle grey where AgX puts it, in linear light for the
-// sRGB picture to encode.
+// sRGB picture to encode, dithered by under one step of that encoding
+// (D332).
 // AgX as Troy Sobotka made it, fitted by Benjamin Wrensch.
 
 #version 450
@@ -25,6 +26,8 @@ layout(set = 0, binding = 1, std140) uniform Grade
     vec4 tonemapper;
     // The bloom's share, and one over its chain's levels (D328).
     vec4 bloom;
+    // One where the picture is dithered (D332).
+    vec4 display;
 }
 grade;
 
@@ -75,6 +78,31 @@ vec3 neutral(vec3 color)
     return mix(color, vec3(kNewPeak), kGrey);
 }
 
+// The sRGB encoding of linear light, and back.
+vec3 encoded(vec3 linear)
+{
+    return mix(linear * 12.92, 1.055 * pow(linear, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), linear));
+}
+
+vec3 decoded(vec3 encoding)
+{
+    return mix(encoding / 12.92, pow((encoding + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), encoding));
+}
+
+// ADR-0051's debanding: the picture is kept in eight bits, sRGB-encoded,
+// where a smooth gradient falls into bands a step apart. Under a step of
+// noise in that encoding, fixed to the pixel, breaks them (Gjøl's
+// screen-space dither, as Bevy's).
+vec4 shown(vec3 light)
+{
+    vec3 color = clamp(light, 0.0, 1.0);
+    if (grade.display.x > 0.5) {
+        const vec3 kNoise = fract(vec3(dot(vec2(171.0, 231.0), floor(gl_FragCoord.xy))) / vec3(103.0, 71.0, 97.0));
+        color = decoded(clamp(encoded(color) + (kNoise - 0.5) / 255.0, 0.0, 1.0));
+    }
+    return vec4(color, 1.0);
+}
+
 void main()
 {
     const mat3 kInset = mat3(0.842479062253094, 0.0423282422610123, 0.0423756549057051, 0.0784335999999992,
@@ -92,15 +120,15 @@ void main()
     }
     const vec3 kLight = graded(seen) * grade.tonemapper.y;
     if (grade.tonemapper.x > 1.5) {
-        outColor = vec4(clamp(kLight, 0.0, 1.0), 1.0);
+        outColor = shown(kLight);
         return;
     }
     if (grade.tonemapper.x > 0.5) {
-        outColor = vec4(clamp(neutral(max(kLight, vec3(0.0))), 0.0, 1.0), 1.0);
+        outColor = shown(neutral(max(kLight, vec3(0.0))));
         return;
     }
     vec3 color = kInset * max(kLight, vec3(1e-10));
     color = (clamp(log2(color), kLowest, kHighest) - kLowest) / (kHighest - kLowest);
     color = kOutset * contrast(color);
-    outColor = vec4(pow(max(color, vec3(0.0)), vec3(2.2)), 1.0);
+    outColor = shown(pow(max(color, vec3(0.0)), vec3(2.2)));
 }
