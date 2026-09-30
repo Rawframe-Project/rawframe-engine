@@ -15,7 +15,8 @@ assets: content execution result base
 game_content: signature content composition document execution diagnostics result base
 audio: world schema execution diagnostics document result base
 audio_import: audio result base
-animation: document result base
+graph: document result base
+animation: graph document result base
 animation_import: animation result base
 localization: document result base
 mesh: result base
