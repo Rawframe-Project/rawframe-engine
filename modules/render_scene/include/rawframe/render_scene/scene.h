@@ -412,6 +412,16 @@ struct ShadowCascade {
     std::uint32_t casterCount = 0;
 };
 
+/// ADR-0051's typed ladder of shadow filters (D330): the hardware's two by
+/// two blend of four compared texels, its base; and a five by five
+/// tent-weighted blend from nine of those (Castaño's optimized PCF), the
+/// middle class. Contact-hardening (PCSS) joins as the top class when it
+/// is built.
+enum class ShadowFilter : std::uint8_t {
+    Hardware,
+    Soft
+};
+
 /// The sun's shadows as the view stage derives them (ADR-0051's cascaded
 /// shadow maps): up to four cascades, nearest first, and the models that
 /// cast into each, cascade by cascade, in draw order (D298). None without
@@ -424,6 +434,8 @@ struct SceneShadows {
     /// Where shadows end, in meters from the eye; they fade over the last
     /// cascade's last tenth.
     float distance = 0;
+    /// How every shadow map is filtered, the punctual lights' too (D330).
+    ShadowFilter filter = ShadowFilter::Soft;
     std::vector<SceneDraw> casters;
     /// Casters left out past the models' limit, once for each cascade.
     std::size_t overLimit = 0;
@@ -598,6 +610,8 @@ struct ShadowSettings {
     float distance = 100;
     float logarithmicBlend = 0.8F;
     std::uint32_t side = 1024;
+    /// For the sun's cascades and the punctual lights' atlas alike.
+    ShadowFilter filter = ShadowFilter::Soft;
 };
 
 /// ADR-0051's anti-aliasing methods that exist so far: none, the

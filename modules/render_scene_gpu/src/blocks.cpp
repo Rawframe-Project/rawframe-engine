@@ -96,7 +96,7 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     block.shadow = {static_cast<float>(kShadows.count),
                     kShadows.distance,
                     static_cast<float>(std::max<std::uint32_t>(kShadows.side, 1)),
-                    0};
+                    kShadows.filter == render_scene::ShadowFilter::Soft ? 1.0F : 0.0F};
     const render_scene::SceneClusters& kClusters = frame.clusters;
     const bool kClustered =
         !frame.lights3d.empty() && kClusters.near > 0 && kClusters.far > kClusters.near &&

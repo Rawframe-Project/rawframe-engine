@@ -15,7 +15,8 @@ layout(set = 0, binding = 0, std140) uniform Frame
     vec4 sky;
     vec4 exposure;
     // The eye's forward; each cascade's far end and texel; the cascades,
-    // the shadows' distance, and a cascade's side in texels (D289).
+    // the shadows' distance, a cascade's side in texels (D289), and one
+    // where the shadows are filtered soft (D330).
     vec4 forward;
     vec4 cascadeFar;
     vec4 cascadeTexel;

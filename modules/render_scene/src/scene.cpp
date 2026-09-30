@@ -315,6 +315,7 @@ struct Scene::State {
         frame.unknownMaterials = 0;
         frame.overLimit = 0;
         frame.shadows.count = 0;
+        frame.shadows.filter = settings.shadows.filter;
         frame.shadows.casters.clear();
         frame.shadows.overLimit = 0;
         frame.lights3d.clear();

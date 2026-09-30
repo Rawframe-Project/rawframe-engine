@@ -155,7 +155,7 @@ const setup = {
         'kest.plan_only = true',
         // The plaza makes no sound: it has no mixer to play; its shadow map
         // is small, for the software rasterizer.
-        ...(plaza ? ['scene.shadow_side = 256'] : ['audio.play = sink']),
+        ...(plaza ? ['scene.shadow_side = 256', 'scene.shadow_filter = hardware'] : ['audio.play = sink']),
         'bots.player = true',
         'render.device = any',
         `bots.endpoint = https://127.0.0.1:${port}/rawframe`,

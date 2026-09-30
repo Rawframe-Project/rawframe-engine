@@ -23,7 +23,8 @@ layout(set = 0, binding = 0, std140) uniform Frame
     vec4 sky;
     vec4 exposure;
     // The eye's forward; each cascade's far end and texel; the cascades,
-    // the shadows' distance, and a cascade's side in texels (D289).
+    // the shadows' distance, a cascade's side in texels (D289), and one
+    // where the shadows are filtered soft (D330).
     vec4 forward;
     vec4 cascadeFar;
     vec4 cascadeTexel;
@@ -259,6 +260,34 @@ vec2 environmentBrdf(float roughness, float nv)
 // normal bias), and the map compared there, nearer the sun being greater
 // (reversed-Z), four texels blended (hardware 2x2 PCF). Past the shadows'
 // distance the sun reaches everything, fading in over its last tenth.
+// ADR-0051's middle shadow filter (D330), Castaño's optimized PCF: a five
+// by five tent over the map's texels about `texel` (in texels), taken as
+// nine of the hardware's blends of four, each tap's middle in the map's
+// coordinates, of a map `size` texels square, and its weight, the nine
+// summing to one.
+struct Taps {
+    vec2 at[9];
+    float weight[9];
+};
+
+Taps tapsAbout(vec2 texel, vec2 size)
+{
+    const vec2 kBase = floor(texel + 0.5);
+    const vec2 kInto = texel + 0.5 - kBase;
+    const vec3 kUs = vec3(4.0 - 3.0 * kInto.x, 7.0, 1.0 + 3.0 * kInto.x);
+    const vec3 kVs = vec3(4.0 - 3.0 * kInto.y, 7.0, 1.0 + 3.0 * kInto.y);
+    const vec3 kU = vec3((3.0 - 2.0 * kInto.x) / kUs.x - 2.0, (3.0 + kInto.x) / kUs.y, kInto.x / kUs.z + 2.0);
+    const vec3 kV = vec3((3.0 - 2.0 * kInto.y) / kVs.x - 2.0, (3.0 + kInto.y) / kVs.y, kInto.y / kVs.z + 2.0);
+    Taps made;
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            made.at[row * 3 + column] = (kBase - 0.5 + vec2(kU[column], kV[row])) / size;
+            made.weight[row * 3 + column] = kUs[column] * kVs[row] / 144.0;
+        }
+    }
+    return made;
+}
+
 float sunlit(vec3 placed, vec3 normal)
 {
     const int kCount = int(frame.shadow.x);
@@ -271,12 +300,25 @@ float sunlit(vec3 placed, vec3 normal)
         at += 1;
     }
     const vec4 kClip = frame.cascades[at] * vec4(placed + normal * (frame.cascadeTexel[at] * 1.5), 1.0);
-    // Within the cascade's square, kept half a texel from its edges so the
-    // four texels blended are its own; the squares tile the map two by two.
-    const float kHalfTexel = 0.5 / frame.shadow.z;
+    // Within the cascade's square, kept from its edges so the texels
+    // blended are its own (half a texel, or three filtered soft); the
+    // squares tile the map two by two.
+    const bool kSoft = frame.shadow.w > 0.5;
+    const float kHalfTexel = (kSoft ? 3.0 : 0.5) / frame.shadow.z;
     const vec2 kInSquare = clamp(vec2(kClip.x * 0.5 + 0.5, 0.5 - kClip.y * 0.5), vec2(kHalfTexel), vec2(1.0 - kHalfTexel));
     const vec2 kInMap = (kInSquare + vec2(float(at % 2), float(at / 2))) * 0.5;
-    const float kLit = textureLod(sampler2DShadow(shadowMap, shadowSampler), vec3(kInMap, kClip.z), 0.0);
+    float lit = 0.0;
+    if (kSoft) {
+        const vec2 kSize = vec2(textureSize(sampler2DShadow(shadowMap, shadowSampler), 0));
+        const Taps kTaps = tapsAbout(kInMap * kSize, kSize);
+        for (int tap = 0; tap < 9; ++tap) {
+            lit += kTaps.weight[tap] *
+                   textureLod(sampler2DShadow(shadowMap, shadowSampler), vec3(kTaps.at[tap], kClip.z), 0.0);
+        }
+    } else {
+        lit = textureLod(sampler2DShadow(shadowMap, shadowSampler), vec3(kInMap, kClip.z), 0.0);
+    }
+    const float kLit = lit;
     const float kFade = clamp((frame.shadow.y - kAhead) / (0.1 * frame.shadow.y), 0.0, 1.0);
     return mix(1.0, kLit, kFade);
 }
@@ -284,7 +326,7 @@ float sunlit(vec3 placed, vec3 normal)
 // How much of a light reaches `placed` through its square of the atlas:
 // the point moved along its normal by a texel and a half there, then
 // compared, nearer the light being greater (reversed-Z), four texels
-// blended, kept within the square.
+// blended, or twenty-five filtered soft (D330), kept within the square.
 float lightShadow(ShadowSlot slot, vec3 placed, vec3 normal)
 {
     const float kNear = slot.rect.w;
@@ -295,10 +337,21 @@ float lightShadow(ShadowSlot slot, vec3 placed, vec3 normal)
         return 1.0;
     }
     const vec2 kSeen = vec2(dot(kFrom, slot.right.xyz), dot(kFrom, slot.up.xyz)) / (kAhead * slot.right.w);
-    const float kHalfTexel = slot.position.w * 0.25 / slot.right.w;
+    const bool kSoft = frame.shadow.w > 0.5;
+    const float kHalfTexel = slot.position.w * (kSoft ? 1.5 : 0.25) / slot.right.w;
     const vec2 kInSquare = clamp(vec2(kSeen.x * 0.5 + 0.5, 0.5 - kSeen.y * 0.5), vec2(kHalfTexel), vec2(1.0 - kHalfTexel));
     const vec2 kInAtlas = slot.rect.xy + kInSquare * slot.rect.z;
-    return textureLod(sampler2DShadow(lightShadowMap, shadowSampler), vec3(kInAtlas, kNear / kAhead), 0.0);
+    if (!kSoft) {
+        return textureLod(sampler2DShadow(lightShadowMap, shadowSampler), vec3(kInAtlas, kNear / kAhead), 0.0);
+    }
+    const vec2 kSize = vec2(textureSize(sampler2DShadow(lightShadowMap, shadowSampler), 0));
+    const Taps kTaps = tapsAbout(kInAtlas * kSize, kSize);
+    float lit = 0.0;
+    for (int tap = 0; tap < 9; ++tap) {
+        lit += kTaps.weight[tap] *
+               textureLod(sampler2DShadow(lightShadowMap, shadowSampler), vec3(kTaps.at[tap], kNear / kAhead), 0.0);
+    }
+    return lit;
 }
 
 // The illuminance the point and spot lights of `placed`'s cluster give it:

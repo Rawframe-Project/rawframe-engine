@@ -180,6 +180,29 @@ fn reflected(surface: Surface, normal: vec3f, toEye: vec3f, toward: vec3f) -> ve
     return ((1.0 - fresnel) * surface.diffuse / kPi + fresnel * (distribution * visibility)) * nl;
 }
 
+// scene.frag's Taps and tapsAbout (D330).
+struct Taps {
+    at: array<vec2f, 9>,
+    weight: array<f32, 9>,
+}
+
+fn tapsAbout(texel: vec2f, size: vec2f) -> Taps {
+    let base = floor(texel + 0.5);
+    let into = texel + 0.5 - base;
+    let us = vec3f(4.0 - 3.0 * into.x, 7.0, 1.0 + 3.0 * into.x);
+    let vs = vec3f(4.0 - 3.0 * into.y, 7.0, 1.0 + 3.0 * into.y);
+    let u = vec3f((3.0 - 2.0 * into.x) / us.x - 2.0, (3.0 + into.x) / us.y, into.x / us.z + 2.0);
+    let v = vec3f((3.0 - 2.0 * into.y) / vs.x - 2.0, (3.0 + into.y) / vs.y, into.y / vs.z + 2.0);
+    var made: Taps;
+    for (var row = 0; row < 3; row++) {
+        for (var column = 0; column < 3; column++) {
+            made.at[row * 3 + column] = (base - 0.5 + vec2f(u[column], v[row])) / size;
+            made.weight[row * 3 + column] = us[column] * vs[row] / 144.0;
+        }
+    }
+    return made;
+}
+
 fn sunlit(placed: vec3f, normal: vec3f) -> f32 {
     let count = i32(frame.shadow.x);
     let ahead = dot(placed, frame.forward.xyz);
@@ -191,10 +214,20 @@ fn sunlit(placed: vec3f, normal: vec3f) -> f32 {
         at += 1;
     }
     let clip = frame.cascades[at] * vec4f(placed + normal * (frame.cascadeTexel[at] * 1.5), 1.0);
-    let halfTexel = 0.5 / frame.shadow.z;
+    let soft = frame.shadow.w > 0.5;
+    let halfTexel = select(0.5, 3.0, soft) / frame.shadow.z;
     let inSquare = clamp(vec2f(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5), vec2f(halfTexel), vec2f(1.0 - halfTexel));
     let inMap = (inSquare + vec2f(f32(at % 2), f32(at / 2))) * 0.5;
-    let lit = textureSampleCompareLevel(shadowMap, shadowSampler, inMap, clip.z);
+    var lit = 0.0;
+    if (soft) {
+        let size = vec2f(textureDimensions(shadowMap));
+        let taps = tapsAbout(inMap * size, size);
+        for (var tap = 0; tap < 9; tap++) {
+            lit += taps.weight[tap] * textureSampleCompareLevel(shadowMap, shadowSampler, taps.at[tap], clip.z);
+        }
+    } else {
+        lit = textureSampleCompareLevel(shadowMap, shadowSampler, inMap, clip.z);
+    }
     let fade = clamp((frame.shadow.y - ahead) / (0.1 * frame.shadow.y), 0.0, 1.0);
     return mix(1.0, lit, fade);
 }
@@ -208,10 +241,20 @@ fn lightShadow(slot: ShadowSlot, placed: vec3f, normal: vec3f) -> f32 {
         return 1.0;
     }
     let seen = vec2f(dot(fromLight, slot.right.xyz), dot(fromLight, slot.up.xyz)) / (ahead * slot.right.w);
-    let halfTexel = slot.position.w * 0.25 / slot.right.w;
+    let soft = frame.shadow.w > 0.5;
+    let halfTexel = slot.position.w * select(0.25, 1.5, soft) / slot.right.w;
     let inSquare = clamp(vec2f(seen.x * 0.5 + 0.5, 0.5 - seen.y * 0.5), vec2f(halfTexel), vec2f(1.0 - halfTexel));
     let inAtlas = slot.rect.xy + inSquare * slot.rect.z;
-    return textureSampleCompareLevel(lightShadowMap, shadowSampler, inAtlas, near / ahead);
+    if (!soft) {
+        return textureSampleCompareLevel(lightShadowMap, shadowSampler, inAtlas, near / ahead);
+    }
+    let size = vec2f(textureDimensions(lightShadowMap));
+    let taps = tapsAbout(inAtlas * size, size);
+    var lit = 0.0;
+    for (var tap = 0; tap < 9; tap++) {
+        lit += taps.weight[tap] * textureSampleCompareLevel(lightShadowMap, shadowSampler, taps.at[tap], near / ahead);
+    }
+    return lit;
 }
 
 fn punctual(placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec3f {

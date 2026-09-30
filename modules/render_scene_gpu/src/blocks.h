@@ -25,7 +25,8 @@ struct FrameBlock {
     std::array<float, 4> sky{};
     std::array<float, 4> exposure{};
     /// The eye's forward; each cascade's far end and texel; the cascades,
-    /// the shadows' distance, and a cascade's side (D289).
+    /// the shadows' distance, a cascade's side (D289), and one where the
+    /// shadows are filtered soft (D330).
     std::array<float, 4> forward{};
     std::array<float, 4> cascadeFar{};
     std::array<float, 4> cascadeTexel{};

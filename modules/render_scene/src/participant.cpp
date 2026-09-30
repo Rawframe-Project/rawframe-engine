@@ -111,10 +111,20 @@ public:
                              "scene.shadow_distance 1 to 10000 meters")
                     .error()};
         }
+        // Its filter, a class of ADR-0051's ladder (D330).
+        const std::string_view kFilter = configuration.text("scene.shadow_filter").value_or("soft");
+        if (kFilter != "hardware" && kFilter != "soft") {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                               composition::kCompositionDomain,
+                                                               code(composition::CompositionError::BadConfiguration),
+                                                               "scene.shadow_filter is hardware or soft")
+                                                      .error()};
+        }
         shadows_ = ShadowSettings{.cascades = static_cast<std::uint32_t>(kCascades),
                                   .distance = static_cast<float>(kDistance),
                                   .logarithmicBlend = kShadowDefaults.logarithmicBlend,
-                                  .side = static_cast<std::uint32_t>(kSide)};
+                                  .side = static_cast<std::uint32_t>(kSide),
+                                  .filter = kFilter == "soft" ? ShadowFilter::Soft : ShadowFilter::Hardware};
         // The punctual lights' shadow atlas (D292): its side, a power of two,
         // or nought for none; its squares from a quarter of it, at most 512
         // texels, down to a quarter of that.
