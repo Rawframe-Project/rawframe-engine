@@ -1,0 +1,79 @@
+module rawframe.model
+
+// 3D pictures as World data (SPEC-0024's scene, D283): what an entity
+// shows, drawn where its pose (rawframe.physics3d's Pose3D) puts it, lit
+// by the sun and the sky. A game declares components of these types;
+// clients draw them, and a server carries them as it carries any other
+// value, with no drawing of its own.
+
+// A mesh drawn at the pose: the game's cooked mesh of the identity its
+// `mesh` line gives it, or one of the engine's own below, scaled by
+// `scaleX`, `scaleY`, and `scaleZ` along the pose's own axes, and turned
+// as the pose turns. `color` is its surface's base color, 0xRRGGBBAA in
+// sRGB; an alpha of nought, a scale of nought, or mesh nought draws
+// nothing.
+struct Model {
+    mesh: u64
+    scaleX: f32
+    scaleY: f32
+    scaleZ: f32
+    color: u32
+}
+
+// The engine's own meshes, each one meter from its center to its sides,
+// so a Model's scale is the body's (rawframe.physics3d's Body3D) half
+// sides or radius: a box of half sides one; a sphere of radius one; an
+// upright cylinder of radius one and half height one; an upright capsule
+// of radius one whose two centers are one above and below its center (a
+// scale along its axis stretches its caps too).
+const BOX: u64 = 0x3ff8cd61f01cf46b
+const SPHERE: u64 = 0x2c6b82d75f7be712
+const CYLINDER: u64 = 0xaee26a717a3a62a0
+const CAPSULE: u64 = 0x63ed148327123836
+
+// A client's view of the 3D World (ADR-0052's camera), on the client's
+// own player: a presentation component (`presentation <camera> on
+// player`) its present systems place. The eye is `offsetX`, `offsetY`,
+// and `offsetZ` meters from the player's pose, in the World's axes, and
+// looks along `yaw` radians about +Y (nought looks along -Z, a quarter
+// turn along -X) and `pitch` radians above the ground's plane. `fovY` is
+// the vertical field of view in radians (a wider window sees more,
+// Hor+), and `near` the nearest distance drawn, in meters; the far one is
+// unbounded. `exposure` is the camera's EV100 (ADR-0047): 15 for a sunny
+// day, lower for dimmer scenes. A camera with a field of view not above
+// nought draws nothing. Without one, a client's view looks at its player
+// from behind and above.
+struct Camera {
+    offsetX: f32
+    offsetY: f32
+    offsetZ: f32
+    yaw: f32
+    pitch: f32
+    fovY: f32
+    near: f32
+    exposure: f32
+}
+
+// The sun (ADR-0051's directional light), on any entity: light arriving
+// along the direction (`directionX`, `directionY`, `directionZ`), the way
+// it travels, `illuminance` lux on a surface facing it (about 100,000 at
+// noon), in `color` (0xRRGGBBAA, sRGB; alpha unused). A game declares at
+// most one sun; without one, a sun at noon lights the World.
+struct Sun {
+    directionX: f32
+    directionY: f32
+    directionZ: f32
+    illuminance: f32
+    color: u32
+}
+
+// The sky's light, arriving from every side (ADR-0051's ambient term):
+// `luminance` candela per square meter (about 5,000 on a clear day), in
+// `color`. A game declares at most one; without one, a clear day's.
+struct Sky {
+    luminance: f32
+    color: u32
+}
+
+// White: a surface, a sun, or a sky as it is.
+const WHITE: u32 = 0xFFFFFFFF

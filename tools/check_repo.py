@@ -50,7 +50,7 @@ NOT_IN_SERVER = {
     "audio", "world_audio", "localization", "world_localization", "authoring",
     "input", "input_kest", "network_loopback", "network_web", "window", "input_window", "window_host",
     "cook", "audio_import", "mesh_import", "animation_import", "texture_import", "build", "render_canvas",
-    "render", "render_canvas_gpu",
+    "render", "render_canvas_gpu", "render_scene",
 }
 # Source formats are decoded in import tooling only (ADR-0058): no process
 # that plays reaches an importer or the cook.
