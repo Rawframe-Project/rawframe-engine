@@ -1,7 +1,8 @@
 // The Phase 1 shape in one process: a server World running a Kest game,
 // replicated over loopback to 64 headless bot clients that each steer their
 // own player, with the server's tick time measured against SPEC-0013's
-// budget (p50 5 ms, p95 8.33 ms, p99 12.5 ms at 60 Hz).
+// budget (p50 5 ms, p95 8.33 ms, p99 12.5 ms at 60 Hz). Under a sanitizer,
+// which checks every access, 16 bots walk the same paths.
 
 #include "rawframe/network_loopback/loopback.h"
 #include "rawframe/test/test.h"
@@ -47,7 +48,7 @@ constexpr std::string_view kArena = "module arena\n"
 constexpr auto kPositionId = schema::ComponentTypeId::fromText("4e8c1a27-b6d3-4f90-8a15-c3e72d9b0f46");
 constexpr auto kSteerId = schema::ComponentTypeId::fromText("a93f6d05-1c8e-4b72-9e40-5d2b8f7c1a63");
 
-constexpr std::size_t kBots = 64;
+constexpr std::size_t kBots = RAWFRAME_TEST_INSTRUMENTED != 0 ? 16 : 64;
 constexpr std::size_t kProps = 200;
 constexpr int kTicks = 300;
 
@@ -84,7 +85,7 @@ double percentile(std::vector<double> samples, double fraction) {
 
 } // namespace
 
-RAWFRAME_TEST(SixtyFourBotsPlayAKestGame) {
+RAWFRAME_TEST(BotsPlayAKestGame) {
     // The game: its program, and its components as the program lays them out.
     const std::array<kest::SourceFile, 1> kFiles = {
         kest::SourceFile{.path = "arena.kest", .text = std::string{kArena}}};

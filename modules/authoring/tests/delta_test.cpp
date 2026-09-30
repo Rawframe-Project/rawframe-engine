@@ -302,11 +302,13 @@ RAWFRAME_TEST(HostileJournalsAreReadOrRefusedWhole) {
         }
     };
     // Cut and edited at every seventh byte, which reaches every field of
-    // every kind; the fuzz target (fuzz_journal.cpp) searches the rest.
-    for (std::size_t at = 0; at <= kSeed.size(); at += 7) {
+    // every kind; the fuzz target (fuzz_journal.cpp) searches the rest, and
+    // under a sanitizer, where it runs too, this takes every 29th.
+    constexpr std::size_t kStride = RAWFRAME_TEST_INSTRUMENTED != 0 ? 29 : 7;
+    for (std::size_t at = 0; at <= kSeed.size(); at += kStride) {
         kTry(kSeed.substr(0, at));
     }
-    for (std::size_t at = 0; at < kSeed.size(); at += 7) {
+    for (std::size_t at = 0; at < kSeed.size(); at += kStride) {
         std::string text = kSeed;
         for (const char kEach : std::string_view{"{}[]\":,0a-A\\n"}) {
             text[at] = kEach;

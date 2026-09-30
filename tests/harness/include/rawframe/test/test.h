@@ -23,6 +23,20 @@
 #define RAWFRAME_TEST_COUNTS_ALLOCATIONS 1
 #endif
 
+// Whether a sanitizer checks every memory access (address or thread): a
+// test that loads the engine to measure it then loads it less, since the
+// run checks the paths, not the load.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#define RAWFRAME_TEST_INSTRUMENTED 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
+#define RAWFRAME_TEST_INSTRUMENTED 1
+#endif
+#endif
+#ifndef RAWFRAME_TEST_INSTRUMENTED
+#define RAWFRAME_TEST_INSTRUMENTED 0
+#endif
+
 namespace rawframe::test {
 
 using TestFunction = void (*)();
