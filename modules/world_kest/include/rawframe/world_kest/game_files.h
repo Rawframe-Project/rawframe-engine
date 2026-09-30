@@ -45,7 +45,7 @@ struct GameText {
 };
 
 /// A texture a `texture` line names, by the identity the line gives it and
-/// the resource it is (D255).
+/// the resource it is (D255); or one a mesh's source holds (D314).
 struct GameTextureResource {
     std::uint64_t id = 0;
     std::string path;
@@ -53,12 +53,24 @@ struct GameTextureResource {
 };
 
 /// A material a `material` line names, by the identity the line gives it
-/// and the resource it is (D303).
+/// and the resource it is (D303); or one a mesh's source holds (D314).
 struct GameMaterialResource {
     std::uint64_t id = 0;
     std::string path;
     base::Bits128 material{};
+    /// Whether a mesh's source holds it: a key its sidecar keeps for what
+    /// the source no longer has names no resource, and is no material.
+    bool subasset = false;
 };
+
+/// A subasset a game reaches through a mesh line (D314): the mesh's
+/// sidecar maps each `material/` and `texture/` key to a resource, and the
+/// game knows it by the resource's first half and by its path, the mesh's,
+/// `#`, and its key.
+[[nodiscard]] std::string subassetPath(std::string_view source, std::string_view key);
+[[nodiscard]] constexpr std::uint64_t subassetIdentity(base::Bits128 resource) noexcept {
+    return resource.high;
+}
 
 /// A scene a mod contributes to one of the game's points (D179): the mod's
 /// subject, the point, the scene's text, and its resource identity.

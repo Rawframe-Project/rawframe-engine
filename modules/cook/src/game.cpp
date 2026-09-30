@@ -9,6 +9,7 @@
 #include "rawframe/localization/catalog.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/game_files.h"
 
 #include <algorithm>
 
@@ -97,6 +98,16 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
             return refuse("a mesh the description names is cooked by rawframe.mesh", mesh.path);
         }
         game.meshes.push_back(world_kest::CookedGameMesh{.path = mesh.path, .mesh = kSidecar.id.value});
+        // Its material and texture subassets (D314), under its path.
+        for (const auto& [kKey, kId] : kSidecar.subassets) {
+            if (kKey.starts_with("material/")) {
+                game.materials.push_back(world_kest::CookedGameMaterial{
+                    .path = world_kest::subassetPath(mesh.path, kKey), .material = kId.value});
+            } else if (kKey.starts_with("texture/")) {
+                game.textures.push_back(world_kest::CookedGameTexture{.path = world_kest::subassetPath(mesh.path, kKey),
+                                                                      .texture = kId.value});
+            }
+        }
     }
     // Each texture: the resource its sidecar names, cooked by
     // rawframe.texture.

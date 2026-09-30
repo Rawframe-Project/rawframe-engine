@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <array>
 #include <iterator>
+#include <span>
 
 #if RAWFRAME_FILE_SYSTEM
 #include <fstream>
@@ -172,6 +173,31 @@ std::unexpected<result::Error> invalid(std::string_view why, std::string_view na
             .withContext("name", name)};
 }
 
+/// Adds a mesh's material and texture subassets (D314), by their keys and
+/// resources; false when one's identity is a material's or texture's the
+/// game already has.
+bool addSubassets(std::string_view mesh,
+                  std::span<const std::pair<std::string, base::Bits128>> subassets,
+                  std::vector<GameTextureResource>& textures,
+                  std::vector<GameMaterialResource>& materials) {
+    for (const auto& [kKey, kResource] : subassets) {
+        const std::uint64_t kId = subassetIdentity(kResource);
+        if (kKey.starts_with("material/")) {
+            if (std::ranges::contains(materials, kId, &GameMaterialResource::id)) {
+                return false;
+            }
+            materials.push_back(GameMaterialResource{
+                .id = kId, .path = subassetPath(mesh, kKey), .material = kResource, .subasset = true});
+        } else if (kKey.starts_with("texture/")) {
+            if (std::ranges::contains(textures, kId, &GameTextureResource::id)) {
+                return false;
+            }
+            textures.push_back(GameTextureResource{.id = kId, .path = subassetPath(mesh, kKey), .texture = kResource});
+        }
+    }
+    return true;
+}
+
 std::string hexOf(base::Bits128 id) {
     std::array<char, base::kBits128HexDigits> digits{};
     base::formatBits128Hex(id, digits);
@@ -194,6 +220,10 @@ result::Result<std::string> readResource(content::ContentStore& store, const con
 }
 
 } // namespace
+
+std::string subassetPath(std::string_view source, std::string_view key) {
+    return std::string{source} + "#" + std::string{key};
+}
 
 void GameFiles::seal() {
     base::Sha256 digest;
@@ -575,8 +605,10 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
             base::Bits128 id, animation::DocumentKind) mutable {
             return animations(id);
         }));
-    // Each mesh, by the resource its sidecar names.
+    // Each mesh, by the resource its sidecar names, and the subassets its
+    // sidecar maps.
     std::vector<base::Bits128> meshes;
+    std::vector<std::pair<std::string, std::vector<std::pair<std::string, base::Bits128>>>> subassets;
     for (const GameMesh& declared : game.description_.meshes) {
         const auto kSidecarText = reader.read(declared.path + std::string{content::kSidecarSuffix});
         const auto kSidecarRead =
@@ -585,6 +617,10 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
             return unreadable("a mesh the game names has a sidecar naming rawframe.mesh", declared.path);
         }
         meshes.push_back((*kSidecarRead)->id.value);
+        auto& mapped = subassets.emplace_back(declared.path, std::vector<std::pair<std::string, base::Bits128>>{});
+        for (const auto& [kKey, kId] : (*kSidecarRead)->subassets) {
+            mapped.second.emplace_back(kKey, kId.value);
+        }
     }
     RAWFRAME_TRY(game.readMeshes(content, meshes));
     // Each text document, by the resource its sidecar names.
@@ -620,6 +656,11 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
         }
         game.materials_.push_back(
             GameMaterialResource{.id = material.id, .path = material.path, .material = (*kSidecarRead)->id.value});
+    }
+    for (const auto& [kMesh, kMapped] : subassets) {
+        if (!addSubassets(kMesh, kMapped, game.textures_, game.materials_)) {
+            return unreadable("a mesh's subasset whose identity the game gives another", kMesh);
+        }
     }
     RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesOf(reader));
     game.sources_.push_back(std::move(files));
@@ -769,6 +810,24 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
         }
         game.materials_.push_back(
             GameMaterialResource{.id = material.id, .path = material.path, .material = kMaterial->material});
+    }
+    // Each mesh's subassets, as the cook listed them under its path.
+    for (const GameMesh& declared : game.description_.meshes) {
+        const std::string kPrefix = subassetPath(declared.path, "");
+        std::vector<std::pair<std::string, base::Bits128>> mapped;
+        for (const CookedGameTexture& texture : kCooked.textures) {
+            if (texture.path.starts_with(kPrefix)) {
+                mapped.emplace_back(texture.path.substr(kPrefix.size()), texture.texture);
+            }
+        }
+        for (const CookedGameMaterial& material : kCooked.materials) {
+            if (material.path.starts_with(kPrefix)) {
+                mapped.emplace_back(material.path.substr(kPrefix.size()), material.material);
+            }
+        }
+        if (!addSubassets(declared.path, mapped, game.textures_, game.materials_)) {
+            return invalid("a mesh's subasset whose identity the game gives another", declared.path);
+        }
     }
     for (const GameAnimator& animator : game.description_.animators) {
         const CookedGameAnimator* const kAnimator = kCooked.animator(animator.path);
