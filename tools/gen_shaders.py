@@ -19,6 +19,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WRITER = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_container.py")
 # Each container: its module, its name, and its stages' sources and entries.
 CONTAINERS = (
+    ("render", "display", (("vert", "vs"), ("frag", "fs"))),
     ("render_canvas_gpu", "sprite", (("vert", "vs"), ("frag", "fs"))),
 )
 
