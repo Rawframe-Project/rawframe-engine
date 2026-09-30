@@ -152,10 +152,10 @@ RAWFRAME_TEST(TheHashAndTheBlobFollowTheMaterial) {
 RAWFRAME_TEST(ACookedMaterialDecodesAsItWasEncoded) {
     const std::vector<std::byte> kBytes = encode(red());
     const auto kDecoded = decode(kBytes);
-    RAWFRAME_EXPECT(kBytes.size() == 204 && kDecoded.has_value() && *kDecoded == red());
+    RAWFRAME_EXPECT(kBytes.size() == 208 && kDecoded.has_value() && *kDecoded == (Qualities{red(), red(), red()}));
     // Anything else is refused: short, another format, a value out of the
     // contract's range, a state out of its set.
-    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(203)), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(207)), MaterialError::Invalid));
     std::vector<std::byte> other = kBytes;
     other[4] = std::byte{2};
     RAWFRAME_EXPECT(refusedWith(decode(other), MaterialError::Invalid));
@@ -249,7 +249,7 @@ RAWFRAME_TEST(ASampledTextureFeedsTheBaseColorAndOpacity) {
     RAWFRAME_EXPECT(kCompiled.has_value() && *kCompiled == stencilled());
     // Cooked and read back; its blob white where the texture colors it.
     const auto kDecoded = decode(encode(stencilled()));
-    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == stencilled());
+    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == (Qualities{stencilled(), stencilled(), stencilled()}));
     const std::array<float, kBlobFloats> kBlob = blobOf(stencilled());
     RAWFRAME_EXPECT(kBlob[0] == 1 && kBlob[1] == 1 && kBlob[2] == 1 && kBlob[7] == 0.5F && kBlob[15] == 6);
     // Its alpha alone: the literal color stays.
@@ -375,7 +375,7 @@ RAWFRAME_TEST(ATextureIsTiledMovedAndTinted) {
     const auto kCompiled = compile(*kRead);
     RAWFRAME_EXPECT(kCompiled.has_value() && *kCompiled == tiled);
     const auto kDecoded = decode(encode(tiled));
-    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == tiled);
+    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == (Qualities{tiled, tiled, tiled}));
     const std::array<float, kBlobFloats> kBlob = blobOf(tiled);
     RAWFRAME_EXPECT(kBlob[0] == 0.5F && kBlob[1] == 0.25F && kBlob[12] == 0.5F && kBlob[15] == 6 && kBlob[16] == 4 &&
                     kBlob[17] == 2 && kBlob[18] == 0.5F && kBlob[19] == 0);
@@ -448,7 +448,7 @@ RAWFRAME_TEST(APackedTextureAndAnEmissionTextureFeedTheirInputs) {
     const auto kCompiled = kRead.has_value() ? compile(*kRead) : std::unexpected{kRead.error().clone()};
     RAWFRAME_EXPECT(kCompiled.has_value() && *kCompiled == made);
     const auto kDecoded = decode(encode(made));
-    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == made);
+    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == (Qualities{made, made, made}));
     const std::array<float, kBlobFloats> kBlob = blobOf(made);
     RAWFRAME_EXPECT(kBlob[3] == 1 && kBlob[7] == 0.5F && kBlob[8] == 200 && kBlob[9] == 100 && kBlob[15] == 10 &&
                     kBlob[20] == 2 && kBlob[21] == 2 && kBlob[32] == 3 && kBlob[33] == 2 && kBlob[34] == 1 &&
@@ -494,7 +494,7 @@ RAWFRAME_TEST(ANormalTextureBendsTheGeometryNormal) {
     const auto kCompiled = kRead.has_value() ? compile(*kRead) : std::unexpected{kRead.error().clone()};
     RAWFRAME_EXPECT(kCompiled.has_value() && *kCompiled == bumped);
     const auto kDecoded = decode(encode(bumped));
-    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == bumped);
+    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == (Qualities{bumped, bumped, bumped}));
     const std::array<float, kBlobFloats> kBlob = blobOf(bumped);
     RAWFRAME_EXPECT(kBlob[15] == 16 && kBlob[28] == 3 && kBlob[29] == 3 && kBlob[35] == 0.5F);
     // A literal normal, a scale at its default, a normal from anything
@@ -519,4 +519,64 @@ RAWFRAME_TEST(ANormalTextureBendsTheGeometryNormal) {
                         {nodeOf(kUv, kUvType, Value::object(), Value::object()),
                          nodeOf(kNode + 3, kNormalMapType, Value::object(), objectOf({{"in", from(kUv, "uv")}}))})),
                     MaterialError::Invalid));
+}
+
+RAWFRAME_TEST(AQualitySwitchGivesEachQualityItsInput) {
+    // The base color a texture's at every quality but the low, where it is
+    // a plain grey; the roughness 0.8 but at the low quality its default.
+    constexpr graph::NodeId kColor = kNode + 3;
+    constexpr graph::NodeId kRough = kNode + 4;
+    const auto kGrey = Value::array({Value::real(0.5), Value::real(0.5), Value::real(0.5)});
+    const auto kSwitchOf = [](graph::NodeId id, std::vector<std::pair<std::string, Value>> inputs) {
+        return nodeOf(id, kQualitySwitchType, Value::object(), objectOf(std::move(inputs)));
+    };
+    const graph::Document kSwitched =
+        surfaceOf(objectOf({{"base_color", from(kColor, "out")}, {"specular_roughness", from(kRough, "out")}}),
+                  {samplerOf({}),
+                   kSwitchOf(kColor, {{"default", from(kSampler, "color")}, {"low", kGrey}}),
+                   kSwitchOf(kRough, {{"default", Value::real(0.8)}, {"low", Value::real(0.3)}})});
+    const auto kText = writeMaterial(kSwitched);
+    RAWFRAME_EXPECT(kText.has_value() && readMaterial(*kText).has_value());
+    const auto kQualities = compileQualities(kSwitched);
+    RAWFRAME_EXPECT(kQualities.has_value());
+    if (!kQualities.has_value()) {
+        return;
+    }
+    const Material& kLow = kQualities->at(static_cast<std::size_t>(Quality::Low));
+    const Material& kMedium = kQualities->at(static_cast<std::size_t>(Quality::Medium));
+    const Material& kHigh = kQualities->at(static_cast<std::size_t>(Quality::High));
+    RAWFRAME_EXPECT(kHigh.textures.baseColor && kHigh.textures.base.id != 0 && kHigh.surface.specularRoughness == 0.8F);
+    RAWFRAME_EXPECT(!kLow.textures.baseColor && kLow.textures.base.id == 0 &&
+                    kLow.surface.baseColor == (std::array<float, 3>{0.5F, 0.5F, 0.5F}) &&
+                    kLow.surface.specularRoughness == 0.3F);
+    // A quality the switch does not name takes its default.
+    RAWFRAME_EXPECT(kMedium == kHigh && compile(kSwitched).has_value() && *compile(kSwitched) == kHigh);
+    // Cooked with the low material apart, and read back whole.
+    const std::vector<std::byte> kBytes = encode(*kQualities);
+    RAWFRAME_EXPECT(kBytes.size() == 208 + 196);
+    const auto kDecoded = decode(kBytes);
+    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == *kQualities);
+    // A quality held apart that does not differ, or cut short, is refused.
+    std::vector<std::byte> same = encode(kHigh);
+    same[204] = std::byte{1};
+    const std::vector<std::byte> kHighBody{same.begin() + 8, same.begin() + 204};
+    same.insert(same.end(), kHighBody.begin(), kHighBody.end());
+    RAWFRAME_EXPECT(refusedWith(decode(same), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(kBytes.size() - 1)), MaterialError::Invalid));
+
+    // No default, inputs of two types, a switch of the wrong type for its
+    // input, and a literal out of range at one quality are refused.
+    for (const graph::Document& kBad : {surfaceOf(objectOf({{"specular_roughness", from(kRough, "out")}}),
+                                                  {kSwitchOf(kRough, {{"low", Value::real(0.3)}})}),
+                                        surfaceOf(objectOf({{"specular_roughness", from(kRough, "out")}}),
+                                                  {kSwitchOf(kRough, {{"default", Value::real(0.8)}, {"low", kGrey}})}),
+                                        surfaceOf(objectOf({{"base_color", from(kRough, "out")}}),
+                                                  {kSwitchOf(kRough, {{"default", Value::real(0.8)}})})}) {
+        RAWFRAME_EXPECT(refusedWith(compile(kBad), MaterialError::Invalid));
+    }
+    const graph::Document kRange =
+        surfaceOf(objectOf({{"specular_roughness", from(kRough, "out")}}),
+                  {kSwitchOf(kRough, {{"default", Value::real(0.8)}, {"low", Value::real(2)}})});
+    RAWFRAME_EXPECT(compile(kRange).has_value() && refusedWith(compile(kRange, Quality::Low), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(compileQualities(kRange), MaterialError::Invalid));
 }

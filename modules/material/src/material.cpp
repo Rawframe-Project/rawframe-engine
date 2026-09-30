@@ -322,7 +322,7 @@ bool known(const graph::Node& node) {
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
     return kText != nullptr &&
            (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kMultiplyType ||
-            *kText == kAddType || *kText == kSeparate3Type || *kText == kNormalMapType);
+            *kText == kAddType || *kText == kSeparate3Type || *kText == kNormalMapType || *kText == kQualitySwitchType);
 }
 
 bool math(std::string_view type) {
@@ -450,6 +450,36 @@ result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& n
     return made;
 }
 
+/// A `quality_switch` node's inputs, checked, and what its `out` carries
+/// (D318): `default` given, all of one type where it is known.
+struct Switch {
+    std::array<std::optional<Operand>, 4> inputs;
+    std::optional<Carried> out;
+};
+
+constexpr std::array<std::string_view, 4> kSwitchInputs = {"default", "high", "low", "medium"};
+
+result::Result<Switch> switchIn(const graph::Document& surface, const graph::Node& node) {
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kSwitchInputs));
+    if (kParts.second->find("default") == nullptr) {
+        return invalid("a quality switch's default is given");
+    }
+    Switch made;
+    for (std::size_t at = 0; at < kSwitchInputs.size(); ++at) {
+        const Value* kInput = kParts.second->find(kSwitchInputs.at(at));
+        if (kInput == nullptr) {
+            continue;
+        }
+        RAWFRAME_TRY_ASSIGN(made.inputs.at(at), operandOf(surface, *kInput));
+        const std::optional<Carried> kCarried = made.inputs.at(at)->carried;
+        if (kCarried.has_value() && made.out.has_value() && *kCarried != *made.out) {
+            return invalid("a quality switch's inputs are of one type");
+        }
+        made.out = made.out.has_value() ? made.out : kCarried;
+    }
+    return made;
+}
+
 /// A `separate3` node's input, checked: a color3 (D312).
 result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 1> kInputs = {"in"};
@@ -563,6 +593,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (kType == kNormalMapType && from.output == "out") {
         RAWFRAME_TRY(normalMapIn(surface, *kSource));
         return std::optional{Carried::Vec3};
+    }
+    if (kType == kQualitySwitchType && from.output == "out") {
+        RAWFRAME_TRY_ASSIGN(const Switch kSwitch, switchIn(surface, *kSource));
+        return kSwitch.out;
     }
     if (kType == kSeparate3Type && (from.output == "r" || from.output == "g" || from.output == "b")) {
         RAWFRAME_TRY(separate3In(surface, *kSource));
@@ -878,6 +912,8 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(separate3In(surface, node));
         } else if (typeOf(node) == kNormalMapType) {
             RAWFRAME_TRY(normalMapIn(surface, node));
+        } else if (typeOf(node) == kQualitySwitchType) {
+            RAWFRAME_TRY(switchIn(surface, node));
         } else {
             RAWFRAME_TRY(sampleIn(surface, node));
         }
@@ -922,11 +958,66 @@ result::Result<graph::Document> readMaterial(std::string_view text, const graph:
     return std::move(*read);
 }
 
-result::Result<Material> compile(const graph::Document& surface) {
-    RAWFRAME_TRY(validateSurface(surface));
-    if (!std::ranges::all_of(surface.nodes, known)) {
-        return unsupported("a material with a node of a type this engine does not know waits for the node library");
+namespace {
+
+/// What an input is at `quality`: a quality switch's input for it, or its
+/// default, followed through switches feeding switches; anything else as
+/// it is.
+Value atQuality(const graph::Document& surface, const Value& value, Quality quality) {
+    Value chosen = value;
+    for (std::size_t followed = 0; followed <= surface.nodes.size(); ++followed) {
+        const std::optional<graph::Connection> kFrom = graph::connectionOf(chosen);
+        const graph::Node* kSource = kFrom.has_value() ? nodeOf(surface, kFrom->node) : nullptr;
+        if (kSource == nullptr || !known(*kSource) || typeOf(*kSource) != kQualitySwitchType) {
+            return chosen;
+        }
+        const Value& kInputs = *kSource->record.find("inputs");
+        constexpr std::array<std::string_view, 3> kNames = {"low", "medium", "high"};
+        const Value* kFor = kInputs.find(kNames.at(static_cast<std::size_t>(quality)));
+        chosen = kFor != nullptr ? *kFor : *kInputs.find("default");
     }
+    return chosen;
+}
+
+/// The document as it is at `quality` (D318): every input a quality switch
+/// feeds given what the switch gives there, and a surface input that comes
+/// to its default left out.
+graph::Document atQuality(const graph::Document& surface, Quality quality) {
+    graph::Document made = surface;
+    for (graph::Node& node : made.nodes) {
+        const Value* kInputs = node.record.find("inputs");
+        if (kInputs == nullptr || kInputs->kind() != Value::Kind::Object || !known(node)) {
+            continue;
+        }
+        const bool kSurface = typeOf(node) == kSurfaceType;
+        Value inputs = Value::object();
+        for (std::size_t at = 0; at < kInputs->names().size(); ++at) {
+            const std::string& kName = kInputs->names()[at];
+            Value value = atQuality(surface, kInputs->items()[at], quality);
+            const Parameter* kParameter = kSurface ? parameterNamed(kName) : nullptr;
+            if (kParameter != nullptr && !graph::connectionOf(value).has_value()) {
+                const auto kLiteral = literalOf(*kParameter, value);
+                if (kLiteral.has_value() && std::ranges::all_of(std::span{kLiteral->data(), kParameter->channels},
+                                                                [kParameter](double channel) {
+                                                                    return channel == kParameter->initial;
+                                                                })) {
+                    continue;
+                }
+            }
+            inputs.add(kName, std::move(value));
+        }
+        Value record = Value::object();
+        for (std::size_t at = 0; at < node.record.names().size(); ++at) {
+            const std::string& kName = node.record.names()[at];
+            record.add(kName, kName == "inputs" ? std::move(inputs) : node.record.items()[at]);
+        }
+        node.record = std::move(record);
+    }
+    return made;
+}
+
+result::Result<Material> compiled(const graph::Document& surface) {
+    RAWFRAME_TRY(validateSurface(surface));
     const graph::Node& kSurface = *surfaceNode(surface);
     RAWFRAME_TRY_ASSIGN(Material made, statesIn(statesOf(surface)));
     RAWFRAME_TRY(inputsIn(kSurface, made.surface));
@@ -1024,6 +1115,24 @@ result::Result<Material> compile(const graph::Document& surface) {
     return made;
 }
 
+} // namespace
+
+result::Result<Material> compile(const graph::Document& surface, Quality quality) {
+    RAWFRAME_TRY(validateSurface(surface));
+    if (!std::ranges::all_of(surface.nodes, known)) {
+        return unsupported("a material with a node of a type this engine does not know waits for the node library");
+    }
+    return compiled(atQuality(surface, quality));
+}
+
+result::Result<Qualities> compileQualities(const graph::Document& surface) {
+    Qualities made;
+    for (const Quality kQuality : {Quality::Low, Quality::Medium, Quality::High}) {
+        RAWFRAME_TRY_ASSIGN(made.at(static_cast<std::size_t>(kQuality)), compile(surface, kQuality));
+    }
+    return made;
+}
+
 result::Result<base::Sha256Digest> semanticHash(const graph::Document& surface) {
     RAWFRAME_TRY(validateSurface(surface));
     if (!std::ranges::all_of(surface.nodes, known)) {
@@ -1040,17 +1149,22 @@ result::Result<base::Sha256Digest> semanticHash(const graph::Document& surface) 
     return *hashed;
 }
 
-std::vector<std::byte> encode(const Material& made) {
-    std::vector<std::byte> bytes;
-    const auto kPut = [&bytes](std::uint32_t word) {
-        for (std::size_t at = 0; at < 4; ++at) {
-            bytes.push_back(static_cast<std::byte>((word >> (at * 8)) & 0xFFU));
-        }
-    };
-    for (const char kLetter : std::string_view{"RFMT"}) {
-        bytes.push_back(static_cast<std::byte>(kLetter));
+namespace {
+
+/// A material's bytes after the format: its states, Surface, textures,
+/// what they feed, and the normal's scale.
+constexpr std::size_t kBodyBytes = 8 + (4 * 16) + (4 * 28) + 8 + 4;
+
+void putWord(std::vector<std::byte>& bytes, std::uint32_t word) {
+    for (std::size_t at = 0; at < 4; ++at) {
+        bytes.push_back(static_cast<std::byte>((word >> (at * 8)) & 0xFFU));
     }
-    kPut(5);
+}
+
+void putBody(std::vector<std::byte>& bytes, const Material& made) {
+    const auto kPut = [&bytes](std::uint32_t word) {
+        putWord(bytes, word);
+    };
     bytes.push_back(static_cast<std::byte>(made.shading));
     bytes.push_back(static_cast<std::byte>(made.blend));
     bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
@@ -1086,26 +1200,27 @@ std::vector<std::byte> encode(const Material& made) {
         bytes.push_back(static_cast<std::byte>(kFeeds));
     }
     kPut(std::bit_cast<std::uint32_t>(made.textures.normalScale));
-    return bytes;
 }
 
-result::Result<Material> decode(std::span<const std::byte> bytes) {
-    constexpr std::size_t kSize = 16 + (4 * 16) + (4 * 28) + 8 + 4;
-    if (bytes.size() != kSize || std::string_view{reinterpret_cast<const char*>(bytes.data()), 4} != "RFMT") {
-        return invalid("a cooked material is RFMT, its format, states, Surface, and texture");
-    }
+/// A material's bytes as `putBody` writes them, `kBodyBytes` long, as
+/// `decode` refuses them.
+result::Result<Material> bodyOf(std::span<const std::byte> bytes) {
+    // Offsets below are the whole record's, whose body follows 8 bytes.
     const auto kWord = [&bytes](std::size_t at) {
         std::uint32_t word = 0;
         for (std::size_t each = 0; each < 4; ++each) {
-            word |= std::to_integer<std::uint32_t>(bytes[at + each]) << (each * 8);
+            word |= std::to_integer<std::uint32_t>(bytes[at - 8 + each]) << (each * 8);
         }
         return word;
     };
-    const auto kShading = std::to_integer<std::uint8_t>(bytes[8]);
-    const auto kBlend = std::to_integer<std::uint8_t>(bytes[9]);
-    const auto kSided = std::to_integer<std::uint8_t>(bytes[10]);
-    if (kWord(4) != 5 || kShading > 1 || kBlend > 2 || kSided > 1 || bytes[11] != std::byte{0}) {
-        return invalid("a cooked material is format 5, its states in their sets");
+    const auto kByte = [&bytes](std::size_t at) {
+        return bytes[at - 8];
+    };
+    const auto kShading = std::to_integer<std::uint8_t>(kByte(8));
+    const auto kBlend = std::to_integer<std::uint8_t>(kByte(9));
+    const auto kSided = std::to_integer<std::uint8_t>(kByte(10));
+    if (kShading > 1 || kBlend > 2 || kSided > 1 || kByte(11) != std::byte{0}) {
+        return invalid("a cooked material's states are in their sets");
     }
     Material made{.shading = static_cast<Shading>(kShading),
                   .blend = static_cast<Blend>(kBlend),
@@ -1120,9 +1235,9 @@ result::Result<Material> decode(std::span<const std::byte> bytes) {
     }
     for (SampledTexture* texture :
          {&made.textures.base, &made.textures.packed, &made.textures.emission, &made.textures.normal}) {
-        const auto kFilter = std::to_integer<std::uint8_t>(bytes[at + 8]);
-        const auto kAddress = std::to_integer<std::uint8_t>(bytes[at + 9]);
-        if (kFilter > 1 || kAddress > 1 || bytes[at + 10] != std::byte{0} || bytes[at + 11] != std::byte{0}) {
+        const auto kFilter = std::to_integer<std::uint8_t>(kByte(at + 8));
+        const auto kAddress = std::to_integer<std::uint8_t>(kByte(at + 9));
+        if (kFilter > 1 || kAddress > 1 || kByte(at + 10) != std::byte{0} || kByte(at + 11) != std::byte{0}) {
             return invalid("a cooked material's texture's sampler state is in its sets");
         }
         *texture =
@@ -1135,7 +1250,7 @@ result::Result<Material> decode(std::span<const std::byte> bytes) {
     }
     std::array<std::uint8_t, 8> feeds{};
     for (std::size_t each = 0; each < feeds.size(); ++each) {
-        feeds.at(each) = std::to_integer<std::uint8_t>(bytes[at + each]);
+        feeds.at(each) = std::to_integer<std::uint8_t>(kByte(at + each));
     }
     if (feeds[0] > 1 || feeds[1] > 1 || feeds[2] > 4 || feeds[3] > 4 || feeds[4] > 4 || feeds[5] != 0 ||
         feeds[6] != 0 || feeds[7] != 0) {
@@ -1158,6 +1273,65 @@ result::Result<Material> decode(std::span<const std::byte> bytes) {
     const auto kCompiled = compile(documentOf(checked, 1));
     if (!kCompiled.has_value() || *kCompiled != checked) {
         return invalid("a cooked material is one a surface document compiles to");
+    }
+    return made;
+}
+
+} // namespace
+
+std::vector<std::byte> encode(const Qualities& made) {
+    std::vector<std::byte> bytes;
+    for (const char kLetter : std::string_view{"RFMT"}) {
+        bytes.push_back(static_cast<std::byte>(kLetter));
+    }
+    putWord(bytes, 6);
+    const Material& kHigh = made.at(static_cast<std::size_t>(Quality::High));
+    putBody(bytes, kHigh);
+    const bool kLow = made.at(static_cast<std::size_t>(Quality::Low)) != kHigh;
+    const bool kMedium = made.at(static_cast<std::size_t>(Quality::Medium)) != kHigh;
+    putWord(bytes, (kLow ? 1U : 0U) | (kMedium ? 2U : 0U));
+    for (const auto& [kDiffers, kQuality] : {std::pair{kLow, Quality::Low}, std::pair{kMedium, Quality::Medium}}) {
+        if (kDiffers) {
+            putBody(bytes, made.at(static_cast<std::size_t>(kQuality)));
+        }
+    }
+    return bytes;
+}
+
+std::vector<std::byte> encode(const Material& made) {
+    return encode(Qualities{made, made, made});
+}
+
+result::Result<Qualities> decode(std::span<const std::byte> bytes) {
+    constexpr std::size_t kHead = 8;
+    const auto kWordAt = [&bytes](std::size_t at) {
+        std::uint32_t word = 0;
+        for (std::size_t each = 0; each < 4; ++each) {
+            word |= std::to_integer<std::uint32_t>(bytes[at + each]) << (each * 8);
+        }
+        return word;
+    };
+    if (bytes.size() < kHead + kBodyBytes + 4 ||
+        std::string_view{reinterpret_cast<const char*>(bytes.data()), 4} != "RFMT" || kWordAt(4) != 6) {
+        return invalid("a cooked material is RFMT, format 6, and its material at the high quality");
+    }
+    const std::uint32_t kDiffer = kWordAt(kHead + kBodyBytes);
+    const std::size_t kMore = ((kDiffer & 1U) != 0 ? 1 : 0) + ((kDiffer & 2U) != 0 ? 1 : 0);
+    if (kDiffer > 3 || bytes.size() != kHead + kBodyBytes + 4 + (kMore * kBodyBytes)) {
+        return invalid("a cooked material holds the qualities that differ, and nothing else");
+    }
+    RAWFRAME_TRY_ASSIGN(const Material kHigh, bodyOf(bytes.subspan(kHead, kBodyBytes)));
+    Qualities made{kHigh, kHigh, kHigh};
+    std::size_t at = kHead + kBodyBytes + 4;
+    for (const auto& [kBit, kQuality] : {std::pair{1U, Quality::Low}, std::pair{2U, Quality::Medium}}) {
+        if ((kDiffer & kBit) == 0) {
+            continue;
+        }
+        RAWFRAME_TRY_ASSIGN(made.at(static_cast<std::size_t>(kQuality)), bodyOf(bytes.subspan(at, kBodyBytes)));
+        if (made.at(static_cast<std::size_t>(kQuality)) == kHigh) {
+            return invalid("a cooked material holds a quality apart only where it differs");
+        }
+        at += kBodyBytes;
     }
     return made;
 }

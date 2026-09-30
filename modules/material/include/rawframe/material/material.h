@@ -72,7 +72,11 @@
 // gives its channels as `r`, `g`, and `b` (floats). `normal_map` (D313)
 // takes a color3 `in`, a tangent-space normal as glTF encodes it, and its
 // param `scale` (the glTF normal scale, left out at one); its `out` is a
-// vec3. A node's params and inputs are in name order.
+// vec3. `quality_switch` (D318) takes `default` and any of `high`, `low`,
+// and `medium`, each connected or a literal as `multiply`'s are, all of one
+// type; its `out` is of that type, and at each quality it is the input for
+// that quality, or `default` where it has none (SPEC-0026's quality axis).
+// A node's params and inputs are in name order.
 //
 // A node of any other type is kept whole, as SPEC-0028 keeps what it does
 // not know. Generation 1 compiles three textures at most (D312), each
@@ -184,6 +188,14 @@ struct Textures {
     friend bool operator==(const Textures&, const Textures&) = default;
 };
 
+/// SPEC-0026's closed quality axis: which of a `quality_switch`'s inputs a
+/// material is compiled with. Which applies is the process's to say.
+enum class Quality : std::uint8_t {
+    Low,
+    Medium,
+    High
+};
+
 /// A compiled material: its declared states, its Surface, and the textures
 /// it samples. An input a texture feeds holds what the texture is
 /// multiplied by in `surface`, one when nothing (D311).
@@ -213,6 +225,11 @@ inline constexpr std::string_view kMultiplyType = "rawframe/multiply@1";
 inline constexpr std::string_view kAddType = "rawframe/add@1";
 inline constexpr std::string_view kSeparate3Type = "rawframe/separate3@1";
 inline constexpr std::string_view kNormalMapType = "rawframe/normal_map@1";
+inline constexpr std::string_view kQualitySwitchType = "rawframe/quality_switch@1";
+
+/// What a surface compiles to at each quality, by `Quality`: the same
+/// material at each where its graph does not differ (D318).
+using Qualities = std::array<Material, 3>;
 
 /// A surface material's document for `made`, its surface node keyed by
 /// `node` and the nodes its textures need by the ids after it, in order,
@@ -233,30 +250,38 @@ inline constexpr std::string_view kNormalMapType = "rawframe/normal_map@1";
 /// Reads the canonical form only, as hostile input.
 [[nodiscard]] result::Result<graph::Document> readMaterial(std::string_view text, const graph::Limits& limits = {});
 
-/// Its states, Surface, and texture: every literal, and the default where
-/// one is left out. Refuses (`Unsupported`) what generation 1 does not
+/// Its states, Surface, and texture at `quality`, each quality switch its
+/// input for it: every literal, and the default where one is left out
+/// (then or by the switch). Refuses (`Unsupported`) what generation 1 does not
 /// compile: a node of a type it does not know, or a connection besides the
 /// header's; (`Invalid`) a factor out of its input's range.
-[[nodiscard]] result::Result<Material> compile(const graph::Document& surface);
+[[nodiscard]] result::Result<Material> compile(const graph::Document& surface, Quality quality = Quality::High);
+/// The surface compiled at each quality, as `compile` refuses it.
+[[nodiscard]] result::Result<Qualities> compileQualities(const graph::Document& surface);
 
 /// SPEC-0028's semantic hash: from the surface node down, and the states,
 /// blind to ids and drawings. Refuses (`Unsupported`) a document holding a
 /// node of a type this family does not know.
 [[nodiscard]] result::Result<base::Sha256Digest> semanticHash(const graph::Document& surface);
 
-/// A compiled material's bytes: `RFMT`, format 5, its states (shading,
+/// A compiled material's bytes: `RFMT`, format 6, then its material at the
+/// high quality: its states (shading,
 /// blend, double sided, a byte each and one of nought), its alpha cutoff,
 /// its Surface's sixteen numbers in the contract's order, then its base,
 /// packed, emission, and normal textures, each its identity (eight bytes),
 /// filter, and address (a byte each), two bytes of nought, and its scale
 /// and offset (two numbers each); then what they feed, a byte each: the
 /// base color, the opacity, the metalness's channel, the roughness's, the
-/// occlusion's, and three of nought; then the normal's scale.
+/// occlusion's, and three of nought; then the normal's scale. Then a byte,
+/// one for a low material that differs and two for a medium one, three of
+/// nought, and each that differs, low first, as the high one is (D318).
+[[nodiscard]] std::vector<std::byte> encode(const Qualities& made);
+/// A material the same at every quality.
 [[nodiscard]] std::vector<std::byte> encode(const Material& made);
 
 /// Refuses (`Invalid`) bytes `encode` would not make, or a material a
 /// document could not compile to: cooked content is checked as it is read.
-[[nodiscard]] result::Result<Material> decode(std::span<const std::byte> bytes);
+[[nodiscard]] result::Result<Qualities> decode(std::span<const std::byte> bytes);
 
 /// ADR-0031's typed data blob, what a device reads of a material: the base
 /// color and metalness; the specular color times its weight, and the

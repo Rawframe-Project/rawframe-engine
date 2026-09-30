@@ -20,8 +20,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     if (!kWritten.has_value() || *kWritten != kText) {
         std::abort();
     }
-    if (const auto kCompiled = material::compile(*kRead); kCompiled.has_value()) {
-        static_cast<void>(material::blobOf(*kCompiled));
+    if (const auto kCompiled = material::compileQualities(*kRead); kCompiled.has_value()) {
+        for (const material::Material& each : *kCompiled) {
+            static_cast<void>(material::blobOf(each));
+        }
         const auto kDecoded = material::decode(material::encode(*kCompiled));
         if (!kDecoded.has_value() || *kDecoded != *kCompiled) {
             std::abort();

@@ -24,7 +24,7 @@ result::Result<std::string> normalize(const document::Value* settings) {
 result::Result<Artifact> cookMaterial(std::span<const std::byte> source, std::string_view, Reads&) {
     const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
     RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, material::readMaterial(kText));
-    RAWFRAME_TRY_ASSIGN(const material::Material kCompiled, material::compile(kDocument));
+    RAWFRAME_TRY_ASSIGN(const material::Qualities kCompiled, material::compileQualities(kDocument));
     return Artifact{.type = content::ResourceTypeId{material::kMaterialType},
                     .representation = *content::RepresentationId::parse(material::kMaterialRepresentation),
                     .bytes = material::encode(kCompiled)};

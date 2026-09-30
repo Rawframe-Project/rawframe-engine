@@ -786,7 +786,7 @@ RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {
             each.representation.text() == material::kMaterialRepresentation) {
             const std::string kBytes = readText(kProject.output / each.locator);
             const auto kRead = material::decode(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
-            found = kRead.has_value() && *kRead == brass;
+            found = kRead.has_value() && *kRead == (material::Qualities{brass, brass, brass});
         }
     }
     RAWFRAME_EXPECT(found);
@@ -848,8 +848,10 @@ RAWFRAME_TEST(AGltfsMaterialsAndImagesCookIntoItsSubassets) {
     // names its material by it, and the material its texture.
     const auto kMesh = mesh::decode(kBytesOf("000000000000000000000000000000a8"));
     RAWFRAME_EXPECT(kMesh.has_value() && kMesh->parts[0].material == 0x8c41d7e2a95b4f03ULL);
-    const auto kMaterial = material::decode(kBytesOf(kMaterialId));
-    RAWFRAME_EXPECT(kMaterial.has_value() && kMaterial->textures.base.id == 0xe2b9054fa3c84d17ULL &&
+    const auto kMaterials = material::decode(kBytesOf(kMaterialId));
+    const material::Material* kMaterial =
+        kMaterials.has_value() ? &kMaterials->at(static_cast<std::size_t>(material::Quality::High)) : nullptr;
+    RAWFRAME_EXPECT(kMaterial != nullptr && kMaterial->textures.base.id == 0xe2b9054fa3c84d17ULL &&
                     kMaterial->textures.baseColor && kMaterial->surface.specularRoughness == 0.5F);
     // Kept exact, as the sidecar says, and sRGB, since it is a color.
     const auto kTexture = texture::decode(kBytesOf(kTextureId));

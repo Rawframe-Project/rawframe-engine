@@ -41,7 +41,8 @@ SceneTexture sceneTextureOf(const material::SampledTexture& texture) {
 }
 
 /// A material's cooked bytes, read and waited for, decoded (D303).
-result::Result<material::Material> readMaterial(content::ContentStore& store, base::Bits128 id) {
+result::Result<material::Material>
+readMaterial(content::ContentStore& store, base::Bits128 id, material::Quality quality) {
     RAWFRAME_TRY_ASSIGN(execution::AsyncHandle<content::VerifiedContent> read,
                         store.read(content::ResourceRef{.id = content::ResourceId{id},
                                                         .type = content::ResourceTypeId{material::kMaterialType}}));
@@ -52,7 +53,8 @@ result::Result<material::Material> readMaterial(content::ContentStore& store, ba
                                                            .domain = kRenderSceneDomain,
                                                            .code = code(RenderSceneError::MaterialUnreadable),
                                                            .description = "a material's read was cancelled"}));
-    return material::decode(kRead.bytes());
+    RAWFRAME_TRY_ASSIGN(const material::Qualities kQualities, material::decode(kRead.bytes()));
+    return kQualities.at(static_cast<std::size_t>(quality));
 }
 
 /// A client's view without a camera of its own: behind its player and
@@ -140,6 +142,19 @@ public:
         antiAliasing_ = kMethod == "off"    ? AntiAliasing::Off
                         : kMethod == "fxaa" ? AntiAliasing::Fxaa
                                             : AntiAliasing::Taa;
+        // SPEC-0026's quality axis (D318): which of their qualities the
+        // game's materials are drawn at, the high unless another is named.
+        const std::string_view kQuality = configuration.text("scene.quality").value_or("high");
+        if (kQuality != "low" && kQuality != "medium" && kQuality != "high") {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                               composition::kCompositionDomain,
+                                                               code(composition::CompositionError::BadConfiguration),
+                                                               "scene.quality is low, medium, or high")
+                                                      .error()};
+        }
+        quality_ = kQuality == "low"      ? material::Quality::Low
+                   : kQuality == "medium" ? material::Quality::Medium
+                                          : material::Quality::High;
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
         }
@@ -182,7 +197,7 @@ public:
                     .representation = *content::RepresentationId::parse(material::kMaterialRepresentation)}};
                 RAWFRAME_TRY(content->admit(kAdmitted));
                 for (const world_kest::GameMaterialResource& each : files->materials()) {
-                    auto read = readMaterial(content->store(), each.material);
+                    auto read = readMaterial(content->store(), each.material, quality_);
                     if (read.has_value()) {
                         materials.push_back({.id = each.id,
                                              .blob = material::blobOf(*read),
@@ -527,6 +542,7 @@ private:
     /// The point and spot lights each frame lit with, culled, and left out
     /// at the limit; a cluster's lights past its limit (D290).
     AntiAliasing antiAliasing_ = AntiAliasing::Taa;
+    material::Quality quality_ = material::Quality::High;
     LightShadowSettings lightShadows_;
     std::uint64_t lightsLit_ = 0;
     std::uint64_t lightsCulled_ = 0;

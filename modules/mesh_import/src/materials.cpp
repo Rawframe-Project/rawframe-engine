@@ -258,7 +258,7 @@ result::Result<std::uint64_t> MaterialMaker::identityOf(const cgltf_material* ma
     // What the cook writes must read back as itself: a material generation 1
     // compiles, or none.
     const auto kRead = material::decode(material::encode(made));
-    if (!kRead.has_value() || *kRead != made) {
+    if (!kRead.has_value() || kRead->at(static_cast<std::size_t>(material::Quality::High)) != made) {
         return unsupported("the material " + kName + " is not one generation 1 compiles" +
                            (kRead.has_value() ? std::string{} : ": " + std::string{kRead.error().description()}));
     }
