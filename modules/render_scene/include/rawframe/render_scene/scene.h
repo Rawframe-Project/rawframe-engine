@@ -138,6 +138,10 @@ struct SceneDraw {
     Matrix normal{};
     std::array<float, 4> color{1, 1, 1, 1};
     world::EntityHandle entity;
+    /// Where the model was the frame before, relative to this frame's eye:
+    /// what its motion is measured from (D291); the model itself where it
+    /// was not drawn then.
+    Matrix previous{};
 };
 
 /// The light a frame is drawn in, linear Rec. 709 (ADR-0047) in physical
@@ -222,6 +226,23 @@ struct SceneShadows {
 
 /// What the queue stage builds: the view, the light, and the draws in the
 /// order a device draws them, grouped by mesh; and what was left out.
+/// ADR-0051's temporal inputs (D291). Whether the frame is antialiased
+/// over time; its subpixel jitter, a pixel's fraction across and down in
+/// [-0.5, 0.5), which the GPU half applies to the projection at its size;
+/// the frame before's view and projection, unjittered, taking this frame's
+/// eye-relative places; and whether that frame's picture may be reused: not
+/// on the first frame, nor across a cut.
+struct SceneTemporal {
+    bool enabled = false;
+    std::array<float, 2> jitter{0, 0};
+    Matrix previousViewProjection{};
+    bool history = false;
+};
+
+/// The subpixel jitter of a frame counted from nought: Halton (2, 3) over
+/// eight frames, centered on the pixel (ADR-0051).
+[[nodiscard]] std::array<float, 2> temporalJitter(std::uint64_t frame) noexcept;
+
 struct SceneFrame {
     /// World axes to the eye's, and the eye's to clip space (reversed-Z,
     /// infinite far).
@@ -231,6 +252,7 @@ struct SceneFrame {
     /// by.
     std::array<float, 3> forward{0, 0, -1};
     SceneShadows shadows;
+    SceneTemporal temporal;
     /// The punctual lights that reach the view, and the clusters they are
     /// culled into (D290).
     std::vector<SceneLight> lights3d;
@@ -277,6 +299,18 @@ struct ShadowSettings {
     std::uint32_t side = 1024;
 };
 
+/// ADR-0051's anti-aliasing methods that exist so far (D291): none, and the
+/// first-party temporal one, the default. Multisampling and FXAA join the
+/// closed set when they are built.
+enum class AntiAliasing : std::uint8_t {
+    Off,
+    Taa
+};
+
+/// An eye moving farther than this in a frame cuts: the picture before is
+/// not reused.
+inline constexpr double kCutDistance = 10;
+
 struct SceneSettings {
     /// The game's components of `rawframe.model.Model`'s type, in its order:
     /// an entity may show one of each.
@@ -291,6 +325,7 @@ struct SceneSettings {
     std::vector<SceneMesh> meshes;
     SceneLimits limits;
     ShadowSettings shadows;
+    AntiAliasing antiAliasing = AntiAliasing::Taa;
 };
 
 class Scene {

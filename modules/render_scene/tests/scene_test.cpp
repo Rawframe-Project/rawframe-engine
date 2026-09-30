@@ -453,3 +453,52 @@ RAWFRAME_TEST(PointAndSpotLightsLightInCandelaAndNameTheirClusters) {
         RAWFRAME_EXPECT(kCrowded.clusters.ranges[at] <= 3);
     }
 }
+
+RAWFRAME_TEST(TheTemporalInputsFollowTheEyeAndTheModels) {
+    Rig rig;
+    const auto kAt = [](double x, double y, double z) {
+        return physics3d::Pose3D{.x = x, .y = y, .z = z, .qw = 1};
+    };
+    const world::EntityHandle kRockEntity = rig.spawn(Model{.mesh = kBox}, kAt(2000, 0, -10));
+    const SceneCamera kCamera{.eye = {2000, 0, 0}, .fovY = 1, .near = 0.1F, .aspect = 1};
+    // The first frame: jittered, with nothing before it to reuse; the
+    // model was where it is.
+    const SceneFrame& kFirst = rig.frame(kCamera);
+    RAWFRAME_EXPECT(kFirst.temporal.enabled && !kFirst.temporal.history &&
+                    kFirst.temporal.jitter == temporalJitter(0) && kFirst.draws.size() == 1 &&
+                    kFirst.draws[0].previous == kFirst.draws[0].model);
+    const Matrix kFirstView = kFirst.temporal.previousViewProjection;
+    const std::array<float, 3> kFirstClip = clipOf(kFirstView, {0, 0, -10});
+    // The model moves a meter away and the eye a meter back: the frame
+    // before's view takes the model's place before to where it was seen.
+    RAWFRAME_EXPECT(
+        rig.world.insert(kRockEntity, *rig.schema->key<physics3d::Pose3D>(), kAt(2000, 0, -11)).has_value());
+    SceneCamera back = kCamera;
+    back.eye = {2000, 0, 1};
+    const SceneFrame& kSecond = rig.frame(back);
+    RAWFRAME_EXPECT(kSecond.temporal.history && kSecond.temporal.jitter == temporalJitter(1) &&
+                    kSecond.draws.size() == 1);
+    RAWFRAME_EXPECT(near(kSecond.draws[0].previous[14], -11) && near(kSecond.draws[0].model[14], -12));
+    const std::array<float, 3> kBefore = clipOf(kSecond.temporal.previousViewProjection, {0, 0, -11});
+    RAWFRAME_EXPECT(near(kBefore[0], kFirstClip[0]) && near(kBefore[1], kFirstClip[1]) &&
+                    near(kBefore[2], kFirstClip[2]));
+    // A cut: the eye jumps, and nothing before is reused.
+    SceneCamera away = kCamera;
+    away.eye = {2050, 0, 0};
+    RAWFRAME_EXPECT(!rig.frame(away).temporal.history);
+    // Eight jitters, each within the pixel, then again.
+    for (std::uint64_t frame = 0; frame < 8; ++frame) {
+        const std::array<float, 2> kJitter = temporalJitter(frame);
+        RAWFRAME_EXPECT(kJitter[0] >= -0.5F && kJitter[0] < 0.5F && kJitter[1] >= -0.5F && kJitter[1] < 0.5F &&
+                        temporalJitter(frame + 8) == kJitter);
+        for (std::uint64_t other = 0; other < frame; ++other) {
+            RAWFRAME_EXPECT(temporalJitter(other) != kJitter);
+        }
+    }
+    // Without anti-aliasing, no jitter.
+    auto plain = *Scene::create(*rig.schema, {.models = {kModelId}, .antiAliasing = AntiAliasing::Off});
+    plain->extract(rig.world);
+    const SceneFrame& kPlain = plain->queue(kCamera);
+    RAWFRAME_EXPECT(!kPlain.temporal.enabled && !kPlain.temporal.history &&
+                    kPlain.temporal.jitter == (std::array<float, 2>{0, 0}));
+}

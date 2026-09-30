@@ -94,6 +94,21 @@ bool wellFormed(const ModelInstance& instance) noexcept {
            });
 }
 
+/// `left` times `right`, column-major.
+Matrix times(const Matrix& left, const Matrix& right) noexcept {
+    Matrix out{};
+    for (std::size_t column = 0; column < 4; ++column) {
+        for (std::size_t row = 0; row < 4; ++row) {
+            float sum = 0;
+            for (std::size_t k = 0; k < 4; ++k) {
+                sum += left[(k * 4) + row] * right[(column * 4) + k];
+            }
+            out[(column * 4) + row] = sum;
+        }
+    }
+    return out;
+}
+
 /// The eye's axes: right, up, and forward, from its yaw and pitch, pitch
 /// kept short of straight up or down.
 std::array<Vector, 3> axesOf(float yaw, float pitch) noexcept {
@@ -121,6 +136,20 @@ struct Scene::State {
     std::optional<Sky> skyNow;
     std::vector<const ModelInstance*> order;
     SceneFrame frame;
+    /// What the frame before drew (D291): each model's turn and scale, and
+    /// its place in the World, by entity and component; and this frame's,
+    /// as it is queued.
+    struct Placement {
+        std::array<float, 9> turned{};
+        std::array<double, 3> position{};
+    };
+    std::map<std::pair<world::EntityHandle, std::uint32_t>, Placement> placed;
+    std::map<std::pair<world::EntityHandle, std::uint32_t>, Placement> placing;
+    /// The eye the frame before was seen from, if it saw, and its view and
+    /// projection, unjittered; the frames queued.
+    std::optional<std::array<double, 3>> previousEye;
+    Matrix previousViewProjection{};
+    std::uint64_t frames = 0;
 
     void lights() {
         const Sun kSun = sunNow.value_or(Sun{
@@ -338,6 +367,19 @@ struct Scene::State {
             draw.model[13] = kPlace[1];
             draw.model[14] = kPlace[2];
             draw.model[15] = 1;
+            // Where it was: the frame before's turn and place, relative to
+            // this frame's eye.
+            const std::pair kKey{instance->entity, instance->component};
+            draw.previous = draw.model;
+            if (const auto kBefore = placed.find(kKey); kBefore != placed.end()) {
+                for (std::size_t column = 0; column < 3; ++column) {
+                    for (std::size_t row = 0; row < 3; ++row) {
+                        draw.previous[(column * 4) + row] = kBefore->second.turned[(column * 3) + row];
+                    }
+                    draw.previous[12 + column] =
+                        static_cast<float>(kBefore->second.position[column] - camera.eye[column]);
+                }
+            }
             const Vector kColor = colorOf(kModel.color);
             draw.color = {kColor[0], kColor[1], kColor[2], static_cast<float>(kModel.color & 0xFFU) / 255.0F};
             // A model near enough casts into the shadows, seen or not: a
@@ -368,11 +410,52 @@ struct Scene::State {
                 ++frame.overLimit;
                 continue;
             }
+            Placement& now = placing[kKey];
+            for (std::size_t column = 0; column < 3; ++column) {
+                for (std::size_t row = 0; row < 3; ++row) {
+                    now.turned[(column * 3) + row] = draw.model[(column * 4) + row];
+                }
+            }
+            now.position = instance->position;
             frame.draws.push_back(draw);
             ++frame.drawn;
         }
+        temporal(camera, kSees);
         cluster(camera, {kRight, kUp, kForward}, kSees, kHalf, kAspect, kNear);
         return frame;
+    }
+
+    /// The temporal inputs (D291): the jitter, and the frame before's view
+    /// taking this frame's places, unless this is the first or the eye cut.
+    void temporal(const SceneCamera& camera, bool sees) {
+        std::swap(placed, placing);
+        placing.clear();
+        SceneTemporal& now = frame.temporal;
+        now.enabled = settings.antiAliasing == AntiAliasing::Taa && sees;
+        now.jitter = now.enabled ? temporalJitter(frames) : std::array<float, 2>{0, 0};
+        const Matrix kViewProjection = times(frame.projection, frame.view);
+        std::array<double, 3> moved{};
+        for (std::size_t axis = 0; axis < 3 && previousEye.has_value(); ++axis) {
+            moved[axis] = camera.eye[axis] - (*previousEye)[axis];
+        }
+        now.history =
+            now.enabled && previousEye.has_value() &&
+            (moved[0] * moved[0]) + (moved[1] * moved[1]) + (moved[2] * moved[2]) <= kCutDistance * kCutDistance;
+        now.previousViewProjection = kViewProjection;
+        if (now.history) {
+            // The frame before's eye-relative places are this frame's moved
+            // by how far the eye went.
+            now.previousViewProjection = previousViewProjection;
+            for (std::size_t row = 0; row < 4; ++row) {
+                for (std::size_t axis = 0; axis < 3; ++axis) {
+                    now.previousViewProjection[12 + row] +=
+                        previousViewProjection[(axis * 4) + row] * static_cast<float>(moved[axis]);
+                }
+            }
+        }
+        previousEye = sees ? std::optional{camera.eye} : std::nullopt;
+        previousViewProjection = kViewProjection;
+        ++frames;
     }
 
     /// The slice a depth ahead falls in: nearer than the clusters' near is
@@ -639,6 +722,21 @@ void Scene::extract(world::World& world) {
 
 const SceneFrame& Scene::queue(const SceneCamera& camera) {
     return state_->queue(camera);
+}
+
+std::array<float, 2> temporalJitter(std::uint64_t frame) noexcept {
+    const auto kRadical = [](std::uint64_t index, std::uint64_t base) {
+        float fraction = 1;
+        float result = 0;
+        while (index > 0) {
+            fraction /= static_cast<float>(base);
+            result += fraction * static_cast<float>(index % base);
+            index /= base;
+        }
+        return result;
+    };
+    const std::uint64_t kIndex = (frame % 8) + 1;
+    return {kRadical(kIndex, 2) - 0.5F, kRadical(kIndex, 3) - 0.5F};
 }
 
 std::span<const ModelInstance> Scene::extracted() const noexcept {

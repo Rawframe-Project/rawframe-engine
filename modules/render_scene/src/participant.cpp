@@ -76,6 +76,18 @@ public:
                                   .distance = static_cast<float>(kDistance),
                                   .logarithmicBlend = kShadowDefaults.logarithmicBlend,
                                   .side = static_cast<std::uint32_t>(kSide)};
+        // ADR-0051's anti-aliasing method (D291): temporal unless turned off;
+        // the closed set's other methods are not built yet.
+        const std::string_view kMethod = configuration.text("scene.anti_aliasing").value_or("taa");
+        if (kMethod != "taa" && kMethod != "off") {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             composition::kCompositionDomain,
+                             code(composition::CompositionError::BadConfiguration),
+                             "scene.anti_aliasing is taa or off; msaa and fxaa are not built yet")
+                    .error()};
+        }
+        antiAliasing_ = kMethod == "off" ? AntiAliasing::Off : AntiAliasing::Taa;
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
         }
@@ -111,7 +123,8 @@ public:
                                   .points = std::move(game->points),
                                   .spots = std::move(game->spots),
                                   .meshes = std::move(game->meshes),
-                                  .shadows = shadows_};
+                                  .shadows = shadows_,
+                                  .antiAliasing = antiAliasing_};
         return {};
     }
 
@@ -270,6 +283,7 @@ private:
     std::size_t mostDraws_ = 0;
     /// The point and spot lights each frame lit with, culled, and left out
     /// at the limit; a cluster's lights past its limit (D290).
+    AntiAliasing antiAliasing_ = AntiAliasing::Taa;
     std::uint64_t lightsLit_ = 0;
     std::uint64_t lightsCulled_ = 0;
     std::uint64_t lightsOverLimit_ = 0;
