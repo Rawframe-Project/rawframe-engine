@@ -1,5 +1,7 @@
 #include "metering.h"
 
+#include "tables.h"
+
 #include <algorithm>
 #include <array>
 #include <maul-rhi/encoder.h>
@@ -14,17 +16,6 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
         .resource = resource,
         .kind = kind,
         .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
-}
-
-mrhiBinding bufferAt(std::uint32_t slot, mrhiResourceId resource, std::uint64_t bytes) noexcept {
-    return mrhiBinding{.slot = slot,
-                       .resource = resource,
-                       .offset = 0,
-                       .size = bytes,
-                       .viewKind = mrhi_texture2d,
-                       .viewFormat = mrhi_formatNone,
-                       .range = {},
-                       .sampler = {}};
 }
 
 /// The histogram's bins zeroed, as the upload pass writes them.
@@ -135,18 +126,10 @@ Metering::record(const Pipelines& pipelines, mrhiResourceId scene, std::uint32_t
     if (!metered_) {
         return {};
     }
-    const std::array<mrhiBinding, 4> kBindings = {
-        mrhiBinding{.slot = 0,
-                    .resource = scene,
-                    .offset = 0,
-                    .size = 0,
-                    .viewKind = mrhi_texture2d,
-                    .viewFormat = mrhi_formatNone,
-                    .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
-                    .sampler = {}},
-        bufferAt(1, exposure_, sizeof(ExposureBlock)),
-        bufferAt(2, histogram_, sizeof(kEmpty)),
-        bufferAt(3, meterResource_, sizeof(MeterBlock))};
+    const std::array<mrhiBinding, 4> kBindings = {textureAt(0, scene),
+                                                  bufferAt(1, exposure_, sizeof(ExposureBlock)),
+                                                  bufferAt(2, histogram_, sizeof(kEmpty)),
+                                                  bufferAt(3, meterResource_, sizeof(MeterBlock))};
     // Every fourth texel each way: a workgroup of 16 by 16 covers 64 by 64.
     const std::uint32_t kAcross = (width + 63) / 64;
     const std::uint32_t kDown = (height + 63) / 64;

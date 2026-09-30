@@ -1033,8 +1033,8 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
     unlit[15] = 1 + 2;
     frame.materials = {render_scene::noMaterial(), unlit};
     const auto kQuartersOf = [&](std::uint64_t texture) {
-        frame.textures = {{},
-                          {.id = texture, .filter = material::Filter::Nearest, .address = material::Address::Clamp}};
+        frame.textures = {
+            {}, {.base = {.id = texture, .filter = material::Filter::Nearest, .address = material::Address::Clamp}}};
         (**made).prepare(&frame, kMeshes, kTextures);
         const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
         std::optional<std::vector<std::byte>> pixels;
@@ -1129,7 +1129,8 @@ RAWFRAME_TEST(AMaskedMaterialIsCutWhereItsTextureIsClear) {
     render_scene::MaterialBlob unlit = render_scene::noMaterial();
     unlit[15] = 1;
     frame.materials = {render_scene::noMaterial(), masked, unlit};
-    frame.textures = {{}, {.id = 0x77, .filter = material::Filter::Nearest, .address = material::Address::Clamp}, {}};
+    frame.textures = {
+        {}, {.base = {.id = 0x77, .filter = material::Filter::Nearest, .address = material::Address::Clamp}}, {}};
     (**made).prepare(&frame, kMeshes, kTextures);
     const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
     const std::uint64_t kBefore = (**made).statistics().frames;
@@ -1181,7 +1182,7 @@ RAWFRAME_TEST(AMaskedCasterCastsOnlyWhatIsLeftOfIt) {
         masked[14] = 0.5F;
         masked[15] = 4;
         frame.materials = {render_scene::noMaterial(), masked};
-        frame.textures = {{}, {.id = 0x77}};
+        frame.textures = {{}, {.base = {.id = 0x77}}};
         const auto kPixels = drawn(**framer, **made, frame, kMeshes, kTextures);
         RAWFRAME_EXPECT(kPixels.has_value());
         return kPixels.has_value() ? at(*kPixels, 27, 39)[0] : -1;
@@ -1190,4 +1191,66 @@ RAWFRAME_TEST(AMaskedCasterCastsOnlyWhatIsLeftOfIt) {
     const int kLit = kFloor(std::byte{0});
     std::printf("left of the box: opaque %d, clear %d\n", kShadowed, kLit);
     RAWFRAME_EXPECT(kLit > 60 && kShadowed < kLit / 3);
+}
+
+RAWFRAME_TEST(PackedAndEmissionTexturesShapeTheSurface) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // One texture, white above and black below, linear in its texels.
+    texture::Texture halves{.format = texture::Format::Rgba8};
+    halves.levels.push_back({.width = 1, .height = 2, .bytes = std::vector<std::byte>(8, std::byte{255})});
+    for (const std::size_t kBelow : {4U, 5U, 6U}) {
+        halves.levels[0].bytes[kBelow] = std::byte{0};
+    }
+    const auto kHalves = std::make_shared<const texture::Texture>(std::move(halves));
+    const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == 0x77 ? kHalves : nullptr;
+    };
+    const render_scene::SceneTexture kSampled{
+        .id = 0x77, .filter = material::Filter::Nearest, .address = material::Address::Clamp};
+    SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
+    shown.material = 1;
+    const auto kHalvesOf = [&](SceneFrame& frame, const material::Material& surface) {
+        frame.shadows.count = 0;
+        frame.draws = {shown};
+        frame.materials = {render_scene::noMaterial(), material::blobOf(surface)};
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes, kTextures);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        return kPixels.has_value() ? std::pair{at(*kPixels, 32, 24)[0], at(*kPixels, 32, 40)[0]} : std::pair{-1, -1};
+    };
+    // Glowing fifty nits in the dark where the emission texture is white,
+    // exposed so that is middle grey.
+    SceneFrame dark = looking();
+    dark.lights.sun = {0, 0, 0};
+    dark.lights.sky = {0, 0, 0};
+    dark.lights.ground = {0, 0, 0};
+    dark.exposure = std::log2(50.0F / (1.2F * 0.18F));
+    material::Material glowing;
+    glowing.surface.emissionLuminance = 50;
+    glowing.textures.emission.id = 0x77;
+    dark.textures = {{}, {.emission = kSampled}};
+    const auto [kGlowAbove, kGlowBelow] = kHalvesOf(dark, glowing);
+    // Under the sky alone, occluded where the packed texture's red is
+    // nought.
+    SceneFrame sky = looking();
+    sky.lights.sun = {0, 0, 0};
+    material::Material occluded;
+    occluded.textures.packed.id = 0x77;
+    occluded.textures.occlusion = material::Channel::Red;
+    sky.textures = {{}, {.packed = kSampled}};
+    const auto [kSkyAbove, kSkyBelow] = kHalvesOf(sky, occluded);
+    std::printf(
+        "glowing %d above, %d below; under the sky %d above, %d below\n", kGlowAbove, kGlowBelow, kSkyAbove, kSkyBelow);
+    RAWFRAME_EXPECT(std::abs(kGlowAbove - 128) <= 3 && kGlowBelow == 0 && kSkyAbove > 60 && kSkyBelow < 5);
 }

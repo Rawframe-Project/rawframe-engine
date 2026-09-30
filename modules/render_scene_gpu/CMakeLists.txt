@@ -6,6 +6,6 @@ if(NOT TARGET rawframe_render)
     return()
 endif()
 
-rawframe_module(NAME render_scene_gpu SOURCES src/blocks.cpp src/meshes.cpp src/metering.cpp src/participant.cpp src/pipelines.cpp src/renderer.cpp src/temporal.cpp DEPS render render_scene material texture mesh composition diagnostics result base)
+rawframe_module(NAME render_scene_gpu SOURCES src/blocks.cpp src/meshes.cpp src/metering.cpp src/participant.cpp src/pipelines.cpp src/renderer.cpp src/tables.cpp src/temporal.cpp DEPS render render_scene material texture mesh composition diagnostics result base)
 
 rawframe_module_tests(NAME render_scene_gpu SOURCES tests/renderer_test.cpp)

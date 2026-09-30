@@ -6,6 +6,7 @@
 #include "pipelines.h"
 #include "rawframe/render/textures.h"
 #include "rawframe/render_scene_gpu/errors.h"
+#include "tables.h"
 #include "temporal.h"
 
 #include <algorithm>
@@ -85,6 +86,14 @@ struct SceneRenderer::State {
         return usable;
     }
 
+    /// A texture and its sampler into two slots of a table: the texture
+    /// held this frame, or white for none and for one not held.
+    void bindTexture(mrhiBinding& image, mrhiBinding& filter, const render_scene::SceneTexture& texture) const {
+        const std::uint64_t kHeld = textures->resource(texture.id);
+        image.resource = resourceOf(kHeld != 0 ? kHeld : textures->resource(0));
+        filter.sampler = pipelines.materialSamplers[samplerOf(texture.filter, texture.address)];
+    }
+
     /// The textures this frame's materials sample, white first, chosen
     /// within `budget`; a material whose texture is not chosen samples
     /// white.
@@ -94,9 +103,14 @@ struct SceneRenderer::State {
         for (const std::vector<render_scene::SceneDraw>* kList :
              {&scene.draws, &scene.shadows.casters, &scene.lightShadows.casters}) {
             for (const render_scene::SceneDraw& draw : *kList) {
-                const std::uint64_t kId = draw.material < scene.textures.size() ? scene.textures[draw.material].id : 0;
-                if (kId != 0) {
-                    static_cast<void>(textures->choose(kId, sampled ? sampled(kId) : nullptr));
+                if (draw.material >= scene.textures.size()) {
+                    continue;
+                }
+                const render_scene::SceneTextures& kTextures = scene.textures[draw.material];
+                for (const std::uint64_t kId : {kTextures.base.id, kTextures.packed.id, kTextures.emission.id}) {
+                    if (kId != 0) {
+                        static_cast<void>(textures->choose(kId, sampled ? sampled(kId) : nullptr));
+                    }
                 }
             }
         }
@@ -109,7 +123,7 @@ struct SceneRenderer::State {
         const HeldMesh* mesh = nullptr;
         std::uint32_t first = 0;
         std::uint32_t count = 0;
-        render_scene::SceneTexture texture;
+        render_scene::SceneTextures texture;
     };
     using Runs = std::vector<Run>;
 
@@ -177,7 +191,7 @@ struct SceneRenderer::State {
     /// alone (`materialTextures` none).
     void append(std::span<const render_scene::SceneDraw> draws,
                 const std::map<std::uint64_t, const HeldMesh*>& usable,
-                std::span<const render_scene::SceneTexture> materialTextures,
+                std::span<const render_scene::SceneTextures> materialTextures,
                 Placed& placed,
                 Runs& runs,
                 std::uint32_t& count,
@@ -206,9 +220,9 @@ struct SceneRenderer::State {
                 }
             }
             placed.instances.push_back(static_cast<float>(draw.material));
-            const render_scene::SceneTexture kTexture = draw.material < materialTextures.size()
-                                                            ? materialTextures[draw.material]
-                                                            : render_scene::SceneTexture{};
+            const render_scene::SceneTextures kTexture = draw.material < materialTextures.size()
+                                                             ? materialTextures[draw.material]
+                                                             : render_scene::SceneTextures{};
             if (runs.empty() || runs.back().mesh != kMesh->second || runs.back().texture != kTexture) {
                 runs.push_back({.mesh = kMesh->second, .first = count, .count = 0, .texture = kTexture});
             }
@@ -251,39 +265,10 @@ struct SceneRenderer::State {
                 continue;
             }
             std::array<mrhiBinding, 4> binding = {
-                mrhiBinding{.slot = 0,
-                            .resource = kSquare.view,
-                            .offset = 0,
-                            .size = sizeof(Matrix4),
-                            .viewKind = mrhi_texture2d,
-                            .viewFormat = mrhi_formatNone,
-                            .range = {},
-                            .sampler = {}},
-                mrhiBinding{.slot = 1,
-                            .resource = now.materialsResource,
-                            .offset = 0,
-                            .size = now.materials.size() * sizeof(render_scene::MaterialBlob),
-                            .viewKind = mrhi_texture2d,
-                            .viewFormat = mrhi_formatNone,
-                            .range = {},
-                            .sampler = {}},
-                mrhiBinding{
-                    .slot = 2,
-                    .resource = resourceOf(textures->resource(0)),
-                    .offset = 0,
-                    .size = 0,
-                    .viewKind = mrhi_texture2d,
-                    .viewFormat = mrhi_formatNone,
-                    .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
-                    .sampler = {}},
-                mrhiBinding{.slot = 3,
-                            .resource = {},
-                            .offset = 0,
-                            .size = 0,
-                            .viewKind = mrhi_texture2d,
-                            .viewFormat = mrhi_formatNone,
-                            .range = {},
-                            .sampler = pipelines.materialSamplers[0]}};
+                bufferAt(0, kSquare.view, sizeof(Matrix4)),
+                bufferAt(1, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob)),
+                textureAt(2, resourceOf(textures->resource(0))),
+                samplerAt(3, pipelines.materialSamplers[0])};
             if (mrhiSetViewport(native, pass, &kSquare.viewport) != mrhi_success) {
                 return failed("a shadow square could not be set up", mrhi_errorState);
             }
@@ -306,14 +291,12 @@ struct SceneRenderer::State {
             }
             std::optional<render_scene::SceneTexture> bound;
             for (const Run& run : kSquare.casters->masked) {
-                if (bound != run.texture) {
-                    const std::uint64_t kHeld = textures->resource(run.texture.id);
-                    binding[2].resource = resourceOf(kHeld != 0 ? kHeld : textures->resource(0));
-                    binding[3].sampler = pipelines.materialSamplers[samplerOf(run.texture.filter, run.texture.address)];
+                if (bound != run.texture.base) {
+                    bindTexture(binding[2], binding[3], run.texture.base);
                     if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
                         return failed("a masked caster's texture could not be bound", mrhi_errorState);
                     }
-                    bound = run.texture;
+                    bound = run.texture.base;
                 }
                 RAWFRAME_TRY(kDraw(run));
             }
@@ -800,82 +783,26 @@ struct SceneRenderer::State {
             return failed("the upload pass could not end", mrhi_errorState);
         }
         RAWFRAME_TRY(castShadows(now));
-        const auto kStored = [](std::uint32_t slot, mrhiResourceId resource, std::uint64_t bytes) {
-            return mrhiBinding{.slot = slot,
-                               .resource = resource,
-                               .offset = 0,
-                               .size = bytes,
-                               .viewKind = mrhi_texture2d,
-                               .viewFormat = mrhi_formatNone,
-                               .range = {},
-                               .sampler = {}};
-        };
-        const std::array<mrhiBinding, 12> kFrameBinding = {
-            mrhiBinding{.slot = 0,
-                        .resource = now.blockResource,
-                        .offset = 0,
-                        .size = sizeof(FrameBlock),
-                        .viewKind = mrhi_texture2d,
-                        .viewFormat = mrhi_formatNone,
-                        .range = {},
-                        .sampler = {}},
-            mrhiBinding{.slot = 1,
-                        .resource = now.shadowMap,
-                        .offset = 0,
-                        .size = 0,
-                        .viewKind = mrhi_texture2d,
-                        .viewFormat = mrhi_formatNone,
-                        .range = {.baseMip = 0,
-                                  .mipCount = MRHI_REMAINING,
-                                  .baseLayer = 0,
-                                  .layerCount = 1,
-                                  .aspect = mrhi_aspectDepthOnly},
-                        .sampler = {}},
-            mrhiBinding{.slot = 2,
-                        .resource = {},
-                        .offset = 0,
-                        .size = 0,
-                        .viewKind = mrhi_texture2d,
-                        .viewFormat = mrhi_formatNone,
-                        .range = {},
-                        .sampler = pipelines.shadowSampler},
-            kStored(3, now.lightsResource, now.lights.size() * sizeof(LightBlock)),
-            kStored(4, now.rangesResource, now.ranges.size() * 4),
-            kStored(5, now.indicesResource, now.indices.size() * 4),
-            mrhiBinding{.slot = 6,
-                        .resource = now.lightShadowMap,
-                        .offset = 0,
-                        .size = 0,
-                        .viewKind = mrhi_texture2d,
-                        .viewFormat = mrhi_formatNone,
-                        .range = {.baseMip = 0,
-                                  .mipCount = MRHI_REMAINING,
-                                  .baseLayer = 0,
-                                  .layerCount = 1,
-                                  .aspect = mrhi_aspectDepthOnly},
-                        .sampler = {}},
-            kStored(7, now.slotsResource, now.slots.size() * sizeof(SlotBlock)),
-            kStored(8, metering->exposure(), sizeof(ExposureBlock)),
-            kStored(9, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob)),
-            mrhiBinding{
-                .slot = 10,
-                .resource = {},
-                .offset = 0,
-                .size = 0,
-                .viewKind = mrhi_texture2d,
-                .viewFormat = mrhi_formatNone,
-                .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
-                .sampler = {}},
-            mrhiBinding{.slot = 11,
-                        .resource = {},
-                        .offset = 0,
-                        .size = 0,
-                        .viewKind = mrhi_texture2d,
-                        .viewFormat = mrhi_formatNone,
-                        .range = {},
-                        .sampler = {}}};
-        const std::array<mrhiBinding, 2> kSkyBinding = {kStored(0, now.skyResource, sizeof(SkyBlock)),
-                                                        kStored(1, metering->exposure(), sizeof(ExposureBlock))};
+        // The scene's table: slots 10 to 15 are each run's textures.
+        const std::array<mrhiBinding, 16> kFrameBinding = {
+            bufferAt(0, now.blockResource, sizeof(FrameBlock)),
+            depthAt(1, now.shadowMap),
+            samplerAt(2, pipelines.shadowSampler),
+            bufferAt(3, now.lightsResource, now.lights.size() * sizeof(LightBlock)),
+            bufferAt(4, now.rangesResource, now.ranges.size() * 4),
+            bufferAt(5, now.indicesResource, now.indices.size() * 4),
+            depthAt(6, now.lightShadowMap),
+            bufferAt(7, now.slotsResource, now.slots.size() * sizeof(SlotBlock)),
+            bufferAt(8, metering->exposure(), sizeof(ExposureBlock)),
+            bufferAt(9, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob)),
+            textureAt(10, {}),
+            samplerAt(11, {}),
+            textureAt(12, {}),
+            samplerAt(13, {}),
+            textureAt(14, {}),
+            samplerAt(15, {})};
+        const std::array<mrhiBinding, 2> kSkyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
+                                                        bufferAt(1, metering->exposure(), sizeof(ExposureBlock))};
         // Runs of models drawn with `pipeline` in `pass`.
         // Runs of models drawn with `pipeline` in `pass`, the table set
         // again where a run samples another texture than the one before
@@ -890,14 +817,13 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 12> binding = kFrameBinding;
-            std::optional<render_scene::SceneTexture> bound;
+            std::array<mrhiBinding, 16> binding = kFrameBinding;
+            std::optional<render_scene::SceneTextures> bound;
             for (const Run& run : runs) {
                 if (bound != run.texture) {
-                    const std::uint64_t kHeld = textures->resource(run.texture.id);
-                    binding[10].resource = resourceOf(kHeld != 0 ? kHeld : textures->resource(0));
-                    binding[11].sampler =
-                        pipelines.materialSamplers[samplerOf(run.texture.filter, run.texture.address)];
+                    bindTexture(binding[10], binding[11], run.texture.base);
+                    bindTexture(binding[12], binding[13], run.texture.packed);
+                    bindTexture(binding[14], binding[15], run.texture.emission);
                     if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
                         return failed("a material's texture could not be bound", mrhi_errorState);
                     }
@@ -941,24 +867,8 @@ struct SceneRenderer::State {
         }
         RAWFRAME_TRY(metering->record(pipelines, now.scene, now.width, now.height));
         RAWFRAME_TRY(temporal->record(pipelines, now.scene, now.motion));
-        const std::array<mrhiBinding, 2> kSceneBinding = {
-            mrhiBinding{
-                .slot = 0,
-                .resource = temporal->shown(now.scene),
-                .offset = 0,
-                .size = 0,
-                .viewKind = mrhi_texture2d,
-                .viewFormat = mrhi_formatNone,
-                .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
-                .sampler = {}},
-            mrhiBinding{.slot = 1,
-                        .resource = now.pictureResource,
-                        .offset = 0,
-                        .size = sizeof(PictureBlock),
-                        .viewKind = mrhi_texture2d,
-                        .viewFormat = mrhi_formatNone,
-                        .range = {},
-                        .sampler = {}}};
+        const std::array<mrhiBinding, 2> kSceneBinding = {textureAt(0, temporal->shown(now.scene)),
+                                                          bufferAt(1, now.pictureResource, sizeof(PictureBlock))};
         if (mrhiBeginPass(native, now.picturePass) != mrhi_success ||
             mrhiSetGraphicsPipeline(native, now.picturePass, pipelines.tonemap.pipeline) != mrhi_success ||
             mrhiSetBindings(native, now.picturePass, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
@@ -969,22 +879,8 @@ struct SceneRenderer::State {
         if (!now.smoothed) {
             return {};
         }
-        const std::array<mrhiBinding, 2> kDisplayBinding = {mrhiBinding{.slot = 0,
-                                                                        .resource = now.display,
-                                                                        .offset = 0,
-                                                                        .size = 0,
-                                                                        .viewKind = mrhi_texture2d,
-                                                                        .viewFormat = mrhi_formatNone,
-                                                                        .range = kSceneBinding[0].range,
-                                                                        .sampler = {}},
-                                                            mrhiBinding{.slot = 1,
-                                                                        .resource = {},
-                                                                        .offset = 0,
-                                                                        .size = 0,
-                                                                        .viewKind = mrhi_texture2d,
-                                                                        .viewFormat = mrhi_formatNone,
-                                                                        .range = {},
-                                                                        .sampler = pipelines.filteredSampler}};
+        const std::array<mrhiBinding, 2> kDisplayBinding = {textureAt(0, now.display),
+                                                            samplerAt(1, pipelines.filteredSampler)};
         if (mrhiBeginPass(native, now.fxaaPass) != mrhi_success ||
             mrhiSetGraphicsPipeline(native, now.fxaaPass, pipelines.fxaa.pipeline) != mrhi_success ||
             mrhiSetBindings(native, now.fxaaPass, 0, kDisplayBinding.data(), kDisplayBinding.size()) != mrhi_success ||

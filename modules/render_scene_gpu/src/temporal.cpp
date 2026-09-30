@@ -1,5 +1,7 @@
 #include "temporal.h"
 
+#include "tables.h"
+
 #include <maul-rhi/encoder.h>
 
 namespace rawframe::render_scene_gpu {
@@ -11,18 +13,6 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
         .resource = resource,
         .kind = kind,
         .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
-}
-
-mrhiBinding textureAt(std::uint32_t slot, mrhiResourceId resource) noexcept {
-    return mrhiBinding{
-        .slot = slot,
-        .resource = resource,
-        .offset = 0,
-        .size = 0,
-        .viewKind = mrhi_texture2d,
-        .viewFormat = mrhi_formatNone,
-        .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
-        .sampler = {}};
 }
 
 } // namespace
@@ -143,22 +133,8 @@ result::Status TemporalPass::record(const Pipelines& pipelines, mrhiResourceId s
     const std::array<mrhiBinding, 5> kBindings = {textureAt(0, scene),
                                                   textureAt(1, before_),
                                                   textureAt(2, motion),
-                                                  mrhiBinding{.slot = 3,
-                                                              .resource = {},
-                                                              .offset = 0,
-                                                              .size = 0,
-                                                              .viewKind = mrhi_texture2d,
-                                                              .viewFormat = mrhi_formatNone,
-                                                              .range = {},
-                                                              .sampler = pipelines.filteredSampler},
-                                                  mrhiBinding{.slot = 4,
-                                                              .resource = state_,
-                                                              .offset = 0,
-                                                              .size = sizeof(TemporalBlock),
-                                                              .viewKind = mrhi_texture2d,
-                                                              .viewFormat = mrhi_formatNone,
-                                                              .range = {},
-                                                              .sampler = {}}};
+                                                  samplerAt(3, pipelines.filteredSampler),
+                                                  bufferAt(4, state_, sizeof(TemporalBlock))};
     if (mrhiBeginPass(native_, pass_) != mrhi_success ||
         mrhiSetGraphicsPipeline(native_, pass_, pipelines.temporal.pipeline) != mrhi_success ||
         mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size()) != mrhi_success ||

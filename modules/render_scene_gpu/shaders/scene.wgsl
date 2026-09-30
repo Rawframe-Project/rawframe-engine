@@ -44,11 +44,25 @@ struct ShadowSlot {
 @group(0) @binding(6) var lightShadowMap: texture_depth_2d;
 @group(0) @binding(7) var<storage, read> slots: array<ShadowSlot>;
 @group(0) @binding(8) var<storage, read> exposure: vec4f;
-// Every material's blob (D303), five vectors each.
+// Every material's blob (D303), eight vectors each.
 @group(0) @binding(9) var<storage, read> materials: array<vec4f>;
 // The texture the draw's material samples, and how (D309).
 @group(0) @binding(10) var baseTexture: texture_2d<f32>;
 @group(0) @binding(11) var baseSampler: sampler;
+// The packed and the emission textures (D312).
+@group(0) @binding(12) var packedTexture: texture_2d<f32>;
+@group(0) @binding(13) var packedSampler: sampler;
+@group(0) @binding(14) var emissionTexture: texture_2d<f32>;
+@group(0) @binding(15) var emissionSampler: sampler;
+
+// A texture's channel a number is read from: one to four, red to alpha;
+// nought for none, which reads one.
+fn channelOf(texel: vec4f, channel: f32) -> f32 {
+    if (channel < 0.5) {
+        return 1.0;
+    }
+    return texel[min(u32(channel + 0.5), 4u) - 1u];
+}
 
 struct Placed {
     @invariant @builtin(position) position: vec4f,
@@ -200,17 +214,40 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
       @location(6) uv: vec2f) -> Shaded {
     let n = normalize(normal);
     let toEye = normalize(-placed);
-    let at = min(material, arrayLength(&materials) / 5u - 1u) * 5u;
+    let at = min(material, arrayLength(&materials) / 8u - 1u) * 8u;
     let base = materials[at];
     let specular = materials[at + 1u];
     let emission = materials[at + 2u];
     let rest = materials[at + 3u];
-    let mapped = materials[at + 4u];
-    // Sampled before anything branches, so its derivatives hold.
-    let sampled = textureSample(baseTexture, baseSampler, uv * mapped.xy + mapped.zw);
+    let baseMap = materials[at + 4u];
+    let packedMap = materials[at + 5u];
+    let emissionMap = materials[at + 6u];
+    let channels = materials[at + 7u];
     let flags = u32(rest.w);
+    // The coordinates' derivatives, taken before anything branches, so a
+    // texture is sampled only where its material has one.
+    let dx = dpdx(uv);
+    let dy = dpdy(uv);
+    var sampled = vec4f(1.0);
+    if ((flags & 6u) != 0u) {
+        sampled = textureSampleGrad(baseTexture, baseSampler, uv * baseMap.xy + baseMap.zw, dx * baseMap.xy,
+                                    dy * baseMap.xy);
+    }
+    var packed = vec4f(1.0);
+    if (channels.x + channels.y + channels.z > 0.5) {
+        packed = textureSampleGrad(packedTexture, packedSampler, uv * packedMap.xy + packedMap.zw, dx * packedMap.xy,
+                                   dy * packedMap.xy);
+    }
+    var glow = vec3f(1.0);
+    if (channels.w > 0.5) {
+        glow = textureSampleGrad(emissionTexture, emissionSampler, uv * emissionMap.xy + emissionMap.zw,
+                                 dx * emissionMap.xy, dy * emissionMap.xy).rgb;
+    }
     let tinted = color.rgb * base.rgb * select(vec3f(1.0), sampled.rgb, (flags & 2u) != 0u);
     let opacity = rest.x * color.a * select(1.0, sampled.a, (flags & 4u) != 0u);
+    let metalness = base.w * channelOf(packed, channels.x);
+    let roughness = specular.w * channelOf(packed, channels.y);
+    let occlusion = rest.y * channelOf(packed, channels.z);
     var out: Shaded;
     out.motion = (now.xy / now.z - before.xy / before.z) * vec2f(0.5, -0.5);
     if ((flags & 1u) != 0u) {
@@ -218,8 +255,8 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
         return out;
     }
     let reflectance = (emission.w - 1.0) / (emission.w + 1.0);
-    let surface = Surface(tinted * (1.0 - base.w), mix(reflectance * reflectance * specular.rgb, tinted, base.w),
-                          specular.w);
+    let surface = Surface(tinted * (1.0 - metalness), mix(reflectance * reflectance * specular.rgb, tinted, metalness),
+                          roughness);
     let direct = frame.sun.rgb * sunlit(placed, n) * reflected(surface, n, toEye, frame.toSun.xyz) +
                  punctual(placed, n, surface, toEye);
     let nv = max(dot(n, toEye), 0.0);
@@ -228,15 +265,15 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let mirrored = reflect(-toEye, n);
     let around = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * n.y);
     let along = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
-    let sky = rest.y * ((1.0 - sheen) * surface.diffuse * around + sheen * along);
-    out.color = vec4f((direct + sky + emission.rgb) * exposure.y, opacity);
+    let sky = occlusion * ((1.0 - sheen) * surface.diffuse * around + sheen * along);
+    out.color = vec4f((direct + sky + emission.rgb * glow) * exposure.y, opacity);
     return out;
 }
 
 // The masked models in the depth prepass (D310): scene.cut.frag.
 @fragment
 fn cut(@location(1) color: vec4f, @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f) {
-    let at = min(material, arrayLength(&materials) / 5u - 1u) * 5u;
+    let at = min(material, arrayLength(&materials) / 8u - 1u) * 8u;
     let rest = materials[at + 3u];
     let mapped = materials[at + 4u];
     let sampled = textureSample(baseTexture, baseSampler, uv * mapped.xy + mapped.zw);

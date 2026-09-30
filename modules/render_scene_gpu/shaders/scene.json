@@ -51,10 +51,16 @@
      "sample_type": "depth", "view_dimension": "2d", "multisampled": false},
     {"table": 0, "slot": 7, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 80},
     {"table": 0, "slot": 8, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 16},
-    {"table": 0, "slot": 9, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 80},
+    {"table": 0, "slot": 9, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 128},
     {"table": 0, "slot": 10, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "float", "view_dimension": "2d", "multisampled": false},
-    {"table": 0, "slot": 11, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"}
+    {"table": 0, "slot": 11, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"},
+    {"table": 0, "slot": 12, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 13, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"},
+    {"table": 0, "slot": 14, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 15, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"}
   ],
   "constants": []
 }

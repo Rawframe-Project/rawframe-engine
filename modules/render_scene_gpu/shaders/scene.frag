@@ -101,12 +101,15 @@ exposure;
 
 // The punctual shadows' atlas, and its squares.
 layout(set = 0, binding = 6) uniform texture2D lightShadowMap;
-// Every material's blob (D303), five vectors each: the base color and
+// Every material's blob (D303), eight vectors each: the base color and
 // metalness; the specular color times its weight, and the roughness; the
 // emission in nits, and the index of refraction; the opacity, the
 // occlusion, the alpha cutoff, and its flags: one when unlit, two when its
-// texture's color multiplies the base color, four when its alpha
-// multiplies the opacity; the texture's scale and offset (D311).
+// base texture's color multiplies the base color, four when its alpha
+// multiplies the opacity; the base, packed, and emission textures' scale
+// and offset (D311); the packed texture's channels for the metalness, the
+// roughness, and the occlusion, and whether the emission texture's color
+// multiplies the emission (D312).
 // The texture the draw's material samples, and how (D309): white for one
 // sampling none.
 layout(set = 0, binding = 9, std430) readonly buffer Materials
@@ -116,6 +119,18 @@ layout(set = 0, binding = 9, std430) readonly buffer Materials
 
 layout(set = 0, binding = 10) uniform texture2D baseTexture;
 layout(set = 0, binding = 11) uniform sampler baseSampler;
+// The packed and the emission textures (D312).
+layout(set = 0, binding = 12) uniform texture2D packedTexture;
+layout(set = 0, binding = 13) uniform sampler packedSampler;
+layout(set = 0, binding = 14) uniform texture2D emissionTexture;
+layout(set = 0, binding = 15) uniform sampler emissionSampler;
+
+// A texture's channel a number is read from: one to four, red to alpha;
+// nought for none, which reads one.
+float channelOf(vec4 texel, float channel)
+{
+    return channel < 0.5 ? 1.0 : channel < 1.5 ? texel.r : channel < 2.5 ? texel.g : channel < 3.5 ? texel.b : texel.a;
+}
 
 layout(set = 0, binding = 7, std430) readonly buffer Slots
 {
@@ -265,20 +280,45 @@ void main()
 {
     const vec3 kNormal = normalize(inNormal);
     const vec3 kToEye = normalize(-inPlaced);
-    const uint kAt = min(inMaterial, uint(materials.length()) / 5u - 1u) * 5u;
+    const uint kAt = min(inMaterial, uint(materials.length()) / 8u - 1u) * 8u;
     const vec4 kBase = materials[kAt];
     const vec4 kSpecular = materials[kAt + 1u];
     const vec4 kEmission = materials[kAt + 2u];
     const vec4 kRest = materials[kAt + 3u];
-    // Where its texture is sampled: the coordinates scaled and moved (D311).
-    const vec4 kMapped = materials[kAt + 4u];
-    // Sampled before anything branches, so its derivatives hold.
-    const vec4 kSampled = texture(sampler2D(baseTexture, baseSampler), inUv * kMapped.xy + kMapped.zw);
+    // Where each texture is sampled (D311), and what the packed and the
+    // emission textures feed (D312).
+    const vec4 kBaseMap = materials[kAt + 4u];
+    const vec4 kPackedMap = materials[kAt + 5u];
+    const vec4 kEmissionMap = materials[kAt + 6u];
+    const vec4 kChannels = materials[kAt + 7u];
     const uint kFlags = uint(kRest.w);
-    const vec3 kColor = inColor.rgb * kBase.rgb * ((kFlags & 2u) != 0u ? kSampled.rgb : vec3(1.0));
+    // The coordinates' derivatives, taken before anything branches, so a
+    // texture is sampled only where its material has one.
+    const vec2 kDx = dFdx(inUv);
+    const vec2 kDy = dFdy(inUv);
+    vec4 sampled = vec4(1.0);
+    if ((kFlags & 6u) != 0u) {
+        sampled = textureGrad(sampler2D(baseTexture, baseSampler), inUv * kBaseMap.xy + kBaseMap.zw,
+                              kDx * kBaseMap.xy, kDy * kBaseMap.xy);
+    }
+    vec4 packed = vec4(1.0);
+    if (kChannels.x + kChannels.y + kChannels.z > 0.5) {
+        packed = textureGrad(sampler2D(packedTexture, packedSampler), inUv * kPackedMap.xy + kPackedMap.zw,
+                             kDx * kPackedMap.xy, kDy * kPackedMap.xy);
+    }
+    vec3 glow = vec3(1.0);
+    if (kChannels.w > 0.5) {
+        glow = textureGrad(sampler2D(emissionTexture, emissionSampler), inUv * kEmissionMap.xy + kEmissionMap.zw,
+                           kDx * kEmissionMap.xy, kDy * kEmissionMap.xy).rgb;
+    }
+    const vec3 kColor = inColor.rgb * kBase.rgb * ((kFlags & 2u) != 0u ? sampled.rgb : vec3(1.0));
     // How much of what is behind it a translucent model hides (D305): its
     // material's opacity times its color's alpha.
-    const float kOpacity = kRest.x * inColor.a * ((kFlags & 4u) != 0u ? kSampled.a : 1.0);
+    const float kOpacity = kRest.x * inColor.a * ((kFlags & 4u) != 0u ? sampled.a : 1.0);
+    const float kMetalness = kBase.w * channelOf(packed, kChannels.x);
+    const float kRoughness = kSpecular.w * channelOf(packed, kChannels.y);
+    const float kOcclusion = kRest.y * channelOf(packed, kChannels.z);
+    const vec3 kGlow = kEmission.rgb * glow;
     outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);
     // Unlit (KHR_materials_unlit): its color stands in the picture as it
     // is, whatever the exposure.
@@ -287,9 +327,9 @@ void main()
         return;
     }
     const float kReflectance = (kEmission.w - 1.0) / (kEmission.w + 1.0);
-    const Surface kSurface = Surface(kColor * (1.0 - kBase.w),
-                                     mix(kReflectance * kReflectance * kSpecular.rgb, kColor, kBase.w),
-                                     kSpecular.w);
+    const Surface kSurface = Surface(kColor * (1.0 - kMetalness),
+                                     mix(kReflectance * kReflectance * kSpecular.rgb, kColor, kMetalness),
+                                     kRoughness);
     const vec3 kDirect = frame.sun.rgb * sunlit(inPlaced, kNormal) * reflected(kSurface, kNormal, kToEye, frame.toSun.xyz) +
                          punctual(inPlaced, kNormal, kSurface, kToEye);
     // The sky above and the ground below (D304): their light across the
@@ -302,6 +342,6 @@ void main()
     const vec3 kMirrored = reflect(-kToEye, kNormal);
     const vec3 kAround = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kNormal.y);
     const vec3 kAlong = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
-    const vec3 kSky = kRest.y * ((1.0 - kSheen) * kSurface.diffuse * kAround + kSheen * kAlong);
-    outColor = vec4((kDirect + kSky + kEmission.rgb) * exposure.value.y, kOpacity);
+    const vec3 kSky = kOcclusion * ((1.0 - kSheen) * kSurface.diffuse * kAround + kSheen * kAlong);
+    outColor = vec4((kDirect + kSky + kGlow) * exposure.value.y, kOpacity);
 }
