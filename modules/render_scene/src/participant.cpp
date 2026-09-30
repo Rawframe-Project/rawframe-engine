@@ -76,6 +76,22 @@ public:
                                   .distance = static_cast<float>(kDistance),
                                   .logarithmicBlend = kShadowDefaults.logarithmicBlend,
                                   .side = static_cast<std::uint32_t>(kSide)};
+        // The punctual lights' shadow atlas (D292): its side, a power of two,
+        // or nought for none; its squares from a quarter of it, at most 512
+        // texels, down to a quarter of that.
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kAtlas,
+                            configuration.unsignedInteger("scene.light_shadow_side", LightShadowSettings{}.side));
+        if (kAtlas != 0 && (kAtlas < 64 || kAtlas > 8192 || (kAtlas & (kAtlas - 1)) != 0)) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             composition::kCompositionDomain,
+                             code(composition::CompositionError::BadConfiguration),
+                             "scene.light_shadow_side is nought or a power of two from 64 to 8192 texels")
+                    .error()};
+        }
+        const auto kLargest = static_cast<std::uint32_t>(std::min<std::uint64_t>(512, kAtlas / 4));
+        lightShadows_ = LightShadowSettings{
+            .side = static_cast<std::uint32_t>(kAtlas), .largest = kLargest, .smallest = kLargest / 4};
         // ADR-0051's anti-aliasing method (D291): temporal unless turned off;
         // the closed set's other methods are not built yet.
         const std::string_view kMethod = configuration.text("scene.anti_aliasing").value_or("taa");
@@ -124,6 +140,7 @@ public:
                                   .spots = std::move(game->spots),
                                   .meshes = std::move(game->meshes),
                                   .shadows = shadows_,
+                                  .lightShadows = lightShadows_,
                                   .antiAliasing = antiAliasing_};
         return {};
     }
@@ -157,6 +174,8 @@ public:
             lightsCulled_ += kFrame.lightsCulled;
             lightsOverLimit_ += kFrame.lightsOverLimit;
             clusterOverflow_ += kFrame.clusterOverflow;
+            shadowSquares_ += kFrame.lightShadows.slots.size();
+            shadowsEvicted_ += kFrame.lightShadows.evicted;
         }
     }
 
@@ -182,7 +201,9 @@ public:
                       diagnostics::field("lightsLit", lightsLit_),
                       diagnostics::field("lightsCulled", lightsCulled_),
                       diagnostics::field("lightsOverLimit", lightsOverLimit_),
-                      diagnostics::field("clusterOverflow", clusterOverflow_)});
+                      diagnostics::field("clusterOverflow", clusterOverflow_),
+                      diagnostics::field("shadowSquares", shadowSquares_),
+                      diagnostics::field("shadowsEvicted", shadowsEvicted_)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -284,10 +305,15 @@ private:
     /// The point and spot lights each frame lit with, culled, and left out
     /// at the limit; a cluster's lights past its limit (D290).
     AntiAliasing antiAliasing_ = AntiAliasing::Taa;
+    LightShadowSettings lightShadows_;
     std::uint64_t lightsLit_ = 0;
     std::uint64_t lightsCulled_ = 0;
     std::uint64_t lightsOverLimit_ = 0;
     std::uint64_t clusterOverflow_ = 0;
+    /// The punctual shadows' squares each frame drew, and the lights that
+    /// asked for shadows past the budget (D292).
+    std::uint64_t shadowSquares_ = 0;
+    std::uint64_t shadowsEvicted_ = 0;
     diagnostics::Emitter emitter_;
 };
 

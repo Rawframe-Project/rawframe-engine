@@ -70,6 +70,8 @@ struct PointLight {
     float lumens = 0;
     float range = 0;
     std::uint32_t color = 0xFFFFFFFF;
+    /// Whether it casts shadows, within the view's budget (D292).
+    bool shadows = false;
 };
 
 /// `rawframe.model.SpotLight` as C++ reads it.
@@ -79,6 +81,7 @@ struct SpotLight {
     float inner = 0;
     float outer = 0;
     std::uint32_t color = 0xFFFFFFFF;
+    bool shadows = false;
 };
 
 /// The engine's own meshes (`rawframe.model`'s BOX, SPHERE, CYLINDER, and
@@ -175,6 +178,48 @@ struct SceneLight {
     /// Nought and minus one for a point: every way is inside.
     float cosInner = -1;
     float cosOuter = -1;
+    /// Its first square in the punctual shadows' atlas, and how many: one
+    /// for a spot, six for a point; none without shadows (D292).
+    std::uint32_t shadowSlot = 0;
+    std::uint32_t shadowSlots = 0;
+};
+
+/// One square of the punctual lights' shadow atlas (D292): a spot's map or
+/// one face of a point's cube, seen from the light along `forward` through
+/// a perspective `tangent` wide each way (reversed-Z with no far plane,
+/// depth one at `near`), placed relative to the eye; where it lies in the
+/// atlas, in texels; and its casters, a run of `SceneLightShadows::casters`.
+struct ShadowSlot {
+    Matrix viewProjection{};
+    std::array<float, 3> position{};
+    std::array<float, 3> right{};
+    std::array<float, 3> up{};
+    std::array<float, 3> forward{};
+    float tangent = 1;
+    float near = 0.05F;
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t side = 0;
+    std::uint32_t firstCaster = 0;
+    std::uint32_t casterCount = 0;
+};
+
+/// A punctual light's square of the shadows' atlas as seen from it, not yet
+/// placed in the atlas nor given casters (D292): a spot's along its
+/// direction, as wide as its cone; a point's `face` along +X, -X, +Y, -Y,
+/// +Z, or -Z, a quarter turn wide.
+[[nodiscard]] ShadowSlot shadowSlotOf(const SceneLight& light, std::uint32_t face) noexcept;
+
+/// The punctual lights' shadows for a frame (D292): the atlas's side (none
+/// without a shadowed light), its squares, and their casters; the lights
+/// that asked for shadows and got none for the budget, and casters past
+/// the models' limit.
+struct SceneLightShadows {
+    std::uint32_t side = 0;
+    std::vector<ShadowSlot> slots;
+    std::vector<SceneDraw> casters;
+    std::size_t evicted = 0;
+    std::size_t overLimit = 0;
 };
 
 /// ADR-0051's one clustered structure for the view (D290): screen tiles by
@@ -253,6 +298,7 @@ struct SceneFrame {
     std::array<float, 3> forward{0, 0, -1};
     SceneShadows shadows;
     SceneTemporal temporal;
+    SceneLightShadows lightShadows;
     /// The punctual lights that reach the view, and the clusters they are
     /// culled into (D290).
     std::vector<SceneLight> lights3d;
@@ -286,6 +332,18 @@ struct SceneLimits {
     /// lights (D290).
     std::size_t maximumLights = 256;
     std::size_t maximumLightsPerCluster = 64;
+    /// ADR-0051's maximum shadow-casting punctual lights per view (D292).
+    std::size_t maximumShadowedLights = 8;
+};
+
+/// ADR-0051's one typed atlas for the punctual lights' shadows (D292), a
+/// profile's values: its side, and its squares' sides, the largest for a
+/// light covering much of the view and halving as it covers less, never
+/// below the smallest. A side of nought gives no punctual shadows.
+struct LightShadowSettings {
+    std::uint32_t side = 2048;
+    std::uint32_t largest = 512;
+    std::uint32_t smallest = 128;
 };
 
 /// ADR-0051's typed cascade configuration, a profile's values: how many
@@ -325,6 +383,7 @@ struct SceneSettings {
     std::vector<SceneMesh> meshes;
     SceneLimits limits;
     ShadowSettings shadows;
+    LightShadowSettings lightShadows;
     AntiAliasing antiAliasing = AntiAliasing::Taa;
 };
 

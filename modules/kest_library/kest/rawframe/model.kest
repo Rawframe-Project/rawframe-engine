@@ -79,24 +79,29 @@ struct Sky {
 // A point light (ADR-0051), on any entity, at its pose: `lumens` of
 // luminous power spread evenly (a lumen over 4π is a candela), reaching
 // `range` meters, where it has faded to nought, in `color` (0xRRGGBBAA,
-// sRGB; alpha unused). Lumens or a range of nought light nothing.
+// sRGB; alpha unused). Lumens or a range of nought light nothing. With
+// `shadows`, what stands between it and a surface shades it, for as many
+// lights as the view's budget holds, those covering most of it first.
 struct PointLight {
     lumens: f32
     range: f32
     color: u32
+    shadows: bool
 }
 
 // A spot light (ADR-0051), on any entity, at its pose, shining along the
 // pose's -Z (nought turn shines along -Z, as a camera looks): `lumens` as
 // if all of them lay in its cone (a lumen over π is a candela, ADR-0051's
 // documented approximation), full within `inner` radians of its axis and
-// fading to nought at `outer`, reaching `range` meters, in `color`.
+// fading to nought at `outer`, reaching `range` meters, in `color`; with
+// `shadows`, shadowed as a point light is.
 struct SpotLight {
     lumens: f32
     range: f32
     inner: f32
     outer: f32
     color: u32
+    shadows: bool
 }
 
 // White: a surface, a sun, or a sky as it is.

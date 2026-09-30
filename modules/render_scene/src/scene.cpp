@@ -1,5 +1,6 @@
 #include "rawframe/render_scene/scene.h"
 
+#include "lights.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
 #include "rawframe/world/column_query.h"
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <numbers>
 #include <tuple>
@@ -19,27 +21,6 @@ namespace {
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, RenderSceneError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kRenderSceneDomain, code(error), why).error()};
-}
-
-using Vector = std::array<float, 3>;
-
-Vector cross(const Vector& a, const Vector& b) noexcept {
-    return {(a[1] * b[2]) - (a[2] * b[1]), (a[2] * b[0]) - (a[0] * b[2]), (a[0] * b[1]) - (a[1] * b[0])};
-}
-
-Vector normalized(const Vector& a) noexcept {
-    const float kLength = std::sqrt((a[0] * a[0]) + (a[1] * a[1]) + (a[2] * a[2]));
-    return kLength > 0 ? Vector{a[0] / kLength, a[1] / kLength, a[2] / kLength} : Vector{0, 1, 0};
-}
-
-/// An sRGB channel of 0xRRGGBBAA, `shift` bits up, in linear light.
-float linearOf(std::uint32_t color, unsigned shift) noexcept {
-    const float kEncoded = static_cast<float>((color >> shift) & 0xFFU) / 255.0F;
-    return kEncoded <= 0.04045F ? kEncoded / 12.92F : std::pow((kEncoded + 0.055F) / 1.055F, 2.4F);
-}
-
-Vector colorOf(std::uint32_t color) noexcept {
-    return {linearOf(color, 24), linearOf(color, 16), linearOf(color, 8)};
 }
 
 /// A clear sky's color, sRGB: the sky's default (D288).
@@ -68,17 +49,6 @@ Bounded bounded(std::shared_ptr<const mesh::Mesh> made) {
         radius = std::max(radius, std::sqrt((kAway[0] * kAway[0]) + (kAway[1] * kAway[1]) + (kAway[2] * kAway[2])));
     }
     return Bounded{.mesh = std::move(made), .center = kCenter, .radius = radius};
-}
-
-/// The columns of a unit quaternion's turn.
-std::array<Vector, 3> turnOf(const std::array<float, 4>& q) noexcept {
-    const float kX = q[0];
-    const float kY = q[1];
-    const float kZ = q[2];
-    const float kW = q[3];
-    return {{{1 - (2 * ((kY * kY) + (kZ * kZ))), 2 * ((kX * kY) + (kZ * kW)), 2 * ((kX * kZ) - (kY * kW))},
-             {2 * ((kX * kY) - (kZ * kW)), 1 - (2 * ((kX * kX) + (kZ * kZ))), 2 * ((kY * kZ) + (kX * kW))},
-             {2 * ((kX * kZ) + (kY * kW)), 2 * ((kY * kZ) - (kX * kW)), 1 - (2 * ((kX * kX) + (kY * kY)))}}};
 }
 
 /// Whether an instance's values are all ones it can be drawn with.
@@ -147,6 +117,11 @@ struct Scene::State {
     std::map<std::pair<world::EntityHandle, std::uint32_t>, Placement> placing;
     /// The eye the frame before was seen from, if it saw, and its view and
     /// projection, unjittered; the frames queued.
+    /// Every model a punctual light's shadow may take, with its bounding
+    /// sphere relative to the eye, in draw order; and whether each light
+    /// kept for the view asks for shadows (D292).
+    std::vector<ShadowCandidate> candidates;
+    std::vector<bool> shadowed;
     std::optional<std::array<double, 3>> previousEye;
     Matrix previousViewProjection{};
     std::uint64_t frames = 0;
@@ -264,6 +239,11 @@ struct Scene::State {
         frame.lightsOverLimit = 0;
         frame.clusterOverflow = 0;
         lights();
+        candidates.clear();
+        const bool kLightShadows =
+            settings.lightShadows.side > 0 && std::ranges::any_of(punctual, [](const LightInstance& light) {
+                return light.light.shadows && light.light.lumens > 0;
+            });
         order.clear();
         for (const ModelInstance& instance : extracted) {
             order.push_back(&instance);
@@ -385,6 +365,9 @@ struct Scene::State {
             // A model near enough casts into the shadows, seen or not: a
             // caster behind the eye still shades what is before it.
             const float kAway = std::sqrt((center[0] * center[0]) + (center[1] * center[1]) + (center[2] * center[2]));
+            if (kLightShadows) {
+                candidates.push_back({.draw = draw, .center = center, .radius = kRadius});
+            }
             if (frame.shadows.count > 0 && kAway - kRadius <= frame.shadows.distance) {
                 if (frame.shadows.casters.size() < settings.limits.maximumModels) {
                     frame.shadows.casters.push_back(draw);
@@ -421,7 +404,14 @@ struct Scene::State {
             ++frame.drawn;
         }
         temporal(camera, kSees);
-        cluster(camera, {kRight, kUp, kForward}, kSees, kHalf, kAspect, kNear);
+        clusterLights(frame,
+                      punctual,
+                      camera,
+                      {kRight, kUp, kForward},
+                      {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
+                      settings.limits,
+                      shadowed);
+        shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
         return frame;
     }
 
@@ -456,153 +446,6 @@ struct Scene::State {
         previousEye = sees ? std::optional{camera.eye} : std::nullopt;
         previousViewProjection = kViewProjection;
         ++frames;
-    }
-
-    /// The slice a depth ahead falls in: nearer than the clusters' near is
-    /// the first, farther than their far the last, exponential between.
-    [[nodiscard]] std::uint32_t sliceOf(float ahead) const noexcept {
-        const SceneClusters& kClusters = frame.clusters;
-        if (ahead <= kClusters.near) {
-            return 0;
-        }
-        const float kSlice = std::log(ahead / kClusters.near) * static_cast<float>(kClusters.slices) /
-                             std::log(kClusters.far / kClusters.near);
-        return std::min(static_cast<std::uint32_t>(kSlice), kClusters.slices - 1);
-    }
-
-    /// The view stage's lights (ADR-0051, D290): each punctual light that
-    /// lights something and reaches the view, in the order of its entity,
-    /// named by every cluster its sphere may reach: the slices its depth
-    /// spans, and the tiles the box around it covers on the screen.
-    void cluster(
-        const SceneCamera& camera, const std::array<Vector, 3>& axes, bool sees, float half, float aspect, float near) {
-        SceneClusters& clusters = frame.clusters;
-        clusters.near = near;
-        const std::uint32_t kCount = clusters.tilesX * clusters.tilesY * clusters.slices;
-        clusters.ranges.assign(std::size_t{kCount} * 2, 0);
-        clusters.indices.clear();
-        std::vector<const LightInstance*> ordered;
-        for (const LightInstance& light : punctual) {
-            ordered.push_back(&light);
-        }
-        std::ranges::sort(ordered, [](const LightInstance* left, const LightInstance* right) {
-            return std::tuple{left->entity, left->spot} < std::tuple{right->entity, right->spot};
-        });
-        const auto& [kRight, kUp, kForward] = axes;
-        const float kTanY = std::tan(half);
-        const float kTanX = kTanY * aspect;
-        // Cluster, light: sorted by cluster, then named in order.
-        std::vector<std::pair<std::uint32_t, std::uint32_t>> named;
-        for (const LightInstance* instance : ordered) {
-            const SpotLight& kLight = instance->light;
-            const bool kFinite = std::isfinite(kLight.lumens) && std::isfinite(kLight.range) &&
-                                 std::isfinite(kLight.inner) && std::isfinite(kLight.outer) &&
-                                 std::ranges::all_of(instance->position,
-                                                     [](double value) {
-                                                         return std::isfinite(value);
-                                                     }) &&
-                                 std::ranges::all_of(instance->rotation, [](float value) {
-                                     return std::isfinite(value);
-                                 });
-            if (!sees || !kFinite || kLight.lumens <= 0 || kLight.range <= 0) {
-                ++frame.lightsCulled;
-                continue;
-            }
-            const Vector kPlace = {static_cast<float>(instance->position[0] - camera.eye[0]),
-                                   static_cast<float>(instance->position[1] - camera.eye[1]),
-                                   static_cast<float>(instance->position[2] - camera.eye[2])};
-            const auto kDot = [&kPlace](const Vector& axis) {
-                return (axis[0] * kPlace[0]) + (axis[1] * kPlace[1]) + (axis[2] * kPlace[2]);
-            };
-            const float kAcross = kDot(kRight);
-            const float kUpward = kDot(kUp);
-            const float kAhead = kDot(kForward);
-            const float kRange = kLight.range;
-            // Behind the near plane, or past a side of the view, wholly.
-            const float kWide = std::atan(kTanX);
-            const bool kBehind = kAhead + kRange < near;
-            const bool kPast = (kUpward * std::cos(half)) - (kAhead * std::sin(half)) > kRange ||
-                               (-kUpward * std::cos(half)) - (kAhead * std::sin(half)) > kRange ||
-                               (kAcross * std::cos(kWide)) - (kAhead * std::sin(kWide)) > kRange ||
-                               (-kAcross * std::cos(kWide)) - (kAhead * std::sin(kWide)) > kRange;
-            if (kBehind || kPast) {
-                ++frame.lightsCulled;
-                continue;
-            }
-            if (frame.lights3d.size() == settings.limits.maximumLights) {
-                ++frame.lightsOverLimit;
-                continue;
-            }
-            const Vector kColor = colorOf(kLight.color);
-            // Lumens to candela (ADR-0051): over the sphere for a point,
-            // over π for a spot.
-            const float kCandela =
-                kLight.lumens / (instance->spot ? std::numbers::pi_v<float> : 4 * std::numbers::pi_v<float>);
-            SceneLight made{.position = kPlace,
-                            .range = kRange,
-                            .intensity = {kColor[0] * kCandela, kColor[1] * kCandela, kColor[2] * kCandela},
-                            .spot = instance->spot};
-            if (instance->spot) {
-                const bool kTurned = std::ranges::any_of(instance->rotation, [](float value) {
-                    return value != 0;
-                });
-                const std::array<Vector, 3> kTurn =
-                    turnOf(kTurned ? instance->rotation : std::array<float, 4>{0, 0, 0, 1});
-                made.direction = normalized({-kTurn[2][0], -kTurn[2][1], -kTurn[2][2]});
-                const float kOuter = std::clamp(kLight.outer, 0.0F, std::numbers::pi_v<float>);
-                const float kInner = std::clamp(kLight.inner, 0.0F, kOuter);
-                made.cosOuter = std::cos(kOuter);
-                made.cosInner = std::max(std::cos(kInner), made.cosOuter + 0.0001F);
-            }
-            const auto kIndex = static_cast<std::uint32_t>(frame.lights3d.size());
-            frame.lights3d.push_back(made);
-            // Its slices, and the tiles between the lines from the eye that
-            // touch its sphere across and up; one about the eye covers all.
-            const float kNearest = std::max(kAhead - kRange, near);
-            const float kFarthest = std::max(kAhead + kRange, kNearest);
-            const auto kTouching = [kAhead, kRange](float along, float tangent) {
-                if (kAhead <= kRange) {
-                    return std::pair{-1.0F, 1.0F};
-                }
-                const float kSquare = (kAhead * kAhead) - (kRange * kRange);
-                const float kSpread = kRange * std::sqrt((along * along) + kSquare);
-                return std::pair{((along * kAhead) - kSpread) / kSquare / tangent,
-                                 ((along * kAhead) + kSpread) / kSquare / tangent};
-            };
-            const auto [left, right] = kTouching(kAcross, kTanX);
-            const auto [bottom, top] = kTouching(kUpward, kTanY);
-            const auto kTile = [](float ndc, bool downward, std::uint32_t tiles) {
-                const float kAt = (downward ? 0.5F - (ndc * 0.5F) : (ndc * 0.5F) + 0.5F) * static_cast<float>(tiles);
-                return static_cast<std::uint32_t>(std::clamp(kAt, 0.0F, static_cast<float>(tiles - 1)));
-            };
-            const std::uint32_t kX0 = kTile(left, false, clusters.tilesX);
-            const std::uint32_t kX1 = kTile(right, false, clusters.tilesX);
-            const std::uint32_t kY0 = kTile(top, true, clusters.tilesY);
-            const std::uint32_t kY1 = kTile(bottom, true, clusters.tilesY);
-            for (std::uint32_t slice = sliceOf(kNearest); slice <= sliceOf(kFarthest); ++slice) {
-                for (std::uint32_t y = kY0; y <= kY1; ++y) {
-                    for (std::uint32_t x = kX0; x <= kX1; ++x) {
-                        named.emplace_back((((slice * clusters.tilesY) + y) * clusters.tilesX) + x, kIndex);
-                    }
-                }
-            }
-        }
-        std::ranges::stable_sort(named, {}, &std::pair<std::uint32_t, std::uint32_t>::first);
-        for (std::size_t at = 0; at < named.size();) {
-            const std::uint32_t kCluster = named[at].first;
-            const auto kFirst = static_cast<std::uint32_t>(clusters.indices.size());
-            std::uint32_t count = 0;
-            for (; at < named.size() && named[at].first == kCluster; ++at) {
-                if (count == settings.limits.maximumLightsPerCluster) {
-                    ++frame.clusterOverflow;
-                    continue;
-                }
-                clusters.indices.push_back(named[at].second);
-                ++count;
-            }
-            clusters.ranges[std::size_t{kCluster} * 2] = kFirst;
-            clusters.ranges[(std::size_t{kCluster} * 2) + 1] = count;
-        }
     }
 };
 
@@ -705,7 +548,8 @@ void Scene::extract(world::World& world) {
                 } else {
                     PointLight point;
                     std::memcpy(&point, chunk.columns[0] + (row * sizeof(PointLight)), sizeof(PointLight));
-                    instance.light = SpotLight{.lumens = point.lumens, .range = point.range, .color = point.color};
+                    instance.light = SpotLight{
+                        .lumens = point.lumens, .range = point.range, .color = point.color, .shadows = point.shadows};
                 }
                 if (state.pose) {
                     if (const auto* pose =
@@ -831,7 +675,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                           sizeof(PointLight),
                           {{"lumens", offsetof(PointLight, lumens)},
                            {"range", offsetof(PointLight, range)},
-                           {"color", offsetof(PointLight, color)}}));
+                           {"color", offsetof(PointLight, color)},
+                           {"shadows", offsetof(PointLight, shadows)}}));
     RAWFRAME_TRY(kLaidOut(!loaded.spots.empty(),
                           "rawframe.model.SpotLight",
                           sizeof(SpotLight),
@@ -839,7 +684,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"range", offsetof(SpotLight, range)},
                            {"inner", offsetof(SpotLight, inner)},
                            {"outer", offsetof(SpotLight, outer)},
-                           {"color", offsetof(SpotLight, color)}}));
+                           {"color", offsetof(SpotLight, color)},
+                           {"shadows", offsetof(SpotLight, shadows)}}));
     for (const physics3d::BodyMesh& kMesh : game.meshes()) {
         loaded.meshes.push_back(SceneMesh{.id = kMesh.id, .mesh = kMesh.mesh});
     }

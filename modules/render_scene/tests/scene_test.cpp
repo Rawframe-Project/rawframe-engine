@@ -502,3 +502,88 @@ RAWFRAME_TEST(TheTemporalInputsFollowTheEyeAndTheModels) {
     RAWFRAME_EXPECT(!kPlain.temporal.enabled && !kPlain.temporal.history &&
                     kPlain.temporal.jitter == (std::array<float, 2>{0, 0}));
 }
+
+RAWFRAME_TEST(PunctualShadowsShareOneAtlasByCover) {
+    const auto kPlace = [](Rig& rig, auto light, schema::ComponentTypeId as, physics3d::Pose3D pose) {
+        const world::EntityHandle kEntity = *rig.world.create();
+        RAWFRAME_EXPECT(rig.world.insertErased(kEntity, *rig.schema->find(as), &light).has_value());
+        RAWFRAME_EXPECT(rig.world.insert(kEntity, *rig.schema->key<physics3d::Pose3D>(), pose).has_value());
+    };
+    const float kDown = std::sin(std::numbers::pi_v<float> / 4);
+    const auto kFill = [&kPlace, kDown](Rig& rig) {
+        // A shadowed spot two meters ahead, shining down on a box below it;
+        // a shadowed lamp forty ahead; an unshadowed lamp; a box far off.
+        kPlace(rig,
+               SpotLight{.lumens = 500, .range = 8, .inner = 0.3F, .outer = 0.6F, .color = 0xFFFFFFFF, .shadows = true},
+               kSpotId,
+               {.x = 100, .y = 4, .z = -2, .qx = -kDown, .qw = kDown});
+        kPlace(rig,
+               PointLight{.lumens = 800, .range = 10, .color = 0xFFFFFFFF, .shadows = true},
+               kPointId,
+               {.x = 100, .y = 2, .z = -40, .qw = 1});
+        kPlace(
+            rig, PointLight{.lumens = 800, .range = 10, .color = 0xFFFFFFFF}, kPointId, {.x = 104, .z = -6, .qw = 1});
+        rig.spawn(Model{.mesh = kBox}, physics3d::Pose3D{.x = 100, .y = 1, .z = -2, .qw = 1});
+        rig.spawn(Model{.mesh = kBox}, physics3d::Pose3D{.x = 160, .y = 1, .z = -2, .qw = 1});
+    };
+    const SceneCamera kCamera{.eye = {100, 2, 0}, .fovY = 1, .near = 0.1F, .aspect = 1.5F};
+    Rig rig;
+    kFill(rig);
+    const SceneFrame& kFrame = rig.frame(kCamera);
+    const SceneLightShadows& kShadows = kFrame.lightShadows;
+    RAWFRAME_EXPECT(kFrame.lights3d.size() == 3 && kShadows.side == 2048 && kShadows.slots.size() == 7 &&
+                    kShadows.evicted == 0);
+    // The spot covers the most: the largest square first, at the atlas's
+    // corner; the lamp's six faces a size smaller beside it, in Morton
+    // order; the unshadowed lamp has none.
+    const SceneLight& kSpot = kFrame.lights3d[0];
+    const SceneLight& kLamp = kFrame.lights3d[1];
+    RAWFRAME_EXPECT(kSpot.spot && kSpot.shadowSlots == 1 && kLamp.shadowSlots == 6 &&
+                    kFrame.lights3d[2].shadowSlots == 0);
+    const ShadowSlot& kSpotSlot = kShadows.slots[kSpot.shadowSlot];
+    RAWFRAME_EXPECT(kSpotSlot.side == 512 && kSpotSlot.x == 0 && kSpotSlot.y == 0);
+    const std::array<std::array<std::uint32_t, 2>, 6> kFaces = {
+        {{512, 0}, {768, 0}, {512, 256}, {768, 256}, {0, 512}, {256, 512}}};
+    for (std::uint32_t face = 0; face < 6; ++face) {
+        const ShadowSlot& kFace = kShadows.slots[kLamp.shadowSlot + face];
+        RAWFRAME_EXPECT(kFace.side == 256 && kFace.x == kFaces[face][0] && kFace.y == kFaces[face][1] &&
+                        near(kFace.tangent, 1));
+    }
+    // The spot looks down: the box below it is its one caster, seen in the
+    // middle of its square, deeper the nearer; the far box casts nowhere.
+    RAWFRAME_EXPECT(kSpotSlot.casterCount == 1 && near(kSpotSlot.forward[1], -1, 1e-3F));
+    // Two meters below the light, then three: straight ahead of it, the
+    // distance ahead its w and the near plane over that its depth.
+    const auto kW = [](const Matrix& matrix, const std::array<float, 3>& point) {
+        return (matrix[3] * point[0]) + (matrix[7] * point[1]) + (matrix[11] * point[2]) + matrix[15];
+    };
+    const std::array<float, 3> kBelow = clipOf(kSpotSlot.viewProjection, {0, 0, -2});
+    const std::array<float, 3> kLower = clipOf(kSpotSlot.viewProjection, {0, -1, -2});
+    RAWFRAME_EXPECT(near(kBelow[0], 0) && near(kBelow[1], 0) && near(kLower[0], 0) && near(kLower[1], 0) &&
+                    near(kW(kSpotSlot.viewProjection, {0, 0, -2}), 2) &&
+                    near(kW(kSpotSlot.viewProjection, {0, -1, -2}), 3) && near(kBelow[2], kSpotSlot.near));
+    for (const ShadowSlot& kSlot : kShadows.slots) {
+        for (std::uint32_t at = kSlot.firstCaster; at < kSlot.firstCaster + kSlot.casterCount; ++at) {
+            RAWFRAME_EXPECT(kShadows.casters[at].model[12] < 50);
+        }
+    }
+
+    // A budget of one light: the spot keeps its shadows, the lamp's are
+    // counted as lost; an atlas of nought gives none.
+    SceneLimits one;
+    one.maximumShadowedLights = 1;
+    Rig budget(one);
+    kFill(budget);
+    const SceneFrame& kBudget = budget.frame(kCamera);
+    RAWFRAME_EXPECT(kBudget.lightShadows.slots.size() == 1 && kBudget.lightShadows.evicted == 1 &&
+                    kBudget.lights3d[0].shadowSlots == 1 && kBudget.lights3d[1].shadowSlots == 0);
+    auto none = *Scene::create(*rig.schema,
+                               {.models = {kModelId},
+                                .points = {kPointId},
+                                .spots = {kSpotId},
+                                .lightShadows = {.side = 0, .largest = 512, .smallest = 128}});
+    none->extract(rig.world);
+    const SceneFrame& kNone = none->queue(kCamera);
+    RAWFRAME_EXPECT(kNone.lightShadows.side == 0 && kNone.lightShadows.slots.empty() &&
+                    kNone.lights3d[0].shadowSlots == 0);
+}
