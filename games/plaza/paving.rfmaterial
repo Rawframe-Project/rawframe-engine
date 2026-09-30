@@ -3,6 +3,25 @@
   "kind": "surface",
   "interface": {},
   "graph": {
+    "020ff7080d79b52c": {
+      "type": "rawframe/uv@1",
+      "params": {},
+      "inputs": {}
+    },
+    "596e8917cecb5b4d": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "020ff7080d79b52c",
+          "output": "uv"
+        },
+        "b": [
+          4,
+          4
+        ]
+      }
+    },
     "9b849390983a226f": {
       "type": "rawframe/surface@1",
       "params": {},
@@ -19,7 +38,12 @@
       "params": {
         "texture": "9f822820a44af4fc"
       },
-      "inputs": {}
+      "inputs": {
+        "uv": {
+          "node": "596e8917cecb5b4d",
+          "output": "out"
+        }
+      }
     }
   }
 }
