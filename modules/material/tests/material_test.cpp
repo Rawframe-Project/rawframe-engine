@@ -152,10 +152,10 @@ RAWFRAME_TEST(TheHashAndTheBlobFollowTheMaterial) {
 RAWFRAME_TEST(ACookedMaterialDecodesAsItWasEncoded) {
     const std::vector<std::byte> kBytes = encode(red());
     const auto kDecoded = decode(kBytes);
-    RAWFRAME_EXPECT(kBytes.size() == 172 && kDecoded.has_value() && *kDecoded == red());
+    RAWFRAME_EXPECT(kBytes.size() == 204 && kDecoded.has_value() && *kDecoded == red());
     // Anything else is refused: short, another format, a value out of the
     // contract's range, a state out of its set.
-    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(171)), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(203)), MaterialError::Invalid));
     std::vector<std::byte> other = kBytes;
     other[4] = std::byte{2};
     RAWFRAME_EXPECT(refusedWith(decode(other), MaterialError::Invalid));
@@ -328,8 +328,8 @@ RAWFRAME_TEST(WhatGenerationOneCannotSampleIsRefused) {
     // Cooked bytes whose texture feeds nothing, or with no texture a
     // sampler state.
     std::vector<std::byte> feedsNothing = encode(stencilled());
-    feedsNothing[164] = std::byte{0};
-    feedsNothing[165] = std::byte{0};
+    feedsNothing[192] = std::byte{0};
+    feedsNothing[193] = std::byte{0};
     RAWFRAME_EXPECT(refusedWith(decode(feedsNothing), MaterialError::Invalid));
     std::vector<std::byte> stateless = encode(red());
     stateless[88] = std::byte{1};
@@ -450,9 +450,9 @@ RAWFRAME_TEST(APackedTextureAndAnEmissionTextureFeedTheirInputs) {
     const auto kDecoded = decode(encode(made));
     RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == made);
     const std::array<float, kBlobFloats> kBlob = blobOf(made);
-    RAWFRAME_EXPECT(kBlob[3] == 1 && kBlob[7] == 0.5F && kBlob[8] == 200 && kBlob[9] == 100 && kBlob[15] == 2 &&
-                    kBlob[20] == 2 && kBlob[21] == 2 && kBlob[28] == 3 && kBlob[29] == 2 && kBlob[30] == 1 &&
-                    kBlob[31] == 1);
+    RAWFRAME_EXPECT(kBlob[3] == 1 && kBlob[7] == 0.5F && kBlob[8] == 200 && kBlob[9] == 100 && kBlob[15] == 10 &&
+                    kBlob[20] == 2 && kBlob[21] == 2 && kBlob[32] == 3 && kBlob[33] == 2 && kBlob[34] == 1 &&
+                    kBlob[35] == 1);
     // The roughness from an alpha channel (Unity's packing), and the same
     // texture for everything.
     const auto kAlpha = compile(
@@ -480,4 +480,43 @@ RAWFRAME_TEST(APackedTextureAndAnEmissionTextureFeedTheirInputs) {
                   {nodeOf(kUv, kUvType, Value::object(), Value::object()),
                    nodeOf(kNode + 3, kSeparate3Type, Value::object(), objectOf({{"in", from(kUv, "uv")}}))}));
     RAWFRAME_EXPECT(refusedWith(kSeparatedUv, MaterialError::Invalid));
+}
+
+RAWFRAME_TEST(ANormalTextureBendsTheGeometryNormal) {
+    // A normal texture through normal_map at half its strength, tiled.
+    Material bumped;
+    bumped.textures.normal = {.id = 0x88, .scale = {3, 3}};
+    bumped.textures.normalScale = 0.5F;
+    const auto kText = writeMaterial(documentOf(bumped, kNode));
+    RAWFRAME_EXPECT(kText.has_value() && kText->contains("rawframe/normal_map@1") &&
+                    kText->contains("\"geometry_normal\""));
+    const auto kRead = kText.has_value() ? readMaterial(*kText) : std::unexpected{kText.error().clone()};
+    const auto kCompiled = kRead.has_value() ? compile(*kRead) : std::unexpected{kRead.error().clone()};
+    RAWFRAME_EXPECT(kCompiled.has_value() && *kCompiled == bumped);
+    const auto kDecoded = decode(encode(bumped));
+    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == bumped);
+    const std::array<float, kBlobFloats> kBlob = blobOf(bumped);
+    RAWFRAME_EXPECT(kBlob[15] == 16 && kBlob[28] == 3 && kBlob[29] == 3 && kBlob[35] == 0.5F);
+    // A literal normal, a scale at its default, a normal from anything
+    // but a normal map, and a normal map of a vec2 are refused.
+    RAWFRAME_EXPECT(refusedWith(
+        validateSurface(surfaceOf(
+            objectOf({{"geometry_normal", Value::array({Value::real(0), Value::real(0), Value::real(1)})}}), {})),
+        MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(surfaceOf(objectOf({{"geometry_normal", from(kNode + 3, "out")}}),
+                                                          {samplerOf({}),
+                                                           nodeOf(kNode + 3,
+                                                                  kNormalMapType,
+                                                                  objectOf({{"scale", Value::real(1)}}),
+                                                                  objectOf({{"in", from(kSampler, "color")}}))})),
+                                MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(
+        validateSurface(surfaceOf(objectOf({{"geometry_normal", from(kSampler, "color")}}), {samplerOf({})})),
+        MaterialError::Invalid));
+    RAWFRAME_EXPECT(
+        refusedWith(validateSurface(surfaceOf(
+                        objectOf({{"geometry_normal", from(kNode + 3, "out")}}),
+                        {nodeOf(kUv, kUvType, Value::object(), Value::object()),
+                         nodeOf(kNode + 3, kNormalMapType, Value::object(), objectOf({{"in", from(kUv, "uv")}}))})),
+                    MaterialError::Invalid));
 }

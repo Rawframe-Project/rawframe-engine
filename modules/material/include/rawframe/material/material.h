@@ -34,7 +34,8 @@
 // Rec.709, each channel from nought to one, as are the weights, the
 // metalness, the roughness, the opacity, and the occlusion; the index of
 // refraction is from one to three; luminance is nought or more.
-// `geometry_normal`, a stream or a map, has no literal.
+// `geometry_normal`, a stream or a map, has no literal: it is connected or
+// left out for the mesh's normal (D313).
 //
 // The optional `states` (SPEC-0026's declared material states, in this
 // order, each left out at its default): `shading` `lit` or `unlit`;
@@ -68,8 +69,10 @@
 // literal: a number (float), two (vec2), or three (color3); their output
 // `out` is of their inputs' type, or of the one that is not a float when
 // the other is (broadcast). `separate3` (D312) takes a color3 `in` and
-// gives its channels as `r`, `g`, and `b` (floats). A node's params and
-// inputs are in name order.
+// gives its channels as `r`, `g`, and `b` (floats). `normal_map` (D313)
+// takes a color3 `in`, a tangent-space normal as glTF encodes it, and its
+// param `scale` (the glTF normal scale, left out at one); its `out` is a
+// vec3. A node's params and inputs are in name order.
 //
 // A node of any other type is kept whole, as SPEC-0028 keeps what it does
 // not know. Generation 1 compiles three textures at most (D312), each
@@ -79,7 +82,8 @@
 // (the glTF factor): the base texture, its color `base_color` and its alpha
 // `geometry_opacity`; the packed texture, a channel each (`separate3`'s,
 // or its alpha) for `base_metalness`, `specular_roughness`, and
-// `ambient_occlusion`; the emission texture, its color `emission_color`.
+// `ambient_occlusion`; the emission texture, its color `emission_color`;
+// the normal texture, through `normal_map`, `geometry_normal`.
 // Any other connection, or a node of a type it does not know, does not
 // compile until the rest of the library exists.
 
@@ -159,7 +163,7 @@ enum class Channel : std::uint8_t {
     Alpha
 };
 
-/// The textures a material samples and what each feeds (D312).
+/// The textures a material samples and what each feeds (D312, D313).
 struct Textures {
     /// Its color the base color, its alpha the opacity.
     SampledTexture base;
@@ -173,6 +177,9 @@ struct Textures {
     Channel occlusion = Channel::None;
     /// Its color the emission's color.
     SampledTexture emission;
+    /// A tangent-space normal, its x and y times `normalScale`.
+    SampledTexture normal;
+    float normalScale = 1;
 
     friend bool operator==(const Textures&, const Textures&) = default;
 };
@@ -205,6 +212,7 @@ inline constexpr std::string_view kUvType = "rawframe/uv@1";
 inline constexpr std::string_view kMultiplyType = "rawframe/multiply@1";
 inline constexpr std::string_view kAddType = "rawframe/add@1";
 inline constexpr std::string_view kSeparate3Type = "rawframe/separate3@1";
+inline constexpr std::string_view kNormalMapType = "rawframe/normal_map@1";
 
 /// A surface material's document for `made`, its surface node keyed by
 /// `node` and the nodes its textures need by the ids after it, in order,
@@ -236,14 +244,14 @@ inline constexpr std::string_view kSeparate3Type = "rawframe/separate3@1";
 /// node of a type this family does not know.
 [[nodiscard]] result::Result<base::Sha256Digest> semanticHash(const graph::Document& surface);
 
-/// A compiled material's bytes: `RFMT`, format 4, its states (shading,
+/// A compiled material's bytes: `RFMT`, format 5, its states (shading,
 /// blend, double sided, a byte each and one of nought), its alpha cutoff,
 /// its Surface's sixteen numbers in the contract's order, then its base,
-/// packed, and emission textures, each its identity (eight bytes), filter,
-/// and address (a byte each), two bytes of nought, and its scale and
-/// offset (two numbers each); then what they feed, a byte each: the base
-/// color, the opacity, the metalness's channel, the roughness's, the
-/// occlusion's, and three of nought.
+/// packed, emission, and normal textures, each its identity (eight bytes),
+/// filter, and address (a byte each), two bytes of nought, and its scale
+/// and offset (two numbers each); then what they feed, a byte each: the
+/// base color, the opacity, the metalness's channel, the roughness's, the
+/// occlusion's, and three of nought; then the normal's scale.
 [[nodiscard]] std::vector<std::byte> encode(const Material& made);
 
 /// Refuses (`Invalid`) bytes `encode` would not make, or a material a
@@ -256,12 +264,13 @@ inline constexpr std::string_view kSeparate3Type = "rawframe/separate3@1";
 /// refraction; the opacity, the occlusion, the alpha cutoff (nought unless
 /// masked), and its flags: one when unlit, two when its base texture's
 /// color multiplies the base color, four when its alpha multiplies the
-/// opacity; the base, packed, and emission textures' scale and offset
-/// (D311); and the channels (one to four, red to alpha; nought for none)
-/// of the packed texture multiplying the metalness, the roughness, and the
-/// occlusion, then one when the emission texture's color multiplies the
-/// emission (D312). 128 bytes, Falcor's precedent.
-inline constexpr std::size_t kBlobFloats = 32;
+/// opacity, eight when the emission texture's color multiplies the
+/// emission, sixteen when the normal texture bends the normal; the base,
+/// packed, emission, and normal textures' scale and offset (D311); and the
+/// channels (one to four, red to alpha; nought for none) of the packed
+/// texture multiplying the metalness, the roughness, and the occlusion,
+/// then the normal's scale (D312, D313). 144 bytes.
+inline constexpr std::size_t kBlobFloats = 36;
 [[nodiscard]] std::array<float, kBlobFloats> blobOf(const Material& made) noexcept;
 
 } // namespace rawframe::material
