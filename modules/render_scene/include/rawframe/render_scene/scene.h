@@ -73,6 +73,11 @@ struct Bloom {
     float intensity = 0;
 };
 
+/// `rawframe.model.ScreenSpaceReflections` as C++ reads it (D331).
+struct ScreenSpaceReflections {
+    float distance = 0;
+};
+
 /// `rawframe.model.Grading` as C++ reads it.
 struct Grading {
     float slopeR = 1;
@@ -241,6 +246,8 @@ struct SceneCamera {
     std::optional<AmbientOcclusion> occlusion;
     /// The camera's bloom, if it asks (D328).
     std::optional<Bloom> bloom;
+    /// The camera's screen-space reflections, if it asks (D331).
+    std::optional<ScreenSpaceReflections> reflections;
     /// The camera's tonemapper, as its component numbers it: another
     /// number is AgX (D295).
     std::uint32_t tonemapper = 0;
@@ -501,6 +508,17 @@ struct SceneBloom {
 /// intensity not finite or not above nought.
 [[nodiscard]] SceneBloom bloomOf(const std::optional<Bloom>& asked) noexcept;
 
+/// ADR-0051's screen-space reflections (D331): whether the view has them,
+/// and how far a reflection is followed, in meters (a tenth to a hundred).
+struct SceneScreenReflections {
+    bool enabled = false;
+    float distance = 0;
+};
+
+/// The reflections a camera's `ScreenSpaceReflections` asks for, made
+/// sound (D331): none for a distance not finite or not above nought.
+[[nodiscard]] SceneScreenReflections reflectionsOf(const std::optional<ScreenSpaceReflections>& asked) noexcept;
+
 /// ADR-0051's temporal inputs (D291). Whether the frame is antialiased
 /// over time; its subpixel jitter, a pixel's fraction across and down in
 /// [-0.5, 0.5), which the GPU half applies to the projection at its size;
@@ -533,6 +551,7 @@ struct SceneFrame {
     SceneGrading grading;
     SceneOcclusion occlusion;
     SceneBloom bloom;
+    SceneScreenReflections reflections;
     Tonemapper tonemapper = Tonemapper::Agx;
     /// Whether the tonemapped picture is antialiased by FXAA (D296): never
     /// with the temporal inputs, which are then off.
@@ -694,6 +713,7 @@ struct GameScene {
     std::optional<schema::ComponentTypeId> grading;
     std::optional<schema::ComponentTypeId> occlusion;
     std::optional<schema::ComponentTypeId> bloom;
+    std::optional<schema::ComponentTypeId> reflections;
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
     std::vector<schema::ComponentTypeId> points;
@@ -706,7 +726,7 @@ struct GameScene {
 /// in `program` must be what this module reads, and its meshes. Refuses
 /// (`NoModels`) a game with no model component, and (`BadComponents`) one
 /// with two cameras, auto-exposures, gradings, ambient occlusions, blooms,
-/// suns, or skies.
+/// screen-space reflections, suns, or skies.
 [[nodiscard]] result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const kest::Program& program);
 
 } // namespace rawframe::render_scene

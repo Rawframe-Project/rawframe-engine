@@ -22,4 +22,11 @@ SceneBloom bloomOf(const std::optional<Bloom>& asked) noexcept {
     return SceneBloom{.enabled = true, .intensity = std::min(asked->intensity, 1.0F)};
 }
 
+SceneScreenReflections reflectionsOf(const std::optional<ScreenSpaceReflections>& asked) noexcept {
+    if (!asked.has_value() || !std::isfinite(asked->distance) || asked->distance <= 0) {
+        return {};
+    }
+    return SceneScreenReflections{.enabled = true, .distance = std::clamp(asked->distance, 0.1F, 100.0F)};
+}
+
 } // namespace rawframe::render_scene

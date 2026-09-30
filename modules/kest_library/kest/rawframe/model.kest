@@ -112,6 +112,17 @@ struct Bloom {
     intensity: f32
 }
 
+// A camera's screen-space reflections (ADR-0051, D331), on the same entity
+// as its camera: a smooth surface reflects what the view saw the frame
+// before where its reflection meets it, within `distance` meters, in
+// place of the sky's picture or a probe's, fading as the surface roughens
+// and toward the view's edges. A distance not above nought reflects
+// nothing; so does a view not antialiased over time, which has no frame
+// before to read.
+struct ScreenSpaceReflections {
+    distance: f32
+}
+
 // A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
 // the same entity as its camera, whose `exposure` it starts from: the
 // frame's light measured in a histogram of its luminance, the darkest
