@@ -267,6 +267,16 @@ fn meter(count: i32, sticks: [controls.Stick], meters: [model.AutoExposure]) {
     }
 }
 
+// A walker's view darkened where things meet (D327): what is hidden
+// within 0.8 meters of a point, taken as found.
+fn hide(count: i32, sticks: [controls.Stick], hidden: [model.AmbientOcclusion]) {
+    let i = 0
+    while i < count {
+        hidden[i] = model.AmbientOcclusion(0.8, 1.0)
+        i = i + 1
+    }
+}
+
 // The sky a client sees and is lit by (D322): the clear day's picture,
 // the sun's own disc left out, its sky averaging 5,000 candela per square
 // meter as the default sky does, its ground the picture's.
