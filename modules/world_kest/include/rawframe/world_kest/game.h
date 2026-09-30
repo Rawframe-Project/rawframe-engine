@@ -333,6 +333,14 @@ struct GameTexture {
     std::string path;
 };
 
+/// A surface material a `rawframe.model.Model` names (D303), by the
+/// identity the model names it by. Its source beside the description is a
+/// material document the cook compiles (`rawframe.material`).
+struct GameMaterial {
+    std::uint64_t id = 0;
+    std::string path;
+};
+
 /// An animator (ADR-0039, D124): a graph an entity's
 /// `rawframe.animation.animator` plays by the identity its line gives it.
 struct GameAnimator {
@@ -441,6 +449,8 @@ struct GameDescription {
     std::vector<GameMesh> meshes;
     /// From `texture <16 hex digits> <file>` lines.
     std::vector<GameTexture> textures;
+    /// From `material <16 hex digits> <file>` lines.
+    std::vector<GameMaterial> materials;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
     /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;

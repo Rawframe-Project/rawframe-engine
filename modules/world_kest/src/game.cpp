@@ -248,6 +248,17 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a texture's identity and file are used once");
             }
             game.textures.push_back(GameTexture{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "material") {
+            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a material line is `material <16 hex digits> <file>`");
+            }
+            if (std::ranges::contains(game.materials, *kId, &GameMaterial::id) ||
+                std::ranges::contains(game.materials, kWords[2], &GameMaterial::path)) {
+                return badLine(number, WorldKestError::BadGameLine, "a material's identity and file are used once");
+            }
+            game.materials.push_back(GameMaterial{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "animator") {
             // animator <16 hex digits> <graph file> [parameters <component>]
             //     [subset <32 hex digits>]
@@ -780,6 +791,14 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
         if (kComponent != game.components.end() && ofEngineType(*kComponent, "rawframe.canvas.Sprite") &&
             kTexture != game.textures.end()) {
             return std::to_string(kTexture->id);
+        }
+    }
+    if (value.field == "material") {
+        const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
+        const auto kMaterial = std::ranges::find(game.materials, value.value, &GameMaterial::path);
+        if (kComponent != game.components.end() && ofEngineType(*kComponent, "rawframe.model.Model") &&
+            kMaterial != game.materials.end()) {
+            return std::to_string(kMaterial->id);
         }
     }
     if (value.field == "graph" && component == world_animation::Animator::kComponentName) {

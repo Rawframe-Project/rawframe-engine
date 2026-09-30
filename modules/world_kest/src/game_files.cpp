@@ -225,6 +225,10 @@ void GameFiles::seal() {
         field(digest, texture.path);
         field(digest, hexOf(texture.texture));
     }
+    for (const GameMaterialResource& material : materials_) {
+        field(digest, material.path);
+        field(digest, hexOf(material.material));
+    }
     for (const Named& graph : graphs_) {
         field(digest, graph.name);
         field(digest, graph.text);
@@ -605,6 +609,18 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
         game.textures_.push_back(
             GameTextureResource{.id = texture.id, .path = texture.path, .texture = (*kSidecarRead)->id.value});
     }
+    // Each material, by the resource its sidecar names.
+    for (const GameMaterial& material : game.description_.materials) {
+        const auto kSidecarText = reader.read(material.path + std::string{content::kSidecarSuffix});
+        const auto kSidecarRead =
+            kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
+        if (!kSidecarRead.has_value() || !kSidecarRead->has_value() ||
+            (*kSidecarRead)->importer != "rawframe.material") {
+            return unreadable("a material the game names has a sidecar naming rawframe.material", material.path);
+        }
+        game.materials_.push_back(
+            GameMaterialResource{.id = material.id, .path = material.path, .material = (*kSidecarRead)->id.value});
+    }
     RAWFRAME_TRY_ASSIGN(std::vector<kest::SourceFile> files, kestFilesOf(reader));
     game.sources_.push_back(std::move(files));
     for (std::string& name : programNames(game.description_)) {
@@ -745,6 +761,14 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
         }
         game.textures_.push_back(
             GameTextureResource{.id = texture.id, .path = texture.path, .texture = kTexture->texture});
+    }
+    for (const GameMaterial& material : game.description_.materials) {
+        const CookedGameMaterial* const kMaterial = kCooked.material(material.path);
+        if (kMaterial == nullptr) {
+            return invalid("the cooked description does not name the resource of a material it names", material.path);
+        }
+        game.materials_.push_back(
+            GameMaterialResource{.id = material.id, .path = material.path, .material = kMaterial->material});
     }
     for (const GameAnimator& animator : game.description_.animators) {
         const CookedGameAnimator* const kAnimator = kCooked.animator(animator.path);

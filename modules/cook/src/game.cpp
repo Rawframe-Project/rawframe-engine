@@ -112,6 +112,20 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
         game.textures.push_back(world_kest::CookedGameTexture{.path = texture.path, .texture = kSidecar.id.value});
     }
 
+    // Each material: the resource its sidecar names, cooked by
+    // rawframe.material.
+    for (const world_kest::GameMaterial& material : kDescription.materials) {
+        auto sidecarBytes = reads.file(material.path + std::string{content::kSidecarSuffix});
+        if (!sidecarBytes.has_value()) {
+            return refuse("a material the description names has a sidecar", material.path);
+        }
+        RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
+        if (kSidecar.importer != "rawframe.material") {
+            return refuse("a material the description names is cooked by rawframe.material", material.path);
+        }
+        game.materials.push_back(world_kest::CookedGameMaterial{.path = material.path, .material = kSidecar.id.value});
+    }
+
     // Each animator's graph: the resource its sidecar names, cooked by
     // rawframe.animation from a graph document. Its clips and their
     // skeleton are resources the graph names, cooked from their own

@@ -222,6 +222,23 @@ RAWFRAME_TEST(TexturesAreDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(MaterialsAreDeclaredByLine) {
+    const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
+    const auto kGame =
+        parseGame(kHead + "material 00000000000000c1 brass.rfmaterial\nmaterial 00000000000000c2 stone.rfmaterial\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->materials.size() == 2 && kGame->materials[1].id == 0xC2 &&
+                    kGame->materials[1].path == "stone.rfmaterial");
+    for (const std::string_view kLines :
+         {"material 00000000000000c1\n",
+          "material 0000000000000000 brass.rfmaterial\n",
+          "material 00000000000000c1 a.rfmaterial\nmaterial 00000000000000c1 b.rfmaterial\n",
+          "material 00000000000000c1 a.rfmaterial\nmaterial 00000000000000c2 a.rfmaterial\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "4"));
+    }
+}
+
 RAWFRAME_TEST(AGameReadsItsMeshesCooked) {
     const std::filesystem::path kDirectory = test::scratchDirectory("meshes");
     std::filesystem::create_directories(kDirectory);
