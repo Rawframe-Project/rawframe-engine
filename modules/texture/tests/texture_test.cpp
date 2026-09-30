@@ -151,3 +151,45 @@ RAWFRAME_TEST(BytesNotExactlyAsWrittenAreRefused) {
     // Sides past the limits are refused before the levels are read.
     RAWFRAME_EXPECT(refusedWith(decode(*kBytes, {.maximumSide = 4}), TextureError::OverLimit));
 }
+
+RAWFRAME_TEST(AHalfFloatCubeRoundTripsWithItsSixFaces) {
+    // An environment (D320): RGBA16F, six square faces a level.
+    Texture cube = chain(Format::Rgba16Float, 8, 8);
+    cube.faces = 6;
+    for (Level& level : cube.levels) {
+        const std::vector<std::byte> kFace = level.bytes;
+        for (std::uint32_t face = 1; face < 6; ++face) {
+            for (const std::byte kByte : kFace) {
+                level.bytes.push_back(kByte ^ static_cast<std::byte>(face));
+            }
+        }
+    }
+    RAWFRAME_EXPECT(levelBytes(Format::Rgba16Float, 8, 8) == 512);
+    const auto kBytes = encode(cube);
+    RAWFRAME_EXPECT(kBytes.has_value());
+    if (!kBytes.has_value()) {
+        return;
+    }
+    // Vulkan's R16G16B16A16_SFLOAT, a type size of two, six faces; its
+    // samples half floats from -1 to 1 as Khronos's descriptor has them.
+    RAWFRAME_EXPECT(wordAt(*kBytes, 12) == 97 && wordAt(*kBytes, 16) == 2 && wordAt(*kBytes, 36) == 6);
+    const std::size_t kDescriptorAt = wordAt(*kBytes, 48);
+    RAWFRAME_EXPECT(wordAt(*kBytes, kDescriptorAt + 20) == 8);
+    RAWFRAME_EXPECT(wordAt(*kBytes, kDescriptorAt + 28) == ((0xC0U << 24U) | (15U << 16U)) &&
+                    wordAt(*kBytes, kDescriptorAt + 36) == 0xBF800000U &&
+                    wordAt(*kBytes, kDescriptorAt + 40) == 0x3F800000U);
+    const auto kRead = decode(*kBytes);
+    RAWFRAME_EXPECT(kRead.has_value() && *kRead == cube);
+    // Neither one face nor six, or six not square, is refused.
+    Texture three = cube;
+    three.faces = 3;
+    RAWFRAME_EXPECT(refusedWith(validate(three), TextureError::BadTexture));
+    Texture oblong = chain(Format::Rgba16Float, 8, 4, 1);
+    oblong.faces = 6;
+    oblong.levels[0].bytes.resize(6 * levelBytes(Format::Rgba16Float, 8, 4));
+    RAWFRAME_EXPECT(refusedWith(validate(oblong), TextureError::BadTexture));
+    // A face short is refused.
+    Texture shortFace = cube;
+    shortFace.levels[0].bytes.resize(5 * 512);
+    RAWFRAME_EXPECT(refusedWith(validate(shortFace), TextureError::BadTexture));
+}

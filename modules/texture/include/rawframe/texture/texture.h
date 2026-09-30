@@ -24,20 +24,23 @@ inline constexpr std::string_view kTextureRepresentation = "rawframe.texture";
 
 /// How a level's texels are stored. The block-compressed BC7 is the desktop
 /// form ADR-0058 names; RGBA8 is kept uncompressed, for what must stay
-/// exact (pixel art, interface images).
+/// exact (pixel art, interface images); RGBA16F holds light past one, in
+/// linear Rec. 709, for environments (D320).
 enum class Format : std::uint8_t {
     Rgba8,
     Rgba8Srgb,
     Bc7,
-    Bc7Srgb
+    Bc7Srgb,
+    Rgba16Float
 };
 
 /// Whether a format's color channels are sRGB-encoded (alpha never is).
 [[nodiscard]] bool isSrgb(Format format) noexcept;
-/// The bytes a level of this size takes: four a texel uncompressed, sixteen
-/// a 4x4 block (partial blocks whole) for BC7.
+/// The bytes a face of a level of this size takes: four a texel for RGBA8,
+/// eight for RGBA16F, sixteen a 4x4 block (partial blocks whole) for BC7.
 [[nodiscard]] std::size_t levelBytes(Format format, std::uint32_t width, std::uint32_t height) noexcept;
 
+/// A level: its sides, and each face's texels in turn.
 struct Level {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
@@ -46,10 +49,13 @@ struct Level {
 };
 
 /// Level nought is the image; each next one halves both sides, rounding
-/// down and never below one, and the last may be any of them.
+/// down and never below one, and the last may be any of them. A cube
+/// (D320) has six square faces, +X, -X, +Y, -Y, +Z, -Z, as Vulkan's layers
+/// are; anything else has one.
 struct Texture {
     Format format = Format::Rgba8;
     std::vector<Level> levels;
+    std::uint32_t faces = 1;
     friend bool operator==(const Texture&, const Texture&) noexcept = default;
 };
 
@@ -60,13 +66,15 @@ struct TextureLimits {
 };
 
 /// Refuses (`BadTexture`) a texture without levels, with a side of nought,
-/// with levels that do not halve, or with bytes that do not fill a level
-/// exactly; and (`OverLimit`) one past the limits.
+/// with levels that do not halve, with bytes that do not fill a level's
+/// faces exactly, or with faces neither one nor six of square sides; and
+/// (`OverLimit`) one past the limits.
 [[nodiscard]] result::Status validate(const Texture& texture, const TextureLimits& limits = {});
 
 /// The cooked form is KTX 2.0 without supercompression: the Vulkan format,
-/// the basic data format descriptor Khronos defines for it, no key and
-/// value data, and the levels smallest first, each aligned to its block.
+/// the basic data format descriptor Khronos defines for it, its faces, no
+/// key and value data, and the levels smallest first, each aligned to its
+/// block.
 /// Refuses what `validate` refuses.
 [[nodiscard]] result::Result<std::vector<std::byte>> encode(const Texture& texture, const TextureLimits& limits = {});
 

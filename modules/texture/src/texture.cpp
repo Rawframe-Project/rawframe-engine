@@ -25,6 +25,11 @@ constexpr std::uint32_t kTransferSrgb = 2;
 constexpr std::uint32_t kVersion13 = 2;
 constexpr std::uint32_t kChannelAlpha = 15;
 constexpr std::uint32_t kSampleLinear = 1U << 4U;
+constexpr std::uint32_t kSampleSigned = 1U << 6U;
+constexpr std::uint32_t kSampleFloat = 1U << 7U;
+// A float sample's range, as the descriptor gives it: -1 and 1 as floats.
+constexpr std::uint32_t kFloatLower = 0xBF800000U;
+constexpr std::uint32_t kFloatUpper = 0x3F800000U;
 
 std::unexpected<result::Error> bad(std::string_view why) {
     return result::fail(result::ErrorClass::InvalidArgument, kTextureDomain, code(TextureError::BadTexture), why);
@@ -48,12 +53,24 @@ std::uint32_t vulkanFormat(Format format) noexcept {
         return 145; // VK_FORMAT_BC7_UNORM_BLOCK
     case Format::Bc7Srgb:
         return 146; // VK_FORMAT_BC7_SRGB_BLOCK
+    case Format::Rgba16Float:
+        return 97; // VK_FORMAT_R16G16B16A16_SFLOAT
     }
     return 0;
 }
 
+/// Bytes a texel of an uncompressed format takes.
+std::uint32_t texelBytes(Format format) noexcept {
+    return format == Format::Rgba16Float ? 8 : 4;
+}
+
+/// KTX 2.0's type size: a channel's bytes, for what a reader swaps.
+std::uint32_t typeSize(Format format) noexcept {
+    return format == Format::Rgba16Float ? 2 : 1;
+}
+
 std::optional<Format> formatOfVulkan(std::uint32_t value) noexcept {
-    for (const Format kFormat : {Format::Rgba8, Format::Rgba8Srgb, Format::Bc7, Format::Bc7Srgb}) {
+    for (const Format kFormat : {Format::Rgba8, Format::Rgba8Srgb, Format::Bc7, Format::Bc7Srgb, Format::Rgba16Float}) {
         if (vulkanFormat(kFormat) == value) {
             return kFormat;
         }
@@ -64,7 +81,7 @@ std::optional<Format> formatOfVulkan(std::uint32_t value) noexcept {
 /// A level's alignment in the file: its texel block's bytes and four,
 /// whose least common multiple is the larger here.
 std::size_t alignmentOf(Format format) noexcept {
-    return compressed(format) ? 16 : 4;
+    return compressed(format) ? 16 : texelBytes(format);
 }
 
 /// The data format descriptor, total size first, as 32-bit words.
@@ -88,20 +105,26 @@ std::vector<std::uint32_t> descriptorOf(Format format) {
         return words;
     }
     constexpr std::uint32_t kBlockBytes = 24 + (4 * 16);
+    const std::uint32_t kBits = texelBytes(format) * 2;
+    const bool kFloat = format == Format::Rgba16Float;
     words = {4 + kBlockBytes,
              0,
              kVersion13 | (kBlockBytes << 16U),
              kModelRgbsda | (kPrimariesBt709 << 8U) | (kTransfer << 16U),
              0,
-             4,
+             texelBytes(format),
              0};
-    // Red, green, blue, and alpha, a byte each; alpha is linear even in an
-    // sRGB format.
+    // Red, green, blue, and alpha, a byte or a half float each; alpha is
+    // linear even in an sRGB format.
     constexpr std::array<std::uint32_t, 4> kChannels = {0, 1, 2, kChannelAlpha};
     for (std::uint32_t index = 0; index < 4; ++index) {
-        const std::uint32_t kType =
-            kChannels[index] | (kChannels[index] == kChannelAlpha && isSrgb(format) ? kSampleLinear : 0U);
-        for (const std::uint32_t kWord : {(index * 8U) | (7U << 16U) | (kType << 24U), 0U, 0U, 255U}) {
+        const std::uint32_t kType = kChannels[index] |
+                                    (kChannels[index] == kChannelAlpha && isSrgb(format) ? kSampleLinear : 0U) |
+                                    (kFloat ? kSampleFloat | kSampleSigned : 0U);
+        for (const std::uint32_t kWord : {(index * kBits) | ((kBits - 1) << 16U) | (kType << 24U),
+                                          0U,
+                                          kFloat ? kFloatLower : 0U,
+                                          kFloat ? kFloatUpper : 255U}) {
             words.push_back(kWord);
         }
     }
@@ -163,7 +186,7 @@ std::size_t levelBytes(Format format, std::uint32_t width, std::uint32_t height)
     if (compressed(format)) {
         return std::size_t{(width + 3) / 4} * ((height + 3) / 4) * 16;
     }
-    return std::size_t{width} * height * 4;
+    return std::size_t{width} * height * texelBytes(format);
 }
 
 result::Status validate(const Texture& texture, const TextureLimits& limits) {
@@ -175,13 +198,17 @@ result::Status validate(const Texture& texture, const TextureLimits& limits) {
     if (kWidth == 0 || kHeight == 0) {
         return bad("a texture's sides are not nought");
     }
+    if ((texture.faces != 1 && texture.faces != 6) || (texture.faces == 6 && kWidth != kHeight)) {
+        return bad("a texture has one face, or six square ones");
+    }
     if (kWidth > limits.maximumSide || kHeight > limits.maximumSide) {
         return overLimit("a texture's side is past its limits");
     }
     if (texture.levels.size() > mostLevels(kWidth, kHeight)) {
         return bad("a texture has more levels than halving its sides makes");
     }
-    if (!totalBytes(texture.format, kWidth, kHeight, texture.levels.size(), limits.maximumBytes).has_value()) {
+    if (!totalBytes(texture.format, kWidth, kHeight, texture.levels.size(), limits.maximumBytes / texture.faces)
+             .has_value()) {
         return overLimit("a texture holds more bytes than its limits allow");
     }
     for (std::size_t index = 0; index < texture.levels.size(); ++index) {
@@ -189,8 +216,8 @@ result::Status validate(const Texture& texture, const TextureLimits& limits) {
         if (kLevel.width != std::max(kWidth >> index, 1U) || kLevel.height != std::max(kHeight >> index, 1U)) {
             return bad("each level halves the one before, never below one");
         }
-        if (kLevel.bytes.size() != levelBytes(texture.format, kLevel.width, kLevel.height)) {
-            return bad("a level's bytes do not fill it exactly");
+        if (kLevel.bytes.size() != texture.faces * levelBytes(texture.format, kLevel.width, kLevel.height)) {
+            return bad("a level's bytes do not fill its faces exactly");
         }
     }
     return {};
@@ -215,15 +242,15 @@ result::Result<std::vector<std::byte>> encode(const Texture& texture, const Text
     for (const std::uint8_t kByte : kIdentifier) {
         out.push_back(static_cast<std::byte>(kByte));
     }
-    // The format, a type size of one, the sides, no depth, no layers, one
-    // face, the levels, and no supercompression.
+    // The format, its type size, the sides, no depth, no layers, the
+    // faces, the levels, and no supercompression.
     for (const std::uint32_t kField : {vulkanFormat(texture.format),
-                                       1U,
+                                       typeSize(texture.format),
                                        texture.levels[0].width,
                                        texture.levels[0].height,
                                        0U,
                                        0U,
-                                       1U,
+                                       texture.faces,
                                        static_cast<std::uint32_t>(kLevels),
                                        0U}) {
         putU32(out, kField);
@@ -260,9 +287,11 @@ result::Result<Texture> decode(std::span<const std::byte> bytes, const TextureLi
     const std::uint32_t kWidth = getU32(bytes, 20);
     const std::uint32_t kHeight = getU32(bytes, 24);
     const std::uint32_t kLevels = getU32(bytes, 40);
-    // A type size of one, no depth, no layers, one face, no supercompression.
-    if (!kFormat.has_value() || getU32(bytes, 16) != 1 || getU32(bytes, 28) != 0 || getU32(bytes, 32) != 0 ||
-        getU32(bytes, 36) != 1 || getU32(bytes, 44) != 0) {
+    const std::uint32_t kFaces = getU32(bytes, 36);
+    // Its type size, no depth, no layers, one face or a cube's six, no
+    // supercompression.
+    if (!kFormat.has_value() || getU32(bytes, 16) != typeSize(*kFormat) || getU32(bytes, 28) != 0 ||
+        getU32(bytes, 32) != 0 || (kFaces != 1 && kFaces != 6) || getU32(bytes, 44) != 0) {
         return bad("a texture of a format or shape this reader does not take");
     }
     if (kWidth == 0 || kHeight == 0 || kLevels == 0 || kLevels > mostLevels(kWidth, kHeight)) {
@@ -271,13 +300,13 @@ result::Result<Texture> decode(std::span<const std::byte> bytes, const TextureLi
     if (kWidth > limits.maximumSide || kHeight > limits.maximumSide) {
         return overLimit("a texture's side is past its limits");
     }
-    if (!totalBytes(*kFormat, kWidth, kHeight, kLevels, limits.maximumBytes).has_value()) {
+    if (!totalBytes(*kFormat, kWidth, kHeight, kLevels, limits.maximumBytes / kFaces).has_value()) {
         return overLimit("a texture holds more bytes than its limits allow");
     }
     if (bytes.size() < kHeaderBytes + (std::size_t{kLevels} * kLevelIndexBytes)) {
         return bad("a texture shorter than its level index");
     }
-    Texture texture{.format = *kFormat, .levels = std::vector<Level>(kLevels)};
+    Texture texture{.format = *kFormat, .levels = std::vector<Level>(kLevels), .faces = kFaces};
     for (std::size_t index = 0; index < kLevels; ++index) {
         const std::size_t kAt = kHeaderBytes + (index * kLevelIndexBytes);
         const std::uint64_t kOffset = getU64(bytes, kAt);
@@ -285,7 +314,7 @@ result::Result<Texture> decode(std::span<const std::byte> bytes, const TextureLi
         Level& level = texture.levels[index];
         level.width = std::max(kWidth >> index, 1U);
         level.height = std::max(kHeight >> index, 1U);
-        if (kLength != levelBytes(*kFormat, level.width, level.height) || kOffset > bytes.size() ||
+        if (kLength != kFaces * levelBytes(*kFormat, level.width, level.height) || kOffset > bytes.size() ||
             kLength > bytes.size() - kOffset) {
             return bad("a level that is not where its index says, or not its size");
         }
