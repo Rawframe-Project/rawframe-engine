@@ -35,6 +35,8 @@ mrhiFormat formatOf(texture::Format format) noexcept {
         return mrhi_formatBc7RgbaUnorm;
     case texture::Format::Bc7Srgb:
         return mrhi_formatBc7RgbaUnormSrgb;
+    case texture::Format::Rgba16Float:
+        return mrhi_formatRgba16Float;
     }
     return mrhi_formatRgba8Unorm;
 }
@@ -139,6 +141,10 @@ bool DeviceTextures::choose(std::uint64_t id, const std::shared_ptr<const textur
         def.width = image->levels[0].width;
         def.height = image->levels[0].height;
         def.mipLevels = static_cast<std::uint32_t>(image->levels.size());
+        if (image->faces == 6) {
+            def.kind = mrhi_textureCube;
+            def.depthOrLayers = 6;
+        }
         def.usage = mrhi_textureSampled | mrhi_textureCopyDestination;
         mrhiTextureId made{};
         if (mrhiCreateTexture(state.native, &def, &made) != mrhi_success) {
@@ -195,6 +201,11 @@ std::uint64_t DeviceTextures::resource(std::uint64_t id) const noexcept {
     return kFound == state_->imported.end() ? 0 : requestKey(kFound->second.index1, kFound->second.generation);
 }
 
+bool DeviceTextures::cube(std::uint64_t id) const noexcept {
+    const auto kFound = state_->chosen.find(id);
+    return kFound != state_->chosen.end() && kFound->second->source->faces == 6;
+}
+
 bool DeviceTextures::compressed(std::uint64_t id) const noexcept {
     const auto kFound = state_->chosen.find(id);
     return kFound != state_->chosen.end() && blocks(kFound->second->source->format);
@@ -208,18 +219,29 @@ result::Status DeviceTextures::write(std::uint64_t pass) {
         const bool kBlocks = blocks(texture.source->format);
         for (std::uint32_t mip = 0; mip < texture.source->levels.size(); ++mip) {
             const texture::Level& level = texture.source->levels[mip];
-            const std::uint32_t kRowBytes = kBlocks ? ((level.width + 3) / 4) * 16 : level.width * 4;
+            const std::uint32_t kRowBytes =
+                kBlocks ? ((level.width + 3) / 4) * 16
+                        : level.width * static_cast<std::uint32_t>(texture::levelBytes(texture.source->format, 1, 1));
             const std::uint32_t kRows = kBlocks ? (level.height + 3) / 4 : level.height;
-            const mrhiTextureCopy kPlace{.resource = resourceOf(resource(kId)), .mip = mip};
+            const std::size_t kFaceBytes = level.bytes.size() / texture.source->faces;
             const mrhiTexelLayout kLayout{.offset = 0, .bytesPerRow = kRowBytes, .rowsPerImage = kRows};
             // A compressed level's copy covers whole blocks.
             const mrhiExtent3d kExtent{.width = kBlocks ? ((level.width + 3) / 4) * 4 : level.width,
                                        .height = kBlocks ? kRows * 4 : level.height,
                                        .depthOrLayers = 1};
-            if (const mrhiResult kWritten = mrhiWriteTexture(
-                    state_->native, kPass, &kPlace, level.bytes.data(), level.bytes.size(), &kLayout, &kExtent);
-                kWritten != mrhi_success) {
-                return failed("a texture's level could not be written", kWritten);
+            // A cube's faces a layer each (D320).
+            for (std::uint32_t face = 0; face < texture.source->faces; ++face) {
+                const mrhiTextureCopy kPlace{.resource = resourceOf(resource(kId)), .mip = mip, .z = face};
+                if (const mrhiResult kWritten = mrhiWriteTexture(state_->native,
+                                                                 kPass,
+                                                                 &kPlace,
+                                                                 level.bytes.data() + (face * kFaceBytes),
+                                                                 kFaceBytes,
+                                                                 &kLayout,
+                                                                 &kExtent);
+                    kWritten != mrhi_success) {
+                    return failed("a texture's level could not be written", kWritten);
+                }
             }
         }
     }
