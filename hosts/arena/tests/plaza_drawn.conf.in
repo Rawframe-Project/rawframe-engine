@@ -18,3 +18,7 @@ render.offscreen = true
 render.width = 640
 render.height = 360
 render.capture = @CAPTURE@
+# A small shadow map and pictures read back often: a software rasterizer
+# under the full check's load draws few frames.
+scene.shadow_side = 256
+render.read_every = 20

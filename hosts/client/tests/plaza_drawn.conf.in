@@ -7,3 +7,7 @@ bots.player = true
 render.device = any
 content.root = @PLAZA_CONTENT@
 render.capture = @CAPTURE@
+# A small shadow map and pictures read back often: a software rasterizer
+# under the full check's load draws few frames.
+scene.shadow_side = 256
+render.read_every = 20

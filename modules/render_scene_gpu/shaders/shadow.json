@@ -1,0 +1,15 @@
+{
+  "root_block_bytes": 0,
+  "entries": [
+    {"name": "vs", "stage": "vertex",
+     "inputs": [{"location": 0, "type": "float32", "components": 3},
+                {"location": 2, "type": "float32", "components": 4},
+                {"location": 3, "type": "float32", "components": 4},
+                {"location": 4, "type": "float32", "components": 4}],
+     "variables": []}
+  ],
+  "bindings": [
+    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex"], "min_size": 64}
+  ],
+  "constants": []
+}

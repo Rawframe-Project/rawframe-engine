@@ -186,3 +186,49 @@ RAWFRAME_TEST(AnEmptySceneIsTheSky) {
     const std::array<render::FrameRecorder*, 1> kRecorders = {made->get()};
     RAWFRAME_EXPECT(!(*framer)->make(kRecorders, {.width = 1U << 20U, .height = 1}).has_value());
 }
+
+RAWFRAME_TEST(TheSunCastsShadows) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    // A white floor two meters below the eye, and a box above it eight
+    // meters ahead; the default sun, travelling along (-0.3, -1, -0.4),
+    // lays the box's shadow on the floor behind it and to its left.
+    SceneFrame frame = looking();
+    RAWFRAME_EXPECT(frame.shadows.count == 4);
+    SceneDraw floor = box(8, 1, {1, 1, 1, 1});
+    floor.model[0] = 10;
+    floor.model[5] = 0.1F;
+    floor.model[10] = 10;
+    floor.normal[0] = 0.1F;
+    floor.normal[5] = 10;
+    floor.normal[10] = 0.1F;
+    floor.model[13] = -2;
+    frame.draws = {floor, box(8, 0.5F, {1, 1, 1, 1})};
+    frame.shadows.casters = frame.draws;
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    const auto kPixels = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    // Where the floor is in the box's shadow, and where it is not: the
+    // floor's top at 1.9 below the eye, 8.76 ahead, 0.57 left or 1.5 right.
+    const auto kShaded = at(*kPixels, 30, 39);
+    const auto kLit = at(*kPixels, 37, 39);
+    std::printf("shaded %d %d %d, lit %d %d %d\n", kShaded[0], kShaded[1], kShaded[2], kLit[0], kLit[1], kLit[2]);
+    RAWFRAME_EXPECT(kShaded[0] + 30 < kLit[0]);
+    // Without cascades, the same floor is lit everywhere.
+    frame.shadows.count = 0;
+    const auto kUnshaded = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kUnshaded.has_value() && std::abs(at(*kUnshaded, 30, 39)[0] - kLit[0]) < 6);
+}

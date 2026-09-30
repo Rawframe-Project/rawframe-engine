@@ -12,6 +12,13 @@ layout(set = 0, binding = 0, std140) uniform Frame
     vec4 sun;
     vec4 sky;
     vec4 exposure;
+    // The eye's forward; each cascade's far end and texel; the cascades,
+    // the shadows' distance, and a cascade's side in texels (D289).
+    vec4 forward;
+    vec4 cascadeFar;
+    vec4 cascadeTexel;
+    vec4 shadow;
+    mat4 cascades[4];
 }
 frame;
 
@@ -27,6 +34,7 @@ layout(location = 8) in vec4 inColor;
 
 layout(location = 0) out vec3 outNormal;
 layout(location = 1) out vec4 outColor;
+layout(location = 2) out vec3 outPlaced;
 
 invariant gl_Position;
 
@@ -37,4 +45,5 @@ void main()
     gl_Position = frame.viewProjection * vec4(kPlaced, 1.0);
     outNormal = mat3(inNormal0, inNormal1, inNormal2) * inNormal;
     outColor = inColor;
+    outPlaced = kPlaced;
 }
