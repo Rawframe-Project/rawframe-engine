@@ -19,6 +19,7 @@ component 2d6e0b91-7c35-4f48-9a1e-3b5c8d0f6a27 plaza.stroller Stroller
 component 6a1f0c3e-94b2-4d57-8e16-2b7d9c4f0a35 plaza.figure rawframe.model.Model
 component 8e4b2c17-6a39-4d05-b1f8-7c2e9d4a3f61 plaza.look rawframe.model.Model
 component 1f7d3a58-9c24-4e6b-8a03-5d9e1b7c2f84 plaza.view rawframe.model.Camera
+component c3a95e27-4b18-4f6d-9a02-7e8d1b5c3f49 plaza.lantern rawframe.model.PointLight
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -86,11 +87,14 @@ predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.veloc
 # What a client draws (D283): every body it mirrors, by its shape and in
 # a color for what it is, the mound as its own mesh, through its own
 # walker's camera, and the strollers as figures where their poses stand
-# (D288); no server carries a look, a figure, or a view.
+# (D288), each with a lantern (D290); no server carries a look, a figure,
+# a lantern, or a view.
 presentation plaza.look on rawframe.physics3d.body
 present plaza.dress dress read rawframe.physics3d.body write plaza.look
 present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
 presentation plaza.figure on plaza.stroller
 present plaza.figure figure read plaza.stroller write plaza.figure
+presentation plaza.lantern on plaza.stroller
+present plaza.lantern lantern read plaza.stroller write plaza.lantern
 presentation plaza.view on player
 present plaza.frame frame read plaza.stick write plaza.view

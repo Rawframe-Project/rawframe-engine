@@ -228,14 +228,14 @@ if(RAWFRAME_BUILD_TESTS)
     # is seen in 3D (D283): its client dresses every body it mirrors by its
     # shape, the mound as the game's own mesh, and sees them through its
     # walker's camera; every model is drawn or culled, none malformed or of
-    # a mesh unknown.
+    # a mesh unknown; and the strollers' lanterns light the frames (D290).
     configure_file(tests/plaza_seen.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen.conf @ONLY)
     add_test(NAME plaza_seen
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_seen PROPERTIES
                          FIXTURES_REQUIRED plaza_content
-                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":1")
+                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":1,\"lightsLit\":[1-9][0-9]*,\"lightsCulled\":[0-9]+,\"lightsOverLimit\":0,\"clusterOverflow\":0")
     if(RAWFRAME_ARENA_DRAWS)
         # The plaza drawn on the one device offscreen (D284): frames drawn,
         # its models in instanced calls, its meshes uploaded once each, and
