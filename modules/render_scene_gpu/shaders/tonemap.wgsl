@@ -9,9 +9,13 @@ struct Grade {
     offset: vec4f,
     power: vec4f,
     tonemapper: vec4f,
+    bloom: vec4f,
 }
 
 @group(0) @binding(1) var<uniform> grade: Grade;
+// The bloom's spread light (D328).
+@group(0) @binding(2) var bloom: texture_2d<f32>;
+@group(0) @binding(3) var blended: sampler;
 
 struct Corner {
     @builtin(position) position: vec4f,
@@ -76,7 +80,12 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
     let highest = 4.026069;
     let size = vec2i(textureDimensions(scene, 0));
     let texel = min(vec2i(uv * vec2f(size)), size - 1);
-    let light = graded(textureLoad(scene, texel, 0).rgb) * grade.tonemapper.y;
+    var seen = textureLoad(scene, texel, 0).rgb;
+    let spread = textureSampleLevel(bloom, blended, uv, 0.0).rgb * grade.bloom.y;
+    if (grade.bloom.x > 0.0) {
+        seen = mix(seen, spread, grade.bloom.x);
+    }
+    let light = graded(seen) * grade.tonemapper.y;
     if (grade.tonemapper.x > 1.5) {
         return vec4f(clamp(light, vec3f(0.0), vec3f(1.0)), 1.0);
     }

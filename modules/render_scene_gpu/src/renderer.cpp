@@ -1,6 +1,7 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 
 #include "blocks.h"
+#include "bloom.h"
 #include "capture.h"
 #include "casting.h"
 #include "environment.h"
@@ -61,6 +62,8 @@ struct SceneRenderer::State {
     std::optional<LightCapturing> capturing;
     /// Its ambient occlusion, when a view asks (D327).
     std::optional<OcclusionPass> occlusion;
+    /// Its bloom, when a view asks (D328).
+    std::optional<BloomPass> bloom;
     std::optional<DeviceMeshes> held;
     /// The materials' textures (D309), and the white one a material
     /// sampling none samples, held as texture nought.
@@ -449,6 +452,10 @@ struct SceneRenderer::State {
         // picture before into the other kept picture (D291).
         RAWFRAME_TRY(temporal->declare(*frame, open.width, open.height, writes));
         RAWFRAME_TRY(occlusion->declare(*frame, now.block, open.width, open.height, writes));
+        RAWFRAME_TRY(bloom->declare(*frame, open.width, open.height));
+        if (bloom->enabled()) {
+            now.picture.bloom = {frame->bloom.intensity, 1.0F / static_cast<float>(bloom->levels()), 0, 0};
+        }
         writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.pictureResource, mrhi_accessCopyDestination));
@@ -583,6 +590,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(capturing->declare(now.scene, open.width, open.height, now.block.exposure[0]));
         RAWFRAME_TRY(metering->addPasses(now.scene));
         RAWFRAME_TRY(temporal->addPass(now.scene, now.motion));
+        RAWFRAME_TRY(bloom->addPasses(temporal->shown(now.scene)));
         // The picture: every pixel of it written, over whatever was there;
         // with FXAA, the tonemapped picture first, then FXAA over it into
         // the frame's (D296).
@@ -599,9 +607,12 @@ struct SceneRenderer::State {
             tonemapDef.colorTargets[0].resource = now.display;
             tonemapDef.colorTargets[0].load = mrhi_loadDiscard;
         }
-        const std::array<mrhiAccess, 2> kPictureReads = {kScene, wholeOf(now.pictureResource, mrhi_accessUniform)};
-        tonemapDef.accesses = kPictureReads.data();
-        tonemapDef.accessCount = static_cast<std::uint32_t>(kPictureReads.size());
+        std::vector<mrhiAccess> pictureReads = {kScene, wholeOf(now.pictureResource, mrhi_accessUniform)};
+        if (bloom->enabled()) {
+            pictureReads.push_back(wholeOf(bloom->spread(), mrhi_accessSampled));
+        }
+        tonemapDef.accesses = pictureReads.data();
+        tonemapDef.accessCount = static_cast<std::uint32_t>(pictureReads.size());
         if (const mrhiResult kAdded = mrhiAddPass(native, &tonemapDef, &now.picturePass); kAdded != mrhi_success) {
             return failed("the picture's pass could not be added", kAdded);
         }
@@ -804,8 +815,14 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(capturing->record(now.scene));
         RAWFRAME_TRY(metering->record(pipelines, now.scene, now.width, now.height));
         RAWFRAME_TRY(temporal->record(pipelines, now.scene, now.motion));
-        const std::array<mrhiBinding, 2> kSceneBinding = {textureAt(0, temporal->shown(now.scene)),
-                                                          bufferAt(1, now.pictureResource, sizeof(PictureBlock))};
+        RAWFRAME_TRY(bloom->record(pipelines, temporal->shown(now.scene)));
+        // The bloom's spread light, or the scene's where there is none,
+        // which the picture's shader does not read then (D328).
+        const std::array<mrhiBinding, 4> kSceneBinding = {
+            textureAt(0, temporal->shown(now.scene)),
+            bufferAt(1, now.pictureResource, sizeof(PictureBlock)),
+            textureAt(2, bloom->enabled() ? bloom->spread() : temporal->shown(now.scene)),
+            samplerAt(3, pipelines.filteredSampler)};
         if (mrhiBeginPass(native, now.picturePass) != mrhi_success ||
             mrhiSetGraphicsPipeline(native, now.picturePass, pipelines.tonemap.pipeline) != mrhi_success ||
             mrhiSetBindings(native, now.picturePass, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
@@ -842,6 +859,7 @@ struct SceneRenderer::State {
             ++statistics.frames;
             statistics.framesSmoothed += declared->smoothed ? 1 : 0;
             statistics.framesOccluded += occlusion->enabled() ? 1 : 0;
+            statistics.framesBloomed += bloom->enabled() ? 1 : 0;
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;
@@ -890,6 +908,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->temporal.emplace(device.native());
     state->capturing.emplace(device);
     state->occlusion.emplace(device.native());
+    state->bloom.emplace(device.native());
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }

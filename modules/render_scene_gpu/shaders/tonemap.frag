@@ -1,5 +1,6 @@
 // The scene's picture (D284), fragment entry "fs": the pre-exposed
-// scene-linear light of the texel under it, graded as the camera asks
+// scene-linear light of the texel under it, mixed with the bloom's spread
+// light as the camera asks (D328), graded as the camera asks
 // (D294, ADR-0051: white balance, ASC CDL, saturation, contrast about
 // middle grey), then mapped for display by the camera's tonemapper (D295,
 // ADR-0047's closed set: AgX, the default; Khronos PBR Neutral; linear),
@@ -22,8 +23,15 @@ layout(set = 0, binding = 1, std140) uniform Grade
     vec4 offset;
     vec4 power;
     vec4 tonemapper;
+    // The bloom's share, and one over its chain's levels (D328).
+    vec4 bloom;
 }
 grade;
+
+// The bloom's spread light, summed over its chain's levels (D328), at a
+// quarter of the target's sides.
+layout(set = 0, binding = 2) uniform texture2D bloom;
+layout(set = 0, binding = 3) uniform sampler blended;
 
 layout(location = 0) in vec2 inUv;
 
@@ -78,7 +86,11 @@ void main()
     const float kHighest = 4.026069;
     const ivec2 kSize = textureSize(scene, 0);
     const ivec2 kTexel = min(ivec2(inUv * vec2(kSize)), kSize - 1);
-    const vec3 kLight = graded(texelFetch(scene, kTexel, 0).rgb) * grade.tonemapper.y;
+    vec3 seen = texelFetch(scene, kTexel, 0).rgb;
+    if (grade.bloom.x > 0.0) {
+        seen = mix(seen, textureLod(sampler2D(bloom, blended), inUv, 0.0).rgb * grade.bloom.y, grade.bloom.x);
+    }
+    const vec3 kLight = graded(seen) * grade.tonemapper.y;
     if (grade.tonemapper.x > 1.5) {
         outColor = vec4(clamp(kLight, 0.0, 1.0), 1.0);
         return;

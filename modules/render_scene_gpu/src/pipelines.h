@@ -52,6 +52,7 @@ struct Pipelines {
     mrhiShaderId meterShader{};
     mrhiShaderId fxaaShader{};
     mrhiShaderId occlusionShader{};
+    mrhiShaderId bloomShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -90,6 +91,11 @@ struct Pipelines {
     Asked temporal;
     Asked tonemap;
     Asked fxaa;
+    /// The bloom's first halving, its others, and its doublings, added to
+    /// the level above (D328).
+    Asked bloomFirst;
+    Asked bloomDown;
+    Asked bloomUp;
 
     Pipelines() = default;
     Pipelines(const Pipelines&) = delete;

@@ -1,6 +1,7 @@
 #include "pipelines.h"
 
 #include "blocks.h"
+#include "generated/bloom_container.h"
 #include "generated/fxaa_container.h"
 #include "generated/meter_container.h"
 #include "generated/occlusion_container.h"
@@ -45,7 +46,10 @@ Pipelines::~Pipelines() {
                          &sky,
                          &temporal,
                          &tonemap,
-                         &fxaa}) {
+                         &fxaa,
+                         &bloomFirst,
+                         &bloomDown,
+                         &bloomUp}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -63,7 +67,8 @@ Pipelines::~Pipelines() {
                                        skyShader,
                                        meterShader,
                                        fxaaShader,
-                                       occlusionShader}) {
+                                       occlusionShader,
+                                       bloomShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -107,6 +112,7 @@ result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kMeterContainer, meterShader));
     RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
     RAWFRAME_TRY(makeShader(kOcclusionContainer, occlusionShader));
+    RAWFRAME_TRY(makeShader(kBloomContainer, bloomShader));
     // Each vertex of the mesh, then each draw's placement.
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
@@ -352,6 +358,31 @@ result::Status Pipelines::make() {
     picture.colorTargetCount = 1;
     picture.colorTargets[0].format = kPictureFormat;
     RAWFRAME_TRY(ask(picture, tonemap));
+    // The bloom's chain (D328): halvings, then doublings added to the
+    // level above.
+    for (const auto& [kEntry, kLabel, kAsked] :
+         {std::tuple{std::string_view{"first"}, std::string_view{"rawframe.scene.bloom.first"}, &bloomFirst},
+          std::tuple{std::string_view{"down"}, std::string_view{"rawframe.scene.bloom.down"}, &bloomDown},
+          std::tuple{std::string_view{"up"}, std::string_view{"rawframe.scene.bloom.up"}, &bloomUp}}) {
+        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+        def.label = kLabel.data();
+        def.labelLength = kLabel.size();
+        def.shader = bloomShader;
+        def.vertexEntry = "vs";
+        def.vertexEntryLength = 2;
+        def.fragmentEntry = kEntry.data();
+        def.fragmentEntryLength = kEntry.size();
+        def.colorTargetCount = 1;
+        def.colorTargets[0].format = kSceneFormat;
+        if (kAsked == &bloomUp) {
+            def.colorTargets[0].blend = true;
+            def.colorTargets[0].color = {
+                .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendOne, .operation = mrhi_blendAdd};
+            def.colorTargets[0].alpha = {
+                .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendZero, .operation = mrhi_blendAdd};
+        }
+        RAWFRAME_TRY(ask(def, *kAsked));
+    }
     // FXAA: the tonemapped picture into the frame's (D296).
     mrhiGraphicsPipelineDef smoothed = picture;
     constexpr std::string_view kFxaaLabel = "rawframe.scene.fxaa";
@@ -363,23 +394,9 @@ result::Status Pipelines::make() {
 
 result::Result<bool> Pipelines::ready() {
     bool all = true;
-    for (Asked* asked : {&casting,
-                         &cutCasting,
-                         &depth,
-                         &cutout,
-                         &surfaces,
-                         &cutSurfaces,
-                         &occlude,
-                         &blurOcclusion,
-                         &lit,
-                         &maskedLit,
-                         &glass,
-                         &sky,
-                         &histogram,
-                         &adapt,
-                         &temporal,
-                         &tonemap,
-                         &fxaa}) {
+    for (Asked* asked : {&casting,       &cutCasting, &depth,     &cutout,     &surfaces,  &cutSurfaces, &occlude,
+                         &blurOcclusion, &lit,        &maskedLit, &glass,      &sky,       &histogram,   &adapt,
+                         &temporal,      &tonemap,    &fxaa,      &bloomFirst, &bloomDown, &bloomUp}) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {

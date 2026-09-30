@@ -143,7 +143,8 @@ public:
                       diagnostics::field("historyReused", statistics.historyReused),
                       diagnostics::field("framesMetered", statistics.framesMetered),
                       diagnostics::field("framesSmoothed", statistics.framesSmoothed),
-                      diagnostics::field("framesOccluded", statistics.framesOccluded)});
+                      diagnostics::field("framesOccluded", statistics.framesOccluded),
+                      diagnostics::field("framesBloomed", statistics.framesBloomed)});
     }
 
 private:

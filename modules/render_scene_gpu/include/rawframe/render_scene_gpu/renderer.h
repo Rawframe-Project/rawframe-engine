@@ -79,8 +79,9 @@ struct RendererStatistics {
     std::uint64_t framesMetered = 0;
     /// Frames antialiased by FXAA (D296).
     std::uint64_t framesSmoothed = 0;
-    /// Frames with ambient occlusion (D327).
+    /// Frames with ambient occlusion (D327), and with bloom (D328).
     std::uint64_t framesOccluded = 0;
+    std::uint64_t framesBloomed = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the
