@@ -2,6 +2,8 @@
 
 #include "graph_parts.h"
 #include "rawframe/animation/errors.h"
+#include "rawframe/graph/errors.h"
+#include "rawframe/graph/graph.h"
 #include "text.h"
 
 #include <algorithm>
@@ -30,19 +32,15 @@ Value hexValue(std::uint64_t id) {
 }
 
 Value connectionValue(const Connection& connection) {
-    Value made = Value::object();
-    made.add("node", hexValue(connection.node));
-    made.add("output", Value::string(connection.output));
-    return made;
+    return graph::connectionValue({.node = connection.node, .output = connection.output});
 }
 
 std::optional<Connection> connectionOf(const Value& value) {
-    const std::optional<std::uint64_t> kNode =
-        hasMembers(value, {"node", "output"}) ? bits64Of(value.find("node")) : std::nullopt;
-    if (!kNode.has_value() || value.find("output")->kind() != Value::Kind::String) {
+    std::optional<graph::Connection> found = graph::connectionOf(value);
+    if (!found.has_value()) {
         return std::nullopt;
     }
-    return Connection{.node = *kNode, .output = *value.find("output")->text()};
+    return Connection{.node = found->node, .output = std::move(found->output)};
 }
 
 bool scalarInForm(const Graph& graph, const Scalar& scalar, bool negative) {
@@ -91,35 +89,7 @@ constexpr std::array<std::string_view, 4> kTypes{"bool", "int", "float", "vec2"}
 constexpr std::array<std::string_view, 3> kReplications{"server_authoritative", "client_predicted", "local"};
 constexpr std::array<std::string_view, 2> kLoops{"clamp", "loop"};
 
-/// SPEC-0028's `<namespace>/<name>@<major>[.<minor>]`, the namespace
-/// `rawframe` or a package's `publisher/package`.
-bool typeIdInForm(std::string_view type) {
-    const std::size_t kAt = type.find('@');
-    if (kAt == std::string_view::npos) {
-        return false;
-    }
-    const std::string_view kPath = type.substr(0, kAt);
-    const std::string_view kVersion = type.substr(kAt + 1);
-    std::size_t segments = 0;
-    for (std::size_t start = 0; start <= kPath.size(); ++segments) {
-        const std::size_t kEnd = std::min(kPath.find('/', start), kPath.size());
-        if (!machineName(kPath.substr(start, kEnd - start))) {
-            return false;
-        }
-        start = kEnd + 1;
-    }
-    const auto kNumber = [](std::string_view digits) {
-        return !digits.empty() && digits.size() <= 9 && (digits == "0" || digits.front() != '0') &&
-               std::ranges::all_of(digits, [](char each) {
-                   return each >= '0' && each <= '9';
-               });
-    };
-    const std::size_t kDot = kVersion.find('.');
-    const bool kVersioned = kDot == std::string_view::npos
-                                ? kNumber(kVersion)
-                                : kNumber(kVersion.substr(0, kDot)) && kNumber(kVersion.substr(kDot + 1));
-    return (segments == 2 || segments == 3) && kVersioned;
-}
+using graph::typeIdInForm;
 
 const GraphNode* nodeOf(const Graph& graph, std::uint64_t id) {
     const auto kFound = std::ranges::lower_bound(graph.nodes, id, {}, &GraphNode::id);
@@ -206,38 +176,6 @@ result::Status parametersInForm(const Graph& graph) {
     std::ranges::sort(ids);
     if (std::ranges::adjacent_find(ids) != ids.end()) {
         return graphInvalid("a graph has each parameter identity once");
-    }
-    return {};
-}
-
-result::Status acyclic(const Graph& graph) {
-    // 0 unseen, 1 on the path, 2 done; a node met again on the path closes
-    // a cycle.
-    std::vector<std::uint8_t> marks(graph.nodes.size(), 0);
-    std::vector<std::pair<std::size_t, std::size_t>> path;
-    for (std::size_t root = 0; root < graph.nodes.size(); ++root) {
-        if (marks[root] != 0) {
-            continue;
-        }
-        path.emplace_back(root, 0);
-        marks[root] = 1;
-        while (!path.empty()) {
-            auto& [at, next] = path.back();
-            const std::vector<const Connection*> kFrom = connectionsOf(graph.nodes[at]);
-            if (next == kFrom.size()) {
-                marks[at] = 2;
-                path.pop_back();
-                continue;
-            }
-            const auto kTo = static_cast<std::size_t>(nodeOf(graph, kFrom[next++]->node) - graph.nodes.data());
-            if (marks[kTo] == 1) {
-                return graphInvalid("a graph has no cycle");
-            }
-            if (marks[kTo] == 0) {
-                marks[kTo] = 1;
-                path.emplace_back(kTo, 0);
-            }
-        }
     }
     return {};
 }
@@ -517,13 +455,45 @@ Value interfaceValue(const Graph& graph) {
     return made;
 }
 
-std::string hexOf(const base::Sha256Digest& digest) {
-    std::string made;
-    for (const std::byte kByte : digest) {
-        made.push_back("0123456789abcdef"[std::to_integer<std::size_t>(kByte) >> 4U]);
-        made.push_back("0123456789abcdef"[std::to_integer<std::size_t>(kByte) & 0xFU]);
+/// A graph error as this module's: the grammar's rules are the graph's.
+std::unexpected<result::Error> asAnimation(result::Error error) {
+    if (error.domain() != graph::kGraphDomain) {
+        return std::unexpected<result::Error>{std::move(error)};
+    }
+    return error.code() == graph::code(graph::GraphError::OverLimit) ? graphOverLimit(error.description())
+                                                                     : graphInvalid(error.description());
+}
+
+/// The graph as SPEC-0028's grammar holds it: each node's record, a
+/// quarantined one as it was read.
+result::Result<graph::Document> documentOf(const Graph& animation) {
+    graph::Document made{.kind = "animation.graph", .interface = interfaceValue(animation)};
+    for (const GraphNode& node : animation.nodes) {
+        if (const auto* kQuarantined = std::get_if<QuarantinedNode>(&node.node)) {
+            auto record = document::parse(kQuarantined->record);
+            if (!record.has_value()) {
+                return graphInvalid("a quarantined node's record is JSON");
+            }
+            made.nodes.push_back({.id = node.id, .record = std::move(*record)});
+        } else {
+            made.nodes.push_back({.id = node.id, .record = nodeValue(animation, node)});
+        }
+    }
+    if (!animation.modifiers.empty()) {
+        made.sections.emplace_back("modifiers", modifiersValue(animation.modifiers));
+    }
+    for (const auto& [kNode, kDrawing] : animation.presentation) {
+        auto drawing = document::parse(kDrawing);
+        if (!drawing.has_value()) {
+            return graphInvalid("a graph's presentation draws its nodes as JSON");
+        }
+        made.presentation.emplace_back(kNode, std::move(*drawing));
     }
     return made;
+}
+
+graph::Limits limitsOf(const GraphLimits& limits) {
+    return {.maximumNodes = limits.maximumNodes};
 }
 
 } // namespace
@@ -605,73 +575,38 @@ result::Status validate(const Graph& graph, const GraphLimits& limits) {
     if (outputs != 1) {
         return graphInvalid("a graph has one output node");
     }
-    RAWFRAME_TRY(acyclic(graph));
-    for (std::size_t at = 0; at < graph.presentation.size(); ++at) {
-        const auto& [kNode, kDrawing] = graph.presentation[at];
-        if (nodeOf(graph, kNode) == nullptr || (at > 0 && !(graph.presentation[at - 1].first < kNode)) ||
-            !document::parse(kDrawing).has_value()) {
-            return graphInvalid("a graph's presentation draws its nodes, once each, in order");
-        }
+    // Connections to nodes there, no cycle, and drawings of its nodes in
+    // order: the grammar's rules.
+    RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, documentOf(graph));
+    if (auto valid = graph::validate(kDocument, limitsOf(limits)); !valid.has_value()) {
+        return asAnimation(std::move(valid).error());
     }
     return modifiersInForm(graph, limits);
 }
 
 result::Result<std::string> writeGraph(const Graph& graph, const GraphLimits& limits) {
     RAWFRAME_TRY(validate(graph, limits));
-    Value nodes = Value::object();
-    for (const GraphNode& node : graph.nodes) {
-        if (const auto* kQuarantined = std::get_if<QuarantinedNode>(&node.node)) {
-            RAWFRAME_TRY_ASSIGN(Value record, document::parse(kQuarantined->record));
-            nodes.add(hexOf(node.id), std::move(record));
-        } else {
-            nodes.add(hexOf(node.id), nodeValue(graph, node));
-        }
+    RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, documentOf(graph));
+    auto written = graph::writeDocument(kDocument, limitsOf(limits));
+    if (!written.has_value()) {
+        return asAnimation(std::move(written).error());
     }
-    Value made = Value::object();
-    made.add("formatVersion", Value::integer(1));
-    made.add("kind", Value::string("animation.graph"));
-    made.add("interface", interfaceValue(graph));
-    made.add("graph", std::move(nodes));
-    if (!graph.modifiers.empty()) {
-        made.add("modifiers", modifiersValue(graph.modifiers));
-    }
-    if (!graph.presentation.empty()) {
-        Value presentation = Value::object();
-        for (const auto& [kNode, kDrawing] : graph.presentation) {
-            RAWFRAME_TRY_ASSIGN(Value drawing, document::parse(kDrawing));
-            presentation.add(hexOf(kNode), std::move(drawing));
-        }
-        made.add("presentation", std::move(presentation));
-    }
-    return document::write(made);
+    return std::move(*written);
 }
 
 result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits) {
-    auto parsed = document::parse(text);
-    if (!parsed.has_value()) {
-        return std::unexpected<result::Error>{std::move(parsed).error()};
+    constexpr std::array<std::string_view, 1> kSections = {"modifiers"};
+    auto read = graph::readDocument(text, "animation.graph", kSections, limitsOf(limits));
+    if (!read.has_value()) {
+        return asAnimation(std::move(read).error());
     }
-    const Value* kind = parsed->find("kind");
-    const bool kDrawn = parsed->find("presentation") != nullptr;
-    const Value* modifiers = parsed->find("modifiers");
-    const bool kShape =
-        parsed->kind() == Value::Kind::Object &&
-        parsed->names().size() == 4 + (kDrawn ? 1U : 0U) + (modifiers != nullptr ? 1U : 0U) &&
-        std::ranges::all_of(std::array<std::string_view, 4>{"formatVersion", "kind", "interface", "graph"},
-                            [&parsed](std::string_view name) {
-                                return parsed->find(name) != nullptr;
-                            });
-    if (!kShape || parsed->find("formatVersion")->integer() != 1 || kind->text() == nullptr ||
-        *kind->text() != "animation.graph" || !hasMembers(*parsed->find("interface"), {"parameters"}) ||
-        parsed->find("interface")->find("parameters")->kind() != Value::Kind::Object ||
-        parsed->find("graph")->kind() != Value::Kind::Object ||
-        (kDrawn && parsed->find("presentation")->kind() != Value::Kind::Object)) {
-        return graphInvalid("a graph is format version 1, kind animation.graph, an interface of parameters, its nodes, "
-                            "optional modifiers, and an optional presentation");
+    const graph::Document& kDocument = *read;
+    if (!hasMembers(kDocument.interface, {"parameters"}) ||
+        kDocument.interface.find("parameters")->kind() != Value::Kind::Object) {
+        return graphInvalid("an animation graph's interface is its parameters");
     }
-    const Value& parameters = *parsed->find("interface")->find("parameters");
-    const Value& nodes = *parsed->find("graph");
-    if (parameters.names().size() > limits.maximumParameters || nodes.names().size() > limits.maximumNodes) {
+    const Value& parameters = *kDocument.interface.find("parameters");
+    if (parameters.names().size() > limits.maximumParameters) {
         return graphOverLimit("a graph has more nodes or parameters than its limits");
     }
     Graph graph;
@@ -679,28 +614,15 @@ result::Result<Graph> readGraph(std::string_view text, const GraphLimits& limits
         RAWFRAME_TRY_ASSIGN(Parameter made, parameterOf(parameters.names()[at], parameters.items()[at]));
         graph.parameters.push_back(std::move(made));
     }
-    for (std::size_t at = 0; at < nodes.names().size(); ++at) {
-        const Value kName = Value::string(nodes.names()[at]);
-        const std::optional<std::uint64_t> kNodeId = bits64Of(&kName);
-        if (!kNodeId.has_value() || nodes.items()[at].kind() != Value::Kind::Object) {
-            return graphInvalid("a graph's nodes are keyed by 16 hex digits");
-        }
-        RAWFRAME_TRY_ASSIGN(GraphNode made, nodeOf(*kNodeId, nodes.items()[at]));
+    for (const graph::Node& node : kDocument.nodes) {
+        RAWFRAME_TRY_ASSIGN(GraphNode made, nodeOf(node.id, node.record));
         graph.nodes.push_back(std::move(made));
     }
-    if (modifiers != nullptr) {
-        RAWFRAME_TRY_ASSIGN(graph.modifiers, modifiersOf(*modifiers));
+    for (const auto& [kName, kSection] : kDocument.sections) {
+        RAWFRAME_TRY_ASSIGN(graph.modifiers, modifiersOf(kSection));
     }
-    if (kDrawn) {
-        const Value& presentation = *parsed->find("presentation");
-        for (std::size_t at = 0; at < presentation.names().size(); ++at) {
-            const Value kName = Value::string(presentation.names()[at]);
-            const std::optional<std::uint64_t> kNode = bits64Of(&kName);
-            if (!kNode.has_value()) {
-                return graphInvalid("a graph's presentation is keyed by its nodes");
-            }
-            graph.presentation.emplace_back(*kNode, document::writeCompact(presentation.items()[at]));
-        }
+    for (const auto& [kNode, kDrawing] : kDocument.presentation) {
+        graph.presentation.emplace_back(kNode, document::writeCompact(kDrawing));
     }
     // What the writer makes of it is the text, byte for byte, or the text
     // was not in the one form.
@@ -744,58 +666,19 @@ result::Result<base::Sha256Digest> semanticHash(const Graph& graph) {
         })) {
         return graphInvalid("a graph with a quarantined node has no semantic hash");
     }
-    // Bottom up: a node's digest covers its type, params, and inputs, each
-    // input by the digest of the node it comes from rather than that
-    // node's id.
-    std::map<std::uint64_t, base::Sha256Digest> digests;
-    const auto kDigestOf = [&graph, &digests](std::uint64_t root) {
-        std::vector<std::pair<std::uint64_t, bool>> pending{{root, false}};
-        while (!pending.empty()) {
-            const auto [kId, kExpanded] = pending.back();
-            pending.pop_back();
-            if (digests.contains(kId)) {
-                continue;
-            }
-            const GraphNode& node = *nodeOf(graph, kId);
-            if (!kExpanded) {
-                pending.emplace_back(kId, true);
-                for (const Connection* kFrom : connectionsOf(node)) {
-                    pending.emplace_back(kFrom->node, false);
-                }
-                continue;
-            }
-            Value record = nodeValue(graph, node);
-            Value inputs = Value::object();
-            const Value& written = *record.find("inputs");
-            for (std::size_t at = 0; at < written.names().size(); ++at) {
-                const Connection kFrom = *connectionOf(written.items()[at]);
-                Value input = Value::object();
-                input.add("node_digest", Value::string(hexOf(digests.at(kFrom.node))));
-                input.add("output", Value::string(kFrom.output));
-                inputs.add(written.names()[at], std::move(input));
-            }
-            Value hashed = Value::object();
-            hashed.add("type", *record.find("type"));
-            hashed.add("params", *record.find("params"));
-            hashed.add("inputs", std::move(inputs));
-            digests.emplace(kId, base::sha256(document::writeCompact(hashed)));
-        }
-        return digests.at(root);
-    };
+    RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, documentOf(graph));
     const auto kOutput = std::ranges::find_if(graph.nodes, [](const GraphNode& node) {
         return std::holds_alternative<OutputNode>(node.node);
     });
-    Value outputs = Value::object();
-    outputs.add("pose", Value::string(hexOf(kDigestOf(kOutput->id))));
-    Value hashed = Value::object();
-    hashed.add("formatVersion", Value::integer(1));
-    hashed.add("kind", Value::string("animation.graph"));
-    hashed.add("interface", interfaceValue(graph));
-    hashed.add("outputs", std::move(outputs));
-    if (!graph.modifiers.empty()) {
-        hashed.add("modifiers", modifiersValue(graph.modifiers));
+    auto hashed = graph::semanticHash(kDocument.nodes,
+                                      {.kind = kDocument.kind,
+                                       .interface = kDocument.interface,
+                                       .outputs = {{"pose", kOutput->id}},
+                                       .sections = kDocument.sections});
+    if (!hashed.has_value()) {
+        return asAnimation(std::move(hashed).error());
     }
-    return base::sha256(document::writeCompact(hashed));
+    return *hashed;
 }
 
 } // namespace rawframe::animation
