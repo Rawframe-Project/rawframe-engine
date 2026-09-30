@@ -4,6 +4,14 @@ rawframe_host(NAME arena OUTPUT rawframe-arena
     SOURCES src/main.cpp
     DEPS host game_content input_kest world_audio world_localization network_loopback render_canvas physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 )
+# Where Maul RHI is built, the arena can draw a client's canvas offscreen on
+# the one device (D279); elsewhere it counts draws without one.
+set(RAWFRAME_ARENA_DRAWS OFF)
+if(TARGET rawframe_render_canvas_gpu)
+    set(RAWFRAME_ARENA_DRAWS ON)
+    target_link_libraries(rawframe_host_arena PRIVATE rawframe::render rawframe::render_canvas_gpu)
+endif()
+target_compile_definitions(rawframe_host_arena PRIVATE RAWFRAME_ARENA_DRAWS=$<BOOL:${RAWFRAME_ARENA_DRAWS}>)
 
 if(RAWFRAME_BUILD_TESTS)
     # Sixteen bots join the sample arena game, play, and the run stops in
@@ -125,6 +133,27 @@ if(RAWFRAME_BUILD_TESTS)
                          FIXTURES_REQUIRED runners_content
                          PASS_REGULAR_EXPRESSION
                          "\"written\":true,\"frames\":[0-9]+,\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9][0-9]*,\"emitterCues\":\"[1-9][0-9]* [1-9][0-9]*\",\"effects\":[1-9]")
+    # Four bots play runners and the first one's canvas is drawn offscreen
+    # on the one device (D279): frames are drawn with their sprites, and a
+    # frame read back shows them. Only where Maul RHI is built; a machine
+    # without an adapter skips unless the check requires one.
+    if(RAWFRAME_ARENA_DRAWS)
+        set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/runners_drawn.tga)
+        configure_file(tests/runners_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_drawn.conf @ONLY)
+        add_test(NAME runners_drawn
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
+                         $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/runners_drawn.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(runners_drawn PROPERTIES
+                             FIXTURES_REQUIRED runners_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"frames\":[1-9][0-9]+,.*\"draws\":[1-9][0-9]+,.*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,\"mostCovered\":[0-9]+,\"captured\":true")
+        if(RAWFRAME_SANITIZE STREQUAL "thread")
+            set_tests_properties(runners_drawn PROPERTIES ENVIRONMENT
+                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
+        endif()
+    endif()
     # Four bots play runners and the first one's World is played on a null
     # device: its thread renders the mixer, and shots reach the master bus.
     configure_file(tests/runners_played.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_played.conf @ONLY)

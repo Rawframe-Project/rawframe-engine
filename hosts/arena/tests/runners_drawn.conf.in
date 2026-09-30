@@ -1,0 +1,20 @@
+# Four bots play the sample platformer for three seconds while the first
+# one's canvas is drawn on the one device into an offscreen target, as its
+# player would see it (D279): one frame in sixty is read back, and its
+# sprites cover pixels; the last is written to a TGA image in the build
+# tree. Its textures are read from the game's content
+# cooked into the build tree. A software rasterizer may serve.
+host.maximum_iterations = 360
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/runners/runners.game
+content.root = @CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 4
+bots.endpoint = arena
+render.device = any
+canvas.offscreen = true
+canvas.width = 640
+canvas.height = 360
+canvas.offscreen_capture = @CAPTURE@

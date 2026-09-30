@@ -1,6 +1,8 @@
 // A server and headless bots in one process over the loopback network, for
 // measuring a networked Kest game without a second machine or a real
 // transport. Not a product: a Tool-role host for scenarios and budgets.
+// Where Maul RHI is built, it can also draw a client's canvas offscreen on
+// the one device (D279).
 //
 //   rawframe-arena [--config <file>]
 
@@ -20,11 +22,22 @@
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
 
+#if RAWFRAME_ARENA_DRAWS
+#include "rawframe/render/registrar.h"
+#include "rawframe/render_canvas_gpu/registrar.h"
+#endif
+
 #include <array>
 
 namespace {
 
-constexpr std::array<rawframe::composition::RegistrarEntry, 13> kRegistrars = {
+#if RAWFRAME_ARENA_DRAWS
+constexpr std::size_t kDrawing = 2;
+#else
+constexpr std::size_t kDrawing = 0;
+#endif
+
+constexpr std::array<rawframe::composition::RegistrarEntry, 13 + kDrawing> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -52,6 +65,11 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 13> kRegistrars = {
         "world_runtime", &rawframe::world_runtime::registerParticipants, rawframe::world_runtime::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_runtime.saves", &rawframe::world_runtime::registerSaves, rawframe::world_runtime::kScopes},
+#if RAWFRAME_ARENA_DRAWS
+    rawframe::composition::RegistrarEntry{"render", &rawframe::render::registerParticipants, rawframe::render::kScopes},
+    rawframe::composition::RegistrarEntry{
+        "render_canvas_gpu", &rawframe::render_canvas_gpu::registerParticipants, rawframe::render_canvas_gpu::kScopes},
+#endif
 };
 
 } // namespace
