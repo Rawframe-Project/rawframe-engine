@@ -1,6 +1,7 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 
 #include "blocks.h"
+#include "environment.h"
 #include "meshes.h"
 #include "metering.h"
 #include "pipelines.h"
@@ -41,7 +42,8 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
     return mrhiAccess{
         .resource = resource,
         .kind = kind,
-        .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
+        .range = {
+            .baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = MRHI_REMAINING, .aspect = {}}};
 }
 
 } // namespace
@@ -62,6 +64,11 @@ struct SceneRenderer::State {
     /// sampling none samples, held as texture nought.
     std::unique_ptr<render::DeviceTextures> textures;
     std::shared_ptr<const texture::Texture> white;
+    /// The sky's picture (D322): the black cube bound where there is
+    /// none, the picture last seen, and its irradiance.
+    std::shared_ptr<const texture::Texture> dark;
+    std::shared_ptr<const texture::Texture> environment;
+    std::array<std::array<float, 4>, 9> irradiance{};
     /// What the next frame draws.
     const render_scene::SceneFrame* frame = nullptr;
     MeshSource meshes;
@@ -100,6 +107,19 @@ struct SceneRenderer::State {
     void texturesOf(const render_scene::SceneFrame& scene, std::uint64_t budget) {
         textures->begin(budget);
         static_cast<void>(textures->choose(0, white));
+        static_cast<void>(textures->choose(kNoEnvironment, dark));
+        // The sky's picture, if it is one; its irradiance taken again only
+        // for another picture.
+        if (const std::uint64_t kSky = scene.lights.environment; kSky != 0 && sampled) {
+            const std::shared_ptr<const texture::Texture> kPicture = sampled(kSky);
+            if (kPicture != nullptr && isEnvironment(*kPicture)) {
+                static_cast<void>(textures->choose(kSky, kPicture));
+                if (kPicture != environment) {
+                    irradiance = irradianceOf(*kPicture);
+                    environment = kPicture;
+                }
+            }
+        }
         for (const std::vector<render_scene::SceneDraw>* kList :
              {&scene.draws, &scene.shadows.casters, &scene.lightShadows.casters}) {
             for (const render_scene::SceneDraw& draw : *kList) {
@@ -384,6 +404,8 @@ struct SceneRenderer::State {
         /// The sky's light, as its pass reads it (D293); the target's size.
         SkyBlock sky;
         mrhiResourceId skyResource{};
+        /// The sky's picture bound this frame, or the dark cube (D322).
+        std::uint64_t environment = kNoEnvironment;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
         /// Where each texel's point moved, the temporal pass's input (D291).
@@ -417,8 +439,9 @@ struct SceneRenderer::State {
             ((std::uint64_t{frame->clusters.ranges.size()} + frame->clusters.indices.size()) * sizeof(std::uint32_t));
         const std::uint64_t kBudget =
             kPlacementBytes < limits.uploadBytesPerFrame ? limits.uploadBytesPerFrame - kPlacementBytes : 0;
-        // White's four bytes are kept aside, so it is always there.
-        const std::uint64_t kWhite = std::min<std::uint64_t>(kBudget, 4);
+        // White's four bytes and the dark cube's 48 are kept aside, so they
+        // are always there.
+        const std::uint64_t kWhite = std::min<std::uint64_t>(kBudget, 4 + 48);
         const std::map<std::uint64_t, const HeldMesh*> kUsable = meshesOf(*frame, meshes, kBudget - kWhite);
         texturesOf(*frame, held->left() + kWhite);
         now.placed = place(*frame, kUsable);
@@ -451,7 +474,21 @@ struct SceneRenderer::State {
         }
         now.width = open.width;
         now.height = open.height;
-        now.sky.light = now.block.sky;
+        // The sky's picture where it is held this frame: its levels, and
+        // the irradiance taken from it.
+        const std::uint64_t kSky = frame->lights.environment;
+        now.environment = kSky != 0 && environment != nullptr && textures->cube(kSky) && textures->resource(kSky) != 0
+                              ? kSky
+                              : kNoEnvironment;
+        if (now.environment != kNoEnvironment) {
+            now.block.environment = {0, 0, 0, static_cast<float>(environment->levels.size())};
+            now.block.irradiance = irradiance;
+        }
+        now.sky = SkyBlock{.light = now.block.sky,
+                           .environment = now.block.environment,
+                           .toDirection = inverseOf(now.block.viewProjection),
+                           .unjittered = now.block.unjittered,
+                           .previous = now.block.previous};
         now.picture = pictureOf(*frame);
         mrhiBufferDef pictureBlockDef = mrhiDefaultBufferDef();
         pictureBlockDef.size = sizeof(PictureBlock);
@@ -790,8 +827,12 @@ struct SceneRenderer::State {
             return failed("the upload pass could not end", mrhi_errorState);
         }
         RAWFRAME_TRY(castShadows(now));
-        // The scene's table: slots 10 to 17 are each run's textures.
-        const std::array<mrhiBinding, 18> kFrameBinding = {
+        // The scene's table: slots 10 to 17 are each run's textures; 18 and
+        // 19 the sky's picture (D322).
+        const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
+        const mrhiBinding kPictureSampler =
+            samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
+        const std::array<mrhiBinding, 20> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, now.shadowMap),
             samplerAt(2, pipelines.shadowSampler),
@@ -809,9 +850,15 @@ struct SceneRenderer::State {
             textureAt(14, {}),
             samplerAt(15, {}),
             textureAt(16, {}),
-            samplerAt(17, {})};
-        const std::array<mrhiBinding, 2> kSkyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
-                                                        bufferAt(1, metering->exposure(), sizeof(ExposureBlock))};
+            samplerAt(17, {}),
+            kPicture,
+            kPictureSampler};
+        std::array<mrhiBinding, 4> skyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
+                                                 bufferAt(1, metering->exposure(), sizeof(ExposureBlock)),
+                                                 kPicture,
+                                                 kPictureSampler};
+        skyBinding[2].slot = 2;
+        skyBinding[3].slot = 3;
         // Runs of models drawn with `pipeline` in `pass`.
         // Runs of models drawn with `pipeline` in `pass`, the table set
         // again where a run samples another texture than the one before
@@ -826,7 +873,7 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 18> binding = kFrameBinding;
+            std::array<mrhiBinding, 20> binding = kFrameBinding;
             std::optional<render_scene::SceneTextures> bound;
             for (const Run& run : runs) {
                 if (bound != run.texture) {
@@ -859,7 +906,7 @@ struct SceneRenderer::State {
             RAWFRAME_TRY(kDrawRuns(
                 kPass, kLit ? pipelines.maskedLit.pipeline : pipelines.cutout.pipeline, now.placed.maskedRuns));
             if (kLit && (mrhiSetGraphicsPipeline(native, kPass, pipelines.sky.pipeline) != mrhi_success ||
-                         mrhiSetBindings(native, kPass, 0, kSkyBinding.data(), kSkyBinding.size()) != mrhi_success ||
+                         mrhiSetBindings(native, kPass, 0, skyBinding.data(), skyBinding.size()) != mrhi_success ||
                          mrhiDraw(native, kPass, 3, 1, 0, 0) != mrhi_success)) {
                 return failed("the sky could not be drawn", mrhi_errorState);
             }
@@ -948,6 +995,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     texture::Texture white{.format = texture::Format::Rgba8Srgb};
     white.levels.push_back({.width = 1, .height = 1, .bytes = std::vector<std::byte>(4, std::byte{0xFF})});
     state->white = std::make_shared<const texture::Texture>(std::move(white));
+    state->dark = darkCube();
     state->pipelines.device = &device;
     state->pipelines.native = device.native();
     RAWFRAME_TRY(state->pipelines.make());

@@ -32,6 +32,9 @@ layout(set = 0, binding = 0, std140) uniform Frame
     mat4 previous;
     // The ground's luminance below the horizon (D304).
     vec4 ground;
+    // The sky's picture's levels and irradiance (D322).
+    vec4 environment;
+    vec4 irradiance[9];
 }
 frame;
 

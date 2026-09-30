@@ -17,6 +17,8 @@ struct Frame {
     unjittered: mat4x4f,
     previous: mat4x4f,
     ground: vec4f,
+    environment: vec4f,
+    irradiance: array<vec4f, 9>,
 }
 
 struct Light {
@@ -57,6 +59,9 @@ struct ShadowSlot {
 // The normal texture (D313).
 @group(0) @binding(16) var normalTexture: texture_2d<f32>;
 @group(0) @binding(17) var normalSampler: sampler;
+// The sky's picture (D322).
+@group(0) @binding(18) var environmentTexture: texture_cube<f32>;
+@group(0) @binding(19) var environmentSampler: sampler;
 
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
@@ -114,6 +119,23 @@ struct Surface {
     diffuse: vec3f,
     headOn: vec3f,
     roughness: f32,
+}
+
+fn irradianceAt(normal: vec3f) -> vec3f {
+    let sum = frame.irradiance[0].rgb * 0.282095 +
+              (frame.irradiance[1].rgb * normal.y + frame.irradiance[2].rgb * normal.z +
+               frame.irradiance[3].rgb * normal.x) * 0.488603 +
+              (frame.irradiance[4].rgb * (normal.x * normal.y) + frame.irradiance[5].rgb * (normal.y * normal.z) +
+               frame.irradiance[7].rgb * (normal.x * normal.z)) * 1.092548 +
+              frame.irradiance[6].rgb * (0.315392 * (3.0 * normal.z * normal.z - 1.0)) +
+              frame.irradiance[8].rgb * (0.546274 * (normal.x * normal.x - normal.y * normal.y));
+    return max(sum, vec3f(0.0));
+}
+
+fn environmentBrdf(roughness: f32, nv: f32) -> vec2f {
+    let fit = roughness * vec4f(-1.0, -0.0275, -0.572, 0.022) + vec4f(1.0, 0.0425, 1.04, -0.04);
+    let a = min(fit.x * fit.x, exp2(-9.28 * nv)) * fit.x + fit.y;
+    return vec2f(-1.04, 1.04) * a + fit.zw;
 }
 
 fn reflected(surface: Surface, normal: vec3f, toEye: vec3f, toward: vec3f) -> vec3f {
@@ -281,7 +303,14 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let mirrored = reflect(-toEye, n);
     let around = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * n.y);
     let along = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
-    let sky = occlusion * ((1.0 - sheen) * surface.diffuse * around + sheen * along);
+    var sky = occlusion * ((1.0 - sheen) * surface.diffuse * around + sheen * along);
+    if (frame.environment.w > 0.5) {
+        let picture = textureSampleLevel(environmentTexture, environmentSampler, mirrored,
+                                         surface.roughness * (frame.environment.w - 1.0)).rgb;
+        let scaleBias = environmentBrdf(surface.roughness, nv);
+        sky = occlusion * frame.sky.rgb *
+              ((1.0 - sheen) * surface.diffuse * irradianceAt(n) + (surface.headOn * scaleBias.x + scaleBias.y) * picture);
+    }
     out.color = vec4f((direct + sky + emission.rgb * glow) * exposure.y, opacity);
     return out;
 }

@@ -31,6 +31,13 @@ mrhiBinding depthAt(std::uint32_t slot, mrhiResourceId resource) noexcept {
     return made;
 }
 
+mrhiBinding cubeAt(std::uint32_t slot, mrhiResourceId resource) noexcept {
+    mrhiBinding made = textureAt(slot, resource);
+    made.viewKind = mrhi_textureCube;
+    made.range.layerCount = 6;
+    return made;
+}
+
 mrhiBinding samplerAt(std::uint32_t slot, mrhiSamplerId sampler) noexcept {
     return mrhiBinding{.slot = slot,
                        .resource = {},

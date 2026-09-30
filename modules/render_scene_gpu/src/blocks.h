@@ -42,8 +42,13 @@ struct FrameBlock {
     Matrix4 previous{};
     /// The ground's luminance below the horizon (D304).
     std::array<float, 4> ground{};
+    /// The sky's picture (D322): its levels, nought for none; and the
+    /// irradiance over π it gives, per unit of the sky's light, as nine
+    /// spherical harmonics' coefficients.
+    std::array<float, 4> environment{};
+    std::array<std::array<float, 4>, 9> irradiance{};
 };
-static_assert(sizeof(FrameBlock) == 624, "the scene's shaders read the frame as 624 bytes");
+static_assert(sizeof(FrameBlock) == 784, "the scene's shaders read the frame as 784 bytes");
 
 /// A point or spot light as the scene's shaders read it (std430, D290).
 struct LightBlock {
@@ -113,7 +118,15 @@ PictureBlock pictureOf(const render_scene::SceneFrame& frame) noexcept;
 /// What the sky's pass reads (D293): its light in candela per square meter.
 struct SkyBlock {
     std::array<float, 4> light{};
+    /// The sky's picture's levels, nought for none (D322); where a point
+    /// of the target looks, the jittered view's inverse; and the view
+    /// unjittered and the frame before's, for the picture's motion.
+    std::array<float, 4> environment{};
+    Matrix4 toDirection{};
+    Matrix4 unjittered{};
+    Matrix4 previous{};
 };
+static_assert(sizeof(SkyBlock) == 224, "the sky's shaders read it as 224 bytes");
 
 /// What the temporal pass reads (D291): whether the picture before may be
 /// reused.

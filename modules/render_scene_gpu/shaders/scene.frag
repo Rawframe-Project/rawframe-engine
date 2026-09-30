@@ -4,7 +4,8 @@
 // shadow map says it reaches (D289); by
 // the point and spot lights of its cluster (D290), each where its squares
 // of the punctual shadows' atlas say it reaches (D292); and by the sky
-// (brighter facing up, and seen in reflection); in physical units, times the exposure the device
+// (brighter facing up, and seen in reflection), or by its picture, all
+// around and reflected by roughness (D322); in physical units, times the exposure the device
 // holds (the camera's, or its metering's, D293), so the scene target holds
 // pre-exposed scene-linear light (ADR-0047). And how far the point moved
 // on the screen since the frame before, for the temporal pass (D291).
@@ -36,6 +37,11 @@ layout(set = 0, binding = 0, std140) uniform Frame
     mat4 previous;
     // The ground's luminance below the horizon (D304).
     vec4 ground;
+    // The sky's picture (D322): its levels, nought for none; and the
+    // irradiance over π it gives, per unit of the sky's light, as nine
+    // spherical harmonics' coefficients.
+    vec4 environment;
+    vec4 irradiance[9];
 }
 frame;
 
@@ -130,6 +136,11 @@ layout(set = 0, binding = 15) uniform sampler emissionSampler;
 layout(set = 0, binding = 16) uniform texture2D normalTexture;
 layout(set = 0, binding = 17) uniform sampler normalSampler;
 
+// The sky's picture (D322), each level its light as a rougher surface
+// reflects it.
+layout(set = 0, binding = 18) uniform textureCube environmentTexture;
+layout(set = 0, binding = 19) uniform sampler environmentSampler;
+
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
 float channelOf(vec4 texel, float channel)
@@ -180,6 +191,30 @@ vec3 reflected(Surface surface, vec3 normal, vec3 toEye, vec3 toward)
     const float kVisibility = 0.5 / (kNl * sqrt(kNv * kNv * (1.0 - kAlpha2) + kAlpha2) +
                                      kNv * sqrt(kNl * kNl * (1.0 - kAlpha2) + kAlpha2));
     return ((1.0 - kFresnel) * surface.diffuse / kPi + kFresnel * (kDistribution * kVisibility)) * kNl;
+}
+
+// The irradiance over π the sky's picture gives a surface facing
+// `normal`, per unit of the sky's light: its spherical harmonics summed.
+vec3 irradianceAt(vec3 normal)
+{
+    const vec3 kSum = frame.irradiance[0].rgb * 0.282095 +
+                      (frame.irradiance[1].rgb * normal.y + frame.irradiance[2].rgb * normal.z +
+                       frame.irradiance[3].rgb * normal.x) * 0.488603 +
+                      (frame.irradiance[4].rgb * (normal.x * normal.y) + frame.irradiance[5].rgb * (normal.y * normal.z) +
+                       frame.irradiance[7].rgb * (normal.x * normal.z)) * 1.092548 +
+                      frame.irradiance[6].rgb * (0.315392 * (3.0 * normal.z * normal.z - 1.0)) +
+                      frame.irradiance[8].rgb * (0.546274 * (normal.x * normal.x - normal.y * normal.y));
+    return max(kSum, vec3(0.0));
+}
+
+// Of the light a surface reflects from all around, the scale on what it
+// reflects head on and the bias added: Karis's fit of the split sum's
+// second half, over the roughness and the cosine to the eye.
+vec2 environmentBrdf(float roughness, float nv)
+{
+    const vec4 kFit = roughness * vec4(-1.0, -0.0275, -0.572, 0.022) + vec4(1.0, 0.0425, 1.04, -0.04);
+    const float kA = min(kFit.x * kFit.x, exp2(-9.28 * nv)) * kFit.x + kFit.y;
+    return vec2(-1.04, 1.04) * kA + kFit.zw;
 }
 
 // How much of the sun reaches `placed`: its cascade chosen by how far ahead
@@ -359,6 +394,18 @@ void main()
     const vec3 kMirrored = reflect(-kToEye, kNormal);
     const vec3 kAround = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kNormal.y);
     const vec3 kAlong = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
-    const vec3 kSky = kOcclusion * ((1.0 - kSheen) * kSurface.diffuse * kAround + kSheen * kAlong);
-    outColor = vec4((kDirect + kSky + kGlow) * exposure.value.y, kOpacity);
+    vec3 sky = kOcclusion * ((1.0 - kSheen) * kSurface.diffuse * kAround + kSheen * kAlong);
+    // With the sky's picture (D322): its irradiance across the normal's
+    // side, and along the reflection its level for the roughness, weighed
+    // by the split sum.
+    if (frame.environment.w > 0.5) {
+        const vec3 kReflected = textureLod(samplerCube(environmentTexture, environmentSampler),
+                                           kMirrored,
+                                           kSurface.roughness * (frame.environment.w - 1.0)).rgb;
+        const vec2 kScaleBias = environmentBrdf(kSurface.roughness, kNv);
+        sky = kOcclusion * frame.sky.rgb *
+              ((1.0 - kSheen) * kSurface.diffuse * irradianceAt(kNormal) +
+               (kSurface.headOn * kScaleBias.x + kScaleBias.y) * kReflected);
+    }
+    outColor = vec4((kDirect + sky + kGlow) * exposure.value.y, kOpacity);
 }
