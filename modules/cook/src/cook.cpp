@@ -200,6 +200,15 @@ std::optional<std::pair<content::ResourceTypeId, content::RepresentationId>> kin
     return std::pair{content::ResourceTypeId{kType.value}, *kRepresentation};
 }
 
+/// An importer's report as a cache record or a receipt writes it (D319).
+Value valueOf(std::span<const std::pair<std::string, std::int64_t>> report) {
+    Value made = Value::object();
+    for (const auto& [kName, kCount] : report) {
+        made.add(kName, Value::integer(kCount));
+    }
+    return made;
+}
+
 /// A cached artifact, if the cache has one for this key that verifies: the
 /// key names a digest, the object under it has that digest, each subasset's
 /// too, and every read that made it would read the same now.
@@ -226,6 +235,17 @@ fromCache(const std::filesystem::path& sources, const std::filesystem::path& cac
         return std::nullopt;
     }
     Artifact artifact{.type = kKind->first, .representation = kKind->second, .bytes = std::move(*bytes)};
+    const Value* report = parsed->find("report");
+    if (report == nullptr || report->kind() != Value::Kind::Object) {
+        return std::nullopt;
+    }
+    for (std::size_t at = 0; at < report->names().size(); ++at) {
+        const std::optional<std::int64_t> kCount = report->items()[at].integer();
+        if (!kCount.has_value()) {
+            return std::nullopt;
+        }
+        artifact.report.emplace_back(report->names()[at], *kCount);
+    }
     for (const Value& subasset : subassets->items()) {
         const Value* named = subasset.find("key");
         const auto kSubassetKind = kindOf(subasset);
@@ -270,6 +290,7 @@ void toCache(const std::filesystem::path& cache,
         subassets.push(std::move(made));
     }
     record.add("subassets", std::move(subassets));
+    record.add("report", valueOf(artifact.report));
     record.add("reads", valueOf(reads));
     if (kept) {
         static_cast<void>(writeText(cache / "keys" / key, document::write(record)));
@@ -576,9 +597,20 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
         input.add("importer", Value::string(std::string{planned.importer->identity}));
         input.add("sourceDigest", Value::string("sha256:" + hexOf(planned.digest)));
         input.add("reads", valueOf(readsMade));
+        if (!artifact->report.empty()) {
+            input.add("report", valueOf(artifact->report));
+        }
+        for (const auto& [kName, kCount] : artifact->report) {
+            report.variants += kName == "variants" ? kCount : 0;
+        }
         input.add("key", Value::string("sha256:" + kKey));
         input.add("reused", Value::boolean(kReused));
         inputs.push(std::move(input));
+    }
+    // SPEC-0026's variants_per_package, across every material cooked.
+    if (report.variants > request.maximumVariants) {
+        report.failures.push_back(failure(CookError::OverLimit, "more material variants than the package's ceiling", "")
+                                      .withContext("variants", std::to_string(report.variants)));
     }
     // A subasset's resource is no other's.
     std::ranges::sort(entries, {}, &content::ManifestEntry::id);
@@ -602,6 +634,8 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
     receipt.add("target", Value::string(request.target));
     receipt.add("determinism", Value::string("double_cook"));
     receipt.add("manifest", Value::string(content::ContentDigest::of(kManifestBytes).text()));
+    receipt.add("variants", Value::integer(report.variants));
+    receipt.add("variantsHeadroom", Value::integer(request.maximumVariants - report.variants));
     receipt.add("inputs", std::move(inputs));
     receipt.add("artifacts", std::move(artifacts));
     receipt.add("failures", Value::integer(0));

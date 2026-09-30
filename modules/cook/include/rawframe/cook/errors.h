@@ -33,6 +33,8 @@ enum class CookError : std::uint32_t {
     BadReference = 9,
     /// A subasset a source's sidecar maps to no resource (D314).
     UnmappedSubasset = 10,
+    /// More material variants than the request's ceiling allows (D319).
+    OverLimit = 11,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(CookError error) noexcept {

@@ -77,6 +77,10 @@ result::Result<Artifact> cookMesh(std::span<const std::byte> source, std::string
                      .bytes = std::move(texels)});
     }
     std::ranges::sort(made.subassets, {}, &Subasset::key);
+    // Each material a variant, the same at every quality (D319).
+    if (!kImported.materials.empty()) {
+        made.report = {{"variants", static_cast<std::int64_t>(kImported.materials.size())}};
+    }
     return made;
 }
 

@@ -37,13 +37,16 @@ struct Subasset {
     friend bool operator==(const Subasset&, const Subasset&) = default;
 };
 
-/// What an importer makes of one source: the source's own resource, and
-/// its subassets in key order.
+/// What an importer makes of one source: the source's own resource, its
+/// subassets in key order, and what it reports of the cook, written into
+/// the receipt beside the source: counts by name, as SPEC-0026's variant
+/// report (D319), in the importer's order.
 struct Artifact {
     content::ResourceTypeId type;
     content::RepresentationId representation;
     std::vector<std::byte> bytes;
     std::vector<Subasset> subassets;
+    std::vector<std::pair<std::string, std::int64_t>> report;
 
     friend bool operator==(const Artifact&, const Artifact&) = default;
 };
@@ -144,11 +147,16 @@ struct CookRequest {
     base::Sha256Digest toolchain{};
     /// The target profile the artifacts are for.
     std::string target = "any";
+    /// SPEC-0026's `variants_per_package`: the most material variants the
+    /// artifacts' reports may count together (D319).
+    std::int64_t maximumVariants = 4096;
 };
 
 struct CookReport {
     std::size_t cooked = 0;
     std::size_t reused = 0;
+    /// The material variants the artifacts' reports count (D319).
+    std::int64_t variants = 0;
     /// Every failure, in source order; any at all publishes nothing.
     std::vector<result::Error> failures;
 };

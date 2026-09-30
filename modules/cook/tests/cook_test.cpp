@@ -754,6 +754,23 @@ RAWFRAME_TEST(AGltfCooksIntoAMeshWithItsBuffers) {
     RAWFRAME_EXPECT(kOutside.failures.size() == 1 && kOutside.failures[0].domain() == mesh::kMeshDomain);
 }
 
+RAWFRAME_TEST(AMaterialsQualitiesAreItsVariants) {
+    // Plaza's paving, a plain grey at the low quality (D318): two variants,
+    // the second the quality axis's (D319).
+    const Project kProject;
+    fs::copy_file(fs::path{RAWFRAME_SAMPLE_GAMES} / "plaza" / "paving.rfmaterial",
+                  kProject.sources / "paving.rfmaterial");
+    writeText(kProject.sources / "paving.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000c2", "", "rawframe.material"));
+    static const std::array<Importer, 2> kImporters = {audioImporter(), materialImporter()};
+    const auto kReport =
+        cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kImporters});
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty() && kReport->variants == 2);
+    RAWFRAME_EXPECT(readText(kProject.output / "cook.receipt")
+                        .find("\"variants\": 2,\n        \"axes\": 1,\n        \"qualityCardinality\": 3,\n        "
+                              "\"qualityVariants\": 1,\n        \"variantsHeadroom\": 1") != std::string::npos);
+}
+
 RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {
     const Project kProject;
     const fs::path kLooks = kProject.sources / "looks";
@@ -790,6 +807,25 @@ RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {
         }
     }
     RAWFRAME_EXPECT(found);
+    // SPEC-0026's variant report (D319): one variant, from no axis, in the
+    // receipt beside its source and for the package; from the cache too.
+    const auto kReported = [&kProject] {
+        const std::string kReceipt = readText(kProject.output / "cook.receipt");
+        return kReceipt.find("\"report\": {\n        \"variants\": 1,\n        \"axes\": 0,\n        "
+                             "\"qualityCardinality\": 3,\n        \"qualityVariants\": 0,\n        "
+                             "\"variantsHeadroom\": 2\n      }") != std::string::npos &&
+               kReceipt.find("\"variants\": 1,\n  \"variantsHeadroom\": 4095,") != std::string::npos;
+    };
+    RAWFRAME_EXPECT(kFirst.variants == 1 && kReported());
+    const CookReport kAgain = kCook();
+    RAWFRAME_EXPECT(kAgain.reused == 3 && kAgain.variants == 1 && kReported());
+    // A package past its ceiling fails visibly.
+    const auto kCapped = cookSources(CookRequest{.sources = kProject.sources,
+                                                 .output = kProject.output,
+                                                 .cache = kProject.cache,
+                                                 .importers = kImporters,
+                                                 .maximumVariants = 0});
+    RAWFRAME_EXPECT(kCapped.has_value() && failedWith(*kCapped, CookError::OverLimit));
     // A material that does not compile fails, visibly: here, an input
     // connected round to its own node.
     std::string connected = *kText;
