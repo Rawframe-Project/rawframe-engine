@@ -1,0 +1,3 @@
+# The plaza's server reads the mound's mesh from the plaza's content cooked
+# into the build tree.
+content.root = @PLAZA_CONTENT@
