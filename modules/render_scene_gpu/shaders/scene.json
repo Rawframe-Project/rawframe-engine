@@ -38,7 +38,8 @@
     {"table": 0, "slot": 5, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 4},
     {"table": 0, "slot": 6, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "depth", "view_dimension": "2d", "multisampled": false},
-    {"table": 0, "slot": 7, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 80}
+    {"table": 0, "slot": 7, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 80},
+    {"table": 0, "slot": 8, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 16}
   ],
   "constants": []
 }

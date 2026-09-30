@@ -64,6 +64,35 @@ struct SlotBlock {
 };
 static_assert(sizeof(SlotBlock) == 80, "the scene's shaders read a shadow square as 80 bytes");
 
+/// The exposure the device holds (D293): its EV100 and the factor it
+/// scales light by, 1 / (1.2 * 2^EV100) (ADR-0047).
+struct ExposureBlock {
+    std::array<float, 4> value{};
+};
+
+/// The exposure `ev100` sets, as the device holds it.
+ExposureBlock exposureOf(float ev100) noexcept;
+
+/// What the metering's steps read (D293): the bounds and rates (minimum,
+/// maximum, brighten, darken); the fractions left out, the compensation,
+/// and the seconds since the frame before; and whether to go at once.
+struct MeterBlock {
+    std::array<float, 4> bounds{};
+    std::array<float, 4> fractions{};
+    std::array<float, 4> snap{};
+};
+
+/// The frame's metering as its steps read it.
+MeterBlock meterOf(const render_scene::SceneFrame& frame) noexcept;
+
+/// The metering's histogram: its bins, the first for no light.
+inline constexpr std::uint32_t kHistogramBins = 128;
+
+/// What the sky's pass reads (D293): its light in candela per square meter.
+struct SkyBlock {
+    std::array<float, 4> light{};
+};
+
 /// What the temporal pass reads (D291): whether the picture before may be
 /// reused.
 struct TemporalBlock {

@@ -1,0 +1,60 @@
+// The camera's metering (D293, ADR-0051), compute entry "histogram": every
+// other texel each way of the frame's pre-exposed light, its luminance
+// taken back to candela per square meter by the exposure it was drawn
+// with, counted into 128 bins: the first for no light, the rest spanning
+// log2 luminance from -8 to 24, the last also taking light the target
+// could not hold. Each workgroup counts its texels in shared
+// bins, then adds them to the frame's.
+
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform texture2D scene;
+
+// The exposure's EV100 and the factor it scales light by.
+layout(set = 0, binding = 1, std430) buffer Exposure
+{
+    vec4 value;
+}
+exposure;
+
+layout(set = 0, binding = 2, std430) buffer Histogram
+{
+    uint bins[128];
+}
+counts;
+
+shared uint counted[128];
+
+const float kLowest = -8.0;
+const float kSpan = 32.0;
+
+void main()
+{
+    const uint kIndex = gl_LocalInvocationIndex;
+    if (kIndex < 128u) {
+        counted[kIndex] = 0u;
+    }
+    barrier();
+    const ivec2 kSize = textureSize(scene, 0);
+    const ivec2 kTexel = ivec2(gl_GlobalInvocationID.xy) * 2;
+    if (kTexel.x < kSize.x && kTexel.y < kSize.y) {
+        const vec3 kColor = texelFetch(scene, kTexel, 0).rgb;
+        const float kLuminance = dot(kColor, vec3(0.2126, 0.7152, 0.0722)) / max(exposure.value.y, 1e-30);
+        // Light past what the target holds, or not a number at all, is the
+        // brightest there is.
+        uint bin = 127u;
+        if (kLuminance <= 0.0) {
+            bin = 0u;
+        } else if (kLuminance <= 3.0e38) {
+            bin = uint(clamp((log2(kLuminance) - kLowest) / kSpan * 127.0 + 1.0, 1.0, 127.0));
+        }
+        atomicAdd(counted[bin], 1u);
+    }
+    barrier();
+    if (kIndex < 128u && counted[kIndex] > 0u) {
+        atomicAdd(counts.bins[kIndex], counted[kIndex]);
+    }
+}

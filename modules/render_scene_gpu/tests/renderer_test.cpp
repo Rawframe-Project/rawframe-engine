@@ -5,7 +5,8 @@
 // draw whose mesh is not given is left out; a mesh is uploaded once, its
 // draws of one mesh one instanced call; the sun casts shadows; a point
 // light lights what is near it, a spot only what its cone reaches, and
-// both cast shadows through their squares of one atlas; and,
+// both cast shadows through their squares of one atlas; a metered camera
+// finds the exposure the scene's light asks for; and,
 // antialiased over time, an edge's texels blend what the jittered frames
 // saw of it, and a moving box leaves no ghost where it was. Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
@@ -458,5 +459,76 @@ RAWFRAME_TEST(PunctualLightsCastShadowsThroughTheirAtlas) {
                     at(*kUnshadowed, 42, 39)[0]);
         RAWFRAME_EXPECT(kWithout > 60 && kInShadow < kWithout / 3 && kLit > 60 &&
                         std::abs(kLit - at(*kUnshadowed, 42, 39)[0]) < 4);
+    }
+}
+
+RAWFRAME_TEST(AMeteredExposureFindsTheScenesLight) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A dim sky of 50 candela per square meter and nothing else, the camera
+    // starting from a sunny day's EV100 of 15, metered at ten EV a second,
+    // a tenth of a second a frame.
+    SceneFrame frame = looking();
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.sky = {50, 50, 50};
+    frame.shadows.count = 0;
+    frame.metering = {
+        .enabled = true,
+        .settings =
+            {.minimum = 0, .maximum = 20, .brighten = 10, .darken = 10, .compensation = 0, .low = 0.1F, .high = 0.9F},
+        .elapsed = 0.1F};
+    std::vector<int> shades;
+    for (int drawnFrames = 0; drawnFrames < 14; ++drawnFrames) {
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        if (!kPixels.has_value()) {
+            return;
+        }
+        shades.push_back(at(*kPixels, 32, 32)[0]);
+    }
+    // The sky's luminance is 2^5.64: an EV100 of 5.64 + log2(100 / 12.5),
+    // reached a stop a frame and then held; the picture as a camera set to
+    // it by hand shows it.
+    SceneFrame fixed = frame;
+    fixed.metering = {};
+    fixed.exposure = std::log2(50.0F) + 3;
+    auto plain = render_scene_gpu::SceneRenderer::create(*kDevice);
+    const auto kFixed = drawn(**framer, **plain, fixed, kMeshes);
+    RAWFRAME_EXPECT(kFixed.has_value());
+    if (!kFixed.has_value()) {
+        return;
+    }
+    std::printf("metered shades:");
+    for (const int kShade : shades) {
+        std::printf(" %d", kShade);
+    }
+    std::printf("; by hand %d\n", at(*kFixed, 32, 32)[0]);
+    RAWFRAME_EXPECT(shades.front() < 10 && shades[3] > shades[1] && shades[5] > shades[3]);
+    RAWFRAME_EXPECT(std::abs(shades.back() - at(*kFixed, 32, 32)[0]) < 4 && shades.back() == shades[shades.size() - 2]);
+    RAWFRAME_EXPECT((*made)->statistics().framesMetered >= 14);
+    // Starting, or after a cut, the exposure goes at once to what it
+    // measures.
+    auto snapping = render_scene_gpu::SceneRenderer::create(*kDevice);
+    frame.metering.snap = true;
+    const auto kAtOnce = drawn(**framer, **snapping, frame, kMeshes);
+    frame.metering.snap = false;
+    const auto kThen = drawn(**framer, **snapping, frame, kMeshes);
+    RAWFRAME_EXPECT(kAtOnce.has_value() && kThen.has_value());
+    if (kAtOnce.has_value() && kThen.has_value()) {
+        std::printf("at once %d, then %d\n", at(*kAtOnce, 32, 32)[0], at(*kThen, 32, 32)[0]);
+        // The first frame is drawn with the camera's exposure; the next
+        // with the one measured.
+        RAWFRAME_EXPECT(at(*kAtOnce, 32, 32)[0] < 10 && std::abs(at(*kThen, 32, 32)[0] - shades.back()) < 3);
     }
 }

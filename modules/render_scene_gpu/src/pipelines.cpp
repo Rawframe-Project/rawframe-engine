@@ -1,8 +1,10 @@
 #include "pipelines.h"
 
 #include "blocks.h"
+#include "generated/meter_container.h"
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
+#include "generated/sky_container.h"
 #include "generated/temporal_container.h"
 #include "generated/tonemap_container.h"
 #include "rawframe/render_scene_gpu/errors.h"
@@ -26,12 +28,16 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked : {&casting, &depth, &lit, &temporal, &tonemap}) {
+    for (Asked* asked : {&casting, &depth, &lit, &sky, &temporal, &tonemap}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
+    }
+    for (Asked* asked : {&histogram, &adapt}) {
+        static_cast<void>(mrhiDestroyComputePipeline(native, asked->compute));
     }
     static_cast<void>(mrhiDestroySampler(native, shadowSampler));
     static_cast<void>(mrhiDestroySampler(native, historySampler));
-    for (const mrhiShaderId kShader : {sceneShader, tonemapShader, shadowShader, temporalShader}) {
+    for (const mrhiShaderId kShader :
+         {sceneShader, tonemapShader, shadowShader, temporalShader, skyShader, meterShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -56,11 +62,23 @@ result::Status Pipelines::ask(const mrhiGraphicsPipelineDef& def, Asked& asked) 
     return {};
 }
 
+result::Status Pipelines::ask(const mrhiComputePipelineDef& def, Asked& asked) {
+    mrhiRequestId request{};
+    if (const mrhiResult kMade = mrhiCreateComputePipeline(native, &def, &asked.compute, &request);
+        kMade != mrhi_success) {
+        return failed("a scene pipeline could not be asked for", kMade);
+    }
+    asked.request = render::requestKey(request.index1, request.generation);
+    return {};
+}
+
 result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kSceneContainer, sceneShader));
     RAWFRAME_TRY(makeShader(kTonemapContainer, tonemapShader));
     RAWFRAME_TRY(makeShader(kShadowContainer, shadowShader));
     RAWFRAME_TRY(makeShader(kTemporalContainer, temporalShader));
+    RAWFRAME_TRY(makeShader(kSkyContainer, skyShader));
+    RAWFRAME_TRY(makeShader(kMeterContainer, meterShader));
     // Each vertex of the mesh, then each draw's placement.
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
@@ -137,6 +155,34 @@ result::Status Pipelines::make() {
     models.colorTargets[0].format = kSceneFormat;
     models.colorTargets[1].format = kMotionFormat;
     RAWFRAME_TRY(ask(models, lit));
+    // The sky, where no model's depth lies: a triangle over the target at
+    // reversed-Z's far end, into the models' targets.
+    mrhiGraphicsPipelineDef behind = mrhiDefaultGraphicsPipelineDef();
+    constexpr std::string_view kSkyLabel = "rawframe.scene.sky";
+    behind.label = kSkyLabel.data();
+    behind.labelLength = kSkyLabel.size();
+    behind.shader = skyShader;
+    behind.vertexEntry = "vs";
+    behind.vertexEntryLength = 2;
+    behind.fragmentEntry = "fs";
+    behind.fragmentEntryLength = 2;
+    behind.cullMode = mrhi_cullNone;
+    behind.depthStencilFormat = kDepthFormat;
+    behind.depthWrite = false;
+    behind.depthCompare = mrhi_compareGreaterEqual;
+    behind.colorTargetCount = 2;
+    behind.colorTargets[0].format = kSceneFormat;
+    behind.colorTargets[1].format = kMotionFormat;
+    RAWFRAME_TRY(ask(behind, sky));
+    // The metering (D293): the frame's histogram, then the exposure moved.
+    for (const auto& [kEntry, kAsked] :
+         {std::pair{std::string_view{"histogram"}, &histogram}, std::pair{std::string_view{"adapt"}, &adapt}}) {
+        mrhiComputePipelineDef metering = mrhiDefaultComputePipelineDef();
+        metering.shader = meterShader;
+        metering.entry = kEntry.data();
+        metering.entryLength = kEntry.size();
+        RAWFRAME_TRY(ask(metering, *kAsked));
+    }
     // The temporal pass: the frame and the picture before, into the
     // picture kept for the next.
     mrhiGraphicsPipelineDef resolving = mrhiDefaultGraphicsPipelineDef();
@@ -176,7 +222,7 @@ result::Status Pipelines::make() {
 
 result::Result<bool> Pipelines::ready() {
     bool all = true;
-    for (Asked* asked : {&casting, &depth, &lit, &temporal, &tonemap}) {
+    for (Asked* asked : {&casting, &depth, &lit, &sky, &histogram, &adapt, &temporal, &tonemap}) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {

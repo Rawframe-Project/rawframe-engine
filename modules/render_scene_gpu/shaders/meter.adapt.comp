@@ -1,0 +1,74 @@
+// The camera's metering (D293, ADR-0051), compute entry "adapt": the
+// histogram's lit bins, less the darkest `low` and the brightest past
+// `high` of their texels, averaged in log2 luminance into an EV100 (a
+// sensor of ISO 100, K 12.5) less the compensation, kept within the
+// bounds; the exposure the device holds moved toward it by at most the
+// brightening or darkening rate times the seconds since the frame before,
+// or set to it at once when the metering starts or the eye cuts away.
+
+#version 450
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 1, std430) buffer Exposure
+{
+    vec4 value;
+}
+exposure;
+
+layout(set = 0, binding = 2, std430) buffer Histogram
+{
+    uint bins[128];
+}
+counts;
+
+// The bounds and rates: minimum, maximum, brighten, darken; and the
+// fractions left out, the compensation, and the seconds since the frame
+// before: low, high, compensation, elapsed; and whether to go at once.
+layout(set = 0, binding = 3, std140) uniform Meter
+{
+    vec4 bounds;
+    vec4 fractions;
+    vec4 snap;
+}
+meter;
+
+const float kLowest = -8.0;
+const float kSpan = 32.0;
+
+void main()
+{
+    float total = 0.0;
+    for (uint bin = 1u; bin < 128u; ++bin) {
+        total += float(counts.bins[bin]);
+    }
+    if (total == 0.0) {
+        return;
+    }
+    const float kLow = meter.fractions.x * total;
+    const float kHigh = meter.fractions.y * total;
+    float seen = 0.0;
+    float sum = 0.0;
+    float weight = 0.0;
+    for (uint bin = 1u; bin < 128u; ++bin) {
+        const float kCount = float(counts.bins[bin]);
+        const float kFrom = max(seen, kLow);
+        const float kTo = min(seen + kCount, kHigh);
+        if (kTo > kFrom) {
+            sum += (kTo - kFrom) * (kLowest + (float(bin) - 0.5) / 127.0 * kSpan);
+            weight += kTo - kFrom;
+        }
+        seen += kCount;
+    }
+    if (weight == 0.0) {
+        return;
+    }
+    const float kTarget = clamp(sum / weight + log2(100.0 / 12.5) - meter.fractions.z, meter.bounds.x, meter.bounds.y);
+    const float kNow = exposure.value.x;
+    const float kStep = kTarget - kNow;
+    const float kMoved = meter.snap.x > 0.5 ? kStep
+                         : kStep < 0.0      ? max(kStep, -meter.bounds.z * meter.fractions.w)
+                                            : min(kStep, meter.bounds.w * meter.fractions.w);
+    const float kEv = clamp(kNow + kMoved, meter.bounds.x, meter.bounds.y);
+    exposure.value = vec4(kEv, 1.0 / (1.2 * exp2(kEv)), 0.0, 0.0);
+}

@@ -23,9 +23,11 @@ constexpr mrhiFormat kDepthFormat = mrhi_formatDepth32Float;
 /// The frame's picture, as `render` declares it.
 constexpr mrhiFormat kPictureFormat = mrhi_formatRgba8UnormSrgb;
 
-/// A pipeline asked of the device, and whether it is made.
+/// A pipeline asked of the device, graphics or compute, and whether it is
+/// made.
 struct Asked {
     mrhiGraphicsPipelineId pipeline{};
+    mrhiComputePipelineId compute{};
     std::uint64_t request = 0;
     bool ready = false;
 };
@@ -39,15 +41,21 @@ struct Pipelines {
     mrhiShaderId tonemapShader{};
     mrhiShaderId shadowShader{};
     mrhiShaderId temporalShader{};
+    mrhiShaderId skyShader{};
+    mrhiShaderId meterShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels of the picture before.
     mrhiSamplerId historySampler{};
-    /// The shadow maps' casters, the depth prepass, the lit models, the
-    /// temporal pass, and the picture.
+    /// The shadow maps' casters, the depth prepass, the lit models, the sky
+    /// behind them, the metering's two steps (D293), the temporal pass, and
+    /// the picture.
     Asked casting;
     Asked depth;
     Asked lit;
+    Asked sky;
+    Asked histogram;
+    Asked adapt;
     Asked temporal;
     Asked tonemap;
 
@@ -65,6 +73,7 @@ struct Pipelines {
 private:
     result::Status makeShader(std::span<const std::uint8_t> container, mrhiShaderId& shader);
     result::Status ask(const mrhiGraphicsPipelineDef& def, Asked& asked);
+    result::Status ask(const mrhiComputePipelineDef& def, Asked& asked);
 };
 
 /// Maul RHI's refusal, named.

@@ -11,11 +11,23 @@ namespace {
 
 /// The light an EV100 exposes to one (ADR-0047): a sensor's saturation at
 /// 1.2 times two to the EV100.
-float exposureOf(float ev100) noexcept {
+float factorOf(float ev100) noexcept {
     return 1.0F / (1.2F * std::exp2(ev100));
 }
 
 } // namespace
+
+ExposureBlock exposureOf(float ev100) noexcept {
+    return {.value = {ev100, factorOf(ev100), 0, 0}};
+}
+
+MeterBlock meterOf(const render_scene::SceneFrame& frame) noexcept {
+    const render_scene::SceneMetering& kMetering = frame.metering;
+    const render_scene::AutoExposure& kAsked = kMetering.settings;
+    return {.bounds = {kAsked.minimum, kAsked.maximum, kAsked.brighten, kAsked.darken},
+            .fractions = {kAsked.low, kAsked.high, kAsked.compensation, kMetering.elapsed},
+            .snap = {kMetering.snap ? 1.0F : 0.0F, 0, 0, 0}};
+}
 
 FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, std::uint32_t height) noexcept {
     FrameBlock block;
@@ -46,7 +58,7 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     block.toSun = {kLights.toSun[0], kLights.toSun[1], kLights.toSun[2], 0};
     block.sun = {kLights.sun[0], kLights.sun[1], kLights.sun[2], 0};
     block.sky = {kLights.sky[0], kLights.sky[1], kLights.sky[2], 0};
-    block.exposure = {exposureOf(frame.exposure), 0, 0, 0};
+    block.exposure = {factorOf(frame.exposure), 0, 0, 0};
     block.forward = {frame.forward[0], frame.forward[1], frame.forward[2], 0};
     const render_scene::SceneShadows& kShadows = frame.shadows;
     for (std::size_t at = 0; at < kShadows.count; ++at) {

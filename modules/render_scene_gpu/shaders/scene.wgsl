@@ -1,4 +1,4 @@
-// The 3D scene's models (D284, D289, D290, D291), for WebGPU: the entries of
+// The 3D scene's models (D284, D289, D290, D291, D292, D293), for WebGPU: the entries of
 // scene.vert and scene.frag.
 
 struct Frame {
@@ -42,6 +42,7 @@ struct ShadowSlot {
 @group(0) @binding(5) var<storage, read> indices: array<u32>;
 @group(0) @binding(6) var lightShadowMap: texture_depth_2d;
 @group(0) @binding(7) var<storage, read> slots: array<ShadowSlot>;
+@group(0) @binding(8) var<storage, read> exposure: vec4f;
 
 struct Placed {
     @invariant @builtin(position) position: vec4f,
@@ -166,7 +167,7 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let facing = max(dot(n, frame.toSun.xyz), 0.0) * sunlit(placed, n);
     let light = (frame.sun.rgb * facing + punctual(placed, n)) / kPi + frame.sky.rgb * (0.5 + 0.5 * n.y);
     var out: Shaded;
-    out.color = vec4f(color.rgb * light * frame.exposure.x, 1.0);
+    out.color = vec4f(color.rgb * light * exposure.y, 1.0);
     out.motion = (now.xy / now.z - before.xy / before.z) * vec2f(0.5, -0.5);
     return out;
 }

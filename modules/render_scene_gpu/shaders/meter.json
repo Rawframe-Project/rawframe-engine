@@ -1,0 +1,15 @@
+{
+  "root_block_bytes": 0,
+  "entries": [
+    {"name": "histogram", "stage": "compute", "workgroup": [16, 16, 1], "workgroup_storage_bytes": 512},
+    {"name": "adapt", "stage": "compute", "workgroup": [1, 1, 1]}
+  ],
+  "bindings": [
+    {"table": 0, "slot": 0, "kind": "sampled_texture", "stages": ["compute"],
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 1, "kind": "storage_buffer", "stages": ["compute"], "min_size": 16},
+    {"table": 0, "slot": 2, "kind": "storage_buffer", "stages": ["compute"], "min_size": 512},
+    {"table": 0, "slot": 3, "kind": "uniform_buffer", "stages": ["compute"], "min_size": 48}
+  ],
+  "constants": []
+}

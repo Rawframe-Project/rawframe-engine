@@ -1,12 +1,11 @@
 // The 3D scene's models (D284), fragment entry "fs": the base color lit by
-// the sun (Lambert), where the sun's shadow map says it reaches (D289), by
-// the point and spot lights of its cluster (D290), and by the sky (brighter
-// facing up), in physical units, times the camera's exposure, so the scene
-// target holds pre-exposed scene-linear light (ADR-0047), a point or spot
-// light's shadowed where its squares of the punctual shadows' atlas say
-// (D292); and how far the
-// point moved on the screen since the frame before, for the temporal pass
-// (D291).
+// the sun (Lambert), where the sun's shadow map says it reaches (D289); by
+// the point and spot lights of its cluster (D290), each where its squares
+// of the punctual shadows' atlas say it reaches (D292); and by the sky
+// (brighter facing up); in physical units, times the exposure the device
+// holds (the camera's, or its metering's, D293), so the scene target holds
+// pre-exposed scene-linear light (ADR-0047). And how far the point moved
+// on the screen since the frame before, for the temporal pass (D291).
 
 #version 450
 
@@ -84,6 +83,14 @@ layout(set = 0, binding = 5, std430) readonly buffer Indices
 {
     uint indices[];
 };
+
+// The exposure the device holds (D293): its EV100 and the factor it
+// scales light by, a metered camera's moved from frame to frame.
+layout(set = 0, binding = 8, std430) readonly buffer Exposure
+{
+    vec4 value;
+}
+exposure;
 
 // The punctual shadows' atlas, and its squares.
 layout(set = 0, binding = 6) uniform texture2D lightShadowMap;
@@ -204,6 +211,6 @@ void main()
     const float kFacing = max(dot(kNormal, frame.toSun.xyz), 0.0) * sunlit(inPlaced, kNormal);
     const vec3 kLight = (frame.sun.rgb * kFacing + punctual(inPlaced, kNormal)) / kPi +
                         frame.sky.rgb * (0.5 + 0.5 * kNormal.y);
-    outColor = vec4(inColor.rgb * kLight * frame.exposure.x, 1.0);
+    outColor = vec4(inColor.rgb * kLight * exposure.value.y, 1.0);
     outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);
 }

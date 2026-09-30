@@ -1,6 +1,7 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 
 #include "blocks.h"
+#include "metering.h"
 #include "pipelines.h"
 #include "rawframe/render_scene_gpu/errors.h"
 
@@ -65,6 +66,8 @@ struct SceneRenderer::State {
     std::uint32_t resolvedHeight = 0;
     std::size_t lastResolved = 0;
     bool resolvedReady = false;
+    /// The exposure the device holds, and its metering (D293).
+    std::optional<Metering> metering;
     std::map<std::uint64_t, Held> held;
     /// What the next frame draws.
     const render_scene::SceneFrame* frame = nullptr;
@@ -407,6 +410,11 @@ struct SceneRenderer::State {
         mrhiResourceId lightsResource{};
         mrhiResourceId rangesResource{};
         mrhiResourceId indicesResource{};
+        /// The sky's light, as its pass reads it (D293); the target's size.
+        SkyBlock sky;
+        mrhiResourceId skyResource{};
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
         /// The temporal pass (D291): the motion target, what the pass
         /// reads, the picture it writes and the one before, and which of
         /// the kept pictures it writes.
@@ -475,6 +483,14 @@ struct SceneRenderer::State {
             if (mrhiDeclareBuffer(native, &def, &now.instances) != mrhi_success) {
                 return failed("the frame's placements could not be declared", mrhi_errorCapacity);
             }
+        }
+        now.width = open.width;
+        now.height = open.height;
+        now.sky.light = now.block.sky;
+        mrhiBufferDef skyDef = mrhiDefaultBufferDef();
+        skyDef.size = sizeof(SkyBlock);
+        if (mrhiDeclareBuffer(native, &skyDef, &now.skyResource) != mrhi_success) {
+            return failed("the sky's light could not be declared", mrhi_errorCapacity);
         }
         mrhiBufferDef blockDef = mrhiDefaultBufferDef();
         blockDef.size = sizeof(FrameBlock);
@@ -592,6 +608,8 @@ struct SceneRenderer::State {
             writes.push_back(wholeOf(now.temporalResource, mrhi_accessCopyDestination));
         }
         writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
+        writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
+        RAWFRAME_TRY(metering->declare(*frame, writes));
         for (const mrhiResourceId kView : now.slotViews) {
             writes.push_back(wholeOf(kView, mrhi_accessCopyDestination));
         }
@@ -651,6 +669,8 @@ struct SceneRenderer::State {
         // holds it for both.
         std::vector<mrhiAccess> reads = meshReads;
         reads.push_back(wholeOf(now.blockResource, mrhi_accessUniform));
+        reads.push_back(wholeOf(now.skyResource, mrhi_accessUniform));
+        reads.push_back(wholeOf(metering->exposure(), mrhi_accessStorageRead));
         for (const mrhiResourceId kLights :
              {now.lightsResource, now.rangesResource, now.indicesResource, now.slotsResource}) {
             reads.push_back(wholeOf(kLights, mrhi_accessStorageRead));
@@ -685,16 +705,13 @@ struct SceneRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &depthDef, &now.depthPass); kAdded != mrhi_success) {
             return failed("the depth pass could not be added", kAdded);
         }
-        // Behind every model, the sky's light.
-        const float kExposure = now.block.exposure[0];
+        // The models, then the sky where none lies, drawn with the exposure
+        // the device holds (D293).
         mrhiPassDef litDef = depthDef;
         litDef.colorTargets[0].resource = now.scene;
         litDef.colorTargets[0].load = mrhi_loadClear;
         litDef.colorTargets[0].store = mrhi_storeKeep;
-        litDef.colorTargets[0].clear = mrhiClearColor{.red = now.block.sky[0] * kExposure,
-                                                      .green = now.block.sky[1] * kExposure,
-                                                      .blue = now.block.sky[2] * kExposure,
-                                                      .alpha = 1};
+        litDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
         litDef.colorTargets[1].resource = now.motion;
         litDef.colorTargets[1].load = mrhi_loadClear;
         litDef.colorTargets[1].store = mrhi_storeKeep;
@@ -706,6 +723,7 @@ struct SceneRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &litDef, &now.litPass); kAdded != mrhi_success) {
             return failed("the models' pass could not be added", kAdded);
         }
+        RAWFRAME_TRY(metering->addPasses(now.scene));
         // The temporal pass reads the frame, its motion, and the picture
         // before, and writes the picture kept for the next frame.
         if (now.temporal) {
@@ -776,6 +794,10 @@ struct SceneRenderer::State {
                             now.indices.size() * sizeof(std::uint32_t)) != mrhi_success) {
             return failed("the frame's lights could not be written", mrhi_errorCapacity);
         }
+        if (mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock)) != mrhi_success) {
+            return failed("the sky's light could not be written", mrhi_errorCapacity);
+        }
+        RAWFRAME_TRY(metering->write(now.upload));
         if (now.temporal &&
             mrhiWriteBuffer(native, now.upload, now.temporalResource, 0, &now.temporalBlock, sizeof(TemporalBlock)) !=
                 mrhi_success) {
@@ -827,7 +849,7 @@ struct SceneRenderer::State {
                                .range = {},
                                .sampler = {}};
         };
-        const std::array<mrhiBinding, 8> kFrameBinding = {
+        const std::array<mrhiBinding, 9> kFrameBinding = {
             mrhiBinding{.slot = 0,
                         .resource = now.blockResource,
                         .offset = 0,
@@ -871,9 +893,12 @@ struct SceneRenderer::State {
                                   .layerCount = 1,
                                   .aspect = mrhi_aspectDepthOnly},
                         .sampler = {}},
-            kStored(7, now.slotsResource, now.slots.size() * sizeof(SlotBlock))};
-        for (const auto& [kPass, kPipeline] :
-             {std::pair{now.depthPass, pipelines.depth.pipeline}, std::pair{now.litPass, pipelines.lit.pipeline}}) {
+            kStored(7, now.slotsResource, now.slots.size() * sizeof(SlotBlock)),
+            kStored(8, metering->exposure(), sizeof(ExposureBlock))};
+        const std::array<mrhiBinding, 2> kSkyBinding = {kStored(0, now.skyResource, sizeof(SkyBlock)),
+                                                        kStored(1, metering->exposure(), sizeof(ExposureBlock))};
+        for (const auto& [kPass, kPipeline, kLit] : {std::tuple{now.depthPass, pipelines.depth.pipeline, false},
+                                                     std::tuple{now.litPass, pipelines.lit.pipeline, true}}) {
             if (mrhiBeginPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not begin", mrhi_errorState);
             }
@@ -899,10 +924,16 @@ struct SceneRenderer::State {
                     }
                 }
             }
+            if (kLit && (mrhiSetGraphicsPipeline(native, kPass, pipelines.sky.pipeline) != mrhi_success ||
+                         mrhiSetBindings(native, kPass, 0, kSkyBinding.data(), kSkyBinding.size()) != mrhi_success ||
+                         mrhiDraw(native, kPass, 3, 1, 0, 0) != mrhi_success)) {
+                return failed("the sky could not be drawn", mrhi_errorState);
+            }
             if (mrhiEndPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not end", mrhi_errorState);
             }
         }
+        RAWFRAME_TRY(metering->record(pipelines, now.scene, now.width, now.height));
         if (now.temporal) {
             RAWFRAME_TRY(resolve(now));
         }
@@ -946,6 +977,10 @@ struct SceneRenderer::State {
         // The picture written is the next frame's picture before only when
         // the frame was submitted and antialiased over time.
         resolvedReady = submitted && declared->temporal;
+        if (submitted && metering->metered()) {
+            ++statistics.framesMetered;
+        }
+        metering->ended(submitted);
         if (resolvedReady) {
             lastResolved = declared->resolving;
         }
@@ -972,6 +1007,8 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->pipelines.device = &device;
     state->pipelines.native = device.native();
     RAWFRAME_TRY(state->pipelines.make());
+    state->metering.emplace(device.native());
+    RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }
 
