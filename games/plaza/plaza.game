@@ -25,6 +25,10 @@ texture 9f822820a44af4fc paving.png
 # The sky all around (D322): a clear day's, written by tools/make_sky.py and
 # cooked into an environment, seen behind everything and lighting it.
 texture a97797a3a58f6d7a sky.hdr
+# What the plaza's middle sees all around (D325, D326): baked by
+# rawframe-bake from the probe's middle, and reflected, projected onto its
+# box, by what stands in the plaza.
+texture ac452b5e41f745bf hall.hdr
 material 6d2c9bd611d50fdf brass.rfmaterial
 material e4443f63fe935232 marble.rfmaterial
 material b6b2fb38f649a30b paving.rfmaterial
@@ -38,6 +42,8 @@ component 1f7d3a58-9c24-4e6b-8a03-5d9e1b7c2f84 plaza.view rawframe.model.Camera
 component c3a95e27-4b18-4f6d-9a02-7e8d1b5c3f49 plaza.lantern rawframe.model.PointLight
 component 5e0b8d24-71c3-4a96-b2f5-8d4c1e6a9f37 plaza.meter rawframe.model.AutoExposure
 component 0d4f7a2e-58c1-4b93-a6e0-3c9b2d7f1e84 plaza.sky rawframe.model.Sky
+component 9c6fbc0e-7e12-4a6e-814f-b893a583b4d9 plaza.hall Hall
+component a05f1e72-8622-4587-a629-f9a65dc4431a plaza.probe rawframe.model.ReflectionProbe
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -87,6 +93,10 @@ spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-22 y
 spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-20.9 y=1 z=-11.8 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=crate.gltf
 spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-21.45 y=2 z=-11.9 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=crate.gltf
 
+# The plaza's reflection probe: a box over the whole floor and up past the
+# terrace, its picture taken three meters above the middle.
+spawn 1 plaza.hall halfX=40 halfY=7.5 halfZ=40 rawframe.physics3d.pose y=3 qw=1
+
 # Eight strollers about the plaza, each starting its round at another time.
 spawn 1 plaza.stroller left=240 rawframe.physics3d.pose x=-12 y=1.4 z=-4 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=210 rawframe.physics3d.pose x=-6 y=1.4 z=12 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
@@ -97,7 +107,7 @@ spawn 1 plaza.stroller left=90 rawframe.physics3d.pose x=18 y=1.4 z=-8 qw=1 rawf
 spawn 1 plaza.stroller left=60 rawframe.physics3d.pose x=0 y=1.4 z=18 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 
-replicate plaza.stroller rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
+replicate plaza.stroller plaza.hall rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
 input plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
@@ -113,8 +123,9 @@ predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.veloc
 # their own materials, through its own
 # walker's camera, and the strollers as figures where their poses stand
 # (D288), each with a lantern (D290), the view's exposure metered (D293),
-# under the sky's picture (D322); no server carries a look, a figure, a
-# lantern, a view, a meter, or a sky.
+# under the sky's picture (D322), reflecting the plaza's probe (D325); no
+# server carries a look, a figure, a lantern, a view, a meter, a sky, or a
+# probe.
 presentation plaza.look on rawframe.physics3d.body
 present plaza.dress dress read rawframe.physics3d.body write plaza.look
 present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
@@ -128,3 +139,5 @@ presentation plaza.meter on player
 present plaza.meter meter read plaza.stick write plaza.meter
 presentation plaza.sky on player
 present plaza.sky sky read plaza.stick write plaza.sky
+presentation plaza.probe on plaza.hall
+present plaza.probe probe read plaza.hall write plaza.probe

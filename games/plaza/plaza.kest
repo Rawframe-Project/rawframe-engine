@@ -21,6 +21,9 @@ const PAVING: u64 = 0xb6b2fb38f649a30b
 // The sky's picture plaza.game's `texture` line names (D322).
 const SKY: u64 = 0xa97797a3a58f6d7a
 
+// The plaza's picture from its middle, the `texture` line's (D326).
+const HALL: u64 = 0xac452b5e41f745bf
+
 // A player's entity arrives with its components zeroed: here it becomes a
 // walker standing somewhere on the plaza.
 fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], characters: [physics3d.Character3D]) {
@@ -292,6 +295,24 @@ fn lantern(count: i32, strollers: [Stroller], lanterns: [model.PointLight]) {
     let i = 0
     while i < count {
         lanterns[i] = model.PointLight(400.0, 6.0, 0xFFC98AFF, false)
+        i = i + 1
+    }
+}
+
+// Where the plaza's reflection probe's box reaches from its middle, in
+// meters (D325).
+struct Hall {
+    halfX: f32
+    halfY: f32
+    halfZ: f32
+}
+
+// What a client reflects in the plaza (D325): the picture baked from the
+// hall's middle, projected onto its box, in its own light.
+fn probe(count: i32, halls: [Hall], probes: [model.ReflectionProbe]) {
+    let i = 0
+    while i < count {
+        probes[i] = model.ReflectionProbe(halls[i].halfX, halls[i].halfY, halls[i].halfZ, 1.0, u32(0), HALL)
         i = i + 1
     }
 }
