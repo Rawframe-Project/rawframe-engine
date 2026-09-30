@@ -241,6 +241,19 @@ fn frame(count: i32, sticks: [controls.Stick], views: [model.Camera]) {
     }
 }
 
+// How a client's eye meets the light (D293): metered from what the walker
+// sees, between EV100 5 and 17, brightening at three stops a second and
+// darkening at one, the darkest tenth and the brightest tenth of the
+// picture left out, a stop brighter than the average: the plaza's pale
+// paving fills most of the view.
+fn meter(count: i32, sticks: [controls.Stick], meters: [model.AutoExposure]) {
+    let i = 0
+    while i < count {
+        meters[i] = model.AutoExposure(5.0, 17.0, 3.0, 1.0, 1.0, 0.1, 0.9)
+        i = i + 1
+    }
+}
+
 // What a client draws of a stroller (D288): an orange capsule of the
 // walkers' girth, 1.8 meters tall, where its pose stands.
 fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
