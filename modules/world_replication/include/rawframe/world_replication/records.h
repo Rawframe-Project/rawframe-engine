@@ -75,7 +75,8 @@ struct StateRecordHead {
                                                                     std::size_t componentCount);
 
 /// SPEC-0041's pace signal: how far ahead of consumption this connection's
-/// newest input arrives, and how far the server wants it.
+/// newest input stood at the least since the last signal (D317), and how
+/// far the server wants it.
 struct Pace {
     std::int64_t measuredLead = 0;
     std::uint64_t targetLead = 0;

@@ -57,6 +57,9 @@ struct ClientReplicationStatistics {
     /// Refused whole: wrong epoch or malformed.
     std::uint64_t datagramsRefused = 0;
     std::uint64_t inputWindowsSent = 0;
+    /// Input samples left unlabelled to bring input that arrives far early
+    /// back toward the target lead (D317).
+    std::uint64_t samplesHeldBack = 0;
     std::uint64_t acknowledgementsSent = 0;
     /// Game messages received (D266).
     std::uint64_t messagesReceived = 0;

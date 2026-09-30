@@ -243,8 +243,11 @@ struct Peer {
     std::uint32_t held = 0;
     std::uint64_t stateSequence = 0;
     std::deque<SentState> sent;
-    /// How far ahead of consumption the newest command arrived, last seen.
-    std::int64_t measuredLead = 0;
+    /// The newest command's tick heard, and how far ahead of the tick being
+    /// consumed it stood at the least since the last pace (D317): what a
+    /// client whose commands come in bursts is late by just before the next.
+    std::uint64_t newestHeard = 0;
+    std::optional<std::int64_t> leastLead;
     bool heardInput = false;
     ChecksumBook checksums;
     InputAllowance allowance;

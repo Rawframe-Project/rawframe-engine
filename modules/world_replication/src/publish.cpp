@@ -251,10 +251,14 @@ bool ReplicationServer::State::isPresent(world::EntityHandle entity) const noexc
 }
 
 void ReplicationServer::State::sendPace(Peer& peer) {
+    if (!peer.leastLead.has_value()) {
+        return;
+    }
     std::array<std::byte, 24> payload{};
     network::Writer writer{payload};
-    if (encodePace(writer, Pace{.measuredLead = peer.measuredLead, .targetLead = settings.targetInputLead})
-            .has_value()) {
+    const Pace kPace{.measuredLead = *peer.leastLead, .targetLead = settings.targetInputLead};
+    peer.leastLead.reset();
+    if (encodePace(writer, kPace).has_value()) {
         static_cast<void>(sessions->sendDatagram(peer.connection,
                                                  network::DatagramRecord{.lane = network::DatagramLane::State,
                                                                          .laneEpoch = peer.accept.replicationEpoch,

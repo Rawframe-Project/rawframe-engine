@@ -163,8 +163,7 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
         strike(peer);
         return;
     }
-    peer.measuredLead =
-        static_cast<std::int64_t>(kWindow->newestInputTick) - static_cast<std::int64_t>(peer.nextInputTick);
+    peer.newestHeard = std::max(peer.newestHeard, kWindow->newestInputTick);
     peer.heardInput = true;
     const std::uint64_t kFirst = kWindow->newestInputTick + 1 - kWindow->commands.size();
     bool misshapen = false;
@@ -204,6 +203,11 @@ void ReplicationServer::State::applyInputs(world::World& world) {
             continue;
         }
         std::vector<std::byte> command;
+        if (peer.heardInput) {
+            const std::int64_t kLead =
+                static_cast<std::int64_t>(peer.newestHeard) - static_cast<std::int64_t>(peer.nextInputTick);
+            peer.leastLead = std::min(peer.leastLead.value_or(kLead), kLead);
+        }
         auto waiting = peer.waitingInputs.find(peer.nextInputTick);
         // Stale input is dropped, not played late (SPEC-0013, D232): the age
         // is in server ticks from its arrival, rounded up from the ceiling.

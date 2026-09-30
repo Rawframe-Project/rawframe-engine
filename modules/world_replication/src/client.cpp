@@ -22,6 +22,12 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Replication
     return result::fail(errorClass, kReplicationDomain, code(error), why);
 }
 
+/// SPEC-0041's client time dilation (D317): input more than `kLeadSlack`
+/// ticks ahead of the target lead is brought back by leaving one sample in
+/// `kDilationSamples` unlabelled (`client_dilation_max`, a fifth).
+constexpr std::int64_t kLeadSlack = 2;
+constexpr std::uint64_t kDilationSamples = 5;
+
 struct Staged {
     std::uint32_t net = 0;
     world::EntityHandle entity;
@@ -96,6 +102,11 @@ struct ReplicationClient::State {
     // Input: commands for consecutive input ticks not yet consumed.
     std::uint64_t nextInputTick = 0;
     std::uint64_t paceSequence = 0;
+    /// Samples still to leave unlabelled, and those labelled since the last.
+    std::uint64_t holdBack = 0;
+    std::uint64_t sinceHeld = 0;
+    /// Whether the next pace measured mostly before the last jump ahead.
+    bool jumped = false;
     std::map<std::uint64_t, std::vector<std::byte>> unconsumed;
     std::uint64_t inputSequence = 0;
 
@@ -190,19 +201,35 @@ struct ReplicationClient::State {
     }
 
     /// The server says how early this client's input arrives; a client that
-    /// is late labels its next commands further ahead (it never goes back:
-    /// a tick once labelled keeps its command).
+    /// is late labels its next commands further ahead at once, and one far
+    /// early, as a client is that stalled, was paced ahead, and made up what
+    /// it owed, leaves samples unlabelled, one in five, until it is not
+    /// (D317). A tick once labelled keeps its command.
     void onPace(const network::SessionEvent& event) {
         const auto kPace = decodePace(event.payload);
         if (!kPace.has_value()) {
             ++statistics.datagramsRefused;
             return;
         }
-        const auto kTarget = static_cast<std::int64_t>(kPace->targetLead);
-        if (kPace->measuredLead < kTarget && event.sequence > paceSequence) {
-            nextInputTick += static_cast<std::uint64_t>(kTarget - kPace->measuredLead);
+        if (event.sequence <= paceSequence) {
+            return;
         }
-        paceSequence = std::max(paceSequence, event.sequence);
+        paceSequence = event.sequence;
+        // The pace after a jump measured the ticks before it took effect.
+        if (std::exchange(jumped, false)) {
+            return;
+        }
+        const auto kTarget = static_cast<std::int64_t>(kPace->targetLead);
+        if (kPace->measuredLead < kTarget) {
+            nextInputTick += static_cast<std::uint64_t>(kTarget - kPace->measuredLead);
+            holdBack = 0;
+            jumped = true;
+        } else if (kPace->measuredLead > kTarget + kLeadSlack) {
+            // Set, not added: the paces in flight measure the same lead.
+            holdBack = static_cast<std::uint64_t>(kPace->measuredLead - kTarget);
+        } else {
+            holdBack = 0;
+        }
     }
 
     /// Notes a state datagram as received: the newest sequence, and a bit per
@@ -656,6 +683,19 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
     }
     // Commands the server consumed are done.
     state.unconsumed.erase(state.unconsumed.begin(), state.unconsumed.upper_bound(state.consumedInputTick));
+    // Far early: this sample is left unlabelled and unpredicted, so the
+    // input's lead shrinks by a tick; the window goes out as ever (D317).
+    const bool kHeldBack = state.holdBack > 0 && state.sinceHeld + 1 >= kDilationSamples;
+    if (kHeldBack) {
+        --state.holdBack;
+        state.sinceHeld = 0;
+        ++state.statistics.samplesHeldBack;
+        if (state.unconsumed.empty()) {
+            return {};
+        }
+    } else {
+        ++state.sinceHeld;
+    }
     std::vector<std::byte> wire(state.settings.input->wireSize() +
                                 (state.settings.perception ? kMaximumPerceptionBytes : 0));
     network::Writer commandWriter{wire};
@@ -671,11 +711,13 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
         RAWFRAME_TRY(encodePerception(commandWriter, seen));
     }
     wire.resize(commandWriter.written().size());
-    const std::uint64_t kTick = state.nextInputTick++;
-    state.unconsumed[kTick] = std::move(wire);
-    if (state.prediction) {
-        state.prediction->command(kTick, value);
-        state.present();
+    if (!kHeldBack) {
+        const std::uint64_t kTick = state.nextInputTick++;
+        state.unconsumed[kTick] = std::move(wire);
+        if (state.prediction) {
+            state.prediction->command(kTick, value);
+            state.present();
+        }
     }
     while (state.unconsumed.size() > kMaximumInputWindow) {
         state.unconsumed.erase(state.unconsumed.begin());

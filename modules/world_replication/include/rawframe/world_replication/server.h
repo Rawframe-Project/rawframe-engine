@@ -77,7 +77,8 @@ struct ServerReplicationSettings {
     /// played as if it had not arrived (D232).
     std::uint64_t inputMaximumAgeMilliseconds = 100;
     /// How many ticks ahead of consumption input should arrive, and how
-    /// often each connection is told how far ahead its input does arrive.
+    /// often each connection is told how far ahead its input stood at the
+    /// least (D317).
     std::uint64_t targetInputLead = 2;
     std::uint64_t paceInterval = 10;
     /// Ticks from one publish of state to a connection to its next:

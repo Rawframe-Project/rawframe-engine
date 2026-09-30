@@ -639,6 +639,58 @@ RAWFRAME_TEST(InputThatWaitedTooLongIsDroppedNotPlayedLate) {
     RAWFRAME_EXPECT(kAfter != nullptr && kAfter->x == kX);
 }
 
+RAWFRAME_TEST(InputPacedFromBurstsAndStallsComesBackOnTime) {
+    // A browser page's client (D317): it samples four ticks' input at once
+    // each frame, and once it stalls a third of a second and then samples
+    // what it owes at once. The server paces by the least lead since its
+    // last signal, so bursts arrive on time; the stall makes the client
+    // jump ahead, and it comes back by leaving samples unlabelled until its
+    // input no longer waits past its age.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.client->admitted());
+    std::uint64_t owed = 0;
+    const auto kTick = [&](bool sampling) {
+        scenario.clock.advance(scenario.stepLength);
+        scenario.server->pump(scenario.serverWorld, scenario.tick);
+        RAWFRAME_EXPECT(
+            scenario.schedule->runTick(scenario.serverWorld, scenario.tick, *world::TickRate::of(60)).has_value());
+        scenario.client->pump();
+        ++owed;
+        if (sampling) {
+            const Steer kSteer{.dx = 1, .dy = 0};
+            for (; owed > 0; --owed) {
+                RAWFRAME_EXPECT(scenario.client->submitInput(std::as_bytes(std::span{&kSteer, 1})).has_value());
+            }
+        }
+    };
+    const auto kPlay = [&](int ticks, int every) {
+        for (int at = 1; at <= ticks; ++at) {
+            kTick(at % every == 0);
+        }
+    };
+    const auto kMissed = [&] {
+        const auto kServer = scenario.server->statistics();
+        return kServer.inputsHeld + kServer.inputsNeutral + kServer.inputsStale;
+    };
+    // Bursts of four: settled after a second, none missed after that.
+    kPlay(60, 4);
+    const std::uint64_t kBurstsSettled = kMissed();
+    kPlay(120, 4);
+    RAWFRAME_EXPECT(kMissed() == kBurstsSettled);
+    // A stall of twenty ticks, then bursts again: missed while it lasts and
+    // a while after, then on time, with samples left unlabelled on the way.
+    kPlay(20, 1000);
+    kTick(true);
+    kPlay(240, 4);
+    const std::uint64_t kStallSettled = kMissed();
+    kPlay(120, 4);
+    RAWFRAME_EXPECT(kMissed() == kStallSettled);
+    RAWFRAME_EXPECT(scenario.client->statistics().samplesHeldBack > 0);
+}
+
 RAWFRAME_TEST(PredictionRecoversFromLostInput) {
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(30),
                        .jitter = MonotonicDuration::fromMilliseconds(30),
