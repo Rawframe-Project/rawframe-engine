@@ -360,6 +360,18 @@ public:
         height_ = height;
     }
 
+    const SceneFrame* queueFrom(const SceneCamera& camera) noexcept override {
+        if (scene_ == nullptr) {
+            return nullptr;
+        }
+        queued_ = &scene_->queue(camera);
+        return queued_;
+    }
+
+    std::span<const ProbeInstance> probes() const noexcept override {
+        return scene_ != nullptr ? scene_->extractedProbes() : std::span<const ProbeInstance>{};
+    }
+
     std::shared_ptr<const mesh::Mesh> mesh(std::uint64_t id) const override {
         return scene_ != nullptr ? scene_->mesh(id) : nullptr;
     }

@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 
 namespace rawframe::render_scene {
 
@@ -32,6 +33,15 @@ public:
     /// The view's size from the next frame on, as the window it is shown in
     /// has it: the camera's aspect follows. Sides of nought are ignored.
     virtual void resize(std::uint32_t width, std::uint32_t height) noexcept = 0;
+    /// Queues a frame from `camera` now, in place of the one queued, from
+    /// the World last extracted: for a tool drawing the scene from
+    /// elsewhere (D326). The next `present` queues the view's own again;
+    /// the models' motion then is measured from this frame. None while the
+    /// scene is idle.
+    [[nodiscard]] virtual const SceneFrame* queueFrom(const SceneCamera& camera) noexcept = 0;
+    /// The reflection probes last extracted, where their poses put them
+    /// (D325); none while the scene is idle.
+    [[nodiscard]] virtual std::span<const ProbeInstance> probes() const noexcept = 0;
     /// The mesh a draw names, the game's or the engine's; none for another,
     /// and while the scene is idle.
     [[nodiscard]] virtual std::shared_ptr<const mesh::Mesh> mesh(std::uint64_t id) const = 0;

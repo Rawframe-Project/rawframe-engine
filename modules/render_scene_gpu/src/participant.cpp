@@ -1,11 +1,14 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/render/frame.h"
 #include "rawframe/render_scene/frames.h"
+#include "rawframe/render_scene_gpu/captures.h"
 #include "rawframe/render_scene_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/renderer.h"
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 
 namespace rawframe::render_scene_gpu {
 
@@ -14,14 +17,16 @@ namespace {
 constexpr diagnostics::EventIdentity kDrawingSummary{"scene", "scene_drawing_summary"};
 constexpr diagnostics::EventIdentity kFailed{"scene", "scene_drawing_failed"};
 constexpr std::string_view kMaybe[] = {render::kFrames.name, render_scene::kSceneFrames.name};
+constexpr std::string_view kProvided[] = {kSceneCaptures.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 /// The scene's place in a frame: first (SPEC-0024).
 constexpr std::uint32_t kOrder = 0;
 
 /// Records the scene's frames into the frames `render` makes (D285): in
 /// each `present` that plans a frame, the view takes the frame's size and
-/// the frame the scene queued is prepared for it.
-class DrawingParticipant final : public composition::Participant {
+/// the frame the scene queued is prepared for it, or the frame a tool asks
+/// to capture (D326).
+class DrawingParticipant final : public composition::Participant, public SceneCaptures {
 public:
     result::Status load(composition::ParticipantContext& context) {
         if (!context.has(render::kFrames.name) || !context.has(render_scene::kSceneFrames.name)) {
@@ -72,8 +77,44 @@ public:
         }
         // The view follows the frame from the next one.
         scene_->resize(kPlanned->first, kPlanned->second);
-        renderer_->prepare(scene_->queued(), meshes_, textures_);
+        if (capturing_.has_value()) {
+            renderer_->prepare(&*capturing_, meshes_, textures_);
+            if (!asked_) {
+                renderer_->capture();
+                asked_ = true;
+            }
+        } else {
+            renderer_->prepare(scene_->queued(), meshes_, textures_);
+        }
         frames_->ready(*renderer_);
+    }
+
+    composition::CapabilityObject provide(std::string_view capability) noexcept override {
+        if (capability == kSceneCaptures.name) {
+            return composition::provideAs<SceneCaptures>(*this);
+        }
+        return {};
+    }
+
+    bool capture(render_scene::SceneFrame frame) override {
+        if (renderer_ == nullptr || capturing_.has_value()) {
+            return false;
+        }
+        capturing_ = std::move(frame);
+        asked_ = false;
+        return true;
+    }
+
+    std::optional<LightCapture> captured() override {
+        if (renderer_ == nullptr || !capturing_.has_value() || !asked_) {
+            return std::nullopt;
+        }
+        std::optional<LightCapture> taken = renderer_->captured();
+        if (taken.has_value()) {
+            capturing_.reset();
+            asked_ = false;
+        }
+        return taken;
     }
 
     void stop() noexcept override {
@@ -110,6 +151,10 @@ private:
     MeshSource meshes_;
     TextureSource textures_;
     std::unique_ptr<SceneRenderer> renderer_;
+    /// The frame a tool asked to capture, and whether the renderer was
+    /// asked to read it.
+    std::optional<render_scene::SceneFrame> capturing_;
+    bool asked_ = false;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
 };
@@ -127,6 +172,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .identity = "rawframe.render_scene_gpu.drawing",
         .factory = &make,
         .scope = composition::LifetimeScope::World,
+        .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
         // Stopping waits for nothing: the frames' owner waits for the last.
