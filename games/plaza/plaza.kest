@@ -83,8 +83,7 @@ enum Stride {
 }
 
 // A stroller: its pace (nought idles, 1.4 walks, four runs), where its head
-// looks (the plaza's middle, in its own frame), where it is on the plaza,
-// the ticks it has strolled, how squarely its head faces the middle (the
+// looks (the plaza's middle, in its own frame), the ticks it has strolled, how squarely its head faces the middle (the
 // head's forward along the look, which a server's head keeps above
 // nought), and where it is in its round: the pace it waits in, and the
 // ticks left of it.
@@ -93,8 +92,6 @@ struct Stroller {
     look_x: f64
     look_y: f64
     look_z: f64
-    x: f64
-    z: f64
     clock: u32
     gaze: f64
     left: u32
@@ -133,9 +130,12 @@ fn stride(s: Stroller) -> Stroller resumes s.at {
 
 // Strollers walk by root motion (D134): each step's move, turned from the
 // stroller's own frame as it was by the facing the step turned from, is
-// where it goes. Four seconds each it idles, walks, and runs, and its head
-// is told where the plaza's middle is from where it now stands and faces.
-fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], entities: [world.Entity]) {
+// where its pose goes, turned as it now faces (the pose is its body's
+// middle, 1.4 meters up, so a client draws it there, D288). Four seconds
+// each it idles, walks, and runs, and its head is told where the plaza's
+// middle is from where it now stands and faces.
+fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], poses: [physics3d.Pose3D],
+          entities: [world.Entity]) {
     let i = 0
     while i < count {
         let m = motions[i]
@@ -144,15 +144,18 @@ fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], en
         let c = m.facingW * m.turnW + m.facingY * m.turnY
         let cos = c * c - s * s
         let sin = 2.0 * s * c
-        strollers[i].x = strollers[i].x + cos * m.moveX + sin * m.moveZ
-        strollers[i].z = strollers[i].z - sin * m.moveX + cos * m.moveZ
+        poses[i].x = poses[i].x + cos * m.moveX + sin * m.moveZ
+        poses[i].z = poses[i].z - sin * m.moveX + cos * m.moveZ
+        poses[i].y = 1.4
+        poses[i].qy = f32(m.facingY)
+        poses[i].qw = f32(m.facingW)
         strollers[i].clock = strollers[i].clock + u32(1)
         strollers[i] = stride(strollers[i])
         // The middle at head height, turned into its frame by its facing now.
         let fc = m.facingW * m.facingW - m.facingY * m.facingY
         let fs = 2.0 * m.facingY * m.facingW
-        let wx = 0.0 - strollers[i].x
-        let wz = 0.0 - strollers[i].z
+        let wx = 0.0 - poses[i].x
+        let wz = 0.0 - poses[i].z
         strollers[i].look_x = fc * wx - fs * wz
         strollers[i].look_y = 1.9
         strollers[i].look_z = fs * wx + fc * wz
@@ -234,6 +237,16 @@ fn frame(count: i32, sticks: [controls.Stick], views: [model.Camera]) {
         views[i].fovY = 1.0
         views[i].near = 0.1
         views[i].exposure = 15.0
+        i = i + 1
+    }
+}
+
+// What a client draws of a stroller (D288): an orange capsule of the
+// walkers' girth, 1.8 meters tall, where its pose stands.
+fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
+    let i = 0
+    while i < count {
+        figures[i] = model.Model(model.CAPSULE, 0.3, 0.45, 0.3, 0xE08A3CFF)
         i = i + 1
     }
 }
