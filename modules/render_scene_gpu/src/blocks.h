@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rawframe/mesh/mesh.h"
 #include "rawframe/render_scene/scene.h"
 
 #include <array>
@@ -9,6 +10,9 @@ namespace rawframe::render_scene_gpu {
 
 /// One column-major matrix, as a cascade's view is written.
 using Matrix4 = std::array<float, 16>;
+
+/// A vertex as the scene pipeline reads it: its position, then its normal.
+constexpr std::uint32_t kVertexBytes = 24;
 
 /// The frame's view and light as the scene's shaders read them (std140).
 struct FrameBlock {
@@ -42,8 +46,23 @@ struct LightBlock {
     std::array<float, 4> intensity{};
     std::array<float, 4> direction{};
     std::array<float, 4> cone{};
+    /// Its first square of the shadows' atlas and how many (D292).
+    std::array<float, 4> shadow{};
 };
-static_assert(sizeof(LightBlock) == 64, "the scene's shaders read a light as 64 bytes");
+static_assert(sizeof(LightBlock) == 80, "the scene's shaders read a light as 80 bytes");
+
+/// A square of the punctual shadows' atlas as the scene's shaders read it
+/// (std430, D292): where it lies and its side as fractions of the atlas,
+/// and its near plane; the light's axes, with how wide it sees; and the
+/// light's place, with a texel's width a meter ahead.
+struct SlotBlock {
+    std::array<float, 4> rect{};
+    std::array<float, 4> right{};
+    std::array<float, 4> up{};
+    std::array<float, 4> forward{};
+    std::array<float, 4> position{};
+};
+static_assert(sizeof(SlotBlock) == 80, "the scene's shaders read a shadow square as 80 bytes");
 
 /// What the temporal pass reads (D291): whether the picture before may be
 /// reused.
@@ -59,5 +78,16 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
 /// The frame's lights as the shaders read them, never none: a buffer bound
 /// is never empty.
 std::vector<LightBlock> lightsOf(const render_scene::SceneFrame& frame);
+
+/// The frame's squares of the punctual shadows' atlas as the shaders read
+/// them, never none.
+std::vector<SlotBlock> slotsOf(const render_scene::SceneFrame& frame);
+
+/// A mesh's vertices as the pipeline reads them, its normals made from its
+/// faces where it has none.
+std::vector<float> verticesOf(const mesh::Mesh& made);
+
+/// The bytes a mesh takes on the device: its vertices and indices.
+std::uint64_t bytesOf(const mesh::Mesh& made) noexcept;
 
 } // namespace rawframe::render_scene_gpu

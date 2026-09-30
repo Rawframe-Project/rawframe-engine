@@ -4,7 +4,8 @@
 // order (the depth prepass, reversed-Z); the sun lights what faces it; a
 // draw whose mesh is not given is left out; a mesh is uploaded once, its
 // draws of one mesh one instanced call; the sun casts shadows; a point
-// light lights what is near it, a spot only what its cone reaches; and,
+// light lights what is near it, a spot only what its cone reaches, and
+// both cast shadows through their squares of one atlas; and,
 // antialiased over time, an edge's texels blend what the jittered frames
 // saw of it, and a moving box leaves no ghost where it was. Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
@@ -19,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <numbers>
 #include <optional>
 
 using namespace rawframe;
@@ -75,6 +77,54 @@ SceneDraw box(float z, float half, std::array<float, 4> color, std::uint64_t mes
     draw.model[14] = -z;
     draw.model[15] = 1;
     return draw;
+}
+
+/// A dark room's frame (D292): a white floor two meters below the eye, a
+/// half-meter box standing on it eight ahead, and a light to its right
+/// casting its shadow left: a spot three meters up shining down, or a lamp
+/// at the eye's height; one cluster holding it, and its squares of a small
+/// atlas taking both models, as the queue stage would place them; exposed
+/// for a dim room.
+SceneFrame lamplit(bool spot) {
+    SceneFrame frame = looking();
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.sky = {0, 0, 0};
+    frame.exposure = 0;
+    frame.shadows.count = 0;
+    SceneDraw floor = box(8, 1, {1, 1, 1, 1});
+    floor.model[0] = 10;
+    floor.model[5] = 0.1F;
+    floor.model[10] = 10;
+    floor.normal[0] = 0.1F;
+    floor.normal[5] = 10;
+    floor.normal[10] = 0.1F;
+    floor.model[13] = -2;
+    SceneDraw cube = box(8, 0.5F, {1, 1, 1, 1});
+    cube.model[13] = -1.4F;
+    frame.draws = {floor, cube};
+    render_scene::SceneLight light{.position = {2, spot ? 1.0F : 0.0F, -8}, .range = 10};
+    const float kCandela = spot ? 300 / std::numbers::pi_v<float> : 1200 / (4 * std::numbers::pi_v<float>);
+    light.intensity = {kCandela, kCandela, kCandela};
+    if (spot) {
+        light.spot = true;
+        light.direction = {0, -1, 0};
+        light.cosInner = std::cos(0.9F);
+        light.cosOuter = std::cos(1.1F);
+    }
+    light.shadowSlots = spot ? 1 : 6;
+    frame.lights3d = {light};
+    frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1, .ranges = {0, 1}, .indices = {0}};
+    frame.lightShadows.side = 512;
+    frame.lightShadows.casters = {floor, cube};
+    for (std::uint32_t face = 0; face < light.shadowSlots; ++face) {
+        render_scene::ShadowSlot slot = render_scene::shadowSlotOf(light, face);
+        slot.x = (face % 4) * 128;
+        slot.y = (face / 4) * 128;
+        slot.side = 128;
+        slot.casterCount = 2;
+        frame.lightShadows.slots.push_back(slot);
+    }
+    return frame;
 }
 
 std::array<int, 3> at(const std::vector<std::byte>& pixels, std::uint32_t x, std::uint32_t y) {
@@ -369,4 +419,44 @@ RAWFRAME_TEST(TemporalAntiAliasingBlendsEdgesWithoutGhosts) {
     }
     std::printf("where it was %d, where it is %d\n", at(*kMoved, 30, 32)[0], at(*kMoved, 42, 32)[0]);
     RAWFRAME_EXPECT(std::abs(at(*kMoved, 30, 32)[0] - kSky) < 6 && std::abs(at(*kMoved, 42, 32)[0] - kBox) < 6);
+}
+
+RAWFRAME_TEST(PunctualLightsCastShadowsThroughTheirAtlas) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    for (const bool kSpot : {true, false}) {
+        // The floor a meter left of the box, in its shadow, and two and a
+        // half right, lit; then the same light without shadows.
+        SceneFrame frame = lamplit(kSpot);
+        RAWFRAME_EXPECT(frame.lights3d.size() == 1 && frame.lightShadows.slots.size() == (kSpot ? 1U : 6U));
+        const auto kShadowed = drawn(**framer, **made, frame, kMeshes);
+        frame.lights3d[0].shadowSlots = 0;
+        const auto kUnshadowed = drawn(**framer, **made, frame, kMeshes);
+        RAWFRAME_EXPECT(kShadowed.has_value() && kUnshadowed.has_value());
+        if (!kShadowed.has_value() || !kUnshadowed.has_value()) {
+            return;
+        }
+        const int kInShadow = at(*kShadowed, 27, 39)[0];
+        const int kWithout = at(*kUnshadowed, 27, 39)[0];
+        const int kLit = at(*kShadowed, 42, 39)[0];
+        std::printf("%s: in its shadow %d, without shadows %d; lit %d and %d\n",
+                    kSpot ? "spot" : "lamp",
+                    kInShadow,
+                    kWithout,
+                    kLit,
+                    at(*kUnshadowed, 42, 39)[0]);
+        RAWFRAME_EXPECT(kWithout > 60 && kInShadow < kWithout / 3 && kLit > 60 &&
+                        std::abs(kLit - at(*kUnshadowed, 42, 39)[0]) < 4);
+    }
 }

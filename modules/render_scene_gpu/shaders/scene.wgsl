@@ -23,6 +23,15 @@ struct Light {
     intensity: vec4f,
     direction: vec4f,
     cone: vec4f,
+    shadow: vec4f,
+}
+
+struct ShadowSlot {
+    rect: vec4f,
+    right: vec4f,
+    up: vec4f,
+    forward: vec4f,
+    position: vec4f,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -31,6 +40,8 @@ struct Light {
 @group(0) @binding(3) var<storage, read> lights: array<Light>;
 @group(0) @binding(4) var<storage, read> ranges: array<vec2u>;
 @group(0) @binding(5) var<storage, read> indices: array<u32>;
+@group(0) @binding(6) var lightShadowMap: texture_depth_2d;
+@group(0) @binding(7) var<storage, read> slots: array<ShadowSlot>;
 
 struct Placed {
     @invariant @builtin(position) position: vec4f,
@@ -85,6 +96,21 @@ fn sunlit(placed: vec3f, normal: vec3f) -> f32 {
     return mix(1.0, lit, fade);
 }
 
+fn lightShadow(slot: ShadowSlot, placed: vec3f, normal: vec3f) -> f32 {
+    let near = slot.rect.w;
+    let away = max(dot(placed - slot.position.xyz, slot.forward.xyz), near);
+    let fromLight = placed + normal * (slot.position.w * away * 1.5) - slot.position.xyz;
+    let ahead = dot(fromLight, slot.forward.xyz);
+    if (ahead <= near) {
+        return 1.0;
+    }
+    let seen = vec2f(dot(fromLight, slot.right.xyz), dot(fromLight, slot.up.xyz)) / (ahead * slot.right.w);
+    let halfTexel = slot.position.w * 0.25 / slot.right.w;
+    let inSquare = clamp(vec2f(seen.x * 0.5 + 0.5, 0.5 - seen.y * 0.5), vec2f(halfTexel), vec2f(1.0 - halfTexel));
+    let inAtlas = slot.rect.xy + inSquare * slot.rect.z;
+    return textureSampleCompareLevel(lightShadowMap, shadowSampler, inAtlas, near / ahead);
+}
+
 fn punctual(placed: vec3f, normal: vec3f) -> vec3f {
     if (frame.clusterGrid.w == 0.0) {
         return vec3f(0.0);
@@ -113,6 +139,20 @@ fn punctual(placed: vec3f, normal: vec3f) -> vec3f {
             let cone = clamp((dot(-toward, light.direction.xyz) - light.cone.y) / (light.cone.x - light.cone.y),
                              0.0, 1.0);
             falloff *= cone * cone;
+        }
+        if (light.shadow.y > 0.5 && falloff > 0.0) {
+            var slot = u32(light.shadow.x);
+            if (light.shadow.y > 1.5) {
+                let axes = abs(toLight);
+                if (axes.x >= axes.y && axes.x >= axes.z) {
+                    slot += select(1u, 0u, toLight.x <= 0.0);
+                } else if (axes.y >= axes.z) {
+                    slot += select(3u, 2u, toLight.y <= 0.0);
+                } else {
+                    slot += select(5u, 4u, toLight.z <= 0.0);
+                }
+            }
+            falloff *= lightShadow(slots[slot], placed, normal);
         }
         sum += light.intensity.rgb * (falloff * max(dot(normal, toward), 0.0));
     }

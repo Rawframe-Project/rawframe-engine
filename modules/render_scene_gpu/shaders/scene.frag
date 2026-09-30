@@ -2,7 +2,9 @@
 // the sun (Lambert), where the sun's shadow map says it reaches (D289), by
 // the point and spot lights of its cluster (D290), and by the sky (brighter
 // facing up), in physical units, times the camera's exposure, so the scene
-// target holds pre-exposed scene-linear light (ADR-0047); and how far the
+// target holds pre-exposed scene-linear light (ADR-0047), a point or spot
+// light's shadowed where its squares of the punctual shadows' atlas say
+// (D292); and how far the
 // point moved on the screen since the frame before, for the temporal pass
 // (D291).
 
@@ -45,13 +47,28 @@ layout(set = 0, binding = 2) uniform samplerShadow shadowSampler;
 
 // A point or spot light (D290): its place relative to the eye and its
 // range; its intensity in candela, and whether it is a spot; the way a spot
-// shines; and the cosines of its cone's inner and outer edges.
+// shines; the cosines of its cone's inner and outer edges; and its first
+// square of the shadows' atlas and how many, none without shadows (D292).
 struct Light
 {
     vec4 placeRange;
     vec4 intensity;
     vec4 direction;
     vec4 cone;
+    vec4 shadow;
+};
+
+// A square of the punctual shadows' atlas (D292): where it lies in the
+// atlas and its side, as fractions of the atlas, and its near plane; the
+// light's axes across, up, and ahead, with how wide it sees; and the
+// light's place, with a texel's width a meter ahead.
+struct ShadowSlot
+{
+    vec4 rect;
+    vec4 right;
+    vec4 up;
+    vec4 forward;
+    vec4 position;
 };
 
 // The frame's lights; each cluster's first index and count; the indices.
@@ -66,6 +83,13 @@ layout(set = 0, binding = 4, std430) readonly buffer Ranges
 layout(set = 0, binding = 5, std430) readonly buffer Indices
 {
     uint indices[];
+};
+
+// The punctual shadows' atlas, and its squares.
+layout(set = 0, binding = 6) uniform texture2D lightShadowMap;
+layout(set = 0, binding = 7, std430) readonly buffer Slots
+{
+    ShadowSlot slots[];
 };
 
 layout(location = 0) out vec4 outColor;
@@ -102,6 +126,26 @@ float sunlit(vec3 placed, vec3 normal)
     return mix(1.0, kLit, kFade);
 }
 
+// How much of a light reaches `placed` through its square of the atlas:
+// the point moved along its normal by a texel and a half there, then
+// compared, nearer the light being greater (reversed-Z), four texels
+// blended, kept within the square.
+float lightShadow(ShadowSlot slot, vec3 placed, vec3 normal)
+{
+    const float kNear = slot.rect.w;
+    const float kAway = max(dot(placed - slot.position.xyz, slot.forward.xyz), kNear);
+    const vec3 kFrom = placed + normal * (slot.position.w * kAway * 1.5) - slot.position.xyz;
+    const float kAhead = dot(kFrom, slot.forward.xyz);
+    if (kAhead <= kNear) {
+        return 1.0;
+    }
+    const vec2 kSeen = vec2(dot(kFrom, slot.right.xyz), dot(kFrom, slot.up.xyz)) / (kAhead * slot.right.w);
+    const float kHalfTexel = slot.position.w * 0.25 / slot.right.w;
+    const vec2 kInSquare = clamp(vec2(kSeen.x * 0.5 + 0.5, 0.5 - kSeen.y * 0.5), vec2(kHalfTexel), vec2(1.0 - kHalfTexel));
+    const vec2 kInAtlas = slot.rect.xy + kInSquare * slot.rect.z;
+    return textureLod(sampler2DShadow(lightShadowMap, shadowSampler), vec3(kInAtlas, kNear / kAhead), 0.0);
+}
+
 // The illuminance the point and spot lights of `placed`'s cluster give it:
 // the cluster found by where the view puts it and how far ahead it is;
 // each light's inverse square windowed to nought at its range, a spot's
@@ -136,6 +180,18 @@ vec3 punctual(vec3 placed, vec3 normal)
                                       0.0,
                                       1.0);
             falloff *= kCone * kCone;
+        }
+        if (kLight.shadow.y > 0.5 && falloff > 0.0) {
+            // A point's face by the way the surface lies from it: +X, -X,
+            // +Y, -Y, +Z, -Z.
+            uint slot = uint(kLight.shadow.x);
+            if (kLight.shadow.y > 1.5) {
+                const vec3 kAxes = abs(kToLight);
+                slot += kAxes.x >= kAxes.y && kAxes.x >= kAxes.z ? (kToLight.x <= 0.0 ? 0u : 1u)
+                        : kAxes.y >= kAxes.z                     ? (kToLight.y <= 0.0 ? 2u : 3u)
+                                                                 : (kToLight.z <= 0.0 ? 4u : 5u);
+            }
+            falloff *= lightShadow(slots[slot], placed, normal);
         }
         sum += kLight.intensity.rgb * (falloff * max(dot(normal, kToward), 0.0));
     }

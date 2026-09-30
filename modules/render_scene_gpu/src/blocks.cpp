@@ -81,12 +81,69 @@ std::vector<LightBlock> lightsOf(const render_scene::SceneFrame& frame) {
             {.placeRange = {light.position[0], light.position[1], light.position[2], light.range},
              .intensity = {light.intensity[0], light.intensity[1], light.intensity[2], light.spot ? 1.0F : 0.0F},
              .direction = {light.direction[0], light.direction[1], light.direction[2], 0},
-             .cone = {light.cosInner, light.cosOuter, 0, 0}});
+             .cone = {light.cosInner, light.cosOuter, 0, 0},
+             .shadow = {static_cast<float>(light.shadowSlot), static_cast<float>(light.shadowSlots), 0, 0}});
     }
     if (made.empty()) {
         made.emplace_back();
     }
     return made;
+}
+
+std::vector<SlotBlock> slotsOf(const render_scene::SceneFrame& frame) {
+    std::vector<SlotBlock> made;
+    const render_scene::SceneLightShadows& kShadows = frame.lightShadows;
+    const auto kAtlas = static_cast<float>(std::max<std::uint32_t>(kShadows.side, 1));
+    for (const render_scene::ShadowSlot& slot : kShadows.slots) {
+        const auto kSide = static_cast<float>(std::max<std::uint32_t>(slot.side, 1));
+        made.push_back({.rect = {static_cast<float>(slot.x) / kAtlas,
+                                 static_cast<float>(slot.y) / kAtlas,
+                                 kSide / kAtlas,
+                                 slot.near},
+                        .right = {slot.right[0], slot.right[1], slot.right[2], slot.tangent},
+                        .up = {slot.up[0], slot.up[1], slot.up[2], 0},
+                        .forward = {slot.forward[0], slot.forward[1], slot.forward[2], 0},
+                        .position = {slot.position[0], slot.position[1], slot.position[2], 2 * slot.tangent / kSide}});
+    }
+    if (made.empty()) {
+        made.emplace_back();
+    }
+    return made;
+}
+
+std::vector<float> verticesOf(const mesh::Mesh& made) {
+    std::vector<mesh::Vector3> normals = made.normals;
+    if (normals.size() != made.positions.size()) {
+        normals.assign(made.positions.size(), mesh::Vector3{0, 0, 0});
+        for (std::size_t at = 0; at + 2 < made.indices.size(); at += 3) {
+            const mesh::Vector3& kA = made.positions[made.indices[at]];
+            const mesh::Vector3& kB = made.positions[made.indices[at + 1]];
+            const mesh::Vector3& kC = made.positions[made.indices[at + 2]];
+            const mesh::Vector3 kAb = {kB[0] - kA[0], kB[1] - kA[1], kB[2] - kA[2]};
+            const mesh::Vector3 kAc = {kC[0] - kA[0], kC[1] - kA[1], kC[2] - kA[2]};
+            // Weighted by the face's area, as its cross product is.
+            const mesh::Vector3 kFace = {(kAb[1] * kAc[2]) - (kAb[2] * kAc[1]),
+                                         (kAb[2] * kAc[0]) - (kAb[0] * kAc[2]),
+                                         (kAb[0] * kAc[1]) - (kAb[1] * kAc[0])};
+            for (std::size_t corner = 0; corner < 3; ++corner) {
+                mesh::Vector3& normal = normals[made.indices[at + corner]];
+                for (std::size_t axis = 0; axis < 3; ++axis) {
+                    normal[axis] += kFace[axis];
+                }
+            }
+        }
+    }
+    std::vector<float> vertices;
+    vertices.reserve(made.positions.size() * 6);
+    for (std::size_t at = 0; at < made.positions.size(); ++at) {
+        vertices.insert(vertices.end(), made.positions[at].begin(), made.positions[at].end());
+        vertices.insert(vertices.end(), normals[at].begin(), normals[at].end());
+    }
+    return vertices;
+}
+
+std::uint64_t bytesOf(const mesh::Mesh& made) noexcept {
+    return (std::uint64_t{made.positions.size()} * kVertexBytes) + (std::uint64_t{made.indices.size()} * 4);
 }
 
 } // namespace rawframe::render_scene_gpu

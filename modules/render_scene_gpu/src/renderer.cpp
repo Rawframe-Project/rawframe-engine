@@ -1,12 +1,10 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 
 #include "blocks.h"
-#include "generated/scene_container.h"
-#include "generated/shadow_container.h"
-#include "generated/temporal_container.h"
-#include "generated/tonemap_container.h"
+#include "pipelines.h"
 #include "rawframe/render_scene_gpu/errors.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -15,6 +13,7 @@
 #include <maul-rhi/pipeline.h>
 #include <maul-rhi/resources.h>
 #include <maul-rhi/shader.h>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,27 +25,6 @@ namespace {
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, SceneGpuError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kSceneGpuDomain, code(error), why).error()};
 }
-
-/// Maul RHI's refusal, named.
-std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) {
-    return std::unexpected<result::Error>{
-        result::fail(result::ErrorClass::Unavailable, kSceneGpuDomain, code(SceneGpuError::Device), why)
-            .error()
-            .withContext("outcome", std::string{mrhiResultName(outcome)})};
-}
-
-/// A vertex as the scene pipeline reads it: its position, then its normal.
-constexpr std::uint32_t kVertexBytes = 24;
-
-/// The sun's shadow map (D289): the cascades' squares, two by two.
-constexpr mrhiFormat kShadowFormat = mrhi_formatDepth32Float;
-
-constexpr mrhiFormat kSceneFormat = mrhi_formatRgba16Float;
-/// Where each texel's point moved since the frame before (D291).
-constexpr mrhiFormat kMotionFormat = mrhi_formatRg16Float;
-constexpr mrhiFormat kDepthFormat = mrhi_formatDepth32Float;
-/// The frame's picture, as `render` declares it.
-constexpr mrhiFormat kPictureFormat = mrhi_formatRgba8UnormSrgb;
 
 /// A resource of the open frame from the key `render` names it by.
 mrhiResourceId resourceOf(std::uint64_t key) noexcept {
@@ -61,43 +39,6 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
         .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
 }
 
-/// A mesh's vertices as the pipeline reads them, its normals made from its
-/// faces where it has none.
-std::vector<float> verticesOf(const mesh::Mesh& made) {
-    std::vector<mesh::Vector3> normals = made.normals;
-    if (normals.size() != made.positions.size()) {
-        normals.assign(made.positions.size(), mesh::Vector3{0, 0, 0});
-        for (std::size_t at = 0; at + 2 < made.indices.size(); at += 3) {
-            const mesh::Vector3& kA = made.positions[made.indices[at]];
-            const mesh::Vector3& kB = made.positions[made.indices[at + 1]];
-            const mesh::Vector3& kC = made.positions[made.indices[at + 2]];
-            const mesh::Vector3 kAb = {kB[0] - kA[0], kB[1] - kA[1], kB[2] - kA[2]};
-            const mesh::Vector3 kAc = {kC[0] - kA[0], kC[1] - kA[1], kC[2] - kA[2]};
-            // Weighted by the face's area, as its cross product is.
-            const mesh::Vector3 kFace = {(kAb[1] * kAc[2]) - (kAb[2] * kAc[1]),
-                                         (kAb[2] * kAc[0]) - (kAb[0] * kAc[2]),
-                                         (kAb[0] * kAc[1]) - (kAb[1] * kAc[0])};
-            for (std::size_t corner = 0; corner < 3; ++corner) {
-                mesh::Vector3& normal = normals[made.indices[at + corner]];
-                for (std::size_t axis = 0; axis < 3; ++axis) {
-                    normal[axis] += kFace[axis];
-                }
-            }
-        }
-    }
-    std::vector<float> vertices;
-    vertices.reserve(made.positions.size() * 6);
-    for (std::size_t at = 0; at < made.positions.size(); ++at) {
-        vertices.insert(vertices.end(), made.positions[at].begin(), made.positions[at].end());
-        vertices.insert(vertices.end(), normals[at].begin(), normals[at].end());
-    }
-    return vertices;
-}
-
-std::uint64_t bytesOf(const mesh::Mesh& made) noexcept {
-    return (std::uint64_t{made.positions.size()} * kVertexBytes) + (std::uint64_t{made.indices.size()} * 4);
-}
-
 /// A mesh held on the device: the mesh it was made from, and whether its
 /// vertices and indices are there yet.
 struct Held {
@@ -107,13 +48,6 @@ struct Held {
     bool uploaded = false;
 };
 
-/// A pipeline asked of the device, and whether it is made.
-struct Asked {
-    mrhiGraphicsPipelineId pipeline{};
-    std::uint64_t request = 0;
-    bool ready = false;
-};
-
 } // namespace
 
 struct SceneRenderer::State {
@@ -121,21 +55,8 @@ struct SceneRenderer::State {
     mrhiDevice* native = nullptr;
     RendererLimits limits;
     RendererStatistics statistics;
-    mrhiShaderId sceneShader{};
-    mrhiShaderId tonemapShader{};
-    mrhiShaderId shadowShader{};
-    mrhiShaderId temporalShader{};
-    /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
-    mrhiSamplerId shadowSampler{};
-    /// Blends four texels of the picture before.
-    mrhiSamplerId historySampler{};
-    /// The shadow map's casters, the depth prepass, the lit models, and the
-    /// picture.
-    Asked casting;
-    Asked depth;
-    Asked lit;
-    Asked temporal;
-    Asked tonemap;
+    /// Its shaders, samplers, and pipelines.
+    Pipelines pipelines;
     /// The temporal pass's pictures (D291), kept from frame to frame: one
     /// written, the other the picture before; their size; which was written
     /// last, and whether it holds a picture a submitted frame drew.
@@ -158,16 +79,7 @@ struct SceneRenderer::State {
             static_cast<void>(mrhiDestroyBuffer(native, made.vertices));
             static_cast<void>(mrhiDestroyBuffer(native, made.indices));
         }
-        for (Asked* asked : {&casting, &depth, &lit, &temporal, &tonemap}) {
-            static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
-        }
         dropResolved();
-        static_cast<void>(mrhiDestroySampler(native, shadowSampler));
-        static_cast<void>(mrhiDestroySampler(native, historySampler));
-        static_cast<void>(mrhiDestroyShader(native, temporalShader));
-        static_cast<void>(mrhiDestroyShader(native, sceneShader));
-        static_cast<void>(mrhiDestroyShader(native, tonemapShader));
-        static_cast<void>(mrhiDestroyShader(native, shadowShader));
     }
 
     void dropResolved() noexcept {
@@ -205,161 +117,6 @@ struct SceneRenderer::State {
         return {};
     }
 
-    result::Status makeShader(std::span<const std::uint8_t> container, mrhiShaderId& shader) {
-        mrhiShaderDef def = mrhiDefaultShaderDef();
-        def.bytes = container.data();
-        def.byteCount = container.size();
-        if (const mrhiResult kMade = mrhiCreateShader(native, &def, &shader); kMade != mrhi_success) {
-            return failed("a scene shader could not be made", kMade);
-        }
-        return {};
-    }
-
-    result::Status ask(const mrhiGraphicsPipelineDef& def, Asked& asked) {
-        mrhiRequestId request{};
-        if (const mrhiResult kMade = mrhiCreateGraphicsPipeline(native, &def, &asked.pipeline, &request);
-            kMade != mrhi_success) {
-            return failed("a scene pipeline could not be asked for", kMade);
-        }
-        asked.request = render::requestKey(request.index1, request.generation);
-        return {};
-    }
-
-    result::Status makePipelines() {
-        RAWFRAME_TRY(makeShader(kSceneContainer, sceneShader));
-        RAWFRAME_TRY(makeShader(kTonemapContainer, tonemapShader));
-        RAWFRAME_TRY(makeShader(kShadowContainer, shadowShader));
-        RAWFRAME_TRY(makeShader(kTemporalContainer, temporalShader));
-        // Each vertex of the mesh, then each draw's placement.
-        constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
-            mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
-            mrhiVertexBufferLayout{.stride = kInstanceBytes, .stepMode = mrhi_stepInstance}};
-        constexpr std::array<mrhiVertexAttribute, 12> kAttributes = {
-            mrhiVertexAttribute{.buffer = 0, .location = 0, .format = mrhi_vertexFloat32x3, .offset = 0},
-            mrhiVertexAttribute{.buffer = 0, .location = 1, .format = mrhi_vertexFloat32x3, .offset = 12},
-            mrhiVertexAttribute{.buffer = 1, .location = 2, .format = mrhi_vertexFloat32x4, .offset = 0},
-            mrhiVertexAttribute{.buffer = 1, .location = 3, .format = mrhi_vertexFloat32x4, .offset = 16},
-            mrhiVertexAttribute{.buffer = 1, .location = 4, .format = mrhi_vertexFloat32x4, .offset = 32},
-            mrhiVertexAttribute{.buffer = 1, .location = 5, .format = mrhi_vertexFloat32x3, .offset = 48},
-            mrhiVertexAttribute{.buffer = 1, .location = 6, .format = mrhi_vertexFloat32x3, .offset = 60},
-            mrhiVertexAttribute{.buffer = 1, .location = 7, .format = mrhi_vertexFloat32x3, .offset = 72},
-            mrhiVertexAttribute{.buffer = 1, .location = 8, .format = mrhi_vertexFloat32x4, .offset = 84},
-            mrhiVertexAttribute{.buffer = 1, .location = 9, .format = mrhi_vertexFloat32x4, .offset = 100},
-            mrhiVertexAttribute{.buffer = 1, .location = 10, .format = mrhi_vertexFloat32x4, .offset = 116},
-            mrhiVertexAttribute{.buffer = 1, .location = 11, .format = mrhi_vertexFloat32x4, .offset = 132}};
-        mrhiGraphicsPipelineDef models = mrhiDefaultGraphicsPipelineDef();
-        models.shader = sceneShader;
-        models.vertexEntry = "vs";
-        models.vertexEntryLength = 2;
-        models.vertexBuffers = kBuffers.data();
-        models.vertexBufferCount = static_cast<std::uint32_t>(kBuffers.size());
-        models.vertexAttributes = kAttributes.data();
-        models.vertexAttributeCount = static_cast<std::uint32_t>(kAttributes.size());
-        // A model scaled negatively turns inside out, so no face is culled.
-        models.cullMode = mrhi_cullNone;
-        models.depthStencilFormat = kDepthFormat;
-        // The depth prepass: nearer is greater (reversed-Z).
-        mrhiGraphicsPipelineDef prepass = models;
-        constexpr std::string_view kDepthLabel = "rawframe.scene.depth";
-        prepass.label = kDepthLabel.data();
-        prepass.labelLength = kDepthLabel.size();
-        prepass.depthWrite = true;
-        prepass.depthCompare = mrhi_compareGreater;
-        prepass.colorTargetCount = 0;
-        RAWFRAME_TRY(ask(prepass, depth));
-        // The casters into the sun's shadow map: the vertex's place alone,
-        // pushed from the sun by its slope (the depth half of ADR-0051's
-        // bias; the normal half is where the map is read).
-        constexpr std::array<mrhiVertexAttribute, 4> kCasterAttributes = {
-            kAttributes[0], kAttributes[2], kAttributes[3], kAttributes[4]};
-        mrhiGraphicsPipelineDef casters = prepass;
-        constexpr std::string_view kCastingLabel = "rawframe.scene.shadows";
-        casters.label = kCastingLabel.data();
-        casters.labelLength = kCastingLabel.size();
-        casters.shader = shadowShader;
-        casters.vertexAttributes = kCasterAttributes.data();
-        casters.vertexAttributeCount = static_cast<std::uint32_t>(kCasterAttributes.size());
-        casters.depthStencilFormat = kShadowFormat;
-        casters.depthBiasSlopeScale = -2.0F;
-        RAWFRAME_TRY(ask(casters, casting));
-        mrhiSamplerDef samplerDef = mrhiDefaultSamplerDef();
-        samplerDef.magFilter = mrhi_filterLinear;
-        samplerDef.minFilter = mrhi_filterLinear;
-        samplerDef.addressU = mrhi_addressClampToEdge;
-        samplerDef.addressV = mrhi_addressClampToEdge;
-        samplerDef.addressW = mrhi_addressClampToEdge;
-        // Lit where the point is at least as near the sun as the nearest
-        // caster (reversed-Z).
-        samplerDef.compare = mrhi_compareGreaterEqual;
-        if (const mrhiResult kMade = mrhiCreateSampler(native, &samplerDef, &shadowSampler); kMade != mrhi_success) {
-            return failed("the shadow sampler could not be made", kMade);
-        }
-        // The lit models, drawn where the prepass left their depth.
-        constexpr std::string_view kLitLabel = "rawframe.scene.models";
-        models.label = kLitLabel.data();
-        models.labelLength = kLitLabel.size();
-        models.fragmentEntry = "fs";
-        models.fragmentEntryLength = 2;
-        models.depthWrite = false;
-        models.depthCompare = mrhi_compareGreaterEqual;
-        models.colorTargetCount = 2;
-        models.colorTargets[0].format = kSceneFormat;
-        models.colorTargets[1].format = kMotionFormat;
-        RAWFRAME_TRY(ask(models, lit));
-        // The temporal pass: the frame and the picture before, into the
-        // picture kept for the next.
-        mrhiGraphicsPipelineDef resolving = mrhiDefaultGraphicsPipelineDef();
-        constexpr std::string_view kTemporalLabel = "rawframe.scene.temporal";
-        resolving.label = kTemporalLabel.data();
-        resolving.labelLength = kTemporalLabel.size();
-        resolving.shader = temporalShader;
-        resolving.vertexEntry = "vs";
-        resolving.vertexEntryLength = 2;
-        resolving.fragmentEntry = "fs";
-        resolving.fragmentEntryLength = 2;
-        resolving.colorTargetCount = 1;
-        resolving.colorTargets[0].format = kSceneFormat;
-        RAWFRAME_TRY(ask(resolving, temporal));
-        mrhiSamplerDef blendingDef = mrhiDefaultSamplerDef();
-        blendingDef.magFilter = mrhi_filterLinear;
-        blendingDef.minFilter = mrhi_filterLinear;
-        blendingDef.addressU = mrhi_addressClampToEdge;
-        blendingDef.addressV = mrhi_addressClampToEdge;
-        blendingDef.addressW = mrhi_addressClampToEdge;
-        if (const mrhiResult kMade = mrhiCreateSampler(native, &blendingDef, &historySampler); kMade != mrhi_success) {
-            return failed("the temporal sampler could not be made", kMade);
-        }
-        mrhiGraphicsPipelineDef picture = mrhiDefaultGraphicsPipelineDef();
-        constexpr std::string_view kPictureLabel = "rawframe.scene.tonemap";
-        picture.label = kPictureLabel.data();
-        picture.labelLength = kPictureLabel.size();
-        picture.shader = tonemapShader;
-        picture.vertexEntry = "vs";
-        picture.vertexEntryLength = 2;
-        picture.fragmentEntry = "fs";
-        picture.fragmentEntryLength = 2;
-        picture.colorTargetCount = 1;
-        picture.colorTargets[0].format = kPictureFormat;
-        return ask(picture, tonemap);
-    }
-
-    /// Whether every pipeline is made; an error if one could not be.
-    result::Result<bool> ready() {
-        bool all = true;
-        for (Asked* asked : {&casting, &depth, &lit, &temporal, &tonemap}) {
-            if (!asked->ready) {
-                if (const auto kAnswer = device->answer(asked->request)) {
-                    if (!kAnswer->has_value()) {
-                        return std::unexpected<result::Error>{kAnswer->error().clone()};
-                    }
-                    asked->ready = true;
-                }
-            }
-            all = all && asked->ready;
-        }
-        return all;
-    }
-
     /// The meshes this frame draws, made on the device as needed; those
     /// still to upload within the frame's budget are marked. A draw whose
     /// mesh is not here is left out.
@@ -369,7 +126,8 @@ struct SceneRenderer::State {
                                             std::vector<Held*>& uploading) {
         std::map<std::uint64_t, Held*> usable;
         std::vector<const render_scene::SceneDraw*> all;
-        for (const std::vector<render_scene::SceneDraw>* kList : {&scene.draws, &scene.shadows.casters}) {
+        for (const std::vector<render_scene::SceneDraw>* kList :
+             {&scene.draws, &scene.shadows.casters, &scene.lightShadows.casters}) {
             for (const render_scene::SceneDraw& draw : *kList) {
                 all.push_back(&draw);
             }
@@ -419,11 +177,16 @@ struct SceneRenderer::State {
 
     /// The placements of the draws whose mesh is here, in order, and the
     /// runs of one mesh each: an instanced draw apiece.
+    /// Mesh, first instance, instances.
+    using Runs = std::vector<std::tuple<const Held*, std::uint32_t, std::uint32_t>>;
+
     struct Placed {
         std::vector<float> instances;
-        /// Mesh, first instance, instances: the draws', then the casters'.
-        std::vector<std::tuple<const Held*, std::uint32_t, std::uint32_t>> runs;
-        std::vector<std::tuple<const Held*, std::uint32_t, std::uint32_t>> casterRuns;
+        /// The draws', then the sun's casters', then each square of the
+        /// punctual shadows' atlas's (D292).
+        Runs runs;
+        Runs casterRuns;
+        std::vector<Runs> slotRuns;
     };
 
     Placed place(const render_scene::SceneFrame& scene, const std::map<std::uint64_t, Held*>& usable) {
@@ -431,10 +194,19 @@ struct SceneRenderer::State {
         std::uint32_t count = 0;
         append(scene.draws, usable, placed, placed.runs, count, true);
         append(scene.shadows.casters, usable, placed, placed.casterRuns, count, false);
+        const std::span<const render_scene::SceneDraw> kCasters = scene.lightShadows.casters;
+        for (const render_scene::ShadowSlot& slot : scene.lightShadows.slots) {
+            append(kCasters.subspan(slot.firstCaster, slot.casterCount),
+                   usable,
+                   placed,
+                   placed.slotRuns.emplace_back(),
+                   count,
+                   false);
+        }
         return placed;
     }
 
-    void append(const std::vector<render_scene::SceneDraw>& draws,
+    void append(std::span<const render_scene::SceneDraw> draws,
                 const std::map<std::uint64_t, Held*>& usable,
                 Placed& placed,
                 std::vector<std::tuple<const Held*, std::uint32_t, std::uint32_t>>& runs,
@@ -497,7 +269,7 @@ struct SceneRenderer::State {
                                                                   .viewKind = mrhi_texture2d,
                                                                   .viewFormat = mrhi_formatNone,
                                                                   .range = {},
-                                                                  .sampler = historySampler},
+                                                                  .sampler = pipelines.historySampler},
                                                       mrhiBinding{.slot = 4,
                                                                   .resource = now.temporalResource,
                                                                   .offset = 0,
@@ -507,7 +279,7 @@ struct SceneRenderer::State {
                                                                   .range = {},
                                                                   .sampler = {}}};
         if (mrhiBeginPass(native, now.temporalPass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native, now.temporalPass, temporal.pipeline) != mrhi_success ||
+            mrhiSetGraphicsPipeline(native, now.temporalPass, pipelines.temporal.pipeline) != mrhi_success ||
             mrhiSetBindings(native, now.temporalPass, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
             mrhiDraw(native, now.temporalPass, 3, 1, 0, 0) != mrhi_success ||
             mrhiEndPass(native, now.temporalPass) != mrhi_success) {
@@ -516,60 +288,85 @@ struct SceneRenderer::State {
         return {};
     }
 
-    /// The shadow pass recorded: each cascade's square of the map drawn from
-    /// its view, the casters in their runs.
-    result::Status castShadows(const Declared& now) {
-        if (mrhiBeginPass(native, now.shadowPass) != mrhi_success) {
-            return failed("the shadow pass could not begin", mrhi_errorState);
+    /// A square of a shadow map: its view, where it lies, and its casters.
+    struct Square {
+        mrhiResourceId view{};
+        mrhiViewport viewport{};
+        const Runs* casters = nullptr;
+    };
+
+    /// A shadow pass recorded: each square drawn from its view, its casters
+    /// in their runs.
+    result::Status cast(const Declared& now, mrhiPassId pass, std::span<const Square> squares) {
+        if (mrhiBeginPass(native, pass) != mrhi_success) {
+            return failed("a shadow pass could not begin", mrhi_errorState);
         }
-        if (now.casters && now.cascadeCount > 0) {
-            if (mrhiSetGraphicsPipeline(native, now.shadowPass, casting.pipeline) != mrhi_success ||
-                mrhiSetVertexBuffer(native, now.shadowPass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
+        bool set = false;
+        for (const Square& kSquare : squares) {
+            if (kSquare.casters->empty()) {
+                continue;
+            }
+            if (!set && (mrhiSetGraphicsPipeline(native, pass, pipelines.casting.pipeline) != mrhi_success ||
+                         mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success)) {
                 return failed("the casters could not be set up", mrhi_errorState);
             }
-            for (std::size_t at = 0; at < now.cascadeCount; ++at) {
-                const std::array<mrhiBinding, 1> kCascade = {mrhiBinding{.slot = 0,
-                                                                         .resource = now.cascades[at],
-                                                                         .offset = 0,
-                                                                         .size = sizeof(Matrix4),
-                                                                         .viewKind = mrhi_texture2d,
-                                                                         .viewFormat = mrhi_formatNone,
-                                                                         .range = {},
-                                                                         .sampler = {}}};
-                const auto kSide = static_cast<float>(now.side);
-                const mrhiViewport kSquare{.x = static_cast<float>(at % 2) * kSide,
-                                           .y = static_cast<float>(at / 2) * kSide,
-                                           .width = kSide,
-                                           .height = kSide,
-                                           .minDepth = 0,
-                                           .maxDepth = 1};
-                if (mrhiSetBindings(native, now.shadowPass, 0, kCascade.data(), kCascade.size()) != mrhi_success ||
-                    mrhiSetViewport(native, now.shadowPass, &kSquare) != mrhi_success) {
-                    return failed("a cascade could not be set up", mrhi_errorState);
-                }
-                for (const auto& [kMesh, kFirst, kCount] : now.placed.casterRuns) {
-                    const auto& [kVertexResource, kIndexResource] = now.imported.at(kMesh);
-                    if (mrhiSetVertexBuffer(native, now.shadowPass, 0, kVertexResource, 0, MRHI_WHOLE_SIZE) !=
-                            mrhi_success ||
-                        mrhiSetIndexBuffer(
-                            native, now.shadowPass, kIndexResource, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) !=
-                            mrhi_success ||
-                        mrhiDrawIndexed(native,
-                                        now.shadowPass,
-                                        static_cast<std::uint32_t>(kMesh->source->indices.size()),
-                                        kCount,
-                                        0,
-                                        0,
-                                        kFirst) != mrhi_success) {
-                        return failed("a caster could not be drawn", mrhi_errorState);
-                    }
+            set = true;
+            const std::array<mrhiBinding, 1> kView = {mrhiBinding{.slot = 0,
+                                                                  .resource = kSquare.view,
+                                                                  .offset = 0,
+                                                                  .size = sizeof(Matrix4),
+                                                                  .viewKind = mrhi_texture2d,
+                                                                  .viewFormat = mrhi_formatNone,
+                                                                  .range = {},
+                                                                  .sampler = {}}};
+            if (mrhiSetBindings(native, pass, 0, kView.data(), kView.size()) != mrhi_success ||
+                mrhiSetViewport(native, pass, &kSquare.viewport) != mrhi_success) {
+                return failed("a shadow square could not be set up", mrhi_errorState);
+            }
+            for (const auto& [kMesh, kFirst, kCount] : *kSquare.casters) {
+                const auto& [kVertexResource, kIndexResource] = now.imported.at(kMesh);
+                if (mrhiSetVertexBuffer(native, pass, 0, kVertexResource, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
+                    mrhiSetIndexBuffer(native, pass, kIndexResource, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) !=
+                        mrhi_success ||
+                    mrhiDrawIndexed(native,
+                                    pass,
+                                    static_cast<std::uint32_t>(kMesh->source->indices.size()),
+                                    kCount,
+                                    0,
+                                    0,
+                                    kFirst) != mrhi_success) {
+                    return failed("a caster could not be drawn", mrhi_errorState);
                 }
             }
         }
-        if (mrhiEndPass(native, now.shadowPass) != mrhi_success) {
-            return failed("the shadow pass could not end", mrhi_errorState);
+        if (mrhiEndPass(native, pass) != mrhi_success) {
+            return failed("a shadow pass could not end", mrhi_errorState);
         }
         return {};
+    }
+
+    /// The sun's cascades, each its square of the map two by two; and the
+    /// punctual lights' squares of their atlas.
+    result::Status castShadows(const Declared& now) {
+        std::vector<Square> squares;
+        const auto kSide = static_cast<float>(now.side);
+        for (std::size_t at = 0; at < now.cascadeCount; ++at) {
+            squares.push_back({.view = now.cascades[at],
+                               .viewport = {.x = static_cast<float>(at % 2) * kSide,
+                                            .y = static_cast<float>(at / 2) * kSide,
+                                            .width = kSide,
+                                            .height = kSide,
+                                            .minDepth = 0,
+                                            .maxDepth = 1},
+                               .casters = &now.placed.casterRuns});
+        }
+        RAWFRAME_TRY(cast(now, now.shadowPass, squares));
+        squares.clear();
+        for (std::size_t at = 0; at < now.slotViews.size(); ++at) {
+            squares.push_back(
+                {.view = now.slotViews[at], .viewport = now.slotViewports[at], .casters = &now.placed.slotRuns[at]});
+        }
+        return cast(now, now.lightShadowPass, squares);
     }
 
     /// What the open frame declared, until it is recorded and ends.
@@ -592,6 +389,16 @@ struct SceneRenderer::State {
         std::size_t cascadeCount = 0;
         std::uint32_t side = 0;
         mrhiPassId shadowPass{};
+        /// The punctual lights' shadow atlas, its squares as the shaders read
+        /// them, each square's view and where it lies, and the pass drawing
+        /// their casters (D292).
+        mrhiResourceId lightShadowMap{};
+        std::vector<SlotBlock> slots;
+        mrhiResourceId slotsResource{};
+        std::vector<Matrix4> slotMatrices;
+        std::vector<mrhiResourceId> slotViews;
+        std::vector<mrhiViewport> slotViewports;
+        mrhiPassId lightShadowPass{};
         /// The frame's lights, each cluster's first index and count, and
         /// the indices (D290), as written and as declared.
         std::vector<LightBlock> lights;
@@ -621,7 +428,7 @@ struct SceneRenderer::State {
             return {};
         }
         device->pump();
-        RAWFRAME_TRY_ASSIGN(const bool kReady, ready());
+        RAWFRAME_TRY_ASSIGN(const bool kReady, pipelines.ready());
         if (!kReady) {
             ++statistics.framesWaiting;
             return {};
@@ -632,6 +439,7 @@ struct SceneRenderer::State {
         const std::uint64_t kPlacementBytes =
             (std::uint64_t{frame->draws.size()} * kInstanceBytes) +
             (std::uint64_t{frame->lights3d.size()} * sizeof(LightBlock)) +
+            (std::uint64_t{frame->lightShadows.slots.size()} * (sizeof(SlotBlock) + sizeof(Matrix4))) +
             ((std::uint64_t{frame->clusters.ranges.size()} + frame->clusters.indices.size()) * sizeof(std::uint32_t));
         const std::uint64_t kBudget =
             kPlacementBytes < limits.uploadBytesPerFrame ? limits.uploadBytesPerFrame - kPlacementBytes : 0;
@@ -658,7 +466,9 @@ struct SceneRenderer::State {
             now.imported.emplace(mesh, std::pair{vertices, indices});
         }
         now.draws = !now.placed.runs.empty();
-        now.casters = !now.placed.casterRuns.empty();
+        now.casters = !now.placed.casterRuns.empty() || std::ranges::any_of(now.placed.slotRuns, [](const Runs& runs) {
+            return !runs.empty();
+        });
         if (now.draws || now.casters) {
             mrhiBufferDef def = mrhiDefaultBufferDef();
             def.size = now.placed.instances.size() * sizeof(float);
@@ -699,6 +509,37 @@ struct SceneRenderer::State {
             if (mrhiDeclareBuffer(native, &def, &now.cascades[at]) != mrhi_success) {
                 return failed("a cascade's view could not be declared", mrhi_errorCapacity);
             }
+        }
+        // The punctual lights' atlas: their squares, or a texel nothing reads
+        // the depth of when there are none; each square's view.
+        const render_scene::SceneLightShadows& kLightShadows = frame->lightShadows;
+        now.slots = slotsOf(*frame);
+        mrhiTextureDef atlasDef = mrhiDefaultTextureDef();
+        atlasDef.format = kShadowFormat;
+        atlasDef.width = std::max<std::uint32_t>(kLightShadows.side, 1);
+        atlasDef.height = atlasDef.width;
+        if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &atlasDef, &now.lightShadowMap);
+            kDeclared != mrhi_success) {
+            return failed("the lights' shadow atlas could not be declared", kDeclared);
+        }
+        mrhiBufferDef slotsDef = mrhiDefaultBufferDef();
+        slotsDef.size = now.slots.size() * sizeof(SlotBlock);
+        if (mrhiDeclareBuffer(native, &slotsDef, &now.slotsResource) != mrhi_success) {
+            return failed("the lights' shadow squares could not be declared", mrhi_errorCapacity);
+        }
+        for (const render_scene::ShadowSlot& slot : kLightShadows.slots) {
+            mrhiBufferDef def = mrhiDefaultBufferDef();
+            def.size = sizeof(Matrix4);
+            if (mrhiDeclareBuffer(native, &def, &now.slotViews.emplace_back()) != mrhi_success) {
+                return failed("a shadow square's view could not be declared", mrhi_errorCapacity);
+            }
+            now.slotMatrices.push_back(slot.viewProjection);
+            now.slotViewports.push_back({.x = static_cast<float>(slot.x),
+                                         .y = static_cast<float>(slot.y),
+                                         .width = static_cast<float>(slot.side),
+                                         .height = static_cast<float>(slot.side),
+                                         .minDepth = 0,
+                                         .maxDepth = 1});
         }
         mrhiResourceId depthTarget{};
         // Antialiased over time, the models' pass also writes their motion,
@@ -750,6 +591,10 @@ struct SceneRenderer::State {
         if (now.temporal) {
             writes.push_back(wholeOf(now.temporalResource, mrhi_accessCopyDestination));
         }
+        writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
+        for (const mrhiResourceId kView : now.slotViews) {
+            writes.push_back(wholeOf(kView, mrhi_accessCopyDestination));
+        }
         for (const Held* mesh : now.uploads) {
             writes.push_back(wholeOf(now.imported.at(mesh).first, mrhi_accessCopyDestination));
             writes.push_back(wholeOf(now.imported.at(mesh).second, mrhi_accessCopyDestination));
@@ -790,13 +635,33 @@ struct SceneRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &shadowDef2, &now.shadowPass); kAdded != mrhi_success) {
             return failed("the shadow pass could not be added", kAdded);
         }
+        std::vector<mrhiAccess> slotReads = meshReads;
+        for (const mrhiResourceId kView : now.slotViews) {
+            slotReads.push_back(wholeOf(kView, mrhi_accessUniform));
+        }
+        mrhiPassDef atlasPassDef = shadowDef2;
+        atlasPassDef.accesses = slotReads.data();
+        atlasPassDef.accessCount = static_cast<std::uint32_t>(slotReads.size());
+        atlasPassDef.depthTarget.resource = now.lightShadowMap;
+        if (const mrhiResult kAdded = mrhiAddPass(native, &atlasPassDef, &now.lightShadowPass);
+            kAdded != mrhi_success) {
+            return failed("the lights' shadow pass could not be added", kAdded);
+        }
         // The models' passes read the shadow map too: the scene's table
         // holds it for both.
         std::vector<mrhiAccess> reads = meshReads;
         reads.push_back(wholeOf(now.blockResource, mrhi_accessUniform));
-        for (const mrhiResourceId kLights : {now.lightsResource, now.rangesResource, now.indicesResource}) {
+        for (const mrhiResourceId kLights :
+             {now.lightsResource, now.rangesResource, now.indicesResource, now.slotsResource}) {
             reads.push_back(wholeOf(kLights, mrhi_accessStorageRead));
         }
+        reads.push_back(mrhiAccess{.resource = now.lightShadowMap,
+                                   .kind = mrhi_accessSampled,
+                                   .range = {.baseMip = 0,
+                                             .mipCount = MRHI_REMAINING,
+                                             .baseLayer = 0,
+                                             .layerCount = 1,
+                                             .aspect = mrhi_aspectDepthOnly}});
         reads.push_back(mrhiAccess{.resource = now.shadowMap,
                                    .kind = mrhi_accessSampled,
                                    .range = {.baseMip = 0,
@@ -922,6 +787,17 @@ struct SceneRenderer::State {
                 return failed("a cascade's view could not be written", mrhi_errorCapacity);
             }
         }
+        if (mrhiWriteBuffer(
+                native, now.upload, now.slotsResource, 0, now.slots.data(), now.slots.size() * sizeof(SlotBlock)) !=
+            mrhi_success) {
+            return failed("the lights' shadow squares could not be written", mrhi_errorCapacity);
+        }
+        for (std::size_t at = 0; at < now.slotViews.size(); ++at) {
+            if (mrhiWriteBuffer(native, now.upload, now.slotViews[at], 0, &now.slotMatrices[at], sizeof(Matrix4)) !=
+                mrhi_success) {
+                return failed("a shadow square's view could not be written", mrhi_errorCapacity);
+            }
+        }
         for (const Held* mesh : now.uploads) {
             const std::vector<float> kVertices = verticesOf(*mesh->source);
             const auto& [kVertexResource, kIndexResource] = now.imported.at(mesh);
@@ -951,7 +827,7 @@ struct SceneRenderer::State {
                                .range = {},
                                .sampler = {}};
         };
-        const std::array<mrhiBinding, 6> kFrameBinding = {
+        const std::array<mrhiBinding, 8> kFrameBinding = {
             mrhiBinding{.slot = 0,
                         .resource = now.blockResource,
                         .offset = 0,
@@ -979,12 +855,25 @@ struct SceneRenderer::State {
                         .viewKind = mrhi_texture2d,
                         .viewFormat = mrhi_formatNone,
                         .range = {},
-                        .sampler = shadowSampler},
+                        .sampler = pipelines.shadowSampler},
             kStored(3, now.lightsResource, now.lights.size() * sizeof(LightBlock)),
             kStored(4, now.rangesResource, now.ranges.size() * 4),
-            kStored(5, now.indicesResource, now.indices.size() * 4)};
+            kStored(5, now.indicesResource, now.indices.size() * 4),
+            mrhiBinding{.slot = 6,
+                        .resource = now.lightShadowMap,
+                        .offset = 0,
+                        .size = 0,
+                        .viewKind = mrhi_texture2d,
+                        .viewFormat = mrhi_formatNone,
+                        .range = {.baseMip = 0,
+                                  .mipCount = MRHI_REMAINING,
+                                  .baseLayer = 0,
+                                  .layerCount = 1,
+                                  .aspect = mrhi_aspectDepthOnly},
+                        .sampler = {}},
+            kStored(7, now.slotsResource, now.slots.size() * sizeof(SlotBlock))};
         for (const auto& [kPass, kPipeline] :
-             {std::pair{now.depthPass, depth.pipeline}, std::pair{now.litPass, lit.pipeline}}) {
+             {std::pair{now.depthPass, pipelines.depth.pipeline}, std::pair{now.litPass, pipelines.lit.pipeline}}) {
             if (mrhiBeginPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not begin", mrhi_errorState);
             }
@@ -1027,7 +916,7 @@ struct SceneRenderer::State {
             .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
             .sampler = {}}};
         if (mrhiBeginPass(native, now.picturePass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native, now.picturePass, tonemap.pipeline) != mrhi_success ||
+            mrhiSetGraphicsPipeline(native, now.picturePass, pipelines.tonemap.pipeline) != mrhi_success ||
             mrhiSetBindings(native, now.picturePass, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
             mrhiDraw(native, now.picturePass, 3, 1, 0, 0) != mrhi_success ||
             mrhiEndPass(native, now.picturePass) != mrhi_success) {
@@ -1080,7 +969,9 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->device = &device;
     state->native = device.native();
     state->limits = limits;
-    RAWFRAME_TRY(state->makePipelines());
+    state->pipelines.device = &device;
+    state->pipelines.native = device.native();
+    RAWFRAME_TRY(state->pipelines.make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }
 
