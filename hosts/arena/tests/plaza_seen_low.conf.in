@@ -1,0 +1,13 @@
+# The plaza seen as plaza_seen.conf.in has it, its materials drawn at the
+# low quality (D318): the paving's switch gives the floor a plain grey, so
+# the one texture sampled is the crates' planks.
+host.maximum_iterations = 240
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/plaza/plaza.game
+content.root = @PLAZA_CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 2
+bots.endpoint = arena
+scene.quality = low

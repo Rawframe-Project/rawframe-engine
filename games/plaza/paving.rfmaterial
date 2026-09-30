@@ -27,8 +27,8 @@
       "params": {},
       "inputs": {
         "base_color": {
-          "node": "ccccefa318eab68e",
-          "output": "color"
+          "node": "d3a1c8e5b7f20946",
+          "output": "out"
         },
         "specular_roughness": 0.8
       }
@@ -43,6 +43,21 @@
           "node": "596e8917cecb5b4d",
           "output": "out"
         }
+      }
+    },
+    "d3a1c8e5b7f20946": {
+      "type": "rawframe/quality_switch@1",
+      "params": {},
+      "inputs": {
+        "default": {
+          "node": "ccccefa318eab68e",
+          "output": "color"
+        },
+        "low": [
+          0.7,
+          0.7,
+          0.7
+        ]
       }
     }
   }

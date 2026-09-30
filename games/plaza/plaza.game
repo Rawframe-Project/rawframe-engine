@@ -19,7 +19,8 @@ mesh 7f3a9c21e84d06b5 crate.gltf
 # polished marble, and the floor paved, its slabs a texture (D309), kept
 # exact: the browser test's software renderer pays dearly for sampling
 # BC7, and its page runs the game on the same thread; everything else has
-# no material and is its color.
+# no material and is its color. At the low quality the paving is a plain
+# grey and samples no texture (D318).
 texture 9f822820a44af4fc paving.png
 material 6d2c9bd611d50fdf brass.rfmaterial
 material e4443f63fe935232 marble.rfmaterial
