@@ -1,3 +1,4 @@
+#include "rawframe/base/platform.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/render/device.h"
@@ -9,11 +10,14 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <fstream>
+#endif
 
 namespace rawframe::render_canvas_gpu {
 
@@ -39,6 +43,7 @@ std::uint64_t coveredOf(const std::vector<std::byte>& pixels) noexcept {
     return covered;
 }
 
+#if RAWFRAME_FILE_SYSTEM
 /// A frame's pixels, RGBA8 rows top first, as an uncompressed TGA image:
 /// the simplest file every image tool opens.
 std::vector<std::byte> tgaOf(const std::vector<std::byte>& pixels, std::uint32_t width, std::uint32_t height) {
@@ -59,6 +64,7 @@ std::vector<std::byte> tgaOf(const std::vector<std::byte>& pixels, std::uint32_t
     }
     return image;
 }
+#endif
 
 /// Draws the canvas's frames on the one device, one on the GPU at a time:
 /// shown on the process's window where it has one, else offscreen when
@@ -77,6 +83,16 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(readEvery_, configuration.unsignedInteger("canvas.read_every", 60));
         capture_ = configuration.path("canvas.capture");
+#if !RAWFRAME_FILE_SYSTEM
+        if (capture_.has_value()) {
+            // A capture is a file, and there are none here.
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
+                                                               composition::kCompositionDomain,
+                                                               code(composition::CompositionError::BadConfiguration),
+                                                               "canvas.capture names a file, and there are none here")
+                                                      .error()};
+        }
+#endif
         if (!context.has(render::kDevice.name) || !context.has(render_canvas::kCanvasFrames.name)) {
             return {};
         }
@@ -192,10 +208,12 @@ public:
         }
         bool captured = false;
         if (capture_.has_value() && last_.has_value()) {
+#if RAWFRAME_FILE_SYSTEM
             const std::vector<std::byte> kImage = tgaOf(*last_, capturedWidth_, capturedHeight_);
             std::ofstream file{*capture_, std::ios::binary};
             file.write(reinterpret_cast<const char*>(kImage.data()), static_cast<std::streamsize>(kImage.size()));
             captured = static_cast<bool>(file);
+#endif
         }
         emitter_.log(diagnostics::Severity::Info,
                      kDrawingSummary,
