@@ -87,6 +87,16 @@ struct RendererStatistics {
 /// its reflection probe's (D325).
 inline constexpr std::uint32_t kInstanceBytes = 156;
 
+/// A frame's light as its scene target held it before the tonemapper
+/// (D326): linear Rec. 709 in candela per square meter, red, green, and
+/// blue for each pixel, rows top first. Divided by the exposure the frame
+/// names: a metering camera's is off by what its metering moved.
+struct LightCapture {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::vector<float> light;
+};
+
 class SceneRenderer final : public render::FrameRecorder {
 public:
     /// Makes the scene's pipelines on `device`, which must be ready and must
@@ -107,6 +117,14 @@ public:
     void ended(bool submitted) noexcept override;
 
     [[nodiscard]] const RendererStatistics& statistics() const noexcept;
+
+    /// Reads back the light of the next frame submitted with a scene, one
+    /// the device reads back at once (`render::kReadbackBytes`), for a
+    /// tool (D326).
+    void capture() noexcept;
+    /// The light captured, once the device finished its frame; given once.
+    /// Never waits.
+    [[nodiscard]] std::optional<LightCapture> captured();
 
     struct State;
 

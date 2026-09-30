@@ -1,6 +1,7 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 
 #include "blocks.h"
+#include "capture.h"
 #include "environment.h"
 #include "meshes.h"
 #include "metering.h"
@@ -60,6 +61,8 @@ struct SceneRenderer::State {
     std::optional<TemporalPass> temporal;
     /// The exposure the device holds, and its metering (D293).
     std::optional<Metering> metering;
+    /// Its light read back for a tool (D326).
+    std::optional<LightCapturing> capturing;
     std::optional<DeviceMeshes> held;
     /// The materials' textures (D309), and the white one a material
     /// sampling none samples, held as texture nought.
@@ -627,6 +630,7 @@ struct SceneRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &litDef, &now.litPass); kAdded != mrhi_success) {
             return failed("the models' pass could not be added", kAdded);
         }
+        RAWFRAME_TRY(capturing->declare(now.scene, open.width, open.height, now.block.exposure[0]));
         RAWFRAME_TRY(metering->addPasses(now.scene));
         RAWFRAME_TRY(temporal->addPass(now.scene, now.motion));
         // The picture: every pixel of it written, over whatever was there;
@@ -833,6 +837,7 @@ struct SceneRenderer::State {
                 return failed("a scene pass could not end", mrhi_errorState);
             }
         }
+        RAWFRAME_TRY(capturing->record(now.scene));
         RAWFRAME_TRY(metering->record(pipelines, now.scene, now.width, now.height));
         RAWFRAME_TRY(temporal->record(pipelines, now.scene, now.motion));
         const std::array<mrhiBinding, 2> kSceneBinding = {textureAt(0, temporal->shown(now.scene)),
@@ -885,6 +890,7 @@ struct SceneRenderer::State {
             ++statistics.framesMetered;
         }
         metering->ended(submitted);
+        capturing->ended(submitted);
         declared.reset();
     }
 
@@ -917,6 +923,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     RAWFRAME_TRY(state->pipelines.make());
     state->metering.emplace(device.native());
     state->temporal.emplace(device.native());
+    state->capturing.emplace(device);
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }
@@ -941,6 +948,14 @@ void SceneRenderer::ended(bool submitted) noexcept {
 
 const RendererStatistics& SceneRenderer::statistics() const noexcept {
     return state_->statistics;
+}
+
+void SceneRenderer::capture() noexcept {
+    state_->capturing->ask();
+}
+
+std::optional<LightCapture> SceneRenderer::captured() {
+    return state_->capturing->taken();
 }
 
 } // namespace rawframe::render_scene_gpu
