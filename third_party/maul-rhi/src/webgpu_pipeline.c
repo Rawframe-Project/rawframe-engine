@@ -16,13 +16,12 @@
 #include "container.h"
 #include "invariant.h"
 #include "reflection.h"
+#include "web_js.h"
 #include "webgpu_names.h"
-
-#include <emscripten/em_js.h>
 
 // clang-format off
 // The contract's enums by value, as WebGPU names them.
-EM_JS(void, JsDefineNames, (void), {
+EM_JS(void, mrhiJsDefineNames, (void), {
     const gpu = Module.mrhiGpu;
     if (gpu.names) {
         return;
@@ -58,7 +57,7 @@ EM_JS(void, JsDefineNames, (void), {
     };
 });
 
-EM_JS(int, JsCreateShader, (int state, const char* code, double bytes, const char* label,
+EM_JS(int, mrhiJsCreateShader, (int state, const char* code, double bytes, const char* label,
                             int labelLength), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
@@ -70,11 +69,11 @@ EM_JS(int, JsCreateShader, (int state, const char* code, double bytes, const cha
 
 // Starts a descriptor: the tables' layouts, the constants, and the
 // render state, filled by the calls that follow.
-EM_JS(void, JsBegin, (int state), {
+EM_JS(void, mrhiJsBegin, (int state), {
     Module.mrhiGpu.states[state].building = {tables: [], constants: {}, buffers: [], targets: []};
 });
 
-EM_JS(void, JsBinding, (int state, uint32_t table, uint32_t slot, uint32_t kind, uint32_t stages,
+EM_JS(void, mrhiJsBinding, (int state, uint32_t table, uint32_t slot, uint32_t kind, uint32_t stages,
                         uint32_t sampler, uint32_t sampleType, uint32_t dimension,
                         uint32_t access, const char* format, bool multisampled, double minSize), {
     const gpu = Module.mrhiGpu;
@@ -102,24 +101,24 @@ EM_JS(void, JsBinding, (int state, uint32_t table, uint32_t slot, uint32_t kind,
     building.tables[table].push(entry);
 });
 
-EM_JS(void, JsConstant, (int state, uint32_t id, double value), {
+EM_JS(void, mrhiJsConstant, (int state, uint32_t id, double value), {
     Module.mrhiGpu.states[state].building.constants[id] = value;
 });
 
-EM_JS(void, JsVertexBuffer, (int state, uint32_t stride, uint32_t step), {
+EM_JS(void, mrhiJsVertexBuffer, (int state, uint32_t stride, uint32_t step), {
     const gpu = Module.mrhiGpu;
     gpu.states[state].building.buffers.push({arrayStride: stride, stepMode: gpu.names.steps[step],
                                              attributes: []});
 });
 
-EM_JS(void, JsVertexAttribute, (int state, uint32_t buffer, uint32_t location, uint32_t format,
+EM_JS(void, mrhiJsVertexAttribute, (int state, uint32_t buffer, uint32_t location, uint32_t format,
                                 uint32_t offset), {
     const gpu = Module.mrhiGpu;
     gpu.states[state].building.buffers[buffer].attributes.push(
         {shaderLocation: location, format: gpu.names.vertex[format], offset});
 });
 
-EM_JS(void, JsPrimitive, (int state, uint32_t topology, uint32_t stripIndex, uint32_t face,
+EM_JS(void, mrhiJsPrimitive, (int state, uint32_t topology, uint32_t stripIndex, uint32_t face,
                           uint32_t cull, bool unclipped), {
     const names = Module.mrhiGpu.names;
     const primitive = {topology: names.topologies[topology], frontFace: names.faces[face],
@@ -134,7 +133,7 @@ EM_JS(void, JsPrimitive, (int state, uint32_t topology, uint32_t stripIndex, uin
 });
 
 // A stencil face from its compare, fail, depth fail and pass values.
-EM_JS(void, JsDepthStencil, (int state, const char* format, bool write, uint32_t compare,
+EM_JS(void, mrhiJsDepthStencil, (int state, const char* format, bool write, uint32_t compare,
                              const uint32_t* front, const uint32_t* back, uint32_t readMask,
                              uint32_t writeMask, int32_t bias, float slope, float clamp), {
     const names = Module.mrhiGpu.names;
@@ -158,14 +157,14 @@ EM_JS(void, JsDepthStencil, (int state, const char* format, bool write, uint32_t
     };
 });
 
-EM_JS(void, JsMultisample, (int state, uint32_t count, uint32_t mask, bool alphaToCoverage), {
+EM_JS(void, mrhiJsMultisample, (int state, uint32_t count, uint32_t mask, bool alphaToCoverage), {
     Module.mrhiGpu.states[state].building.multisample = {count, mask: mask >>> 0,
                                                           alphaToCoverageEnabled: alphaToCoverage};
 });
 
 // A color target, or a gap for a null format; its blend's factors and
 // operations as color then alpha.
-EM_JS(void, JsColorTarget, (int state, const char* format, bool blend, const uint32_t* factors,
+EM_JS(void, mrhiJsColorTarget, (int state, const char* format, bool blend, const uint32_t* factors,
                             uint32_t writeMask), {
     const names = Module.mrhiGpu.names;
     const building = Module.mrhiGpu.states[state].building;
@@ -186,7 +185,7 @@ EM_JS(void, JsColorTarget, (int state, const char* format, bool blend, const uin
 
 // Starts the pipeline the descriptor describes and returns its handle;
 // it settles into the state's queue unless destroyed first.
-EM_JS(int, JsStart, (int state, bool compute, int shader, const char* vertex, int vertexLength,
+EM_JS(int, mrhiJsStart, (int state, bool compute, int shader, const char* vertex, int vertexLength,
                      const char* fragment, int fragmentLength, uint32_t immediates,
                      const char* label, int labelLength, int failure), {
     const gpu = Module.mrhiGpu;
@@ -240,7 +239,7 @@ EM_JS(int, JsStart, (int state, bool compute, int shader, const char* vertex, in
 });
 
 // The next settled pipeline, or -1; its outcome through outcomeOut.
-EM_JS(int, JsTakePipeline, (int state, int32_t* outcomeOut), {
+EM_JS(int, mrhiJsTakePipeline, (int state, int32_t* outcomeOut), {
     const next = Module.mrhiGpu.states[state].pipelines.shift();
     if (!next) {
         return -1;
@@ -254,29 +253,29 @@ EM_JS_DEPS(mrhi_webgpu_pipeline, "$UTF8ToString");
 
 void mrhiWebGpuDefineNames(void)
 {
-    JsDefineNames();
+    mrhiJsDefineNames();
 }
 
 uint64_t mrhiWebGpuCreateShader(int state, const mrhiShaderDef* def, const mrhiContainer* container)
 {
-    return (uint64_t)JsCreateShader(state, (const char*)container->wgsl,
-                                    (double)container->wgslBytes, def->label,
-                                    (int)def->labelLength);
+    return (uint64_t)mrhiJsCreateShader(state, (const char*)container->wgsl,
+                                        (double)container->wgslBytes, def->label,
+                                        (int)def->labelLength);
 }
 
 // Describes the whole container's bindings, table by table.
 static void DescribeLayout(int state, const mrhiReflection* reflection)
 {
-    JsBegin(state);
+    mrhiJsBegin(state);
     for (uint32_t i = 0; i < reflection->bindingCount; ++i)
     {
         const mrhiShaderBinding* binding = &reflection->bindings[i];
         const char* format = binding->kind == mrhi_bindingStorageTexture
                                  ? mrhiWebGpuFormat(binding->format)
                                  : nullptr;
-        JsBinding(state, binding->table, binding->slot, binding->kind, binding->stages,
-                  binding->sampler, binding->sampleType, binding->viewDimension, binding->access,
-                  format, binding->multisampled, (double)binding->minSize);
+        mrhiJsBinding(state, binding->table, binding->slot, binding->kind, binding->stages,
+                      binding->sampler, binding->sampleType, binding->viewDimension,
+                      binding->access, format, binding->multisampled, (double)binding->minSize);
     }
 }
 
@@ -284,7 +283,7 @@ static void DescribeConstants(int state, const mrhiConstantValue* constants, uin
 {
     for (uint32_t i = 0; i < count; ++i)
     {
-        JsConstant(state, constants[i].id, constants[i].value);
+        mrhiJsConstant(state, constants[i].id, constants[i].value);
     }
 }
 
@@ -302,9 +301,9 @@ uint64_t mrhiWebGpuStartComputePipeline(int state, const mrhiDriverComputePipeli
     DescribeConstants(state, pipeline->constants, pipeline->constantCount);
     int length = 0;
     const char* entry = EntryName(pipeline->reflection, pipeline->entry, &length);
-    return (uint64_t)JsStart(state, true, (int)pipeline->shader, entry, length, nullptr, 0,
-                             pipeline->reflection->rootBlockBytes, pipeline->label,
-                             (int)pipeline->labelLength, mrhi_errorPlatform);
+    return (uint64_t)mrhiJsStart(state, true, (int)pipeline->shader, entry, length, nullptr, 0,
+                                 pipeline->reflection->rootBlockBytes, pipeline->label,
+                                 (int)pipeline->labelLength, mrhi_errorPlatform);
 }
 
 // The render state of a graphics def.
@@ -312,27 +311,28 @@ static void DescribeRender(int state, const mrhiGraphicsPipelineDef* def)
 {
     for (uint32_t i = 0; i < def->vertexBufferCount; ++i)
     {
-        JsVertexBuffer(state, def->vertexBuffers[i].stride, def->vertexBuffers[i].stepMode);
+        mrhiJsVertexBuffer(state, def->vertexBuffers[i].stride, def->vertexBuffers[i].stepMode);
     }
     for (uint32_t i = 0; i < def->vertexAttributeCount; ++i)
     {
         const mrhiVertexAttribute* attribute = &def->vertexAttributes[i];
-        JsVertexAttribute(state, attribute->buffer, attribute->location, attribute->format,
-                          attribute->offset);
+        mrhiJsVertexAttribute(state, attribute->buffer, attribute->location, attribute->format,
+                              attribute->offset);
     }
-    JsPrimitive(state, def->topology, def->stripIndexFormat, def->frontFace, def->cullMode,
-                def->unclippedDepth);
+    mrhiJsPrimitive(state, def->topology, def->stripIndexFormat, def->frontFace, def->cullMode,
+                    def->unclippedDepth);
     if (def->depthStencilFormat != mrhi_formatNone)
     {
         const uint32_t front[4] = {def->stencilFront.compare, def->stencilFront.failOp,
                                    def->stencilFront.depthFailOp, def->stencilFront.passOp};
         const uint32_t back[4] = {def->stencilBack.compare, def->stencilBack.failOp,
                                   def->stencilBack.depthFailOp, def->stencilBack.passOp};
-        JsDepthStencil(state, mrhiWebGpuFormat(def->depthStencilFormat), def->depthWrite,
-                       def->depthCompare, front, back, def->stencilReadMask, def->stencilWriteMask,
-                       def->depthBias, def->depthBiasSlopeScale, def->depthBiasClamp);
+        mrhiJsDepthStencil(state, mrhiWebGpuFormat(def->depthStencilFormat), def->depthWrite,
+                           def->depthCompare, front, back, def->stencilReadMask,
+                           def->stencilWriteMask, def->depthBias, def->depthBiasSlopeScale,
+                           def->depthBiasClamp);
     }
-    JsMultisample(state, def->sampleCount, def->sampleMask, def->alphaToCoverage);
+    mrhiJsMultisample(state, def->sampleCount, def->sampleMask, def->alphaToCoverage);
     for (uint32_t i = 0; i < def->colorTargetCount; ++i)
     {
         const mrhiColorTargetState* target = &def->colorTargets[i];
@@ -341,7 +341,7 @@ static void DescribeRender(int state, const mrhiGraphicsPipelineDef* def)
                                      target->alpha.dstFactor, target->alpha.operation};
         const char* format =
             target->format == mrhi_formatNone ? nullptr : mrhiWebGpuFormat(target->format);
-        JsColorTarget(state, format, target->blend, factors, target->writeMask);
+        mrhiJsColorTarget(state, format, target->blend, factors, target->writeMask);
     }
 }
 
@@ -358,15 +358,15 @@ uint64_t mrhiWebGpuStartGraphicsPipeline(int state, const mrhiDriverGraphicsPipe
     const char* fragment = pipeline->fragmentEntry < reflection->entryCount
                                ? EntryName(reflection, pipeline->fragmentEntry, &fragmentLength)
                                : nullptr;
-    return (uint64_t)JsStart(state, false, (int)pipeline->shader, vertex, vertexLength, fragment,
-                             fragmentLength, reflection->rootBlockBytes, def->label,
-                             (int)def->labelLength, mrhi_errorPlatform);
+    return (uint64_t)mrhiJsStart(state, false, (int)pipeline->shader, vertex, vertexLength,
+                                 fragment, fragmentLength, reflection->rootBlockBytes, def->label,
+                                 (int)def->labelLength, mrhi_errorPlatform);
 }
 
 bool mrhiWebGpuTakePipeline(int state, uint64_t* handleOut, mrhiResult* outcomeOut)
 {
     int32_t outcome = 0;
-    int handle = JsTakePipeline(state, &outcome);
+    int handle = mrhiJsTakePipeline(state, &outcome);
     if (handle < 0)
     {
         return false;

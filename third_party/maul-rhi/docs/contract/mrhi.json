@@ -394,7 +394,7 @@
             },
             "metal": {
               "class": "restricted",
-              "note": "lowPower and hasUnifiedMemory for integrated; no virtual or software"
+              "note": "hasUnifiedMemory for integrated; Apple's paravirtual device, known by its name, as virtual; never software"
             },
             "web_gpu": {
               "class": "restricted",
@@ -961,7 +961,7 @@
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "counter sampling at stage boundaries"
+                  "note": "the timestamp counter set, sampled at stage or encoder boundaries (not granted yet)"
                 },
                 "web_gpu": {
                   "class": "restricted",
@@ -1303,11 +1303,11 @@
                 },
                 "d3d12": {
                   "class": "restricted",
-                  "note": "resource binding tier 2"
+                  "note": "resource binding tier 3"
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "argument buffers tier 2"
+                  "note": "MTLGPUFamilyMetal3: descriptors in a plain buffer (not granted yet)"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -1330,7 +1330,7 @@
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "argument buffers tier 2"
+                  "note": "MTLGPUFamilyMetal3: descriptors in a plain buffer (not granted yet)"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -2081,11 +2081,11 @@
                 },
                 "d3d12": {
                   "class": "restricted",
-                  "note": "1000000 at tier 2"
+                  "note": "65536 at resource binding tier 3"
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "argument buffers tier 2"
+                  "note": "MTLGPUFamilyMetal3 (not granted yet)"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -2105,11 +2105,11 @@
                 },
                 "d3d12": {
                   "class": "restricted",
-                  "note": "2048, or the queried maximum"
+                  "note": "256: the heaps and the frames' rings share 2048 samplers"
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "argument buffer samplers"
+                  "note": "MTLGPUFamilyMetal3 (not granted yet)"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -6206,6 +6206,33 @@
                   "note": "\"unknown\" with its message"
                 }
               }
+            },
+            {
+              "name": "loss_simulated",
+              "value": 5,
+              "doc": "The program lost the device through mrhiSimulateDeviceLoss; the GPU is fine.",
+              "mapping": {
+                "vulkan": {
+                  "class": "emulated",
+                  "note": "lost by mrhiSimulateDeviceLoss, the API told nothing",
+                  "cost": "none: a flag in the core"
+                },
+                "d3d12": {
+                  "class": "emulated",
+                  "note": "lost by mrhiSimulateDeviceLoss, the API told nothing",
+                  "cost": "none: a flag in the core"
+                },
+                "metal": {
+                  "class": "emulated",
+                  "note": "lost by mrhiSimulateDeviceLoss, the API told nothing",
+                  "cost": "none: a flag in the core"
+                },
+                "web_gpu": {
+                  "class": "emulated",
+                  "note": "lost by mrhiSimulateDeviceLoss, the API told nothing",
+                  "cost": "none: a flag in the core"
+                }
+              }
             }
           ]
         },
@@ -6303,6 +6330,28 @@
             "object": "the device"
           },
           "library": "reads what the library kept of the loss"
+        },
+        {
+          "kind": "function",
+          "name": "simulate_device_loss",
+          "doc": "Loses a ready device as a driver's report of a loss would: the notice, then every running frame, its readbacks and every pending pipeline answered `mrhi_errorDeviceLost`, which every call that needs the GPU answers afterwards. The driver is told nothing; its work finishes unseen. The report's reason is `mrhi_lossSimulated`. For testing a program's recovery.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device; `mrhi_errorState` for a device still opening; `mrhi_errorDeviceLost` for a device already lost."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "library": "the core loses the device as a driver's report would"
         }
       ]
     },
@@ -8881,7 +8930,7 @@
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "a texture in the argument buffer"
+                  "note": "a texture's gpuResourceID in the heap's buffer"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -8904,7 +8953,7 @@
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "a texture in the argument buffer, read or written"
+                  "note": "a texture's gpuResourceID in the heap's buffer, read or written"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -8923,11 +8972,11 @@
                 },
                 "d3d12": {
                   "class": "restricted",
-                  "note": "a raw or structured view, or an unordered access view"
+                  "note": "a raw unordered access view when writable, else a raw shader resource view"
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "a buffer address in the argument buffer"
+                  "note": "a buffer's gpuAddress in the heap's buffer"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -9148,11 +9197,11 @@
                 },
                 "d3d12": {
                   "class": "restricted",
-                  "note": "the shader-visible CBV_SRV_UAV heap's descriptors"
+                  "note": "a region of every frame slot's shader-visible CBV_SRV_UAV heap"
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "the argument buffer's resource slots"
+                  "note": "the heap buffer's resource descriptors"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -9171,11 +9220,11 @@
                 },
                 "d3d12": {
                   "class": "restricted",
-                  "note": "the shader-visible sampler heap's descriptors"
+                  "note": "a region of every frame slot's shader-visible sampler heap"
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "the argument buffer's sampler slots"
+                  "note": "the heap buffer's sampler descriptors"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -9341,7 +9390,7 @@
             },
             "metal": {
               "class": "restricted",
-              "note": "the argument buffer's slot written"
+              "note": "the heap buffer's descriptor written"
             },
             "web_gpu": {
               "class": "absent_rejected",
@@ -9427,7 +9476,7 @@
             },
             "metal": {
               "class": "restricted",
-              "note": "the argument buffer's sampler slot written"
+              "note": "the heap buffer's sampler descriptor written"
             },
             "web_gpu": {
               "class": "absent_rejected",
@@ -10399,6 +10448,39 @@
           }
         },
         {
+          "kind": "function",
+          "name": "suggest_surface_color",
+          "doc": "Suggests the color to configure a surface with, from what its caps report, in the library's fallback order: the color asked for, then half floats in linear Rec. 709 of extended range, then 8-bit sRGB in Rec. 709 of standard range, the caps' first such format. The program applies the suggestion or chooses otherwise; configuring never replaces a color.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success` with the color; `mrhi_errorInvalid` for a NULL argument, or caps reporting more than MRHI_SURFACE_COLORS colors; `mrhi_errorUnsupported` when the caps report none of the three, which a surface that presents always does."
+          },
+          "args": [
+            {
+              "name": "caps",
+              "type": "struct.surface_caps",
+              "pointer": "const",
+              "doc": "The caps the surface reported."
+            },
+            {
+              "name": "asked",
+              "type": "struct.surface_color",
+              "pointer": "const",
+              "doc": "The color the program wants first."
+            },
+            {
+              "name": "color_out",
+              "type": "struct.surface_color",
+              "pointer": "mutable",
+              "doc": "Receives the color to configure."
+            }
+          ],
+          "thread_safety": {
+            "class": "any"
+          },
+          "library": "picks among the reported colors in the library's fallback order"
+        },
+        {
           "kind": "struct",
           "name": "surface_config",
           "def": true,
@@ -10640,7 +10722,7 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "CreateSwapChainForHwnd, or ResizeBuffers when only the size changes"
+              "note": "CreateSwapChainForHwnd with three flip-discard buffers, after the frames using an earlier swapchain of the window finish, since a window holds one"
             },
             "metal": {
               "class": "direct",
@@ -10685,7 +10767,7 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "the swapchain released once those frames finish"
+              "note": "the swapchain released once those frames finish, which unconfiguring waits for"
             },
             "metal": {
               "class": "direct",
@@ -11031,7 +11113,7 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "a placed resource in the frame's heap, aliased by lifetime"
+              "note": "a placed resource in the frame's heap, aliased by lifetime, or a committed resource of its own where resource heap tier 1 keeps buffers and textures apart"
             },
             "metal": {
               "class": "direct",
@@ -11083,7 +11165,7 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "a placed resource in the frame's heap, aliased by lifetime"
+              "note": "a placed resource in the frame's heap, aliased by lifetime, or a committed resource of its own where resource heap tier 1 keeps buffers and textures apart"
             },
             "metal": {
               "class": "direct",
@@ -11200,7 +11282,7 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "GetCurrentBackBufferIndex, and the swapchain's occlusion status"
+              "note": "the frame latency waitable object, then GetCurrentBackBufferIndex; a minimized window is occluded, and one whose size is no longer the swapchain's suboptimal"
             },
             "metal": {
               "class": "direct",
@@ -11331,7 +11413,7 @@
                 },
                 "d3d12": {
                   "class": "direct",
-                  "note": "a copy queue"
+                  "note": "the direct queue, as every pass"
                 },
                 "metal": {
                   "class": "direct",
@@ -11849,7 +11931,7 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "D3D12_RENDER_PASS_BEGINNING_ACCESS_CLEAR_PARAMETERS"
+              "note": "ClearRenderTargetView"
             },
             "metal": {
               "class": "direct",
@@ -11919,7 +12001,7 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "D3D12_RENDER_PASS_RENDER_TARGET_DESC"
+              "note": "a render target view of its mip and layer, set with OMSetRenderTargets"
             },
             "metal": {
               "class": "direct",
@@ -12665,16 +12747,21 @@
               "name": "after",
               "type": "enum.resource_state",
               "doc": "Its state from then."
+            },
+            {
+              "name": "aliasing",
+              "type": "bool",
+              "doc": "Whether it is the first use of a declared resource placed over memory that resources used earlier in the frame: it then also waits for their uses, and comes from the undefined state even for a buffer."
             }
           ],
           "mapping": {
             "vulkan": {
               "class": "direct",
-              "note": "VkImageMemoryBarrier2 and VkBufferMemoryBarrier2 in vkCmdPipelineBarrier2"
+              "note": "VkImageMemoryBarrier2 and VkBufferMemoryBarrier2 in vkCmdPipelineBarrier2, an aliasing one waiting for all commands' writes"
             },
             "d3d12": {
               "class": "direct",
-              "note": "ResourceBarrier transitions, or enhanced barriers where present"
+              "note": "ResourceBarrier transitions, an aliasing one led by an aliasing barrier"
             },
             "metal": {
               "class": "direct",
@@ -13916,11 +14003,11 @@
                 },
                 "d3d12": {
                   "class": "direct",
-                  "note": "ResourceDescriptorHeap, SM 6.6"
+                  "note": "an unbounded array at register 0 of a space of its own from 16"
                 },
                 "metal": {
                   "class": "direct",
-                  "note": "argument buffer, tier 2"
+                  "note": "a runtime array in an argument buffer, MSL 3.0"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -13939,11 +14026,11 @@
                 },
                 "d3d12": {
                   "class": "direct",
-                  "note": "ResourceDescriptorHeap, SM 6.6"
+                  "note": "an unbounded array at register 0 of a space of its own from 16"
                 },
                 "metal": {
                   "class": "direct",
-                  "note": "argument buffer, tier 2"
+                  "note": "a runtime array in an argument buffer, MSL 3.0"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -13962,11 +14049,11 @@
                 },
                 "d3d12": {
                   "class": "direct",
-                  "note": "ResourceDescriptorHeap, SM 6.6"
+                  "note": "an unbounded array at register 0 of a space of its own from 16"
                 },
                 "metal": {
                   "class": "direct",
-                  "note": "argument buffer, tier 2"
+                  "note": "a runtime array in an argument buffer, MSL 3.0"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -13985,11 +14072,11 @@
                 },
                 "d3d12": {
                   "class": "direct",
-                  "note": "SamplerDescriptorHeap, SM 6.6"
+                  "note": "an unbounded sampler array at register 0 of a space of its own from 16"
                 },
                 "metal": {
                   "class": "direct",
-                  "note": "argument buffer, tier 2"
+                  "note": "a runtime array in an argument buffer, MSL 3.0"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -14012,7 +14099,7 @@
                 },
                 "metal": {
                   "class": "direct",
-                  "note": "argument buffer, tier 2, read_write"
+                  "note": "a runtime array in an argument buffer, MSL 3.0, read_write"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -14046,8 +14133,8 @@
                 },
                 "d3d12": {
                   "class": "emulated",
-                  "note": "a variant or root constant",
-                  "cost": "a pipeline variant per value, or a root constant read in the shader"
+                  "note": "a root constant the shader reads",
+                  "cost": "a root constant read in the shader"
                 },
                 "metal": {
                   "class": "direct",
@@ -14070,8 +14157,8 @@
                 },
                 "d3d12": {
                   "class": "emulated",
-                  "note": "a variant or root constant",
-                  "cost": "a pipeline variant per value, or a root constant read in the shader"
+                  "note": "a root constant the shader reads",
+                  "cost": "a root constant read in the shader"
                 },
                 "metal": {
                   "class": "direct",
@@ -14094,8 +14181,8 @@
                 },
                 "d3d12": {
                   "class": "emulated",
-                  "note": "a variant or root constant",
-                  "cost": "a pipeline variant per value, or a root constant read in the shader"
+                  "note": "a root constant the shader reads",
+                  "cost": "a root constant read in the shader"
                 },
                 "metal": {
                   "class": "direct",
@@ -14118,8 +14205,8 @@
                 },
                 "d3d12": {
                   "class": "emulated",
-                  "note": "a variant or root constant",
-                  "cost": "a pipeline variant per value, or a root constant read in the shader"
+                  "note": "a root constant the shader reads",
+                  "cost": "a root constant read in the shader"
                 },
                 "metal": {
                   "class": "direct",
@@ -14184,7 +14271,7 @@
             },
             "metal": {
               "class": "restricted",
-              "note": "reads a metallib section, made offline and added to the container beside the SPIR-V; the library never translates at run time"
+              "note": "reads the container's metallib, or its MSL, made offline beside the SPIR-V (tools/mrhi_msl.py), with the Metal map placing each binding; the library never translates at run time"
             },
             "web_gpu": {
               "class": "direct",
@@ -14279,11 +14366,11 @@
             },
             "d3d12": {
               "class": "restricted",
-              "note": "the DXIL section kept for the pipelines; a container without one is refused with mrhi_errorUnsupported"
+              "note": "the DXIL section kept for the pipelines, and a root signature from the container's layout and D3D12 map; a container without DXIL, or whose root signature passes its 64 words, is refused with mrhi_errorUnsupported"
             },
             "metal": {
               "class": "restricted",
-              "note": "newLibraryWithData from the metallib section; a container without one is refused with mrhi_errorUnsupported"
+              "note": "newLibraryWithData from the metallib, or newLibraryWithSource from each entry's MSL; a container with neither is refused with mrhi_errorUnsupported"
             },
             "web_gpu": {
               "class": "direct",
@@ -15563,8 +15650,8 @@
             },
             "d3d12": {
               "class": "emulated",
-              "note": "a root constant the shader reads, or a variant made offline",
-              "cost": "a root constant read in the shader, or one DXIL variant per value set"
+              "note": "a root constant the shader reads; a constant sizing something is compiled at its default and refused another value with mrhi_errorUnsupported",
+              "cost": "a root constant read in the shader"
             },
             "metal": {
               "class": "direct",
@@ -17084,8 +17171,8 @@
               "note": "a pipeline state stream and its root signature"
             },
             "metal": {
-              "class": "direct",
-              "note": "MTLRenderPipelineDescriptor and an MTLDepthStencilState"
+              "class": "restricted",
+              "note": "MTLRenderPipelineDescriptor and an MTLDepthStencilState; Metal has no pipeline sample mask, so a mask leaving samples out waits on a mask output the MSL cook writes, and is refused with mrhi_errorUnsupported"
             },
             "web_gpu": {
               "class": "direct",
@@ -17152,11 +17239,11 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "CreatePipelineState, answered at the next poll"
+              "note": "CreateGraphicsPipelineState at the call, answered at the next poll"
             },
             "metal": {
               "class": "direct",
-              "note": "newRenderPipelineStateWithDescriptor:completionHandler:, answered at the next poll"
+              "note": "newRenderPipelineStateWithDescriptor:error: at the call, answered at the next poll"
             },
             "web_gpu": {
               "class": "direct",
@@ -17336,11 +17423,11 @@
             },
             "d3d12": {
               "class": "direct",
-              "note": "CreateComputePipelineState, answered at the next poll"
+              "note": "CreateComputePipelineState at the call, answered at the next poll"
             },
             "metal": {
               "class": "direct",
-              "note": "newComputePipelineStateWithDescriptor:completionHandler:, answered at the next poll"
+              "note": "newComputePipelineStateWithDescriptor:options:reflection:error: at the call, answered at the next poll"
             },
             "web_gpu": {
               "class": "direct",
@@ -18420,8 +18507,9 @@
               "note": "vkCmdDrawIndirect"
             },
             "d3d12": {
-              "class": "direct",
-              "note": "ExecuteIndirect with a draw command signature"
+              "class": "emulated",
+              "note": "ExecuteIndirect with a draw command signature, which for a pipeline reading its vertex or instance index first sets their offsets from a copy of the arguments' first vertex and instance",
+              "cost": "for such a pipeline, two buffer copies and two barriers per draw"
             },
             "metal": {
               "class": "direct",
@@ -18474,8 +18562,9 @@
               "note": "vkCmdDrawIndexedIndirect"
             },
             "d3d12": {
-              "class": "direct",
-              "note": "ExecuteIndirect with an indexed draw command signature"
+              "class": "emulated",
+              "note": "ExecuteIndirect with an indexed draw command signature, which for a pipeline reading its vertex or instance index first sets their offsets from a copy of the arguments' first vertex and instance",
+              "cost": "for such a pipeline, two buffer copies and two barriers per draw"
             },
             "metal": {
               "class": "direct",
@@ -19721,6 +19810,11 @@
               "doc": "Its passes writing timestamps."
             },
             {
+              "name": "accesses",
+              "type": "uint32",
+              "doc": "The resources its passes declare, their targets among them."
+            },
+            {
               "name": "label_bytes",
               "type": "uint64",
               "doc": "Their labels' bytes together."
@@ -19739,6 +19833,11 @@
               "name": "needed",
               "type": "uint32",
               "doc": "Its resources a kept pass uses."
+            },
+            {
+              "name": "sealed",
+              "type": "uint32",
+              "doc": "Its resources that began it sealed."
             },
             {
               "name": "transients",

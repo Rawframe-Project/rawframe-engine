@@ -35,6 +35,8 @@ extern "C"
         uint32_t occlusionPasses;
         // Its passes writing timestamps.
         uint32_t timestampPasses;
+        // The resources its passes declare, their targets among them.
+        uint32_t accesses;
         // Their labels' bytes together.
         uint64_t labelBytes;
         // Its barriers.
@@ -43,6 +45,8 @@ extern "C"
         uint32_t resources;
         // Its resources a kept pass uses.
         uint32_t needed;
+        // Its resources that began it sealed.
+        uint32_t sealed;
         // Its resources the frame makes.
         uint32_t transients;
         // Its surface images, presented after its work.

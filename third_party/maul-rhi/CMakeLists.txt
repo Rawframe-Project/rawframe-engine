@@ -25,15 +25,41 @@ option(MAUL_RHI_TSAN "Instrument with ThreadSanitizer" OFF)
 option(MAUL_RHI_COVERAGE "Instrument for gcov coverage" OFF)
 option(MAUL_RHI_FUZZ "Build the libFuzzer targets (Clang)" OFF)
 option(MAUL_RHI_TEST_DRIVER "Build the test driver (mrhiTestDriverDef)" ${MAUL_RHI_BUILD_TESTS})
-# The Vulkan driver (mrhi-0003): every native build; the web has no Vulkan.
-if(EMSCRIPTEN)
+# The web: Emscripten's, or a plain WebAssembly toolchain's (mrhi-0016).
+if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
+    set(maul_rhi_web ON)
+else()
+    set(maul_rhi_web OFF)
+endif()
+# The native driver (mrhi-0003), one per build: Metal on Apple systems,
+# D3D12 on Windows, Vulkan on the others; the web has none. A Windows
+# build may take Vulkan instead of D3D12.
+if(maul_rhi_web OR APPLE OR WIN32)
     set(maul_rhi_vulkan_default OFF)
 else()
     set(maul_rhi_vulkan_default ON)
 endif()
 option(MAUL_RHI_VULKAN_DRIVER "Build the Vulkan driver" ${maul_rhi_vulkan_default})
+# The Metal driver, in Objective-C.
+option(MAUL_RHI_METAL_DRIVER "Build the Metal driver" ${APPLE})
+if(MAUL_RHI_METAL_DRIVER AND NOT APPLE)
+    message(FATAL_ERROR "The Metal driver builds on Apple systems only")
+endif()
+if(MAUL_RHI_METAL_DRIVER AND MAUL_RHI_VULKAN_DRIVER)
+    message(FATAL_ERROR "A build has one native driver: turn MAUL_RHI_VULKAN_DRIVER off "
+                        "with MAUL_RHI_METAL_DRIVER on")
+endif()
+# The D3D12 driver (mrhi-0003), the native driver of Windows builds.
+option(MAUL_RHI_D3D12_DRIVER "Build the D3D12 driver" ${WIN32})
+if(MAUL_RHI_D3D12_DRIVER AND NOT WIN32)
+    message(FATAL_ERROR "The D3D12 driver builds on Windows only")
+endif()
+if(MAUL_RHI_D3D12_DRIVER AND MAUL_RHI_VULKAN_DRIVER)
+    message(FATAL_ERROR "A build has one native driver: turn MAUL_RHI_VULKAN_DRIVER off "
+                        "with MAUL_RHI_D3D12_DRIVER on")
+endif()
 # The WebGPU driver (mrhi-0003): every web build.
-option(MAUL_RHI_WEBGPU_DRIVER "Build the WebGPU driver" ${EMSCRIPTEN})
+option(MAUL_RHI_WEBGPU_DRIVER "Build the WebGPU driver" ${maul_rhi_web})
 
 # Every executable (tests, benchmarks, tools) lands in the top of the
 # build tree, so scripts and CI find them in one place.
@@ -111,10 +137,39 @@ if(MAUL_RHI_VULKAN_DRIVER)
     target_include_directories(maul-rhi SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/khronos)
     target_link_libraries(maul-rhi PRIVATE ${CMAKE_DL_LIBS})
 endif()
+if(MAUL_RHI_METAL_DRIVER)
+    enable_language(OBJC)
+    target_sources(maul-rhi PRIVATE src/driver_metal.m src/metal_device.m src/metal_names.m
+                                   src/metal_copy.m src/metal_encode.m src/metal_frame.m
+                                   src/metal_graphics.m src/metal_pipeline.m src/metal_resource.m
+                                   src/metal_surface.m)
+    target_compile_definitions(maul-rhi PRIVATE MAUL_RHI_METAL_DRIVER)
+    # The family's C23 for Objective-C, with manual retain and release so
+    # that Metal objects sit in plain C structs.
+    set_target_properties(maul-rhi PROPERTIES
+        OBJC_STANDARD 23
+        OBJC_STANDARD_REQUIRED ON
+        OBJC_EXTENSIONS OFF
+        OBJC_VISIBILITY_PRESET hidden)
+    target_compile_options(maul-rhi PRIVATE
+        $<$<COMPILE_LANGUAGE:OBJC>:-fno-objc-arc -Wmissing-prototypes>)
+    target_link_libraries(maul-rhi PRIVATE "-framework CoreGraphics" "-framework Foundation"
+                                           "-framework Metal" "-framework QuartzCore")
+endif()
+if(MAUL_RHI_D3D12_DRIVER)
+    target_sources(maul-rhi PRIVATE src/driver_d3d12.c src/d3d12_api.c src/d3d12_device.c
+                                   src/d3d12_names.c src/d3d12_resource.c src/d3d12_slots.c
+                                   src/d3d12_view.c src/d3d12_pipeline.c src/d3d12_root.c
+                                   src/d3d12_graphics.c src/d3d12_frame.c src/d3d12_record.c
+                                   src/d3d12_barrier.c src/d3d12_copy.c src/d3d12_bind.c
+                                   src/d3d12_draw.c src/d3d12_heap.c src/d3d12_surface.c
+                                   src/d3d12_swapchain.c)
+    target_compile_definitions(maul-rhi PRIVATE MAUL_RHI_D3D12_DRIVER)
+    # The DirectX headers, kept as published (directx/README.md).
+    target_include_directories(maul-rhi SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/directx)
+endif()
 if(MAUL_RHI_WEBGPU_DRIVER)
-    target_sources(maul-rhi PRIVATE src/driver_webgpu.c src/webgpu_device.c src/webgpu_frame.c
-                                   src/webgpu_names.c src/webgpu_pipeline.c)
-    target_compile_definitions(maul-rhi PRIVATE MAUL_RHI_WEBGPU_DRIVER)
+    include(cmake/Web.cmake)
 endif()
 
 if(MAUL_RHI_BUILD_TESTS)
@@ -151,6 +206,7 @@ if(MAUL_RHI_BUILD_TESTS)
         maul_add_test(plan)
         maul_add_test(memory)
         maul_add_test(shader WHITEBOX)
+        maul_add_test(container_d3d12 WHITEBOX)
         maul_add_test(pipeline WHITEBOX)
         maul_add_test(graphics WHITEBOX)
         maul_add_test(cache WHITEBOX)
@@ -178,17 +234,43 @@ if(MAUL_RHI_BUILD_TESTS)
     # Where the XCB client library is installed, the suite also makes a
     # window to check surfaces on; only the test links it. On the web it
     # runs in headless Chrome (test/web_runner.cjs), sleeping through
-    # JSPI while the browser settles its promises.
-    if(EMSCRIPTEN)
+    # JSPI while the browser settles its promises, with Emscripten or
+    # without (mrhi-0016).
+    if(maul_rhi_web)
         maul_add_test(conformance MANUAL)
-        target_link_options(test_conformance PRIVATE -sJSPI -sEXIT_RUNTIME
-                            -sEXPORTED_RUNTIME_METHODS=ENV)
+        if(EMSCRIPTEN)
+            target_link_options(test_conformance PRIVATE -sJSPI -sEXIT_RUNTIME
+                                -sEXPORTED_RUNTIME_METHODS=ENV)
+        else()
+            # A reactor whose main the runner calls through JSPI, with the
+            # driver's imports from maul-rhi.mjs (mrhi-0016).
+            target_link_options(test_conformance PRIVATE -mexec-model=reactor -Wl,--export-table
+                                -Wl,--export=main)
+        endif()
         add_test(NAME conformance
                  COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
                          $<TARGET_FILE:test_conformance>)
         set_tests_properties(conformance PROPERTIES SKIP_RETURN_CODE 77)
     else()
         maul_add_test(conformance)
+        if(MAUL_RHI_METAL_DRIVER)
+            # A CAMetalLayer outside any window to present to.
+            target_sources(test_conformance PRIVATE test/metal_layer.m)
+            set_target_properties(test_conformance PROPERTIES OBJC_STANDARD 23
+                                                              OBJC_STANDARD_REQUIRED ON)
+            target_compile_options(test_conformance PRIVATE
+                                   $<$<COMPILE_LANGUAGE:OBJC>:-fno-objc-arc>)
+            target_compile_definitions(test_conformance PRIVATE MAUL_RHI_METAL_DRIVER)
+            target_link_libraries(test_conformance PRIVATE "-framework QuartzCore")
+        endif()
+        if(MAUL_RHI_D3D12_DRIVER)
+            # The debug layer, and the Agility SDK the exe exports.
+            target_sources(test_conformance PRIVATE test/d3d12_debug.c)
+            target_include_directories(test_conformance SYSTEM PRIVATE
+                                       ${PROJECT_SOURCE_DIR}/directx)
+            target_compile_definitions(test_conformance PRIVATE MAUL_RHI_D3D12_DRIVER)
+            target_link_libraries(test_conformance PRIVATE d3d12 dxgi)
+        endif()
     endif()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND AND MAUL_RHI_VULKAN_DRIVER)

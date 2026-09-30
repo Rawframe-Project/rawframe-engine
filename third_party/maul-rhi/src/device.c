@@ -220,6 +220,7 @@ typedef struct FrameParts
     size_t labels;
     size_t driverPasses;
     size_t driverResources;
+    size_t driverAccesses;
 } FrameParts;
 
 // Lays out the tables of the open frame, sized by the device's limits.
@@ -255,6 +256,8 @@ static FrameParts AddFrameParts(mrhiLayout* layout, const mrhiDeviceDef* def)
         mrhiLayoutAdd(layout, limits->framePasses, sizeof(mrhiDriverPass), alignof(mrhiDriverPass));
     parts.driverResources = mrhiLayoutAdd(layout, limits->frameResources,
                                           sizeof(mrhiDriverResource), alignof(mrhiDriverResource));
+    parts.driverAccesses = mrhiLayoutAdd(layout, limits->frameAccesses, sizeof(mrhiDriverAccess),
+                                         alignof(mrhiDriverAccess));
     return parts;
 }
 
@@ -276,6 +279,7 @@ static void PlaceFrameParts(mrhiDevice* device, unsigned char* block, const Fram
     device->frameLabels = (char*)(block + parts->labels);
     device->driverPasses = (mrhiDriverPass*)(block + parts->driverPasses);
     device->driverResources = (mrhiDriverResource*)(block + parts->driverResources);
+    device->driverAccesses = (mrhiDriverAccess*)(block + parts->driverAccesses);
 }
 
 // The device's block: the struct, then its tables, sized by its limits.

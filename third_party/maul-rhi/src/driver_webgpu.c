@@ -16,12 +16,12 @@
 #include "allocator.h"
 #include "format_caps.h"
 #include "invariant.h"
+#include "web_js.h"
 #include "webgpu_device.h"
 #include "webgpu_names.h"
 
 #include "maul-rhi/surface.h"
 
-#include <emscripten/em_js.h>
 #include <stdalign.h>
 #include <string.h>
 
@@ -53,7 +53,7 @@ typedef struct WebGpuDriver
 // runner reads, a device state's objects under handles, and the makers
 // of buffers and textures, whose usage flags are the browser's for the
 // contract's bits, by name.
-EM_JS(int, JsCreateState, (void), {
+EM_JS(int, mrhiJsCreateState, (void), {
     const gpu = Module.mrhiGpu || (Module.mrhiGpu = {
         states: [null],
         errors: [],
@@ -103,12 +103,12 @@ EM_JS(int, JsCreateState, (void), {
     return gpu.add({settled: [], adapter: null});
 });
 
-EM_JS(void, JsDestroyState, (int state), {
+EM_JS(void, mrhiJsDestroyState, (int state), {
     Module.mrhiGpu.states[state] = null;
 });
 
 // Asks for the browser's adapter; the slot settles either way.
-EM_JS(void, JsRequestAdapter, (int state, uint32_t slot), {
+EM_JS(void, mrhiJsRequestAdapter, (int state, uint32_t slot), {
     const self = Module.mrhiGpu.states[state];
     const settle = adapter => {
         if (Module.mrhiGpu.states[state] === self) {
@@ -124,7 +124,7 @@ EM_JS(void, JsRequestAdapter, (int state, uint32_t slot), {
 });
 
 // The next settled slot and its outcome, or -1.
-EM_JS(int, JsTakeSettled, (int state, int32_t* outcomeOut), {
+EM_JS(int, mrhiJsTakeSettled, (int state, int32_t* outcomeOut), {
     const next = Module.mrhiGpu.states[state].settled.shift();
     if (!next) {
         return -1;
@@ -133,28 +133,28 @@ EM_JS(int, JsTakeSettled, (int state, int32_t* outcomeOut), {
     return next[0];
 });
 
-EM_JS(bool, JsHasAdapter, (int state), {
+EM_JS(bool, mrhiJsHasAdapter, (int state), {
     return Module.mrhiGpu.states[state].adapter !== null;
 });
 
-EM_JS(bool, JsAdapterHas, (int state, const char* feature), {
+EM_JS(bool, mrhiJsAdapterHas, (int state, const char* feature), {
     return Module.mrhiGpu.states[state].adapter.features.has(UTF8ToString(feature));
 });
 
 // A limit, 0 for one the browser does not report.
-EM_JS(double, JsAdapterLimit, (int state, const char* limit), {
+EM_JS(double, mrhiJsAdapterLimit, (int state, const char* limit), {
     const value = Module.mrhiGpu.states[state].adapter.limits[UTF8ToString(limit)];
     return typeof value === 'number' ? value : 0;
 });
 
-EM_JS(bool, JsAdapterFallback, (int state), {
+EM_JS(bool, mrhiJsAdapterFallback, (int state), {
     const info = Module.mrhiGpu.states[state].adapter.info;
     return !!(info && info.isFallbackAdapter);
 });
 
 // Writes the adapter's name, its description or its vendor and
 // architecture, and returns its bytes.
-EM_JS(int, JsAdapterName, (int state, char* out, int capacity), {
+EM_JS(int, mrhiJsAdapterName, (int state, char* out, int capacity), {
     const info = Module.mrhiGpu.states[state].adapter.info || {};
     const parts = [info.vendor, info.architecture].filter(part => part);
     const name = info.description || parts.join(' ') || 'WebGPU';
@@ -164,7 +164,7 @@ EM_JS(int, JsAdapterName, (int state, char* out, int capacity), {
 // A canvas the selector names and its WebGPU context, kept as a state of
 // its own so that any device reaches it by handle: the handle, or 0 for a
 // selector naming no canvas, or a canvas without a WebGPU context.
-EM_JS(int, JsCreateCanvas, (const char* selector, int selectorLength), {
+EM_JS(int, mrhiJsCreateCanvas, (const char* selector, int selectorLength), {
     let canvas = null;
     try {
         canvas = typeof document === 'undefined' ? null :
@@ -176,11 +176,11 @@ EM_JS(int, JsCreateCanvas, (const char* selector, int selectorLength), {
     return context ? Module.mrhiGpu.add({canvas, context}) : 0;
 });
 
-EM_JS(void, JsDestroyCanvas, (int surface), {
+EM_JS(void, mrhiJsDestroyCanvas, (int surface), {
     Module.mrhiGpu.states[surface] = null;
 });
 
-EM_JS(bool, JsPrefersBgra, (void), {
+EM_JS(bool, mrhiJsPrefersBgra, (void), {
     return navigator.gpu.getPreferredCanvasFormat() === 'bgra8unorm';
 });
 // clang-format on
@@ -191,29 +191,30 @@ EM_JS_DEPS(mrhi_webgpu_driver, "$UTF8ToString,$stringToUTF8");
 // WebGPU's core features: false otherwise.
 static bool Describe(const WebGpuDriver* driver, mrhiDriverAdapter* adapterOut)
 {
-    if (!JsHasAdapter(driver->state) || !JsAdapterHas(driver->state, "core-features-and-limits"))
+    if (!mrhiJsHasAdapter(driver->state) ||
+        !mrhiJsAdapterHas(driver->state, "core-features-and-limits"))
     {
         return false;
     }
     *adapterOut = (mrhiDriverAdapter){.handle = ADAPTER_HANDLE};
     mrhiAdapterInfo* info = &adapterOut->info;
     info->driver = mrhi_driverWebGpu;
-    info->kind = JsAdapterFallback(driver->state) ? mrhi_adapterSoftware : mrhi_adapterUnknown;
+    info->kind = mrhiJsAdapterFallback(driver->state) ? mrhi_adapterSoftware : mrhi_adapterUnknown;
     // Room for the terminating NUL stringToUTF8 writes.
     char name[MRHI_ADAPTER_NAME_BYTES + 1];
-    int length = JsAdapterName(driver->state, name, (int)sizeof(name));
+    int length = mrhiJsAdapterName(driver->state, name, (int)sizeof(name));
     memcpy(info->name, name, (size_t)length);
     info->nameLength = (uint32_t)length;
     for (size_t i = 0; i < mrhiWebGpuFeatureCount; ++i)
     {
-        bool has = JsAdapterHas(driver->state, mrhiWebGpuFeatures[i].name);
+        bool has = mrhiJsAdapterHas(driver->state, mrhiWebGpuFeatures[i].name);
         memcpy((unsigned char*)&adapterOut->features + mrhiWebGpuFeatures[i].offset, &has,
                sizeof(has));
     }
     for (size_t i = 0; i < mrhiWebGpuLimitCount; ++i)
     {
         mrhiSetWebGpuLimit(&adapterOut->limits, &mrhiWebGpuLimits[i],
-                           JsAdapterLimit(driver->state, mrhiWebGpuLimits[i].name));
+                           mrhiJsAdapterLimit(driver->state, mrhiWebGpuLimits[i].name));
     }
     adapterOut->limits.framesInFlight = WEBGPU_FRAMES_IN_FLIGHT;
     return true;
@@ -244,7 +245,7 @@ static mrhiResult RequestAdapters(void* self, uint64_t tag)
     {
         return mrhi_errorCapacity;
     }
-    JsRequestAdapter(driver->state, slot);
+    mrhiJsRequestAdapter(driver->state, slot);
     return mrhi_success;
 }
 
@@ -253,7 +254,7 @@ static size_t Poll(void* self, mrhiDriverEvent* events, size_t capacity)
     WebGpuDriver* driver = self;
     size_t moved = 0;
     int32_t outcome = 0;
-    int slot = moved < capacity ? JsTakeSettled(driver->state, &outcome) : -1;
+    int slot = moved < capacity ? mrhiJsTakeSettled(driver->state, &outcome) : -1;
     while (slot >= 0)
     {
         MRHI_ASSERT((uint32_t)slot < driver->slotCount && driver->tags[slot] != 0);
@@ -264,7 +265,7 @@ static size_t Poll(void* self, mrhiDriverEvent* events, size_t capacity)
         }
         events[moved++] = (mrhiDriverEvent){.tag = driver->tags[slot], .outcome = outcome};
         driver->tags[slot] = 0;
-        slot = moved < capacity ? JsTakeSettled(driver->state, &outcome) : -1;
+        slot = moved < capacity ? mrhiJsTakeSettled(driver->state, &outcome) : -1;
     }
     return moved;
 }
@@ -299,7 +300,7 @@ static mrhiResult CreateSurface(void* self, const mrhiChain* source, const mrhiS
         return mrhi_errorUnsupported;
     }
     const mrhiSurfaceSourceCanvas* canvas = (const mrhiSurfaceSourceCanvas*)source;
-    int handle = JsCreateCanvas(canvas->selector, (int)canvas->selectorLength);
+    int handle = mrhiJsCreateCanvas(canvas->selector, (int)canvas->selectorLength);
     *handleOut = (uint64_t)handle;
     return handle != 0 ? mrhi_success : mrhi_errorUnsupported;
 }
@@ -307,7 +308,7 @@ static mrhiResult CreateSurface(void* self, const mrhiChain* source, const mrhiS
 static void DestroySurface(void* self, uint64_t handle)
 {
     (void)self;
-    JsDestroyCanvas((int)handle);
+    mrhiJsDestroyCanvas((int)handle);
 }
 
 // What a canvas shows, the browser's preferred format first: 8-bit
@@ -320,7 +321,7 @@ static void GetSurfaceCaps(const void* self, uint64_t surface, uint64_t adapter,
     const WebGpuDriver* driver = self;
     (void)surface;
     MRHI_ASSERT(adapter == ADAPTER_HANDLE && driver->found);
-    bool bgra = JsPrefersBgra();
+    bool bgra = mrhiJsPrefersBgra();
     const mrhiFormat formats[2] = {bgra ? mrhi_formatBgra8Unorm : mrhi_formatRgba8Unorm,
                                    bgra ? mrhi_formatRgba8Unorm : mrhi_formatBgra8Unorm};
     const mrhiColorPrimaries primaries[2] = {mrhi_primariesBt709, mrhi_primariesDisplayP3};
@@ -373,7 +374,7 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
 static void Destroy(void* self)
 {
     WebGpuDriver* driver = self;
-    JsDestroyState(driver->state);
+    mrhiJsDestroyState(driver->state);
     mrhiAllocator allocator = driver->allocator;
     mrhiRelease(&allocator, driver, driver->bytes, alignof(WebGpuDriver));
 }
@@ -409,7 +410,7 @@ mrhiResult mrhiCreateWebGpuDriver(const mrhiAllocator* allocator, uint32_t pendi
     *driver = (WebGpuDriver){
         .allocator = *allocator,
         .bytes = layout.size,
-        .state = JsCreateState(),
+        .state = mrhiJsCreateState(),
         .tags = (uint64_t*)(block + tagsAt),
         .searches = (bool*)(block + searchesAt),
         .slotCount = pendingLimit,

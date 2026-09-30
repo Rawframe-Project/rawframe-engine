@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The view of a submitted frame (mrhi-0013): the frame's resources, kept
-// passes, barriers, commands, uploads and readback ring, built in tables
-// the device allocated for them, as its driver reads them.
+// passes with the resources they declare, barriers, commands, uploads
+// and readback ring, built in tables the device allocated for them, as
+// its driver reads them.
 
 #include "device_core.h"
 #include "invariant.h"
@@ -15,6 +16,7 @@ static mrhiDriverResource ViewResource(const mrhiFrameResource* resource)
 {
     mrhiDriverResource view = {
         .needed = resource->firstPass != 0,
+        .sealed = resource->initialState == mrhi_stateSealed,
         .handle = resource->handle,
         .size = resource->size,
         .usage = resource->usage,
@@ -46,10 +48,18 @@ static mrhiDriverResource ViewResource(const mrhiFrameResource* resource)
     return view;
 }
 
-// A kept pass as its driver sees it.
-static mrhiDriverPass ViewPass(const mrhiDevice* device, uint32_t index)
+// A kept pass as its driver sees it, its declared resources copied from
+// the next free entry of the accesses' table on.
+static mrhiDriverPass ViewPass(const mrhiDevice* device, uint32_t index, uint32_t* accessAt)
 {
     const mrhiFramePass* pass = &device->framePasses[index];
+    mrhiDriverAccess* accesses = &device->driverAccesses[*accessAt];
+    for (uint32_t i = 0; i < pass->useCount; ++i)
+    {
+        const mrhiFrameUse* use = &device->frameUses[pass->firstUse + i];
+        accesses[i] = (mrhiDriverAccess){.resource = use->resource, .state = use->state};
+    }
+    *accessAt += pass->useCount;
     mrhiDriverPass view = {
         .id = {index + 1, device->frameSerial},
         .passClass = pass->passClass,
@@ -65,6 +75,8 @@ static mrhiDriverPass ViewPass(const mrhiDevice* device, uint32_t index)
         .occlusionSet = pass->occlusionHandle,
         .timestampSet = pass->timestampSet,
         .heap = pass->heap,
+        .accesses = accesses,
+        .accessCount = pass->useCount,
         .timestampBegin = pass->timestampBegin,
         .timestampEnd = pass->timestampEnd,
         .firstChunk = pass->firstChunk,
@@ -84,11 +96,13 @@ void mrhiViewFrame(mrhiDevice* device, mrhiDriverFrame* frameOut)
         device->driverResources[i] = ViewResource(&device->frameResources[i]);
     }
     uint32_t kept = 0;
+    // Every pass's uses fit the table, which holds a frame's accesses.
+    uint32_t accessAt = 0;
     for (uint32_t i = 0; i < device->framePassCount; ++i)
     {
         if (device->framePasses[i].kept)
         {
-            device->driverPasses[kept++] = ViewPass(device, i);
+            device->driverPasses[kept++] = ViewPass(device, i, &accessAt);
         }
     }
     // A pass that found the arena or the staging full refused the frame

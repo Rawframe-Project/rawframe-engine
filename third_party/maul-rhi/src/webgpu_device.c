@@ -16,11 +16,11 @@
 #include "allocator.h"
 #include "capabilities_core.h"
 #include "invariant.h"
+#include "web_js.h"
 #include "webgpu_frame.h"
 #include "webgpu_names.h"
 #include "webgpu_pipeline.h"
 
-#include <emscripten/em_js.h>
 #include <stdalign.h>
 #include <string.h>
 
@@ -51,24 +51,24 @@ typedef struct WebGpuDevice
 } WebGpuDevice;
 
 // clang-format off
-EM_JS(int, JsCreateDeviceState, (void), {
+EM_JS(int, mrhiJsCreateDeviceState, (void), {
     return Module.mrhiGpu.add({device: null, objects: [null], free: [], retiring: [], lost: null,
                                features: [], limits: {}, pipelines: [], frame: null,
                                running: [], finished: 0, pool: [], readbacks: [],
                                staging: null});
 });
 
-EM_JS(void, JsWantFeature, (int state, const char* feature), {
+EM_JS(void, mrhiJsWantFeature, (int state, const char* feature), {
     Module.mrhiGpu.states[state].features.push(UTF8ToString(feature));
 });
 
-EM_JS(void, JsWantLimit, (int state, const char* limit, double value), {
+EM_JS(void, mrhiJsWantLimit, (int state, const char* limit, double value), {
     Module.mrhiGpu.states[state].limits[UTF8ToString(limit)] = value;
 });
 
 // Asks a fresh adapter for the device; the instance's slot settles with
 // success or the failure given.
-EM_JS(void, JsOpenDevice, (int instance, int state, uint32_t slot, const char* label,
+EM_JS(void, mrhiJsOpenDevice, (int instance, int state, uint32_t slot, const char* label,
                            int labelLength, int failure), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
@@ -107,7 +107,7 @@ EM_JS(void, JsOpenDevice, (int instance, int state, uint32_t slot, const char* l
 
 // Destroys the device and every object it holds, once its error scope
 // is read: the closings still reading are counted.
-EM_JS(void, JsCloseDevice, (int state), {
+EM_JS(void, mrhiJsCloseDevice, (int state), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
     gpu.states[state] = null;
@@ -143,23 +143,23 @@ EM_JS(void, JsCloseDevice, (int state), {
         });
 });
 
-EM_JS(bool, JsIsLost, (int state), {
+EM_JS(bool, mrhiJsIsLost, (int state), {
     return Module.mrhiGpu.states[state].lost !== null;
 });
 
 // Writes the loss's message and returns its bytes.
-EM_JS(int, JsLossMessage, (int state, char* out, int capacity), {
+EM_JS(int, mrhiJsLossMessage, (int state, char* out, int capacity), {
     const lost = Module.mrhiGpu.states[state].lost;
     return stringToUTF8(lost ? lost.message : "", out, capacity);
 });
 
-EM_JS(int, JsCreateBuffer, (int state, double size, uint32_t usage), {
+EM_JS(int, mrhiJsCreateBuffer, (int state, double size, uint32_t usage), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
     return gpu.put(self, gpu.buffer(self.device, size, usage));
 });
 
-EM_JS(int, JsCreateTexture, (int state, bool volume, const char* format, uint32_t width,
+EM_JS(int, mrhiJsCreateTexture, (int state, bool volume, const char* format, uint32_t width,
                              uint32_t height, uint32_t depth, uint32_t mips, uint32_t samples,
                              uint32_t usage, const char* viewFormats), {
     const gpu = Module.mrhiGpu;
@@ -168,7 +168,7 @@ EM_JS(int, JsCreateTexture, (int state, bool volume, const char* format, uint32_
                                      depth, mips, samples, usage, UTF8ToString(viewFormats)));
 });
 
-EM_JS(int, JsCreateView, (int state, int texture, const char* format, const char* dimension,
+EM_JS(int, mrhiJsCreateView, (int state, int texture, const char* format, const char* dimension,
                           const char* aspect, uint32_t baseMip, uint32_t mips, uint32_t baseLayer,
                           uint32_t layers), {
     const descriptor = {
@@ -189,7 +189,7 @@ EM_JS(int, JsCreateView, (int state, int texture, const char* format, const char
     return gpu.put(self, self.objects[texture].createView(descriptor));
 });
 
-EM_JS(int, JsCreateSampler, (int state, const char* addressU, const char* addressV,
+EM_JS(int, mrhiJsCreateSampler, (int state, const char* addressU, const char* addressV,
                              const char* addressW, const char* mag, const char* min,
                              const char* mip, float lodMin, float lodMax, const char* compare,
                              uint32_t anisotropy), {
@@ -212,7 +212,7 @@ EM_JS(int, JsCreateSampler, (int state, const char* addressU, const char* addres
     return gpu.put(self, self.device.createSampler(descriptor));
 });
 
-EM_JS(int, JsCreateQuerySet, (int state, bool timestamps, uint32_t count), {
+EM_JS(int, mrhiJsCreateQuerySet, (int state, bool timestamps, uint32_t count), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
     return gpu.put(self, self.device.createQuerySet({type: timestamps ? 'timestamp' : 'occlusion',
@@ -221,7 +221,7 @@ EM_JS(int, JsCreateQuerySet, (int state, bool timestamps, uint32_t count), {
 
 // Configures a canvas at a size, which becomes its drawing buffer's: its
 // swapchain's handle.
-EM_JS(int, JsConfigureCanvas, (int state, int surface, const char* format, uint32_t usage,
+EM_JS(int, mrhiJsConfigureCanvas, (int state, int surface, const char* format, uint32_t usage,
                                const char* viewFormats, bool displayP3, bool extended,
                                bool premultiplied, uint32_t width, uint32_t height), {
     const gpu = Module.mrhiGpu;
@@ -242,14 +242,14 @@ EM_JS(int, JsConfigureCanvas, (int state, int surface, const char* format, uint3
     return gpu.put(self, {canvas, width, height});
 });
 
-EM_JS(void, JsUnconfigureCanvas, (int state, int swapchain), {
+EM_JS(void, mrhiJsUnconfigureCanvas, (int state, int swapchain), {
     const gpu = Module.mrhiGpu;
     gpu.take(gpu.states[state], swapchain).canvas.context.unconfigure();
 });
 
 // The canvas's current texture, or 0 when the page has resized its
 // drawing buffer since it was configured.
-EM_JS(int, JsAcquireCanvas, (int state, int swapchain), {
+EM_JS(int, mrhiJsAcquireCanvas, (int state, int swapchain), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
     const chain = self.objects[swapchain];
@@ -262,18 +262,18 @@ EM_JS(int, JsAcquireCanvas, (int state, int swapchain), {
 
 // Frees a handle whose object the device does not destroy: a swapchain
 // reconfigured, or a canvas's texture, which the browser presents.
-EM_JS(void, JsForget, (int state, int handle), {
+EM_JS(void, mrhiJsForget, (int state, int handle), {
     const gpu = Module.mrhiGpu;
     gpu.take(gpu.states[state], handle);
 });
 
 // Retires an object once the frame numbered serial has finished.
-EM_JS(void, JsRetire, (int state, int handle, double serial), {
+EM_JS(void, mrhiJsRetire, (int state, int handle, double serial), {
     Module.mrhiGpu.states[state].retiring.push([serial, handle]);
 });
 
 // Destroys the retiring objects whose frames have finished.
-EM_JS(void, JsSweep, (int state, double finished), {
+EM_JS(void, mrhiJsSweep, (int state, double finished), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
     self.retiring = self.retiring.filter(([serial, handle]) => {
@@ -295,13 +295,13 @@ EM_JS_DEPS(mrhi_webgpu_device, "$UTF8ToString,$stringToUTF8");
 // the frame recording may name it.
 static void Retire(WebGpuDevice* device, uint64_t handle)
 {
-    JsRetire(device->state, (int)handle, (double)(device->submitted + 1));
+    mrhiJsRetire(device->state, (int)handle, (double)(device->submitted + 1));
 }
 
 static void Destroy(void* self)
 {
     WebGpuDevice* device = self;
-    JsCloseDevice(device->state);
+    mrhiJsCloseDevice(device->state);
     mrhiAllocator allocator = device->allocator;
     mrhiRelease(&allocator, device, device->bytes, alignof(WebGpuDevice));
 }
@@ -332,7 +332,7 @@ static const char* CompareOf(mrhiCompareFunction compare)
 static mrhiResult CreateSampler(void* self, const mrhiSamplerDef* def, uint64_t* handleOut)
 {
     const WebGpuDevice* device = self;
-    *handleOut = (uint64_t)JsCreateSampler(
+    *handleOut = (uint64_t)mrhiJsCreateSampler(
         device->state, AddressOf(def->addressU), AddressOf(def->addressV), AddressOf(def->addressW),
         FilterOf(def->magFilter), FilterOf(def->minFilter), FilterOf(def->mipFilter), def->lodMin,
         def->lodMax, CompareOf(def->compare), def->maxAnisotropy);
@@ -347,7 +347,7 @@ static void DestroyObject(void* self, uint64_t handle)
 static mrhiResult CreateBuffer(void* self, const mrhiBufferDef* def, uint64_t* handleOut)
 {
     const WebGpuDevice* device = self;
-    *handleOut = (uint64_t)JsCreateBuffer(device->state, (double)def->size, def->usage);
+    *handleOut = (uint64_t)mrhiJsCreateBuffer(device->state, (double)def->size, def->usage);
     return mrhi_success;
 }
 
@@ -356,7 +356,7 @@ static mrhiResult CreateTexture(void* self, const mrhiTextureDef* def, uint64_t*
     const WebGpuDevice* device = self;
     char viewFormats[MRHI_WEBGPU_VIEW_FORMAT_BYTES];
     mrhiWebGpuViewFormats(def, viewFormats);
-    *handleOut = (uint64_t)JsCreateTexture(
+    *handleOut = (uint64_t)mrhiJsCreateTexture(
         device->state, def->kind == mrhi_texture3d, mrhiWebGpuFormat(def->format), def->width,
         def->height, def->depthOrLayers, def->mipLevels, def->sampleCount, def->usage, viewFormats);
     return mrhi_success;
@@ -369,7 +369,7 @@ static mrhiResult CreateView(void* self, uint64_t texture, const mrhiViewDef* de
     static const char* const s_dimensions[] = {"2d", "2d-array", "cube", "cube-array", "3d"};
     static const char* const s_aspects[] = {"all", "depth-only", "stencil-only"};
     MRHI_ASSERT(def->kind <= mrhi_texture3d && def->aspect <= mrhi_aspectStencilOnly);
-    *handleOut = (uint64_t)JsCreateView(
+    *handleOut = (uint64_t)mrhiJsCreateView(
         device->state, (int)texture, mrhiWebGpuFormat(def->format), s_dimensions[def->kind],
         s_aspects[def->aspect], def->baseMip, def->mipCount, def->baseLayer, def->layerCount);
     return mrhi_success;
@@ -379,7 +379,7 @@ static mrhiResult CreateQuerySet(void* self, const mrhiQuerySetDef* def, uint64_
 {
     const WebGpuDevice* device = self;
     *handleOut =
-        (uint64_t)JsCreateQuerySet(device->state, def->type == mrhi_queryTimestamp, def->count);
+        (uint64_t)mrhiJsCreateQuerySet(device->state, def->type == mrhi_queryTimestamp, def->count);
     return mrhi_success;
 }
 
@@ -388,7 +388,7 @@ static void LossReport(void* self, mrhiDeviceLossReport* reportOut)
     const WebGpuDevice* device = self;
     // Room for the terminating NUL stringToUTF8 writes.
     char message[MRHI_LOSS_MESSAGE_BYTES + 1];
-    int length = JsLossMessage(device->state, message, (int)sizeof(message));
+    int length = mrhiJsLossMessage(device->state, message, (int)sizeof(message));
     *reportOut =
         (mrhiDeviceLossReport){.reason = mrhi_lossUnknown, .messageLength = (uint32_t)length};
     memcpy(reportOut->message, message, (size_t)length);
@@ -472,7 +472,7 @@ static size_t PollFrames(WebGpuDevice* device, mrhiDriverEvent* events, size_t c
     }
     if (moved > 0)
     {
-        JsSweep(device->state, (double)device->finished);
+        mrhiJsSweep(device->state, (double)device->finished);
     }
     return moved;
 }
@@ -499,7 +499,7 @@ static size_t Poll(void* self, mrhiDriverEvent* events, size_t capacity)
         }
     }
     moved += PollFrames(device, events + moved, capacity - moved);
-    if (moved < capacity && !device->lossTold && JsIsLost(device->state))
+    if (moved < capacity && !device->lossTold && mrhiJsIsLost(device->state))
     {
         device->lossTold = true;
         events[moved++] = (mrhiDriverEvent){.tag = 0, .outcome = mrhi_errorDeviceLost};
@@ -585,13 +585,13 @@ static mrhiResult ConfigureSurface(void* self, uint64_t surface, const mrhiSurfa
     const WebGpuDevice* device = self;
     if (oldSwapchain != 0)
     {
-        JsForget(device->state, (int)oldSwapchain);
+        mrhiJsForget(device->state, (int)oldSwapchain);
     }
     mrhiTextureDef def = mrhiDefaultTextureDef();
     memcpy(def.viewFormats, config->viewFormats, sizeof(def.viewFormats));
     char viewFormats[MRHI_WEBGPU_VIEW_FORMAT_BYTES];
     mrhiWebGpuViewFormats(&def, viewFormats);
-    *swapchainOut = (uint64_t)JsConfigureCanvas(
+    *swapchainOut = (uint64_t)mrhiJsConfigureCanvas(
         device->state, (int)surface, mrhiWebGpuFormat(config->color.format), config->usage,
         viewFormats, config->color.primaries == mrhi_primariesDisplayP3,
         config->color.range == mrhi_rangeExtended, config->alphaMode == mrhi_alphaPremultiplied,
@@ -602,14 +602,14 @@ static mrhiResult ConfigureSurface(void* self, uint64_t surface, const mrhiSurfa
 static void UnconfigureSurface(void* self, uint64_t swapchain)
 {
     const WebGpuDevice* device = self;
-    JsUnconfigureCanvas(device->state, (int)swapchain);
+    mrhiJsUnconfigureCanvas(device->state, (int)swapchain);
 }
 
 // The canvas's current texture: out of date once the page resizes it.
 static mrhiResult AcquireImage(void* self, uint64_t swapchain, uint64_t* imageOut)
 {
     const WebGpuDevice* device = self;
-    int image = JsAcquireCanvas(device->state, (int)swapchain);
+    int image = mrhiJsAcquireCanvas(device->state, (int)swapchain);
     *imageOut = (uint64_t)image;
     return image != 0 ? mrhi_success : mrhi_errorOutOfDate;
 }
@@ -620,7 +620,7 @@ static void ReleaseImage(void* self, uint64_t swapchain, uint64_t image)
 {
     const WebGpuDevice* device = self;
     (void)swapchain;
-    JsForget(device->state, (int)image);
+    mrhiJsForget(device->state, (int)image);
 }
 
 static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag)
@@ -716,7 +716,7 @@ mrhiResult mrhiCreateWebGpuDevice(const mrhiAllocator* allocator, int instanceSt
     *device = (WebGpuDevice){
         .allocator = *allocator,
         .bytes = layout.size,
-        .state = JsCreateDeviceState(),
+        .state = mrhiJsCreateDeviceState(),
         .pending = (Pending*)((unsigned char*)device + pendingAt),
         .pendingLimit = pipelines,
         .tags = (uint64_t*)((unsigned char*)device + tagsAt),
@@ -730,17 +730,17 @@ mrhiResult mrhiCreateWebGpuDevice(const mrhiAllocator* allocator, int instanceSt
                sizeof(wanted));
         if (wanted)
         {
-            JsWantFeature(device->state, mrhiWebGpuFeatures[i].name);
+            mrhiJsWantFeature(device->state, mrhiWebGpuFeatures[i].name);
         }
     }
     // A limit below WebGPU's default is raised to it by the browser.
     for (size_t i = 0; i < mrhiWebGpuLimitCount; ++i)
     {
-        JsWantLimit(device->state, mrhiWebGpuLimits[i].name,
-                    mrhiWebGpuLimitValue(&def->limits, &mrhiWebGpuLimits[i]));
+        mrhiJsWantLimit(device->state, mrhiWebGpuLimits[i].name,
+                        mrhiWebGpuLimitValue(&def->limits, &mrhiWebGpuLimits[i]));
     }
-    JsOpenDevice(instanceState, device->state, slot, def->label, (int)def->labelLength,
-                 mrhi_errorPlatform);
+    mrhiJsOpenDevice(instanceState, device->state, slot, def->label, (int)def->labelLength,
+                     mrhi_errorPlatform);
     *deviceOut = (mrhiDeviceDriver){.vtable = &s_vtable, .self = device};
     return mrhi_success;
 }

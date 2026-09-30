@@ -49,7 +49,8 @@ const char* mrhiWebGpuFormat(mrhiFormat format);
 #define MRHI_WEBGPU_VIEW_FORMAT_BYTES (MRHI_VIEW_FORMATS * 32)
 
 // Writes the formats a texture's views may take besides its own, their
-// names comma-separated and NUL-terminated.
+// names comma-separated and NUL-terminated; none for a transient
+// attachment.
 void mrhiWebGpuViewFormats(const mrhiTextureDef* def, char out[MRHI_WEBGPU_VIEW_FORMAT_BYTES]);
 
 #endif // MAUL_RHI_SRC_WEBGPU_NAMES_H

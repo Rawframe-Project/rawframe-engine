@@ -15,7 +15,7 @@
 #include "maul-rhi/pipeline.h"
 
 // The SPI version a driver's vtable must carry.
-#define MRHI_SPI_VERSION 2
+#define MRHI_SPI_VERSION 3
 
 // An adapter as a driver reports it: its handle, never zero, its facts,
 // and the features and limits it can grant.
@@ -81,11 +81,14 @@ typedef enum mrhiDriverResourceKind
 // swapchain's handle (0 for a transient); a surface image's image; a
 // texture's def, whose usage is the usage field for a transient; a
 // buffer's bytes; its usage, a transient's the one its passes derive;
-// and where a transient lives in the frame's memory.
+// where a transient lives in the frame's memory; and whether a device
+// object began the frame sealed (mrhi-0015), which a heap may read it in
+// without the frame declaring it.
 typedef struct mrhiDriverResource
 {
     mrhiDriverResourceKind kind;
     bool needed;
+    bool sealed;
     uint64_t handle;
     uint64_t image;
     const mrhiTextureDef* texture;
@@ -95,15 +98,23 @@ typedef struct mrhiDriverResource
     uint64_t memoryBytes;
 } mrhiDriverResource;
 
+// A resource a kept pass declares, its targets among them: its frame
+// slot plus one, and the state the use leaves it in.
+typedef struct mrhiDriverAccess
+{
+    uint32_t resource;
+    mrhiResourceState state;
+} mrhiDriverAccess;
+
 // A kept pass of a submitted frame: its id, which its barriers name; its
 // class and label (labelLength bytes of UTF-8 without NUL); its targets,
 // naming frame resources by slot plus one, with the stores the compile
 // derived; its render area; its occlusion query set's handle (0 for
 // none); its timestamp query set's handle and the queries written at
 // its start and end (MRHI_NO_QUERY for none); its heap's handle (0 for
-// none); and its first command
-// chunk, an index into the frame's chunks plus one (0 for none), each
-// chunk naming the next.
+// none); the resources it declares, which a heap may reach unbound; and
+// its first command chunk, an index into the frame's chunks plus one (0
+// for none), each chunk naming the next.
 typedef struct mrhiDriverPass
 {
     mrhiPassId id;
@@ -123,6 +134,8 @@ typedef struct mrhiDriverPass
     uint32_t timestampBegin;
     uint32_t timestampEnd;
     uint64_t heap;
+    const mrhiDriverAccess* accesses;
+    uint32_t accessCount;
     uint32_t firstChunk;
 } mrhiDriverPass;
 

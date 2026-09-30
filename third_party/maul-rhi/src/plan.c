@@ -5,7 +5,10 @@
 // state their last use left them in, as disjoint boxes of mips, layers
 // and planes, and each kept use makes barriers from the states it meets.
 // Imported objects carry one state between frames, so the frame's end
-// unifies theirs. The barriers are then put in the order they run.
+// unifies theirs. The barriers are then put in the order they run. Once
+// the declared resources are placed, the first use of one over memory
+// used earlier in the frame is marked as aliasing, a buffer's gaining a
+// barrier from the undefined state for it.
 
 #include "device_core.h"
 
@@ -252,6 +255,7 @@ static bool PlanResource(mrhiDevice* device, uint32_t slot)
             {
                 continue;
             }
+            resource->firstState = resource->firstPass == 0 ? uses[i].state : resource->firstState;
             resource->firstPass = resource->firstPass == 0 ? p + 1 : resource->firstPass;
             resource->lastPass = p + 1;
             resource->finalState = uses[i].state;
@@ -327,6 +331,71 @@ mrhiResult mrhiPlan(mrhiDevice* device)
         }
     }
     Sort(device);
+    return mrhi_success;
+}
+
+// Whether a placed resource takes memory that another placed resource
+// used in kept passes before its first.
+static bool Aliases(const mrhiDevice* device, const mrhiFrameResource* resource)
+{
+    for (uint32_t i = 0; i < device->frameResourceCount; ++i)
+    {
+        const mrhiFrameResource* other = &device->frameResources[i];
+        if (other->placed && other->lastPass < resource->firstPass &&
+            other->memoryOffset < resource->memoryOffset + resource->memoryBytes &&
+            resource->memoryOffset < other->memoryOffset + other->memoryBytes)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+mrhiResult mrhiPlanAliasing(mrhiDevice* device)
+{
+    uint32_t serial = device->frameSerial;
+    uint32_t planned = device->frameBarrierCount;
+    for (uint32_t slot = 1; slot <= device->frameResourceCount; ++slot)
+    {
+        const mrhiFrameResource* resource = &device->frameResources[slot - 1];
+        if (!resource->placed || !Aliases(device, resource))
+        {
+            continue;
+        }
+        bool marked = false;
+        for (uint32_t i = 0; i < planned; ++i)
+        {
+            mrhiBarrier* barrier = &device->frameBarriers[i];
+            if (barrier->resource.index1 == slot && barrier->pass.index1 == resource->firstPass &&
+                barrier->before == mrhi_stateUndefined)
+            {
+                barrier->aliasing = true;
+                marked = true;
+            }
+        }
+        // A texture's first use always has barriers from the undefined
+        // state; a buffer's gets one.
+        if (marked)
+        {
+            continue;
+        }
+        if (device->frameBarrierCount == device->deviceLimits.frameBarriers)
+        {
+            return mrhi_errorCapacity;
+        }
+        device->frameBarriers[device->frameBarrierCount++] = (mrhiBarrier){
+            .pass = {resource->firstPass, serial},
+            .resource = {slot, serial},
+            .range = {0, 1, 0, 1, mrhi_aspectAll},
+            .before = mrhi_stateUndefined,
+            .after = resource->firstState,
+            .aliasing = true,
+        };
+    }
+    if (device->frameBarrierCount > planned)
+    {
+        Sort(device);
+    }
     return mrhi_success;
 }
 

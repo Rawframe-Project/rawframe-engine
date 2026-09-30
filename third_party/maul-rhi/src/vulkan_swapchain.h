@@ -55,7 +55,8 @@ typedef struct mrhiVulkanSwapchains
     uint32_t capacity;
     // Room for one frame's surface images, a swapchain acquiring once a
     // frame: the semaphores its submission waits on and signals (the
-    // first signal left for the caller), and what it presents.
+    // first wait and the first signal left for the caller), and what it
+    // presents.
     VkSemaphoreSubmitInfo* waits;
     VkSemaphoreSubmitInfo* signals;
     VkSwapchainKHR* presentChains;
@@ -92,7 +93,7 @@ VkImage mrhiVulkanSwapchainImage(const mrhiVulkanSwapchains* swapchains, uint64_
                                  uint64_t image);
 
 // Fills the semaphores a frame's surface images add to its submission:
-// the acquire semaphores it waits on, from waits[0], and the present
+// the acquire semaphores it waits on, from waits[1], and the present
 // semaphores it signals, from signals[1]; tags the acquire semaphores
 // with the frame's serial. Returns how many images there are.
 uint32_t mrhiVulkanPresentSemaphores(mrhiVulkanSwapchains* swapchains, const mrhiDriverFrame* frame,

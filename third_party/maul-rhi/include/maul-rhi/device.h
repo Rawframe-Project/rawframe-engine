@@ -229,6 +229,9 @@ extern "C"
         mrhi_lossRemoved = 3,
         // The GPU's driver failed.
         mrhi_lossDriverFault = 4,
+        // The program lost the device through mrhiSimulateDeviceLoss; the GPU
+        // is fine.
+        mrhi_lossSimulated = 5,
     };
 
 // The bytes a device loss report's message may take, in UTF-8.
@@ -266,6 +269,21 @@ extern "C"
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceLossReport(mrhiDevice* device,
                                                                mrhiDeviceLossReport* reportOut);
+
+    /// Loses a ready device as a driver's report of a loss would: the notice,
+    /// then every running frame, its readbacks and every pending pipeline
+    /// answered `mrhi_errorDeviceLost`, which every call that needs the GPU
+    /// answers afterwards. The driver is told nothing; its work finishes
+    /// unseen. The report's reason is `mrhi_lossSimulated`. For testing a
+    /// program's recovery.
+    ///
+    /// @param device  The device.
+    /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device;
+    /// `mrhi_errorState` for a device still opening; `mrhi_errorDeviceLost` for
+    /// a device already lost.
+    /// @par Thread safety
+    /// Safe from any thread; the device is used by one thread at a time.
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiSimulateDeviceLoss(mrhiDevice* device);
 
 #ifdef __cplusplus
 }

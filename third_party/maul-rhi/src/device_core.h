@@ -177,12 +177,14 @@ typedef struct mrhiFrameResource
     bool written;
     // Whether a kept pass needs it, and the usages kept passes make of
     // it, found by the compile, with the plan's transience, its first
-    // and last kept passes (0 for none) and the state it ends in.
+    // and last kept passes (0 for none), the state its first use puts
+    // it in and the state it ends in.
     bool needed;
     uint32_t usage;
     bool transient;
     uint32_t firstPass;
     uint32_t lastPass;
+    mrhiResourceState firstState;
     mrhiResourceState finalState;
     // Where the compile placed a declared resource in the frame's memory.
     bool placed;
@@ -487,6 +489,7 @@ struct mrhiDevice
     char* frameLabels;
     mrhiDriverPass* driverPasses;
     mrhiDriverResource* driverResources;
+    mrhiDriverAccess* driverAccesses;
     // The last request given, frames' tokens and pipelines' requests
     // alike.
     uint32_t lastRequest;
@@ -596,6 +599,11 @@ void mrhiDeriveStores(mrhiDevice* device);
 // memory by lifetime: success, or mrhi_errorCapacity when the offsets
 // overflow.
 mrhiResult mrhiPlace(mrhiDevice* device);
+
+// Marks the first use of each placed resource that takes memory used
+// earlier in the frame, adding a buffer's barrier for it: success, or
+// mrhi_errorCapacity when the barriers run out.
+mrhiResult mrhiPlanAliasing(mrhiDevice* device);
 
 // Leaves each imported object in the state the submitted frame left it.
 void mrhiApplyFinalStates(mrhiDevice* device);

@@ -181,7 +181,8 @@ static void WalkCommands(Walk* walk, const mrhiDriverPass* pass)
     }
 }
 
-// Checks a pass's label, targets and query sets, then walks its commands.
+// Checks a pass's label, targets, query sets and declared resources,
+// then walks its commands.
 static void WalkPass(Walk* walk, const mrhiDriverPass* pass)
 {
     const mrhiDriverFrame* frame = walk->frame;
@@ -195,9 +196,16 @@ static void WalkPass(Walk* walk, const mrhiDriverPass* pass)
     WALK_CHECK(pass->occlusionSet == 0 || IsHandle(walk, pass->occlusionSet));
     WALK_CHECK(pass->timestampSet == 0 || IsHandle(walk, pass->timestampSet));
     WALK_CHECK(pass->heap == 0 || IsHandle(walk, pass->heap));
+    for (uint32_t i = 0; i < pass->accessCount; ++i)
+    {
+        WALK_CHECK(pass->accesses[i].resource != 0 &&
+                   pass->accesses[i].resource <= frame->resourceCount &&
+                   pass->accesses[i].state <= mrhi_stateSealed);
+    }
     walk->counts.labeled += pass->labelLength > 0 ? 1 : 0;
     walk->counts.occlusionPasses += pass->occlusionSet != 0 ? 1 : 0;
     walk->counts.timestampPasses += pass->timestampSet != 0 ? 1 : 0;
+    walk->counts.accesses += pass->accessCount;
     walk->counts.labelBytes += pass->labelLength;
     WalkCommands(walk, pass);
 }
@@ -223,6 +231,7 @@ static void CheckResource(Walk* walk, const mrhiDriverResource* resource)
         WALK_CHECK(IsHandle(walk, resource->handle));
     }
     walk->counts.needed += resource->needed ? 1 : 0;
+    walk->counts.sealed += resource->sealed ? 1 : 0;
     walk->counts.transients += transient ? 1 : 0;
     walk->counts.presented += image ? 1 : 0;
 }

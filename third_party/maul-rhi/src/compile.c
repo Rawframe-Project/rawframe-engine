@@ -64,6 +64,10 @@ mrhiResult mrhiCompile(mrhiDevice* device)
         }
     }
     status = mrhiPlace(device);
+    if (status == mrhi_success)
+    {
+        status = mrhiPlanAliasing(device);
+    }
     if (status != mrhi_success)
     {
         return status;

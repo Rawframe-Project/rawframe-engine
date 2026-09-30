@@ -622,6 +622,10 @@ extern "C"
         mrhiResourceState before;
         // Its state from then.
         mrhiResourceState after;
+        // Whether it is the first use of a declared resource placed over memory
+        // that resources used earlier in the frame: it then also waits for
+        // their uses, and comes from the undefined state even for a buffer.
+        bool aliasing;
     } mrhiBarrier;
 
     // What a compiled frame does with a resource.

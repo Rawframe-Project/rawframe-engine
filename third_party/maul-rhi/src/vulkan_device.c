@@ -670,7 +670,7 @@ static Layout LayoutOf(const mrhiDeviceDef* def)
     uint32_t surfaces = limits->surfaces;
     at.swapchains =
         mrhiLayoutAdd(layout, surfaces, sizeof(mrhiVulkanSwapchain), alignof(mrhiVulkanSwapchain));
-    at.waits = mrhiLayoutAdd(layout, surfaces, sizeof(VkSemaphoreSubmitInfo),
+    at.waits = mrhiLayoutAdd(layout, (size_t)surfaces + 1, sizeof(VkSemaphoreSubmitInfo),
                              alignof(VkSemaphoreSubmitInfo));
     at.signals = mrhiLayoutAdd(layout, (size_t)surfaces + 1, sizeof(VkSemaphoreSubmitInfo),
                                alignof(VkSemaphoreSubmitInfo));

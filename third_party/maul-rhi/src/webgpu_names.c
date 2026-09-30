@@ -169,6 +169,12 @@ void mrhiWebGpuViewFormats(const mrhiTextureDef* def, char out[MRHI_WEBGPU_VIEW_
 {
     size_t length = 0;
     out[0] = '\0';
+    // A transient attachment is only rendered to, through its own format,
+    // and WebGPU refuses view formats on one.
+    if ((def->usage & mrhi_textureTransient) != 0)
+    {
+        return;
+    }
     for (uint32_t i = 0; i < MRHI_VIEW_FORMATS && def->viewFormats[i] != mrhi_formatNone; ++i)
     {
         const char* name = mrhiWebGpuFormat(def->viewFormats[i]);

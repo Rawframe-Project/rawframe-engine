@@ -17,11 +17,11 @@
 
 #include "capabilities_core.h"
 #include "invariant.h"
+#include "web_js.h"
 #include "webgpu_names.h"
 
 #include "maul-rhi/encoder.h"
 
-#include <emscripten/em_js.h>
 #include <string.h>
 
 // Where a pass's commands go.
@@ -35,7 +35,7 @@ typedef enum Work
 // clang-format off
 // Starts a frame: its command encoder, its uploads written, and the pool
 // trimmed of objects no frame took in the last 8.
-EM_JS(void, JsBeginFrame, (int state, double serial, const uint8_t* staging, double stagingBytes,
+EM_JS(void, mrhiJsBeginFrame, (int state, double serial, const uint8_t* staging, double stagingBytes,
                            double ringBytes), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
@@ -129,27 +129,27 @@ EM_JS(void, JsBeginFrame, (int state, double serial, const uint8_t* staging, dou
     self.frame = frame;
 });
 
-EM_JS(void, JsUseObject, (int state, uint32_t index, int handle), {
+EM_JS(void, mrhiJsUseObject, (int state, uint32_t index, int handle), {
     const self = Module.mrhiGpu.states[state];
     self.frame.objects[index] = self.objects[handle];
 });
 
 // A canvas's texture, whose handle is freed as the frame takes it: the
 // browser presents it once the page returns to its event loop.
-EM_JS(void, JsUseImage, (int state, uint32_t index, int handle), {
+EM_JS(void, mrhiJsUseImage, (int state, uint32_t index, int handle), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
     self.frame.objects[index] = gpu.take(self, handle);
 });
 
-EM_JS(void, JsTransientBuffer, (int state, uint32_t index, double size, uint32_t usage), {
+EM_JS(void, mrhiJsTransientBuffer, (int state, uint32_t index, double size, uint32_t usage), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
     const key = ['buffer', size, usage].join();
     self.frame.objects[index] = self.frame.take(key, () => gpu.buffer(self.device, size, usage));
 });
 
-EM_JS(void, JsTransientTexture, (int state, uint32_t index, bool volume, const char* format,
+EM_JS(void, mrhiJsTransientTexture, (int state, uint32_t index, bool volume, const char* format,
                                  uint32_t width, uint32_t height, uint32_t depth, uint32_t mips,
                                  uint32_t samples, uint32_t usage, const char* viewFormats), {
     const gpu = Module.mrhiGpu;
@@ -161,11 +161,11 @@ EM_JS(void, JsTransientTexture, (int state, uint32_t index, bool volume, const c
         self.device, volume, name, width, height, depth, mips, samples, usage, views));
 });
 
-EM_JS(void, JsAddNoTarget, (int state), {
+EM_JS(void, mrhiJsAddNoTarget, (int state), {
     Module.mrhiGpu.states[state].frame.targets.push(null);
 });
 
-EM_JS(void, JsAddColorTarget, (int state, uint32_t resource, uint32_t mip, uint32_t layer,
+EM_JS(void, mrhiJsAddColorTarget, (int state, uint32_t resource, uint32_t mip, uint32_t layer,
                             bool volume, bool keep, bool discard, float red, float green,
                             float blue, float alpha, uint32_t resolve, uint32_t resolveMip,
                             uint32_t resolveLayer), {
@@ -187,7 +187,7 @@ EM_JS(void, JsAddColorTarget, (int state, uint32_t resource, uint32_t mip, uint3
 
 // A depth target: the ops of the aspects its format has, or those
 // aspects read-only.
-EM_JS(void, JsAddDepthTarget, (int state, uint32_t resource, uint32_t mip, uint32_t layer,
+EM_JS(void, mrhiJsAddDepthTarget, (int state, uint32_t resource, uint32_t mip, uint32_t layer,
                             bool depth, bool stencil, bool readOnly, bool depthKeep,
                             bool depthDiscard, float clearDepth, bool stencilKeep,
                             bool stencilDiscard, uint32_t clearStencil), {
@@ -214,7 +214,7 @@ EM_JS(void, JsAddDepthTarget, (int state, uint32_t resource, uint32_t mip, uint3
 // with the targets given, a compute pass at once only for its
 // timestamps. A compute pass that leaves for the encoder writes its end
 // timestamp in a pass of its own.
-EM_JS(void, JsBeginPass, (int state, int work, const char* label, int labelLength,
+EM_JS(void, mrhiJsBeginPass, (int state, int work, const char* label, int labelLength,
                           int occlusion, int timestamps, uint32_t begin, uint32_t end,
                           bool split), {
     const self = Module.mrhiGpu.states[state];
@@ -256,7 +256,7 @@ EM_JS(void, JsBeginPass, (int state, int work, const char* label, int labelLengt
     }
 });
 
-EM_JS(void, JsEndPass, (int state), {
+EM_JS(void, mrhiJsEndPass, (int state), {
     const frame = Module.mrhiGpu.states[state].frame;
     if (frame.pass) {
         frame.pass.end();
@@ -273,7 +273,7 @@ EM_JS(void, JsEndPass, (int state), {
 
 // Sets a pipeline, and the empty bind groups of its tables without
 // bindings.
-EM_JS(void, JsSetPipeline, (int state, int handle), {
+EM_JS(void, mrhiJsSetPipeline, (int state, int handle), {
     const self = Module.mrhiGpu.states[state];
     const frame = self.frame;
     const entry = self.objects[handle];
@@ -289,7 +289,7 @@ EM_JS(void, JsSetPipeline, (int state, int handle), {
     });
 });
 
-EM_JS(void, JsImmediates, (int state, uint32_t offset, const uint8_t* bytes, uint32_t size), {
+EM_JS(void, mrhiJsImmediates, (int state, uint32_t offset, const uint8_t* bytes, uint32_t size), {
     const frame = Module.mrhiGpu.states[state].frame;
     const bound = frame.bound;
     bound.immediates.set(HEAPU8.subarray(bytes, bytes + size), offset);
@@ -297,20 +297,20 @@ EM_JS(void, JsImmediates, (int state, uint32_t offset, const uint8_t* bytes, uin
     frame.inside().setImmediates(offset, bound.immediates.subarray(offset, offset + size));
 });
 
-EM_JS(void, JsBindBuffer, (int state, uint32_t slot, uint32_t resource, double offset,
+EM_JS(void, mrhiJsBindBuffer, (int state, uint32_t slot, uint32_t resource, double offset,
                            double size), {
     const frame = Module.mrhiGpu.states[state].frame;
     frame.entries.push({binding: slot, resource: {buffer: frame.objects[resource], offset, size}});
 });
 
-EM_JS(void, JsBindSampler, (int state, uint32_t slot, int handle), {
+EM_JS(void, mrhiJsBindSampler, (int state, uint32_t slot, int handle), {
     const self = Module.mrhiGpu.states[state];
     self.frame.entries.push({binding: slot, resource: self.objects[handle]});
 });
 
 // A texture's binding, through a view of one aspect's format when it
 // names one, which the browser resolves.
-EM_JS(void, JsBindTexture, (int state, uint32_t slot, uint32_t resource, const char* format,
+EM_JS(void, mrhiJsBindTexture, (int state, uint32_t slot, uint32_t resource, const char* format,
                             uint32_t dimension, uint32_t aspect, uint32_t baseMip, uint32_t mips,
                             uint32_t baseLayer, uint32_t layers), {
     const gpu = Module.mrhiGpu;
@@ -331,7 +331,7 @@ EM_JS(void, JsBindTexture, (int state, uint32_t slot, uint32_t resource, const c
 
 // Makes a bind group of the bindings given, in the pipeline's layout of
 // the table, and sets it.
-EM_JS(void, JsBindTable, (int state, uint32_t table), {
+EM_JS(void, mrhiJsBindTable, (int state, uint32_t table), {
     const self = Module.mrhiGpu.states[state];
     const frame = self.frame;
     const bound = frame.bound;
@@ -343,54 +343,54 @@ EM_JS(void, JsBindTable, (int state, uint32_t table), {
     bound.groups[table] = group;
 });
 
-EM_JS(void, JsSetVertexBuffer, (int state, uint32_t slot, uint32_t resource, double offset,
+EM_JS(void, mrhiJsSetVertexBuffer, (int state, uint32_t slot, uint32_t resource, double offset,
                              double size), {
     const frame = Module.mrhiGpu.states[state].frame;
     frame.pass.setVertexBuffer(slot, frame.objects[resource], offset, size);
 });
 
-EM_JS(void, JsSetIndexBuffer, (int state, bool wide, uint32_t resource, double offset,
+EM_JS(void, mrhiJsSetIndexBuffer, (int state, bool wide, uint32_t resource, double offset,
                             double size), {
     const frame = Module.mrhiGpu.states[state].frame;
     frame.pass.setIndexBuffer(frame.objects[resource], wide ? 'uint32' : 'uint16', offset, size);
 });
 
-EM_JS(void, JsViewport, (int state, float x, float y, float width, float height, float minDepth,
+EM_JS(void, mrhiJsViewport, (int state, float x, float y, float width, float height, float minDepth,
                          float maxDepth), {
     Module.mrhiGpu.states[state].frame.pass.setViewport(x, y, width, height, minDepth, maxDepth);
 });
 
-EM_JS(void, JsScissor, (int state, uint32_t x, uint32_t y, uint32_t width, uint32_t height), {
+EM_JS(void, mrhiJsScissor, (int state, uint32_t x, uint32_t y, uint32_t width, uint32_t height), {
     Module.mrhiGpu.states[state].frame.pass.setScissorRect(x, y, width, height);
 });
 
-EM_JS(void, JsBlendConstant, (int state, float red, float green, float blue, float alpha), {
+EM_JS(void, mrhiJsBlendConstant, (int state, float red, float green, float blue, float alpha), {
     Module.mrhiGpu.states[state].frame.pass.setBlendConstant([red, green, blue, alpha]);
 });
 
-EM_JS(void, JsStencilReference, (int state, uint32_t reference), {
+EM_JS(void, mrhiJsStencilReference, (int state, uint32_t reference), {
     Module.mrhiGpu.states[state].frame.pass.setStencilReference(reference >>> 0);
 });
 
-EM_JS(void, JsDraw, (int state, uint32_t vertices, uint32_t instances, uint32_t first,
+EM_JS(void, mrhiJsDraw, (int state, uint32_t vertices, uint32_t instances, uint32_t first,
                      uint32_t firstInstance), {
     Module.mrhiGpu.states[state].frame.pass.draw(vertices >>> 0, instances >>> 0, first >>> 0,
                                                  firstInstance >>> 0);
 });
 
-EM_JS(void, JsDrawIndexed, (int state, uint32_t indices, uint32_t instances, uint32_t first,
+EM_JS(void, mrhiJsDrawIndexed, (int state, uint32_t indices, uint32_t instances, uint32_t first,
                             int32_t baseVertex, uint32_t firstInstance), {
     Module.mrhiGpu.states[state].frame.pass.drawIndexed(indices >>> 0, instances >>> 0,
                                                         first >>> 0, baseVertex,
                                                         firstInstance >>> 0);
 });
 
-EM_JS(void, JsDispatch, (int state, uint32_t x, uint32_t y, uint32_t z), {
+EM_JS(void, mrhiJsDispatch, (int state, uint32_t x, uint32_t y, uint32_t z), {
     Module.mrhiGpu.states[state].frame.inside().dispatchWorkgroups(x >>> 0, y >>> 0, z >>> 0);
 });
 
 // A draw, an indexed draw or a dispatch, its arguments read on the GPU.
-EM_JS(void, JsIndirect, (int state, int kind, uint32_t resource, double offset), {
+EM_JS(void, mrhiJsIndirect, (int state, int kind, uint32_t resource, double offset), {
     const frame = Module.mrhiGpu.states[state].frame;
     const buffer = frame.objects[resource];
     if (kind === 0) {
@@ -402,7 +402,7 @@ EM_JS(void, JsIndirect, (int state, int kind, uint32_t resource, double offset),
     }
 });
 
-EM_JS(void, JsOcclusion, (int state, bool begin, uint32_t query), {
+EM_JS(void, mrhiJsOcclusion, (int state, bool begin, uint32_t query), {
     const frame = Module.mrhiGpu.states[state].frame;
     if (begin) {
         frame.write(frame.occlusion, query);
@@ -414,7 +414,7 @@ EM_JS(void, JsOcclusion, (int state, bool begin, uint32_t query), {
 
 // Resolves queries; a query set keeps its values across frames, so those
 // the frame has not written are cleared to 0 after.
-EM_JS(void, JsResolve, (int state, int set, uint32_t first, uint32_t count, uint32_t resource,
+EM_JS(void, mrhiJsResolve, (int state, int set, uint32_t first, uint32_t count, uint32_t resource,
                         double offset), {
     const self = Module.mrhiGpu.states[state];
     const frame = self.frame;
@@ -435,7 +435,7 @@ EM_JS(void, JsResolve, (int state, int set, uint32_t first, uint32_t count, uint
 });
 
 // Pushes a debug group, pops one, or inserts a marker.
-EM_JS(void, JsDebug, (int state, int kind, const char* label, int labelLength), {
+EM_JS(void, mrhiJsDebug, (int state, int kind, const char* label, int labelLength), {
     const frame = Module.mrhiGpu.states[state].frame;
     const target = frame.work === 1 ? frame.pass : frame.outside();
     if (kind === 0) {
@@ -449,7 +449,7 @@ EM_JS(void, JsDebug, (int state, int kind, const char* label, int labelLength), 
 
 // A copy between buffers, object 0 naming the staging buffer as the
 // source and the ring's mirror as the destination.
-EM_JS(void, JsCopyBuffer, (int state, uint32_t source, double sourceOffset, uint32_t target,
+EM_JS(void, mrhiJsCopyBuffer, (int state, uint32_t source, double sourceOffset, uint32_t target,
                            double targetOffset, double size), {
     const self = Module.mrhiGpu.states[state];
     const frame = self.frame;
@@ -463,7 +463,7 @@ EM_JS(void, JsCopyBuffer, (int state, uint32_t source, double sourceOffset, uint
 
 // A copy between a buffer and a texture, object 0 naming staging or the
 // ring's mirror, bytes the span a readback fills.
-EM_JS(void, JsCopyWithTexture, (int state, bool toTexture, uint32_t buffer, double offset,
+EM_JS(void, mrhiJsCopyWithTexture, (int state, bool toTexture, uint32_t buffer, double offset,
                                 uint32_t bytesPerRow, uint32_t rowsPerImage, uint32_t texture,
                                 uint32_t mip, uint32_t x, uint32_t y, uint32_t z, uint32_t aspect,
                                 uint32_t width, uint32_t height, uint32_t depth, double bytes), {
@@ -471,11 +471,13 @@ EM_JS(void, JsCopyWithTexture, (int state, bool toTexture, uint32_t buffer, doub
     const self = gpu.states[state];
     const frame = self.frame;
     const ring = !toTexture && !buffer;
+    // A layout of 0, for a copy of one row or one layer, is left out,
+    // as WebGPU takes it.
     const side = {
         buffer: buffer ? frame.objects[buffer] : (toTexture ? self.staging : frame.ring()),
         offset,
-        bytesPerRow,
-        rowsPerImage,
+        bytesPerRow: bytesPerRow || undefined,
+        rowsPerImage: rowsPerImage || undefined,
     };
     const image = {texture: frame.objects[texture], mipLevel: mip, origin: {x, y, z},
                    aspect: gpu.names.aspects[aspect]};
@@ -490,7 +492,7 @@ EM_JS(void, JsCopyWithTexture, (int state, bool toTexture, uint32_t buffer, doub
     }
 });
 
-EM_JS(void, JsCopyTexture, (int state, const uint32_t* source, const uint32_t* target,
+EM_JS(void, mrhiJsCopyTexture, (int state, const uint32_t* source, const uint32_t* target,
                             uint32_t width, uint32_t height, uint32_t depth), {
     const gpu = Module.mrhiGpu;
     const frame = gpu.states[state].frame;
@@ -505,7 +507,7 @@ EM_JS(void, JsCopyTexture, (int state, const uint32_t* source, const uint32_t* t
 // Submits the frame; it finishes when its readbacks are in the ring, or
 // when the queue has done its work, and the frames finished advance to
 // the first still running.
-EM_JS(void, JsSubmit, (int state, uint8_t* ring), {
+EM_JS(void, mrhiJsSubmit, (int state, uint8_t* ring), {
     const gpu = Module.mrhiGpu;
     const self = gpu.states[state];
     const frame = self.frame;
@@ -543,7 +545,7 @@ EM_JS(void, JsSubmit, (int state, uint8_t* ring), {
     }, settle);
 });
 
-EM_JS(double, JsFinished, (int state), {
+EM_JS(double, mrhiJsFinished, (int state), {
     return Module.mrhiGpu.states[state].finished;
 });
 // clang-format on
@@ -563,11 +565,15 @@ static Work WorkOf(const mrhiDriverPass* pass)
 static void AddTransientTexture(int state, uint32_t index1, const mrhiDriverResource* resource)
 {
     const mrhiTextureDef* def = resource->texture;
+    // The usage the frame's passes gave it, transient among them.
+    mrhiTextureDef used = *def;
+    used.usage = resource->usage;
     char viewFormats[MRHI_WEBGPU_VIEW_FORMAT_BYTES];
-    mrhiWebGpuViewFormats(def, viewFormats);
-    JsTransientTexture(state, index1, def->kind == mrhi_texture3d, mrhiWebGpuFormat(def->format),
-                       def->width, def->height, def->depthOrLayers, def->mipLevels,
-                       def->sampleCount, resource->usage, viewFormats);
+    mrhiWebGpuViewFormats(&used, viewFormats);
+    mrhiJsTransientTexture(state, index1, def->kind == mrhi_texture3d,
+                           mrhiWebGpuFormat(def->format), def->width, def->height,
+                           def->depthOrLayers, def->mipLevels, def->sampleCount, resource->usage,
+                           viewFormats);
 }
 
 // Names the frame's needed resources on the JavaScript side by slot plus
@@ -587,17 +593,17 @@ static void AddResources(int state, const mrhiDriverFrame* frame)
         {
         case mrhiDriverDeviceTexture:
         case mrhiDriverDeviceBuffer:
-            JsUseObject(state, i + 1, (int)resource->handle);
+            mrhiJsUseObject(state, i + 1, (int)resource->handle);
             break;
         case mrhiDriverTransientBuffer:
-            JsTransientBuffer(state, i + 1, (double)resource->size, resource->usage);
+            mrhiJsTransientBuffer(state, i + 1, (double)resource->size, resource->usage);
             break;
         case mrhiDriverTransientTexture:
             AddTransientTexture(state, i + 1, resource);
             break;
         default:
             MRHI_ASSERT(resource->kind == mrhiDriverSurfaceImage);
-            JsUseImage(state, i + 1, (int)resource->image);
+            mrhiJsUseImage(state, i + 1, (int)resource->image);
             break;
         }
     }
@@ -617,15 +623,16 @@ static void AddTargets(int state, const mrhiDriverFrame* frame, const mrhiDriver
         const mrhiColorTarget* target = &pass->colorTargets[i];
         if (target->resource.index1 == 0)
         {
-            JsAddNoTarget(state);
+            mrhiJsAddNoTarget(state);
             continue;
         }
         const mrhiClearColor* clear = &target->clear;
-        JsAddColorTarget(state, target->resource.index1, target->mip, target->layer,
-                         TextureOf(frame, target->resource.index1)->kind == mrhi_texture3d,
-                         target->load == mrhi_loadKeep, pass->colorStores[i] == mrhi_storeDiscard,
-                         clear->red, clear->green, clear->blue, clear->alpha,
-                         target->resolve.index1, target->resolveMip, target->resolveLayer);
+        mrhiJsAddColorTarget(state, target->resource.index1, target->mip, target->layer,
+                             TextureOf(frame, target->resource.index1)->kind == mrhi_texture3d,
+                             target->load == mrhi_loadKeep,
+                             pass->colorStores[i] == mrhi_storeDiscard, clear->red, clear->green,
+                             clear->blue, clear->alpha, target->resolve.index1, target->resolveMip,
+                             target->resolveLayer);
     }
     const mrhiDepthTarget* depth = &pass->depthTarget;
     if (depth->resource.index1 == 0)
@@ -633,11 +640,11 @@ static void AddTargets(int state, const mrhiDriverFrame* frame, const mrhiDriver
         return;
     }
     mrhiFormat format = TextureOf(frame, depth->resource.index1)->format;
-    JsAddDepthTarget(state, depth->resource.index1, depth->mip, depth->layer,
-                     mrhiFormatHasDepth(format), mrhiFormatHasStencil(format), depth->readOnly,
-                     depth->depthLoad == mrhi_loadKeep, pass->depthStore == mrhi_storeDiscard,
-                     depth->clearDepth, depth->stencilLoad == mrhi_loadKeep,
-                     pass->stencilStore == mrhi_storeDiscard, depth->clearStencil);
+    mrhiJsAddDepthTarget(state, depth->resource.index1, depth->mip, depth->layer,
+                         mrhiFormatHasDepth(format), mrhiFormatHasStencil(format), depth->readOnly,
+                         depth->depthLoad == mrhi_loadKeep, pass->depthStore == mrhi_storeDiscard,
+                         depth->clearDepth, depth->stencilLoad == mrhi_loadKeep,
+                         pass->stencilStore == mrhi_storeDiscard, depth->clearStencil);
 }
 
 // Whether a command goes on the command encoder, out of a compute pass.
@@ -678,20 +685,21 @@ static void Bind(int state, const mrhiCommand* command)
         case mrhi_bindingUniformBuffer:
         case mrhi_bindingStorageBuffer:
         case mrhi_bindingReadOnlyStorageBuffer:
-            JsBindBuffer(state, binding.slot, binding.object, (double)binding.offset,
-                         (double)binding.size);
+            mrhiJsBindBuffer(state, binding.slot, binding.object, (double)binding.offset,
+                             (double)binding.size);
             break;
         case mrhi_bindingSampler:
-            JsBindSampler(state, binding.slot, (int)binding.offset);
+            mrhiJsBindSampler(state, binding.slot, (int)binding.offset);
             break;
         default:
-            JsBindTexture(state, binding.slot, binding.object, mrhiWebGpuFormat(binding.viewFormat),
-                          binding.viewKind, binding.aspect, binding.baseMip, binding.mipCount,
-                          (uint32_t)binding.offset, (uint32_t)binding.size);
+            mrhiJsBindTexture(state, binding.slot, binding.object,
+                              mrhiWebGpuFormat(binding.viewFormat), binding.viewKind,
+                              binding.aspect, binding.baseMip, binding.mipCount,
+                              (uint32_t)binding.offset, (uint32_t)binding.size);
             break;
         }
     }
-    JsBindTable(state, command->a);
+    mrhiJsBindTable(state, command->a);
 }
 
 // Sets the root block or render state from a command and its payload.
@@ -700,30 +708,30 @@ static void SetState(int state, const mrhiCommand* command)
     switch (command->type)
     {
     case mrhiCommandRootBlock:
-        JsImmediates(state, command->a, (const uint8_t*)&command[1], (uint32_t)command->b);
+        mrhiJsImmediates(state, command->a, (const uint8_t*)&command[1], (uint32_t)command->b);
         break;
     case mrhiCommandViewport:
     {
         mrhiViewport viewport;
         memcpy(&viewport, &command[1], sizeof(viewport));
-        JsViewport(state, viewport.x, viewport.y, viewport.width, viewport.height,
-                   viewport.minDepth, viewport.maxDepth);
+        mrhiJsViewport(state, viewport.x, viewport.y, viewport.width, viewport.height,
+                       viewport.minDepth, viewport.maxDepth);
         break;
     }
     case mrhiCommandScissor:
-        JsScissor(state, command->a, (uint32_t)command->b, (uint32_t)command->c,
-                  (uint32_t)command->d);
+        mrhiJsScissor(state, command->a, (uint32_t)command->b, (uint32_t)command->c,
+                      (uint32_t)command->d);
         break;
     case mrhiCommandBlendConstant:
     {
         mrhiClearColor color;
         memcpy(&color, &command[1], sizeof(color));
-        JsBlendConstant(state, color.red, color.green, color.blue, color.alpha);
+        mrhiJsBlendConstant(state, color.red, color.green, color.blue, color.alpha);
         break;
     }
     default:
         MRHI_ASSERT(command->type == mrhiCommandStencilReference);
-        JsStencilReference(state, command->a);
+        mrhiJsStencilReference(state, command->a);
         break;
     }
 }
@@ -733,27 +741,29 @@ static void Draw(int state, const mrhiCommand* command)
     switch (command->type)
     {
     case mrhiCommandDraw:
-        JsDraw(state, command->a, (uint32_t)command->b, (uint32_t)command->c, (uint32_t)command->d);
+        mrhiJsDraw(state, command->a, (uint32_t)command->b, (uint32_t)command->c,
+                   (uint32_t)command->d);
         break;
     case mrhiCommandDrawIndexed:
-        JsDrawIndexed(state, command->a, (uint32_t)command->b, (uint32_t)command->c,
-                      (int32_t)(uint32_t)(command->c >> 32), (uint32_t)command->d);
+        mrhiJsDrawIndexed(state, command->a, (uint32_t)command->b, (uint32_t)command->c,
+                          (int32_t)(uint32_t)(command->c >> 32), (uint32_t)command->d);
         break;
     case mrhiCommandDispatch:
-        JsDispatch(state, command->a, (uint32_t)command->b, (uint32_t)command->c);
+        mrhiJsDispatch(state, command->a, (uint32_t)command->b, (uint32_t)command->c);
         break;
     case mrhiCommandVertexBuffer:
-        JsSetVertexBuffer(state, command->a, (uint32_t)command->b, (double)command->c,
-                          (double)command->d);
+        mrhiJsSetVertexBuffer(state, command->a, (uint32_t)command->b, (double)command->c,
+                              (double)command->d);
         break;
     case mrhiCommandIndexBuffer:
-        JsSetIndexBuffer(state, command->a == mrhi_indexUint32, (uint32_t)command->b,
-                         (double)command->c, (double)command->d);
+        mrhiJsSetIndexBuffer(state, command->a == mrhi_indexUint32, (uint32_t)command->b,
+                             (double)command->c, (double)command->d);
         break;
     default:
         MRHI_ASSERT(command->type >= mrhiCommandDrawIndirect &&
                     command->type <= mrhiCommandDispatchIndirect);
-        JsIndirect(state, command->type - mrhiCommandDrawIndirect, command->a, (double)command->c);
+        mrhiJsIndirect(state, command->type - mrhiCommandDrawIndirect, command->a,
+                       (double)command->c);
         break;
     }
 }
@@ -784,10 +794,10 @@ static void CopyWithTexture(int state, const mrhiDriverFrame* frame, const mrhiC
     uint64_t bytes = command->type == mrhiCommandReadTexture
                          ? SpanOf(TextureOf(frame, texture.object), &buffer, &texture, command)
                          : 0;
-    JsCopyWithTexture(state, toTexture, buffer.object, (double)buffer.offset, buffer.bytesPerRow,
-                      buffer.rowsPerImage, texture.object, texture.mip, texture.x, texture.y,
-                      texture.z, texture.aspect, (uint32_t)command->b, (uint32_t)command->c,
-                      (uint32_t)command->d, (double)bytes);
+    mrhiJsCopyWithTexture(state, toTexture, buffer.object, (double)buffer.offset,
+                          buffer.bytesPerRow, buffer.rowsPerImage, texture.object, texture.mip,
+                          texture.x, texture.y, texture.z, texture.aspect, (uint32_t)command->b,
+                          (uint32_t)command->c, (uint32_t)command->d, (double)bytes);
 }
 
 static void Copy(int state, const mrhiDriverFrame* frame, const mrhiCommand* command)
@@ -800,8 +810,8 @@ static void Copy(int state, const mrhiDriverFrame* frame, const mrhiCommand* com
     {
         mrhiCommandBufferSide sides[2];
         memcpy(sides, &command[1], sizeof(sides));
-        JsCopyBuffer(state, sides[0].object, (double)sides[0].offset, sides[1].object,
-                     (double)sides[1].offset, (double)command->b);
+        mrhiJsCopyBuffer(state, sides[0].object, (double)sides[0].offset, sides[1].object,
+                         (double)sides[1].offset, (double)command->b);
         break;
     }
     case mrhiCommandCopyTexture:
@@ -812,8 +822,8 @@ static void Copy(int state, const mrhiDriverFrame* frame, const mrhiCommand* com
                                     sides[0].y,      sides[0].z,   sides[0].aspect};
         const uint32_t target[6] = {sides[1].object, sides[1].mip, sides[1].x,
                                     sides[1].y,      sides[1].z,   sides[1].aspect};
-        JsCopyTexture(state, source, target, (uint32_t)command->b, (uint32_t)command->c,
-                      (uint32_t)command->d);
+        mrhiJsCopyTexture(state, source, target, (uint32_t)command->b, (uint32_t)command->c,
+                          (uint32_t)command->d);
         break;
     }
     default:
@@ -828,7 +838,7 @@ static void Encode(int state, const mrhiDriverFrame* frame, const mrhiCommand* c
     {
     case mrhiCommandGraphicsPipeline:
     case mrhiCommandComputePipeline:
-        JsSetPipeline(state, (int)command->b);
+        mrhiJsSetPipeline(state, (int)command->b);
         break;
     case mrhiCommandRootBlock:
     case mrhiCommandViewport:
@@ -842,19 +852,19 @@ static void Encode(int state, const mrhiDriverFrame* frame, const mrhiCommand* c
         break;
     case mrhiCommandPushDebugGroup:
     case mrhiCommandDebugMarker:
-        JsDebug(state, command->type == mrhiCommandPushDebugGroup ? 0 : 2, (const char*)&command[1],
-                (int)command->b);
+        mrhiJsDebug(state, command->type == mrhiCommandPushDebugGroup ? 0 : 2,
+                    (const char*)&command[1], (int)command->b);
         break;
     case mrhiCommandPopDebugGroup:
-        JsDebug(state, 1, nullptr, 0);
+        mrhiJsDebug(state, 1, nullptr, 0);
         break;
     case mrhiCommandBeginOcclusionQuery:
     case mrhiCommandEndOcclusionQuery:
-        JsOcclusion(state, command->type == mrhiCommandBeginOcclusionQuery, command->a);
+        mrhiJsOcclusion(state, command->type == mrhiCommandBeginOcclusionQuery, command->a);
         break;
     case mrhiCommandResolveQueries:
-        JsResolve(state, (int)command->b, (uint32_t)command->c, (uint32_t)(command->c >> 32),
-                  command->a, (double)command->d);
+        mrhiJsResolve(state, (int)command->b, (uint32_t)command->c, (uint32_t)(command->c >> 32),
+                      command->a, (double)command->d);
         break;
     default:
         if (command->type >= mrhiCommandCopyBuffer)
@@ -878,9 +888,9 @@ static void EncodePass(int state, const mrhiDriverFrame* frame, const mrhiDriver
     {
         AddTargets(state, frame, pass);
     }
-    JsBeginPass(state, (int)work, pass->label, (int)pass->labelLength, (int)pass->occlusionSet,
-                (int)pass->timestampSet, pass->timestampBegin, pass->timestampEnd,
-                work == WORK_COMPUTE && Splits(frame, pass));
+    mrhiJsBeginPass(state, (int)work, pass->label, (int)pass->labelLength, (int)pass->occlusionSet,
+                    (int)pass->timestampSet, pass->timestampBegin, pass->timestampEnd,
+                    work == WORK_COMPUTE && Splits(frame, pass));
     for (uint32_t chunk = pass->firstChunk; chunk != 0; chunk = frame->chunks[chunk - 1].next)
     {
         const mrhiCommandChunk* at = &frame->chunks[chunk - 1];
@@ -889,22 +899,22 @@ static void EncodePass(int state, const mrhiDriverFrame* frame, const mrhiDriver
             Encode(state, frame, &at->commands[i]);
         }
     }
-    JsEndPass(state);
+    mrhiJsEndPass(state);
 }
 
 void mrhiWebGpuSubmitFrame(int state, const mrhiDriverFrame* frame, uint64_t serial)
 {
-    JsBeginFrame(state, (double)serial, frame->staging, (double)frame->stagingBytes,
-                 (double)frame->readbackBytes);
+    mrhiJsBeginFrame(state, (double)serial, frame->staging, (double)frame->stagingBytes,
+                     (double)frame->readbackBytes);
     AddResources(state, frame);
     for (uint32_t p = 0; p < frame->passCount; ++p)
     {
         EncodePass(state, frame, &frame->passes[p]);
     }
-    JsSubmit(state, frame->readbackRing);
+    mrhiJsSubmit(state, frame->readbackRing);
 }
 
 uint64_t mrhiWebGpuFinishedFrames(int state)
 {
-    return (uint64_t)JsFinished(state);
+    return (uint64_t)mrhiJsFinished(state);
 }

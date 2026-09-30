@@ -201,3 +201,48 @@ mrhiResult mrhiGetSurfaceCaps(mrhiInstance* instance, mrhiSurfaceId surface, mrh
     *capsOut = caps.presentable ? caps : (mrhiSurfaceCaps){0};
     return mrhi_success;
 }
+
+static bool IsSameColor(const mrhiSurfaceColor* a, const mrhiSurfaceColor* b)
+{
+    return a->format == b->format && a->primaries == b->primaries && a->transfer == b->transfer &&
+           a->range == b->range;
+}
+
+// 8-bit sRGB in Rec. 709 of standard range, the floor every presenting
+// surface reports.
+static bool IsSrgb8(const mrhiSurfaceColor* color)
+{
+    return (color->format == mrhi_formatRgba8Unorm || color->format == mrhi_formatBgra8Unorm) &&
+           color->primaries == mrhi_primariesBt709 && color->transfer == mrhi_transferSrgb &&
+           color->range == mrhi_rangeStandard;
+}
+
+mrhiResult mrhiSuggestSurfaceColor(const mrhiSurfaceCaps* caps, const mrhiSurfaceColor* asked,
+                                   mrhiSurfaceColor* colorOut)
+{
+    if (caps == nullptr || asked == nullptr || colorOut == nullptr ||
+        caps->colorCount > MRHI_SURFACE_COLORS)
+    {
+        return mrhi_errorInvalid;
+    }
+    static const mrhiSurfaceColor hdr = {mrhi_formatRgba16Float, mrhi_primariesBt709,
+                                         mrhi_transferLinear, mrhi_rangeExtended};
+    // The fallback order: what was asked, then linear half floats of
+    // extended range, then 8-bit sRGB.
+    for (uint32_t step = 0; step < 3; ++step)
+    {
+        for (uint32_t i = 0; i < caps->colorCount; ++i)
+        {
+            const mrhiSurfaceColor* color = &caps->colors[i];
+            bool fits = step == 0   ? IsSameColor(color, asked)
+                        : step == 1 ? IsSameColor(color, &hdr)
+                                    : IsSrgb8(color);
+            if (fits)
+            {
+                *colorOut = *color;
+                return mrhi_success;
+            }
+        }
+    }
+    return mrhi_errorUnsupported;
+}

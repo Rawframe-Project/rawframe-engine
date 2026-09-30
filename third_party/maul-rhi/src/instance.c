@@ -13,6 +13,12 @@
 #ifdef MAUL_RHI_TEST_DRIVER
 #include "driver_test.h"
 #endif
+#ifdef MAUL_RHI_D3D12_DRIVER
+#include "driver_d3d12.h"
+#endif
+#ifdef MAUL_RHI_METAL_DRIVER
+#include "driver_metal.h"
+#endif
 #ifdef MAUL_RHI_VULKAN_DRIVER
 #include "driver_vulkan.h"
 #endif
@@ -127,7 +133,13 @@ static mrhiResult StartDriver(mrhiInstance* instance, const mrhiInstanceDef* def
         }
 #endif
     }
-#ifdef MAUL_RHI_VULKAN_DRIVER
+#ifdef MAUL_RHI_D3D12_DRIVER
+    return mrhiCreateD3d12Driver(&instance->allocator, def->limits.notifications,
+                                 &instance->driver);
+#elif defined(MAUL_RHI_METAL_DRIVER)
+    return mrhiCreateMetalDriver(&instance->allocator, def->limits.notifications,
+                                 &instance->driver);
+#elif defined(MAUL_RHI_VULKAN_DRIVER)
     mrhiResult status = mrhiCreateVulkanDriver(&instance->allocator, def->limits.notifications,
                                                def->limits.adapters, &instance->driver);
     MRHI_ASSERT(instance->driver.vtable == nullptr ||

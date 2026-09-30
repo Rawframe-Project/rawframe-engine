@@ -10,6 +10,7 @@
 #include "invariant.h"
 
 #include <stdatomic.h>
+#include <string.h>
 
 #define FRAME_DEF_COOKIE 0x6D726672u
 
@@ -93,7 +94,8 @@ static void Finish(mrhiDevice* device, uint64_t tag, mrhiResult outcome)
     }
 }
 
-void mrhiLoseDevice(mrhiDevice* device)
+// Loses the device with a report: the driver's, or the one given.
+static void Lose(mrhiDevice* device, const mrhiDeviceLossReport* given)
 {
     if (device->state == mrhi_deviceLost)
     {
@@ -101,7 +103,14 @@ void mrhiLoseDevice(mrhiDevice* device)
     }
     device->state = mrhi_deviceLost;
     mrhiDeviceLossReport report = {0};
-    device->driver.vtable->lossReport(device->driver.self, &report);
+    if (given != nullptr)
+    {
+        report = *given;
+    }
+    else
+    {
+        device->driver.vtable->lossReport(device->driver.self, &report);
+    }
     report.lastSubmitted = (mrhiRequestId){device->lastSubmitted, device->lastSubmitted != 0};
     report.lastFinished = (mrhiRequestId){device->lastFinished, device->lastFinished != 0};
     MRHI_ASSERT(report.messageLength <= MRHI_LOSS_MESSAGE_BYTES);
@@ -113,6 +122,31 @@ void mrhiLoseDevice(mrhiDevice* device)
         Finish(device, device->running[0], mrhi_errorDeviceLost);
     }
     mrhiLosePipelines(device);
+}
+
+void mrhiLoseDevice(mrhiDevice* device)
+{
+    Lose(device, nullptr);
+}
+
+mrhiResult mrhiSimulateDeviceLoss(mrhiDevice* device)
+{
+    if (device == nullptr)
+    {
+        return mrhi_errorInvalid;
+    }
+    if (device->state != mrhi_deviceReady)
+    {
+        return device->state == mrhi_deviceLost ? mrhi_errorDeviceLost : mrhi_errorState;
+    }
+    static const char message[] = "Lost through mrhiSimulateDeviceLoss";
+    mrhiDeviceLossReport report = {
+        .reason = mrhi_lossSimulated,
+        .messageLength = sizeof(message) - 1,
+    };
+    memcpy(report.message, message, sizeof(message) - 1);
+    Lose(device, &report);
+    return mrhi_success;
 }
 
 mrhiResult mrhiDriverStatus(mrhiDevice* device, mrhiResult status)

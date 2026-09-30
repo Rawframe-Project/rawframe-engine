@@ -222,6 +222,14 @@ function(rawframe_module_tests)
         set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT
                              "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
     endif()
+    # On the web, Maul RHI's page side for Node's run of a test that holds
+    # the device (tools/wasi_run.mjs, D282).
+    if(TARGET maul-rhi)
+        get_target_property(rawframe_rhi_glue maul-rhi MAUL_RHI_WEB_GLUE)
+        if(rawframe_rhi_glue)
+            set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT "RAWFRAME_MAUL_RHI_GLUE=${rawframe_rhi_glue}")
+        endif()
+    endif()
 endfunction()
 
 # Declares a coverage-guided fuzz target for one module's hostile input

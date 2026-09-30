@@ -253,6 +253,25 @@ extern "C"
                                                           mrhiAdapterId adapter,
                                                           mrhiSurfaceCaps* capsOut);
 
+    /// Suggests the color to configure a surface with, from what its caps
+    /// report, in the library's fallback order: the color asked for, then half
+    /// floats in linear Rec. 709 of extended range, then 8-bit sRGB in Rec. 709
+    /// of standard range, the caps' first such format. The program applies the
+    /// suggestion or chooses otherwise; configuring never replaces a color.
+    ///
+    /// @param caps      The caps the surface reported.
+    /// @param asked     The color the program wants first.
+    /// @param colorOut  Receives the color to configure.
+    /// @return `mrhi_success` with the color; `mrhi_errorInvalid` for a NULL
+    /// argument, or caps reporting more than MRHI_SURFACE_COLORS colors;
+    /// `mrhi_errorUnsupported` when the caps report none of the three, which a
+    /// surface that presents always does.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiSuggestSurfaceColor(const mrhiSurfaceCaps* caps,
+                                                               const mrhiSurfaceColor* asked,
+                                                               mrhiSurfaceColor* colorOut);
+
     // How a device configures a surface. Build it with mrhiDefaultSurfaceConfig
     // and set its surface, color and size.
     typedef struct mrhiSurfaceConfig

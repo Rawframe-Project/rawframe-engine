@@ -140,15 +140,20 @@ static bool IsTexture(const mrhiDriverFrame* frame, uint32_t index1)
            kind == mrhiDriverSurfaceImage;
 }
 
+// What an aliasing barrier waits for: every earlier use of the memory
+// its resource takes.
+static const Use s_aliased = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
+                              VK_IMAGE_LAYOUT_UNDEFINED};
+
 static void AddBarrier(const mrhiVulkanRecording* recording, const mrhiBarrier* barrier,
                        Batch* batch)
 {
-    const Use* before = &s_uses[barrier->before];
+    const Use* before = barrier->aliasing ? &s_aliased : &s_uses[barrier->before];
     const Use* after = &s_uses[barrier->after];
     uint32_t index1 = barrier->resource.index1;
     if (!IsTexture(recording->frame, index1))
     {
-        before = BufferUse(barrier->before);
+        before = barrier->aliasing ? &s_aliased : BufferUse(barrier->before);
         after = BufferUse(barrier->after);
         batch->buffers[batch->bufferCount++] = (VkBufferMemoryBarrier2){
             .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,

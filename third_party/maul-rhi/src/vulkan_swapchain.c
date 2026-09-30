@@ -345,7 +345,7 @@ uint32_t mrhiVulkanPresentSemaphores(mrhiVulkanSwapchains* swapchains, const mrh
         uint32_t image = (uint32_t)resource->image - 1;
         uint32_t semaphore = slot->waitOf[image];
         slot->acquiredBy[semaphore] = serial;
-        swapchains->waits[count] = (VkSemaphoreSubmitInfo){
+        swapchains->waits[count + 1] = (VkSemaphoreSubmitInfo){
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = slot->acquired[semaphore],
             .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,

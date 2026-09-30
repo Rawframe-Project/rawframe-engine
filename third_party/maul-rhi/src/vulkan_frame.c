@@ -377,9 +377,20 @@ static VkResult Run(mrhiVulkanFrames* frames, mrhiVulkanSlot* slot, const mrhiDr
         .commandBuffer = slot->commands,
     };
     // The frame waits for its surface images' acquires and signals their
-    // presents beside its serial.
+    // presents beside its serial. It also waits for the frame that used
+    // its slot before it: the host saw that frame finish before reusing
+    // the slot's memory, so the wait costs the GPU nothing, but it puts
+    // the reuse in the queue's own order, where synchronization
+    // validation sees it.
     mrhiVulkanSwapchains* swapchains = frames->swapchains;
     uint32_t images = mrhiVulkanPresentSemaphores(swapchains, frame, frames->submitted + 1);
+    bool reused = frames->submitted >= frames->slotCount;
+    swapchains->waits[0] = (VkSemaphoreSubmitInfo){
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = frames->timeline,
+        .value = reused ? frames->submitted + 1 - frames->slotCount : 0,
+        .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+    };
     swapchains->signals[0] = (VkSemaphoreSubmitInfo){
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
         .semaphore = frames->timeline,
@@ -388,8 +399,8 @@ static VkResult Run(mrhiVulkanFrames* frames, mrhiVulkanSlot* slot, const mrhiDr
     };
     const VkSubmitInfo2 submit = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .waitSemaphoreInfoCount = images,
-        .pWaitSemaphoreInfos = swapchains->waits,
+        .waitSemaphoreInfoCount = images + (reused ? 1 : 0),
+        .pWaitSemaphoreInfos = reused ? swapchains->waits : swapchains->waits + 1,
         .commandBufferInfoCount = 1,
         .pCommandBufferInfos = &commands,
         .signalSemaphoreInfoCount = images + 1,
