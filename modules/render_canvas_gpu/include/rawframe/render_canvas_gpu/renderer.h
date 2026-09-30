@@ -31,11 +31,17 @@ namespace rawframe::render_canvas_gpu {
 /// The texture the game names `id`, decoded; none while it is not ready.
 using TextureSource = std::function<std::shared_ptr<const texture::Texture>(std::uint64_t id)>;
 
-/// SPEC-0024's limit points as the canvas's GPU half has them: its
-/// textures', a draw whose texture is not held being left out. Their upload
-/// budget is three quarters of what the device uploads in a frame, the rest
-/// kept for the frame's corners.
-using RendererLimits = render::TextureLimits;
+/// SPEC-0024's limit points as the canvas's GPU half has them.
+struct RendererLimits {
+    /// Textures held on the device at once; a draw naming one past them is
+    /// left out.
+    std::size_t maximumTextures = 256;
+    /// SPEC-0024's `upload_bytes_per_frame`: a texture that would pass it
+    /// waits for a later frame (`deferred`), its draws left out until then.
+    /// Three quarters of what the device uploads in a frame, the rest kept
+    /// for the frame's corners; a texture larger than it is never drawn.
+    std::uint64_t uploadBytesPerFrame = render::kFrameUploadBytes / 4 * 3;
+};
 
 struct RendererStatistics {
     /// Frames it drew in, submitted.

@@ -105,11 +105,11 @@ result::Result<std::unique_ptr<DeviceTextures>> DeviceTextures::create(Device& d
     return std::unique_ptr<DeviceTextures>{new DeviceTextures{std::move(state)}};
 }
 
-void DeviceTextures::begin() noexcept {
+void DeviceTextures::begin(std::uint64_t budget) noexcept {
     state_->chosen.clear();
     state_->imported.clear();
     state_->uploads.clear();
-    state_->budget = state_->limits.uploadBytesPerFrame;
+    state_->budget = budget;
 }
 
 bool DeviceTextures::choose(std::uint64_t id, const std::shared_ptr<const texture::Texture>& image) {

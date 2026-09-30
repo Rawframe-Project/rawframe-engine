@@ -52,6 +52,7 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
 struct CanvasRenderer::State {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
+    RendererLimits limits;
     RendererStatistics statistics;
     mrhiShaderId shader{};
     mrhiGraphicsPipelineId pipeline{};
@@ -144,7 +145,7 @@ struct CanvasRenderer::State {
     /// Chooses the textures this frame draws from; a draw whose texture
     /// is not chosen is left out.
     void texturesOf(const render_canvas::CanvasFrame& canvas, const TextureSource& source) {
-        held->begin();
+        held->begin(limits.uploadBytesPerFrame);
         for (const render_canvas::CanvasDraw& draw : canvas.draws) {
             static_cast<void>(held->choose(draw.texture, source ? source(draw.texture) : nullptr));
         }
@@ -338,7 +339,9 @@ result::Result<std::unique_ptr<CanvasRenderer>> CanvasRenderer::create(render::D
     auto state = std::make_unique<State>();
     state->device = &device;
     state->native = device.native();
-    RAWFRAME_TRY_ASSIGN(state->held, render::DeviceTextures::create(device, limits));
+    state->limits = limits;
+    RAWFRAME_TRY_ASSIGN(state->held,
+                        render::DeviceTextures::create(device, {.maximumTextures = limits.maximumTextures}));
     RAWFRAME_TRY(state->makePipeline());
     return std::unique_ptr<CanvasRenderer>{new CanvasRenderer{std::move(state)}};
 }

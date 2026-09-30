@@ -2,8 +2,8 @@
 
 // Textures held on the device (SPEC-0024, D307): each made once from the
 // decoded texture a drawer names, and made again when a reload gives it a
-// new one; its levels uploaded within the frame's budget, and a texture
-// that would pass the budget left for a later frame. The canvas's sprites
+// new one; its levels uploaded within the budget the drawer gives the
+// frame, and a texture that would pass it left for a later frame. The canvas's sprites
 // and the scene's materials each hold theirs in one of these. Ids of the
 // open frame are named as `requestKey` names them.
 
@@ -18,14 +18,10 @@
 
 namespace rawframe::render {
 
-/// SPEC-0024's limit points on what a drawer holds on the device.
+/// SPEC-0024's limit point on what a drawer holds on the device: the
+/// textures held at once; one chosen past them is not drawn.
 struct TextureLimits {
-    /// Textures held at once; one chosen past them is not drawn.
     std::size_t maximumTextures = 256;
-    /// SPEC-0024's `upload_bytes_per_frame`: a texture that would pass it
-    /// waits for a later frame (deferred). A texture larger than it is never
-    /// drawn.
-    std::uint64_t uploadBytesPerFrame = kFrameUploadBytes / 4 * 3;
 };
 
 struct TextureStatistics {
@@ -47,8 +43,11 @@ public:
     DeviceTextures& operator=(const DeviceTextures&) = delete;
     ~DeviceTextures();
 
-    /// Starts choosing what the frame being declared draws from.
-    void begin() noexcept;
+    /// Starts choosing what the frame being declared draws from, within
+    /// `budget` bytes of uploads (the drawer's share of SPEC-0024's
+    /// `upload_bytes_per_frame`). A texture larger than every budget is
+    /// never drawn.
+    void begin(std::uint64_t budget) noexcept;
     /// Chooses the texture the drawer names `id`, decoded as `image`: made
     /// on the device if it is not held, or held from another image. Whether
     /// the frame can draw from it: not for no image, a format the device
