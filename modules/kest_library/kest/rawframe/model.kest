@@ -130,11 +130,18 @@ struct Sun {
 // sun's light and the sky's (D304): `ground` is its albedo, 0xRRGGBBAA in
 // sRGB (alpha unused), and nought gives nothing back. A game declares at
 // most one; without one, a clear day's: 5,000 in a clear blue
-// (0x8FB8EBFF) over a ground giving back a fifth (0x7C7C7CFF).
+// (0x8FB8EBFF) over a ground giving back a fifth (0x7C7C7CFF). An
+// `environment` is a picture of the sky all around (D322): the game texture
+// a Radiance picture cooked as an environment is (its identity, as a
+// material names a texture), seen behind everything and lighting and
+// reflected by every surface, its light times `luminance` in `color`; the
+// picture's lower half is then the ground, and `ground` gives nothing.
+// Nought, or a texture that is not an environment, is none.
 struct Sky {
     luminance: f32
     color: u32
     ground: u32
+    environment: u64
 }
 
 // A point light (ADR-0051), on any entity, at its pose: `lumens` of

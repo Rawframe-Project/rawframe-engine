@@ -104,6 +104,7 @@ struct Sky {
     float luminance = 0;
     std::uint32_t color = 0xFFFFFFFF;
     std::uint32_t ground = 0;
+    std::uint64_t environment = 0;
 };
 
 /// `rawframe.model.PointLight` as C++ reads it.
@@ -259,6 +260,10 @@ struct SceneLights {
     /// The ground's luminance below the horizon (D304): its albedo times
     /// the sun's illuminance on it and the sky's, over π.
     std::array<float, 3> ground{0, 0, 0};
+    /// The sky's picture (D322): the texture the game names, a cube whose
+    /// light `sky` scales, in place of the sky's and the ground's; nought
+    /// for none.
+    std::uint64_t environment = 0;
 };
 
 /// A punctual light as the extract stage copies it out of the World, where

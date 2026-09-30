@@ -279,6 +279,11 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSkyId), &sky).has_value());
     const SceneFrame& kWhite = rig.frame({});
     RAWFRAME_EXPECT(near(kWhite.lights.ground[2], (215.86F / std::numbers::pi_v<float>)+10, 0.1F));
+    // The sky's picture is named through to the frame (D322); none without.
+    RAWFRAME_EXPECT(kWhite.lights.environment == 0);
+    sky.environment = 0x5eed5eed5eed5eedULL;
+    RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSkyId), &sky).has_value());
+    RAWFRAME_EXPECT(rig.frame({}).lights.environment == 0x5eed5eed5eed5eedULL);
     // A sun not finite gives no light rather than a poisoned frame.
     Sun broken{.illuminance = std::numeric_limits<float>::infinity()};
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSunId), &broken).has_value());

@@ -207,7 +207,8 @@ struct Scene::State {
         frame.lights =
             SceneLights{.toSun = kToSun,
                         .sun = {kSunColor[0] * kIlluminance, kSunColor[1] * kIlluminance, kSunColor[2] * kIlluminance},
-                        .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance}};
+                        .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance},
+                        .environment = kSky.environment};
         // The ground, level and unshadowed: what reaches it, the sun's at
         // its height and the whole upper sky's (π times its luminance),
         // given back evenly by its albedo.
@@ -891,11 +892,13 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"directionZ", offsetof(Sun, directionZ)},
                            {"illuminance", offsetof(Sun, illuminance)},
                            {"color", offsetof(Sun, color)}}));
-    RAWFRAME_TRY(kLaidOut(
-        loaded.sky.has_value(),
-        "rawframe.model.Sky",
-        sizeof(Sky),
-        {{"luminance", offsetof(Sky, luminance)}, {"color", offsetof(Sky, color)}, {"ground", offsetof(Sky, ground)}}));
+    RAWFRAME_TRY(kLaidOut(loaded.sky.has_value(),
+                          "rawframe.model.Sky",
+                          sizeof(Sky),
+                          {{"luminance", offsetof(Sky, luminance)},
+                           {"color", offsetof(Sky, color)},
+                           {"ground", offsetof(Sky, ground)},
+                           {"environment", offsetof(Sky, environment)}}));
     RAWFRAME_TRY(kLaidOut(!loaded.points.empty(),
                           "rawframe.model.PointLight",
                           sizeof(PointLight),
