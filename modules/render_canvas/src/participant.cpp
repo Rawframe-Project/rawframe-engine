@@ -1,12 +1,12 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/game_content/game_content.h"
+#include "rawframe/game_textures/game_textures.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
 #include "rawframe/render_canvas/errors.h"
 #include "rawframe/render_canvas/frames.h"
 #include "rawframe/render_canvas/registrar.h"
-#include "rawframe/render_canvas/textures.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/client_worlds.h"
 
@@ -102,14 +102,14 @@ public:
             if (!content->held()) {
                 return {};
             }
-            RAWFRAME_TRY(content->admit(textureRepresentations()));
-            auto textures = CanvasTextures::create(content->store(),
-                                                   *context.cpuExecutor(),
-                                                   context.owner(),
-                                                   context.scope(),
-                                                   context.clock(),
-                                                   files->textures(),
-                                                   kTextureBudgetBytes);
+            RAWFRAME_TRY(content->admit(game_textures::textureRepresentations()));
+            auto textures = game_textures::GameTextures::create(content->store(),
+                                                                *context.cpuExecutor(),
+                                                                context.owner(),
+                                                                context.scope(),
+                                                                context.clock(),
+                                                                files->textures(),
+                                                                kTextureBudgetBytes);
             if (textures.has_value()) {
                 textures_ = std::move(*textures);
             } else {
@@ -138,7 +138,7 @@ public:
             ++tick_;
             queued_ = nullptr;
             if (textures_ != nullptr) {
-                const TextureChanges kChanges = textures_->update(tick_);
+                const game_textures::TextureChanges kChanges = textures_->update(tick_);
                 for (const auto& [kId, kError] : kChanges.failed) {
                     emitter_.log(diagnostics::Severity::Warning,
                                  kUnreadTexture,
@@ -197,7 +197,8 @@ public:
         if (clients_ == nullptr) {
             return;
         }
-        const TextureCounts kTextures = textures_ != nullptr ? textures_->counts() : TextureCounts{};
+        const game_textures::TextureCounts kTextures =
+            textures_ != nullptr ? textures_->counts() : game_textures::TextureCounts{};
         emitter_.log(diagnostics::Severity::Info,
                      kCanvasSummary,
                      "what one client's canvas drew",
@@ -302,7 +303,7 @@ private:
     std::uint64_t viewed_ = 0;
     std::uint64_t reloaded_ = 0;
     std::unique_ptr<Canvas> canvas_;
-    std::unique_ptr<CanvasTextures> textures_;
+    std::unique_ptr<game_textures::GameTextures> textures_;
     std::optional<std::string> unread_;
     std::uint64_t tick_ = 0;
     std::uint64_t drawsWaiting_ = 0;

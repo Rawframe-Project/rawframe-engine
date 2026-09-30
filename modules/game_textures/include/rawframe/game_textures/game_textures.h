@@ -1,11 +1,12 @@
 #pragma once
 
 // A game's textures read by resource identity (ADR-0025, D255): each
-// texture its `texture` lines declare asked of the content store once,
-// decoded into its levels on a CPU worker, and held while this lives, so
-// nothing a device draws from is evicted under it. A texture recooked while
-// this lives follows the store's reload to its new revision (D262). The
-// upload to a device is `rawframe.render`'s, when it exists.
+// texture asked of the content store once, decoded into its levels on a CPU
+// worker, and held while this lives, so nothing a device draws from is
+// evicted under it. A texture recooked while this lives follows the store's
+// reload to its new revision (D262). The canvas's sprites and the scene's
+// materials both draw from it (D306); the upload to a device is
+// `rawframe.render`'s.
 
 #include "rawframe/assets/assets.h"
 #include "rawframe/content/store.h"
@@ -20,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace rawframe::render_canvas {
+namespace rawframe::game_textures {
 
 /// The representation a cooked texture has, admitted wherever textures are
 /// read.
@@ -48,13 +49,13 @@ struct TextureChanges {
     bool read = false;
 };
 
-class CanvasTextures {
+class GameTextures {
 public:
     /// Asks for every texture of `declared` at once, decoding on `cpu` as
     /// `owner`, within `budgetBytes` of decoded levels. Refuses what a
     /// request refuses: a texture the catalog does not hold, or holds as
     /// another type.
-    [[nodiscard]] static result::Result<std::unique_ptr<CanvasTextures>>
+    [[nodiscard]] static result::Result<std::unique_ptr<GameTextures>>
     create(content::ContentStore& store,
            execution::Executor& cpu,
            execution::OwnerId owner,
@@ -63,9 +64,9 @@ public:
            std::vector<world_kest::GameTextureResource> declared,
            std::uint64_t budgetBytes);
 
-    CanvasTextures(const CanvasTextures&) = delete;
-    CanvasTextures& operator=(const CanvasTextures&) = delete;
-    ~CanvasTextures();
+    GameTextures(const GameTextures&) = delete;
+    GameTextures& operator=(const GameTextures&) = delete;
+    ~GameTextures();
 
     /// Once a frame, on the owner's thread: takes finished reads, decodes,
     /// and reloads, and says what changed.
@@ -80,8 +81,8 @@ public:
     struct State;
 
 private:
-    explicit CanvasTextures(std::unique_ptr<State> state) noexcept;
+    explicit GameTextures(std::unique_ptr<State> state) noexcept;
     std::unique_ptr<State> state_;
 };
 
-} // namespace rawframe::render_canvas
+} // namespace rawframe::game_textures

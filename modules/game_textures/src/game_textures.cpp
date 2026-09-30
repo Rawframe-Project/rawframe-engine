@@ -1,8 +1,8 @@
-#include "rawframe/render_canvas/textures.h"
+#include "rawframe/game_textures/game_textures.h"
 
 #include <algorithm>
 
-namespace rawframe::render_canvas {
+namespace rawframe::game_textures {
 
 namespace {
 
@@ -33,25 +33,25 @@ std::vector<content::AdmittedRepresentation> textureRepresentations() {
         {.type = kTextureType, .representation = *content::RepresentationId::parse(texture::kTextureRepresentation)}};
 }
 
-struct CanvasTextures::State {
+struct GameTextures::State {
     std::unique_ptr<assets::AssetSet> set;
     std::vector<Wanted> wanted;
     bool read = false;
 };
 
-CanvasTextures::CanvasTextures(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
+GameTextures::GameTextures(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
 }
 
-CanvasTextures::~CanvasTextures() = default;
+GameTextures::~GameTextures() = default;
 
-result::Result<std::unique_ptr<CanvasTextures>>
-CanvasTextures::create(content::ContentStore& store,
-                       execution::Executor& cpu,
-                       execution::OwnerId owner,
-                       execution::CancellationScope& parent,
-                       const execution::MonotonicSource& clock,
-                       std::vector<world_kest::GameTextureResource> declared,
-                       std::uint64_t budgetBytes) {
+result::Result<std::unique_ptr<GameTextures>>
+GameTextures::create(content::ContentStore& store,
+                     execution::Executor& cpu,
+                     execution::OwnerId owner,
+                     execution::CancellationScope& parent,
+                     const execution::MonotonicSource& clock,
+                     std::vector<world_kest::GameTextureResource> declared,
+                     std::uint64_t budgetBytes) {
     auto state = std::make_unique<State>();
     RAWFRAME_TRY_ASSIGN(
         state->set,
@@ -66,10 +66,10 @@ CanvasTextures::create(content::ContentStore& store,
         RAWFRAME_TRY_ASSIGN(const assets::RequesterId kRequester, state->set->request(kReference));
         state->wanted.push_back(Wanted{.id = texture.id, .resource = kReference.id, .requester = kRequester});
     }
-    return std::unique_ptr<CanvasTextures>{new CanvasTextures{std::move(state)}};
+    return std::unique_ptr<GameTextures>{new GameTextures{std::move(state)}};
 }
 
-TextureChanges CanvasTextures::update(std::uint64_t tick) {
+TextureChanges GameTextures::update(std::uint64_t tick) {
     State& state = *state_;
     state.set->update(tick);
     TextureChanges changes;
@@ -100,7 +100,7 @@ TextureChanges CanvasTextures::update(std::uint64_t tick) {
     return changes;
 }
 
-std::shared_ptr<const texture::Texture> CanvasTextures::texture(std::uint64_t id, std::uint64_t tick) const {
+std::shared_ptr<const texture::Texture> GameTextures::texture(std::uint64_t id, std::uint64_t tick) const {
     const auto kWanted = std::ranges::find(state_->wanted, id, &Wanted::id);
     if (kWanted == state_->wanted.end()) {
         return nullptr;
@@ -113,7 +113,7 @@ std::shared_ptr<const texture::Texture> CanvasTextures::texture(std::uint64_t id
     return shared.has_value() ? std::move(*shared) : nullptr;
 }
 
-TextureCounts CanvasTextures::counts() const noexcept {
+TextureCounts GameTextures::counts() const noexcept {
     TextureCounts counts{.bytes = state_->set->statistics().residentBytes};
     for (const Wanted& wanted : state_->wanted) {
         switch (state_->set->readiness(wanted.requester)) {
@@ -131,4 +131,4 @@ TextureCounts CanvasTextures::counts() const noexcept {
     return counts;
 }
 
-} // namespace rawframe::render_canvas
+} // namespace rawframe::game_textures
