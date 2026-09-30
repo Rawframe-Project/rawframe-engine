@@ -2,6 +2,7 @@
 
 #include <maul-window/gamepad.h>
 #include <maul-window/input.h>
+#include <maul-window/native.h>
 #include <maul-window/window.h>
 #include <utility>
 
@@ -219,6 +220,42 @@ result::Result<RequestId> Windows::requestTextInput(WindowId window, bool enable
                              mwinRect{.x = caret.x, .y = caret.y, .width = caret.width, .height = caret.height},
                              &request);
     return requested(kStatus, request, "a text input request");
+}
+
+result::Result<HandleBundle> Windows::handles(WindowId window) const {
+    mwinNativeHandles native{};
+    const mwinResult status = mwinGetNativeHandles(platform_->context, toMaul(window), &native);
+    if (status != mwin_success) {
+        return failure(status, "a window's native handles");
+    }
+    HandleBundle bundle{.generation = native.surfaceGeneration};
+    switch (native.platform) {
+    case mwin_platformWin32:
+        bundle.handles = Win32Handles{.window = native.handles.win32.hwnd, .instance = native.handles.win32.hinstance};
+        break;
+    case mwin_platformWayland:
+        bundle.handles =
+            WaylandHandles{.display = native.handles.wayland.display, .surface = native.handles.wayland.surface};
+        break;
+    case mwin_platformX11:
+        bundle.handles = XcbHandles{.connection = native.handles.x11.connection, .window = native.handles.x11.window};
+        break;
+    case mwin_platformAndroid:
+        bundle.handles = AndroidHandles{.window = native.handles.android.window};
+        break;
+    case mwin_platformMacOS:
+    case mwin_platformIOS:
+        bundle.handles = AppleHandles{.view = native.handles.apple.view, .layer = native.handles.apple.layer};
+        break;
+    case mwin_platformWeb:
+        bundle.handles =
+            CanvasHandles{.selector = std::string{native.handles.web.selector, native.handles.web.selectorLength}};
+        break;
+    default:
+        bundle.handles = TestHandles{};
+        break;
+    }
+    return bundle;
 }
 
 result::Status Windows::rumble(GamepadId gamepad, float low, float high, std::uint32_t milliseconds) {

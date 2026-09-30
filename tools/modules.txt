@@ -26,7 +26,7 @@ cook: localization animation mesh_import mesh texture_import texture scene world
 build: signature content document result base
 install: content signature document result base
 input: document result base
-window: result base
+window: composition result base
 render: composition diagnostics result base
 input_window: input window result base
 window_host: host input_kest input_window input window composition execution result base

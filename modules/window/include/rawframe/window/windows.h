@@ -14,6 +14,7 @@
 
 #include "rawframe/result/result.h"
 #include "rawframe/window/events.h"
+#include "rawframe/window/handles.h"
 
 #include <cstdint>
 #include <optional>
@@ -103,6 +104,12 @@ public:
     [[nodiscard]] result::Status destroy(WindowId window);
 
     [[nodiscard]] result::Result<WindowState> state(WindowId window) const;
+
+    /// The window's native handles for its current surface generation:
+    /// State while it has no surface (before WindowCreated, and between
+    /// SurfaceLost and SurfaceRestored). For the seam to the device only
+    /// (`Surfaces`), never to be kept past the generation.
+    [[nodiscard]] result::Result<HandleBundle> handles(WindowId window) const;
 
     [[nodiscard]] result::Result<RequestId> requestTitle(WindowId window, std::string_view title);
     /// Answered by Resized and PixelSizeChanged with what the platform

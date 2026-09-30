@@ -3,7 +3,9 @@
 // A Host driven from a window's frames (D249, D250): the process's one
 // window, whose raw input the Host's participants get as the player's
 // devices (`rawframe.input.feed`), and each frame every Host iteration due,
-// then what they asked the player's gamepads to feel (D251).
+// then what they asked the player's gamepads to feel (D251). The window's
+// surface is lent too (`rawframe.window.surfaces`, D280), read in each
+// frame before the Host runs, for the device to present to.
 // The window system owns the loop on every platform, so a desktop client
 // and a page run the same program: `window::run` returns when it stops on
 // a desktop, and at once on the web, where the page's frames go on.
@@ -12,6 +14,7 @@
 #include "rawframe/input/feed.h"
 #include "rawframe/input_window/bridge.h"
 #include "rawframe/result/result.h"
+#include "rawframe/window/surfaces.h"
 #include "rawframe/window/windows.h"
 
 #include <memory>
@@ -49,6 +52,7 @@ private:
     host::HostRequest request_;
     WindowHostSettings settings_;
     input::Feed feed_;
+    window::Surfaces surfaces_;
     std::vector<composition::LentCapability> lent_;
     std::optional<input_window::Bridge> bridge_;
     std::unique_ptr<host::Host> host_;

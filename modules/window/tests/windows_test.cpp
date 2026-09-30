@@ -2,10 +2,12 @@
 // close with a refusal, requests answered after the notifications they
 // caused and superseded when replaced, stale ids refused, input reset on
 // focus loss, raw input and drops carried whole, gamepads about no window,
-// and a program whose start fails.
+// a program whose start fails, and the seam's window side: a surface
+// generation's handles given once, none while the surface is lost.
 
 #include "rawframe/test/test.h"
 #include "rawframe/window/errors.h"
+#include "rawframe/window/surfaces.h"
 #include "rawframe/window/testing.h"
 #include "rawframe/window/windows.h"
 
@@ -318,4 +320,46 @@ RAWFRAME_TEST(AZeroLimitIsRefused) {
     settings.limits.windows = 0;
     RAWFRAME_EXPECT(failsWith(testing::run(script, settings), WindowError::Invalid));
     RAWFRAME_EXPECT(!script.stopped);
+}
+
+RAWFRAME_TEST(EachSurfaceGenerationsHandlesAreGivenOnce) {
+    Surfaces surfaces;
+    std::uint32_t first = 0;
+    Script script{{
+        [&](Windows& windows, Script& self) {
+            surfaces.watch(self.window);
+            surfaces.update(windows);
+            RAWFRAME_EXPECT(surfaces.states().size() == 1);
+            first = surfaces.states()[0].generation;
+            RAWFRAME_EXPECT(first != 0);
+            const auto kBundle = surfaces.take(self.window);
+            RAWFRAME_EXPECT(kBundle.has_value() && kBundle->generation == first &&
+                            std::holds_alternative<TestHandles>(kBundle->handles));
+            RAWFRAME_EXPECT(!surfaces.take(self.window).has_value());
+            // Updated again without a new generation, nothing more is given.
+            surfaces.update(windows);
+            RAWFRAME_EXPECT(!surfaces.take(self.window).has_value());
+            RAWFRAME_EXPECT(testing::post(windows, report(EventKind::SurfaceLost, self.window)).has_value());
+        },
+        [&](Windows& windows, Script& self) {
+            surfaces.update(windows);
+            RAWFRAME_EXPECT(surfaces.states()[0].generation == 0 && !surfaces.take(self.window).has_value());
+            RAWFRAME_EXPECT(testing::post(windows, report(EventKind::SurfaceRestored, self.window)).has_value());
+        },
+        [&](Windows& windows, Script& self) {
+            surfaces.update(windows);
+            const std::uint32_t kSecond = surfaces.states()[0].generation;
+            RAWFRAME_EXPECT(kSecond != 0 && kSecond != first);
+            const auto kBundle = surfaces.take(self.window);
+            RAWFRAME_EXPECT(kBundle.has_value() && kBundle->generation == kSecond);
+            RAWFRAME_EXPECT(windows.destroy(self.window).has_value());
+        },
+        [&](Windows& windows, Script& self) {
+            // A window gone is no longer watched.
+            surfaces.update(windows);
+            RAWFRAME_EXPECT(surfaces.states().empty() && !surfaces.take(self.window).has_value());
+        },
+    }};
+    RAWFRAME_EXPECT(testing::run(script, RunSettings{}).has_value());
+    RAWFRAME_EXPECT(script.stoppedWell);
 }
