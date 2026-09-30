@@ -63,15 +63,20 @@
 // Its outputs are `color` (color3) and `alpha` (float); the texture's own
 // format says whether its texels are sRGB, so color is pipeline-owned, as
 // SPEC-0026 has it. `uv` gives a mesh's texture coordinates, the set its
-// `channel` names (0 to 7, left out at 0); its output is `uv` (vec2). A
-// node's params and inputs are in name order.
+// `channel` names (0 to 7, left out at 0); its output is `uv` (vec2).
+// `multiply` and `add` (D311) take inputs `a` and `b`, each connected or a
+// literal: a number (float), two (vec2), or three (color3); their output
+// `out` is of their inputs' type, or of the one that is not a float when
+// the other is (broadcast). A node's params and inputs are in name order.
 //
 // A node of any other type is kept whole, as SPEC-0028 keeps what it does
-// not know. Generation 1 compiles a surface whose `base_color` is a sampled
-// texture's color, whose `geometry_opacity` is its alpha, or both of one
-// texture, sampled at a mesh's first coordinates. Any other connection, or
-// a node of a type it does not know, does not compile until the rest of the
-// library exists.
+// not know. Generation 1 compiles one sampled texture: its color, or its
+// color multiplied by a literal (the glTF factor), feeding `base_color`;
+// its alpha, or its alpha multiplied by a literal, feeding
+// `geometry_opacity`; sampled at a mesh's first coordinates, or at them
+// scaled and moved by `multiply` and `add` with literals (SPEC-0026's
+// `tile_and_offset`, folded). Any other connection, or a node of a type it
+// does not know, does not compile until the rest of the library exists.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/graph/graph.h"
@@ -135,12 +140,17 @@ struct SampledTexture {
     /// The base color is its color; the opacity its alpha.
     bool color = false;
     bool alpha = false;
+    /// Where it is sampled: a mesh's first coordinates times `scale`, plus
+    /// `offset` (D311).
+    std::array<float, 2> scale{1, 1};
+    std::array<float, 2> offset{0, 0};
 
     friend bool operator==(const SampledTexture&, const SampledTexture&) = default;
 };
 
 /// A compiled material: its declared states, its Surface, and the texture
-/// it samples. An input the texture feeds holds its default in `surface`.
+/// it samples. An input the texture feeds holds what the texture is
+/// multiplied by in `surface`, one when nothing (D311).
 struct Material {
     Shading shading = Shading::Lit;
     Blend blend = Blend::Opaque;
@@ -163,9 +173,13 @@ inline constexpr std::string_view kMaterialRepresentation = "rawframe.material";
 inline constexpr std::string_view kSurfaceType = "rawframe/surface@1";
 inline constexpr std::string_view kSampleTexture2dType = "rawframe/sample_texture_2d@1";
 inline constexpr std::string_view kUvType = "rawframe/uv@1";
+inline constexpr std::string_view kMultiplyType = "rawframe/multiply@1";
+inline constexpr std::string_view kAddType = "rawframe/add@1";
 
 /// A surface material's document for `made`, its surface node keyed by
-/// `node` and the node sampling its texture, if it has one, by `node` + 1.
+/// `node` and the nodes its texture needs by the ids after it: the sampler
+/// + 1, the coordinates + 2, their scale + 3 and offset + 4, the color's
+/// factor + 5, the opacity's + 6, each only where it is needed.
 [[nodiscard]] graph::Document documentOf(const Material& made, graph::NodeId node);
 
 /// Refuses (`Invalid`) a document out of the family's rules: kind
@@ -184,8 +198,8 @@ inline constexpr std::string_view kUvType = "rawframe/uv@1";
 
 /// Its states, Surface, and texture: every literal, and the default where
 /// one is left out. Refuses (`Unsupported`) what generation 1 does not
-/// compile: a node of a type it does not know, or a connection besides a
-/// sampled texture feeding the base color and opacity.
+/// compile: a node of a type it does not know, or a connection besides the
+/// header's; (`Invalid`) a factor out of its input's range.
 [[nodiscard]] result::Result<Material> compile(const graph::Document& surface);
 
 /// SPEC-0028's semantic hash: from the surface node down, and the states,
@@ -193,25 +207,26 @@ inline constexpr std::string_view kUvType = "rawframe/uv@1";
 /// node of a type this family does not know.
 [[nodiscard]] result::Result<base::Sha256Digest> semanticHash(const graph::Document& surface);
 
-/// A compiled material's bytes: `RFMT`, format 2, its states (shading,
+/// A compiled material's bytes: `RFMT`, format 3, its states (shading,
 /// blend, double sided, a byte each and one of nought), its alpha cutoff,
 /// its Surface's sixteen numbers in the contract's order, then its texture:
 /// the identity (eight bytes), the filter, the address, what it feeds (one
-/// for the color, two for the alpha), a byte each, and one of nought.
+/// for the color, two for the alpha), a byte each, and one of nought; its
+/// scale and offset, two numbers each.
 [[nodiscard]] std::vector<std::byte> encode(const Material& made);
 
-/// Refuses (`Invalid`) bytes `encode` would not make, or a material out of
-/// the contract's ranges: cooked content is checked as it is read.
+/// Refuses (`Invalid`) bytes `encode` would not make, or a material a
+/// document could not compile to: cooked content is checked as it is read.
 [[nodiscard]] result::Result<Material> decode(std::span<const std::byte> bytes);
 
 /// ADR-0031's typed data blob, what a device reads of a material: the base
 /// color and metalness; the specular color times its weight, and the
 /// roughness; the emission's color times its luminance, and the index of
 /// refraction; the opacity, the occlusion, the alpha cutoff (nought unless
-/// masked), and its flags: one when unlit, two when its texture's color is
-/// the base color (which is then white), four when the texture's alpha is
-/// the opacity.
-inline constexpr std::size_t kBlobFloats = 16;
+/// masked), and its flags: one when unlit, two when its texture's color
+/// multiplies the base color, four when the texture's alpha multiplies the
+/// opacity; then the texture's scale and offset (D311).
+inline constexpr std::size_t kBlobFloats = 20;
 [[nodiscard]] std::array<float, kBlobFloats> blobOf(const Material& made) noexcept;
 
 } // namespace rawframe::material

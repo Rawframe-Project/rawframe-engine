@@ -152,12 +152,12 @@ RAWFRAME_TEST(TheHashAndTheBlobFollowTheMaterial) {
 RAWFRAME_TEST(ACookedMaterialDecodesAsItWasEncoded) {
     const std::vector<std::byte> kBytes = encode(red());
     const auto kDecoded = decode(kBytes);
-    RAWFRAME_EXPECT(kBytes.size() == 92 && kDecoded.has_value() && *kDecoded == red());
+    RAWFRAME_EXPECT(kBytes.size() == 108 && kDecoded.has_value() && *kDecoded == red());
     // Anything else is refused: short, another format, a value out of the
     // contract's range, a state out of its set.
-    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(91)), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(107)), MaterialError::Invalid));
     std::vector<std::byte> other = kBytes;
-    other[4] = std::byte{1};
+    other[4] = std::byte{2};
     RAWFRAME_EXPECT(refusedWith(decode(other), MaterialError::Invalid));
     Material metallic = red();
     metallic.surface.baseMetalness = 2;
@@ -178,6 +178,7 @@ constexpr graph::NodeId kUv = kNode + 2;
 /// nearest and clamped.
 Material stencilled() {
     Material made{.blend = Blend::Translucent};
+    made.surface.baseColor = {1, 1, 1};
     made.surface.specularRoughness = 0.5F;
     made.texture = {.id = 0xa44ecb4a39ac5cc8ULL,
                     .filter = Filter::Nearest,
@@ -334,4 +335,94 @@ RAWFRAME_TEST(WhatGenerationOneCannotSampleIsRefused) {
     std::vector<std::byte> stateless = encode(red());
     stateless[88] = std::byte{1};
     RAWFRAME_EXPECT(refusedWith(decode(stateless), MaterialError::Invalid));
+}
+
+namespace {
+
+graph::Node mathOf(graph::NodeId id, std::string_view type, Value a, Value b) {
+    return nodeOf(id, type, Value::object(), objectOf({{"a", std::move(a)}, {"b", std::move(b)}}));
+}
+
+Value pair(double x, double y) {
+    return Value::array({Value::real(x), Value::real(y)});
+}
+
+/// Its color feeding the base color, sampled where `math` (ids after the
+/// uv node's) says, the last of them feeding the sampler.
+graph::Document sampledThrough(std::vector<graph::Node> math) {
+    std::vector<graph::Node> nodes = {samplerOf({}, objectOf({{"uv", from(math.back().id, "out")}})),
+                                      nodeOf(kUv, kUvType, Value::object(), Value::object())};
+    std::ranges::move(math, std::back_inserter(nodes));
+    return surfaceOf(objectOf({{"base_color", from(kSampler, "color")}}), std::move(nodes));
+}
+
+} // namespace
+
+RAWFRAME_TEST(ATextureIsTiledMovedAndTinted) {
+    // Four times across and twice down, moved half a texture, its color
+    // times a factor and its alpha times a half.
+    Material tiled = stencilled();
+    tiled.surface.baseColor = {0.5F, 0.25F, 1};
+    tiled.surface.geometryOpacity = 0.5F;
+    tiled.texture.scale = {4, 2};
+    tiled.texture.offset = {0.5F, 0};
+    const auto kText = writeMaterial(documentOf(tiled, kNode));
+    RAWFRAME_EXPECT(kText.has_value() && kText->contains("rawframe/multiply@1") && kText->contains("rawframe/add@1"));
+    const auto kRead = kText.has_value() ? readMaterial(*kText) : std::unexpected{kText.error().clone()};
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    const auto kCompiled = compile(*kRead);
+    RAWFRAME_EXPECT(kCompiled.has_value() && *kCompiled == tiled);
+    const auto kDecoded = decode(encode(tiled));
+    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == tiled);
+    const std::array<float, kBlobFloats> kBlob = blobOf(tiled);
+    RAWFRAME_EXPECT(kBlob[0] == 0.5F && kBlob[1] == 0.25F && kBlob[12] == 0.5F && kBlob[15] == 6 && kBlob[16] == 4 &&
+                    kBlob[17] == 2 && kBlob[18] == 0.5F && kBlob[19] == 0);
+    // Moved, then scaled by one number, either operand first: the move is
+    // scaled too.
+    const auto kFolded =
+        compile(sampledThrough({mathOf(kNode + 3, kAddType, from(kUv, "uv"), pair(1, -1)),
+                                mathOf(kNode + 4, kMultiplyType, Value::real(3), from(kNode + 3, "out"))}));
+    RAWFRAME_EXPECT(kFolded.has_value() && kFolded->texture.scale == (std::array<float, 2>{3, 3}) &&
+                    kFolded->texture.offset == (std::array<float, 2>{3, -3}));
+    // A color scaled by one number is tinted grey.
+    const auto kGrey = compile(
+        surfaceOf(objectOf({{"base_color", from(kNode + 3, "out")}}),
+                  {samplerOf({}), mathOf(kNode + 3, kMultiplyType, from(kSampler, "color"), Value::real(0.25))}));
+    RAWFRAME_EXPECT(kGrey.has_value() && kGrey->surface.baseColor == (std::array<float, 3>{0.25F, 0.25F, 0.25F}));
+}
+
+RAWFRAME_TEST(WhatTheMathNodesCannotSayIsRefused) {
+    // Literals of the wrong count; an input left out; types that do not
+    // meet; a sampler's coordinates of another type.
+    for (const graph::Node& kBad :
+         {mathOf(kNode + 3,
+                 kMultiplyType,
+                 from(kUv, "uv"),
+                 Value::array({Value::real(1), Value::real(1), Value::real(1), Value::real(1)})),
+          nodeOf(kNode + 3, kMultiplyType, Value::object(), objectOf({{"a", from(kUv, "uv")}})),
+          mathOf(kNode + 3,
+                 kMultiplyType,
+                 from(kUv, "uv"),
+                 Value::array({Value::real(1), Value::real(1), Value::real(1)})),
+          mathOf(kNode + 3, kAddType, pair(1, 1), Value::array({Value::real(1), Value::real(1), Value::real(1)}))}) {
+        RAWFRAME_EXPECT(refusedWith(validateSurface(sampledThrough({kBad})), MaterialError::Invalid));
+    }
+    // Generation 1 folds literals only; a factor stays in its input's range.
+    RAWFRAME_EXPECT(
+        refusedWith(compile(sampledThrough({mathOf(kNode + 3, kMultiplyType, from(kUv, "uv"), from(kUv, "uv"))})),
+                    MaterialError::Unsupported));
+    RAWFRAME_EXPECT(refusedWith(compile(sampledThrough({mathOf(kNode + 3, kAddType, pair(1, 1), pair(2, 2))})),
+                                MaterialError::Unsupported));
+    RAWFRAME_EXPECT(refusedWith(
+        compile(surfaceOf(objectOf({{"base_color", from(kNode + 3, "out")}}),
+                          {samplerOf({}), mathOf(kNode + 3, kMultiplyType, from(kSampler, "color"), Value::real(2))})),
+        MaterialError::Invalid));
+    RAWFRAME_EXPECT(
+        refusedWith(compile(surfaceOf(
+                        objectOf({{"specular_roughness", from(kNode + 3, "out")}}),
+                        {samplerOf({}), mathOf(kNode + 3, kMultiplyType, from(kSampler, "alpha"), Value::real(0.5))})),
+                    MaterialError::Unsupported));
 }
