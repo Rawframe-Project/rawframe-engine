@@ -190,9 +190,9 @@ public:
     /// matched). Nothing of it is kept.
     void extract(world::World& world);
 
-    /// The queue stage, in `present`: the extracted models seen through
-    /// `camera`, those in view in the order of their meshes, then of their
-    /// entities, then of their components.
+    /// The view and queue stages, in `present`: the extracted models seen
+    /// through `camera` and culled to its view, those in view in the order
+    /// of their meshes, then of their entities, then of their components.
     const SceneFrame& queue(const SceneCamera& camera);
 
     [[nodiscard]] std::span<const ModelInstance> extracted() const noexcept;
