@@ -382,6 +382,9 @@ struct SceneFrame {
     SceneMetering metering;
     SceneGrading grading;
     Tonemapper tonemapper = Tonemapper::Agx;
+    /// Whether the tonemapped picture is antialiased by FXAA (D296): never
+    /// with the temporal inputs, which are then off.
+    bool fxaa = false;
     /// The punctual lights that reach the view, and the clusters they are
     /// culled into (D290).
     std::vector<SceneLight> lights3d;
@@ -440,12 +443,14 @@ struct ShadowSettings {
     std::uint32_t side = 1024;
 };
 
-/// ADR-0051's anti-aliasing methods that exist so far (D291): none, and the
-/// first-party temporal one, the default. Multisampling and FXAA join the
-/// closed set when they are built.
+/// ADR-0051's anti-aliasing methods that exist so far: none, the
+/// first-party temporal one, the default (D291), and FXAA, the cheap one,
+/// run on the display-referred picture after the tonemapper (D296).
+/// Multisampling joins the closed set when it is built.
 enum class AntiAliasing : std::uint8_t {
     Off,
-    Taa
+    Taa,
+    Fxaa
 };
 
 /// An eye moving farther than this in a frame cuts: the picture before is

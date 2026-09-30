@@ -506,7 +506,13 @@ RAWFRAME_TEST(TheTemporalInputsFollowTheEyeAndTheModels) {
     plain->extract(rig.world);
     const SceneFrame& kPlain = plain->queue(kCamera);
     RAWFRAME_EXPECT(!kPlain.temporal.enabled && !kPlain.temporal.history &&
-                    kPlain.temporal.jitter == (std::array<float, 2>{0, 0}));
+                    kPlain.temporal.jitter == (std::array<float, 2>{0, 0}) && !kPlain.fxaa);
+    // FXAA works on the one picture: no jitter and no history (D296).
+    auto cheap = *Scene::create(*rig.schema, {.models = {kModelId}, .antiAliasing = AntiAliasing::Fxaa});
+    cheap->extract(rig.world);
+    const SceneFrame& kCheap = cheap->queue(kCamera);
+    RAWFRAME_EXPECT(kCheap.fxaa && !kCheap.temporal.enabled && !kCheap.temporal.history &&
+                    kCheap.temporal.jitter == (std::array<float, 2>{0, 0}));
 }
 
 RAWFRAME_TEST(PunctualShadowsShareOneAtlasByCover) {

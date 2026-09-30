@@ -92,18 +92,20 @@ public:
         const auto kLargest = static_cast<std::uint32_t>(std::min<std::uint64_t>(512, kAtlas / 4));
         lightShadows_ = LightShadowSettings{
             .side = static_cast<std::uint32_t>(kAtlas), .largest = kLargest, .smallest = kLargest / 4};
-        // ADR-0051's anti-aliasing method (D291): temporal unless turned off;
-        // the closed set's other methods are not built yet.
+        // ADR-0051's anti-aliasing method (D291, D296): temporal unless
+        // another is named; multisampling is not built yet.
         const std::string_view kMethod = configuration.text("scene.anti_aliasing").value_or("taa");
-        if (kMethod != "taa" && kMethod != "off") {
+        if (kMethod != "taa" && kMethod != "fxaa" && kMethod != "off") {
             return std::unexpected<result::Error>{
                 result::fail(result::ErrorClass::InvalidArgument,
                              composition::kCompositionDomain,
                              code(composition::CompositionError::BadConfiguration),
-                             "scene.anti_aliasing is taa or off; msaa and fxaa are not built yet")
+                             "scene.anti_aliasing is taa, fxaa, or off; msaa is not built yet")
                     .error()};
         }
-        antiAliasing_ = kMethod == "off" ? AntiAliasing::Off : AntiAliasing::Taa;
+        antiAliasing_ = kMethod == "off"    ? AntiAliasing::Off
+                        : kMethod == "fxaa" ? AntiAliasing::Fxaa
+                                            : AntiAliasing::Taa;
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
         }
