@@ -1,4 +1,4 @@
-// The 3D scene's models (D284, D289), for WebGPU: the entries of
+// The 3D scene's models (D284, D289, D290), for WebGPU: the entries of
 // scene.vert and scene.frag.
 
 struct Frame {
@@ -12,11 +12,23 @@ struct Frame {
     cascadeTexel: vec4f,
     shadow: vec4f,
     cascades: array<mat4x4f, 4>,
+    clusterGrid: vec4f,
+    clusterDepth: vec4f,
+}
+
+struct Light {
+    placeRange: vec4f,
+    intensity: vec4f,
+    direction: vec4f,
+    cone: vec4f,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var shadowMap: texture_depth_2d;
 @group(0) @binding(2) var shadowSampler: sampler_comparison;
+@group(0) @binding(3) var<storage, read> lights: array<Light>;
+@group(0) @binding(4) var<storage, read> ranges: array<vec2u>;
+@group(0) @binding(5) var<storage, read> indices: array<u32>;
 
 struct Placed {
     @invariant @builtin(position) position: vec4f,
@@ -60,10 +72,44 @@ fn sunlit(placed: vec3f, normal: vec3f) -> f32 {
     return mix(1.0, lit, fade);
 }
 
+fn punctual(placed: vec3f, normal: vec3f) -> vec3f {
+    if (frame.clusterGrid.w == 0.0) {
+        return vec3f(0.0);
+    }
+    let clip = frame.viewProjection * vec4f(placed, 1.0);
+    let seen = clip.xy / clip.w;
+    let grid = vec3u(frame.clusterGrid.xyz);
+    let x = min(u32(max((seen.x * 0.5 + 0.5) * frame.clusterGrid.x, 0.0)), grid.x - 1u);
+    let y = min(u32(max((0.5 - seen.y * 0.5) * frame.clusterGrid.y, 0.0)), grid.y - 1u);
+    let ahead = dot(placed, frame.forward.xyz);
+    var slice = 0u;
+    if (ahead > frame.clusterDepth.x) {
+        slice = min(u32(log(ahead / frame.clusterDepth.x) * frame.clusterDepth.y), grid.z - 1u);
+    }
+    let range = ranges[(slice * grid.y + y) * grid.x + x];
+    var sum = vec3f(0.0);
+    for (var at = range.x; at < range.x + range.y; at += 1u) {
+        let light = lights[indices[at]];
+        let toLight = light.placeRange.xyz - placed;
+        let square = dot(toLight, toLight);
+        let toward = toLight * inverseSqrt(max(square, 1e-8));
+        let reached = square / (light.placeRange.w * light.placeRange.w);
+        let window = clamp(1.0 - reached * reached, 0.0, 1.0);
+        var falloff = window * window / max(square, 1e-4);
+        if (light.intensity.w > 0.5) {
+            let cone = clamp((dot(-toward, light.direction.xyz) - light.cone.y) / (light.cone.x - light.cone.y),
+                             0.0, 1.0);
+            falloff *= cone * cone;
+        }
+        sum += light.intensity.rgb * (falloff * max(dot(normal, toward), 0.0));
+    }
+    return sum;
+}
+
 @fragment
 fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f) -> @location(0) vec4f {
     let n = normalize(normal);
     let facing = max(dot(n, frame.toSun.xyz), 0.0) * sunlit(placed, n);
-    let light = frame.sun.rgb * (facing / kPi) + frame.sky.rgb * (0.5 + 0.5 * n.y);
+    let light = (frame.sun.rgb * facing + punctual(placed, n)) / kPi + frame.sky.rgb * (0.5 + 0.5 * n.y);
     return vec4f(color.rgb * light * frame.exposure.x, 1.0);
 }

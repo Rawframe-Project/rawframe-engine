@@ -3,7 +3,8 @@
 // puts it, over the sky; a nearer model hides a farther one whatever their
 // order (the depth prepass, reversed-Z); the sun lights what faces it; a
 // draw whose mesh is not given is left out; and a mesh is uploaded once,
-// its draws of one mesh one instanced call. Skips where no adapter
+// its draws of one mesh one instanced call; the sun casts shadows; and a
+// point light lights what is near it, a spot only what its cone reaches. Skips where no adapter
 // answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
 // `render`'s framer (D285), as the frame participant makes them.
 
@@ -12,6 +13,7 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 #include "rawframe/test/test.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -231,4 +233,65 @@ RAWFRAME_TEST(TheSunCastsShadows) {
     frame.shadows.count = 0;
     const auto kUnshaded = drawn(**framer, **made, frame, kMeshes);
     RAWFRAME_EXPECT(kUnshaded.has_value() && std::abs(at(*kUnshaded, 30, 39)[0] - kLit[0]) < 6);
+}
+
+RAWFRAME_TEST(PointAndSpotLightsLightWhatTheyReach) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    // The floor of the shadows' test in the dark, and a lamp of ten
+    // candela a meter above it, eight ahead, the view exposed for a dim
+    // room; one cluster holds it, as the queue stage's tests prove the
+    // clusters themselves.
+    SceneFrame frame = looking();
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.sky = {0, 0, 0};
+    frame.exposure = 0;
+    frame.shadows.count = 0;
+    SceneDraw floor = box(8, 1, {1, 1, 1, 1});
+    floor.model[0] = 10;
+    floor.model[5] = 0.1F;
+    floor.model[10] = 10;
+    floor.normal[0] = 0.1F;
+    floor.normal[5] = 10;
+    floor.normal[10] = 0.1F;
+    floor.model[13] = -2;
+    frame.draws = {floor};
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    const auto kDark = drawn(**framer, **made, frame, kMeshes);
+    frame.lights3d = {{.position = {0, -1, -8}, .range = 10, .intensity = {10, 10, 10}}};
+    frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1, .ranges = {0, 1}, .indices = {0}};
+    const auto kLamp = drawn(**framer, **made, frame, kMeshes);
+    // A spot there shining down lights the floor below it; shining up, not.
+    frame.lights3d[0].spot = true;
+    frame.lights3d[0].direction = {0, -1, 0};
+    frame.lights3d[0].cosInner = std::cos(0.3F);
+    frame.lights3d[0].cosOuter = std::cos(0.6F);
+    const auto kDown = drawn(**framer, **made, frame, kMeshes);
+    frame.lights3d[0].direction = {0, 1, 0};
+    const auto kUp = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kDark.has_value() && kLamp.has_value() && kDown.has_value() && kUp.has_value());
+    if (!kDark.has_value() || !kLamp.has_value() || !kDown.has_value() || !kUp.has_value()) {
+        return;
+    }
+    // The floor below the lamp, 1.9 below the eye and 8 ahead, and its
+    // far corner, beyond the lamp's reach.
+    const auto kBelow = at(*kLamp, 32, 39);
+    std::printf("dark %d, lamp %d far %d, spot down %d up %d\n",
+                at(*kDark, 32, 39)[0],
+                kBelow[0],
+                at(*kLamp, 2, 34)[0],
+                at(*kDown, 32, 39)[0],
+                at(*kUp, 32, 39)[0]);
+    RAWFRAME_EXPECT(at(*kDark, 32, 39)[0] < 10 && kBelow[0] > 100 && at(*kLamp, 2, 34)[0] < kBelow[0] / 2);
+    RAWFRAME_EXPECT(at(*kDown, 32, 39)[0] > 100 && at(*kUp, 32, 39)[0] < 10);
 }

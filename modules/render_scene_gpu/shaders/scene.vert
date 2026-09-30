@@ -19,6 +19,11 @@ layout(set = 0, binding = 0, std140) uniform Frame
     vec4 cascadeTexel;
     vec4 shadow;
     mat4 cascades[4];
+    // The clusters' tiles across and down, their slices, and the lights;
+    // their near end, and the slices over the log of their far over near
+    // (D290).
+    vec4 clusterGrid;
+    vec4 clusterDepth;
 }
 frame;
 

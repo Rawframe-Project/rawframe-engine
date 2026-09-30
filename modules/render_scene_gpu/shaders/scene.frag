@@ -1,8 +1,8 @@
 // The 3D scene's models (D284), fragment entry "fs": the base color lit by
-// the sun (Lambert), where the sun's shadow map says it reaches (D289), and
-// the sky (brighter facing up), in physical units, times the camera's
-// exposure, so the scene target holds pre-exposed scene-linear light
-// (ADR-0047).
+// the sun (Lambert), where the sun's shadow map says it reaches (D289), by
+// the point and spot lights of its cluster (D290), and by the sky (brighter
+// facing up), in physical units, times the camera's exposure, so the scene
+// target holds pre-exposed scene-linear light (ADR-0047).
 
 #version 450
 
@@ -20,6 +20,11 @@ layout(set = 0, binding = 0, std140) uniform Frame
     vec4 cascadeTexel;
     vec4 shadow;
     mat4 cascades[4];
+    // The clusters' tiles across and down, their slices, and the lights;
+    // their near end, and the slices over the log of their far over near
+    // (D290).
+    vec4 clusterGrid;
+    vec4 clusterDepth;
 }
 frame;
 
@@ -29,6 +34,31 @@ layout(location = 2) in vec3 inPlaced;
 
 layout(set = 0, binding = 1) uniform texture2D shadowMap;
 layout(set = 0, binding = 2) uniform samplerShadow shadowSampler;
+
+// A point or spot light (D290): its place relative to the eye and its
+// range; its intensity in candela, and whether it is a spot; the way a spot
+// shines; and the cosines of its cone's inner and outer edges.
+struct Light
+{
+    vec4 placeRange;
+    vec4 intensity;
+    vec4 direction;
+    vec4 cone;
+};
+
+// The frame's lights; each cluster's first index and count; the indices.
+layout(set = 0, binding = 3, std430) readonly buffer Lights
+{
+    Light lights[];
+};
+layout(set = 0, binding = 4, std430) readonly buffer Ranges
+{
+    uvec2 ranges[];
+};
+layout(set = 0, binding = 5, std430) readonly buffer Indices
+{
+    uint indices[];
+};
 
 layout(location = 0) out vec4 outColor;
 
@@ -61,10 +91,51 @@ float sunlit(vec3 placed, vec3 normal)
     return mix(1.0, kLit, kFade);
 }
 
+// The illuminance the point and spot lights of `placed`'s cluster give it:
+// the cluster found by where the view puts it and how far ahead it is;
+// each light's inverse square windowed to nought at its range, a spot's
+// also faded across its cone's edge.
+vec3 punctual(vec3 placed, vec3 normal)
+{
+    if (frame.clusterGrid.w == 0.0) {
+        return vec3(0.0);
+    }
+    const vec4 kClip = frame.viewProjection * vec4(placed, 1.0);
+    const vec2 kSeen = kClip.xy / kClip.w;
+    const uvec3 kGrid = uvec3(frame.clusterGrid.xyz);
+    const uint kX = min(uint(max((kSeen.x * 0.5 + 0.5) * frame.clusterGrid.x, 0.0)), kGrid.x - 1u);
+    const uint kY = min(uint(max((0.5 - kSeen.y * 0.5) * frame.clusterGrid.y, 0.0)), kGrid.y - 1u);
+    const float kAhead = dot(placed, frame.forward.xyz);
+    const uint kSlice = kAhead <= frame.clusterDepth.x
+                            ? 0u
+                            : min(uint(log(kAhead / frame.clusterDepth.x) * frame.clusterDepth.y), kGrid.z - 1u);
+    const uvec2 kRange = ranges[(kSlice * kGrid.y + kY) * kGrid.x + kX];
+    vec3 sum = vec3(0.0);
+    for (uint at = kRange.x; at < kRange.x + kRange.y; ++at) {
+        const Light kLight = lights[indices[at]];
+        const vec3 kToLight = kLight.placeRange.xyz - placed;
+        const float kSquare = dot(kToLight, kToLight);
+        const vec3 kToward = kToLight * inversesqrt(max(kSquare, 1e-8));
+        const float kReached = kSquare / (kLight.placeRange.w * kLight.placeRange.w);
+        const float kWindow = clamp(1.0 - kReached * kReached, 0.0, 1.0);
+        float falloff = kWindow * kWindow / max(kSquare, 1e-4);
+        if (kLight.intensity.w > 0.5) {
+            const float kCone = clamp((dot(-kToward, kLight.direction.xyz) - kLight.cone.y) /
+                                          (kLight.cone.x - kLight.cone.y),
+                                      0.0,
+                                      1.0);
+            falloff *= kCone * kCone;
+        }
+        sum += kLight.intensity.rgb * (falloff * max(dot(normal, kToward), 0.0));
+    }
+    return sum;
+}
+
 void main()
 {
     const vec3 kNormal = normalize(inNormal);
     const float kFacing = max(dot(kNormal, frame.toSun.xyz), 0.0) * sunlit(inPlaced, kNormal);
-    const vec3 kLight = frame.sun.rgb * (kFacing / kPi) + frame.sky.rgb * (0.5 + 0.5 * kNormal.y);
+    const vec3 kLight = (frame.sun.rgb * kFacing + punctual(inPlaced, kNormal)) / kPi +
+                        frame.sky.rgb * (0.5 + 0.5 * kNormal.y);
     outColor = vec4(inColor.rgb * kLight * frame.exposure.x, 1.0);
 }

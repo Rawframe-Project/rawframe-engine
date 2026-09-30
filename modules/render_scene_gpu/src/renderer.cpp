@@ -1,5 +1,6 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 
+#include "blocks.h"
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
 #include "generated/tonemap_container.h"
@@ -36,26 +37,6 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
 /// A vertex as the scene pipeline reads it: its position, then its normal.
 constexpr std::uint32_t kVertexBytes = 24;
 
-/// One column-major matrix, as a cascade's view is written.
-using Matrix4 = std::array<float, 16>;
-
-/// The frame's view and light as the scene's shaders read them (std140).
-struct FrameBlock {
-    std::array<float, 16> viewProjection{};
-    std::array<float, 4> toSun{};
-    std::array<float, 4> sun{};
-    std::array<float, 4> sky{};
-    std::array<float, 4> exposure{};
-    /// The eye's forward; each cascade's far end and texel; the cascades,
-    /// the shadows' distance, and a cascade's side (D289).
-    std::array<float, 4> forward{};
-    std::array<float, 4> cascadeFar{};
-    std::array<float, 4> cascadeTexel{};
-    std::array<float, 4> shadow{};
-    std::array<Matrix4, 4> cascades{};
-};
-static_assert(sizeof(FrameBlock) == 448, "the scene's shaders read the frame as 448 bytes");
-
 /// The sun's shadow map (D289): the cascades' squares, two by two.
 constexpr mrhiFormat kShadowFormat = mrhi_formatDepth32Float;
 
@@ -75,12 +56,6 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
         .resource = resource,
         .kind = kind,
         .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
-}
-
-/// The light an EV100 exposes to one (ADR-0047): a sensor's saturation at
-/// 1.2 times two to the EV100.
-float exposureOf(float ev100) noexcept {
-    return 1.0F / (1.2F * std::exp2(ev100));
 }
 
 /// A mesh's vertices as the pipeline reads them, its normals made from its
@@ -361,37 +336,6 @@ struct SceneRenderer::State {
         return usable;
     }
 
-    static FrameBlock blockOf(const render_scene::SceneFrame& frame) noexcept {
-        FrameBlock block;
-        // The projection times the view, column-major.
-        for (std::size_t column = 0; column < 4; ++column) {
-            for (std::size_t row = 0; row < 4; ++row) {
-                float sum = 0;
-                for (std::size_t k = 0; k < 4; ++k) {
-                    sum += frame.projection[(k * 4) + row] * frame.view[(column * 4) + k];
-                }
-                block.viewProjection[(column * 4) + row] = sum;
-            }
-        }
-        const render_scene::SceneLights& kLights = frame.lights;
-        block.toSun = {kLights.toSun[0], kLights.toSun[1], kLights.toSun[2], 0};
-        block.sun = {kLights.sun[0], kLights.sun[1], kLights.sun[2], 0};
-        block.sky = {kLights.sky[0], kLights.sky[1], kLights.sky[2], 0};
-        block.exposure = {exposureOf(frame.exposure), 0, 0, 0};
-        block.forward = {frame.forward[0], frame.forward[1], frame.forward[2], 0};
-        const render_scene::SceneShadows& kShadows = frame.shadows;
-        for (std::size_t at = 0; at < kShadows.count; ++at) {
-            block.cascadeFar[at] = kShadows.cascades[at].far;
-            block.cascadeTexel[at] = kShadows.cascades[at].texel;
-            block.cascades[at] = kShadows.cascades[at].viewProjection;
-        }
-        block.shadow = {static_cast<float>(kShadows.count),
-                        kShadows.distance,
-                        static_cast<float>(std::max<std::uint32_t>(kShadows.side, 1)),
-                        0};
-        return block;
-    }
-
     /// The placements of the draws whose mesh is here, in order, and the
     /// runs of one mesh each: an instanced draw apiece.
     struct Placed {
@@ -519,6 +463,14 @@ struct SceneRenderer::State {
         std::size_t cascadeCount = 0;
         std::uint32_t side = 0;
         mrhiPassId shadowPass{};
+        /// The frame's lights, each cluster's first index and count, and
+        /// the indices (D290), as written and as declared.
+        std::vector<LightBlock> lights;
+        std::vector<std::uint32_t> ranges;
+        std::vector<std::uint32_t> indices;
+        mrhiResourceId lightsResource{};
+        mrhiResourceId rangesResource{};
+        mrhiResourceId indicesResource{};
         bool draws = false;
         bool casters = false;
     };
@@ -535,14 +487,21 @@ struct SceneRenderer::State {
             return {};
         }
         Declared now;
-        // The placements come first in the frame's uploads; the meshes share
-        // what is left.
-        const std::uint64_t kPlacementBytes = std::uint64_t{frame->draws.size()} * kInstanceBytes;
+        // The placements and lights come first in the frame's uploads; the
+        // meshes share what is left.
+        const std::uint64_t kPlacementBytes =
+            (std::uint64_t{frame->draws.size()} * kInstanceBytes) +
+            (std::uint64_t{frame->lights3d.size()} * sizeof(LightBlock)) +
+            ((std::uint64_t{frame->clusters.ranges.size()} + frame->clusters.indices.size()) * sizeof(std::uint32_t));
         const std::uint64_t kBudget =
             kPlacementBytes < limits.uploadBytesPerFrame ? limits.uploadBytesPerFrame - kPlacementBytes : 0;
         const std::map<std::uint64_t, Held*> kUsable = meshesOf(*frame, meshes, kBudget, now.uploads);
         now.placed = place(*frame, kUsable);
         now.block = blockOf(*frame);
+        now.lights = lightsOf(*frame);
+        now.ranges = now.block.clusterGrid[3] > 0 ? frame->clusters.ranges : std::vector<std::uint32_t>{0, 0};
+        now.indices = now.block.clusterGrid[3] > 0 && !frame->clusters.indices.empty() ? frame->clusters.indices
+                                                                                       : std::vector<std::uint32_t>{0};
         // Everything this frame uses: the meshes it draws, imported; its
         // placements and view; and its targets.
         for (const auto& [id, mesh] : kUsable) {
@@ -571,6 +530,16 @@ struct SceneRenderer::State {
         blockDef.size = sizeof(FrameBlock);
         if (mrhiDeclareBuffer(native, &blockDef, &now.blockResource) != mrhi_success) {
             return failed("the frame's view could not be declared", mrhi_errorCapacity);
+        }
+        for (const auto& [kBytes, kMade] :
+             {std::pair{now.lights.size() * sizeof(LightBlock), &now.lightsResource},
+              std::pair{now.ranges.size() * sizeof(std::uint32_t), &now.rangesResource},
+              std::pair{now.indices.size() * sizeof(std::uint32_t), &now.indicesResource}}) {
+            mrhiBufferDef def = mrhiDefaultBufferDef();
+            def.size = kBytes;
+            if (mrhiDeclareBuffer(native, &def, kMade) != mrhi_success) {
+                return failed("the frame's lights could not be declared", mrhi_errorCapacity);
+            }
         }
         // The shadow map: the cascades' squares two by two, or a texel
         // nothing reads the depth of when there are none.
@@ -604,7 +573,10 @@ struct SceneRenderer::State {
         }
 
         // The upload pass writes what the drawing reads.
-        std::vector<mrhiAccess> writes = {wholeOf(now.blockResource, mrhi_accessCopyDestination)};
+        std::vector<mrhiAccess> writes = {wholeOf(now.blockResource, mrhi_accessCopyDestination),
+                                          wholeOf(now.lightsResource, mrhi_accessCopyDestination),
+                                          wholeOf(now.rangesResource, mrhi_accessCopyDestination),
+                                          wholeOf(now.indicesResource, mrhi_accessCopyDestination)};
         if (now.draws || now.casters) {
             writes.push_back(wholeOf(now.instances, mrhi_accessCopyDestination));
         }
@@ -655,6 +627,9 @@ struct SceneRenderer::State {
         // holds it for both.
         std::vector<mrhiAccess> reads = meshReads;
         reads.push_back(wholeOf(now.blockResource, mrhi_accessUniform));
+        for (const mrhiResourceId kLights : {now.lightsResource, now.rangesResource, now.indicesResource}) {
+            reads.push_back(wholeOf(kLights, mrhi_accessStorageRead));
+        }
         reads.push_back(mrhiAccess{.resource = now.shadowMap,
                                    .kind = mrhi_accessSampled,
                                    .range = {.baseMip = 0,
@@ -729,6 +704,23 @@ struct SceneRenderer::State {
                              now.placed.instances.size() * sizeof(float)) != mrhi_success)) {
             return failed("the frame's placements could not be written", mrhi_errorCapacity);
         }
+        if (mrhiWriteBuffer(
+                native, now.upload, now.lightsResource, 0, now.lights.data(), now.lights.size() * sizeof(LightBlock)) !=
+                mrhi_success ||
+            mrhiWriteBuffer(native,
+                            now.upload,
+                            now.rangesResource,
+                            0,
+                            now.ranges.data(),
+                            now.ranges.size() * sizeof(std::uint32_t)) != mrhi_success ||
+            mrhiWriteBuffer(native,
+                            now.upload,
+                            now.indicesResource,
+                            0,
+                            now.indices.data(),
+                            now.indices.size() * sizeof(std::uint32_t)) != mrhi_success) {
+            return failed("the frame's lights could not be written", mrhi_errorCapacity);
+        }
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
             if (mrhiWriteBuffer(native, now.upload, now.cascades[at], 0, &now.block.cascades[at], sizeof(Matrix4)) !=
                 mrhi_success) {
@@ -754,34 +746,48 @@ struct SceneRenderer::State {
             return failed("the upload pass could not end", mrhi_errorState);
         }
         RAWFRAME_TRY(castShadows(now));
-        const std::array<mrhiBinding, 3> kFrameBinding = {mrhiBinding{.slot = 0,
-                                                                      .resource = now.blockResource,
-                                                                      .offset = 0,
-                                                                      .size = sizeof(FrameBlock),
-                                                                      .viewKind = mrhi_texture2d,
-                                                                      .viewFormat = mrhi_formatNone,
-                                                                      .range = {},
-                                                                      .sampler = {}},
-                                                          mrhiBinding{.slot = 1,
-                                                                      .resource = now.shadowMap,
-                                                                      .offset = 0,
-                                                                      .size = 0,
-                                                                      .viewKind = mrhi_texture2d,
-                                                                      .viewFormat = mrhi_formatNone,
-                                                                      .range = {.baseMip = 0,
-                                                                                .mipCount = MRHI_REMAINING,
-                                                                                .baseLayer = 0,
-                                                                                .layerCount = 1,
-                                                                                .aspect = mrhi_aspectDepthOnly},
-                                                                      .sampler = {}},
-                                                          mrhiBinding{.slot = 2,
-                                                                      .resource = {},
-                                                                      .offset = 0,
-                                                                      .size = 0,
-                                                                      .viewKind = mrhi_texture2d,
-                                                                      .viewFormat = mrhi_formatNone,
-                                                                      .range = {},
-                                                                      .sampler = shadowSampler}};
+        const auto kStored = [](std::uint32_t slot, mrhiResourceId resource, std::uint64_t bytes) {
+            return mrhiBinding{.slot = slot,
+                               .resource = resource,
+                               .offset = 0,
+                               .size = bytes,
+                               .viewKind = mrhi_texture2d,
+                               .viewFormat = mrhi_formatNone,
+                               .range = {},
+                               .sampler = {}};
+        };
+        const std::array<mrhiBinding, 6> kFrameBinding = {
+            mrhiBinding{.slot = 0,
+                        .resource = now.blockResource,
+                        .offset = 0,
+                        .size = sizeof(FrameBlock),
+                        .viewKind = mrhi_texture2d,
+                        .viewFormat = mrhi_formatNone,
+                        .range = {},
+                        .sampler = {}},
+            mrhiBinding{.slot = 1,
+                        .resource = now.shadowMap,
+                        .offset = 0,
+                        .size = 0,
+                        .viewKind = mrhi_texture2d,
+                        .viewFormat = mrhi_formatNone,
+                        .range = {.baseMip = 0,
+                                  .mipCount = MRHI_REMAINING,
+                                  .baseLayer = 0,
+                                  .layerCount = 1,
+                                  .aspect = mrhi_aspectDepthOnly},
+                        .sampler = {}},
+            mrhiBinding{.slot = 2,
+                        .resource = {},
+                        .offset = 0,
+                        .size = 0,
+                        .viewKind = mrhi_texture2d,
+                        .viewFormat = mrhi_formatNone,
+                        .range = {},
+                        .sampler = shadowSampler},
+            kStored(3, now.lightsResource, now.lights.size() * sizeof(LightBlock)),
+            kStored(4, now.rangesResource, now.ranges.size() * 4),
+            kStored(5, now.indicesResource, now.indices.size() * 4)};
         for (const auto& [kPass, kPipeline] :
              {std::pair{now.depthPass, depth.pipeline}, std::pair{now.litPass, lit.pipeline}}) {
             if (mrhiBeginPass(native, kPass) != mrhi_success) {
