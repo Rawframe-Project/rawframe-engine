@@ -29,7 +29,8 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked : {&casting, &depth, &lit, &glass, &sky, &temporal, &tonemap, &fxaa}) {
+    for (Asked* asked :
+         {&casting, &cutCasting, &depth, &cutout, &lit, &maskedLit, &glass, &sky, &temporal, &tonemap, &fxaa}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -123,6 +124,13 @@ result::Status Pipelines::make() {
     prepass.depthCompare = mrhi_compareGreater;
     prepass.colorTargetCount = 0;
     RAWFRAME_TRY(ask(prepass, depth));
+    mrhiGraphicsPipelineDef cutDef = prepass;
+    constexpr std::string_view kCutLabel = "rawframe.scene.depth.masked";
+    cutDef.label = kCutLabel.data();
+    cutDef.labelLength = kCutLabel.size();
+    cutDef.fragmentEntry = "cut";
+    cutDef.fragmentEntryLength = 3;
+    RAWFRAME_TRY(ask(cutDef, cutout));
     // The casters into the sun's shadow map: the vertex's place alone,
     // pushed from the sun by its slope (the depth half of ADR-0051's
     // bias; the normal half is where the map is read).
@@ -138,6 +146,25 @@ result::Status Pipelines::make() {
     casters.depthStencilFormat = kShadowFormat;
     casters.depthBiasSlopeScale = -2.0F;
     RAWFRAME_TRY(ask(casters, casting));
+    // Masked casters: their color, material, and texture coordinates too.
+    constexpr std::array<mrhiVertexAttribute, 7> kCutAttributes = {kAttributes[0],
+                                                                   kAttributes[3],
+                                                                   kAttributes[4],
+                                                                   kAttributes[5],
+                                                                   kAttributes[9],
+                                                                   kAttributes[13],
+                                                                   kAttributes[2]};
+    mrhiGraphicsPipelineDef cutCasters = casters;
+    constexpr std::string_view kCutCastingLabel = "rawframe.scene.shadows.masked";
+    cutCasters.label = kCutCastingLabel.data();
+    cutCasters.labelLength = kCutCastingLabel.size();
+    cutCasters.vertexEntry = "vsCut";
+    cutCasters.vertexEntryLength = 5;
+    cutCasters.fragmentEntry = "cut";
+    cutCasters.fragmentEntryLength = 3;
+    cutCasters.vertexAttributes = kCutAttributes.data();
+    cutCasters.vertexAttributeCount = static_cast<std::uint32_t>(kCutAttributes.size());
+    RAWFRAME_TRY(ask(cutCasters, cutCasting));
     mrhiSamplerDef samplerDef = mrhiDefaultSamplerDef();
     samplerDef.magFilter = mrhi_filterLinear;
     samplerDef.minFilter = mrhi_filterLinear;
@@ -183,6 +210,12 @@ result::Status Pipelines::make() {
     models.colorTargets[0].format = kSceneFormat;
     models.colorTargets[1].format = kMotionFormat;
     RAWFRAME_TRY(ask(models, lit));
+    mrhiGraphicsPipelineDef maskedDef = models;
+    constexpr std::string_view kMaskedLabel = "rawframe.scene.models.masked";
+    maskedDef.label = kMaskedLabel.data();
+    maskedDef.labelLength = kMaskedLabel.size();
+    maskedDef.depthCompare = mrhi_compareEqual;
+    RAWFRAME_TRY(ask(maskedDef, maskedLit));
     // The translucent models (D305): over the opaque ones and the sky,
     // tested against their depth but writing none, blended by their
     // opacity, and leaving the motion to what is behind them.
@@ -271,7 +304,19 @@ result::Status Pipelines::make() {
 
 result::Result<bool> Pipelines::ready() {
     bool all = true;
-    for (Asked* asked : {&casting, &depth, &lit, &glass, &sky, &histogram, &adapt, &temporal, &tonemap, &fxaa}) {
+    for (Asked* asked : {&casting,
+                         &cutCasting,
+                         &depth,
+                         &cutout,
+                         &lit,
+                         &maskedLit,
+                         &glass,
+                         &sky,
+                         &histogram,
+                         &adapt,
+                         &temporal,
+                         &tonemap,
+                         &fxaa}) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {

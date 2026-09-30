@@ -58,8 +58,17 @@ struct Pipelines {
     /// behind them, the metering's two steps (D293), the temporal pass, the
     /// picture, and FXAA over it (D296).
     Asked casting;
+    /// The masked casters, cut where their opacity falls below their
+    /// cutoff (D310).
+    Asked cutCasting;
     Asked depth;
+    /// The masked models' depth, cut where their opacity falls below their
+    /// cutoff (D310).
+    Asked cutout;
     Asked lit;
+    /// The masked models lit only where their depth is the prepass's
+    /// (D310).
+    Asked maskedLit;
     /// The translucent models, blended over what is behind them (D305).
     Asked glass;
     Asked sky;

@@ -24,7 +24,6 @@ namespace {
 constexpr diagnostics::EventIdentity kSceneSummary{"scene", "scene_summary"};
 constexpr std::string_view kProvided[] = {kSceneFrames.name};
 constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
-constexpr diagnostics::EventIdentity kMaterialProjected{"scene", "material_projected"};
 constexpr diagnostics::EventIdentity kTextureUnknown{"scene", "material_texture_unknown"};
 constexpr diagnostics::EventIdentity kTexturesUnavailable{"scene", "textures_unavailable"};
 constexpr diagnostics::EventIdentity kTextureUnread{"scene", "texture_unavailable"};
@@ -185,9 +184,6 @@ public:
                                              .texture = {.id = read->texture.id,
                                                          .filter = read->texture.filter,
                                                          .address = read->texture.address}});
-                        if (read->blend == material::Blend::Masked) {
-                            projected_.push_back(each.path);
-                        }
                     } else {
                         unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});
                     }
@@ -228,14 +224,6 @@ public:
                          kTexturesUnavailable,
                          "the materials' textures could not be asked for: they are sampled as white",
                          {diagnostics::field("reason", *unreadTextures_)});
-        }
-        // SPEC-0026's projection, declared: the depth prepass tests no
-        // alpha yet.
-        for (const std::string& kPath : projected_) {
-            emitter_.log(diagnostics::Severity::Warning,
-                         kMaterialProjected,
-                         "a masked material is drawn opaque until the depth prepass tests alpha",
-                         {diagnostics::field("material", kPath)});
         }
         return {};
     }
@@ -512,9 +500,6 @@ private:
     std::size_t gameMaterials_ = 0;
     /// Materials that could not be read, and why, said at start.
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;
-    /// Materials drawn otherwise than they ask (masked drawn opaque), said
-    /// at start.
-    std::vector<std::string> projected_;
     /// The textures the materials sample (D309): held, the materials
     /// naming one the game does not declare, and why they could not be
     /// asked for.

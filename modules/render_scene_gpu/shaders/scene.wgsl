@@ -1,5 +1,5 @@
-// The 3D scene's models (D284, D289, D290, D291, D292, D293, D309), for WebGPU: the entries of
-// scene.vert and scene.frag.
+// The 3D scene's models (D284, D289, D290, D291, D292, D293, D309, D310), for WebGPU: the entries of
+// scene.vert, scene.frag, and scene.cut.frag.
 
 struct Frame {
     viewProjection: mat4x4f,
@@ -230,4 +230,16 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let sky = rest.y * ((1.0 - sheen) * surface.diffuse * around + sheen * along);
     out.color = vec4f((direct + sky + emission.rgb) * exposure.y, opacity);
     return out;
+}
+
+// The masked models in the depth prepass (D310): scene.cut.frag.
+@fragment
+fn cut(@location(1) color: vec4f, @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f) {
+    let at = min(material, arrayLength(&materials) / 4u - 1u) * 4u;
+    let rest = materials[at + 3u];
+    let sampled = textureSample(baseTexture, baseSampler, uv);
+    let opacity = rest.x * color.a * select(1.0, sampled.a, (u32(rest.w) & 4u) != 0u);
+    if (opacity < rest.z) {
+        discard;
+    }
 }

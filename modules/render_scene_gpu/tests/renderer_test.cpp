@@ -143,11 +143,12 @@ std::array<int, 3> at(const std::vector<std::byte>& pixels, std::uint32_t x, std
 std::optional<std::vector<std::byte>> drawn(render::Framer& framer,
                                             render_scene_gpu::SceneRenderer& renderer,
                                             const SceneFrame& frame,
-                                            const render_scene_gpu::MeshSource& meshes) {
+                                            const render_scene_gpu::MeshSource& meshes,
+                                            const render_scene_gpu::TextureSource& textures = {}) {
     const std::array<render::FrameRecorder*, 1> kRecorders = {&renderer};
     const std::uint64_t kBefore = renderer.statistics().frames;
     for (int attempt = 0; attempt < 1000 && renderer.statistics().frames == kBefore; ++attempt) {
-        renderer.prepare(&frame, meshes);
+        renderer.prepare(&frame, meshes, textures);
         RAWFRAME_EXPECT(framer.finish(5'000'000'000).has_value());
         const auto kMade = framer.make(kRecorders, {.width = kSide, .height = kSide, .readBack = true});
         RAWFRAME_EXPECT(kMade.has_value());
@@ -1079,4 +1080,106 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
     }
     // The texture and white, each uploaded once.
     RAWFRAME_EXPECT(asked > 0 && (**made).statistics().texturesUploaded == 2);
+}
+
+RAWFRAME_TEST(AMaskedMaterialIsCutWhereItsTextureIsClear) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // White texels, the top row opaque, the bottom row clear.
+    texture::Texture stencil{.format = texture::Format::Rgba8Srgb};
+    stencil.levels.push_back({.width = 2, .height = 2, .bytes = std::vector<std::byte>(16, std::byte{255})});
+    for (const std::size_t kClear : {11U, 15U}) {
+        stencil.levels[0].bytes[kClear] = std::byte{0};
+    }
+    const auto kStencil = std::make_shared<const texture::Texture>(std::move(stencil));
+    const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == 0x77 ? kStencil : nullptr;
+    };
+    // An unlit red box masked by the texture's alpha at half, before an
+    // unlit green one: the red above, the green seen through below.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    SceneDraw cut = box(4, 1.5F, {1, 0, 0, 1});
+    cut.material = 1;
+    SceneDraw behind = box(10, 5, {0, 1, 0, 1});
+    behind.material = 2;
+    frame.draws = {cut, behind};
+    render_scene::MaterialBlob masked = render_scene::noMaterial();
+    masked[14] = 0.5F;
+    masked[15] = 1 + 4;
+    render_scene::MaterialBlob unlit = render_scene::noMaterial();
+    unlit[15] = 1;
+    frame.materials = {render_scene::noMaterial(), masked, unlit};
+    frame.textures = {{}, {.id = 0x77, .filter = material::Filter::Nearest, .address = material::Address::Clamp}, {}};
+    (**made).prepare(&frame, kMeshes, kTextures);
+    const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
+    const std::uint64_t kBefore = (**made).statistics().frames;
+    for (int attempt = 0; attempt < 1000 && (**made).statistics().frames == kBefore; ++attempt) {
+        RAWFRAME_EXPECT((**framer).finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((**framer).make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
+    }
+    RAWFRAME_EXPECT((**framer).finish(5'000'000'000).has_value());
+    const auto kPixels = (**framer).pixels();
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    const std::array<int, 3> kAbove = at(*kPixels, 32, 24);
+    const std::array<int, 3> kBelow = at(*kPixels, 32, 40);
+    std::printf("above %d %d %d, below %d %d %d\n", kAbove[0], kAbove[1], kAbove[2], kBelow[0], kBelow[1], kBelow[2]);
+    RAWFRAME_EXPECT(kAbove[0] > kAbove[1] + 60 && kBelow[1] > kBelow[0] + 60);
+}
+
+RAWFRAME_TEST(AMaskedCasterCastsOnlyWhatIsLeftOfIt) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // The spot's room with its box masked by a texture opaque or clear:
+    // opaque, the floor left of the box is in its shadow; clear, the box is
+    // cut away from the light, and the floor is lit.
+    const auto kFloor = [&](std::byte alpha) {
+        texture::Texture one{.format = texture::Format::Rgba8Srgb};
+        one.levels.push_back(
+            {.width = 1, .height = 1, .bytes = {std::byte{255}, std::byte{255}, std::byte{255}, alpha}});
+        const auto kOne = std::make_shared<const texture::Texture>(std::move(one));
+        const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+            return id == 0x77 ? kOne : nullptr;
+        };
+        SceneFrame frame = lamplit(true);
+        frame.draws[1].material = 1;
+        frame.lightShadows.casters[1].material = 1;
+        render_scene::MaterialBlob masked = render_scene::noMaterial();
+        masked[14] = 0.5F;
+        masked[15] = 4;
+        frame.materials = {render_scene::noMaterial(), masked};
+        frame.textures = {{}, {.id = 0x77}};
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes, kTextures);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        return kPixels.has_value() ? at(*kPixels, 27, 39)[0] : -1;
+    };
+    const int kShadowed = kFloor(std::byte{255});
+    const int kLit = kFloor(std::byte{0});
+    std::printf("left of the box: opaque %d, clear %d\n", kShadowed, kLit);
+    RAWFRAME_EXPECT(kLit > 60 && kShadowed < kLit / 3);
 }
