@@ -22,12 +22,13 @@ ReflectionPass::ReflectionPass(mrhiDevice* native) noexcept : native_(native) {
 }
 
 result::Status ReflectionPass::declare(const render_scene::SceneFrame& frame,
+                                       bool made,
                                        const FrameBlock& block,
                                        mrhiResourceId before,
                                        std::uint32_t width,
                                        std::uint32_t height,
                                        std::vector<mrhiAccess>& writes) {
-    enabled_ = frame.reflections.enabled && before.index1 != 0;
+    enabled_ = frame.reflections.enabled && made && before.index1 != 0;
     if (!enabled_) {
         return {};
     }

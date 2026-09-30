@@ -36,6 +36,7 @@ public:
     /// the upload pass writes added to `writes`. The prepass's surfaces
     /// target is the renderer's, shared with the reflections (D331).
     result::Status declare(const render_scene::SceneFrame& frame,
+                           bool made,
                            const FrameBlock& block,
                            std::uint32_t width,
                            std::uint32_t height,

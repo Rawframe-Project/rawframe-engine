@@ -103,4 +103,21 @@ inline std::optional<std::vector<std::byte>> drawn(render::Framer& framer,
     return framer.pixels();
 }
 
+/// One frame drawn and read back once the renderer draws what `counted`
+/// counts: an effect's pipelines are asked for when a frame first wants
+/// it, and the frames before the device answers go without it (D337).
+inline std::optional<std::vector<std::byte>> drawnWith(render::Framer& framer,
+                                                       render_scene_gpu::SceneRenderer& renderer,
+                                                       const render_scene::SceneFrame& frame,
+                                                       const render_scene_gpu::MeshSource& meshes,
+                                                       std::uint64_t render_scene_gpu::RendererStatistics::* counted,
+                                                       const render_scene_gpu::TextureSource& textures = {}) {
+    const std::uint64_t kBefore = renderer.statistics().*counted;
+    std::optional<std::vector<std::byte>> pixels;
+    for (int attempt = 0; attempt < 1000 && renderer.statistics().*counted == kBefore; ++attempt) {
+        pixels = drawn(framer, renderer, frame, meshes, textures);
+    }
+    return pixels;
+}
+
 } // namespace rawframe::scene_fixture

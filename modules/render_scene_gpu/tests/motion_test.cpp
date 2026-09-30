@@ -64,7 +64,8 @@ RAWFRAME_TEST(AMovingBoxIsSmearedByMotionBlurAndAStillOneIsNot) {
         return render_scene::engineMesh(id);
     };
     const auto kSharp = drawn(**framer, **made, moving(2, false), kMeshes);
-    const auto kBlurred = drawn(**framer, **made, moving(2, true), kMeshes);
+    const auto kBlurred = drawnWith(
+        **framer, **made, moving(2, true), kMeshes, &render_scene_gpu::RendererStatistics::framesMotionBlurred);
     const auto kStill = drawn(**framer, **made, moving(0, true), kMeshes);
     RAWFRAME_EXPECT(kSharp.has_value() && kBlurred.has_value() && kStill.has_value());
     if (!kSharp.has_value() || !kBlurred.has_value() || !kStill.has_value()) {

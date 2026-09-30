@@ -76,6 +76,9 @@ RAWFRAME_TEST(TheFloorAtABlocksFootIsDarkerWithAmbientOcclusion) {
         return std::pair{kPixels, (*made)->captured()};
     };
     const auto [kPlain, kPlainLight] = kLit(false);
+    // The occlusion's pipelines asked for and made first (D337).
+    static_cast<void>(
+        drawnWith(**framer, **made, yard(true), kMeshes, &render_scene_gpu::RendererStatistics::framesOccluded));
     const auto [kOccluded, kOccludedLight] = kLit(true);
     RAWFRAME_EXPECT(kPlain.has_value() && kPlainLight.has_value() && kOccludedLight.has_value());
     if (!kPlain.has_value() || !kPlainLight.has_value() || !kOccludedLight.has_value()) {

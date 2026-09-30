@@ -103,17 +103,11 @@ result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kTemporalContainer, temporalShader));
     RAWFRAME_TRY(makeShader(kSkyContainer, skyShader));
     RAWFRAME_TRY(makeShader(kMeterContainer, meterShader));
-    RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
-    RAWFRAME_TRY(makeShader(kOcclusionContainer, occlusionShader));
-    RAWFRAME_TRY(makeShader(kBloomContainer, bloomShader));
-    RAWFRAME_TRY(makeShader(kReflectContainer, reflectShader));
-    RAWFRAME_TRY(makeShader(kMotionContainer, motionShader));
-    RAWFRAME_TRY(makeShader(kFocusContainer, focusShader));
     // Each vertex of the mesh, then each draw's placement.
-    constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
+    static constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
         mrhiVertexBufferLayout{.stride = kInstanceBytes, .stepMode = mrhi_stepInstance}};
-    constexpr std::array<mrhiVertexAttribute, 16> kAttributes = {
+    static constexpr std::array<mrhiVertexAttribute, 16> kAttributes = {
         mrhiVertexAttribute{.buffer = 0, .location = 0, .format = mrhi_vertexFloat32x3, .offset = 0},
         mrhiVertexAttribute{.buffer = 0, .location = 1, .format = mrhi_vertexFloat32x3, .offset = 12},
         mrhiVertexAttribute{.buffer = 0, .location = 13, .format = mrhi_vertexFloat32x2, .offset = 24},
@@ -157,98 +151,6 @@ result::Status Pipelines::make() {
     cutDef.fragmentEntry = "cut";
     cutDef.fragmentEntryLength = 3;
     RAWFRAME_TRY(ask(cutDef, cutout));
-    // With the ambient occlusion (D327), the prepass also leaves each
-    // point's surface: whole, and masked.
-    mrhiGraphicsPipelineDef surfacesDef = prepass;
-    constexpr std::string_view kSurfacesLabel = "rawframe.scene.depth.surfaces";
-    surfacesDef.label = kSurfacesLabel.data();
-    surfacesDef.labelLength = kSurfacesLabel.size();
-    surfacesDef.fragmentEntry = "normal";
-    surfacesDef.fragmentEntryLength = 6;
-    surfacesDef.colorTargetCount = 1;
-    surfacesDef.colorTargets[0].format = kSurfaceFormat;
-    RAWFRAME_TRY(ask(surfacesDef, surfaces));
-    mrhiGraphicsPipelineDef cutSurfacesDef = surfacesDef;
-    constexpr std::string_view kCutSurfacesLabel = "rawframe.scene.depth.surfaces.masked";
-    cutSurfacesDef.label = kCutSurfacesLabel.data();
-    cutSurfacesDef.labelLength = kCutSurfacesLabel.size();
-    cutSurfacesDef.fragmentEntry = "cutNormal";
-    cutSurfacesDef.fragmentEntryLength = 9;
-    RAWFRAME_TRY(ask(cutSurfacesDef, cutSurfaces));
-    // The ambient occlusion from the prepass's depth and surfaces, then
-    // blurred, each a triangle over the target.
-    for (const auto& [kEntry, kLabel, kAsked] :
-         {std::tuple{std::string_view{"occlude"}, std::string_view{"rawframe.scene.occlusion"}, &occlude},
-          std::tuple{std::string_view{"blur"}, std::string_view{"rawframe.scene.occlusion.blur"}, &blurOcclusion}}) {
-        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
-        def.label = kLabel.data();
-        def.labelLength = kLabel.size();
-        def.shader = occlusionShader;
-        def.vertexEntry = "vs";
-        def.vertexEntryLength = 2;
-        def.fragmentEntry = kEntry.data();
-        def.fragmentEntryLength = kEntry.size();
-        def.colorTargetCount = 1;
-        def.colorTargets[0].format = kAmbientFormat;
-        RAWFRAME_TRY(ask(def, *kAsked));
-    }
-    // The screen-space reflections from the prepass's depth and surfaces
-    // and the picture before (D331), a triangle over the target.
-    mrhiGraphicsPipelineDef marching = mrhiDefaultGraphicsPipelineDef();
-    constexpr std::string_view kMarchLabel = "rawframe.scene.reflections";
-    marching.label = kMarchLabel.data();
-    marching.labelLength = kMarchLabel.size();
-    marching.shader = reflectShader;
-    marching.vertexEntry = "vs";
-    marching.vertexEntryLength = 2;
-    marching.fragmentEntry = "march";
-    marching.fragmentEntryLength = 5;
-    marching.colorTargetCount = 1;
-    marching.colorTargets[0].format = kReflectionFormat;
-    RAWFRAME_TRY(ask(marching, march));
-    // The motion blur's tiles and their neighbors, then its gathering, each
-    // a triangle over its target (D334).
-    for (const auto& [kEntry, kLabel, kFormat, kAsked] :
-         {std::tuple{
-              std::string_view{"tile"}, std::string_view{"rawframe.scene.motion.tiles"}, kMotionFormat, &motionTiles},
-          std::tuple{std::string_view{"neighbor"},
-                     std::string_view{"rawframe.scene.motion.neighbors"},
-                     kMotionFormat,
-                     &motionNeighbors},
-          std::tuple{std::string_view{"gather"},
-                     std::string_view{"rawframe.scene.motion.gather"},
-                     kSceneFormat,
-                     &motionGather}}) {
-        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
-        def.label = kLabel.data();
-        def.labelLength = kLabel.size();
-        def.shader = motionShader;
-        def.vertexEntry = "vs";
-        def.vertexEntryLength = 2;
-        def.fragmentEntry = kEntry.data();
-        def.fragmentEntryLength = kEntry.size();
-        def.colorTargetCount = 1;
-        def.colorTargets[0].format = kFormat;
-        RAWFRAME_TRY(ask(def, *kAsked));
-    }
-    // The depth of field's halving and bokeh at half size, then its blend,
-    // each a triangle over its target (D336).
-    for (const auto& [kEntry, kLabel, kAsked] :
-         {std::tuple{std::string_view{"prefilter"}, std::string_view{"rawframe.scene.focus.halved"}, &focusPrefilter},
-          std::tuple{std::string_view{"bokeh"}, std::string_view{"rawframe.scene.focus.bokeh"}, &focusBokeh},
-          std::tuple{std::string_view{"combine"}, std::string_view{"rawframe.scene.focus.combined"}, &focusCombine}}) {
-        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
-        def.label = kLabel.data();
-        def.labelLength = kLabel.size();
-        def.shader = focusShader;
-        def.vertexEntry = "vs";
-        def.vertexEntryLength = 2;
-        def.fragmentEntry = kEntry.data();
-        def.fragmentEntryLength = kEntry.size();
-        def.colorTargetCount = 1;
-        def.colorTargets[0].format = kSceneFormat;
-        RAWFRAME_TRY(ask(def, *kAsked));
-    }
     // The casters into the sun's shadow map: the vertex's place alone,
     // pushed from the sun by its slope (the depth half of ADR-0051's
     // bias; the normal half is where the map is read).
@@ -411,47 +313,177 @@ result::Status Pipelines::make() {
     picture.colorTargetCount = 1;
     picture.colorTargets[0].format = kPictureFormat;
     RAWFRAME_TRY(ask(picture, tonemap));
-    // The bloom's chain (D328): halvings, then doublings added to the
-    // level above.
-    for (const auto& [kEntry, kLabel, kAsked] :
-         {std::tuple{std::string_view{"first"}, std::string_view{"rawframe.scene.bloom.first"}, &bloomFirst},
-          std::tuple{std::string_view{"down"}, std::string_view{"rawframe.scene.bloom.down"}, &bloomDown},
-          std::tuple{std::string_view{"up"}, std::string_view{"rawframe.scene.bloom.up"}, &bloomUp}}) {
-        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
-        def.label = kLabel.data();
-        def.labelLength = kLabel.size();
-        def.shader = bloomShader;
-        def.vertexEntry = "vs";
-        def.vertexEntryLength = 2;
-        def.fragmentEntry = kEntry.data();
-        def.fragmentEntryLength = kEntry.size();
-        def.colorTargetCount = 1;
-        def.colorTargets[0].format = kSceneFormat;
-        if (kAsked == &bloomUp) {
-            def.colorTargets[0].blend = true;
-            def.colorTargets[0].color = {
-                .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendOne, .operation = mrhi_blendAdd};
-            def.colorTargets[0].alpha = {
-                .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendZero, .operation = mrhi_blendAdd};
-        }
-        RAWFRAME_TRY(ask(def, *kAsked));
-    }
-    // FXAA: the tonemapped picture into the frame's (D296).
-    mrhiGraphicsPipelineDef smoothed = picture;
-    constexpr std::string_view kFxaaLabel = "rawframe.scene.fxaa";
-    smoothed.label = kFxaaLabel.data();
-    smoothed.labelLength = kFxaaLabel.size();
-    smoothed.shader = fxaaShader;
-    return ask(smoothed, fxaa);
+    // What the effects' pipelines are made from when a view first wants
+    // them (D337).
+    prepass_ = prepass;
+    picture_ = picture;
+    return {};
 }
 
-result::Result<bool> Pipelines::ready() {
+result::Status Pipelines::askFor(Effect effect) {
+    switch (effect) {
+    case Effect::Surfaces: {
+        // The prepass also leaving each point's surface, for the ambient
+        // occlusion and the reflections (D327, D331): whole, and masked.
+        mrhiGraphicsPipelineDef surfacesDef = prepass_;
+        constexpr std::string_view kSurfacesLabel = "rawframe.scene.depth.surfaces";
+        surfacesDef.label = kSurfacesLabel.data();
+        surfacesDef.labelLength = kSurfacesLabel.size();
+        surfacesDef.fragmentEntry = "normal";
+        surfacesDef.fragmentEntryLength = 6;
+        surfacesDef.colorTargetCount = 1;
+        surfacesDef.colorTargets[0].format = kSurfaceFormat;
+        RAWFRAME_TRY(ask(surfacesDef, surfaces));
+        mrhiGraphicsPipelineDef cutSurfacesDef = surfacesDef;
+        constexpr std::string_view kCutSurfacesLabel = "rawframe.scene.depth.surfaces.masked";
+        cutSurfacesDef.label = kCutSurfacesLabel.data();
+        cutSurfacesDef.labelLength = kCutSurfacesLabel.size();
+        cutSurfacesDef.fragmentEntry = "cutNormal";
+        cutSurfacesDef.fragmentEntryLength = 9;
+        RAWFRAME_TRY(ask(cutSurfacesDef, cutSurfaces));
+        return {};
+    }
+    case Effect::Occlusion: {
+        RAWFRAME_TRY(makeShader(kOcclusionContainer, occlusionShader));
+        // The ambient occlusion from the prepass's depth and surfaces, then
+        // blurred, each a triangle over the target.
+        for (const auto& [kEntry, kLabel, kAsked] :
+             {std::tuple{std::string_view{"occlude"}, std::string_view{"rawframe.scene.occlusion"}, &occlude},
+              std::tuple{
+                  std::string_view{"blur"}, std::string_view{"rawframe.scene.occlusion.blur"}, &blurOcclusion}}) {
+            mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+            def.label = kLabel.data();
+            def.labelLength = kLabel.size();
+            def.shader = occlusionShader;
+            def.vertexEntry = "vs";
+            def.vertexEntryLength = 2;
+            def.fragmentEntry = kEntry.data();
+            def.fragmentEntryLength = kEntry.size();
+            def.colorTargetCount = 1;
+            def.colorTargets[0].format = kAmbientFormat;
+            RAWFRAME_TRY(ask(def, *kAsked));
+        }
+        return {};
+    }
+    case Effect::Reflections: {
+        RAWFRAME_TRY(makeShader(kReflectContainer, reflectShader));
+        // The screen-space reflections from the prepass's depth and surfaces
+        // and the picture before (D331), a triangle over the target.
+        mrhiGraphicsPipelineDef marching = mrhiDefaultGraphicsPipelineDef();
+        constexpr std::string_view kMarchLabel = "rawframe.scene.reflections";
+        marching.label = kMarchLabel.data();
+        marching.labelLength = kMarchLabel.size();
+        marching.shader = reflectShader;
+        marching.vertexEntry = "vs";
+        marching.vertexEntryLength = 2;
+        marching.fragmentEntry = "march";
+        marching.fragmentEntryLength = 5;
+        marching.colorTargetCount = 1;
+        marching.colorTargets[0].format = kReflectionFormat;
+        RAWFRAME_TRY(ask(marching, march));
+        return {};
+    }
+    case Effect::MotionBlur: {
+        RAWFRAME_TRY(makeShader(kMotionContainer, motionShader));
+        // The motion blur's tiles and their neighbors, then its gathering, each
+        // a triangle over its target (D334).
+        for (const auto& [kEntry, kLabel, kFormat, kAsked] :
+             {std::tuple{std::string_view{"tile"},
+                         std::string_view{"rawframe.scene.motion.tiles"},
+                         kMotionFormat,
+                         &motionTiles},
+              std::tuple{std::string_view{"neighbor"},
+                         std::string_view{"rawframe.scene.motion.neighbors"},
+                         kMotionFormat,
+                         &motionNeighbors},
+              std::tuple{std::string_view{"gather"},
+                         std::string_view{"rawframe.scene.motion.gather"},
+                         kSceneFormat,
+                         &motionGather}}) {
+            mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+            def.label = kLabel.data();
+            def.labelLength = kLabel.size();
+            def.shader = motionShader;
+            def.vertexEntry = "vs";
+            def.vertexEntryLength = 2;
+            def.fragmentEntry = kEntry.data();
+            def.fragmentEntryLength = kEntry.size();
+            def.colorTargetCount = 1;
+            def.colorTargets[0].format = kFormat;
+            RAWFRAME_TRY(ask(def, *kAsked));
+        }
+        return {};
+    }
+    case Effect::DepthOfField: {
+        RAWFRAME_TRY(makeShader(kFocusContainer, focusShader));
+        // The depth of field's halving and bokeh at half size, then its blend,
+        // each a triangle over its target (D336).
+        for (const auto& [kEntry, kLabel, kAsked] :
+             {std::tuple{
+                  std::string_view{"prefilter"}, std::string_view{"rawframe.scene.focus.halved"}, &focusPrefilter},
+              std::tuple{std::string_view{"bokeh"}, std::string_view{"rawframe.scene.focus.bokeh"}, &focusBokeh},
+              std::tuple{
+                  std::string_view{"combine"}, std::string_view{"rawframe.scene.focus.combined"}, &focusCombine}}) {
+            mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+            def.label = kLabel.data();
+            def.labelLength = kLabel.size();
+            def.shader = focusShader;
+            def.vertexEntry = "vs";
+            def.vertexEntryLength = 2;
+            def.fragmentEntry = kEntry.data();
+            def.fragmentEntryLength = kEntry.size();
+            def.colorTargetCount = 1;
+            def.colorTargets[0].format = kSceneFormat;
+            RAWFRAME_TRY(ask(def, *kAsked));
+        }
+        return {};
+    }
+    case Effect::Bloom: {
+        RAWFRAME_TRY(makeShader(kBloomContainer, bloomShader));
+        // The bloom's chain (D328): halvings, then doublings added to the
+        // level above.
+        for (const auto& [kEntry, kLabel, kAsked] :
+             {std::tuple{std::string_view{"first"}, std::string_view{"rawframe.scene.bloom.first"}, &bloomFirst},
+              std::tuple{std::string_view{"down"}, std::string_view{"rawframe.scene.bloom.down"}, &bloomDown},
+              std::tuple{std::string_view{"up"}, std::string_view{"rawframe.scene.bloom.up"}, &bloomUp}}) {
+            mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+            def.label = kLabel.data();
+            def.labelLength = kLabel.size();
+            def.shader = bloomShader;
+            def.vertexEntry = "vs";
+            def.vertexEntryLength = 2;
+            def.fragmentEntry = kEntry.data();
+            def.fragmentEntryLength = kEntry.size();
+            def.colorTargetCount = 1;
+            def.colorTargets[0].format = kSceneFormat;
+            if (kAsked == &bloomUp) {
+                def.colorTargets[0].blend = true;
+                def.colorTargets[0].color = {
+                    .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendOne, .operation = mrhi_blendAdd};
+                def.colorTargets[0].alpha = {
+                    .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendZero, .operation = mrhi_blendAdd};
+            }
+            RAWFRAME_TRY(ask(def, *kAsked));
+        }
+        return {};
+    }
+    case Effect::Fxaa: {
+        RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
+        // FXAA: the tonemapped picture into the frame's (D296).
+        mrhiGraphicsPipelineDef smoothed = picture_;
+        constexpr std::string_view kFxaaLabel = "rawframe.scene.fxaa";
+        smoothed.label = kFxaaLabel.data();
+        smoothed.labelLength = kFxaaLabel.size();
+        smoothed.shader = fxaaShader;
+        return ask(smoothed, fxaa);
+    }
+    }
+    return {};
+}
+
+result::Result<bool> Pipelines::answered(std::initializer_list<Asked*> pipelines) {
     bool all = true;
-    for (Asked* asked :
-         {&casting,       &cutCasting, &depth,       &cutout,          &surfaces,     &cutSurfaces,    &occlude,
-          &blurOcclusion, &march,      &motionTiles, &motionNeighbors, &motionGather, &focusPrefilter, &focusBokeh,
-          &focusCombine,  &lit,        &maskedLit,   &glass,           &sky,          &histogram,      &adapt,
-          &temporal,      &tonemap,    &fxaa,        &bloomFirst,      &bloomDown,    &bloomUp}) {
+    for (Asked* asked : pipelines) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {
@@ -463,6 +495,46 @@ result::Result<bool> Pipelines::ready() {
         all = all && asked->ready;
     }
     return all;
+}
+
+result::Result<bool> Pipelines::ready() {
+    return answered({&casting,
+                     &cutCasting,
+                     &depth,
+                     &cutout,
+                     &lit,
+                     &maskedLit,
+                     &glass,
+                     &sky,
+                     &histogram,
+                     &adapt,
+                     &temporal,
+                     &tonemap});
+}
+
+result::Result<bool> Pipelines::wanted(Effect effect) {
+    const auto kAt = static_cast<std::size_t>(effect);
+    if (!asked_[kAt]) {
+        asked_[kAt] = true;
+        RAWFRAME_TRY(askFor(effect));
+    }
+    switch (effect) {
+    case Effect::Surfaces:
+        return answered({&surfaces, &cutSurfaces});
+    case Effect::Occlusion:
+        return answered({&occlude, &blurOcclusion});
+    case Effect::Reflections:
+        return answered({&march});
+    case Effect::MotionBlur:
+        return answered({&motionTiles, &motionNeighbors, &motionGather});
+    case Effect::DepthOfField:
+        return answered({&focusPrefilter, &focusBokeh, &focusCombine});
+    case Effect::Bloom:
+        return answered({&bloomFirst, &bloomDown, &bloomUp});
+    case Effect::Fxaa:
+        return answered({&fxaa});
+    }
+    return false;
 }
 
 } // namespace rawframe::render_scene_gpu

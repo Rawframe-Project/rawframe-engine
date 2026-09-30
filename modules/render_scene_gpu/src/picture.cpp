@@ -22,6 +22,7 @@ PicturePass::PicturePass(mrhiDevice* native) noexcept : native_(native) {
 }
 
 result::Status PicturePass::declare(const render_scene::SceneFrame& frame,
+                                    bool made,
                                     std::uint32_t width,
                                     std::uint32_t height,
                                     std::size_t bloomLevels,
@@ -36,7 +37,7 @@ result::Status PicturePass::declare(const render_scene::SceneFrame& frame,
         return failed("the picture's grade could not be declared", mrhi_errorCapacity);
     }
     writes.push_back(wholeOf(blockResource_, mrhi_accessCopyDestination));
-    smoothed_ = frame.fxaa;
+    smoothed_ = frame.fxaa && made;
     if (smoothed_) {
         mrhiTextureDef def = mrhiDefaultTextureDef();
         def.format = kPictureFormat;

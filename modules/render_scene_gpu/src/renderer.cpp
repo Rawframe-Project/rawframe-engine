@@ -255,6 +255,15 @@ struct SceneRenderer::State {
         bool casters = false;
     };
 
+    /// Whether an effect a frame `wants` can be drawn: its pipelines asked
+    /// for the first time it is wanted, and made (D337).
+    result::Result<bool> made(bool wants, Effect effect) {
+        if (!wants) {
+            return false;
+        }
+        return pipelines.wanted(effect);
+    }
+
     result::Status declare(render::Frame& open) {
         declared.reset();
         if (frame == nullptr) {
@@ -441,11 +450,21 @@ struct SceneRenderer::State {
         // Antialiased over time, the temporal pass blends the frame with the
         // picture before into the other kept picture (D291).
         RAWFRAME_TRY(temporal->declare(*frame, open.width, open.height, writes));
-        RAWFRAME_TRY(occlusion->declare(*frame, now.block, open.width, open.height, writes));
+        // Each effect the view wants, once its pipelines are made (D337).
+        RAWFRAME_TRY_ASSIGN(const bool kSurfaces,
+                            made(frame->occlusion.enabled || frame->reflections.enabled, Effect::Surfaces));
+        RAWFRAME_TRY_ASSIGN(const bool kOccluding, made(frame->occlusion.enabled, Effect::Occlusion));
+        RAWFRAME_TRY_ASSIGN(const bool kReflecting, made(frame->reflections.enabled, Effect::Reflections));
+        RAWFRAME_TRY_ASSIGN(const bool kBlurring, made(frame->motionBlur.enabled, Effect::MotionBlur));
+        RAWFRAME_TRY_ASSIGN(const bool kFocusing, made(frame->depthOfField.enabled, Effect::DepthOfField));
+        RAWFRAME_TRY_ASSIGN(const bool kBlooming, made(frame->bloom.enabled, Effect::Bloom));
+        RAWFRAME_TRY_ASSIGN(const bool kSmoothing, made(frame->fxaa, Effect::Fxaa));
+        RAWFRAME_TRY(occlusion->declare(*frame, kSurfaces && kOccluding, now.block, open.width, open.height, writes));
         // The reflections read the picture before, so only where it is
         // reused (D331).
         RAWFRAME_TRY(
             reflecting->declare(*frame,
+                                kSurfaces && kReflecting,
                                 now.block,
                                 temporal->enabled() && temporal->reused() ? temporal->before() : mrhiResourceId{},
                                 open.width,
@@ -463,10 +482,11 @@ struct SceneRenderer::State {
                 return failed("the prepass's surfaces could not be declared", kDeclared);
             }
         }
-        RAWFRAME_TRY(motionBlur->declare(*frame, open.width, open.height, writes));
-        RAWFRAME_TRY(focus->declare(*frame, open.width, open.height, writes));
-        RAWFRAME_TRY(bloom->declare(*frame, open.width, open.height));
-        RAWFRAME_TRY(picture->declare(*frame, open.width, open.height, bloom->enabled() ? bloom->levels() : 0, writes));
+        RAWFRAME_TRY(motionBlur->declare(*frame, kBlurring, open.width, open.height, writes));
+        RAWFRAME_TRY(focus->declare(*frame, kFocusing, open.width, open.height, writes));
+        RAWFRAME_TRY(bloom->declare(*frame, kBlooming, open.width, open.height));
+        RAWFRAME_TRY(picture->declare(
+            *frame, kSmoothing, open.width, open.height, bloom->enabled() ? bloom->levels() : 0, writes));
         writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
         RAWFRAME_TRY(metering->declare(*frame, writes));

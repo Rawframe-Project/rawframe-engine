@@ -38,6 +38,7 @@ public:
     /// by `height`, seen through `block`'s view: its target and block
     /// declared, and what the upload pass writes added to `writes`.
     result::Status declare(const render_scene::SceneFrame& frame,
+                           bool made,
                            const FrameBlock& block,
                            mrhiResourceId before,
                            std::uint32_t width,

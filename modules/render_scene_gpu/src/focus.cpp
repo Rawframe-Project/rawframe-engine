@@ -34,10 +34,11 @@ DepthOfFieldPass::DepthOfFieldPass(mrhiDevice* native) noexcept : native_(native
 }
 
 result::Status DepthOfFieldPass::declare(const render_scene::SceneFrame& frame,
+                                         bool made,
                                          std::uint32_t width,
                                          std::uint32_t height,
                                          std::vector<mrhiAccess>& writes) {
-    enabled_ = frame.depthOfField.enabled;
+    enabled_ = frame.depthOfField.enabled && made;
     if (!enabled_) {
         return {};
     }

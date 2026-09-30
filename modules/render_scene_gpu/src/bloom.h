@@ -23,7 +23,7 @@ public:
 
     /// Joins the open frame if its view asks, for a target `width` by
     /// `height`: its levels declared.
-    result::Status declare(const render_scene::SceneFrame& frame, std::uint32_t width, std::uint32_t height);
+    result::Status declare(const render_scene::SceneFrame& frame, bool made, std::uint32_t width, std::uint32_t height);
 
     [[nodiscard]] bool enabled() const noexcept;
     /// The first level, holding every level's light, and how many there

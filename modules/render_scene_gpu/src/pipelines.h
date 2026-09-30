@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <initializer_list>
 #include <maul-rhi/pipeline.h>
 #include <maul-rhi/resources.h>
 #include <maul-rhi/shader.h>
@@ -41,8 +42,24 @@ struct Asked {
     bool ready = false;
 };
 
-/// The scene's shaders, samplers, and pipelines (D284 to D292): asked of
-/// the device at once, made as it answers, and destroyed with it.
+/// The optional effects whose pipelines are asked for only when a view
+/// first wants them (D337): the prepass's surfaces target, which the
+/// ambient occlusion and the reflections read, and each effect.
+enum class Effect : std::uint8_t {
+    Surfaces,
+    Occlusion,
+    Reflections,
+    MotionBlur,
+    DepthOfField,
+    Bloom,
+    Fxaa
+};
+inline constexpr std::size_t kEffects = 7;
+
+/// The scene's shaders, samplers, and pipelines (D284 to D292): what every
+/// frame draws with asked of the device at once, each effect's when a view
+/// first wants it (D337), made as the device answers, and destroyed with
+/// it.
 struct Pipelines {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
@@ -117,16 +134,31 @@ struct Pipelines {
     Pipelines& operator=(const Pipelines&) = delete;
     ~Pipelines();
 
-    /// Every shader and sampler made, every pipeline asked for.
+    /// Every sampler made, and every shader and pipeline every frame draws
+    /// with asked for.
     result::Status make();
 
-    /// Whether every pipeline is made; an error if one could not be.
+    /// Whether every pipeline every frame draws with is made; an error if
+    /// one could not be.
     result::Result<bool> ready();
 
+    /// Whether `effect`'s pipelines are made: asked for the first time a
+    /// frame wants it, so the frames until the device answers go without
+    /// it; an error if one could not be made.
+    result::Result<bool> wanted(Effect effect);
+
 private:
+    result::Status askFor(Effect effect);
+    result::Result<bool> answered(std::initializer_list<Asked*> pipelines);
     result::Status makeShader(std::span<const std::uint8_t> container, mrhiShaderId& shader);
     result::Status ask(const mrhiGraphicsPipelineDef& def, Asked& asked);
     result::Status ask(const mrhiComputePipelineDef& def, Asked& asked);
+
+    /// Which effects have been asked for, and the prepass's and the
+    /// picture's pipelines, which their surfaces and FXAA are made from.
+    std::array<bool, kEffects> asked_{};
+    mrhiGraphicsPipelineDef prepass_{};
+    mrhiGraphicsPipelineDef picture_{};
 };
 
 /// Where a material's filter and address put its sampler among

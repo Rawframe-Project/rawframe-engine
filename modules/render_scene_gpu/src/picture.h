@@ -23,6 +23,7 @@ public:
     /// picture declared, and what the upload pass writes added to
     /// `writes`.
     result::Status declare(const render_scene::SceneFrame& frame,
+                           bool made,
                            std::uint32_t width,
                            std::uint32_t height,
                            std::size_t bloomLevels,

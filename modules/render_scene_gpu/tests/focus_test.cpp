@@ -72,7 +72,8 @@ RAWFRAME_TEST(ALensKeepsItsFocusSharpAndBlursWhatIsFarBeyondIt) {
         return render_scene::engineMesh(id);
     };
     const auto kPlain = drawn(**framer, **made, lensed(false), kMeshes);
-    const auto kFocused = drawn(**framer, **made, lensed(true), kMeshes);
+    const auto kFocused =
+        drawnWith(**framer, **made, lensed(true), kMeshes, &render_scene_gpu::RendererStatistics::framesFocused);
     RAWFRAME_EXPECT(kPlain.has_value() && kFocused.has_value());
     if (!kPlain.has_value() || !kFocused.has_value()) {
         return;

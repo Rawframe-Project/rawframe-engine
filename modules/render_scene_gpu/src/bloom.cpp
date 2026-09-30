@@ -24,11 +24,12 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
 BloomPass::BloomPass(mrhiDevice* native) noexcept : native_(native) {
 }
 
-result::Status BloomPass::declare(const render_scene::SceneFrame& frame, std::uint32_t width, std::uint32_t height) {
+result::Status
+BloomPass::declare(const render_scene::SceneFrame& frame, bool made, std::uint32_t width, std::uint32_t height) {
     levels_.clear();
     down_.clear();
     up_.clear();
-    enabled_ = frame.bloom.enabled;
+    enabled_ = frame.bloom.enabled && made;
     if (!enabled_) {
         return {};
     }

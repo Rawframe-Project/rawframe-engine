@@ -32,11 +32,12 @@ OcclusionPass::OcclusionPass(mrhiDevice* native) noexcept : native_(native) {
 }
 
 result::Status OcclusionPass::declare(const render_scene::SceneFrame& frame,
+                                      bool made,
                                       const FrameBlock& block,
                                       std::uint32_t width,
                                       std::uint32_t height,
                                       std::vector<mrhiAccess>& writes) {
-    enabled_ = frame.occlusion.enabled;
+    enabled_ = frame.occlusion.enabled && made;
     if (!enabled_) {
         return {};
     }
@@ -45,12 +46,12 @@ result::Status OcclusionPass::declare(const render_scene::SceneFrame& frame,
                             .viewProjection = block.viewProjection,
                             .settings = {frame.occlusion.radius, frame.occlusion.intensity, frame.projection[14], 0}};
     // The occlusion at half the target's size, rounded up.
-    for (mrhiResourceId* made : {&raw_, &blurred_}) {
+    for (mrhiResourceId* target : {&raw_, &blurred_}) {
         mrhiTextureDef def = mrhiDefaultTextureDef();
         def.format = kAmbientFormat;
         def.width = (width + 1) / 2;
         def.height = (height + 1) / 2;
-        if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &def, made); kDeclared != mrhi_success) {
+        if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &def, target); kDeclared != mrhi_success) {
             return failed("the ambient occlusion's targets could not be declared", kDeclared);
         }
     }

@@ -634,7 +634,8 @@ RAWFRAME_TEST(FxaaSoftensSlantedEdgesAlone) {
     frame.draws = {turned};
     const auto kHard = drawn(**framer, **made, frame, kMeshes);
     frame.fxaa = true;
-    const auto kSoft = drawn(**framer, **made, frame, kMeshes);
+    const auto kSoft =
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::framesSmoothed);
     RAWFRAME_EXPECT(kHard.has_value() && kSoft.has_value());
     if (!kHard.has_value() || !kSoft.has_value()) {
         return;

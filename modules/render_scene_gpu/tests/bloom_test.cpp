@@ -61,7 +61,12 @@ RAWFRAME_TEST(ABrightGlowSpreadsWithTheBloom) {
     std::array<std::array<int, 3>, 3> middle{};
     const std::array<float, 3> kIntensities = {0, 0.1F, 0.4F};
     for (std::size_t which = 0; which < kIntensities.size(); ++which) {
-        const auto kPixels = drawn(**framer, **made, glowing(kIntensities[which]), kMeshes);
+        const auto kPixels = kIntensities[which] > 0 ? drawnWith(**framer,
+                                                                 **made,
+                                                                 glowing(kIntensities[which]),
+                                                                 kMeshes,
+                                                                 &render_scene_gpu::RendererStatistics::framesBloomed)
+                                                     : drawn(**framer, **made, glowing(kIntensities[which]), kMeshes);
         RAWFRAME_EXPECT(kPixels.has_value());
         if (!kPixels.has_value()) {
             return;
