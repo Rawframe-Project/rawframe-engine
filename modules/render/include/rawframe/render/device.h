@@ -8,6 +8,7 @@
 // ask, then look each frame until it is ready. Client only; a dedicated
 // server links none of it (D277).
 
+#include "rawframe/composition/participant.h"
 #include "rawframe/result/result.h"
 
 #include <cstdint>
@@ -81,5 +82,22 @@ private:
     explicit Device(std::unique_ptr<State> state) noexcept;
     std::unique_ptr<State> state_;
 };
+
+/// The process's one device as the rendering cluster reaches it (D279):
+/// the device participant (registrar.h) asks for it, opens it, and lends
+/// it once it is ready.
+class DeviceHolder {
+public:
+    DeviceHolder() = default;
+    DeviceHolder(const DeviceHolder&) = delete;
+    DeviceHolder& operator=(const DeviceHolder&) = delete;
+    virtual ~DeviceHolder() = default;
+
+    /// The device, ready and not lost; none while it opens, when the
+    /// process asked for none, and once it failed or was lost.
+    [[nodiscard]] virtual Device* ready() noexcept = 0;
+};
+
+inline constexpr composition::Capability<DeviceHolder> kDevice{"rawframe.render.device"};
 
 } // namespace rawframe::render
