@@ -36,4 +36,14 @@ SceneMotionBlur motionBlurOf(const std::optional<MotionBlur>& asked) noexcept {
     return SceneMotionBlur{.enabled = true, .shutter = std::min(asked->shutter, 1.0F)};
 }
 
+SceneDepthOfField depthOfFieldOf(const std::optional<DepthOfField>& asked) noexcept {
+    if (!asked.has_value() || !std::isfinite(asked->focus) || asked->focus <= 0 || !std::isfinite(asked->aperture) ||
+        asked->aperture <= 0) {
+        return {};
+    }
+    return SceneDepthOfField{.enabled = true,
+                             .focus = std::clamp(asked->focus, 0.1F, 10'000.0F),
+                             .aperture = std::clamp(asked->aperture, 0.5F, 64.0F)};
+}
+
 } // namespace rawframe::render_scene

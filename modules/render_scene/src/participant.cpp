@@ -202,6 +202,7 @@ public:
         bloomComponent_ = game->bloom;
         reflectionsComponent_ = game->reflections;
         motionBlurComponent_ = game->motionBlur;
+        depthOfFieldComponent_ = game->depthOfField;
         gameMeshes_ = game->meshes.size();
         // The game's materials from its cooked content; one that cannot be
         // read is drawn as none, and said so when the scene starts.
@@ -615,6 +616,15 @@ private:
                 }
             }
         }
+        camera_.depthOfField.reset();
+        if (depthOfFieldComponent_.has_value()) {
+            if (const auto kDepthOfField = kView.world->registry().find(*depthOfFieldComponent_)) {
+                if (const auto* asked =
+                        static_cast<const DepthOfField*>(kView.world->getErased(kView.owned, *kDepthOfField))) {
+                    camera_.depthOfField = *asked;
+                }
+            }
+        }
         camera_.bloom.reset();
         if (bloomComponent_.has_value()) {
             if (const auto kBloom = kView.world->registry().find(*bloomComponent_)) {
@@ -659,6 +669,7 @@ private:
     std::optional<schema::ComponentTypeId> bloomComponent_;
     std::optional<schema::ComponentTypeId> reflectionsComponent_;
     std::optional<schema::ComponentTypeId> motionBlurComponent_;
+    std::optional<schema::ComponentTypeId> depthOfFieldComponent_;
     std::optional<execution::MonotonicInstant> presented_;
     std::size_t gameMeshes_ = 0;
     /// Frames seen through the player's own camera.

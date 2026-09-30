@@ -314,7 +314,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky],\n"
         "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
         "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion],\n"
-        "        blooms: [model.Bloom], mirrors: [model.ScreenSpaceReflections], blurs: [model.MotionBlur]) {\n}\n";
+        "        blooms: [model.Bloom], mirrors: [model.ScreenSpaceReflections], blurs: [model.MotionBlur],\n"
+        "        focuses: [model.DepthOfField]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
@@ -322,15 +323,17 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                                "component ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.torch rawframe.model.SpotLight\n"
                                "component dc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.probe "
                                "rawframe.model.ReflectionProbe\n";
-    const std::string kView = "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n"
-                              "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n"
-                              "component cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.grade rawframe.model.Grading\n"
-                              "component ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.hidden "
-                              "rawframe.model.AmbientOcclusion\n"
-                              "component fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.bloom rawframe.model.Bloom\n"
-                              "component 0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.mirror "
-                              "rawframe.model.ScreenSpaceReflections\n"
-                              "component 1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.blur rawframe.model.MotionBlur\n";
+    const std::string kView =
+        "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n"
+        "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n"
+        "component cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.grade rawframe.model.Grading\n"
+        "component ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.hidden "
+        "rawframe.model.AmbientOcclusion\n"
+        "component fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.bloom rawframe.model.Bloom\n"
+        "component 0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.mirror "
+        "rawframe.model.ScreenSpaceReflections\n"
+        "component 1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.blur rawframe.model.MotionBlur\n"
+        "component 2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.focus rawframe.model.DepthOfField\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
                     kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
@@ -344,7 +347,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                     kLoaded->occlusion == schema::ComponentTypeId::fromText("ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->bloom == schema::ComponentTypeId::fromText("fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->reflections == schema::ComponentTypeId::fromText("0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->motionBlur == schema::ComponentTypeId::fromText("1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
+                    kLoaded->motionBlur == schema::ComponentTypeId::fromText("1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+                    kLoaded->depthOfField == schema::ComponentTypeId::fromText("2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -988,6 +992,21 @@ RAWFRAME_TEST(ACamerasMotionBlurIsMadeSound) {
     Rig rig;
     RAWFRAME_EXPECT(rig.frame({.motionBlur = MotionBlur{.shutter = 0.5F}}).motionBlur.enabled &&
                     !rig.frame({}).motionBlur.enabled);
+}
+
+RAWFRAME_TEST(ACamerasDepthOfFieldIsMadeSound) {
+    RAWFRAME_EXPECT(!depthOfFieldOf(std::nullopt).enabled &&
+                    !depthOfFieldOf(DepthOfField{.focus = 0, .aperture = 2}).enabled &&
+                    !depthOfFieldOf(DepthOfField{.focus = 5, .aperture = 0}).enabled &&
+                    !depthOfFieldOf(DepthOfField{.focus = std::nanf(""), .aperture = 2}).enabled &&
+                    !depthOfFieldOf(DepthOfField{.focus = 5, .aperture = std::nanf("")}).enabled);
+    const SceneDepthOfField kAsked = depthOfFieldOf(DepthOfField{.focus = 5, .aperture = 2.8F});
+    RAWFRAME_EXPECT(kAsked.enabled && kAsked.focus == 5 && kAsked.aperture == 2.8F);
+    const SceneDepthOfField kFar = depthOfFieldOf(DepthOfField{.focus = 1e6F, .aperture = 0.1F});
+    RAWFRAME_EXPECT(kFar.focus == 10'000 && kFar.aperture == 0.5F);
+    Rig rig;
+    RAWFRAME_EXPECT(rig.frame({.depthOfField = DepthOfField{.focus = 5, .aperture = 2}}).depthOfField.enabled &&
+                    !rig.frame({}).depthOfField.enabled);
 }
 
 RAWFRAME_TEST(ACamerasBloomIsMadeSound) {

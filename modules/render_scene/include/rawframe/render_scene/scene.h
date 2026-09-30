@@ -83,6 +83,12 @@ struct MotionBlur {
     float shutter = 0;
 };
 
+/// `rawframe.model.DepthOfField` as C++ reads it (D336).
+struct DepthOfField {
+    float focus = 0;
+    float aperture = 0;
+};
+
 /// `rawframe.model.Grading` as C++ reads it.
 struct Grading {
     float slopeR = 1;
@@ -255,6 +261,8 @@ struct SceneCamera {
     std::optional<ScreenSpaceReflections> reflections;
     /// The camera's motion blur, if it asks (D334).
     std::optional<MotionBlur> motionBlur;
+    /// The camera's depth of field, if it asks (D336).
+    std::optional<DepthOfField> depthOfField;
     /// The camera's tonemapper, as its component numbers it: another
     /// number is AgX (D295).
     std::uint32_t tonemapper = 0;
@@ -538,6 +546,19 @@ struct SceneMotionBlur {
 /// none for a shutter not finite or not above nought.
 [[nodiscard]] SceneMotionBlur motionBlurOf(const std::optional<MotionBlur>& asked) noexcept;
 
+/// ADR-0051's depth of field (D336): whether the view has it, the distance
+/// in focus in meters (a tenth to ten thousand), and the lens's f-number
+/// (a half to 64).
+struct SceneDepthOfField {
+    bool enabled = false;
+    float focus = 0;
+    float aperture = 0;
+};
+
+/// The depth of field a camera's `DepthOfField` asks for, made sound
+/// (D336): none for a focus or an aperture not finite or not above nought.
+[[nodiscard]] SceneDepthOfField depthOfFieldOf(const std::optional<DepthOfField>& asked) noexcept;
+
 /// ADR-0051's temporal inputs (D291). Whether the frame is antialiased
 /// over time; its subpixel jitter, a pixel's fraction across and down in
 /// [-0.5, 0.5), which the GPU half applies to the projection at its size;
@@ -572,6 +593,7 @@ struct SceneFrame {
     SceneBloom bloom;
     SceneScreenReflections reflections;
     SceneMotionBlur motionBlur;
+    SceneDepthOfField depthOfField;
     Tonemapper tonemapper = Tonemapper::Agx;
     /// Whether the tonemapped picture is antialiased by FXAA (D296): never
     /// with the temporal inputs, which are then off.
@@ -739,6 +761,7 @@ struct GameScene {
     std::optional<schema::ComponentTypeId> bloom;
     std::optional<schema::ComponentTypeId> reflections;
     std::optional<schema::ComponentTypeId> motionBlur;
+    std::optional<schema::ComponentTypeId> depthOfField;
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
     std::vector<schema::ComponentTypeId> points;
@@ -751,7 +774,7 @@ struct GameScene {
 /// in `program` must be what this module reads, and its meshes. Refuses
 /// (`NoModels`) a game with no model component, and (`BadComponents`) one
 /// with two cameras, auto-exposures, gradings, ambient occlusions, blooms,
-/// screen-space reflections, motion blurs, suns, or skies.
+/// screen-space reflections, motion blurs, depths of field, suns, or skies.
 [[nodiscard]] result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const kest::Program& program);
 
 } // namespace rawframe::render_scene

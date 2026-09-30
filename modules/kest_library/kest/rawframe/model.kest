@@ -133,6 +133,17 @@ struct MotionBlur {
     shutter: f32
 }
 
+// A camera's depth of field (ADR-0051, D336), on the same entity as its
+// camera: what lies `focus` meters ahead is sharp, and what lies nearer
+// or farther blurs into discs as a lens of the camera's field of view
+// on a full-frame sensor, opened to the f-number `aperture`, would blur
+// it (smaller numbers blur more). A focus or an aperture not above
+// nought blurs nothing.
+struct DepthOfField {
+    focus: f32
+    aperture: f32
+}
+
 // A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
 // the same entity as its camera, whose `exposure` it starts from: the
 // frame's light measured in a histogram of its luminance, the darkest
