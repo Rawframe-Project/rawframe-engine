@@ -87,7 +87,8 @@ result::Status encodePace(network::Writer& writer, const Pace& pace) {
     const auto kZigzag =
         (static_cast<std::uint64_t>(pace.measuredLead) << 1U) ^ static_cast<std::uint64_t>(pace.measuredLead >> 63);
     RAWFRAME_TRY(writer.varint(kZigzag));
-    return writer.varint(pace.targetLead);
+    RAWFRAME_TRY(writer.varint(pace.targetLead));
+    return writer.varint(pace.greatestLead);
 }
 
 result::Result<Pace> decodePace(std::span<const std::byte> payload) {
@@ -96,6 +97,7 @@ result::Result<Pace> decodePace(std::span<const std::byte> payload) {
     Pace pace;
     pace.measuredLead = static_cast<std::int64_t>(kZigzag >> 1U) ^ -static_cast<std::int64_t>(kZigzag & 1U);
     RAWFRAME_TRY_ASSIGN(pace.targetLead, reader.varintAtMost(kMaximumInputWindow));
+    RAWFRAME_TRY_ASSIGN(pace.greatestLead, reader.varintAtMost(kMaximumPaceLead));
     if (reader.remaining() != 0) {
         return malformed("a pace signal has bytes past its end");
     }

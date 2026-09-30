@@ -105,8 +105,11 @@ struct ReplicationClient::State {
     /// Samples still to leave unlabelled, and those labelled since the last.
     std::uint64_t holdBack = 0;
     std::uint64_t sinceHeld = 0;
-    /// Whether the next pace measured mostly before the last jump ahead.
+    /// Whether the next pace measured mostly before the last jump ahead;
+    /// and the lead the last signal measured, or the one a jump made
+    /// (D323).
     bool jumped = false;
+    std::optional<std::int64_t> lastLead;
     std::map<std::uint64_t, std::vector<std::byte>> unconsumed;
     std::uint64_t inputSequence = 0;
 
@@ -204,7 +207,16 @@ struct ReplicationClient::State {
     /// is late labels its next commands further ahead at once, and one far
     /// early, as a client is that stalled, was paced ahead, and made up what
     /// it owed, leaves samples unlabelled, one in five, until it is not
-    /// (D317). A tick once labelled keeps its command.
+    /// (D317). A client late after a stall is making up the ticks it owed,
+    /// over a frame or a few, and a jump for that left it as far early once
+    /// it had, a burst's commands waiting past their age and dropped, for
+    /// as long as the fifths took (D323): so a client jumps only for a
+    /// lateness two signals in a row find, the second no less late, and
+    /// not while it shrinks as the owed ticks are made up; and then never
+    /// past the greatest lead less the target, lateness left over being
+    /// the next signal's. The first signal, on admission, late for the way
+    /// there, jumps all of it at once. A tick once labelled keeps its
+    /// command.
     void onPace(const network::SessionEvent& event) {
         const auto kPace = decodePace(event.payload);
         if (!kPace.has_value()) {
@@ -220,10 +232,24 @@ struct ReplicationClient::State {
             return;
         }
         const auto kTarget = static_cast<std::int64_t>(kPace->targetLead);
+        const std::optional<std::int64_t> kBefore = std::exchange(lastLead, kPace->measuredLead);
         if (kPace->measuredLead < kTarget) {
-            nextInputTick += static_cast<std::uint64_t>(kTarget - kPace->measuredLead);
             holdBack = 0;
-            jumped = true;
+            // Late: at once on admission, with no signal before; else only
+            // when the signal before was late too and this one no less, as
+            // it is while the ticks owed are made up. The server leaves out
+            // what it measured while a client was silent (D323).
+            if (!kBefore.has_value() || (*kBefore < kTarget && kPace->measuredLead <= *kBefore)) {
+                const std::int64_t kRoom =
+                    std::max<std::int64_t>(static_cast<std::int64_t>(kPace->greatestLead) - kTarget, 1);
+                const std::int64_t kLate = kTarget - kPace->measuredLead;
+                const std::int64_t kJump = kBefore.has_value() ? std::min(kLate, kRoom) : kLate;
+                nextInputTick += static_cast<std::uint64_t>(kJump);
+                jumped = true;
+                // The next signal is weighed against the lead the jump
+                // makes.
+                lastLead = kPace->measuredLead + kJump;
+            }
         } else if (kPace->measuredLead > kTarget + kLeadSlack) {
             // Set, not added: the paces in flight measure the same lead.
             holdBack = static_cast<std::uint64_t>(kPace->measuredLead - kTarget);

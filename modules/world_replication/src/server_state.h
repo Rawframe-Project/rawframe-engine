@@ -167,6 +167,9 @@ struct ReplicationServer::State {
     void onInput(Peer& peer, const network::SessionEvent& event);
 
     void applyInputs(world::World& world);
+    /// SPEC-0013's input age at the peer's tick rate (D232): the server
+    /// ticks a command may wait from its arrival, rounded up.
+    [[nodiscard]] std::uint64_t maximumAgeTicks(const Peer& peer) const noexcept;
 
     /// A consumed command's moment, checked when it arrived, kept within the
     /// skew of the lag its connection's claims have shown.

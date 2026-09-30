@@ -75,12 +75,18 @@ struct StateRecordHead {
                                                                     std::size_t componentCount);
 
 /// SPEC-0041's pace signal: how far ahead of consumption this connection's
-/// newest input stood at the least since the last signal (D317), and how
-/// far the server wants it.
+/// newest input stood at the least since the last signal (D317), how far
+/// the server wants it, and the farthest a command may lead before it waits
+/// past SPEC-0013's input age and is dropped as stale (D323).
 struct Pace {
     std::int64_t measuredLead = 0;
     std::uint64_t targetLead = 0;
+    std::uint64_t greatestLead = 0;
 };
+
+/// The farthest lead a pace signal may name: a minute of ticks at the
+/// fastest rate a World ticks.
+inline constexpr std::uint64_t kMaximumPaceLead = 1U << 16U;
 
 [[nodiscard]] result::Status encodePace(network::Writer& writer, const Pace& pace);
 [[nodiscard]] result::Result<Pace> decodePace(std::span<const std::byte> payload);

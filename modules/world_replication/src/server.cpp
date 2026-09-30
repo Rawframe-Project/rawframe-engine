@@ -164,7 +164,17 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
         return;
     }
     peer.newestHeard = std::max(peer.newestHeard, kWindow->newestInputTick);
+    // What the lead was since the window before counts if this one came
+    // within a command's age of it; a longer silence was a stall, and
+    // pacing a client ahead for it would leave it that far early once it
+    // made up what it owed, its commands waiting past their age and
+    // dropped (D323).
+    if (peer.pendingLead.has_value() && pumpTick <= peer.heardAt + maximumAgeTicks(peer)) {
+        peer.leastLead = std::min(peer.leastLead.value_or(*peer.pendingLead), *peer.pendingLead);
+    }
+    peer.pendingLead.reset();
     peer.heardInput = true;
+    peer.heardAt = pumpTick;
     const std::uint64_t kFirst = kWindow->newestInputTick + 1 - kWindow->commands.size();
     bool misshapen = false;
     for (std::size_t index = 0; index < kWindow->commands.size(); ++index) {
@@ -192,6 +202,12 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
     }
 }
 
+std::uint64_t ReplicationServer::State::maximumAgeTicks(const Peer& peer) const noexcept {
+    const std::uint64_t kSeconds = std::max<std::uint64_t>(peer.accept.tickRateSeconds, 1);
+    return (settings.inputMaximumAgeMilliseconds * peer.accept.tickRateTicks + (1000 * kSeconds) - 1) /
+           (1000 * kSeconds);
+}
+
 void ReplicationServer::State::applyInputs(world::World& world) {
     if (!settings.input || !input) {
         return;
@@ -206,15 +222,12 @@ void ReplicationServer::State::applyInputs(world::World& world) {
         if (peer.heardInput) {
             const std::int64_t kLead =
                 static_cast<std::int64_t>(peer.newestHeard) - static_cast<std::int64_t>(peer.nextInputTick);
-            peer.leastLead = std::min(peer.leastLead.value_or(kLead), kLead);
+            peer.pendingLead = std::min(peer.pendingLead.value_or(kLead), kLead);
         }
         auto waiting = peer.waitingInputs.find(peer.nextInputTick);
         // Stale input is dropped, not played late (SPEC-0013, D232): the age
-        // is in server ticks from its arrival, rounded up from the ceiling.
-        const std::uint64_t kSeconds = std::max<std::uint64_t>(peer.accept.tickRateSeconds, 1);
-        const std::uint64_t kMaximumAge =
-            (settings.inputMaximumAgeMilliseconds * peer.accept.tickRateTicks + (1000 * kSeconds) - 1) /
-            (1000 * kSeconds);
+        // is in server ticks from its arrival.
+        const std::uint64_t kMaximumAge = maximumAgeTicks(peer);
         if (waiting != peer.waitingInputs.end() && pumpTick > waiting->second.arrived + kMaximumAge) {
             ++statistics.inputsStale;
             peer.waitingInputs.erase(waiting);

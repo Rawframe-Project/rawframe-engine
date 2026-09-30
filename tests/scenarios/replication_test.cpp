@@ -643,15 +643,20 @@ RAWFRAME_TEST(InputPacedFromBurstsAndStallsComesBackOnTime) {
     // A browser page's client (D317): it samples four ticks' input at once
     // each frame, and once it stalls a third of a second and then samples
     // what it owes at once. The server paces by the least lead since its
-    // last signal, so bursts arrive on time; the stall makes the client
-    // jump ahead, and it comes back by leaving samples unlabelled until its
-    // input no longer waits past its age.
+    // last signal, so bursts arrive on time. It leaves out what it measured
+    // while the client was silent past a command's age, and the client
+    // jumps only for a lateness two signals in a row find, the second no
+    // less: one making up a stall is not paced ahead for it, and is on time
+    // once it has, not early (D323).
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
     for (int step = 0; step < 30; ++step) {
         scenario.step(Steer{});
     }
     RAWFRAME_EXPECT(scenario.client->admitted());
     std::uint64_t owed = 0;
+    // The most samples a frame takes: a page makes up a long stall over a
+    // few frames.
+    std::uint64_t most = 1000;
     const auto kTick = [&](bool sampling) {
         scenario.clock.advance(scenario.stepLength);
         scenario.server->pump(scenario.serverWorld, scenario.tick);
@@ -661,7 +666,7 @@ RAWFRAME_TEST(InputPacedFromBurstsAndStallsComesBackOnTime) {
         ++owed;
         if (sampling) {
             const Steer kSteer{.dx = 1, .dy = 0};
-            for (; owed > 0; --owed) {
+            for (std::uint64_t taken = 0; owed > 0 && taken < most; --owed, ++taken) {
                 RAWFRAME_EXPECT(scenario.client->submitInput(std::as_bytes(std::span{&kSteer, 1})).has_value());
             }
         }
@@ -680,15 +685,29 @@ RAWFRAME_TEST(InputPacedFromBurstsAndStallsComesBackOnTime) {
     const std::uint64_t kBurstsSettled = kMissed();
     kPlay(120, 4);
     RAWFRAME_EXPECT(kMissed() == kBurstsSettled);
-    // A stall of twenty ticks, then bursts again: missed while it lasts and
-    // a while after, then on time, with samples left unlabelled on the way.
+    // A stall of twenty ticks, then bursts again: what it owed came too
+    // late and is missed, and within half a second nothing more is; no
+    // command waits past its age, and no sample is left unlabelled for it.
+    const std::uint64_t kStaleBefore = scenario.server->statistics().inputsStale;
+    const std::uint64_t kHeldBefore = scenario.client->statistics().samplesHeldBack;
     kPlay(20, 1000);
     kTick(true);
-    kPlay(240, 4);
+    kPlay(28, 4);
     const std::uint64_t kStallSettled = kMissed();
-    kPlay(120, 4);
+    kPlay(240, 4);
     RAWFRAME_EXPECT(kMissed() == kStallSettled);
-    RAWFRAME_EXPECT(scenario.client->statistics().samplesHeldBack > 0);
+    RAWFRAME_EXPECT(scenario.server->statistics().inputsStale == kStaleBefore &&
+                    scenario.client->statistics().samplesHeldBack == kHeldBefore);
+    // Stalled again, making up what it owed six samples a frame, two more
+    // than a frame's ticks: late until it has, within two seconds, and
+    // never early.
+    most = 6;
+    kPlay(20, 1000);
+    kPlay(120, 4);
+    const std::uint64_t kSpreadSettled = kMissed();
+    kPlay(240, 4);
+    RAWFRAME_EXPECT(kMissed() == kSpreadSettled);
+    RAWFRAME_EXPECT(scenario.server->statistics().inputsStale == kStaleBefore);
 }
 
 RAWFRAME_TEST(PredictionRecoversFromLostInput) {

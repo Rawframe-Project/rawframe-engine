@@ -256,7 +256,9 @@ void ReplicationServer::State::sendPace(Peer& peer) {
     }
     std::array<std::byte, 24> payload{};
     network::Writer writer{payload};
-    const Pace kPace{.measuredLead = *peer.leastLead, .targetLead = settings.targetInputLead};
+    const Pace kPace{.measuredLead = *peer.leastLead,
+                     .targetLead = settings.targetInputLead,
+                     .greatestLead = std::min(maximumAgeTicks(peer), kMaximumPaceLead)};
     peer.leastLead.reset();
     if (encodePace(writer, kPace).has_value()) {
         static_cast<void>(sessions->sendDatagram(peer.connection,

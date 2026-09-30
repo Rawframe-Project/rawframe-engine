@@ -143,15 +143,22 @@ RAWFRAME_TEST(PaceSignalsCarrySignedLeads) {
     for (const std::int64_t kLead : {std::int64_t{0}, std::int64_t{-1}, std::int64_t{5}, std::int64_t{-300}}) {
         std::array<std::byte, 16> out{};
         network::Writer writer{out};
-        RAWFRAME_EXPECT(encodePace(writer, Pace{.measuredLead = kLead, .targetLead = 2}).has_value());
+        RAWFRAME_EXPECT(
+            encodePace(writer, Pace{.measuredLead = kLead, .targetLead = 2, .greatestLead = 6}).has_value());
         const auto kBack = decodePace(writer.written());
-        RAWFRAME_EXPECT(kBack.has_value() && kBack->measuredLead == kLead && kBack->targetLead == 2);
+        RAWFRAME_EXPECT(kBack.has_value() && kBack->measuredLead == kLead && kBack->targetLead == 2 &&
+                        kBack->greatestLead == 6);
     }
     // Minus one is one byte: zigzag keeps small leads small either way.
     std::array<std::byte, 16> out{};
     network::Writer writer{out};
     RAWFRAME_EXPECT(encodePace(writer, Pace{.measuredLead = -1, .targetLead = 2}).has_value());
-    RAWFRAME_EXPECT(writer.written().size() == 2 && writer.written()[0] == std::byte{1});
+    RAWFRAME_EXPECT(writer.written().size() == 3 && writer.written()[0] == std::byte{1});
+    // A greatest lead past a minute of ticks is refused.
+    std::array<std::byte, 16> far{};
+    network::Writer farWriter{far};
+    RAWFRAME_EXPECT(encodePace(farWriter, Pace{.targetLead = 2, .greatestLead = kMaximumPaceLead + 1}).has_value());
+    RAWFRAME_EXPECT(!decodePace(farWriter.written()).has_value());
 }
 
 RAWFRAME_TEST(StateAcknowledgementsCarryABitmap) {

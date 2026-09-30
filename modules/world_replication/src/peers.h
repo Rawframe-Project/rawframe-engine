@@ -249,6 +249,12 @@ struct Peer {
     std::uint64_t newestHeard = 0;
     std::optional<std::int64_t> leastLead;
     bool heardInput = false;
+    /// The server tick its last input window arrived in, and the least lead
+    /// since, counted only once the next window comes within a command's
+    /// age (D323): a client unheard for longer is stalled or cut off, and is
+    /// not paced for it.
+    std::uint64_t heardAt = 0;
+    std::optional<std::int64_t> pendingLead;
     ChecksumBook checksums;
     InputAllowance allowance;
     /// Closed by this side, for breaking the protocol or striking out: to
