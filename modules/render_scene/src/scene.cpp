@@ -321,6 +321,9 @@ struct Scene::State {
         frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;
         frame.metering = meteringOf(camera);
         frame.grading = gradingOf(camera.grading);
+        frame.tonemapper = camera.tonemapper <= static_cast<std::uint32_t>(Tonemapper::Linear)
+                               ? static_cast<Tonemapper>(camera.tonemapper)
+                               : Tonemapper::Agx;
         frame.forward = kForward;
         const bool kShadows = kSees && settings.shadows.cascades > 0 && settings.shadows.side > 0 &&
                               settings.shadows.distance > kNear &&
@@ -698,7 +701,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"pitch", offsetof(Camera, pitch)},
                            {"fovY", offsetof(Camera, fovY)},
                            {"near", offsetof(Camera, near)},
-                           {"exposure", offsetof(Camera, exposure)}}));
+                           {"exposure", offsetof(Camera, exposure)},
+                           {"tonemapper", offsetof(Camera, tonemapper)}}));
     RAWFRAME_TRY(kLaidOut(loaded.autoExposure.has_value(),
                           "rawframe.model.AutoExposure",
                           sizeof(AutoExposure),

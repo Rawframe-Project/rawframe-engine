@@ -40,9 +40,12 @@ const CAPSULE: u64 = 0x63ed148327123836
 // the vertical field of view in radians (a wider window sees more,
 // Hor+), and `near` the nearest distance drawn, in meters; the far one is
 // unbounded. `exposure` is the camera's EV100 (ADR-0047): 15 for a sunny
-// day, lower for dimmer scenes. A camera with a field of view not above
-// nought draws nothing. Without one, a client's view looks at its player
-// from behind and above.
+// day, lower for dimmer scenes. `tonemapper` maps its light for display
+// (ADR-0047's closed set): AGX (nought, the default), PBR_NEUTRAL for
+// colours reproduced as authored, or LINEAR for measuring; each keeps
+// middle grey where AgX puts it, and another value is AgX. A camera with a
+// field of view not above nought draws nothing. Without one, a client's
+// view looks at its player from behind and above.
 struct Camera {
     offsetX: f32
     offsetY: f32
@@ -52,7 +55,13 @@ struct Camera {
     fovY: f32
     near: f32
     exposure: f32
+    tonemapper: u32
 }
+
+// The tonemappers a camera may map its light with (ADR-0047).
+const AGX: u32 = 0
+const PBR_NEUTRAL: u32 = 1
+const LINEAR: u32 = 2
 
 // A camera's grading (ADR-0051, ADR-0047), on the same entity as its
 // camera: the scene's light, before it is mapped for display, balanced to

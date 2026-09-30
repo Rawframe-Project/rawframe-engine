@@ -48,6 +48,15 @@ struct Camera {
     float fovY = 0;
     float near = 0;
     float exposure = 0;
+    std::uint32_t tonemapper = 0;
+};
+
+/// ADR-0047's closed tonemapper set, as a camera names it (D295): AgX, the
+/// default; Khronos PBR Neutral; and linear, for measuring.
+enum class Tonemapper : std::uint8_t {
+    Agx = 0,
+    PbrNeutral = 1,
+    Linear = 2
 };
 
 /// `rawframe.model.Grading` as C++ reads it.
@@ -159,6 +168,9 @@ struct SceneCamera {
     std::optional<AutoExposure> metering;
     /// The camera's grading, if it asks (D294).
     std::optional<Grading> grading;
+    /// The camera's tonemapper, as its component numbers it: another
+    /// number is AgX (D295).
+    std::uint32_t tonemapper = 0;
     float elapsed = 0;
 };
 
@@ -369,6 +381,7 @@ struct SceneFrame {
     SceneLightShadows lightShadows;
     SceneMetering metering;
     SceneGrading grading;
+    Tonemapper tonemapper = Tonemapper::Agx;
     /// The punctual lights that reach the view, and the clusters they are
     /// culled into (D290).
     std::vector<SceneLight> lights3d;

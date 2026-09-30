@@ -626,7 +626,7 @@ RAWFRAME_TEST(AMeteredCameraIsMadeSound) {
     RAWFRAME_EXPECT(!rig.frame(camera).metering.enabled);
 }
 
-RAWFRAME_TEST(AGradeBalancesWhiteAndIsMadeSound) {
+RAWFRAME_TEST(ACamerasGradeAndTonemapperAreMadeSound) {
     // Neutral: the balance is the identity, and the rest passes light on.
     const SceneGrading kNeutral = gradingOf(Grading{});
     RAWFRAME_EXPECT(kNeutral.enabled);
@@ -670,4 +670,12 @@ RAWFRAME_TEST(AGradeBalancesWhiteAndIsMadeSound) {
     camera.grading = Grading{.slopeR = 2};
     const SceneGrading kGraded = rig.frame(camera).grading;
     RAWFRAME_EXPECT(kGraded.enabled && kGraded.slope[0] == 2);
+    // The camera's tonemapper, AgX for a number outside the set (D295).
+    RAWFRAME_EXPECT(rig.frame(camera).tonemapper == Tonemapper::Agx);
+    camera.tonemapper = 1;
+    RAWFRAME_EXPECT(rig.frame(camera).tonemapper == Tonemapper::PbrNeutral);
+    camera.tonemapper = 2;
+    RAWFRAME_EXPECT(rig.frame(camera).tonemapper == Tonemapper::Linear);
+    camera.tonemapper = 7;
+    RAWFRAME_EXPECT(rig.frame(camera).tonemapper == Tonemapper::Agx);
 }

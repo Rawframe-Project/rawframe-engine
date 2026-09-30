@@ -280,6 +280,7 @@ private:
         camera_.fovY = view.fovY;
         camera_.near = view.near;
         camera_.exposure = view.exposure;
+        camera_.tonemapper = view.tonemapper;
         camera_.metering.reset();
         camera_.grading.reset();
         if (gradingComponent_.has_value()) {
