@@ -800,3 +800,39 @@ RAWFRAME_TEST(TranslucentModelsComeLastFarthestFirst) {
     RAWFRAME_EXPECT(near(kFrame.draws[2].model[14], -15) && near(kFrame.draws[3].model[14], -10) &&
                     near(kFrame.draws[4].model[14], -5));
 }
+
+RAWFRAME_TEST(OpaqueModelsAreGroupedByTheirMaterialsTexture) {
+    auto schema = registry();
+    world::World world{schema};
+    const SceneTexture kTiles{.id = 0x77, .filter = material::Filter::Nearest};
+    const SceneTexture kBark{.id = 0x55, .address = material::Address::Clamp};
+    auto scene = *Scene::create(*schema,
+                                {.models = {kModelId},
+                                 .materials = {{.id = 0xa1, .blob = noMaterial(), .texture = kTiles},
+                                               {.id = 0xa2, .blob = noMaterial(), .texture = kBark},
+                                               {.id = 0xa3, .blob = noMaterial()}}});
+    // Boxes and spheres of each material, in no order.
+    std::uint32_t at = 0;
+    for (const std::uint64_t kMaterial : {0xa1ULL, 0xa3ULL, 0xa2ULL, 0xa1ULL, 0xa2ULL, 0xa3ULL}) {
+        for (const std::uint64_t kMesh : {kSphere, kBox}) {
+            const world::EntityHandle kEntity = *world.create();
+            Model model{.mesh = kMesh, .material = kMaterial};
+            RAWFRAME_EXPECT(world.insertErased(kEntity, *schema->find(kModelId), &model).has_value());
+            RAWFRAME_EXPECT(world
+                                .insert(kEntity,
+                                        *schema->key<physics3d::Pose3D>(),
+                                        {.x = static_cast<double>(at++ % 4) - 2, .z = -12, .qw = 1})
+                                .has_value());
+        }
+    }
+    scene->extract(world);
+    const SceneFrame& kFrame = scene->queue({.fovY = 1.5F, .near = 0.1F, .aspect = 1});
+    // Each material's texture at its blob's place: none's, then the game's.
+    RAWFRAME_EXPECT(kFrame.textures == (std::vector<SceneTexture>{{}, kTiles, kBark, {}}));
+    // No texture, then bark, then tiles; by mesh within each.
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> order;
+    for (const SceneDraw& draw : kFrame.draws) {
+        order.emplace_back(kFrame.textures[draw.material].id, draw.mesh);
+    }
+    RAWFRAME_EXPECT(kFrame.draws.size() == 12 && std::ranges::is_sorted(order));
+}

@@ -12,6 +12,7 @@
 // near plane maps to depth one, the horizon to nought.
 
 #include "rawframe/kest/program.h"
+#include "rawframe/material/material.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
@@ -141,6 +142,17 @@ using MaterialBlob = std::array<float, 16>;
 /// color, so the model's color is its base color.
 [[nodiscard]] MaterialBlob noMaterial() noexcept;
 
+/// The texture a material samples, as a device binds it (D309): the game's
+/// texture by the identity its `texture` line gives it, none when nought,
+/// and the material's declared sampler state.
+struct SceneTexture {
+    std::uint64_t id = 0;
+    material::Filter filter = material::Filter::Linear;
+    material::Address address = material::Address::Repeat;
+
+    friend bool operator==(const SceneTexture&, const SceneTexture&) = default;
+};
+
 /// A game's material, by the identity its `material` line gives it.
 struct SceneMaterial {
     std::uint64_t id = 0;
@@ -148,6 +160,7 @@ struct SceneMaterial {
     /// Whether it blends over what is behind it (SPEC-0026's `translucent`,
     /// D305).
     bool translucent = false;
+    SceneTexture texture;
 };
 
 struct SceneMesh {
@@ -423,8 +436,9 @@ struct SceneFrame {
     /// EV100.
     float exposure = 15;
     SceneLights lights;
-    /// The opaque draws, grouped by mesh, then the last `translucent` of
-    /// them the translucent ones, farthest first (D305).
+    /// The opaque draws, grouped by their material's texture, then by mesh
+    /// (D309); then the last `translucent` of them the translucent ones,
+    /// farthest first (D305).
     std::vector<SceneDraw> draws;
     std::size_t translucent = 0;
     std::size_t drawn = 0;
@@ -441,6 +455,8 @@ struct SceneFrame {
     /// Every material's blob (ADR-0031, D303), a draw naming its place: the
     /// first none's, then the game's in the order they were given.
     std::vector<MaterialBlob> materials;
+    /// Every material's texture, at its blob's place (D309).
+    std::vector<SceneTexture> textures;
     std::size_t overLimit = 0;
 };
 

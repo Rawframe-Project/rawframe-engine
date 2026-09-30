@@ -485,6 +485,15 @@ struct Scene::State {
         std::ranges::stable_sort(kTranslucent, [&kAway](const SceneDraw& left, const SceneDraw& right) {
             return kAway(left) > kAway(right);
         });
+        // The opaque by their material's texture, so a device binds each
+        // once (D309); within one, by mesh as they were.
+        const auto kTextureOf = [this](const SceneDraw& draw) {
+            return draw.material < frame.textures.size() ? frame.textures[draw.material].id : 0;
+        };
+        std::ranges::stable_sort(std::ranges::subrange(frame.draws.begin(), kTranslucent.begin()),
+                                 [&kTextureOf](const SceneDraw& left, const SceneDraw& right) {
+                                     return kTextureOf(left) < kTextureOf(right);
+                                 });
         castIntoCascades();
         temporal(camera, kSees);
         frame.metering.snap = frame.metering.enabled && (!meteredBefore || !continuous);
@@ -620,6 +629,7 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
     // The frame's materials: none's first, then the game's; a later line of
     // an identity replaces an earlier.
     state->frame.materials = {noMaterial()};
+    state->frame.textures = {SceneTexture{}};
     state->translucent = {false};
     for (const SceneMaterial& kMaterial : settings.materials) {
         if (kMaterial.id == 0) {
@@ -629,9 +639,11 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
             state->materials.try_emplace(kMaterial.id, static_cast<std::uint32_t>(state->frame.materials.size()));
         if (kNew) {
             state->frame.materials.push_back(kMaterial.blob);
+            state->frame.textures.push_back(kMaterial.texture);
             state->translucent.push_back(kMaterial.translucent);
         } else {
             state->frame.materials[kAt->second] = kMaterial.blob;
+            state->frame.textures[kAt->second] = kMaterial.texture;
             state->translucent[kAt->second] = kMaterial.translucent;
         }
     }

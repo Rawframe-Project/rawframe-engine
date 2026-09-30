@@ -2,10 +2,12 @@
 
 // The scene's frames as a device draws them (D283): what the scene
 // participant queued in this Host iteration's `present`, the view's size,
-// and the meshes its draws name, for the GPU half to record after it.
+// and the meshes and textures its draws name, for the GPU half to record
+// after it.
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/render_scene/scene.h"
+#include "rawframe/texture/texture.h"
 
 #include <cstdint>
 #include <memory>
@@ -33,6 +35,10 @@ public:
     /// The mesh a draw names, the game's or the engine's; none for another,
     /// and while the scene is idle.
     [[nodiscard]] virtual std::shared_ptr<const mesh::Mesh> mesh(std::uint64_t id) const = 0;
+    /// The texture a material samples, decoded and held (D309); none while
+    /// it is not ready, for one the game does not declare, and while the
+    /// scene is idle.
+    [[nodiscard]] virtual std::shared_ptr<const texture::Texture> texture(std::uint64_t id) const = 0;
 };
 
 inline constexpr composition::Capability<SceneFrames> kSceneFrames{"rawframe.render_scene.frames"};

@@ -1,6 +1,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/game_content/game_content.h"
+#include "rawframe/game_textures/game_textures.h"
 #include "rawframe/material/material.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 
 namespace rawframe::render_scene {
@@ -23,6 +25,13 @@ constexpr diagnostics::EventIdentity kSceneSummary{"scene", "scene_summary"};
 constexpr std::string_view kProvided[] = {kSceneFrames.name};
 constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
 constexpr diagnostics::EventIdentity kMaterialProjected{"scene", "material_projected"};
+constexpr diagnostics::EventIdentity kTextureUnknown{"scene", "material_texture_unknown"};
+constexpr diagnostics::EventIdentity kTexturesUnavailable{"scene", "textures_unavailable"};
+constexpr diagnostics::EventIdentity kTextureUnread{"scene", "texture_unavailable"};
+constexpr diagnostics::EventIdentity kTextureReloaded{"scene", "texture_reloaded"};
+constexpr diagnostics::EventIdentity kTexturesRead{"scene", "textures_read"};
+/// The decoded levels the materials' textures may hold.
+constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
 constexpr std::string_view kMaybe[] = {
     world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
 
@@ -172,7 +181,10 @@ public:
                     if (read.has_value()) {
                         materials.push_back({.id = each.id,
                                              .blob = material::blobOf(*read),
-                                             .translucent = read->blend == material::Blend::Translucent});
+                                             .translucent = read->blend == material::Blend::Translucent,
+                                             .texture = {.id = read->texture.id,
+                                                         .filter = read->texture.filter,
+                                                         .address = read->texture.address}});
                         if (read->blend == material::Blend::Masked) {
                             projected_.push_back(each.path);
                         }
@@ -183,6 +195,7 @@ public:
             }
         }
         gameMaterials_ = materials.size();
+        RAWFRAME_TRY(readTextures(context, *files, materials));
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .sun = game->sun,
                                   .sky = game->sky,
@@ -204,6 +217,18 @@ public:
                          "a material could not be read: its models are drawn with none",
                          {diagnostics::field("material", kPath), diagnostics::field("reason", kReason)});
         }
+        for (const auto& [kPath, kTexture] : unknownTextures_) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kTextureUnknown,
+                         "a material samples a texture the game does not declare: it is sampled as white",
+                         {diagnostics::field("material", kPath), diagnostics::field("texture", kTexture)});
+        }
+        if (unreadTextures_.has_value()) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kTexturesUnavailable,
+                         "the materials' textures could not be asked for: they are sampled as white",
+                         {diagnostics::field("reason", *unreadTextures_)});
+        }
         // SPEC-0026's projection, declared: the depth prepass tests no
         // alpha yet.
         for (const std::string& kPath : projected_) {
@@ -221,6 +246,8 @@ public:
         }
         if (phase == composition::HostPhase::PresentationExtract) {
             queued_ = nullptr;
+            ++tick_;
+            updateTextures();
             extract();
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
@@ -254,29 +281,33 @@ public:
         if (clients_ == nullptr) {
             return;
         }
-        emitter_.log(diagnostics::Severity::Info,
-                     kSceneSummary,
-                     "what one client's scene drew",
-                     {diagnostics::field("frames", frames_),
-                      diagnostics::field("framesViewed", viewed_),
-                      diagnostics::field("viewWidth", width_),
-                      diagnostics::field("viewHeight", height_),
-                      diagnostics::field("modelsDrawn", drawn_),
-                      diagnostics::field("culled", culled_),
-                      diagnostics::field("hidden", hidden_),
-                      diagnostics::field("malformed", malformed_),
-                      diagnostics::field("unknownMeshes", unknownMeshes_),
-                      diagnostics::field("overLimit", overLimit_),
-                      diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
-                      diagnostics::field("gameMeshes", static_cast<std::uint64_t>(gameMeshes_)),
-                      diagnostics::field("gameMaterials", static_cast<std::uint64_t>(gameMaterials_)),
-                      diagnostics::field("unknownMaterials", unknownMaterials_),
-                      diagnostics::field("lightsLit", lightsLit_),
-                      diagnostics::field("lightsCulled", lightsCulled_),
-                      diagnostics::field("lightsOverLimit", lightsOverLimit_),
-                      diagnostics::field("clusterOverflow", clusterOverflow_),
-                      diagnostics::field("shadowSquares", shadowSquares_),
-                      diagnostics::field("shadowsEvicted", shadowsEvicted_)});
+        emitter_.log(
+            diagnostics::Severity::Info,
+            kSceneSummary,
+            "what one client's scene drew",
+            {diagnostics::field("frames", frames_),
+             diagnostics::field("framesViewed", viewed_),
+             diagnostics::field("viewWidth", width_),
+             diagnostics::field("viewHeight", height_),
+             diagnostics::field("modelsDrawn", drawn_),
+             diagnostics::field("culled", culled_),
+             diagnostics::field("hidden", hidden_),
+             diagnostics::field("malformed", malformed_),
+             diagnostics::field("unknownMeshes", unknownMeshes_),
+             diagnostics::field("overLimit", overLimit_),
+             diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
+             diagnostics::field("gameMeshes", static_cast<std::uint64_t>(gameMeshes_)),
+             diagnostics::field("gameMaterials", static_cast<std::uint64_t>(gameMaterials_)),
+             diagnostics::field("unknownMaterials", unknownMaterials_),
+             diagnostics::field("materialTextures", static_cast<std::uint64_t>(sampled_)),
+             diagnostics::field("texturesReady",
+                                static_cast<std::uint64_t>(textures_ != nullptr ? textures_->counts().ready : 0)),
+             diagnostics::field("lightsLit", lightsLit_),
+             diagnostics::field("lightsCulled", lightsCulled_),
+             diagnostics::field("lightsOverLimit", lightsOverLimit_),
+             diagnostics::field("clusterOverflow", clusterOverflow_),
+             diagnostics::field("shadowSquares", shadowSquares_),
+             diagnostics::field("shadowsEvicted", shadowsEvicted_)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -310,7 +341,90 @@ public:
         return scene_ != nullptr ? scene_->mesh(id) : nullptr;
     }
 
+    std::shared_ptr<const texture::Texture> texture(std::uint64_t id) const override {
+        return textures_ != nullptr ? textures_->texture(id, tick_) : nullptr;
+    }
+
 private:
+    /// Asks for the textures `materials` sample, of those the game
+    /// declares, decoded on a CPU worker (D309); a material sampling one it
+    /// does not declare samples white, and is said so at start.
+    result::Status readTextures(composition::ParticipantContext& context,
+                                const world_kest::GameFiles& files,
+                                std::vector<SceneMaterial>& materials) {
+        std::set<std::uint64_t> sampled;
+        for (SceneMaterial& each : materials) {
+            if (each.texture.id == 0) {
+                continue;
+            }
+            if (std::ranges::find(files.textures(), each.texture.id, &world_kest::GameTextureResource::id) ==
+                files.textures().end()) {
+                const auto kPath = std::ranges::find(files.materials(), each.id, &world_kest::GameMaterialResource::id);
+                unknownTextures_.emplace_back(kPath != files.materials().end() ? kPath->path : std::string{},
+                                              graph::nodeIdText(each.texture.id));
+                each.texture.id = 0;
+                continue;
+            }
+            sampled.insert(each.texture.id);
+        }
+        sampled_ = sampled.size();
+        if (sampled.empty() || !context.has(game_content::kGameContent.name) || context.cpuExecutor() == nullptr) {
+            return {};
+        }
+        RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
+        if (!content->held()) {
+            return {};
+        }
+        RAWFRAME_TRY(content->admit(game_textures::textureRepresentations()));
+        std::vector<world_kest::GameTextureResource> declared;
+        for (const world_kest::GameTextureResource& each : files.textures()) {
+            if (sampled.contains(each.id)) {
+                declared.push_back(each);
+            }
+        }
+        auto textures = game_textures::GameTextures::create(content->store(),
+                                                            *context.cpuExecutor(),
+                                                            context.owner(),
+                                                            context.scope(),
+                                                            context.clock(),
+                                                            std::move(declared),
+                                                            kTextureBudgetBytes);
+        if (textures.has_value()) {
+            textures_ = std::move(*textures);
+        } else {
+            unreadTextures_ = std::string{textures.error().description()};
+        }
+        return {};
+    }
+
+    /// Takes finished reads and reloads; a texture that fails is sampled
+    /// as white.
+    void updateTextures() noexcept {
+        if (textures_ == nullptr) {
+            return;
+        }
+        const game_textures::TextureChanges kChanges = textures_->update(tick_);
+        for (const auto& [kId, kError] : kChanges.failed) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kTextureUnread,
+                         "a material's texture could not be read: it is sampled as white",
+                         {diagnostics::field("texture", graph::nodeIdText(kId)),
+                          diagnostics::field("reason", std::string{kError.description()})});
+        }
+        for (const std::uint64_t kId : kChanges.reloaded) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kTextureReloaded,
+                         "a material's texture was replaced by its new revision",
+                         {diagnostics::field("texture", graph::nodeIdText(kId))});
+        }
+        if (kChanges.read) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kTexturesRead,
+                         "the materials' textures were read",
+                         {diagnostics::field("textures", static_cast<std::uint64_t>(textures_->counts().ready))});
+        }
+    }
+
     /// The client's World copied out, and the eye moved to its player,
     /// through the player's camera if it has one.
     void extract() noexcept {
@@ -401,6 +515,14 @@ private:
     /// Materials drawn otherwise than they ask (masked drawn opaque), said
     /// at start.
     std::vector<std::string> projected_;
+    /// The textures the materials sample (D309): held, the materials
+    /// naming one the game does not declare, and why they could not be
+    /// asked for.
+    std::unique_ptr<game_textures::GameTextures> textures_;
+    std::size_t sampled_ = 0;
+    std::uint64_t tick_ = 0;
+    std::vector<std::pair<std::string, std::string>> unknownTextures_;
+    std::optional<std::string> unreadTextures_;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
     /// The point and spot lights each frame lit with, culled, and left out
@@ -433,6 +555,8 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .scope = composition::LifetimeScope::World,
         .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
+        // The materials' textures are decoded on the CPU executor (D309).
+        .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
         .observabilityIdentity = "render_scene.scene",
         .budgetOwner = "render",
