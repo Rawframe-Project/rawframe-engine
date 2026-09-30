@@ -9,4 +9,9 @@ if(RAWFRAME_BUILD_TESTS)
     # A bad argument is a usage error, not a crash.
     add_test(NAME cook_usage COMMAND rawframe_host_cook_tool)
     set_tests_properties(cook_usage PROPERTIES WILL_FAIL TRUE)
+    # An author's crate with no subasset map, mapped by the tool and cooked.
+    add_test(NAME cook_map_subassets
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/map_subassets.sh
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/map_subassets)
 endif()
