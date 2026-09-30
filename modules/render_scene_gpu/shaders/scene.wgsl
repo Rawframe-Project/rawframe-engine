@@ -44,7 +44,7 @@ struct ShadowSlot {
 @group(0) @binding(6) var lightShadowMap: texture_depth_2d;
 @group(0) @binding(7) var<storage, read> slots: array<ShadowSlot>;
 @group(0) @binding(8) var<storage, read> exposure: vec4f;
-// Every material's blob (D303), four vectors each.
+// Every material's blob (D303), five vectors each.
 @group(0) @binding(9) var<storage, read> materials: array<vec4f>;
 // The texture the draw's material samples, and how (D309).
 @group(0) @binding(10) var baseTexture: texture_2d<f32>;
@@ -200,13 +200,14 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
       @location(6) uv: vec2f) -> Shaded {
     let n = normalize(normal);
     let toEye = normalize(-placed);
-    let at = min(material, arrayLength(&materials) / 4u - 1u) * 4u;
+    let at = min(material, arrayLength(&materials) / 5u - 1u) * 5u;
     let base = materials[at];
     let specular = materials[at + 1u];
     let emission = materials[at + 2u];
     let rest = materials[at + 3u];
+    let mapped = materials[at + 4u];
     // Sampled before anything branches, so its derivatives hold.
-    let sampled = textureSample(baseTexture, baseSampler, uv);
+    let sampled = textureSample(baseTexture, baseSampler, uv * mapped.xy + mapped.zw);
     let flags = u32(rest.w);
     let tinted = color.rgb * base.rgb * select(vec3f(1.0), sampled.rgb, (flags & 2u) != 0u);
     let opacity = rest.x * color.a * select(1.0, sampled.a, (flags & 4u) != 0u);
@@ -235,9 +236,10 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
 // The masked models in the depth prepass (D310): scene.cut.frag.
 @fragment
 fn cut(@location(1) color: vec4f, @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f) {
-    let at = min(material, arrayLength(&materials) / 4u - 1u) * 4u;
+    let at = min(material, arrayLength(&materials) / 5u - 1u) * 5u;
     let rest = materials[at + 3u];
-    let sampled = textureSample(baseTexture, baseSampler, uv);
+    let mapped = materials[at + 4u];
+    let sampled = textureSample(baseTexture, baseSampler, uv * mapped.xy + mapped.zw);
     let opacity = rest.x * color.a * select(1.0, sampled.a, (u32(rest.w) & 4u) != 0u);
     if (opacity < rest.z) {
         discard;

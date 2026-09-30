@@ -136,7 +136,7 @@ inline constexpr std::uint64_t kCapsule = 0x63ed148327123836ULL;
 
 /// A mesh the scene may draw, by the identity a Model names it by.
 /// A compiled material as a device reads it (`material::blobOf`, D303).
-using MaterialBlob = std::array<float, 16>;
+using MaterialBlob = std::array<float, material::kBlobFloats>;
 
 /// A model without a material: OpenPBR's surface but for a white base
 /// color, so the model's color is its base color.

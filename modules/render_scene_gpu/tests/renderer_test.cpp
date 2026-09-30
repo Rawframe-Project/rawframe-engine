@@ -1052,6 +1052,13 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
                    : std::array<std::array<int, 3>, 4>{};
     };
     const auto [kRed, kGreen, kBlue, kWhite] = kQuartersOf(0x77);
+    // Moved half a texture left (D311), clamped: the green column fills
+    // the face's left half as well as its right.
+    unlit[18] = 0.5F;
+    frame.materials = {render_scene::noMaterial(), unlit};
+    const std::array<int, 3> kMoved = kQuartersOf(0x77)[0];
+    unlit[18] = 0;
+    frame.materials = {render_scene::noMaterial(), unlit};
     // A texture that is not there is sampled as white.
     const auto kNone = kQuartersOf(0x55);
     std::printf("red %d %d %d, green %d %d %d, blue %d %d %d, white %d %d %d, none %d %d %d, uploaded %llu\n",
@@ -1075,6 +1082,7 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
     RAWFRAME_EXPECT(kGreen[1] > kGreen[0] + 60 && kGreen[1] > kGreen[2] + 60);
     RAWFRAME_EXPECT(kBlue[2] > kBlue[0] + 60 && kBlue[2] > kBlue[1] + 60);
     RAWFRAME_EXPECT(kWhite[0] > 150 && std::abs(kWhite[0] - kWhite[2]) < 10);
+    RAWFRAME_EXPECT(kMoved == kGreen);
     for (const std::array<int, 3>& kQuarter : kNone) {
         RAWFRAME_EXPECT(kQuarter == kWhite);
     }
