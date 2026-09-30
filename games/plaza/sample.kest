@@ -1,0 +1,20 @@
+module sample
+
+// A client's input for a walker (plaza.game's `sample` line): the stick,
+// made each tick from its player's actions (plaza.actions). The camera
+// looks along -Z, so up is -Z.
+
+import controls
+import rawframe.input
+
+const MOVE: u64 = 0x2b8c866778ceb662
+const JUMP: u64 = 0x2afb6c927e7f3e6f
+
+fn sample(into: [controls.Stick]) {
+    into[0].runX = input.x(MOVE)
+    into[0].runZ = 0.0 - input.y(MOVE)
+    into[0].jump = 0.0
+    if input.on(JUMP) {
+        into[0].jump = 1.0
+    }
+}

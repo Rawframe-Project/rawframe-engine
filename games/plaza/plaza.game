@@ -74,6 +74,10 @@ spawn 1 plaza.stroller left=30 x=-2 z=-20 rawframe.animation.animator graph=stro
 replicate plaza.stroller rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
 input plaza.stick
+# A client makes its stick from its player's actions (plaza.actions) with
+# sample.kest; bots press the same keys and buttons.
+actions plaza.actions
+sample sample.kest sample
 interest rawframe.physics3d.pose x z within 30
 interpolate rawframe.physics3d.pose
 predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick

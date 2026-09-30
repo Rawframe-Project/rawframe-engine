@@ -1,0 +1,53 @@
+{
+  "kind": "input.actions",
+  "formatVersion": 1,
+  "actions": [
+    {
+      "actionId": "2b8c866778ceb662",
+      "name": "move",
+      "valueType": "axis2d",
+      "displayName": "Move",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "quad": {
+            "up": "key_w",
+            "down": "key_s",
+            "left": "key_a",
+            "right": "key_d"
+          }
+        },
+        {
+          "device": "gamepad",
+          "control": "stick_left"
+        }
+      ]
+    },
+    {
+      "actionId": "2afb6c927e7f3e6f",
+      "name": "jump",
+      "valueType": "bool",
+      "displayName": "Jump",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "space"
+        },
+        {
+          "device": "gamepad",
+          "control": "face_south"
+        }
+      ]
+    }
+  ],
+  "contexts": [
+    {
+      "contextId": "1ce0361b75804509",
+      "name": "walking",
+      "actions": [
+        "move",
+        "jump"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+module controls
+
+// What a walker's player asks of it each tick, apart from the game so that
+// the game and a client's sample program (sample.kest) share the one type.
+
+// What a player asks for, each -1 to 1: to run along x and z, and to jump
+// (above a half).
+struct Stick {
+    runX: f32
+    runZ: f32
+    jump: f32
+}
