@@ -18,8 +18,8 @@ enum class TextureError : std::uint32_t {
     BadTexture = 1,
     /// Larger, or with more levels or bytes, than the limits allow.
     OverLimit = 2,
-    /// A source image the importer cannot read: not PNG, JPEG, BMP, or TGA,
-    /// or broken.
+    /// A source image the importer cannot read: not PNG, JPEG, BMP, TGA,
+    /// or Radiance, or broken.
     BadSource = 3,
 };
 

@@ -178,6 +178,56 @@ totalBytes(Format format, std::uint32_t width, std::uint32_t height, std::size_t
 
 } // namespace
 
+std::uint16_t halfOf(float value) noexcept {
+    const std::uint32_t kBits = std::bit_cast<std::uint32_t>(value);
+    const auto kSign = static_cast<std::uint16_t>((kBits >> 16U) & 0x8000U);
+    const std::uint32_t kExponent = (kBits >> 23U) & 0xFFU;
+    std::uint32_t mantissa = kBits & 0x7FFFFFU;
+    if (kExponent == 0xFFU) {
+        // Infinity stays infinite; a NaN stays a quiet NaN.
+        return static_cast<std::uint16_t>(kSign | 0x7C00U | (mantissa != 0 ? 0x200U : 0U));
+    }
+    const int kHalfExponent = static_cast<int>(kExponent) - 127 + 15;
+    if (kHalfExponent >= 31) {
+        return static_cast<std::uint16_t>(kSign | 0x7C00U);
+    }
+    // A subnormal half keeps the mantissa's leading one, shifted into it.
+    std::uint32_t shift = 13;
+    std::uint32_t half = 0;
+    if (kHalfExponent <= 0) {
+        if (kHalfExponent < -10) {
+            return kSign;
+        }
+        mantissa |= 0x800000U;
+        shift = static_cast<std::uint32_t>(14 - kHalfExponent);
+        half = mantissa >> shift;
+    } else {
+        half = (static_cast<std::uint32_t>(kHalfExponent) << 10U) | (mantissa >> shift);
+    }
+    const std::uint32_t kRemainder = mantissa & ((1U << shift) - 1U);
+    const std::uint32_t kHalfway = 1U << (shift - 1U);
+    // A carry out of the mantissa raises the exponent, as rounding should.
+    if (kRemainder > kHalfway || (kRemainder == kHalfway && (half & 1U) != 0)) {
+        ++half;
+    }
+    return static_cast<std::uint16_t>(kSign | half);
+}
+
+float floatOf(std::uint16_t half) noexcept {
+    const std::uint32_t kSign = (std::uint32_t{half} & 0x8000U) << 16U;
+    const std::uint32_t kExponent = (std::uint32_t{half} >> 10U) & 0x1FU;
+    const std::uint32_t kMantissa = std::uint32_t{half} & 0x3FFU;
+    if (kExponent == 0) {
+        // Nought or subnormal: the mantissa in units of two to the -24.
+        const float kValue = static_cast<float>(kMantissa) * 0x1p-24F;
+        return kSign != 0 ? -kValue : kValue;
+    }
+    if (kExponent == 31) {
+        return std::bit_cast<float>(kSign | 0x7F800000U | (kMantissa << 13U));
+    }
+    return std::bit_cast<float>(kSign | ((kExponent + 112U) << 23U) | (kMantissa << 13U));
+}
+
 bool isSrgb(Format format) noexcept {
     return format == Format::Rgba8Srgb || format == Format::Bc7Srgb;
 }

@@ -7,7 +7,9 @@
 #include "rawframe/texture/errors.h"
 #include "rawframe/texture/texture.h"
 
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -192,4 +194,25 @@ RAWFRAME_TEST(AHalfFloatCubeRoundTripsWithItsSixFaces) {
     Texture shortFace = cube;
     shortFace.levels[0].bytes.resize(5 * 512);
     RAWFRAME_EXPECT(refusedWith(validate(shortFace), TextureError::BadTexture));
+}
+
+RAWFRAME_TEST(HalvesRoundToNearestAndComeBackExactly) {
+    RAWFRAME_EXPECT(halfOf(1.0F) == 0x3C00 && halfOf(-2.0F) == 0xC000 && halfOf(0.0F) == 0);
+    RAWFRAME_EXPECT(halfOf(65504.0F) == 0x7BFF && halfOf(65536.0F) == 0x7C00 && halfOf(-1e9F) == 0xFC00);
+    // The smallest subnormal, and half of it, a tie, rounds to even: nought.
+    RAWFRAME_EXPECT(halfOf(0x1p-24F) == 1 && halfOf(0x1p-25F) == 0 && halfOf(0x1.8p-24F) == 2);
+    // Just past halfway between 1 and the next half rounds up; the tie down.
+    RAWFRAME_EXPECT(halfOf(1.0F + 0x1p-11F) == 0x3C00 && halfOf(1.0F + 0x1.2p-11F) == 0x3C01);
+    RAWFRAME_EXPECT(halfOf(1.0F + 0x3p-11F) == 0x3C02);
+    // Every half that is a number comes back as itself.
+    bool exact = true;
+    for (std::uint32_t bits = 0; bits < 0x10000U; ++bits) {
+        const auto kHalf = static_cast<std::uint16_t>(bits);
+        if ((bits & 0x7C00U) != 0x7C00U) {
+            exact = exact && halfOf(floatOf(kHalf)) == kHalf;
+        }
+    }
+    RAWFRAME_EXPECT(exact);
+    RAWFRAME_EXPECT(floatOf(0x3555) > 0.333F && floatOf(0x3555) < 0.3334F);
+    RAWFRAME_EXPECT(std::isnan(floatOf(halfOf(std::numeric_limits<float>::quiet_NaN()))));
 }

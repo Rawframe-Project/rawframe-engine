@@ -40,6 +40,12 @@ enum class Format : std::uint8_t {
 /// eight for RGBA16F, sixteen a 4x4 block (partial blocks whole) for BC7.
 [[nodiscard]] std::size_t levelBytes(Format format, std::uint32_t width, std::uint32_t height) noexcept;
 
+/// A float as the IEEE half an RGBA16F channel holds, rounded to nearest,
+/// ties to even; past the half's range it is infinite.
+[[nodiscard]] std::uint16_t halfOf(float value) noexcept;
+/// An IEEE half as a float, exactly.
+[[nodiscard]] float floatOf(std::uint16_t half) noexcept;
+
 /// A level: its sides, and each face's texels in turn.
 struct Level {
     std::uint32_t width = 0;
