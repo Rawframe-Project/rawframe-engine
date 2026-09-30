@@ -120,6 +120,11 @@ else()
     endif()
     if(RAWFRAME_SANITIZE STREQUAL "address")
         target_compile_options(rawframe_policy INTERFACE -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+        # The debug configuration and its assertions, optimized as far as
+        # AddressSanitizer itself advises (-O1): unoptimized, the tree's
+        # tests took forty times their development time, the check's long
+        # pole (D329).
+        target_compile_options(rawframe_policy INTERFACE -O1)
         # Coverage for the fuzz targets' guidance inside every module they
         # reach, not only their own files (D242).
         if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
