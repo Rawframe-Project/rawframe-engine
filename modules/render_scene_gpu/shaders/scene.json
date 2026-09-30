@@ -13,18 +13,21 @@
                 {"location": 8, "type": "float32", "components": 4},
                 {"location": 9, "type": "float32", "components": 4},
                 {"location": 10, "type": "float32", "components": 4},
-                {"location": 11, "type": "float32", "components": 4}],
+                {"location": 11, "type": "float32", "components": 4},
+                {"location": 12, "type": "float32", "components": 1}],
      "variables": [{"location": 0, "type": "float32", "components": 3},
                    {"location": 1, "type": "float32", "components": 4},
                    {"location": 2, "type": "float32", "components": 3},
                    {"location": 3, "type": "float32", "components": 3},
-                   {"location": 4, "type": "float32", "components": 3}]},
+                   {"location": 4, "type": "float32", "components": 3},
+                   {"location": 5, "type": "uint32", "components": 1}]},
     {"name": "fs", "stage": "fragment",
      "variables": [{"location": 0, "type": "float32", "components": 3},
                    {"location": 1, "type": "float32", "components": 4},
                    {"location": 2, "type": "float32", "components": 3},
                    {"location": 3, "type": "float32", "components": 3},
-                   {"location": 4, "type": "float32", "components": 3}],
+                   {"location": 4, "type": "float32", "components": 3},
+                   {"location": 5, "type": "uint32", "components": 1}],
      "outputs": [{"location": 0, "type": "float32", "components": 4},
                  {"location": 1, "type": "float32", "components": 2}]}
   ],
@@ -39,7 +42,8 @@
     {"table": 0, "slot": 6, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "depth", "view_dimension": "2d", "multisampled": false},
     {"table": 0, "slot": 7, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 80},
-    {"table": 0, "slot": 8, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 16}
+    {"table": 0, "slot": 8, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 16},
+    {"table": 0, "slot": 9, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 64}
   ],
   "constants": []
 }

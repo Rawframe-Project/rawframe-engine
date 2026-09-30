@@ -206,6 +206,7 @@ struct SceneRenderer::State {
                     placed.instances.push_back(draw.previous[(column * 4) + row]);
                 }
             }
+            placed.instances.push_back(static_cast<float>(draw.material));
             if (runs.empty() || std::get<0>(runs.back()) != kMesh->second) {
                 runs.emplace_back(kMesh->second, count, 0);
             }
@@ -333,6 +334,9 @@ struct SceneRenderer::State {
         std::vector<std::uint32_t> ranges;
         std::vector<std::uint32_t> indices;
         mrhiResourceId lightsResource{};
+        /// The frame's materials' blobs (D303).
+        std::vector<render_scene::MaterialBlob> materials;
+        mrhiResourceId materialsResource{};
         mrhiResourceId rangesResource{};
         mrhiResourceId indicesResource{};
         /// The camera's grade and tonemapper, as the picture's pass reads
@@ -429,8 +433,10 @@ struct SceneRenderer::State {
         if (mrhiDeclareBuffer(native, &blockDef, &now.blockResource) != mrhi_success) {
             return failed("the frame's view could not be declared", mrhi_errorCapacity);
         }
+        now.materials = frame->materials.empty() ? std::vector{render_scene::noMaterial()} : frame->materials;
         for (const auto& [kBytes, kMade] :
-             {std::pair{now.lights.size() * sizeof(LightBlock), &now.lightsResource},
+             {std::pair{now.materials.size() * sizeof(render_scene::MaterialBlob), &now.materialsResource},
+              std::pair{now.lights.size() * sizeof(LightBlock), &now.lightsResource},
               std::pair{now.ranges.size() * sizeof(std::uint32_t), &now.rangesResource},
               std::pair{now.indices.size() * sizeof(std::uint32_t), &now.indicesResource}}) {
             mrhiBufferDef def = mrhiDefaultBufferDef();
@@ -517,6 +523,7 @@ struct SceneRenderer::State {
         // The upload pass writes what the drawing reads.
         std::vector<mrhiAccess> writes = {wholeOf(now.blockResource, mrhi_accessCopyDestination),
                                           wholeOf(now.lightsResource, mrhi_accessCopyDestination),
+                                          wholeOf(now.materialsResource, mrhi_accessCopyDestination),
                                           wholeOf(now.rangesResource, mrhi_accessCopyDestination),
                                           wholeOf(now.indicesResource, mrhi_accessCopyDestination)};
         if (now.draws || now.casters) {
@@ -594,7 +601,7 @@ struct SceneRenderer::State {
         reads.push_back(wholeOf(now.skyResource, mrhi_accessUniform));
         reads.push_back(wholeOf(metering->exposure(), mrhi_accessStorageRead));
         for (const mrhiResourceId kLights :
-             {now.lightsResource, now.rangesResource, now.indicesResource, now.slotsResource}) {
+             {now.lightsResource, now.rangesResource, now.indicesResource, now.slotsResource, now.materialsResource}) {
             reads.push_back(wholeOf(kLights, mrhi_accessStorageRead));
         }
         reads.push_back(mrhiAccess{.resource = now.lightShadowMap,
@@ -702,6 +709,12 @@ struct SceneRenderer::State {
                 mrhi_success ||
             mrhiWriteBuffer(native,
                             now.upload,
+                            now.materialsResource,
+                            0,
+                            now.materials.data(),
+                            now.materials.size() * sizeof(render_scene::MaterialBlob)) != mrhi_success ||
+            mrhiWriteBuffer(native,
+                            now.upload,
                             now.rangesResource,
                             0,
                             now.ranges.data(),
@@ -767,7 +780,7 @@ struct SceneRenderer::State {
                                .range = {},
                                .sampler = {}};
         };
-        const std::array<mrhiBinding, 9> kFrameBinding = {
+        const std::array<mrhiBinding, 10> kFrameBinding = {
             mrhiBinding{.slot = 0,
                         .resource = now.blockResource,
                         .offset = 0,
@@ -812,7 +825,8 @@ struct SceneRenderer::State {
                                   .aspect = mrhi_aspectDepthOnly},
                         .sampler = {}},
             kStored(7, now.slotsResource, now.slots.size() * sizeof(SlotBlock)),
-            kStored(8, metering->exposure(), sizeof(ExposureBlock))};
+            kStored(8, metering->exposure(), sizeof(ExposureBlock)),
+            kStored(9, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob))};
         const std::array<mrhiBinding, 2> kSkyBinding = {kStored(0, now.skyResource, sizeof(SkyBlock)),
                                                         kStored(1, metering->exposure(), sizeof(ExposureBlock))};
         for (const auto& [kPass, kPipeline, kLit] : {std::tuple{now.depthPass, pipelines.depth.pipeline, false},

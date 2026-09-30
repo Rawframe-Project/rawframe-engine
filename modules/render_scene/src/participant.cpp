@@ -22,6 +22,7 @@ namespace {
 constexpr diagnostics::EventIdentity kSceneSummary{"scene", "scene_summary"};
 constexpr std::string_view kProvided[] = {kSceneFrames.name};
 constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
+constexpr diagnostics::EventIdentity kMaterialProjected{"scene", "material_projected"};
 constexpr std::string_view kMaybe[] = {
     world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
 
@@ -170,6 +171,9 @@ public:
                     auto read = readMaterial(content->store(), each.material);
                     if (read.has_value()) {
                         materials.push_back({.id = each.id, .blob = material::blobOf(*read)});
+                        if (read->blend != material::Blend::Opaque) {
+                            projected_.push_back(each.path);
+                        }
                     } else {
                         unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});
                     }
@@ -197,6 +201,13 @@ public:
                          kMaterialUnread,
                          "a material could not be read: its models are drawn with none",
                          {diagnostics::field("material", kPath), diagnostics::field("reason", kReason)});
+        }
+        // SPEC-0026's projection, declared: the passes carry no alpha yet.
+        for (const std::string& kPath : projected_) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kMaterialProjected,
+                         "a masked or translucent material is drawn opaque until the scene's passes carry alpha",
+                         {diagnostics::field("material", kPath)});
         }
         return {};
     }
@@ -384,6 +395,9 @@ private:
     std::size_t gameMaterials_ = 0;
     /// Materials that could not be read, and why, said at start.
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;
+    /// Materials drawn otherwise than they ask (masked or translucent drawn
+    /// opaque), said at start.
+    std::vector<std::string> projected_;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
     /// The point and spot lights each frame lit with, culled, and left out

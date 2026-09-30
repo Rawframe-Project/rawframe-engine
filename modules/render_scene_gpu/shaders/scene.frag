@@ -1,5 +1,6 @@
-// The 3D scene's models (D284), fragment entry "fs": the base color lit,
-// through ADR-0031's lit shading model (D299), by the sun, where the sun's
+// The 3D scene's models (D284), fragment entry "fs": the surface its
+// material gives it (D303, ADR-0031's blob; the model's color tinting the
+// base color), lit through ADR-0031's lit shading model (D299) by the sun, where the sun's
 // shadow map says it reaches (D289); by
 // the point and spot lights of its cluster (D290), each where its squares
 // of the punctual shadows' atlas say it reaches (D292); and by the sky
@@ -41,6 +42,8 @@ layout(location = 1) in vec4 inColor;
 layout(location = 2) in vec3 inPlaced;
 layout(location = 3) in vec3 inNow;
 layout(location = 4) in vec3 inBefore;
+// The model's material's place among the frame's materials.
+layout(location = 5) flat in uint inMaterial;
 
 layout(set = 0, binding = 1) uniform texture2D shadowMap;
 layout(set = 0, binding = 2) uniform samplerShadow shadowSampler;
@@ -95,6 +98,15 @@ exposure;
 
 // The punctual shadows' atlas, and its squares.
 layout(set = 0, binding = 6) uniform texture2D lightShadowMap;
+// Every material's blob (D303), four vectors each: the base color and
+// metalness; the specular color times its weight, and the roughness; the
+// emission in nits, and the index of refraction; the opacity, the
+// occlusion, the alpha cutoff, and whether it is unlit.
+layout(set = 0, binding = 9, std430) readonly buffer Materials
+{
+    vec4 materials[];
+};
+
 layout(set = 0, binding = 7, std430) readonly buffer Slots
 {
     ShadowSlot slots[];
@@ -107,17 +119,21 @@ layout(location = 1) out vec2 outMotion;
 
 const float kPi = 3.14159265;
 
-// The surface every model has until materials give models their own
-// (ADR-0031, D299): OpenPBR's defaults, a dielectric of index 1.5, which
-// reflects four hundredths head on, with a specular roughness of 0.3.
-const float kRoughness = 0.3;
-const vec3 kHeadOn = vec3(0.04);
+// A point's surface as the BRDF takes it: the diffuse color (the base
+// color less what metal takes), what it reflects head on (a dielectric's
+// by its index of refraction and specular color, or a metal's base color),
+// and its roughness.
+struct Surface {
+    vec3 diffuse;
+    vec3 headOn;
+    float roughness;
+};
 
 // Of the light arriving from `toward`, per unit of illuminance, what leaves
 // toward the eye, times the cosine it arrives at: glTF's metallic-roughness
-// BRDF, the base color's Lambert diffuse under Schlick's Fresnel, and GGX
-// with Smith's height-correlated visibility.
-vec3 reflected(vec3 base, vec3 normal, vec3 toEye, vec3 toward)
+// BRDF, the diffuse color's Lambert under Schlick's Fresnel, and GGX with
+// Smith's height-correlated visibility.
+vec3 reflected(Surface surface, vec3 normal, vec3 toEye, vec3 toward)
 {
     const float kNl = max(dot(normal, toward), 0.0);
     if (kNl <= 0.0) {
@@ -126,14 +142,14 @@ vec3 reflected(vec3 base, vec3 normal, vec3 toEye, vec3 toward)
     const vec3 kHalf = normalize(toEye + toward);
     const float kNv = max(dot(normal, toEye), 1e-4);
     const float kNh = max(dot(normal, kHalf), 0.0);
-    const float kAlpha = kRoughness * kRoughness;
+    const float kAlpha = max(surface.roughness * surface.roughness, 1e-3);
     const float kAlpha2 = kAlpha * kAlpha;
-    const vec3 kFresnel = kHeadOn + (1.0 - kHeadOn) * pow(1.0 - max(dot(toEye, kHalf), 0.0), 5.0);
+    const vec3 kFresnel = surface.headOn + (1.0 - surface.headOn) * pow(1.0 - max(dot(toEye, kHalf), 0.0), 5.0);
     const float kSpread = kNh * kNh * (kAlpha2 - 1.0) + 1.0;
     const float kDistribution = kAlpha2 / (kPi * kSpread * kSpread);
     const float kVisibility = 0.5 / (kNl * sqrt(kNv * kNv * (1.0 - kAlpha2) + kAlpha2) +
                                      kNv * sqrt(kNl * kNl * (1.0 - kAlpha2) + kAlpha2));
-    return ((1.0 - kFresnel) * base / kPi + kFresnel * (kDistribution * kVisibility)) * kNl;
+    return ((1.0 - kFresnel) * surface.diffuse / kPi + kFresnel * (kDistribution * kVisibility)) * kNl;
 }
 
 // How much of the sun reaches `placed`: its cascade chosen by how far ahead
@@ -187,7 +203,7 @@ float lightShadow(ShadowSlot slot, vec3 placed, vec3 normal)
 // the cluster found by where the view puts it and how far ahead it is;
 // each light's inverse square windowed to nought at its range, a spot's
 // also faded across its cone's edge.
-vec3 punctual(vec3 placed, vec3 normal, vec3 base, vec3 toEye)
+vec3 punctual(vec3 placed, vec3 normal, Surface surface, vec3 toEye)
 {
     if (frame.clusterGrid.w == 0.0) {
         return vec3(0.0);
@@ -230,7 +246,7 @@ vec3 punctual(vec3 placed, vec3 normal, vec3 base, vec3 toEye)
             }
             falloff *= lightShadow(slots[slot], placed, normal);
         }
-        sum += kLight.intensity.rgb * falloff * reflected(base, normal, toEye, kToward);
+        sum += kLight.intensity.rgb * falloff * reflected(surface, normal, toEye, kToward);
     }
     return sum;
 }
@@ -239,16 +255,33 @@ void main()
 {
     const vec3 kNormal = normalize(inNormal);
     const vec3 kToEye = normalize(-inPlaced);
-    const vec3 kBase = inColor.rgb;
-    const vec3 kDirect = frame.sun.rgb * sunlit(inPlaced, kNormal) * reflected(kBase, kNormal, kToEye, frame.toSun.xyz) +
-                         punctual(inPlaced, kNormal, kBase, kToEye);
+    const uint kAt = min(inMaterial, uint(materials.length()) / 4u - 1u) * 4u;
+    const vec4 kBase = materials[kAt];
+    const vec4 kSpecular = materials[kAt + 1u];
+    const vec4 kEmission = materials[kAt + 2u];
+    const vec4 kRest = materials[kAt + 3u];
+    const vec3 kColor = inColor.rgb * kBase.rgb;
+    outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);
+    // Unlit (KHR_materials_unlit): its color stands in the picture as it
+    // is, whatever the exposure.
+    if (kRest.w > 0.5) {
+        outColor = vec4(kColor, 1.0);
+        return;
+    }
+    const float kReflectance = (kEmission.w - 1.0) / (kEmission.w + 1.0);
+    const Surface kSurface = Surface(kColor * (1.0 - kBase.w),
+                                     mix(kReflectance * kReflectance * kSpecular.rgb, kColor, kBase.w),
+                                     kSpecular.w);
+    const vec3 kDirect = frame.sun.rgb * sunlit(inPlaced, kNormal) * reflected(kSurface, kNormal, kToEye, frame.toSun.xyz) +
+                         punctual(inPlaced, kNormal, kSurface, kToEye);
     // The sky: its light from above the normal, diffused, and from along
     // the reflection, the Fresnel of a rough surface (reflection probes
-    // replace this, ADR-0051).
+    // replace this, ADR-0051); what the material occludes of both.
     const float kNv = max(dot(kNormal, kToEye), 0.0);
-    const vec3 kSheen = kHeadOn + (max(vec3(1.0 - kRoughness), kHeadOn) - kHeadOn) * pow(1.0 - kNv, 5.0);
+    const vec3 kSheen = kSurface.headOn + (max(vec3(1.0 - kSurface.roughness), kSurface.headOn) - kSurface.headOn) *
+                                              pow(1.0 - kNv, 5.0);
     const vec3 kMirrored = reflect(-kToEye, kNormal);
-    const vec3 kSky = frame.sky.rgb * ((1.0 - kSheen) * kBase * (0.5 + 0.5 * kNormal.y) + kSheen * (0.5 + 0.5 * kMirrored.y));
-    outColor = vec4((kDirect + kSky) * exposure.value.y, 1.0);
-    outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);
+    const vec3 kSky = frame.sky.rgb * kRest.y *
+                      ((1.0 - kSheen) * kSurface.diffuse * (0.5 + 0.5 * kNormal.y) + kSheen * (0.5 + 0.5 * kMirrored.y));
+    outColor = vec4((kDirect + kSky + kEmission.rgb) * exposure.value.y, 1.0);
 }

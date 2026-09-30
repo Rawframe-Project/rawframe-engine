@@ -43,6 +43,8 @@ struct ShadowSlot {
 @group(0) @binding(6) var lightShadowMap: texture_depth_2d;
 @group(0) @binding(7) var<storage, read> slots: array<ShadowSlot>;
 @group(0) @binding(8) var<storage, read> exposure: vec4f;
+// Every material's blob (D303), four vectors each.
+@group(0) @binding(9) var<storage, read> materials: array<vec4f>;
 
 struct Placed {
     @invariant @builtin(position) position: vec4f,
@@ -51,6 +53,7 @@ struct Placed {
     @location(2) placed: vec3f,
     @location(3) now: vec3f,
     @location(4) before: vec3f,
+    @location(5) @interpolate(flat) material: u32,
 }
 
 struct Shaded {
@@ -62,7 +65,8 @@ struct Shaded {
 fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) model0: vec4f,
       @location(3) model1: vec4f, @location(4) model2: vec4f, @location(5) normal0: vec3f,
       @location(6) normal1: vec3f, @location(7) normal2: vec3f, @location(8) color: vec4f,
-      @location(9) previous0: vec4f, @location(10) previous1: vec4f, @location(11) previous2: vec4f) -> Placed {
+      @location(9) previous0: vec4f, @location(10) previous1: vec4f, @location(11) previous2: vec4f,
+      @location(12) material: f32) -> Placed {
     let vertex = vec4f(position, 1.0);
     let placed = vec3f(dot(model0, vertex), dot(model1, vertex), dot(model2, vertex));
     var out: Placed;
@@ -73,17 +77,19 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
     let was = vec3f(dot(previous0, vertex), dot(previous1, vertex), dot(previous2, vertex));
     out.now = (frame.unjittered * vec4f(placed, 1.0)).xyw;
     out.before = (frame.previous * vec4f(was, 1.0)).xyw;
+    out.material = u32(material);
     return out;
 }
 
 const kPi = 3.14159265;
 
-// The surface every model has until materials give models their own
-// (D299): OpenPBR's defaults.
-const kRoughness = 0.3;
-const kHeadOn = vec3f(0.04);
+struct Surface {
+    diffuse: vec3f,
+    headOn: vec3f,
+    roughness: f32,
+}
 
-fn reflected(base: vec3f, normal: vec3f, toEye: vec3f, toward: vec3f) -> vec3f {
+fn reflected(surface: Surface, normal: vec3f, toEye: vec3f, toward: vec3f) -> vec3f {
     let nl = max(dot(normal, toward), 0.0);
     if (nl <= 0.0) {
         return vec3f(0.0);
@@ -91,13 +97,13 @@ fn reflected(base: vec3f, normal: vec3f, toEye: vec3f, toward: vec3f) -> vec3f {
     let halfway = normalize(toEye + toward);
     let nv = max(dot(normal, toEye), 1e-4);
     let nh = max(dot(normal, halfway), 0.0);
-    let alpha = kRoughness * kRoughness;
+    let alpha = max(surface.roughness * surface.roughness, 1e-3);
     let alpha2 = alpha * alpha;
-    let fresnel = kHeadOn + (1.0 - kHeadOn) * pow(1.0 - max(dot(toEye, halfway), 0.0), 5.0);
+    let fresnel = surface.headOn + (1.0 - surface.headOn) * pow(1.0 - max(dot(toEye, halfway), 0.0), 5.0);
     let spread = nh * nh * (alpha2 - 1.0) + 1.0;
     let distribution = alpha2 / (kPi * spread * spread);
     let visibility = 0.5 / (nl * sqrt(nv * nv * (1.0 - alpha2) + alpha2) + nv * sqrt(nl * nl * (1.0 - alpha2) + alpha2));
-    return ((1.0 - fresnel) * base / kPi + fresnel * (distribution * visibility)) * nl;
+    return ((1.0 - fresnel) * surface.diffuse / kPi + fresnel * (distribution * visibility)) * nl;
 }
 
 fn sunlit(placed: vec3f, normal: vec3f) -> f32 {
@@ -134,7 +140,7 @@ fn lightShadow(slot: ShadowSlot, placed: vec3f, normal: vec3f) -> f32 {
     return textureSampleCompareLevel(lightShadowMap, shadowSampler, inAtlas, near / ahead);
 }
 
-fn punctual(placed: vec3f, normal: vec3f, base: vec3f, toEye: vec3f) -> vec3f {
+fn punctual(placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec3f {
     if (frame.clusterGrid.w == 0.0) {
         return vec3f(0.0);
     }
@@ -177,25 +183,39 @@ fn punctual(placed: vec3f, normal: vec3f, base: vec3f, toEye: vec3f) -> vec3f {
             }
             falloff *= lightShadow(slots[slot], placed, normal);
         }
-        sum += light.intensity.rgb * falloff * reflected(base, normal, toEye, toward);
+        sum += light.intensity.rgb * falloff * reflected(surface, normal, toEye, toward);
     }
     return sum;
 }
 
 @fragment
 fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
-      @location(3) now: vec3f, @location(4) before: vec3f) -> Shaded {
+      @location(3) now: vec3f, @location(4) before: vec3f, @location(5) @interpolate(flat) material: u32) -> Shaded {
     let n = normalize(normal);
     let toEye = normalize(-placed);
-    let base = color.rgb;
-    let direct = frame.sun.rgb * sunlit(placed, n) * reflected(base, n, toEye, frame.toSun.xyz) +
-                 punctual(placed, n, base, toEye);
-    let nv = max(dot(n, toEye), 0.0);
-    let sheen = kHeadOn + (max(vec3f(1.0 - kRoughness), kHeadOn) - kHeadOn) * pow(1.0 - nv, 5.0);
-    let mirrored = reflect(-toEye, n);
-    let sky = frame.sky.rgb * ((1.0 - sheen) * base * (0.5 + 0.5 * n.y) + sheen * (0.5 + 0.5 * mirrored.y));
+    let at = min(material, arrayLength(&materials) / 4u - 1u) * 4u;
+    let base = materials[at];
+    let specular = materials[at + 1u];
+    let emission = materials[at + 2u];
+    let rest = materials[at + 3u];
+    let tinted = color.rgb * base.rgb;
     var out: Shaded;
-    out.color = vec4f((direct + sky) * exposure.y, 1.0);
     out.motion = (now.xy / now.z - before.xy / before.z) * vec2f(0.5, -0.5);
+    if (rest.w > 0.5) {
+        out.color = vec4f(tinted, 1.0);
+        return out;
+    }
+    let reflectance = (emission.w - 1.0) / (emission.w + 1.0);
+    let surface = Surface(tinted * (1.0 - base.w), mix(reflectance * reflectance * specular.rgb, tinted, base.w),
+                          specular.w);
+    let direct = frame.sun.rgb * sunlit(placed, n) * reflected(surface, n, toEye, frame.toSun.xyz) +
+                 punctual(placed, n, surface, toEye);
+    let nv = max(dot(n, toEye), 0.0);
+    let sheen = surface.headOn + (max(vec3f(1.0 - surface.roughness), surface.headOn) - surface.headOn) *
+                                     pow(1.0 - nv, 5.0);
+    let mirrored = reflect(-toEye, n);
+    let sky = frame.sky.rgb * rest.y *
+              ((1.0 - sheen) * surface.diffuse * (0.5 + 0.5 * n.y) + sheen * (0.5 + 0.5 * mirrored.y));
+    out.color = vec4f((direct + sky + emission.rgb) * exposure.y, 1.0);
     return out;
 }

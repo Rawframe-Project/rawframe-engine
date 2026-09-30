@@ -45,12 +45,14 @@ layout(location = 8) in vec4 inColor;
 layout(location = 9) in vec4 inPrevious0;
 layout(location = 10) in vec4 inPrevious1;
 layout(location = 11) in vec4 inPrevious2;
+layout(location = 12) in float inMaterial;
 
 layout(location = 0) out vec3 outNormal;
 layout(location = 1) out vec4 outColor;
 layout(location = 2) out vec3 outPlaced;
 layout(location = 3) out vec3 outNow;
 layout(location = 4) out vec3 outBefore;
+layout(location = 5) flat out uint outMaterial;
 
 invariant gl_Position;
 
@@ -65,4 +67,5 @@ void main()
     const vec3 kWas = vec3(dot(inPrevious0, kVertex), dot(inPrevious1, kVertex), dot(inPrevious2, kVertex));
     outNow = (frame.unjittered * vec4(kPlaced, 1.0)).xyw;
     outBefore = (frame.previous * vec4(kWas, 1.0)).xyw;
+    outMaterial = uint(inMaterial);
 }

@@ -70,9 +70,9 @@ struct RendererStatistics {
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the
-/// model's rows, the normals' columns, the color, and the model's rows the
-/// frame before (D291).
-inline constexpr std::uint32_t kInstanceBytes = 148;
+/// model's rows, the normals' columns, the color, the model's rows the
+/// frame before (D291), and its material's place among the frame's (D303).
+inline constexpr std::uint32_t kInstanceBytes = 152;
 
 class SceneRenderer final : public render::FrameRecorder {
 public:

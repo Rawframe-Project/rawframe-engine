@@ -797,3 +797,78 @@ RAWFRAME_TEST(TheLitModelReflectsTheSunAndTheSky) {
     std::printf("highlight %d, below %d; sky alone head on %d, rim %d\n", kHighlight, kBelow, kHeadOn, kRim);
     RAWFRAME_EXPECT(kHighlight > kBelow + 60 && kHeadOn > 0 && kRim > 2 * kHeadOn);
 }
+
+RAWFRAME_TEST(AMaterialShapesItsModelsSurface) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A box four meters ahead in the dark, exposed so fifty nits are
+    // middle grey, with its material (D303) second in the frame's.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.sky = {0, 0, 0};
+    frame.exposure = std::log2(50.0F / (1.2F * 0.18F));
+    SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
+    shown.material = 1;
+    frame.draws = {shown};
+    const auto kCenter = [&](const render_scene::MaterialBlob& blob) {
+        frame.materials = {render_scene::noMaterial(), blob};
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        return kPixels.has_value() ? at(*kPixels, 32, 32) : std::array<int, 3>{};
+    };
+    const std::array<int, 3> kDark = kCenter(render_scene::noMaterial());
+    // Unlit, its color stands whatever the light; emitting fifty nits, it
+    // shows middle grey in the dark.
+    render_scene::MaterialBlob unlit = render_scene::noMaterial();
+    unlit[0] = 0.05F;
+    unlit[1] = 0.5F;
+    unlit[2] = 0.05F;
+    unlit[15] = 1;
+    const std::array<int, 3> kUnlit = kCenter(unlit);
+    render_scene::MaterialBlob glowing = render_scene::noMaterial();
+    glowing[8] = 50;
+    glowing[9] = 50;
+    glowing[10] = 50;
+    const std::array<int, 3> kGlowing = kCenter(glowing);
+    // A black ball under the default sun: a rougher one spreads the sun's
+    // highlight thinner.
+    SceneFrame lit = looking();
+    lit.shadows.count = 0;
+    SceneDraw ball = box(4, 1.5F, {0, 0, 0, 1}, render_scene::kSphere);
+    ball.material = 1;
+    lit.draws = {ball};
+    const auto kHighlight = [&](float roughness) {
+        render_scene::MaterialBlob rough = render_scene::noMaterial();
+        rough[7] = roughness;
+        lit.materials = {render_scene::noMaterial(), rough};
+        const auto kPixels = drawn(**framer, **made, lit, kMeshes);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        return kPixels.has_value() ? at(*kPixels, 35, 22)[0] : -1;
+    };
+    const int kSmooth = kHighlight(0.3F);
+    const int kRough = kHighlight(0.9F);
+    std::printf("dark %d, unlit %d %d %d, glowing %d %d %d, highlight smooth %d rough %d\n",
+                kDark[0],
+                kUnlit[0],
+                kUnlit[1],
+                kUnlit[2],
+                kGlowing[0],
+                kGlowing[1],
+                kGlowing[2],
+                kSmooth,
+                kRough);
+    RAWFRAME_EXPECT(kDark[0] == 0 && kUnlit[1] > kUnlit[0] + 60 && std::abs(kGlowing[0] - 128) <= 3 &&
+                    kSmooth > kRough + 30);
+}
