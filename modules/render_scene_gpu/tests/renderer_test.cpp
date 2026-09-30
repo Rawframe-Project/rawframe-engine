@@ -688,3 +688,65 @@ RAWFRAME_TEST(FxaaSoftensSlantedEdgesAlone) {
     RAWFRAME_EXPECT(at(*kSoft, 2, 2) == at(*kHard, 2, 2) && at(*kSoft, 32, 32) == at(*kHard, 32, 32));
     RAWFRAME_EXPECT((*made)->statistics().framesSmoothed >= 1);
 }
+
+RAWFRAME_TEST(PbrNeutralMeetsItsConformanceVectors) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A sky exposed so the operator is fed its light unchanged: the
+    // exposure's factor undoes the normalization's 1.41371 (ADR-0047,
+    // D295).
+    SceneFrame frame = looking();
+    frame.lights.sun = {0, 0, 0};
+    frame.shadows.count = 0;
+    frame.tonemapper = render_scene::Tonemapper::PbrNeutral;
+    frame.exposure = std::log2(1.41371F / 1.2F);
+    // Khronos PBR Neutral's vectors, in sRGB: within its guarantee range
+    // (every channel from 0.08, none past 0.76 once 0.04 is taken off)
+    // each channel is its input less 0.04; below 0.08 the offset
+    // shrinks; past 0.76 the peak is compressed and desaturated.
+    struct Vector {
+        std::array<float, 3> light;
+        std::array<int, 3> shown;
+    };
+    constexpr std::array<Vector, 8> kVectors = {{{{0.5F, 0.3F, 0.2F}, {181, 139, 111}},
+                                                 {{0.1F, 0.7F, 0.35F}, {69, 212, 151}},
+                                                 {{0.75F, 0.75F, 0.75F}, {219, 219, 219}},
+                                                 {{0.02F, 0.02F, 0.02F}, {8, 8, 8}},
+                                                 {{0.3F, 0.05F, 0.6F}, {141, 34, 198}},
+                                                 {{1, 1, 1}, {240, 240, 240}},
+                                                 {{2, 1, 0.5F}, {250, 193, 154}},
+                                                 {{10, 10, 10}, {254, 254, 254}}}};
+    for (const Vector& kVector : kVectors) {
+        frame.lights.sky = kVector.light;
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        if (!kPixels.has_value()) {
+            return;
+        }
+        const std::array<int, 3> kShown = at(*kPixels, 32, 32);
+        std::printf("neutral %.2f %.2f %.2f: %d %d %d, expected %d %d %d\n",
+                    kVector.light[0],
+                    kVector.light[1],
+                    kVector.light[2],
+                    kShown[0],
+                    kShown[1],
+                    kShown[2],
+                    kVector.shown[0],
+                    kVector.shown[1],
+                    kVector.shown[2]);
+        for (std::size_t channel = 0; channel < 3; ++channel) {
+            RAWFRAME_EXPECT(std::abs(kShown[channel] - kVector.shown[channel]) <= 1);
+        }
+    }
+}
