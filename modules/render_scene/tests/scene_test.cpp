@@ -287,22 +287,25 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
     // A Kest type is laid out when a function uses it.
     const std::string kUses =
         "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky],\n"
-        "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure]) {\n}\n";
+        "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
+        "        grades: [model.Grading]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
     const std::string kLamps = "component 9c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.lamp rawframe.model.PointLight\n"
                                "component ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.torch rawframe.model.SpotLight\n";
-    const std::string kView =
-        "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n"
-        "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n";
+    const std::string kView = "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n"
+                              "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n"
+                              "component cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.grade rawframe.model.Grading\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
                     kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
                     kLoaded->camera == schema::ComponentTypeId::fromText("7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->meshes.empty() && kLoaded->points == (std::vector<schema::ComponentTypeId>{kPointId}) &&
                     kLoaded->spots == (std::vector<schema::ComponentTypeId>{kSpotId}) &&
-                    kLoaded->autoExposure == schema::ComponentTypeId::fromText("bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
+                    kLoaded->autoExposure ==
+                        schema::ComponentTypeId::fromText("bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+                    kLoaded->grading == schema::ComponentTypeId::fromText("cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -621,4 +624,50 @@ RAWFRAME_TEST(AMeteredCameraIsMadeSound) {
     // A value not finite meters nothing.
     camera.metering->compensation = std::numeric_limits<float>::quiet_NaN();
     RAWFRAME_EXPECT(!rig.frame(camera).metering.enabled);
+}
+
+RAWFRAME_TEST(AGradeBalancesWhiteAndIsMadeSound) {
+    // Neutral: the balance is the identity, and the rest passes light on.
+    const SceneGrading kNeutral = gradingOf(Grading{});
+    RAWFRAME_EXPECT(kNeutral.enabled);
+    for (std::size_t at = 0; at < 9; ++at) {
+        RAWFRAME_EXPECT(near(kNeutral.balance[at], at % 4 == 0 ? 1.0F : 0.0F, 2e-3F));
+    }
+    // Warmer: white comes out redder than blue; cooler, bluer; a tint
+    // above nought lowers green.
+    const auto kWhiteOf = [](const SceneGrading& grade) {
+        std::array<float, 3> out{};
+        for (std::size_t row = 0; row < 3; ++row) {
+            out[row] = grade.balance[row * 3] + grade.balance[(row * 3) + 1] + grade.balance[(row * 3) + 2];
+        }
+        return out;
+    };
+    const std::array<float, 3> kWarm = kWhiteOf(gradingOf(Grading{.temperature = 1}));
+    const std::array<float, 3> kCool = kWhiteOf(gradingOf(Grading{.temperature = -1}));
+    const std::array<float, 3> kMagenta = kWhiteOf(gradingOf(Grading{.tint = 1}));
+    std::printf("warm %f %f %f cool %f %f %f magenta %f %f %f\n",
+                kWarm[0],
+                kWarm[1],
+                kWarm[2],
+                kCool[0],
+                kCool[1],
+                kCool[2],
+                kMagenta[0],
+                kMagenta[1],
+                kMagenta[2]);
+    RAWFRAME_EXPECT(kWarm[0] > kWarm[2] && kCool[2] > kCool[0] && kMagenta[1] < kMagenta[0] &&
+                    kMagenta[1] < kMagenta[2]);
+    // Not yet set (all nought), or not finite: no grade; a negative
+    // saturation is none.
+    RAWFRAME_EXPECT(!gradingOf(Grading{.powerR = 0, .powerG = 0, .powerB = 0}).enabled &&
+                    !gradingOf(std::nullopt).enabled);
+    RAWFRAME_EXPECT(!gradingOf(Grading{.slopeG = std::numeric_limits<float>::infinity()}).enabled);
+    RAWFRAME_EXPECT(gradingOf(Grading{.saturation = -2}).saturation == 0);
+    // A camera's grade reaches its frame.
+    Rig rig;
+    SceneCamera camera{.fovY = 1, .near = 0.1F, .aspect = 1};
+    RAWFRAME_EXPECT(!rig.frame(camera).grading.enabled);
+    camera.grading = Grading{.slopeR = 2};
+    const SceneGrading kGraded = rig.frame(camera).grading;
+    RAWFRAME_EXPECT(kGraded.enabled && kGraded.slope[0] == 2);
 }

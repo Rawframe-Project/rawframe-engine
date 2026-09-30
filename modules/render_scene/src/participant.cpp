@@ -133,6 +133,7 @@ public:
         client_ = client;
         cameraComponent_ = game->camera;
         autoExposureComponent_ = game->autoExposure;
+        gradingComponent_ = game->grading;
         gameMeshes_ = game->meshes.size();
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .sun = game->sun,
@@ -280,6 +281,14 @@ private:
         camera_.near = view.near;
         camera_.exposure = view.exposure;
         camera_.metering.reset();
+        camera_.grading.reset();
+        if (gradingComponent_.has_value()) {
+            if (const auto kGrading = kView.world->registry().find(*gradingComponent_)) {
+                if (const auto* asked = static_cast<const Grading*>(kView.world->getErased(kView.owned, *kGrading))) {
+                    camera_.grading = *asked;
+                }
+            }
+        }
         if (autoExposureComponent_.has_value()) {
             if (const auto kMetering = kView.world->registry().find(*autoExposureComponent_)) {
                 if (const auto* asked =
@@ -302,6 +311,7 @@ private:
     SceneCamera camera_;
     std::optional<schema::ComponentTypeId> cameraComponent_;
     std::optional<schema::ComponentTypeId> autoExposureComponent_;
+    std::optional<schema::ComponentTypeId> gradingComponent_;
     std::optional<execution::MonotonicInstant> presented_;
     std::size_t gameMeshes_ = 0;
     /// Frames seen through the player's own camera.

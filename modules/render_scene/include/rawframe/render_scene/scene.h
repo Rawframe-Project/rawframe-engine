@@ -50,6 +50,23 @@ struct Camera {
     float exposure = 0;
 };
 
+/// `rawframe.model.Grading` as C++ reads it.
+struct Grading {
+    float slopeR = 1;
+    float slopeG = 1;
+    float slopeB = 1;
+    float offsetR = 0;
+    float offsetG = 0;
+    float offsetB = 0;
+    float powerR = 1;
+    float powerG = 1;
+    float powerB = 1;
+    float saturation = 1;
+    float contrast = 1;
+    float temperature = 0;
+    float tint = 0;
+};
+
 /// `rawframe.model.AutoExposure` as C++ reads it.
 struct AutoExposure {
     float minimum = 0;
@@ -140,6 +157,8 @@ struct SceneCamera {
     /// `exposure`, if the camera asks (D293); and the seconds since the
     /// frame before, on the Host's timeline.
     std::optional<AutoExposure> metering;
+    /// The camera's grading, if it asks (D294).
+    std::optional<Grading> grading;
     float elapsed = 0;
 };
 
@@ -301,6 +320,25 @@ struct SceneMetering {
     bool snap = false;
 };
 
+/// ADR-0051's grading form (D294), as the display stage applies it to the
+/// scene's linear light before the tonemapper: whether it grades; the white
+/// balance as one matrix of linear Rec. 709 (rows of three, the camera's
+/// temperature and tint taken through LMS); the ASC CDL slope, offset, and
+/// power; saturation; and contrast about middle grey. A grade with a value
+/// not finite or a power not above nought grades nothing.
+struct SceneGrading {
+    bool enabled = false;
+    std::array<float, 9> balance{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    std::array<float, 3> slope{1, 1, 1};
+    std::array<float, 3> offset{0, 0, 0};
+    std::array<float, 3> power{1, 1, 1};
+    float saturation = 1;
+    float contrast = 1;
+};
+
+/// The grading a camera's `Grading` asks for, made sound (D294).
+[[nodiscard]] SceneGrading gradingOf(const std::optional<Grading>& asked) noexcept;
+
 /// ADR-0051's temporal inputs (D291). Whether the frame is antialiased
 /// over time; its subpixel jitter, a pixel's fraction across and down in
 /// [-0.5, 0.5), which the GPU half applies to the projection at its size;
@@ -330,6 +368,7 @@ struct SceneFrame {
     SceneTemporal temporal;
     SceneLightShadows lightShadows;
     SceneMetering metering;
+    SceneGrading grading;
     /// The punctual lights that reach the view, and the clusters they are
     /// culled into (D290).
     std::vector<SceneLight> lights3d;
@@ -458,6 +497,7 @@ struct GameScene {
     std::vector<schema::ComponentTypeId> models;
     std::optional<schema::ComponentTypeId> camera;
     std::optional<schema::ComponentTypeId> autoExposure;
+    std::optional<schema::ComponentTypeId> grading;
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
     std::vector<schema::ComponentTypeId> points;
@@ -468,7 +508,7 @@ struct GameScene {
 /// Finds the game's components of `rawframe.model`'s types, whose layouts
 /// in `program` must be what this module reads, and its meshes. Refuses
 /// (`NoModels`) a game with no model component, and (`BadComponents`) one
-/// with two cameras, auto-exposures, suns, or skies.
+/// with two cameras, auto-exposures, gradings, suns, or skies.
 [[nodiscard]] result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const kest::Program& program);
 
 } // namespace rawframe::render_scene

@@ -320,6 +320,7 @@ struct Scene::State {
         frame.projection = Matrix{kFocal / kAspect, 0, 0, 0, 0, kFocal, 0, 0, 0, 0, 0, -1, 0, 0, kNear, 0};
         frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;
         frame.metering = meteringOf(camera);
+        frame.grading = gradingOf(camera.grading);
         frame.forward = kForward;
         const bool kShadows = kSees && settings.shadows.cascades > 0 && settings.shadows.side > 0 &&
                               settings.shadows.distance > kNear &&
@@ -651,6 +652,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             RAWFRAME_TRY(kOne(loaded.camera, component.id, "a game has at most one 3D camera: a client has one view"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.AutoExposure")) {
             RAWFRAME_TRY(kOne(loaded.autoExposure, component.id, "a game has at most one auto-exposure: one view"));
+        } else if (world_kest::ofEngineType(component, "rawframe.model.Grading")) {
+            RAWFRAME_TRY(kOne(loaded.grading, component.id, "a game has at most one grading: one view"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.Sun")) {
             RAWFRAME_TRY(kOne(loaded.sun, component.id, "a game has at most one sun"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.Sky")) {
@@ -706,6 +709,22 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"compensation", offsetof(AutoExposure, compensation)},
                            {"low", offsetof(AutoExposure, low)},
                            {"high", offsetof(AutoExposure, high)}}));
+    RAWFRAME_TRY(kLaidOut(loaded.grading.has_value(),
+                          "rawframe.model.Grading",
+                          sizeof(Grading),
+                          {{"slopeR", offsetof(Grading, slopeR)},
+                           {"slopeG", offsetof(Grading, slopeG)},
+                           {"slopeB", offsetof(Grading, slopeB)},
+                           {"offsetR", offsetof(Grading, offsetR)},
+                           {"offsetG", offsetof(Grading, offsetG)},
+                           {"offsetB", offsetof(Grading, offsetB)},
+                           {"powerR", offsetof(Grading, powerR)},
+                           {"powerG", offsetof(Grading, powerG)},
+                           {"powerB", offsetof(Grading, powerB)},
+                           {"saturation", offsetof(Grading, saturation)},
+                           {"contrast", offsetof(Grading, contrast)},
+                           {"temperature", offsetof(Grading, temperature)},
+                           {"tint", offsetof(Grading, tint)}}));
     RAWFRAME_TRY(kLaidOut(loaded.sun.has_value(),
                           "rawframe.model.Sun",
                           sizeof(Sun),

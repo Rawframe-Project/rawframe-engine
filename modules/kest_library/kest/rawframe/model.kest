@@ -54,6 +54,30 @@ struct Camera {
     exposure: f32
 }
 
+// A camera's grading (ADR-0051, ADR-0047), on the same entity as its
+// camera: the scene's light, before it is mapped for display, balanced to
+// a white `temperature` warmer (above nought) or cooler and `tint` more
+// magenta (above nought) or green, about minus one to one; then each
+// channel times its `slope`, plus its `offset`, to the power of its
+// `power` (ASC CDL); then `saturation` (one keeps it, nought is grey) and
+// `contrast` about middle grey (one keeps it). One with a power not above
+// nought grades nothing: a grade not yet set is all nought.
+struct Grading {
+    slopeR: f32
+    slopeG: f32
+    slopeB: f32
+    offsetR: f32
+    offsetG: f32
+    offsetB: f32
+    powerR: f32
+    powerG: f32
+    powerB: f32
+    saturation: f32
+    contrast: f32
+    temperature: f32
+    tint: f32
+}
+
 // A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
 // the same entity as its camera, whose `exposure` it starts from: the
 // frame's light measured in a histogram of its luminance, the darkest
