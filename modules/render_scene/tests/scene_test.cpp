@@ -315,7 +315,7 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
         "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion],\n"
         "        blooms: [model.Bloom], mirrors: [model.ScreenSpaceReflections], blurs: [model.MotionBlur],\n"
-        "        focuses: [model.DepthOfField]) {\n}\n";
+        "        focuses: [model.DepthOfField], contacts: [model.ContactShadows]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
@@ -333,22 +333,24 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "component 0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.mirror "
         "rawframe.model.ScreenSpaceReflections\n"
         "component 1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.blur rawframe.model.MotionBlur\n"
-        "component 2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.focus rawframe.model.DepthOfField\n";
+        "component 2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.focus rawframe.model.DepthOfField\n"
+        "component 3d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.contact rawframe.model.ContactShadows\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
-    RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
-                    kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
-                    kLoaded->camera == schema::ComponentTypeId::fromText("7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->meshes.empty() && kLoaded->points == (std::vector<schema::ComponentTypeId>{kPointId}) &&
-                    kLoaded->spots == (std::vector<schema::ComponentTypeId>{kSpotId}) &&
-                    kLoaded->probes == (std::vector<schema::ComponentTypeId>{kProbeId}) &&
-                    kLoaded->autoExposure ==
-                        schema::ComponentTypeId::fromText("bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->grading == schema::ComponentTypeId::fromText("cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->occlusion == schema::ComponentTypeId::fromText("ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->bloom == schema::ComponentTypeId::fromText("fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->reflections == schema::ComponentTypeId::fromText("0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->motionBlur == schema::ComponentTypeId::fromText("1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->depthOfField == schema::ComponentTypeId::fromText("2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
+    RAWFRAME_EXPECT(
+        kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
+        kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
+        kLoaded->camera == schema::ComponentTypeId::fromText("7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->meshes.empty() && kLoaded->points == (std::vector<schema::ComponentTypeId>{kPointId}) &&
+        kLoaded->spots == (std::vector<schema::ComponentTypeId>{kSpotId}) &&
+        kLoaded->probes == (std::vector<schema::ComponentTypeId>{kProbeId}) &&
+        kLoaded->autoExposure == schema::ComponentTypeId::fromText("bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->grading == schema::ComponentTypeId::fromText("cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->occlusion == schema::ComponentTypeId::fromText("ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->bloom == schema::ComponentTypeId::fromText("fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->reflections == schema::ComponentTypeId::fromText("0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->motionBlur == schema::ComponentTypeId::fromText("1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->depthOfField == schema::ComponentTypeId::fromText("2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->contactShadows == schema::ComponentTypeId::fromText("3d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -1007,6 +1009,18 @@ RAWFRAME_TEST(ACamerasDepthOfFieldIsMadeSound) {
     Rig rig;
     RAWFRAME_EXPECT(rig.frame({.depthOfField = DepthOfField{.focus = 5, .aperture = 2}}).depthOfField.enabled &&
                     !rig.frame({}).depthOfField.enabled);
+}
+
+RAWFRAME_TEST(ACamerasContactShadowsAreMadeSound) {
+    RAWFRAME_EXPECT(!contactShadowsOf(std::nullopt).enabled && !contactShadowsOf(ContactShadows{.length = 0}).enabled &&
+                    !contactShadowsOf(ContactShadows{.length = std::nanf("")}).enabled);
+    const SceneContactShadows kAsked = contactShadowsOf(ContactShadows{.length = 0.5F});
+    RAWFRAME_EXPECT(kAsked.enabled && kAsked.length == 0.5F &&
+                    contactShadowsOf(ContactShadows{.length = 100}).length == 10 &&
+                    contactShadowsOf(ContactShadows{.length = 0.001F}).length == 0.01F);
+    Rig rig;
+    RAWFRAME_EXPECT(rig.frame({.contactShadows = ContactShadows{.length = 0.5F}}).contactShadows.enabled &&
+                    !rig.frame({}).contactShadows.enabled);
 }
 
 RAWFRAME_TEST(ACamerasBloomIsMadeSound) {

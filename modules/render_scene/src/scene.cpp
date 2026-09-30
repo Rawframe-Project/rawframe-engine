@@ -378,6 +378,7 @@ struct Scene::State {
         frame.reflections = reflectionsOf(camera.reflections);
         frame.motionBlur = motionBlurOf(camera.motionBlur);
         frame.depthOfField = depthOfFieldOf(camera.depthOfField);
+        frame.contactShadows = contactShadowsOf(camera.contactShadows);
         frame.tonemapper = camera.tonemapper <= static_cast<std::uint32_t>(Tonemapper::Linear)
                                ? static_cast<Tonemapper>(camera.tonemapper)
                                : Tonemapper::Agx;
@@ -853,6 +854,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
         } else if (world_kest::ofEngineType(component, "rawframe.model.ScreenSpaceReflections")) {
             RAWFRAME_TRY(
                 kOne(loaded.reflections, component.id, "a game has at most one screen-space reflections: one view"));
+        } else if (world_kest::ofEngineType(component, "rawframe.model.ContactShadows")) {
+            RAWFRAME_TRY(kOne(loaded.contactShadows, component.id, "a game has at most one contact shadows: one view"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.DepthOfField")) {
             RAWFRAME_TRY(kOne(loaded.depthOfField, component.id, "a game has at most one depth of field: one view"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.MotionBlur")) {
@@ -934,6 +937,10 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                           "rawframe.model.DepthOfField",
                           sizeof(DepthOfField),
                           {{"focus", offsetof(DepthOfField, focus)}, {"aperture", offsetof(DepthOfField, aperture)}}));
+    RAWFRAME_TRY(kLaidOut(loaded.contactShadows.has_value(),
+                          "rawframe.model.ContactShadows",
+                          sizeof(ContactShadows),
+                          {{"length", offsetof(ContactShadows, length)}}));
     RAWFRAME_TRY(kLaidOut(
         loaded.occlusion.has_value(),
         "rawframe.model.AmbientOcclusion",

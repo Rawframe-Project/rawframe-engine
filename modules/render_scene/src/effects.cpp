@@ -46,4 +46,11 @@ SceneDepthOfField depthOfFieldOf(const std::optional<DepthOfField>& asked) noexc
                              .aperture = std::clamp(asked->aperture, 0.5F, 64.0F)};
 }
 
+SceneContactShadows contactShadowsOf(const std::optional<ContactShadows>& asked) noexcept {
+    if (!asked.has_value() || !std::isfinite(asked->length) || asked->length <= 0) {
+        return {};
+    }
+    return SceneContactShadows{.enabled = true, .length = std::clamp(asked->length, 0.01F, 10.0F)};
+}
+
 } // namespace rawframe::render_scene

@@ -144,6 +144,15 @@ struct DepthOfField {
     aperture: f32
 }
 
+// A camera's contact shadows (ADR-0051, D338), on the same entity as its
+// camera: where something the view sees stands within `length` meters of
+// a point toward the sun, the point is shaded from the sun, so the small
+// shadows where things touch, which the shadow maps are too coarse to
+// hold, are drawn. A length not above nought draws none.
+struct ContactShadows {
+    length: f32
+}
+
 // A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
 // the same entity as its camera, whose `exposure` it starts from: the
 // frame's light measured in a histogram of its luminance, the darkest
