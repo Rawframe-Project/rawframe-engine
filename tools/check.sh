@@ -133,6 +133,21 @@ else
             grep '^page:' out/web-play.log
         fi
     fi
+    # Every engine shader's WGSL compiled by the browser's WebGPU (D286).
+    if [ "$failures" -eq 0 ]; then
+        step "web shaders"
+        wgsl_status=0
+        RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
+            PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
+            tools/node_page.sh tools/check_wgsl.mjs "$PWD" >out/web-shaders.log 2>&1 || wgsl_status=$?
+        if [ "$wgsl_status" -eq 77 ]; then
+            echo "web shaders skipped: no Puppeteer or no browser for it"
+        elif [ "$wgsl_status" -ne 0 ]; then
+            tail -30 out/web-shaders.log; fail "web shaders"
+        else
+            grep '^page: [0-9]' out/web-shaders.log
+        fi
+    fi
     # Measured last, alone, so the builds do not share the machine with it.
     if [ "$failures" -eq 0 ]; then
         step "tick budget"

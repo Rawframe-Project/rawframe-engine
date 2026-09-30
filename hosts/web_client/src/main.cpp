@@ -19,8 +19,8 @@
 // Or the page lets a canvas run the client (D250): `play` instead of
 // `start` makes a window of a canvas and plays the player from its input,
 // and the window system's frames, not the page's, drive the Host; with
-// `render.device`, the game is drawn in the canvas through the browser's
-// WebGPU (D282):
+// `render.device`, the game (its scene and its canvas, D286) is drawn in
+// the page's canvas through the browser's WebGPU (D282):
 //
 //   rawframe_client_play(client, configuration, length) -> 0 or an exit code
 //   rawframe_client_ended(client) -> -1 while it plays, then its exit code
@@ -40,6 +40,8 @@
 #include "rawframe/render/registrar.h"
 #include "rawframe/render_canvas/registrar.h"
 #include "rawframe/render_canvas_gpu/registrar.h"
+#include "rawframe/render_scene/registrar.h"
+#include "rawframe/render_scene_gpu/registrar.h"
 #include "rawframe/window/windows.h"
 #include "rawframe/window_host/window_host.h"
 #include "rawframe/world_animation/registrar.h"
@@ -69,7 +71,7 @@ using namespace rawframe;
 // Kest game, 2D and 3D physics, the simulation's animation, replication
 // over the page's WebTransport with the game's input sources, and its sound,
 // which the page takes and plays (D259).
-constexpr std::array<composition::RegistrarEntry, 13> kRegistrars = {
+constexpr std::array<composition::RegistrarEntry, 15> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
     composition::RegistrarEntry{"network_web", &network_web::registerParticipants, network_web::kScopes},
@@ -79,6 +81,8 @@ constexpr std::array<composition::RegistrarEntry, 13> kRegistrars = {
     composition::RegistrarEntry{"render_canvas", &render_canvas::registerParticipants, render_canvas::kScopes},
     composition::RegistrarEntry{
         "render_canvas_gpu", &render_canvas_gpu::registerParticipants, render_canvas_gpu::kScopes},
+    composition::RegistrarEntry{"render_scene", &render_scene::registerParticipants, render_scene::kScopes},
+    composition::RegistrarEntry{"render_scene_gpu", &render_scene_gpu::registerParticipants, render_scene_gpu::kScopes},
     composition::RegistrarEntry{"world_animation", &world_animation::registerParticipants, world_animation::kScopes},
     composition::RegistrarEntry{"world_audio", &world_audio::registerParticipants, world_audio::kScopes},
     composition::RegistrarEntry{"world_kest", &world_kest::registerParticipants, world_kest::kScopes},
