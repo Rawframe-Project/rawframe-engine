@@ -10,8 +10,10 @@ physics3d gravity 0 -10 0
 collision class walker 5f23859a6c00ebba
 
 # The mound's triangles, cooked from glTF (the plaza is played with its
-# cooked content).
+# cooked content), and a crate's, each bringing its own materials, the
+# crate's planks a texture kept exact (D314).
 mesh 6d3cbd2231e069f1 mound.gltf
+mesh 7f3a9c21e84d06b5 crate.gltf
 
 # What the models are made of (D303): the strollers are brass, the pillars
 # polished marble, and the floor paved, its slabs a texture (D309), kept
@@ -74,6 +76,12 @@ spawn 1 plaza.blade pivotX=30 pivotY=4 pivotZ=30 rawframe.animation.animator gra
 # The mound, ten meters across and 1.2 high, on the plaza's floor.
 spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-20 y=0.5 z=20 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=mound.gltf
 
+# Three crates a meter on each side, one on the other two, beyond where
+# walkers start.
+spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-22 y=1 z=-12 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=crate.gltf
+spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-20.9 y=1 z=-11.8 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=crate.gltf
+spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-21.45 y=2 z=-11.9 rawframe.physics3d.velocity rawframe.physics3d.mesh mesh=crate.gltf
+
 # Eight strollers about the plaza, each starting its round at another time.
 spawn 1 plaza.stroller left=240 rawframe.physics3d.pose x=-12 y=1.4 z=-4 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=210 rawframe.physics3d.pose x=-6 y=1.4 z=12 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
@@ -96,7 +104,8 @@ interpolate rawframe.physics3d.pose
 predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick
 
 # What a client draws (D283): every body it mirrors, by its shape and in
-# a color for what it is, the mound as its own mesh, through its own
+# a color for what it is, the mound and the crates as their own meshes in
+# their own materials, through its own
 # walker's camera, and the strollers as figures where their poses stand
 # (D288), each with a lantern (D290), the view's exposure metered (D293);
 # no server carries a look, a figure, a lantern, a view, or a meter.

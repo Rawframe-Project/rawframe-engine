@@ -181,10 +181,11 @@ fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], po
 
 // What a client draws of a body (D283): the engine's mesh of its shape at
 // its size, or, for one made of the game's triangles, that mesh as it is,
-// in a color for what it is: walkers blue, what moves by itself steel,
-// what is pushed about wood, the floor paving (its slabs a texture),
-// pillars stone, and the rest sandstone. A capsule's mesh is stretched to the capsule's height,
-// its caps with it. A client gives every body it mirrors a look; no server
+// in its own materials (D314); the others in a color for what it is:
+// walkers blue, what moves by itself steel, what is pushed about wood,
+// the floor paving (its slabs a texture), pillars stone, and the rest
+// sandstone. A capsule's mesh is stretched to the capsule's height, its
+// caps with it. A client gives every body it mirrors a look; no server
 // carries one.
 fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
     let i = 0
@@ -201,7 +202,7 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
             look = model.Model(model.CYLINDER, b.width, b.height, b.width, 0xE6E0D2FF, MARBLE)
         }
         if b.shape == physics3d.MESH {
-            look = model.Model(u64(0), 1.0, 1.0, 1.0, 0x5E8C3AFF, u64(0))
+            look = model.Model(u64(0), 1.0, 1.0, 1.0, 0xFFFFFFFF, u64(0))
         }
         if b.shape == physics3d.BOX && b.width > 20.0 && b.height < 1.0 {
             look.color = 0x8C8C84FF

@@ -1,5 +1,8 @@
 {
   "schema": 1,
   "resourceId": "46837f0a03812629d3a7e3df63fa0905",
-  "importer": "rawframe.mesh"
+  "importer": "rawframe.mesh",
+  "subassets": {
+    "material/Grass": "3aa889e544dcfceb69d2f26ce56d4eac"
+  }
 }

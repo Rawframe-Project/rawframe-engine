@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "resourceId": "5cdfde71bbc7f622b4c029a1aed59f5d",
+  "importer": "rawframe.mesh",
+  "settings": {
+    "exact": true
+  },
+  "subassets": {
+    "material/Iron": "4fa8f5945fc4b1ae8d454ad061562124",
+    "material/Planks": "ea67406491ff8d5d03a9f0f0e6487de4",
+    "texture/Planks": "71cc8dbcf82d6cfaf7c2823fba81bfa3"
+  }
+}

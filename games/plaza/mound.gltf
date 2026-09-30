@@ -26,9 +26,25 @@
       "POSITION": 0,
       "NORMAL": 1
      },
-     "indices": 2
+     "indices": 2,
+     "material": 0
     }
    ]
+  }
+ ],
+ "materials": [
+  {
+   "name": "Grass",
+   "pbrMetallicRoughness": {
+    "baseColorFactor": [
+     0.1119,
+     0.2623,
+     0.0423,
+     1
+    ],
+    "metallicFactor": 0,
+    "roughnessFactor": 0.9
+   }
   }
  ],
  "buffers": [
