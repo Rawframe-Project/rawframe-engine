@@ -5,6 +5,7 @@
 #include "capture.h"
 #include "casting.h"
 #include "environment.h"
+#include "focus.h"
 #include "meshes.h"
 #include "metering.h"
 #include "motion.h"
@@ -69,6 +70,8 @@ struct SceneRenderer::State {
     std::optional<ReflectionPass> reflecting;
     /// Its motion blur, when a view asks (D334).
     std::optional<MotionBlurPass> motionBlur;
+    /// Its depth of field, when a view asks (D336).
+    std::optional<DepthOfFieldPass> focus;
     /// Its bloom, when a view asks (D328).
     std::optional<BloomPass> bloom;
     /// Its picture, graded and tonemapped, and antialiased by FXAA when a
@@ -461,6 +464,7 @@ struct SceneRenderer::State {
             }
         }
         RAWFRAME_TRY(motionBlur->declare(*frame, open.width, open.height, writes));
+        RAWFRAME_TRY(focus->declare(*frame, open.width, open.height, writes));
         RAWFRAME_TRY(bloom->declare(*frame, open.width, open.height));
         RAWFRAME_TRY(picture->declare(*frame, open.width, open.height, bloom->enabled() ? bloom->levels() : 0, writes));
         writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
@@ -602,9 +606,10 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(metering->addPasses(now.scene));
         RAWFRAME_TRY(temporal->addPass(now.scene, now.motion));
         // The post chain in ADR-0051's order: the temporal slot, the motion
-        // blur, the bloom, then the picture.
+        // blur, the depth of field, the bloom, then the picture.
         RAWFRAME_TRY(motionBlur->addPasses(temporal->shown(now.scene), now.motion, now.depth));
-        const mrhiResourceId kShown = motionBlur->shown(temporal->shown(now.scene));
+        RAWFRAME_TRY(focus->addPasses(motionBlur->shown(temporal->shown(now.scene)), now.depth));
+        const mrhiResourceId kShown = focus->shown(motionBlur->shown(temporal->shown(now.scene)));
         RAWFRAME_TRY(bloom->addPasses(kShown));
         RAWFRAME_TRY(picture->addPasses(kShown,
                                         bloom->enabled() ? bloom->spread() : mrhiResourceId{},
@@ -668,6 +673,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(occlusion->write(now.upload));
         RAWFRAME_TRY(reflecting->write(now.upload));
         RAWFRAME_TRY(motionBlur->write(now.upload));
+        RAWFRAME_TRY(focus->write(now.upload));
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
             if (mrhiWriteBuffer(native, now.upload, now.cascades[at], 0, &now.block.cascades[at], sizeof(Matrix4)) !=
                 mrhi_success) {
@@ -809,7 +815,8 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(metering->record(pipelines, now.scene, now.width, now.height));
         RAWFRAME_TRY(temporal->record(pipelines, now.scene, now.motion));
         RAWFRAME_TRY(motionBlur->record(pipelines));
-        RAWFRAME_TRY(bloom->record(pipelines, motionBlur->shown(temporal->shown(now.scene))));
+        RAWFRAME_TRY(focus->record(pipelines));
+        RAWFRAME_TRY(bloom->record(pipelines, focus->shown(motionBlur->shown(temporal->shown(now.scene)))));
         return picture->record(pipelines);
     }
 
@@ -830,6 +837,7 @@ struct SceneRenderer::State {
             statistics.framesBloomed += bloom->enabled() ? 1 : 0;
             statistics.framesReflected += reflecting->enabled() ? 1 : 0;
             statistics.framesMotionBlurred += motionBlur->enabled() ? 1 : 0;
+            statistics.framesFocused += focus->enabled() ? 1 : 0;
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;
@@ -880,6 +888,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->occlusion.emplace(device.native());
     state->reflecting.emplace(device.native());
     state->motionBlur.emplace(device.native());
+    state->focus.emplace(device.native());
     state->bloom.emplace(device.native());
     state->picture.emplace(device.native());
     RAWFRAME_TRY(state->metering->make());

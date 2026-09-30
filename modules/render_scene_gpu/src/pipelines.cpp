@@ -2,6 +2,7 @@
 
 #include "blocks.h"
 #include "generated/bloom_container.h"
+#include "generated/focus_container.h"
 #include "generated/fxaa_container.h"
 #include "generated/meter_container.h"
 #include "generated/motion_container.h"
@@ -34,10 +35,11 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked : {&casting, &cutCasting,    &depth,     &cutout,      &surfaces,        &cutSurfaces,
-                         &occlude, &blurOcclusion, &march,     &motionTiles, &motionNeighbors, &motionGather,
-                         &lit,     &maskedLit,     &glass,     &sky,         &temporal,        &tonemap,
-                         &fxaa,    &bloomFirst,    &bloomDown, &bloomUp}) {
+    for (Asked* asked :
+         {&casting,       &cutCasting, &depth,       &cutout,          &surfaces,     &cutSurfaces,    &occlude,
+          &blurOcclusion, &march,      &motionTiles, &motionNeighbors, &motionGather, &focusPrefilter, &focusBokeh,
+          &focusCombine,  &lit,        &maskedLit,   &glass,           &sky,          &temporal,       &tonemap,
+          &fxaa,          &bloomFirst, &bloomDown,   &bloomUp}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -58,7 +60,8 @@ Pipelines::~Pipelines() {
                                        occlusionShader,
                                        bloomShader,
                                        reflectShader,
-                                       motionShader}) {
+                                       motionShader,
+                                       focusShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -105,6 +108,7 @@ result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kBloomContainer, bloomShader));
     RAWFRAME_TRY(makeShader(kReflectContainer, reflectShader));
     RAWFRAME_TRY(makeShader(kMotionContainer, motionShader));
+    RAWFRAME_TRY(makeShader(kFocusContainer, focusShader));
     // Each vertex of the mesh, then each draw's placement.
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
@@ -225,6 +229,24 @@ result::Status Pipelines::make() {
         def.fragmentEntryLength = kEntry.size();
         def.colorTargetCount = 1;
         def.colorTargets[0].format = kFormat;
+        RAWFRAME_TRY(ask(def, *kAsked));
+    }
+    // The depth of field's halving and bokeh at half size, then its blend,
+    // each a triangle over its target (D336).
+    for (const auto& [kEntry, kLabel, kAsked] :
+         {std::tuple{std::string_view{"prefilter"}, std::string_view{"rawframe.scene.focus.halved"}, &focusPrefilter},
+          std::tuple{std::string_view{"bokeh"}, std::string_view{"rawframe.scene.focus.bokeh"}, &focusBokeh},
+          std::tuple{std::string_view{"combine"}, std::string_view{"rawframe.scene.focus.combined"}, &focusCombine}}) {
+        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+        def.label = kLabel.data();
+        def.labelLength = kLabel.size();
+        def.shader = focusShader;
+        def.vertexEntry = "vs";
+        def.vertexEntryLength = 2;
+        def.fragmentEntry = kEntry.data();
+        def.fragmentEntryLength = kEntry.size();
+        def.colorTargetCount = 1;
+        def.colorTargets[0].format = kSceneFormat;
         RAWFRAME_TRY(ask(def, *kAsked));
     }
     // The casters into the sun's shadow map: the vertex's place alone,
@@ -425,10 +447,11 @@ result::Status Pipelines::make() {
 
 result::Result<bool> Pipelines::ready() {
     bool all = true;
-    for (Asked* asked : {&casting,  &cutCasting,    &depth, &cutout,      &surfaces,        &cutSurfaces,
-                         &occlude,  &blurOcclusion, &march, &motionTiles, &motionNeighbors, &motionGather,
-                         &lit,      &maskedLit,     &glass, &sky,         &histogram,       &adapt,
-                         &temporal, &tonemap,       &fxaa,  &bloomFirst,  &bloomDown,       &bloomUp}) {
+    for (Asked* asked :
+         {&casting,       &cutCasting, &depth,       &cutout,          &surfaces,     &cutSurfaces,    &occlude,
+          &blurOcclusion, &march,      &motionTiles, &motionNeighbors, &motionGather, &focusPrefilter, &focusBokeh,
+          &focusCombine,  &lit,        &maskedLit,   &glass,           &sky,          &histogram,      &adapt,
+          &temporal,      &tonemap,    &fxaa,        &bloomFirst,      &bloomDown,    &bloomUp}) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {

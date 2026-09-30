@@ -26,6 +26,7 @@ CONTAINERS = (
     ("render_scene_gpu", "occlusion", (("vert", "vs"), ("frag", "occlude"), ("blur.frag", "blur"))),
     ("render_scene_gpu", "reflect", (("vert", "vs"), ("frag", "march"))),
     ("render_scene_gpu", "motion", (("vert", "vs"), ("tile.frag", "tile"), ("neighbor.frag", "neighbor"), ("gather.frag", "gather"))),
+    ("render_scene_gpu", "focus", (("vert", "vs"), ("prefilter.frag", "prefilter"), ("bokeh.frag", "bokeh"), ("combine.frag", "combine"))),
     ("render_scene_gpu", "fxaa", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "bloom", (("vert", "vs"), ("first.frag", "first"), ("down.frag", "down"), ("up.frag", "up"))),
     ("render_scene_gpu", "meter", (("histogram.comp", "histogram"), ("adapt.comp", "adapt"))),

@@ -57,6 +57,7 @@ struct Pipelines {
     mrhiShaderId bloomShader{};
     mrhiShaderId reflectShader{};
     mrhiShaderId motionShader{};
+    mrhiShaderId focusShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -89,6 +90,10 @@ struct Pipelines {
     Asked motionTiles;
     Asked motionNeighbors;
     Asked motionGather;
+    /// The depth of field's halving, its bokeh, and its blend (D336).
+    Asked focusPrefilter;
+    Asked focusBokeh;
+    Asked focusCombine;
     Asked lit;
     /// The masked models lit only where their depth is the prepass's
     /// (D310).

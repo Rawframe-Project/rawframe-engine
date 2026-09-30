@@ -80,11 +80,13 @@ struct RendererStatistics {
     /// Frames antialiased by FXAA (D296).
     std::uint64_t framesSmoothed = 0;
     /// Frames with ambient occlusion (D327), with bloom (D328), with
-    /// screen-space reflections (D331), and with motion blur (D334).
+    /// screen-space reflections (D331), with motion blur (D334), and with
+    /// depth of field (D336).
     std::uint64_t framesOccluded = 0;
     std::uint64_t framesBloomed = 0;
     std::uint64_t framesReflected = 0;
     std::uint64_t framesMotionBlurred = 0;
+    std::uint64_t framesFocused = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the
