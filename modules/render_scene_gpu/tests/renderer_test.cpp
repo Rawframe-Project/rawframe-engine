@@ -273,7 +273,12 @@ RAWFRAME_TEST(TheSunCastsShadows) {
     floor.normal[10] = 0.1F;
     floor.model[13] = -2;
     frame.draws = {floor, box(8, 0.5F, {1, 1, 1, 1})};
+    // Both cast into every cascade.
     frame.shadows.casters = frame.draws;
+    for (std::size_t at = 0; at < frame.shadows.count; ++at) {
+        frame.shadows.cascades[at].firstCaster = 0;
+        frame.shadows.cascades[at].casterCount = 2;
+    }
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };

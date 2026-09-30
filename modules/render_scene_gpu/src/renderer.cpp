@@ -144,10 +144,10 @@ struct SceneRenderer::State {
 
     struct Placed {
         std::vector<float> instances;
-        /// The draws', then the sun's casters', then each square of the
-        /// punctual shadows' atlas's (D292).
+        /// The draws', then each of the sun's cascades' casters' (D298),
+        /// then each square of the punctual shadows' atlas's (D292).
         Runs runs;
-        Runs casterRuns;
+        std::array<Runs, 4> cascadeRuns;
         std::vector<Runs> slotRuns;
     };
 
@@ -155,7 +155,16 @@ struct SceneRenderer::State {
         Placed placed;
         std::uint32_t count = 0;
         append(scene.draws, usable, placed, placed.runs, count, true);
-        append(scene.shadows.casters, usable, placed, placed.casterRuns, count, false);
+        const std::span<const render_scene::SceneDraw> kSunCasters = scene.shadows.casters;
+        for (std::size_t at = 0; at < scene.shadows.count && at < placed.cascadeRuns.size(); ++at) {
+            const render_scene::ShadowCascade& kCascade = scene.shadows.cascades[at];
+            append(kSunCasters.subspan(kCascade.firstCaster, kCascade.casterCount),
+                   usable,
+                   placed,
+                   placed.cascadeRuns[at],
+                   count,
+                   false);
+        }
         const std::span<const render_scene::SceneDraw> kCasters = scene.lightShadows.casters;
         for (const render_scene::ShadowSlot& slot : scene.lightShadows.slots) {
             append(kCasters.subspan(slot.firstCaster, slot.casterCount),
@@ -277,7 +286,7 @@ struct SceneRenderer::State {
                                             .height = kSide,
                                             .minDepth = 0,
                                             .maxDepth = 1},
-                               .casters = &now.placed.casterRuns});
+                               .casters = &now.placed.cascadeRuns[at]});
         }
         RAWFRAME_TRY(cast(now, now.shadowPass, squares));
         squares.clear();
@@ -389,9 +398,11 @@ struct SceneRenderer::State {
             now.imported.emplace(mesh, std::pair{vertices, indices});
         }
         now.draws = !now.placed.runs.empty();
-        now.casters = !now.placed.casterRuns.empty() || std::ranges::any_of(now.placed.slotRuns, [](const Runs& runs) {
+        const auto kAny = [](const Runs& runs) {
             return !runs.empty();
-        });
+        };
+        now.casters =
+            std::ranges::any_of(now.placed.cascadeRuns, kAny) || std::ranges::any_of(now.placed.slotRuns, kAny);
         if (now.draws || now.casters) {
             mrhiBufferDef def = mrhiDefaultBufferDef();
             def.size = now.placed.instances.size() * sizeof(float);
