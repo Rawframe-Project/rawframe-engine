@@ -58,7 +58,7 @@
      "outputs": [{"location": 0, "type": "float32", "components": 4}]}
   ],
   "bindings": [
-    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex", "fragment"], "min_size": 800},
+    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex", "fragment"], "min_size": 816},
     {"table": 0, "slot": 1, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "depth", "view_dimension": "2d", "multisampled": false},
     {"table": 0, "slot": 2, "kind": "sampler", "stages": ["fragment"], "sampler": "comparison"},
@@ -87,6 +87,8 @@
     {"table": 0, "slot": 19, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"},
     {"table": 0, "slot": 20, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 48},
     {"table": 0, "slot": 21, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 22, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "float", "view_dimension": "2d", "multisampled": false}
   ],
   "constants": []

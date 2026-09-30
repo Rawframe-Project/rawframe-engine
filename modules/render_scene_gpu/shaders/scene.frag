@@ -46,8 +46,10 @@ layout(set = 0, binding = 0, std140) uniform Frame
     // spherical harmonics' coefficients.
     vec4 environment;
     vec4 irradiance[9];
-    // Whether the view's ambient occlusion is on (D327).
+    // Whether the view's ambient occlusion is on (D327), and its
+    // screen-space reflections (D331).
     vec4 occlusion;
+    vec4 reflections;
 }
 frame;
 
@@ -178,6 +180,11 @@ vec3 projected(Probe probe, vec3 placed, vec3 mirrored)
 // What of the light from all around reaches each texel (D327), where the
 // view's ambient occlusion is on: at half the target's size.
 layout(set = 0, binding = 21) uniform texture2D occlusionTexture;
+
+// What each texel's reflection met in the picture before, pre-exposed,
+// and how much of it to take (D331), where the view's screen-space
+// reflections are on.
+layout(set = 0, binding = 22) uniform texture2D reflectionTexture;
 
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
@@ -489,7 +496,8 @@ void main()
     }
     // Along the reflection, the sky's picture's or the probe's level for
     // the roughness, weighed by the split sum (D322, D325).
-    vec3 along = kSheen * mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
+    vec3 weight = kSheen;
+    vec3 incoming = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
     const Probe kProbe = probes[min(inProbe, uint(probes.length()) - 1u)];
     if (kProbe.place.w > 0.5) {
         const vec3 kToward = kProbe.extent.x > 0.0 ? projected(kProbe, inPlaced, kMirrored) : kMirrored;
@@ -497,8 +505,16 @@ void main()
                                            kToward,
                                            kSurface.roughness * (kProbe.place.w - 1.0)).rgb;
         const vec2 kScaleBias = environmentBrdf(kSurface.roughness, kNv);
-        along = (kSurface.headOn * kScaleBias.x + kScaleBias.y) * kProbe.light.rgb * kReflected;
+        weight = kSurface.headOn * kScaleBias.x + kScaleBias.y;
+        incoming = kProbe.light.rgb * kReflected;
     }
+    // Over it, what the screen-space reflection met, as much as it found
+    // (D331), for an opaque model the prepass saw.
+    if (frame.reflections.x > 0.5 && kOpacity >= 0.999) {
+        const vec4 kMet = texelFetch(reflectionTexture, ivec2(gl_FragCoord.xy), 0);
+        incoming = mix(incoming, kMet.rgb / max(exposure.value.y, 1e-12), kMet.a);
+    }
+    const vec3 along = weight * incoming;
     // What of it reaches the point (D327): for an opaque model, what the
     // ambient occlusion found; a translucent one the prepass never saw
     // takes all of it. An opaque model's alpha, interpolated, can fall a

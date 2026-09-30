@@ -35,6 +35,9 @@ public:
     /// reuses the picture before.
     [[nodiscard]] bool enabled() const noexcept;
     [[nodiscard]] bool reused() const noexcept;
+    /// The picture before, joined to the open frame when it is enabled; a
+    /// picture to read only where it is reused (D331).
+    [[nodiscard]] mrhiResourceId before() const noexcept;
 
     /// What the frame shows: the blended picture, or `scene` without it.
     [[nodiscard]] mrhiResourceId shown(mrhiResourceId scene) const noexcept;

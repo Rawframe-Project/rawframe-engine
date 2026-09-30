@@ -44,16 +44,13 @@ result::Status OcclusionPass::declare(const render_scene::SceneFrame& frame,
     block_ = OcclusionBlock{.toPoint = inverseOf(block.viewProjection),
                             .viewProjection = block.viewProjection,
                             .settings = {frame.occlusion.radius, frame.occlusion.intensity, frame.projection[14], 0}};
-    // The surfaces at the target's size; the occlusion at half of it,
-    // rounded up.
-    for (const auto& [kFormat, kHalved, kMade] : {std::tuple{kSurfaceFormat, false, &surfaces_},
-                                                  std::tuple{kAmbientFormat, true, &raw_},
-                                                  std::tuple{kAmbientFormat, true, &blurred_}}) {
+    // The occlusion at half the target's size, rounded up.
+    for (mrhiResourceId* made : {&raw_, &blurred_}) {
         mrhiTextureDef def = mrhiDefaultTextureDef();
-        def.format = kFormat;
-        def.width = kHalved ? (width + 1) / 2 : width;
-        def.height = kHalved ? (height + 1) / 2 : height;
-        if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &def, kMade); kDeclared != mrhi_success) {
+        def.format = kAmbientFormat;
+        def.width = (width + 1) / 2;
+        def.height = (height + 1) / 2;
+        if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &def, made); kDeclared != mrhi_success) {
             return failed("the ambient occlusion's targets could not be declared", kDeclared);
         }
     }
@@ -70,18 +67,15 @@ bool OcclusionPass::enabled() const noexcept {
     return enabled_;
 }
 
-mrhiResourceId OcclusionPass::surfaces() const noexcept {
-    return surfaces_;
-}
-
 mrhiResourceId OcclusionPass::reaching() const noexcept {
     return blurred_;
 }
 
-result::Status OcclusionPass::addPasses(mrhiResourceId depth) {
+result::Status OcclusionPass::addPasses(mrhiResourceId depth, mrhiResourceId surfaces) {
     if (!enabled_) {
         return {};
     }
+    surfaces_ = surfaces;
     for (const auto& [kTarget, kReads, kMade] :
          {std::tuple{raw_,
                      std::array<mrhiAccess, 3>{depthOf(depth),

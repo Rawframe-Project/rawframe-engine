@@ -24,6 +24,7 @@ CONTAINERS = (
     ("render_scene_gpu", "scene", (("vert", "vs"), ("frag", "fs"), ("cut.frag", "cut"), ("normal.frag", "normal"),
                                    ("cutnormal.frag", "cutNormal"))),
     ("render_scene_gpu", "occlusion", (("vert", "vs"), ("frag", "occlude"), ("blur.frag", "blur"))),
+    ("render_scene_gpu", "reflect", (("vert", "vs"), ("frag", "march"))),
     ("render_scene_gpu", "fxaa", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "bloom", (("vert", "vs"), ("first.frag", "first"), ("down.frag", "down"), ("up.frag", "up"))),
     ("render_scene_gpu", "meter", (("histogram.comp", "histogram"), ("adapt.comp", "adapt"))),

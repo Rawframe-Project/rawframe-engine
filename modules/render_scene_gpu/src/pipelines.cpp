@@ -5,6 +5,7 @@
 #include "generated/fxaa_container.h"
 #include "generated/meter_container.h"
 #include "generated/occlusion_container.h"
+#include "generated/reflect_container.h"
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
 #include "generated/sky_container.h"
@@ -40,6 +41,7 @@ Pipelines::~Pipelines() {
                          &cutSurfaces,
                          &occlude,
                          &blurOcclusion,
+                         &march,
                          &lit,
                          &maskedLit,
                          &glass,
@@ -68,7 +70,8 @@ Pipelines::~Pipelines() {
                                        meterShader,
                                        fxaaShader,
                                        occlusionShader,
-                                       bloomShader}) {
+                                       bloomShader,
+                                       reflectShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -113,6 +116,7 @@ result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
     RAWFRAME_TRY(makeShader(kOcclusionContainer, occlusionShader));
     RAWFRAME_TRY(makeShader(kBloomContainer, bloomShader));
+    RAWFRAME_TRY(makeShader(kReflectContainer, reflectShader));
     // Each vertex of the mesh, then each draw's placement.
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
@@ -196,6 +200,20 @@ result::Status Pipelines::make() {
         def.colorTargets[0].format = kAmbientFormat;
         RAWFRAME_TRY(ask(def, *kAsked));
     }
+    // The screen-space reflections from the prepass's depth and surfaces
+    // and the picture before (D331), a triangle over the target.
+    mrhiGraphicsPipelineDef marching = mrhiDefaultGraphicsPipelineDef();
+    constexpr std::string_view kMarchLabel = "rawframe.scene.reflections";
+    marching.label = kMarchLabel.data();
+    marching.labelLength = kMarchLabel.size();
+    marching.shader = reflectShader;
+    marching.vertexEntry = "vs";
+    marching.vertexEntryLength = 2;
+    marching.fragmentEntry = "march";
+    marching.fragmentEntryLength = 5;
+    marching.colorTargetCount = 1;
+    marching.colorTargets[0].format = kReflectionFormat;
+    RAWFRAME_TRY(ask(marching, march));
     // The casters into the sun's shadow map: the vertex's place alone,
     // pushed from the sun by its slope (the depth half of ADR-0051's
     // bias; the normal half is where the map is read).
@@ -394,9 +412,9 @@ result::Status Pipelines::make() {
 
 result::Result<bool> Pipelines::ready() {
     bool all = true;
-    for (Asked* asked : {&casting,       &cutCasting, &depth,     &cutout,     &surfaces,  &cutSurfaces, &occlude,
-                         &blurOcclusion, &lit,        &maskedLit, &glass,      &sky,       &histogram,   &adapt,
-                         &temporal,      &tonemap,    &fxaa,      &bloomFirst, &bloomDown, &bloomUp}) {
+    for (Asked* asked : {&casting,       &cutCasting, &depth,   &cutout,    &surfaces,   &cutSurfaces, &occlude,
+                         &blurOcclusion, &march,      &lit,     &maskedLit, &glass,      &sky,         &histogram,
+                         &adapt,         &temporal,   &tonemap, &fxaa,      &bloomFirst, &bloomDown,   &bloomUp}) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {

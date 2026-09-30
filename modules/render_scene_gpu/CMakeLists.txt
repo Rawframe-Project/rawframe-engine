@@ -6,6 +6,6 @@ if(NOT TARGET rawframe_render)
     return()
 endif()
 
-rawframe_module(NAME render_scene_gpu SOURCES src/blocks.cpp src/bloom.cpp src/capture.cpp src/casting.cpp src/environment.cpp src/meshes.cpp src/metering.cpp src/occlusion.cpp src/participant.cpp src/pipelines.cpp src/renderer.cpp src/runs.cpp src/tables.cpp src/temporal.cpp DEPS render render_scene material texture mesh composition diagnostics result base)
+rawframe_module(NAME render_scene_gpu SOURCES src/blocks.cpp src/bloom.cpp src/capture.cpp src/casting.cpp src/environment.cpp src/meshes.cpp src/metering.cpp src/occlusion.cpp src/participant.cpp src/pipelines.cpp src/reflection.cpp src/renderer.cpp src/runs.cpp src/tables.cpp src/temporal.cpp DEPS render render_scene material texture mesh composition diagnostics result base)
 
-rawframe_module_tests(NAME render_scene_gpu SOURCES tests/bloom_test.cpp tests/capture_test.cpp tests/environment_test.cpp tests/occlusion_test.cpp tests/renderer_test.cpp tests/shadow_test.cpp)
+rawframe_module_tests(NAME render_scene_gpu SOURCES tests/bloom_test.cpp tests/capture_test.cpp tests/environment_test.cpp tests/occlusion_test.cpp tests/reflection_test.cpp tests/renderer_test.cpp tests/shadow_test.cpp)

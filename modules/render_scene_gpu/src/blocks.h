@@ -48,10 +48,12 @@ struct FrameBlock {
     /// spherical harmonics' coefficients.
     std::array<float, 4> environment{};
     std::array<std::array<float, 4>, 9> irradiance{};
-    /// One where the view's ambient occlusion is on (D327).
+    /// One where the view's ambient occlusion is on (D327), and where its
+    /// screen-space reflections are (D331).
     std::array<float, 4> occlusion{};
+    std::array<float, 4> reflections{};
 };
-static_assert(sizeof(FrameBlock) == 800, "the scene's shaders read the frame as 800 bytes");
+static_assert(sizeof(FrameBlock) == 816, "the scene's shaders read the frame as 816 bytes");
 
 /// A point or spot light as the scene's shaders read it (std430, D290).
 struct LightBlock {

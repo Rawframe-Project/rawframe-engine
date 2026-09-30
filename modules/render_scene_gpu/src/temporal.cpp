@@ -94,6 +94,10 @@ bool TemporalPass::reused() const noexcept {
     return enabled_ && block_.state[0] > 0;
 }
 
+mrhiResourceId TemporalPass::before() const noexcept {
+    return before_;
+}
+
 mrhiResourceId TemporalPass::shown(mrhiResourceId scene) const noexcept {
     return enabled_ ? resolved_ : scene;
 }

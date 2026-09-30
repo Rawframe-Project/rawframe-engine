@@ -21,6 +21,7 @@ struct Frame {
     environment: vec4f,
     irradiance: array<vec4f, 9>,
     occlusion: vec4f,
+    reflections: vec4f,
 }
 
 struct Light {
@@ -66,6 +67,8 @@ struct ShadowSlot {
 @group(0) @binding(19) var environmentSampler: sampler;
 // What of the light from all around reaches each texel (D327).
 @group(0) @binding(21) var occlusionTexture: texture_2d<f32>;
+// What each texel's reflection met, and how much (D331).
+@group(0) @binding(22) var reflectionTexture: texture_2d<f32>;
 
 // What each model reflects (D325): the sky's picture first, then each
 // reflection probe; scene.frag's Probe.
@@ -373,15 +376,22 @@ fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(
     if (frame.environment.w > 0.5) {
         around = frame.sky.rgb * irradianceAt(n);
     }
-    var along = sheen * mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
+    var weight = sheen;
+    var incoming = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
     let chosen = probes[min(probe, arrayLength(&probes) - 1u)];
     if (chosen.place.w > 0.5) {
         let toward = select(mirrored, projected(chosen, placed, mirrored), chosen.extent.x > 0.0);
         let picture = textureSampleLevel(environmentTexture, environmentSampler, toward,
                                          surface.roughness * (chosen.place.w - 1.0)).rgb;
         let scaleBias = environmentBrdf(surface.roughness, nv);
-        along = (surface.headOn * scaleBias.x + scaleBias.y) * chosen.light.rgb * picture;
+        weight = surface.headOn * scaleBias.x + scaleBias.y;
+        incoming = chosen.light.rgb * picture;
     }
+    if (frame.reflections.x > 0.5 && opacity >= 0.999) {
+        let met = textureLoad(reflectionTexture, vec2i(position.xy), 0);
+        incoming = mix(incoming, met.rgb / max(exposure.y, 1e-12), met.a);
+    }
+    let along = weight * incoming;
     var reaches = 1.0;
     if (frame.occlusion.x > 0.5 && opacity >= 0.999) {
         reaches = textureLoad(occlusionTexture, vec2i(position.xy) / 2, 0).r;

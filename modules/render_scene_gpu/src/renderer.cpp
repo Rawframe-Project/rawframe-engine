@@ -11,6 +11,7 @@
 #include "pipelines.h"
 #include "rawframe/render/textures.h"
 #include "rawframe/render_scene_gpu/errors.h"
+#include "reflection.h"
 #include "runs.h"
 #include "tables.h"
 #include "temporal.h"
@@ -62,6 +63,8 @@ struct SceneRenderer::State {
     std::optional<LightCapturing> capturing;
     /// Its ambient occlusion, when a view asks (D327).
     std::optional<OcclusionPass> occlusion;
+    /// Its screen-space reflections, when a view asks (D331).
+    std::optional<ReflectionPass> reflecting;
     /// Its bloom, when a view asks (D328).
     std::optional<BloomPass> bloom;
     std::optional<DeviceMeshes> held;
@@ -190,8 +193,11 @@ struct SceneRenderer::State {
         mrhiResourceId instances{};
         mrhiResourceId blockResource{};
         mrhiResourceId scene{};
-        /// The prepass's depth.
+        /// The prepass's depth, and each point's surface beside it when a
+        /// screen-space effect reads them (D327, D331).
         mrhiResourceId depth{};
+        bool surfaced = false;
+        mrhiResourceId surfaces{};
         mrhiPassId upload{};
         mrhiPassId depthPass{};
         mrhiPassId litPass{};
@@ -452,6 +458,27 @@ struct SceneRenderer::State {
         // picture before into the other kept picture (D291).
         RAWFRAME_TRY(temporal->declare(*frame, open.width, open.height, writes));
         RAWFRAME_TRY(occlusion->declare(*frame, now.block, open.width, open.height, writes));
+        // The reflections read the picture before, so only where it is
+        // reused (D331).
+        RAWFRAME_TRY(
+            reflecting->declare(*frame,
+                                now.block,
+                                temporal->enabled() && temporal->reused() ? temporal->before() : mrhiResourceId{},
+                                open.width,
+                                open.height,
+                                writes));
+        now.block.reflections = {reflecting->enabled() ? 1.0F : 0.0F, 0, 0, 0};
+        now.surfaced = occlusion->enabled() || reflecting->enabled();
+        if (now.surfaced) {
+            mrhiTextureDef def = mrhiDefaultTextureDef();
+            def.format = kSurfaceFormat;
+            def.width = open.width;
+            def.height = open.height;
+            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &def, &now.surfaces);
+                kDeclared != mrhi_success) {
+                return failed("the prepass's surfaces could not be declared", kDeclared);
+            }
+        }
         RAWFRAME_TRY(bloom->declare(*frame, open.width, open.height));
         if (bloom->enabled()) {
             now.picture.bloom = {frame->bloom.intensity, 1.0F / static_cast<float>(bloom->levels()), 0, 0};
@@ -540,10 +567,10 @@ struct SceneRenderer::State {
         mrhiPassDef depthDef = mrhiDefaultPassDef();
         depthDef.accesses = reads.data();
         depthDef.accessCount = static_cast<std::uint32_t>(reads.size());
-        // With the ambient occlusion, each point's surface beside its
-        // depth (D327).
-        if (occlusion->enabled()) {
-            depthDef.colorTargets[0].resource = occlusion->surfaces();
+        // With the ambient occlusion or the reflections, each point's
+        // surface beside its depth (D327, D331).
+        if (now.surfaced) {
+            depthDef.colorTargets[0].resource = now.surfaces;
             depthDef.colorTargets[0].load = mrhi_loadClear;
             depthDef.colorTargets[0].store = mrhi_storeKeep;
             depthDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 1, .blue = 0, .alpha = 1};
@@ -562,12 +589,17 @@ struct SceneRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &depthDef, &now.depthPass); kAdded != mrhi_success) {
             return failed("the depth pass could not be added", kAdded);
         }
-        RAWFRAME_TRY(occlusion->addPasses(now.depth));
+        RAWFRAME_TRY(occlusion->addPasses(now.depth, now.surfaces));
+        RAWFRAME_TRY(reflecting->addPasses(now.depth, now.surfaces));
         // The models, then the sky where none lies, drawn with the exposure
-        // the device holds (D293), reading what the occlusion found.
+        // the device holds (D293), reading what the occlusion found and
+        // what the reflections met.
         std::vector<mrhiAccess> litReads = reads;
         if (occlusion->enabled()) {
             litReads.push_back(wholeOf(occlusion->reaching(), mrhi_accessSampled));
+        }
+        if (reflecting->enabled()) {
+            litReads.push_back(wholeOf(reflecting->reflected(), mrhi_accessSampled));
         }
         mrhiPassDef litDef = depthDef;
         litDef.accesses = litReads.data();
@@ -681,6 +713,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(metering->write(now.upload));
         RAWFRAME_TRY(temporal->write(now.upload));
         RAWFRAME_TRY(occlusion->write(now.upload));
+        RAWFRAME_TRY(reflecting->write(now.upload));
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
             if (mrhiWriteBuffer(native, now.upload, now.cascades[at], 0, &now.block.cascades[at], sizeof(Matrix4)) !=
                 mrhi_success) {
@@ -707,11 +740,12 @@ struct SceneRenderer::State {
         // The scene's table: slots 10 to 17 are each run's textures; 18 and
         // 19 the sky's picture (D322), or the run's probe's; 20 what each
         // reflects (D325); 21 what the ambient occlusion found, or white
-        // (D327).
+        // (D327); 22 what the screen-space reflections met, or white
+        // (D331).
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
             samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
-        const std::array<mrhiBinding, 22> kFrameBinding = {
+        const std::array<mrhiBinding, 23> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, now.shadowMap),
             samplerAt(2, pipelines.shadowSampler),
@@ -733,7 +767,8 @@ struct SceneRenderer::State {
             kPicture,
             kPictureSampler,
             bufferAt(20, now.probesResource, now.reflections.blocks.size() * sizeof(ProbeBlock)),
-            textureAt(21, occlusion->enabled() ? occlusion->reaching() : resourceOf(textures->resource(0)))};
+            textureAt(21, occlusion->enabled() ? occlusion->reaching() : resourceOf(textures->resource(0))),
+            textureAt(22, reflecting->enabled() ? reflecting->reflected() : resourceOf(textures->resource(0)))};
         std::array<mrhiBinding, 4> skyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
                                                  bufferAt(1, metering->exposure(), sizeof(ExposureBlock)),
                                                  kPicture,
@@ -754,10 +789,12 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 22> binding = kFrameBinding;
-            // The prepass, which the occlusion comes after, reads white.
+            std::array<mrhiBinding, 23> binding = kFrameBinding;
+            // The prepass, which the occlusion and the reflections come
+            // after, reads white.
             if (pass.index1 == now.depthPass.index1 && pass.generation == now.depthPass.generation) {
                 binding[21] = textureAt(21, resourceOf(textures->resource(0)));
+                binding[22] = textureAt(22, resourceOf(textures->resource(0)));
             }
             std::optional<std::pair<render_scene::SceneTextures, std::uint32_t>> bound;
             for (const Run& run : runs) {
@@ -785,9 +822,10 @@ struct SceneRenderer::State {
         // The opaque models, their depth first, the masked cut there
         // (D310); then, lit, the sky where none lies; then the translucent
         // over both (D305).
-        // With the ambient occlusion, the prepass leaves each point's
-        // surface too, and the occlusion is found between the two (D327).
-        const bool kSurfaces = occlusion->enabled();
+        // With the ambient occlusion or the reflections, the prepass
+        // leaves each point's surface too, and they are found between the
+        // two (D327, D331).
+        const bool kSurfaces = now.surfaced;
         for (const auto& [kPass, kPipeline, kLit] :
              {std::tuple{now.depthPass, (kSurfaces ? pipelines.surfaces : pipelines.depth).pipeline, false},
               std::tuple{now.litPass, pipelines.lit.pipeline, true}}) {
@@ -810,6 +848,7 @@ struct SceneRenderer::State {
             }
             if (!kLit) {
                 RAWFRAME_TRY(occlusion->record(pipelines, now.depth));
+                RAWFRAME_TRY(reflecting->record(pipelines));
             }
         }
         RAWFRAME_TRY(capturing->record(now.scene));
@@ -860,6 +899,7 @@ struct SceneRenderer::State {
             statistics.framesSmoothed += declared->smoothed ? 1 : 0;
             statistics.framesOccluded += occlusion->enabled() ? 1 : 0;
             statistics.framesBloomed += bloom->enabled() ? 1 : 0;
+            statistics.framesReflected += reflecting->enabled() ? 1 : 0;
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;
@@ -908,6 +948,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->temporal.emplace(device.native());
     state->capturing.emplace(device);
     state->occlusion.emplace(device.native());
+    state->reflecting.emplace(device.native());
     state->bloom.emplace(device.native());
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};

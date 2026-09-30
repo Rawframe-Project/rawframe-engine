@@ -27,6 +27,8 @@ constexpr mrhiFormat kDepthFormat = mrhi_formatDepth32Float;
 constexpr mrhiFormat kSurfaceFormat = mrhi_formatRgba16Float;
 /// What of the light from all around reaches each point (D327).
 constexpr mrhiFormat kAmbientFormat = mrhi_formatR8Unorm;
+/// What each point reflects of the picture before, and how much (D331).
+constexpr mrhiFormat kReflectionFormat = mrhi_formatRgba16Float;
 /// The frame's picture, as `render` declares it.
 constexpr mrhiFormat kPictureFormat = mrhi_formatRgba8UnormSrgb;
 
@@ -53,6 +55,7 @@ struct Pipelines {
     mrhiShaderId fxaaShader{};
     mrhiShaderId occlusionShader{};
     mrhiShaderId bloomShader{};
+    mrhiShaderId reflectShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -79,6 +82,8 @@ struct Pipelines {
     /// The ambient occlusion, and its blur (D327).
     Asked occlude;
     Asked blurOcclusion;
+    /// The screen-space reflections (D331).
+    Asked march;
     Asked lit;
     /// The masked models lit only where their depth is the prepass's
     /// (D310).

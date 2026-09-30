@@ -33,7 +33,8 @@ public:
 
     /// Joins the open frame if its view asks, at `width` by `height`, seen
     /// through `block`'s view: its targets and block declared, and what
-    /// the upload pass writes added to `writes`.
+    /// the upload pass writes added to `writes`. The prepass's surfaces
+    /// target is the renderer's, shared with the reflections (D331).
     result::Status declare(const render_scene::SceneFrame& frame,
                            const FrameBlock& block,
                            std::uint32_t width,
@@ -41,12 +42,11 @@ public:
                            std::vector<mrhiAccess>& writes);
 
     [[nodiscard]] bool enabled() const noexcept;
-    /// The prepass's surfaces target, and what reaches each point, blurred.
-    [[nodiscard]] mrhiResourceId surfaces() const noexcept;
+    /// What reaches each point, blurred.
     [[nodiscard]] mrhiResourceId reaching() const noexcept;
 
-    /// Its two passes, after the prepass that wrote `depth`.
-    result::Status addPasses(mrhiResourceId depth);
+    /// Its two passes, after the prepass that wrote `depth` and `surfaces`.
+    result::Status addPasses(mrhiResourceId depth, mrhiResourceId surfaces);
 
     /// Its write, in the upload pass.
     result::Status write(mrhiPassId upload);

@@ -1,0 +1,21 @@
+{
+  "root_block_bytes": 0,
+  "entries": [
+    {"name": "vs", "stage": "vertex",
+     "variables": [{"location": 0, "type": "float32", "components": 2}]},
+    {"name": "march", "stage": "fragment",
+     "variables": [{"location": 0, "type": "float32", "components": 2}],
+     "outputs": [{"location": 0, "type": "float32", "components": 4}]}
+  ],
+  "bindings": [
+    {"table": 0, "slot": 0, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "depth", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 1, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 2, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 3, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"},
+    {"table": 0, "slot": 4, "kind": "uniform_buffer", "stages": ["fragment"], "min_size": 208}
+  ],
+  "constants": []
+}

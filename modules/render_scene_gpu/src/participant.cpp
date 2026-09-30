@@ -144,7 +144,8 @@ public:
                       diagnostics::field("framesMetered", statistics.framesMetered),
                       diagnostics::field("framesSmoothed", statistics.framesSmoothed),
                       diagnostics::field("framesOccluded", statistics.framesOccluded),
-                      diagnostics::field("framesBloomed", statistics.framesBloomed)});
+                      diagnostics::field("framesBloomed", statistics.framesBloomed),
+                      diagnostics::field("framesReflected", statistics.framesReflected)});
     }
 
 private:
