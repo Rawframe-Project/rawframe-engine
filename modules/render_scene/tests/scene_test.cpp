@@ -255,6 +255,13 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
     RAWFRAME_EXPECT(near(kDefault.lights.sun[0], 100000, 1) &&
                     near(kDefault.lights.sky[2], 5000 * std::pow((0xEB / 255.0F + 0.055F) / 1.055F, 2.4F), 0.5F) &&
                     kDefault.lights.sky[0] < kDefault.lights.sky[2] && kDefault.lights.toSun[1] > 0.8F);
+    // The default ground gives back a fifth of the sun's light at its
+    // height and the sky's (D304).
+    const float kFifth = std::pow((0x7C / 255.0F + 0.055F) / 1.055F, 2.4F);
+    RAWFRAME_EXPECT(
+        near(kDefault.lights.ground[0],
+             kFifth * ((100000 * kDefault.lights.toSun[1] / std::numbers::pi_v<float>)+kDefault.lights.sky[0]),
+             1));
     const world::EntityHandle kLight = *rig.world.create();
     Sun sun{.directionX = 0, .directionY = -2, .directionZ = 0, .illuminance = 1000, .color = 0x808080FF};
     Sky sky{.luminance = 10, .color = 0x0000FFFF};
@@ -264,6 +271,12 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
     // sRGB 0x80 is about 0.216 linear.
     RAWFRAME_EXPECT(near(kLit.lights.toSun[1], 1) && near(kLit.lights.sun[0], 215.86F, 0.1F) &&
                     near(kLit.lights.sky[0], 0) && near(kLit.lights.sky[2], 10));
+    // A ground giving back nothing is black below the horizon (D304).
+    RAWFRAME_EXPECT(kLit.lights.ground == (std::array<float, 3>{0, 0, 0}));
+    sky.ground = 0xFFFFFFFF;
+    RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSkyId), &sky).has_value());
+    const SceneFrame& kWhite = rig.frame({});
+    RAWFRAME_EXPECT(near(kWhite.lights.ground[2], (215.86F / std::numbers::pi_v<float>)+10, 0.1F));
     // A sun not finite gives no light rather than a poisoned frame.
     Sun broken{.illuminance = std::numeric_limits<float>::infinity()};
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSunId), &broken).has_value());

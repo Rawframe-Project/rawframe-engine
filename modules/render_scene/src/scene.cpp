@@ -32,6 +32,9 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, RenderScene
 
 /// A clear sky's color, sRGB: the sky's default (D288).
 constexpr std::uint32_t kClearSky = 0x8FB8EBFF;
+/// The default ground's albedo, sRGB: a fifth, near the Earth's land's
+/// (D304).
+constexpr std::uint32_t kGround = 0x7C7C7CFF;
 
 /// A mesh with the sphere around it, in its own space.
 struct Bounded {
@@ -174,7 +177,7 @@ struct Scene::State {
         const Sun kSun = sunNow.value_or(Sun{
             .directionX = -0.3F, .directionY = -1.0F, .directionZ = -0.4F, .illuminance = 100000, .color = 0xFFFFFFFF});
         // A clear day's sky: its light, and its blue.
-        const Sky kSky = skyNow.value_or(Sky{.luminance = 5000, .color = kClearSky});
+        const Sky kSky = skyNow.value_or(Sky{.luminance = 5000, .color = kClearSky, .ground = kGround});
         const Vector kToSun = normalized({-kSun.directionX, -kSun.directionY, -kSun.directionZ});
         const Vector kSunColor = colorOf(kSun.color);
         const Vector kSkyColor = colorOf(kSky.color);
@@ -184,6 +187,15 @@ struct Scene::State {
             SceneLights{.toSun = kToSun,
                         .sun = {kSunColor[0] * kIlluminance, kSunColor[1] * kIlluminance, kSunColor[2] * kIlluminance},
                         .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance}};
+        // The ground, level and unshadowed: what reaches it, the sun's at
+        // its height and the whole upper sky's (π times its luminance),
+        // given back evenly by its albedo.
+        const Vector kAlbedo = colorOf(kSky.ground);
+        const float kSunOnGround = std::max(kToSun[1], 0.0F) / std::numbers::pi_v<float>;
+        for (std::size_t channel = 0; channel < 3; ++channel) {
+            frame.lights.ground[channel] =
+                kAlbedo[channel] * ((frame.lights.sun[channel] * kSunOnGround) + frame.lights.sky[channel]);
+        }
     }
 
     /// The sun's cascades for this view (ADR-0051): the view from the near
@@ -809,10 +821,11 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"directionZ", offsetof(Sun, directionZ)},
                            {"illuminance", offsetof(Sun, illuminance)},
                            {"color", offsetof(Sun, color)}}));
-    RAWFRAME_TRY(kLaidOut(loaded.sky.has_value(),
-                          "rawframe.model.Sky",
-                          sizeof(Sky),
-                          {{"luminance", offsetof(Sky, luminance)}, {"color", offsetof(Sky, color)}}));
+    RAWFRAME_TRY(kLaidOut(
+        loaded.sky.has_value(),
+        "rawframe.model.Sky",
+        sizeof(Sky),
+        {{"luminance", offsetof(Sky, luminance)}, {"color", offsetof(Sky, color)}, {"ground", offsetof(Sky, ground)}}));
     RAWFRAME_TRY(kLaidOut(!loaded.points.empty(),
                           "rawframe.model.PointLight",
                           sizeof(PointLight),

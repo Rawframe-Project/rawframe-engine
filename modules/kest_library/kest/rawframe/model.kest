@@ -124,13 +124,17 @@ struct Sun {
     color: u32
 }
 
-// The sky's light, arriving from every side (ADR-0051's ambient term):
-// `luminance` candela per square meter (about 5,000 on a clear day), in
-// `color`. A game declares at most one; without one, a clear day's: 5,000
-// in a clear blue (0x8FB8EBFF).
+// The sky's light, arriving from above the horizon (ADR-0051's ambient
+// term): `luminance` candela per square meter (about 5,000 on a clear
+// day), in `color`. From below it comes what the ground gives back of the
+// sun's light and the sky's (D304): `ground` is its albedo, 0xRRGGBBAA in
+// sRGB (alpha unused), and nought gives nothing back. A game declares at
+// most one; without one, a clear day's: 5,000 in a clear blue
+// (0x8FB8EBFF) over a ground giving back a fifth (0x7C7C7CFF).
 struct Sky {
     luminance: f32
     color: u32
+    ground: u32
 }
 
 // A point light (ADR-0051), on any entity, at its pose: `lumens` of

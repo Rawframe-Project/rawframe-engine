@@ -101,6 +101,7 @@ struct Sun {
 struct Sky {
     float luminance = 0;
     std::uint32_t color = 0xFFFFFFFF;
+    std::uint32_t ground = 0;
 };
 
 /// `rawframe.model.PointLight` as C++ reads it.
@@ -217,6 +218,9 @@ struct SceneLights {
     std::array<float, 3> toSun{0, 1, 0};
     std::array<float, 3> sun{0, 0, 0};
     std::array<float, 3> sky{0, 0, 0};
+    /// The ground's luminance below the horizon (D304): its albedo times
+    /// the sun's illuminance on it and the sky's, over π.
+    std::array<float, 3> ground{0, 0, 0};
 };
 
 /// A punctual light as the extract stage copies it out of the World, where
