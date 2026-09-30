@@ -67,16 +67,21 @@
 // `multiply` and `add` (D311) take inputs `a` and `b`, each connected or a
 // literal: a number (float), two (vec2), or three (color3); their output
 // `out` is of their inputs' type, or of the one that is not a float when
-// the other is (broadcast). A node's params and inputs are in name order.
+// the other is (broadcast). `separate3` (D312) takes a color3 `in` and
+// gives its channels as `r`, `g`, and `b` (floats). A node's params and
+// inputs are in name order.
 //
 // A node of any other type is kept whole, as SPEC-0028 keeps what it does
-// not know. Generation 1 compiles one sampled texture: its color, or its
-// color multiplied by a literal (the glTF factor), feeding `base_color`;
-// its alpha, or its alpha multiplied by a literal, feeding
-// `geometry_opacity`; sampled at a mesh's first coordinates, or at them
-// scaled and moved by `multiply` and `add` with literals (SPEC-0026's
-// `tile_and_offset`, folded). Any other connection, or a node of a type it
-// does not know, does not compile until the rest of the library exists.
+// not know. Generation 1 compiles three textures at most (D312), each
+// sampled at a mesh's first coordinates, or at them scaled and moved by
+// `multiply` and `add` with literals (SPEC-0026's `tile_and_offset`,
+// folded), and each feeding its inputs directly or multiplied by a literal
+// (the glTF factor): the base texture, its color `base_color` and its alpha
+// `geometry_opacity`; the packed texture, a channel each (`separate3`'s,
+// or its alpha) for `base_metalness`, `specular_roughness`, and
+// `ambient_occlusion`; the emission texture, its color `emission_color`.
+// Any other connection, or a node of a type it does not know, does not
+// compile until the rest of the library exists.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/graph/graph.h"
@@ -130,26 +135,50 @@ enum class Address : std::uint8_t {
     Clamp
 };
 
-/// The texture a material samples (D308): the game's texture by the
+/// A texture a material samples (D308): the game's texture by the
 /// identity its `texture` line gives it (none when nought), its declared
-/// sampler state, and what it feeds.
+/// sampler state, and where it is sampled: a mesh's first coordinates
+/// times `scale`, plus `offset` (D311).
 struct SampledTexture {
     std::uint64_t id = 0;
     Filter filter = Filter::Linear;
     Address address = Address::Repeat;
-    /// The base color is its color; the opacity its alpha.
-    bool color = false;
-    bool alpha = false;
-    /// Where it is sampled: a mesh's first coordinates times `scale`, plus
-    /// `offset` (D311).
     std::array<float, 2> scale{1, 1};
     std::array<float, 2> offset{0, 0};
 
     friend bool operator==(const SampledTexture&, const SampledTexture&) = default;
 };
 
-/// A compiled material: its declared states, its Surface, and the texture
-/// it samples. An input the texture feeds holds what the texture is
+/// The channel of a texture a number is read from; none for an input no
+/// texture feeds.
+enum class Channel : std::uint8_t {
+    None,
+    Red,
+    Green,
+    Blue,
+    Alpha
+};
+
+/// The textures a material samples and what each feeds (D312).
+struct Textures {
+    /// Its color the base color, its alpha the opacity.
+    SampledTexture base;
+    bool baseColor = false;
+    bool opacity = false;
+    /// A channel each for the metalness, the roughness, and the occlusion
+    /// (glTF packs them blue, green, and red).
+    SampledTexture packed;
+    Channel metalness = Channel::None;
+    Channel roughness = Channel::None;
+    Channel occlusion = Channel::None;
+    /// Its color the emission's color.
+    SampledTexture emission;
+
+    friend bool operator==(const Textures&, const Textures&) = default;
+};
+
+/// A compiled material: its declared states, its Surface, and the textures
+/// it samples. An input a texture feeds holds what the texture is
 /// multiplied by in `surface`, one when nothing (D311).
 struct Material {
     Shading shading = Shading::Lit;
@@ -157,7 +186,7 @@ struct Material {
     float alphaCutoff = 0.5F;
     bool doubleSided = false;
     Surface surface;
-    SampledTexture texture;
+    Textures textures;
 
     friend bool operator==(const Material&, const Material&) = default;
 };
@@ -175,11 +204,11 @@ inline constexpr std::string_view kSampleTexture2dType = "rawframe/sample_textur
 inline constexpr std::string_view kUvType = "rawframe/uv@1";
 inline constexpr std::string_view kMultiplyType = "rawframe/multiply@1";
 inline constexpr std::string_view kAddType = "rawframe/add@1";
+inline constexpr std::string_view kSeparate3Type = "rawframe/separate3@1";
 
 /// A surface material's document for `made`, its surface node keyed by
-/// `node` and the nodes its texture needs by the ids after it: the sampler
-/// + 1, the coordinates + 2, their scale + 3 and offset + 4, the color's
-/// factor + 5, the opacity's + 6, each only where it is needed.
+/// `node` and the nodes its textures need by the ids after it, in order,
+/// each only where it is needed.
 [[nodiscard]] graph::Document documentOf(const Material& made, graph::NodeId node);
 
 /// Refuses (`Invalid`) a document out of the family's rules: kind
@@ -207,12 +236,14 @@ inline constexpr std::string_view kAddType = "rawframe/add@1";
 /// node of a type this family does not know.
 [[nodiscard]] result::Result<base::Sha256Digest> semanticHash(const graph::Document& surface);
 
-/// A compiled material's bytes: `RFMT`, format 3, its states (shading,
+/// A compiled material's bytes: `RFMT`, format 4, its states (shading,
 /// blend, double sided, a byte each and one of nought), its alpha cutoff,
-/// its Surface's sixteen numbers in the contract's order, then its texture:
-/// the identity (eight bytes), the filter, the address, what it feeds (one
-/// for the color, two for the alpha), a byte each, and one of nought; its
-/// scale and offset, two numbers each.
+/// its Surface's sixteen numbers in the contract's order, then its base,
+/// packed, and emission textures, each its identity (eight bytes), filter,
+/// and address (a byte each), two bytes of nought, and its scale and
+/// offset (two numbers each); then what they feed, a byte each: the base
+/// color, the opacity, the metalness's channel, the roughness's, the
+/// occlusion's, and three of nought.
 [[nodiscard]] std::vector<std::byte> encode(const Material& made);
 
 /// Refuses (`Invalid`) bytes `encode` would not make, or a material a
@@ -223,10 +254,14 @@ inline constexpr std::string_view kAddType = "rawframe/add@1";
 /// color and metalness; the specular color times its weight, and the
 /// roughness; the emission's color times its luminance, and the index of
 /// refraction; the opacity, the occlusion, the alpha cutoff (nought unless
-/// masked), and its flags: one when unlit, two when its texture's color
-/// multiplies the base color, four when the texture's alpha multiplies the
-/// opacity; then the texture's scale and offset (D311).
-inline constexpr std::size_t kBlobFloats = 20;
+/// masked), and its flags: one when unlit, two when its base texture's
+/// color multiplies the base color, four when its alpha multiplies the
+/// opacity; the base, packed, and emission textures' scale and offset
+/// (D311); and the channels (one to four, red to alpha; nought for none)
+/// of the packed texture multiplying the metalness, the roughness, and the
+/// occlusion, then one when the emission texture's color multiplies the
+/// emission (D312). 128 bytes, Falcor's precedent.
+inline constexpr std::size_t kBlobFloats = 32;
 [[nodiscard]] std::array<float, kBlobFloats> blobOf(const Material& made) noexcept;
 
 } // namespace rawframe::material

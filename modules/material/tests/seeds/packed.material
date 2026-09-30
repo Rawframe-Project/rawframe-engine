@@ -1,0 +1,78 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "020ff7080d79b52c": {
+      "type": "rawframe/uv@1",
+      "params": {},
+      "inputs": {}
+    },
+    "1345136049620182": {
+      "type": "rawframe/separate3@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "c6e8c0f1628ba7e7",
+          "output": "color"
+        }
+      }
+    },
+    "596e8917cecb5b4d": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "020ff7080d79b52c",
+          "output": "uv"
+        },
+        "b": [
+          4,
+          4
+        ]
+      }
+    },
+    "9b849390983a226f": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "ambient_occlusion": {
+          "node": "1345136049620182",
+          "output": "r"
+        },
+        "base_color": {
+          "node": "ccccefa318eab68e",
+          "output": "color"
+        },
+        "specular_roughness": {
+          "node": "1345136049620182",
+          "output": "g"
+        }
+      }
+    },
+    "c6e8c0f1628ba7e7": {
+      "type": "rawframe/sample_texture_2d@1",
+      "params": {
+        "texture": "de9e25cb1901f2ea"
+      },
+      "inputs": {
+        "uv": {
+          "node": "596e8917cecb5b4d",
+          "output": "out"
+        }
+      }
+    },
+    "ccccefa318eab68e": {
+      "type": "rawframe/sample_texture_2d@1",
+      "params": {
+        "texture": "9f822820a44af4fc"
+      },
+      "inputs": {
+        "uv": {
+          "node": "596e8917cecb5b4d",
+          "output": "out"
+        }
+      }
+    }
+  }
+}

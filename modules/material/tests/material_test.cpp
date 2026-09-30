@@ -152,10 +152,10 @@ RAWFRAME_TEST(TheHashAndTheBlobFollowTheMaterial) {
 RAWFRAME_TEST(ACookedMaterialDecodesAsItWasEncoded) {
     const std::vector<std::byte> kBytes = encode(red());
     const auto kDecoded = decode(kBytes);
-    RAWFRAME_EXPECT(kBytes.size() == 108 && kDecoded.has_value() && *kDecoded == red());
+    RAWFRAME_EXPECT(kBytes.size() == 172 && kDecoded.has_value() && *kDecoded == red());
     // Anything else is refused: short, another format, a value out of the
     // contract's range, a state out of its set.
-    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(107)), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(171)), MaterialError::Invalid));
     std::vector<std::byte> other = kBytes;
     other[4] = std::byte{2};
     RAWFRAME_EXPECT(refusedWith(decode(other), MaterialError::Invalid));
@@ -180,11 +180,9 @@ Material stencilled() {
     Material made{.blend = Blend::Translucent};
     made.surface.baseColor = {1, 1, 1};
     made.surface.specularRoughness = 0.5F;
-    made.texture = {.id = 0xa44ecb4a39ac5cc8ULL,
-                    .filter = Filter::Nearest,
-                    .address = Address::Clamp,
-                    .color = true,
-                    .alpha = true};
+    made.textures.base = {.id = 0xa44ecb4a39ac5cc8ULL, .filter = Filter::Nearest, .address = Address::Clamp};
+    made.textures.baseColor = true;
+    made.textures.opacity = true;
     return made;
 }
 
@@ -257,16 +255,17 @@ RAWFRAME_TEST(ASampledTextureFeedsTheBaseColorAndOpacity) {
     // Its alpha alone: the literal color stays.
     Material masked{.blend = Blend::Masked};
     masked.surface.baseColor = {0.2F, 0.3F, 0.4F};
-    masked.texture = {.id = 7, .alpha = true};
+    masked.textures.base.id = 7;
+    masked.textures.opacity = true;
     const auto kMasked = compile(documentOf(masked, kNode));
     RAWFRAME_EXPECT(kMasked.has_value() && *kMasked == masked && blobOf(masked)[0] == 0.2F && blobOf(masked)[15] == 4);
     // Sampled at a mesh's first coordinates, named or not; the hash follows
     // the texture.
     const auto kNamed = compile(sampledAt(0));
-    RAWFRAME_EXPECT(kNamed.has_value() && kNamed->texture.color && !kNamed->texture.alpha);
+    RAWFRAME_EXPECT(kNamed.has_value() && kNamed->textures.baseColor && !kNamed->textures.opacity);
     const auto kHash = semanticHash(documentOf(stencilled(), kNode));
     Material other = stencilled();
-    other.texture.id = 8;
+    other.textures.base.id = 8;
     const auto kOther = semanticHash(documentOf(other, kNode));
     RAWFRAME_EXPECT(kHash.has_value() && kOther.has_value() && *kHash != *kOther);
 }
@@ -316,8 +315,7 @@ RAWFRAME_TEST(TheNodeLibraryIsHeld) {
 
 RAWFRAME_TEST(WhatGenerationOneCannotSampleIsRefused) {
     // Another input fed; a second texture; coordinates past the first set.
-    const graph::Document kRough =
-        surfaceOf(objectOf({{"specular_roughness", from(kSampler, "alpha")}}), {samplerOf({})});
+    const graph::Document kRough = surfaceOf(objectOf({{"specular_ior", from(kSampler, "alpha")}}), {samplerOf({})});
     RAWFRAME_EXPECT(validateSurface(kRough).has_value() && refusedWith(compile(kRough), MaterialError::Unsupported));
     graph::Node second = samplerOf({});
     second.id = kUv;
@@ -330,7 +328,8 @@ RAWFRAME_TEST(WhatGenerationOneCannotSampleIsRefused) {
     // Cooked bytes whose texture feeds nothing, or with no texture a
     // sampler state.
     std::vector<std::byte> feedsNothing = encode(stencilled());
-    feedsNothing[90] = std::byte{0};
+    feedsNothing[164] = std::byte{0};
+    feedsNothing[165] = std::byte{0};
     RAWFRAME_EXPECT(refusedWith(decode(feedsNothing), MaterialError::Invalid));
     std::vector<std::byte> stateless = encode(red());
     stateless[88] = std::byte{1};
@@ -364,8 +363,8 @@ RAWFRAME_TEST(ATextureIsTiledMovedAndTinted) {
     Material tiled = stencilled();
     tiled.surface.baseColor = {0.5F, 0.25F, 1};
     tiled.surface.geometryOpacity = 0.5F;
-    tiled.texture.scale = {4, 2};
-    tiled.texture.offset = {0.5F, 0};
+    tiled.textures.base.scale = {4, 2};
+    tiled.textures.base.offset = {0.5F, 0};
     const auto kText = writeMaterial(documentOf(tiled, kNode));
     RAWFRAME_EXPECT(kText.has_value() && kText->contains("rawframe/multiply@1") && kText->contains("rawframe/add@1"));
     const auto kRead = kText.has_value() ? readMaterial(*kText) : std::unexpected{kText.error().clone()};
@@ -385,8 +384,8 @@ RAWFRAME_TEST(ATextureIsTiledMovedAndTinted) {
     const auto kFolded =
         compile(sampledThrough({mathOf(kNode + 3, kAddType, from(kUv, "uv"), pair(1, -1)),
                                 mathOf(kNode + 4, kMultiplyType, Value::real(3), from(kNode + 3, "out"))}));
-    RAWFRAME_EXPECT(kFolded.has_value() && kFolded->texture.scale == (std::array<float, 2>{3, 3}) &&
-                    kFolded->texture.offset == (std::array<float, 2>{3, -3}));
+    RAWFRAME_EXPECT(kFolded.has_value() && kFolded->textures.base.scale == (std::array<float, 2>{3, 3}) &&
+                    kFolded->textures.base.offset == (std::array<float, 2>{3, -3}));
     // A color scaled by one number is tinted grey.
     const auto kGrey = compile(
         surfaceOf(objectOf({{"base_color", from(kNode + 3, "out")}}),
@@ -422,7 +421,63 @@ RAWFRAME_TEST(WhatTheMathNodesCannotSayIsRefused) {
         MaterialError::Invalid));
     RAWFRAME_EXPECT(
         refusedWith(compile(surfaceOf(
-                        objectOf({{"specular_roughness", from(kNode + 3, "out")}}),
+                        objectOf({{"specular_ior", from(kNode + 3, "out")}}),
                         {samplerOf({}), mathOf(kNode + 3, kMultiplyType, from(kSampler, "alpha"), Value::real(0.5))})),
                     MaterialError::Unsupported));
+}
+
+RAWFRAME_TEST(APackedTextureAndAnEmissionTextureFeedTheirInputs) {
+    // glTF's occlusion, roughness, and metalness in one texture, red, green,
+    // and blue, the roughness at a factor; a glowing texture of its own;
+    // over a base texture's color.
+    Material made = stencilled();
+    made.textures.opacity = false;
+    made.surface.specularRoughness = 0.5F;
+    made.surface.emissionLuminance = 200;
+    made.textures.packed = {.id = 0x77, .scale = {2, 2}};
+    made.textures.metalness = Channel::Blue;
+    made.textures.roughness = Channel::Green;
+    made.textures.occlusion = Channel::Red;
+    made.surface.baseMetalness = 1;
+    made.surface.ambientOcclusion = 1;
+    made.textures.emission = {.id = 0x99, .filter = Filter::Nearest};
+    made.surface.emissionColor = {1, 0.5F, 0.25F};
+    const auto kText = writeMaterial(documentOf(made, kNode));
+    RAWFRAME_EXPECT(kText.has_value() && kText->contains("rawframe/separate3@1"));
+    const auto kRead = kText.has_value() ? readMaterial(*kText) : std::unexpected{kText.error().clone()};
+    const auto kCompiled = kRead.has_value() ? compile(*kRead) : std::unexpected{kRead.error().clone()};
+    RAWFRAME_EXPECT(kCompiled.has_value() && *kCompiled == made);
+    const auto kDecoded = decode(encode(made));
+    RAWFRAME_EXPECT(kDecoded.has_value() && *kDecoded == made);
+    const std::array<float, kBlobFloats> kBlob = blobOf(made);
+    RAWFRAME_EXPECT(kBlob[3] == 1 && kBlob[7] == 0.5F && kBlob[8] == 200 && kBlob[9] == 100 && kBlob[15] == 2 &&
+                    kBlob[20] == 2 && kBlob[21] == 2 && kBlob[28] == 3 && kBlob[29] == 2 && kBlob[30] == 1 &&
+                    kBlob[31] == 1);
+    // The roughness from an alpha channel (Unity's packing), and the same
+    // texture for everything.
+    const auto kAlpha = compile(
+        surfaceOf(objectOf({{"base_color", from(kSampler, "color")}, {"specular_roughness", from(kSampler, "alpha")}}),
+                  {samplerOf({})}));
+    RAWFRAME_EXPECT(kAlpha.has_value() && kAlpha->textures.roughness == Channel::Alpha &&
+                    kAlpha->textures.packed.id == kAlpha->textures.base.id);
+    // Two textures packed into one input's neighbors, a channel of the
+    // base color's, and a separated literal are refused.
+    graph::Node other = samplerOf({});
+    other.id = kUv;
+    const auto kTwoPacked = compile(
+        surfaceOf(objectOf({{"base_metalness", from(kSampler, "alpha")}, {"specular_roughness", from(kUv, "alpha")}}),
+                  {samplerOf({}), other}));
+    RAWFRAME_EXPECT(refusedWith(kTwoPacked, MaterialError::Unsupported));
+    const auto kLiteral = compile(
+        surfaceOf(objectOf({{"base_metalness", from(kNode + 3, "r")}}),
+                  {nodeOf(kNode + 3,
+                          kSeparate3Type,
+                          Value::object(),
+                          objectOf({{"in", Value::array({Value::real(1), Value::real(1), Value::real(1)})}}))}));
+    RAWFRAME_EXPECT(refusedWith(kLiteral, MaterialError::Unsupported));
+    const auto kSeparatedUv = validateSurface(
+        surfaceOf(objectOf({{"base_metalness", from(kNode + 3, "r")}}),
+                  {nodeOf(kUv, kUvType, Value::object(), Value::object()),
+                   nodeOf(kNode + 3, kSeparate3Type, Value::object(), objectOf({{"in", from(kUv, "uv")}}))}));
+    RAWFRAME_EXPECT(refusedWith(kSeparatedUv, MaterialError::Invalid));
 }

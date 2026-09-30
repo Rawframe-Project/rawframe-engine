@@ -7,7 +7,9 @@
 #include <bit>
 #include <charconv>
 #include <cmath>
+#include <iterator>
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -314,7 +316,7 @@ bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
     return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
-                                *kText == kMultiplyType || *kText == kAddType);
+                                *kText == kMultiplyType || *kText == kAddType || *kText == kSeparate3Type);
 }
 
 bool math(std::string_view type) {
@@ -442,6 +444,21 @@ result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& n
     return made;
 }
 
+/// A `separate3` node's input, checked: a color3 (D312).
+result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kInputs = {"in"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
+    const Value* kIn = kParts.second->find("in");
+    if (kIn == nullptr) {
+        return invalid("a separate3 node's input is in, given");
+    }
+    RAWFRAME_TRY_ASSIGN(Operand made, operandOf(surface, *kIn));
+    if (made.carried.has_value() && *made.carried != Carried::Color3) {
+        return invalid("a separate3 node's input is a color3");
+    }
+    return made;
+}
+
 /// What a `sample_texture_2d` node's params say, and what its `uv` comes
 /// from, if connected.
 struct Sampling {
@@ -508,6 +525,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
         RAWFRAME_TRY_ASSIGN(const Math kMath, mathIn(surface, *kSource));
         return kMath.out;
     }
+    if (kType == kSeparate3Type && (from.output == "r" || from.output == "g" || from.output == "b")) {
+        RAWFRAME_TRY(separate3In(surface, *kSource));
+        return std::optional{Carried::Float};
+    }
     return invalid("a connection names an output its node has");
 }
 
@@ -549,36 +570,53 @@ result::Result<Affine> affineOf(const graph::Document& surface, const graph::Con
     return made;
 }
 
-/// What feeds a surface input connected to `from`: a sampler's `wanted`
-/// output, or that times a literal, the factor (one when none).
+/// What feeds a surface input: a sampler's color, or one of its channels,
+/// or that times a literal, the factor (one when none).
 struct Fed {
     graph::NodeId sampler = 0;
+    /// The color, or the channel.
+    bool color = false;
+    Channel channel = Channel::None;
     std::array<double, 3> factor{1, 1, 1};
 };
 
-result::Result<Fed> fedBy(const graph::Document& surface, const graph::Connection& from, std::string_view wanted) {
+result::Result<Fed> fedBy(const graph::Document& surface, const graph::Connection& from, bool factored = false) {
+    const auto kRefused = [] {
+        return unsupported("a surface input connected to anything but a sampled texture's color or channel, or that "
+                           "times a literal, waits for the node library");
+    };
     const graph::Node& kNode = *nodeOf(surface, from.node);
-    if (typeOf(kNode) == kSampleTexture2dType && from.output == wanted) {
-        return Fed{.sampler = kNode.id};
+    const std::string_view kType = typeOf(kNode);
+    if (kType == kSampleTexture2dType) {
+        return Fed{.sampler = kNode.id,
+                   .color = from.output == "color",
+                   .channel = from.output == "alpha" ? Channel::Alpha : Channel::None};
     }
-    if (typeOf(kNode) == kMultiplyType) {
-        RAWFRAME_TRY_ASSIGN(const Math kMath, mathIn(surface, kNode));
-        if (kMath.a.from.has_value() != kMath.b.from.has_value()) {
-            const Operand& kConnected = kMath.a.from.has_value() ? kMath.a : kMath.b;
-            const Operand& kLiteral = kMath.a.from.has_value() ? kMath.b : kMath.a;
-            const graph::Node& kSource = *nodeOf(surface, kConnected.from->node);
-            if (typeOf(kSource) == kSampleTexture2dType && kConnected.from->output == wanted) {
-                Fed made{.sampler = kSource.id};
-                for (std::size_t channel = 0; channel < 3; ++channel) {
-                    made.factor[channel] =
-                        kLiteral.carried == Carried::Float ? kLiteral.literal[0] : kLiteral.literal[channel];
-                }
-                return made;
-            }
+    if (kType == kSeparate3Type) {
+        RAWFRAME_TRY_ASSIGN(const Operand kIn, separate3In(surface, kNode));
+        if (!kIn.from.has_value() || kIn.from->output != "color" ||
+            typeOf(*nodeOf(surface, kIn.from->node)) != kSampleTexture2dType) {
+            return kRefused();
         }
+        return Fed{.sampler = kIn.from->node,
+                   .channel = from.output == "r"   ? Channel::Red
+                              : from.output == "g" ? Channel::Green
+                                                   : Channel::Blue};
     }
-    return unsupported("a surface input connected to anything but a sampled texture's color or alpha, or that "
-                       "times a literal, waits for the node library");
+    if (kType != kMultiplyType || factored) {
+        return kRefused();
+    }
+    RAWFRAME_TRY_ASSIGN(const Math kMath, mathIn(surface, kNode));
+    if (kMath.a.from.has_value() == kMath.b.from.has_value()) {
+        return kRefused();
+    }
+    const Operand& kConnected = kMath.a.from.has_value() ? kMath.a : kMath.b;
+    const Operand& kLiteral = kMath.a.from.has_value() ? kMath.b : kMath.a;
+    RAWFRAME_TRY_ASSIGN(Fed made, fedBy(surface, *kConnected.from, true));
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+        made.factor[channel] = kLiteral.carried == Carried::Float ? kLiteral.literal[0] : kLiteral.literal[channel];
+    }
+    return made;
 }
 
 } // namespace
@@ -587,44 +625,7 @@ graph::Document documentOf(const Material& made, graph::NodeId node) {
     const Surface kDefaults;
     Surface surface = made.surface;
     Surface initial = kDefaults;
-    const SampledTexture& kTexture = made.texture;
-    const bool kTextured = kTexture.id != 0;
-    const graph::NodeId kSampler = node + 1;
-    const graph::NodeId kUv = node + 2;
-    const graph::NodeId kScale = node + 3;
-    const graph::NodeId kOffset = node + 4;
-    const graph::NodeId kColor = node + 5;
-    const graph::NodeId kOpacity = node + 6;
-    const bool kScaled = kTextured && kTexture.scale != std::array<float, 2>{1, 1};
-    const bool kMoved = kTextured && kTexture.offset != std::array<float, 2>{0, 0};
-    const bool kTinted = kTextured && kTexture.color && surface.baseColor != std::array<float, 3>{1, 1, 1};
-    const bool kFaded = kTextured && kTexture.alpha && surface.geometryOpacity != 1;
-    Value inputs = Value::object();
-    for (const Parameter& parameter : kParameters) {
-        const float* kValue = parameter.place(surface);
-        const float* kInitial = parameter.place(initial);
-        if (kTextured && parameter.name == "base_color" && kTexture.color) {
-            inputs.add(
-                std::string{parameter.name},
-                graph::connectionValue({.node = kTinted ? kColor : kSampler, .output = kTinted ? "out" : "color"}));
-            continue;
-        }
-        if (kTextured && parameter.name == "geometry_opacity" && kTexture.alpha) {
-            inputs.add(
-                std::string{parameter.name},
-                graph::connectionValue({.node = kFaded ? kOpacity : kSampler, .output = kFaded ? "out" : "alpha"}));
-            continue;
-        }
-        if (std::equal(kValue, kValue + parameter.channels, kInitial)) {
-            continue;
-        }
-        if (parameter.channels == 1) {
-            inputs.add(std::string{parameter.name}, numberOf(*kValue));
-        } else {
-            inputs.add(std::string{parameter.name},
-                       Value::array({numberOf(kValue[0]), numberOf(kValue[1]), numberOf(kValue[2])}));
-        }
-    }
+    const Textures& kTextures = made.textures;
     const auto kRecord = [](std::string_view type, Value params, Value nodeInputs) {
         Value record = Value::object();
         record.add("type", Value::string(std::string{type}));
@@ -638,56 +639,138 @@ graph::Document documentOf(const Material& made, graph::NodeId node) {
         operands.add("b", std::move(b));
         return kRecord(type, Value::object(), std::move(operands));
     };
-    graph::Document document{.kind = "surface"};
-    document.nodes.push_back({.id = node, .record = kRecord(kSurfaceType, Value::object(), std::move(inputs))});
-    if (kTextured) {
+    const auto kFrom = [](graph::NodeId id, std::string output) {
+        return graph::connectionValue({.node = id, .output = std::move(output)});
+    };
+    // Each texture's nodes by the ids after the surface's, in order: its
+    // sampler, the coordinates, their scale, their offset, and the packed
+    // texture's channels; then each factor.
+    graph::NodeId next = node + 1;
+    std::vector<graph::Node> after;
+    const auto kPlace = [&](const SampledTexture& texture, bool separated) {
+        const graph::NodeId kSampler = next++;
+        const bool kScaled = texture.scale != std::array<float, 2>{1, 1};
+        const bool kMoved = texture.offset != std::array<float, 2>{0, 0};
+        const graph::NodeId kUv = kScaled || kMoved ? next++ : 0;
+        const graph::NodeId kScale = kScaled ? next++ : 0;
+        const graph::NodeId kOffset = kMoved ? next++ : 0;
         Value params = Value::object();
-        if (kTexture.address == Address::Clamp) {
+        if (texture.address == Address::Clamp) {
             params.add("address", Value::string("clamp"));
         }
-        if (kTexture.filter == Filter::Nearest) {
+        if (texture.filter == Filter::Nearest) {
             params.add("filter", Value::string("nearest"));
         }
-        params.add("texture", Value::string(graph::nodeIdText(kTexture.id)));
+        params.add("texture", Value::string(graph::nodeIdText(texture.id)));
         Value sampled = Value::object();
         if (kScaled || kMoved) {
-            sampled.add("uv", graph::connectionValue({.node = kMoved ? kOffset : kScale, .output = "out"}));
+            sampled.add("uv", kFrom(kMoved ? kOffset : kScale, "out"));
         }
-        document.nodes.push_back(
+        after.push_back(
             {.id = kSampler, .record = kRecord(kSampleTexture2dType, std::move(params), std::move(sampled))});
         if (kScaled || kMoved) {
-            document.nodes.push_back({.id = kUv, .record = kRecord(kUvType, Value::object(), Value::object())});
+            after.push_back({.id = kUv, .record = kRecord(kUvType, Value::object(), Value::object())});
         }
         if (kScaled) {
-            document.nodes.push_back(
-                {.id = kScale,
-                 .record = kMath(kMultiplyType,
-                                 graph::connectionValue({.node = kUv, .output = "uv"}),
-                                 Value::array({numberOf(kTexture.scale[0]), numberOf(kTexture.scale[1])}))});
+            after.push_back({.id = kScale,
+                             .record = kMath(kMultiplyType,
+                                             kFrom(kUv, "uv"),
+                                             Value::array({numberOf(texture.scale[0]), numberOf(texture.scale[1])}))});
         }
         if (kMoved) {
-            document.nodes.push_back(
+            after.push_back(
                 {.id = kOffset,
                  .record = kMath(kAddType,
-                                 kScaled ? graph::connectionValue({.node = kScale, .output = "out"})
-                                         : graph::connectionValue({.node = kUv, .output = "uv"}),
-                                 Value::array({numberOf(kTexture.offset[0]), numberOf(kTexture.offset[1])}))});
+                                 kScaled ? kFrom(kScale, "out") : kFrom(kUv, "uv"),
+                                 Value::array({numberOf(texture.offset[0]), numberOf(texture.offset[1])}))});
         }
-        if (kTinted) {
-            document.nodes.push_back({.id = kColor,
-                                      .record = kMath(kMultiplyType,
-                                                      graph::connectionValue({.node = kSampler, .output = "color"}),
-                                                      Value::array({numberOf(surface.baseColor[0]),
-                                                                    numberOf(surface.baseColor[1]),
-                                                                    numberOf(surface.baseColor[2])}))});
+        graph::NodeId separate = 0;
+        if (separated) {
+            separate = next++;
+            Value in = Value::object();
+            in.add("in", kFrom(kSampler, "color"));
+            after.push_back({.id = separate, .record = kRecord(kSeparate3Type, Value::object(), std::move(in))});
         }
-        if (kFaded) {
-            document.nodes.push_back({.id = kOpacity,
-                                      .record = kMath(kMultiplyType,
-                                                      graph::connectionValue({.node = kSampler, .output = "alpha"}),
-                                                      numberOf(surface.geometryOpacity))});
+        return std::pair{kSampler, separate};
+    };
+    const auto kRgb = [](Channel channel) {
+        return channel == Channel::Red || channel == Channel::Green || channel == Channel::Blue;
+    };
+    const auto [kBase, kUnused] =
+        kTextures.base.id != 0 ? kPlace(kTextures.base, false) : std::pair<graph::NodeId, graph::NodeId>{};
+    const auto [kPacked, kSeparate] =
+        kTextures.packed.id != 0
+            ? kPlace(kTextures.packed,
+                     kRgb(kTextures.metalness) || kRgb(kTextures.roughness) || kRgb(kTextures.occlusion))
+            : std::pair<graph::NodeId, graph::NodeId>{};
+    const graph::NodeId kEmission = kTextures.emission.id != 0 ? kPlace(kTextures.emission, false).first : 0;
+    static_cast<void>(kUnused);
+    const auto kChannelOf = [](Channel channel) -> std::string {
+        switch (channel) {
+        case Channel::Red:
+            return "r";
+        case Channel::Green:
+            return "g";
+        case Channel::Blue:
+            return "b";
+        default:
+            return "alpha";
+        }
+    };
+    Value inputs = Value::object();
+    for (const Parameter& parameter : kParameters) {
+        const float* kValue = parameter.place(surface);
+        const float* kInitial = parameter.place(initial);
+        // What feeds it, if a texture does.
+        std::optional<Value> fed;
+        const std::string_view kName = parameter.name;
+        if (kBase != 0 && kName == "base_color" && kTextures.baseColor) {
+            fed = kFrom(kBase, "color");
+        } else if (kBase != 0 && kName == "geometry_opacity" && kTextures.opacity) {
+            fed = kFrom(kBase, "alpha");
+        } else if (kEmission != 0 && kName == "emission_color") {
+            fed = kFrom(kEmission, "color");
+        } else if (kPacked != 0) {
+            const Channel kChannel = kName == "base_metalness"       ? kTextures.metalness
+                                     : kName == "specular_roughness" ? kTextures.roughness
+                                     : kName == "ambient_occlusion"  ? kTextures.occlusion
+                                                                     : Channel::None;
+            if (kChannel != Channel::None) {
+                fed = kRgb(kChannel) ? kFrom(kSeparate, kChannelOf(kChannel)) : kFrom(kPacked, "alpha");
+            }
+        }
+        if (fed.has_value()) {
+            if (std::ranges::all_of(std::span{kValue, parameter.channels}, [](float value) {
+                    return value == 1;
+                })) {
+                inputs.add(std::string{kName}, std::move(*fed));
+            } else {
+                const graph::NodeId kFactor = next++;
+                after.push_back(
+                    {.id = kFactor,
+                     .record =
+                         kMath(kMultiplyType,
+                               std::move(*fed),
+                               parameter.channels == 1
+                                   ? numberOf(kValue[0])
+                                   : Value::array({numberOf(kValue[0]), numberOf(kValue[1]), numberOf(kValue[2])}))});
+                inputs.add(std::string{kName}, kFrom(kFactor, "out"));
+            }
+            continue;
+        }
+        if (std::equal(kValue, kValue + parameter.channels, kInitial)) {
+            continue;
+        }
+        if (parameter.channels == 1) {
+            inputs.add(std::string{kName}, numberOf(*kValue));
+        } else {
+            inputs.add(std::string{kName},
+                       Value::array({numberOf(kValue[0]), numberOf(kValue[1]), numberOf(kValue[2])}));
         }
     }
+    graph::Document document{.kind = "surface"};
+    document.nodes.push_back({.id = node, .record = kRecord(kSurfaceType, Value::object(), std::move(inputs))});
+    std::ranges::move(after, std::back_inserter(document.nodes));
     Value states = Value::object();
     if (made.shading != Shading::Lit) {
         states.add("shading", Value::string(std::string{kShadings[static_cast<std::size_t>(made.shading)]}));
@@ -735,6 +818,8 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(uvIn(node));
         } else if (math(typeOf(node))) {
             RAWFRAME_TRY(mathIn(surface, node));
+        } else if (typeOf(node) == kSeparate3Type) {
+            RAWFRAME_TRY(separate3In(surface, node));
         } else {
             RAWFRAME_TRY(sampleIn(surface, node));
         }
@@ -784,9 +869,14 @@ result::Result<Material> compile(const graph::Document& surface) {
     const graph::Node& kSurface = *surfaceNode(surface);
     RAWFRAME_TRY_ASSIGN(Material made, statesIn(statesOf(surface)));
     RAWFRAME_TRY(inputsIn(kSurface, made.surface));
-    // Generation 1: one sampled texture, its color, or that times a factor,
-    // the base color, and its alpha, or that times a factor, the opacity.
-    std::optional<graph::NodeId> sampler;
+    // Generation 1 (D312): the base, packed, and emission textures, one
+    // sampler each, each input fed directly or times a factor.
+    enum Slot : std::uint8_t {
+        Base,
+        Packed,
+        Emission
+    };
+    std::array<std::optional<graph::NodeId>, 3> samplers;
     const Value& kInputs = *kSurface.record.find("inputs");
     for (std::size_t at = 0; at < kInputs.names().size(); ++at) {
         const std::optional<graph::Connection> kFrom = graph::connectionOf(kInputs.items()[at]);
@@ -794,49 +884,61 @@ result::Result<Material> compile(const graph::Document& surface) {
             continue;
         }
         const std::string& kName = kInputs.names()[at];
-        const bool kColor = kName == "base_color";
-        if (!kColor && kName != "geometry_opacity") {
-            return unsupported("a surface input besides the base color and the opacity connected waits for the node "
-                               "library");
+        RAWFRAME_TRY_ASSIGN(const Fed kFed, fedBy(surface, *kFrom));
+        const bool kColored = kName == "base_color" || kName == "emission_color";
+        const bool kPacked = kName == "base_metalness" || kName == "specular_roughness" || kName == "ambient_occlusion";
+        if ((kColored && !kFed.color) || (kName == "geometry_opacity" && kFed.channel != Channel::Alpha) ||
+            (kPacked && kFed.channel == Channel::None) || (!kColored && !kPacked && kName != "geometry_opacity")) {
+            return unsupported(
+                "a texture feeds the base color and opacity, the metalness, roughness, and occlusion by a "
+                "channel, and the emission color, in generation 1");
         }
-        RAWFRAME_TRY_ASSIGN(const Fed kFed, fedBy(surface, *kFrom, kColor ? "color" : "alpha"));
-        if (sampler.has_value() && *sampler != kFed.sampler) {
-            return unsupported("a material samples one texture in generation 1");
+        const Slot kSlot = kPacked ? Packed : kName == "emission_color" ? Emission : Base;
+        if (samplers[kSlot].has_value() && *samplers[kSlot] != kFed.sampler) {
+            return unsupported("a material's base, packed, and emission textures are one sampler each in generation 1");
         }
-        sampler = kFed.sampler;
+        samplers[kSlot] = kFed.sampler;
         if (!std::ranges::all_of(kFed.factor, [](double factor) {
                 return factor >= 0 && factor <= 1;
             })) {
             return invalid("a texture's factor is in its input's range, nought to one");
         }
-        if (kColor) {
-            made.texture.color = true;
-            for (std::size_t channel = 0; channel < 3; ++channel) {
-                made.surface.baseColor[channel] = static_cast<float>(kFed.factor[channel]);
-            }
-        } else {
-            made.texture.alpha = true;
-            made.surface.geometryOpacity = static_cast<float>(kFed.factor[0]);
+        float* place = parameterNamed(kName)->place(made.surface);
+        for (std::size_t channel = 0; channel < parameterNamed(kName)->channels; ++channel) {
+            place[channel] = static_cast<float>(kFed.factor[channel]);
+        }
+        Textures& textures = made.textures;
+        if (kName == "base_color") {
+            textures.baseColor = true;
+        } else if (kName == "geometry_opacity") {
+            textures.opacity = true;
+        } else if (kName == "base_metalness") {
+            textures.metalness = kFed.channel;
+        } else if (kName == "specular_roughness") {
+            textures.roughness = kFed.channel;
+        } else if (kName == "ambient_occlusion") {
+            textures.occlusion = kFed.channel;
         }
     }
-    if (sampler.has_value()) {
-        RAWFRAME_TRY_ASSIGN(const Sampling kSampling, sampleIn(surface, *nodeOf(surface, *sampler)));
-        made.texture.id = kSampling.texture.id;
-        made.texture.filter = kSampling.texture.filter;
-        made.texture.address = kSampling.texture.address;
+    for (const auto& [kSlot, kTexture] : {std::pair{Base, &made.textures.base},
+                                          std::pair{Packed, &made.textures.packed},
+                                          std::pair{Emission, &made.textures.emission}}) {
+        if (!samplers[kSlot].has_value()) {
+            continue;
+        }
+        RAWFRAME_TRY_ASSIGN(const Sampling kSampling, sampleIn(surface, *nodeOf(surface, *samplers[kSlot])));
+        SampledTexture& texture = *kTexture;
+        texture = kSampling.texture;
         if (kSampling.uv.has_value()) {
             RAWFRAME_TRY_ASSIGN(const Affine kAffine, affineOf(surface, *kSampling.uv));
             for (std::size_t axis = 0; axis < 2; ++axis) {
-                made.texture.scale[axis] = static_cast<float>(kAffine.scale[axis]);
-                made.texture.offset[axis] = static_cast<float>(kAffine.offset[axis]);
+                texture.scale[axis] = static_cast<float>(kAffine.scale[axis]);
+                texture.offset[axis] = static_cast<float>(kAffine.offset[axis]);
             }
-            if (!std::ranges::all_of(made.texture.scale,
-                                     [](float value) {
-                                         return std::isfinite(value);
-                                     }) ||
-                !std::ranges::all_of(made.texture.offset, [](float value) {
-                    return std::isfinite(value);
-                })) {
+            const auto kFinite = [](float value) {
+                return std::isfinite(value);
+            };
+            if (!std::ranges::all_of(texture.scale, kFinite) || !std::ranges::all_of(texture.offset, kFinite)) {
                 return invalid("a texture's coordinates are scaled and moved by finite numbers");
             }
         }
@@ -870,7 +972,7 @@ std::vector<std::byte> encode(const Material& made) {
     for (const char kLetter : std::string_view{"RFMT"}) {
         bytes.push_back(static_cast<std::byte>(kLetter));
     }
-    kPut(3);
+    kPut(4);
     bytes.push_back(static_cast<std::byte>(made.shading));
     bytes.push_back(static_cast<std::byte>(made.blend));
     bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
@@ -883,21 +985,32 @@ std::vector<std::byte> encode(const Material& made) {
             kPut(std::bit_cast<std::uint32_t>(kValue[channel]));
         }
     }
-    kPut(static_cast<std::uint32_t>(made.texture.id));
-    kPut(static_cast<std::uint32_t>(made.texture.id >> 32U));
-    bytes.push_back(static_cast<std::byte>(made.texture.filter));
-    bytes.push_back(static_cast<std::byte>(made.texture.address));
-    bytes.push_back(static_cast<std::byte>((made.texture.color ? 1U : 0U) | (made.texture.alpha ? 2U : 0U)));
-    bytes.push_back(std::byte{0});
-    for (const float kValue :
-         {made.texture.scale[0], made.texture.scale[1], made.texture.offset[0], made.texture.offset[1]}) {
-        kPut(std::bit_cast<std::uint32_t>(kValue));
+    for (const SampledTexture* kTexture : {&made.textures.base, &made.textures.packed, &made.textures.emission}) {
+        kPut(static_cast<std::uint32_t>(kTexture->id));
+        kPut(static_cast<std::uint32_t>(kTexture->id >> 32U));
+        bytes.push_back(static_cast<std::byte>(kTexture->filter));
+        bytes.push_back(static_cast<std::byte>(kTexture->address));
+        bytes.push_back(std::byte{0});
+        bytes.push_back(std::byte{0});
+        for (const float kValue : {kTexture->scale[0], kTexture->scale[1], kTexture->offset[0], kTexture->offset[1]}) {
+            kPut(std::bit_cast<std::uint32_t>(kValue));
+        }
+    }
+    for (const std::uint8_t kFeeds : {static_cast<std::uint8_t>(made.textures.baseColor ? 1 : 0),
+                                      static_cast<std::uint8_t>(made.textures.opacity ? 1 : 0),
+                                      static_cast<std::uint8_t>(made.textures.metalness),
+                                      static_cast<std::uint8_t>(made.textures.roughness),
+                                      static_cast<std::uint8_t>(made.textures.occlusion),
+                                      std::uint8_t{0},
+                                      std::uint8_t{0},
+                                      std::uint8_t{0}}) {
+        bytes.push_back(static_cast<std::byte>(kFeeds));
     }
     return bytes;
 }
 
 result::Result<Material> decode(std::span<const std::byte> bytes) {
-    constexpr std::size_t kSize = 16 + (4 * 16) + 12 + 16;
+    constexpr std::size_t kSize = 16 + (4 * 16) + (3 * 28) + 8;
     if (bytes.size() != kSize || std::string_view{reinterpret_cast<const char*>(bytes.data()), 4} != "RFMT") {
         return invalid("a cooked material is RFMT, its format, states, Surface, and texture");
     }
@@ -911,8 +1024,8 @@ result::Result<Material> decode(std::span<const std::byte> bytes) {
     const auto kShading = std::to_integer<std::uint8_t>(bytes[8]);
     const auto kBlend = std::to_integer<std::uint8_t>(bytes[9]);
     const auto kSided = std::to_integer<std::uint8_t>(bytes[10]);
-    if (kWord(4) != 3 || kShading > 1 || kBlend > 2 || kSided > 1 || bytes[11] != std::byte{0}) {
-        return invalid("a cooked material is format 3, its states in their sets");
+    if (kWord(4) != 4 || kShading > 1 || kBlend > 2 || kSided > 1 || bytes[11] != std::byte{0}) {
+        return invalid("a cooked material is format 4, its states in their sets");
     }
     Material made{.shading = static_cast<Shading>(kShading),
                   .blend = static_cast<Blend>(kBlend),
@@ -925,23 +1038,33 @@ result::Result<Material> decode(std::span<const std::byte> bytes) {
             place[channel] = std::bit_cast<float>(kWord(at));
         }
     }
-    const std::uint64_t kTexture = kWord(at) | (std::uint64_t{kWord(at + 4)} << 32U);
-    const auto kFilter = std::to_integer<std::uint8_t>(bytes[at + 8]);
-    const auto kAddress = std::to_integer<std::uint8_t>(bytes[at + 9]);
-    const auto kFeeds = std::to_integer<std::uint8_t>(bytes[at + 10]);
-    // A texture feeds something; none has no sampler state.
-    if (kFilter > 1 || kAddress > 1 || kFeeds > 3 || bytes[at + 11] != std::byte{0} ||
-        (kTexture == 0) != (kFeeds == 0) || (kTexture == 0 && (kFilter != 0 || kAddress != 0))) {
-        return invalid("a cooked material's texture is none, or one feeding its color or opacity");
+    for (SampledTexture* texture : {&made.textures.base, &made.textures.packed, &made.textures.emission}) {
+        const auto kFilter = std::to_integer<std::uint8_t>(bytes[at + 8]);
+        const auto kAddress = std::to_integer<std::uint8_t>(bytes[at + 9]);
+        if (kFilter > 1 || kAddress > 1 || bytes[at + 10] != std::byte{0} || bytes[at + 11] != std::byte{0}) {
+            return invalid("a cooked material's texture's sampler state is in its sets");
+        }
+        *texture =
+            SampledTexture{.id = kWord(at) | (std::uint64_t{kWord(at + 4)} << 32U),
+                           .filter = static_cast<Filter>(kFilter),
+                           .address = static_cast<Address>(kAddress),
+                           .scale = {std::bit_cast<float>(kWord(at + 12)), std::bit_cast<float>(kWord(at + 16))},
+                           .offset = {std::bit_cast<float>(kWord(at + 20)), std::bit_cast<float>(kWord(at + 24))}};
+        at += 28;
     }
-    made.texture =
-        SampledTexture{.id = kTexture,
-                       .filter = static_cast<Filter>(kFilter),
-                       .address = static_cast<Address>(kAddress),
-                       .color = (kFeeds & 1U) != 0,
-                       .alpha = (kFeeds & 2U) != 0,
-                       .scale = {std::bit_cast<float>(kWord(at + 12)), std::bit_cast<float>(kWord(at + 16))},
-                       .offset = {std::bit_cast<float>(kWord(at + 20)), std::bit_cast<float>(kWord(at + 24))}};
+    std::array<std::uint8_t, 8> feeds{};
+    for (std::size_t each = 0; each < feeds.size(); ++each) {
+        feeds.at(each) = std::to_integer<std::uint8_t>(bytes[at + each]);
+    }
+    if (feeds[0] > 1 || feeds[1] > 1 || feeds[2] > 4 || feeds[3] > 4 || feeds[4] > 4 || feeds[5] != 0 ||
+        feeds[6] != 0 || feeds[7] != 0) {
+        return invalid("a cooked material's textures feed what they may");
+    }
+    made.textures.baseColor = feeds[0] == 1;
+    made.textures.opacity = feeds[1] == 1;
+    made.textures.metalness = static_cast<Channel>(feeds[2]);
+    made.textures.roughness = static_cast<Channel>(feeds[3]);
+    made.textures.occlusion = static_cast<Channel>(feeds[4]);
     // Its ranges are the document's: written as one and checked.
     if (!(made.alphaCutoff >= 0 && made.alphaCutoff <= 1)) {
         return invalid("a cooked material's alpha cutoff is from nought to one");
@@ -971,12 +1094,20 @@ std::array<float, kBlobFloats> blobOf(const Material& made) noexcept {
     blob[12] = kSurface.geometryOpacity;
     blob[13] = kSurface.ambientOcclusion;
     blob[14] = made.blend == Blend::Masked ? made.alphaCutoff : 0;
-    blob[15] = static_cast<float>((made.shading == Shading::Unlit ? 1U : 0U) | (made.texture.color ? 2U : 0U) |
-                                  (made.texture.alpha ? 4U : 0U));
-    blob[16] = made.texture.scale[0];
-    blob[17] = made.texture.scale[1];
-    blob[18] = made.texture.offset[0];
-    blob[19] = made.texture.offset[1];
+    const Textures& kTextures = made.textures;
+    blob[15] = static_cast<float>((made.shading == Shading::Unlit ? 1U : 0U) | (kTextures.baseColor ? 2U : 0U) |
+                                  (kTextures.opacity ? 4U : 0U));
+    std::size_t at = 16;
+    for (const SampledTexture* kTexture : {&kTextures.base, &kTextures.packed, &kTextures.emission}) {
+        blob[at++] = kTexture->scale[0];
+        blob[at++] = kTexture->scale[1];
+        blob[at++] = kTexture->offset[0];
+        blob[at++] = kTexture->offset[1];
+    }
+    blob[28] = static_cast<float>(kTextures.metalness);
+    blob[29] = static_cast<float>(kTextures.roughness);
+    blob[30] = static_cast<float>(kTextures.occlusion);
+    blob[31] = kTextures.emission.id != 0 ? 1.0F : 0.0F;
     return blob;
 }
 
