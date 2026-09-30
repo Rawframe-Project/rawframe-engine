@@ -1,6 +1,7 @@
 #include "rawframe/render_canvas_gpu/renderer.h"
 
 #include "generated/sprite_container.h"
+#include "rawframe/render/textures.h"
 #include "rawframe/render_canvas_gpu/errors.h"
 
 #include <algorithm>
@@ -33,32 +34,6 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
 constexpr std::uint32_t kVertexBytes = sizeof(render_canvas::CanvasVertex);
 static_assert(kVertexBytes == 20, "the sprite pipeline reads a corner as 20 bytes");
 
-mrhiFormat formatOf(texture::Format format) noexcept {
-    switch (format) {
-    case texture::Format::Rgba8:
-        return mrhi_formatRgba8Unorm;
-    case texture::Format::Rgba8Srgb:
-        return mrhi_formatRgba8UnormSrgb;
-    case texture::Format::Bc7:
-        return mrhi_formatBc7RgbaUnorm;
-    case texture::Format::Bc7Srgb:
-        return mrhi_formatBc7RgbaUnormSrgb;
-    }
-    return mrhi_formatRgba8Unorm;
-}
-
-bool compressed(texture::Format format) noexcept {
-    return format == texture::Format::Bc7 || format == texture::Format::Bc7Srgb;
-}
-
-std::uint64_t bytesOf(const texture::Texture& image) noexcept {
-    std::uint64_t bytes = 0;
-    for (const texture::Level& level : image.levels) {
-        bytes += level.bytes.size();
-    }
-    return bytes;
-}
-
 /// A resource of the open frame from the key `render` names it by.
 mrhiResourceId resourceOf(std::uint64_t key) noexcept {
     return mrhiResourceId{.index1 = static_cast<std::uint32_t>(key >> 32U),
@@ -72,20 +47,11 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
         .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
 }
 
-/// A texture held on the device: the decoded image it was made from, so a
-/// reload's new one is seen, and whether its levels are there yet.
-struct Held {
-    std::shared_ptr<const texture::Texture> source;
-    mrhiTextureId texture{};
-    bool uploaded = false;
-};
-
 } // namespace
 
 struct CanvasRenderer::State {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
-    RendererLimits limits;
     RendererStatistics statistics;
     mrhiShaderId shader{};
     mrhiGraphicsPipelineId pipeline{};
@@ -95,15 +61,12 @@ struct CanvasRenderer::State {
     /// block-compressed ones linearly, across their levels.
     mrhiSamplerId nearest{};
     mrhiSamplerId linear{};
-    std::map<std::uint64_t, Held> held;
+    std::unique_ptr<render::DeviceTextures> held;
     /// What the next frame draws.
     const render_canvas::CanvasFrame* frame = nullptr;
     TextureSource textures;
     /// What the open frame declared, until it is recorded and ends.
     bool declared = false;
-    std::map<std::uint64_t, Held*> usable;
-    std::map<const Held*, mrhiResourceId> imported;
-    std::vector<Held*> uploads;
     std::optional<mrhiPassId> upload;
     mrhiPassId drawing{};
     std::uint64_t drawn = 0;
@@ -116,9 +79,6 @@ struct CanvasRenderer::State {
             return;
         }
         // Maul RHI retires what a frame still uses once the frame is done.
-        for (auto& [id, texture] : held) {
-            static_cast<void>(mrhiDestroyTexture(native, texture.texture));
-        }
         static_cast<void>(mrhiDestroySampler(native, nearest));
         static_cast<void>(mrhiDestroySampler(native, linear));
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, pipeline));
@@ -181,60 +141,13 @@ struct CanvasRenderer::State {
         return {};
     }
 
-    /// The textures this frame draws from, made or replaced on the device
-    /// as needed; those still to upload within the frame's budget are
-    /// marked. A draw whose texture is not here is left out.
-    std::map<std::uint64_t, Held*>
-    texturesOf(const render_canvas::CanvasFrame& canvas, const TextureSource& source, std::vector<Held*>& uploading) {
-        std::map<std::uint64_t, Held*> chosen;
-        std::uint64_t budget = limits.uploadBytesPerFrame;
+    /// Chooses the textures this frame draws from; a draw whose texture
+    /// is not chosen is left out.
+    void texturesOf(const render_canvas::CanvasFrame& canvas, const TextureSource& source) {
+        held->begin();
         for (const render_canvas::CanvasDraw& draw : canvas.draws) {
-            if (chosen.contains(draw.texture)) {
-                continue;
-            }
-            std::shared_ptr<const texture::Texture> image = source ? source(draw.texture) : nullptr;
-            if (image == nullptr || image->levels.empty() ||
-                (compressed(image->format) && !device->adapter()->blockCompression)) {
-                continue;
-            }
-            auto found = held.find(draw.texture);
-            if (found != held.end() && found->second.source != image) {
-                // A reload's new revision: the old one is retired once the
-                // frames that draw it are done.
-                static_cast<void>(mrhiDestroyTexture(native, found->second.texture));
-                held.erase(found);
-                ++statistics.texturesReplaced;
-                found = held.end();
-            }
-            if (found == held.end()) {
-                if (held.size() >= limits.maximumTextures) {
-                    continue;
-                }
-                mrhiTextureDef def = mrhiDefaultTextureDef();
-                def.format = formatOf(image->format);
-                def.width = image->levels[0].width;
-                def.height = image->levels[0].height;
-                def.mipLevels = static_cast<std::uint32_t>(image->levels.size());
-                def.usage = mrhi_textureSampled | mrhi_textureCopyDestination;
-                mrhiTextureId made{};
-                if (mrhiCreateTexture(native, &def, &made) != mrhi_success) {
-                    continue;
-                }
-                found = held.emplace(draw.texture, Held{.source = std::move(image), .texture = made}).first;
-            }
-            Held& texture = found->second;
-            if (!texture.uploaded) {
-                const std::uint64_t kBytes = bytesOf(*texture.source);
-                if (kBytes > budget) {
-                    ++statistics.uploadsDeferred;
-                    continue;
-                }
-                budget -= kBytes;
-                uploading.push_back(&texture);
-            }
-            chosen.emplace(draw.texture, &texture);
+            static_cast<void>(held->choose(draw.texture, source ? source(draw.texture) : nullptr));
         }
-        return chosen;
     }
 
     result::Status declare(render::Frame& open) {
@@ -255,19 +168,10 @@ struct CanvasRenderer::State {
             ++statistics.framesWaiting;
             return {};
         }
-        uploads.clear();
-        imported.clear();
-        usable = texturesOf(*frame, textures, uploads);
+        texturesOf(*frame, textures);
         // Everything this frame uses: the textures it draws from, imported,
         // and this frame's corners and indices.
-        for (const auto& [id, texture] : usable) {
-            mrhiResourceId resource{};
-            if (const mrhiResult kImported = mrhiImportTexture(native, texture->texture, &resource);
-                kImported != mrhi_success) {
-                return failed("a texture could not join the frame", kImported);
-            }
-            imported.emplace(texture, resource);
-        }
+        RAWFRAME_TRY(held->import());
         const bool kQuads = !frame->indices.empty();
         if (kQuads) {
             mrhiBufferDef cornersDef = mrhiDefaultBufferDef();
@@ -285,8 +189,8 @@ struct CanvasRenderer::State {
             writes.push_back(wholeOf(corners_, mrhi_accessCopyDestination));
             writes.push_back(wholeOf(indices_, mrhi_accessCopyDestination));
         }
-        for (const Held* texture : uploads) {
-            writes.push_back(wholeOf(imported.at(texture), mrhi_accessCopyDestination));
+        for (const std::uint64_t kTexture : held->uploading()) {
+            writes.push_back(wholeOf(resourceOf(kTexture), mrhi_accessCopyDestination));
         }
         upload.reset();
         if (!writes.empty()) {
@@ -305,8 +209,8 @@ struct CanvasRenderer::State {
             reads.push_back(wholeOf(corners_, mrhi_accessVertex));
             reads.push_back(wholeOf(indices_, mrhi_accessIndex));
         }
-        for (const auto& [texture, resource] : imported) {
-            reads.push_back(wholeOf(resource, mrhi_accessSampled));
+        for (const std::uint64_t kTexture : held->chosen()) {
+            reads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
         }
         mrhiPassDef drawDef = mrhiDefaultPassDef();
         drawDef.colorTargets[0].resource = resourceOf(open.picture);
@@ -345,25 +249,7 @@ struct CanvasRenderer::State {
                                  frame->indices.size() * sizeof(std::uint32_t)) != mrhi_success)) {
                 return failed("the frame's corners could not be written", mrhi_errorCapacity);
             }
-            for (const Held* texture : uploads) {
-                for (std::uint32_t mip = 0; mip < texture->source->levels.size(); ++mip) {
-                    const texture::Level& level = texture->source->levels[mip];
-                    const bool kBlocks = compressed(texture->source->format);
-                    const std::uint32_t kRowBytes = kBlocks ? ((level.width + 3) / 4) * 16 : level.width * 4;
-                    const std::uint32_t kRows = kBlocks ? (level.height + 3) / 4 : level.height;
-                    const mrhiTextureCopy kPlace{.resource = imported.at(texture), .mip = mip};
-                    const mrhiTexelLayout kLayout{.offset = 0, .bytesPerRow = kRowBytes, .rowsPerImage = kRows};
-                    // A compressed level's copy covers whole blocks.
-                    const mrhiExtent3d kExtent{.width = kBlocks ? ((level.width + 3) / 4) * 4 : level.width,
-                                               .height = kBlocks ? kRows * 4 : level.height,
-                                               .depthOrLayers = 1};
-                    if (const mrhiResult kWritten = mrhiWriteTexture(
-                            native, *upload, &kPlace, level.bytes.data(), level.bytes.size(), &kLayout, &kExtent);
-                        kWritten != mrhi_success) {
-                        return failed("a texture's level could not be written", kWritten);
-                    }
-                }
-            }
+            RAWFRAME_TRY(held->write(render::requestKey(upload->index1, upload->generation)));
             if (mrhiEndPass(native, *upload) != mrhi_success) {
                 return failed("the upload pass could not end", mrhi_errorState);
             }
@@ -380,16 +266,15 @@ struct CanvasRenderer::State {
                 return failed("the drawing could not be set up", mrhi_errorState);
             }
             for (const render_canvas::CanvasDraw& draw : frame->draws) {
-                const auto kTexture = usable.find(draw.texture);
-                if (kTexture == usable.end()) {
+                const std::uint64_t kTexture = held->resource(draw.texture);
+                if (kTexture == 0) {
                     ++leftOut;
                     continue;
                 }
-                const Held& texture = *kTexture->second;
                 const std::array<mrhiBinding, 2> kBindings = {
                     mrhiBinding{
                         .slot = 0,
-                        .resource = imported.at(&texture),
+                        .resource = resourceOf(kTexture),
                         .offset = 0,
                         .size = 0,
                         .viewKind = mrhi_texture2d,
@@ -404,7 +289,7 @@ struct CanvasRenderer::State {
                                 .viewKind = mrhi_texture2d,
                                 .viewFormat = mrhi_formatNone,
                                 .range = {},
-                                .sampler = compressed(texture.source->format) ? linear : nearest}};
+                                .sampler = held->compressed(draw.texture) ? linear : nearest}};
                 if (mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
                     mrhiDrawIndexed(native, drawing, draw.indexCount, 1, draw.firstIndex, 0, 0) != mrhi_success) {
                     return failed("a draw could not be recorded", mrhi_errorState);
@@ -420,13 +305,17 @@ struct CanvasRenderer::State {
     }
 
     void ended(bool submitted) noexcept {
-        if (!std::exchange(declared, false) || !submitted) {
+        if (!std::exchange(declared, false)) {
             return;
         }
-        for (Held* texture : uploads) {
-            texture->uploaded = true;
-            ++statistics.texturesUploaded;
-            statistics.uploadBytes += bytesOf(*texture->source);
+        held->ended(submitted);
+        const render::TextureStatistics& kHeld = held->statistics();
+        statistics.texturesUploaded = kHeld.texturesUploaded;
+        statistics.uploadBytes = kHeld.uploadBytes;
+        statistics.uploadsDeferred = kHeld.uploadsDeferred;
+        statistics.texturesReplaced = kHeld.texturesReplaced;
+        if (!submitted) {
+            return;
         }
         ++statistics.frames;
         statistics.draws += drawn;
@@ -449,7 +338,7 @@ result::Result<std::unique_ptr<CanvasRenderer>> CanvasRenderer::create(render::D
     auto state = std::make_unique<State>();
     state->device = &device;
     state->native = device.native();
-    state->limits = limits;
+    RAWFRAME_TRY_ASSIGN(state->held, render::DeviceTextures::create(device, limits));
     RAWFRAME_TRY(state->makePipeline());
     return std::unique_ptr<CanvasRenderer>{new CanvasRenderer{std::move(state)}};
 }
