@@ -1,6 +1,7 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 
 #include "blocks.h"
+#include "meshes.h"
 #include "metering.h"
 #include "pipelines.h"
 #include "rawframe/render_scene_gpu/errors.h"
@@ -41,15 +42,6 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
         .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
 }
 
-/// A mesh held on the device: the mesh it was made from, and whether its
-/// vertices and indices are there yet.
-struct Held {
-    std::shared_ptr<const mesh::Mesh> source;
-    mrhiBufferId vertices{};
-    mrhiBufferId indices{};
-    bool uploaded = false;
-};
-
 } // namespace
 
 struct SceneRenderer::State {
@@ -63,76 +55,26 @@ struct SceneRenderer::State {
     std::optional<TemporalPass> temporal;
     /// The exposure the device holds, and its metering (D293).
     std::optional<Metering> metering;
-    std::map<std::uint64_t, Held> held;
+    std::optional<DeviceMeshes> held;
     /// What the next frame draws.
     const render_scene::SceneFrame* frame = nullptr;
     MeshSource meshes;
 
-    ~State() {
-        if (native == nullptr) {
-            return;
-        }
-        // Maul RHI retires what a frame still uses once the frame is done.
-        for (auto& [id, made] : held) {
-            static_cast<void>(mrhiDestroyBuffer(native, made.vertices));
-            static_cast<void>(mrhiDestroyBuffer(native, made.indices));
-        }
-    }
-
-    /// The meshes this frame draws, made on the device as needed; those
-    /// still to upload within the frame's budget are marked. A draw whose
-    /// mesh is not here is left out.
-    std::map<std::uint64_t, Held*> meshesOf(const render_scene::SceneFrame& scene,
-                                            const MeshSource& given,
-                                            std::uint64_t budget,
-                                            std::vector<Held*>& uploading) {
-        std::map<std::uint64_t, Held*> usable;
-        std::vector<const render_scene::SceneDraw*> all;
+    /// The meshes this frame draws, chosen within the frame's upload
+    /// budget. A draw whose mesh is not chosen is left out.
+    std::map<std::uint64_t, const HeldMesh*>
+    meshesOf(const render_scene::SceneFrame& scene, const MeshSource& given, std::uint64_t budget) {
+        held->begin(budget);
+        std::map<std::uint64_t, const HeldMesh*> usable;
         for (const std::vector<render_scene::SceneDraw>* kList :
              {&scene.draws, &scene.shadows.casters, &scene.lightShadows.casters}) {
             for (const render_scene::SceneDraw& draw : *kList) {
-                all.push_back(&draw);
-            }
-        }
-        for (const render_scene::SceneDraw* kDraw : all) {
-            const render_scene::SceneDraw& draw = *kDraw;
-            if (usable.contains(draw.mesh)) {
-                continue;
-            }
-            auto found = held.find(draw.mesh);
-            if (found == held.end()) {
-                std::shared_ptr<const mesh::Mesh> source = given ? given(draw.mesh) : nullptr;
-                if (source == nullptr || source->positions.empty() || source->indices.empty() ||
-                    held.size() >= limits.maximumMeshes) {
-                    continue;
+                if (!usable.contains(draw.mesh)) {
+                    if (const HeldMesh* kMesh = held->choose(draw.mesh, given, statistics); kMesh != nullptr) {
+                        usable.emplace(draw.mesh, kMesh);
+                    }
                 }
-                mrhiBufferDef vertexDef = mrhiDefaultBufferDef();
-                vertexDef.size = std::uint64_t{source->positions.size()} * kVertexBytes;
-                vertexDef.usage = mrhi_bufferVertex | mrhi_bufferCopyDestination;
-                mrhiBufferDef indexDef = mrhiDefaultBufferDef();
-                indexDef.size = std::uint64_t{source->indices.size()} * 4;
-                indexDef.usage = mrhi_bufferIndex | mrhi_bufferCopyDestination;
-                Held made{.source = std::move(source)};
-                if (mrhiCreateBuffer(native, &vertexDef, &made.vertices) != mrhi_success) {
-                    continue;
-                }
-                if (mrhiCreateBuffer(native, &indexDef, &made.indices) != mrhi_success) {
-                    static_cast<void>(mrhiDestroyBuffer(native, made.vertices));
-                    continue;
-                }
-                found = held.emplace(draw.mesh, std::move(made)).first;
             }
-            Held& mesh = found->second;
-            if (!mesh.uploaded) {
-                const std::uint64_t kBytes = bytesOf(*mesh.source);
-                if (kBytes > budget) {
-                    ++statistics.uploadsDeferred;
-                    continue;
-                }
-                budget -= kBytes;
-                uploading.push_back(&mesh);
-            }
-            usable.emplace(draw.mesh, &mesh);
         }
         return usable;
     }
@@ -140,7 +82,7 @@ struct SceneRenderer::State {
     /// The placements of the draws whose mesh is here, in order, and the
     /// runs of one mesh each: an instanced draw apiece.
     /// Mesh, first instance, instances.
-    using Runs = std::vector<std::tuple<const Held*, std::uint32_t, std::uint32_t>>;
+    using Runs = std::vector<std::tuple<const HeldMesh*, std::uint32_t, std::uint32_t>>;
 
     struct Placed {
         std::vector<float> instances;
@@ -153,7 +95,7 @@ struct SceneRenderer::State {
         std::vector<Runs> slotRuns;
     };
 
-    Placed place(const render_scene::SceneFrame& scene, const std::map<std::uint64_t, Held*>& usable) {
+    Placed place(const render_scene::SceneFrame& scene, const std::map<std::uint64_t, const HeldMesh*>& usable) {
         Placed placed;
         std::uint32_t count = 0;
         const std::span<const render_scene::SceneDraw> kDraws = scene.draws;
@@ -183,9 +125,9 @@ struct SceneRenderer::State {
     }
 
     void append(std::span<const render_scene::SceneDraw> draws,
-                const std::map<std::uint64_t, Held*>& usable,
+                const std::map<std::uint64_t, const HeldMesh*>& usable,
                 Placed& placed,
-                std::vector<std::tuple<const Held*, std::uint32_t, std::uint32_t>>& runs,
+                std::vector<std::tuple<const HeldMesh*, std::uint32_t, std::uint32_t>>& runs,
                 std::uint32_t& count,
                 bool counted) {
         for (const render_scene::SceneDraw& draw : draws) {
@@ -258,11 +200,8 @@ struct SceneRenderer::State {
                 return failed("a shadow square could not be set up", mrhi_errorState);
             }
             for (const auto& [kMesh, kFirst, kCount] : *kSquare.casters) {
-                const auto& [kVertexResource, kIndexResource] = now.imported.at(kMesh);
-                if (mrhiSetVertexBuffer(native, pass, 0, kVertexResource, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
-                    mrhiSetIndexBuffer(native, pass, kIndexResource, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) !=
-                        mrhi_success ||
-                    mrhiDrawIndexed(native,
+                RAWFRAME_TRY(held->bind(pass, *kMesh));
+                if (mrhiDrawIndexed(native,
                                     pass,
                                     static_cast<std::uint32_t>(kMesh->source->indices.size()),
                                     kCount,
@@ -305,10 +244,8 @@ struct SceneRenderer::State {
 
     /// What the open frame declared, until it is recorded and ends.
     struct Declared {
-        std::vector<Held*> uploads;
         Placed placed;
         FrameBlock block;
-        std::map<const Held*, std::pair<mrhiResourceId, mrhiResourceId>> imported;
         mrhiResourceId instances{};
         mrhiResourceId blockResource{};
         mrhiResourceId scene{};
@@ -384,7 +321,7 @@ struct SceneRenderer::State {
             ((std::uint64_t{frame->clusters.ranges.size()} + frame->clusters.indices.size()) * sizeof(std::uint32_t));
         const std::uint64_t kBudget =
             kPlacementBytes < limits.uploadBytesPerFrame ? limits.uploadBytesPerFrame - kPlacementBytes : 0;
-        const std::map<std::uint64_t, Held*> kUsable = meshesOf(*frame, meshes, kBudget, now.uploads);
+        const std::map<std::uint64_t, const HeldMesh*> kUsable = meshesOf(*frame, meshes, kBudget);
         now.placed = place(*frame, kUsable);
         now.block = blockOf(*frame, open.width, open.height);
         now.lights = lightsOf(*frame);
@@ -393,19 +330,9 @@ struct SceneRenderer::State {
                                                                                        : std::vector<std::uint32_t>{0};
         // Everything this frame uses: the meshes it draws, imported; its
         // placements and view; and its targets.
-        for (const auto& [id, mesh] : kUsable) {
-            mrhiResourceId vertices{};
-            mrhiResourceId indices{};
-            if (const mrhiResult kImported = mrhiImportBuffer(native, mesh->vertices, &vertices);
-                kImported != mrhi_success) {
-                return failed("a mesh could not join the frame", kImported);
-            }
-            if (const mrhiResult kImported = mrhiImportBuffer(native, mesh->indices, &indices);
-                kImported != mrhi_success) {
-                return failed("a mesh could not join the frame", kImported);
-            }
-            now.imported.emplace(mesh, std::pair{vertices, indices});
-        }
+        std::vector<mrhiAccess> meshWrites;
+        std::vector<mrhiAccess> meshReads;
+        RAWFRAME_TRY(held->import(meshWrites, meshReads));
         now.draws = !now.placed.runs.empty() || !now.placed.translucentRuns.empty();
         const auto kAny = [](const Runs& runs) {
             return !runs.empty();
@@ -547,10 +474,7 @@ struct SceneRenderer::State {
         for (const mrhiResourceId kView : now.slotViews) {
             writes.push_back(wholeOf(kView, mrhi_accessCopyDestination));
         }
-        for (const Held* mesh : now.uploads) {
-            writes.push_back(wholeOf(now.imported.at(mesh).first, mrhi_accessCopyDestination));
-            writes.push_back(wholeOf(now.imported.at(mesh).second, mrhi_accessCopyDestination));
-        }
+        writes.insert(writes.end(), meshWrites.begin(), meshWrites.end());
         mrhiPassDef uploadDef = mrhiDefaultPassDef();
         uploadDef.passClass = mrhi_passTransfer;
         uploadDef.accesses = writes.data();
@@ -559,13 +483,8 @@ struct SceneRenderer::State {
             return failed("the upload pass could not be added", kAdded);
         }
         // The shadow map first: its casters from each cascade's view.
-        std::vector<mrhiAccess> meshReads;
         if (now.draws || now.casters) {
             meshReads.push_back(wholeOf(now.instances, mrhi_accessVertex));
-        }
-        for (const auto& [mesh, resources] : now.imported) {
-            meshReads.push_back(wholeOf(resources.first, mrhi_accessVertex));
-            meshReads.push_back(wholeOf(resources.second, mrhi_accessIndex));
         }
         std::vector<mrhiAccess> shadowReads = meshReads;
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
@@ -756,21 +675,7 @@ struct SceneRenderer::State {
                 return failed("a shadow square's view could not be written", mrhi_errorCapacity);
             }
         }
-        for (const Held* mesh : now.uploads) {
-            const std::vector<float> kVertices = verticesOf(*mesh->source);
-            const auto& [kVertexResource, kIndexResource] = now.imported.at(mesh);
-            if (mrhiWriteBuffer(
-                    native, now.upload, kVertexResource, 0, kVertices.data(), kVertices.size() * sizeof(float)) !=
-                    mrhi_success ||
-                mrhiWriteBuffer(native,
-                                now.upload,
-                                kIndexResource,
-                                0,
-                                mesh->source->indices.data(),
-                                mesh->source->indices.size() * 4) != mrhi_success) {
-                return failed("a mesh could not be written", mrhi_errorCapacity);
-            }
-        }
+        RAWFRAME_TRY(held->write(now.upload));
         if (mrhiEndPass(native, now.upload) != mrhi_success) {
             return failed("the upload pass could not end", mrhi_errorState);
         }
@@ -847,11 +752,8 @@ struct SceneRenderer::State {
                 return failed("the models could not be set up", mrhi_errorState);
             }
             for (const auto& [kMesh, kFirst, kCount] : runs) {
-                const auto& [kVertexResource, kIndexResource] = now.imported.at(kMesh);
-                if (mrhiSetVertexBuffer(native, pass, 0, kVertexResource, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
-                    mrhiSetIndexBuffer(native, pass, kIndexResource, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) !=
-                        mrhi_success ||
-                    mrhiDrawIndexed(native,
+                RAWFRAME_TRY(held->bind(pass, *kMesh));
+                if (mrhiDrawIndexed(native,
                                     pass,
                                     static_cast<std::uint32_t>(kMesh->source->indices.size()),
                                     kCount,
@@ -943,12 +845,8 @@ struct SceneRenderer::State {
         if (!declared.has_value()) {
             return;
         }
+        held->ended(submitted, statistics);
         if (submitted) {
-            for (Held* mesh : declared->uploads) {
-                mesh->uploaded = true;
-                ++statistics.meshesUploaded;
-                statistics.uploadBytes += bytesOf(*mesh->source);
-            }
             ++statistics.frames;
             statistics.framesSmoothed += declared->smoothed ? 1 : 0;
             if (temporal->enabled()) {
@@ -983,6 +881,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->device = &device;
     state->native = device.native();
     state->limits = limits;
+    state->held.emplace(device.native(), limits.maximumMeshes);
     state->pipelines.device = &device;
     state->pipelines.native = device.native();
     RAWFRAME_TRY(state->pipelines.make());
