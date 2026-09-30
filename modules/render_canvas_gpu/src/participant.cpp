@@ -1,9 +1,11 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/render/device.h"
+#include "rawframe/render/display.h"
 #include "rawframe/render_canvas/frames.h"
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_canvas_gpu/renderer.h"
+#include "rawframe/window/surfaces.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -17,13 +19,13 @@ namespace rawframe::render_canvas_gpu {
 
 namespace {
 
-constexpr diagnostics::EventIdentity kOffscreenSummary{"canvas", "offscreen_summary"};
-constexpr diagnostics::EventIdentity kFailed{"canvas", "offscreen_failed"};
-constexpr std::string_view kMaybe[] = {render::kDevice.name, render_canvas::kCanvasFrames.name};
+constexpr diagnostics::EventIdentity kDrawingSummary{"canvas", "drawing_summary"};
+constexpr diagnostics::EventIdentity kFailed{"canvas", "drawing_failed"};
+constexpr std::string_view kMaybe[] = {render::kDevice.name, render_canvas::kCanvasFrames.name, window::kSurfaces.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 /// How long stopping waits for the last frame: lavapipe draws a view in
 /// milliseconds.
-constexpr std::uint64_t kFinishNanoseconds = 250'000'000;
+constexpr std::uint64_t kFinishNanoseconds = 100'000'000;
 
 /// The pixels a read-back frame's sprites covered: those not the clear
 /// black behind them.
@@ -58,9 +60,10 @@ std::vector<std::byte> tgaOf(const std::vector<std::byte>& pixels, std::uint32_t
     return image;
 }
 
-/// Draws the canvas's frames offscreen on the one device, one on the GPU
-/// at a time, and reads some back.
-class OffscreenParticipant final : public composition::Participant {
+/// Draws the canvas's frames on the one device, one on the GPU at a time:
+/// shown on the process's window where it has one, else offscreen when
+/// asked; some are read back.
+class DrawingParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
         const composition::Configuration& configuration = context.configuration();
@@ -72,10 +75,14 @@ public:
                                                                "canvas.offscreen is true or false")
                                                       .error()};
         }
-        RAWFRAME_TRY_ASSIGN(readEvery_, configuration.unsignedInteger("canvas.offscreen_read_every", 60));
-        capture_ = configuration.path("canvas.offscreen_capture");
-        if (kOffscreen != "true" || !context.has(render::kDevice.name) ||
-            !context.has(render_canvas::kCanvasFrames.name)) {
+        RAWFRAME_TRY_ASSIGN(readEvery_, configuration.unsignedInteger("canvas.read_every", 60));
+        capture_ = configuration.path("canvas.capture");
+        if (!context.has(render::kDevice.name) || !context.has(render_canvas::kCanvasFrames.name)) {
+            return {};
+        }
+        if (context.has(window::kSurfaces.name)) {
+            RAWFRAME_TRY_ASSIGN(windows_, context.capability(window::kSurfaces));
+        } else if (kOffscreen != "true") {
             return {};
         }
         RAWFRAME_TRY_ASSIGN(devices_, context.capability(render::kDevice));
@@ -111,6 +118,14 @@ public:
                 return;
             }
             renderer_ = std::move(*made);
+            if (windows_ != nullptr) {
+                auto display = render::Display::create(*device);
+                if (!display.has_value()) {
+                    fail(display.error());
+                    return;
+                }
+                display_ = std::move(*display);
+            }
         }
         if (drawing_) {
             const auto kDone = renderer_->done();
@@ -126,10 +141,23 @@ public:
             takePixels();
         }
         const bool kRead = readEvery_ != 0 && (submitted_ + 1) % readEvery_ == 0;
-        const auto kDrawn = renderer_->render(
-            *frame,
-            textures_,
-            OffscreenTarget{.width = frames_->width(), .height = frames_->height(), .readBack = kRead});
+        OffscreenTarget target{.width = frames_->width(), .height = frames_->height(), .readBack = kRead};
+        std::optional<ShownOn> shown;
+        if (windows_ != nullptr) {
+            // Shown on the window, drawn at its size; a window that shows
+            // nothing this frame is not drawn for.
+            const auto kPrepared =
+                windows_->states().empty() ? std::nullopt : devices_->prepare(windows_->states()[0].window);
+            if (!kPrepared.has_value() || !kPrepared->second.drawable) {
+                ++framesHidden_;
+                return;
+            }
+            target.width = kPrepared->second.size.width;
+            target.height = kPrepared->second.size.height;
+            shown = ShownOn{.display = display_.get(), .surface = kPrepared->first};
+        }
+        const auto kDrawn = shown.has_value() ? renderer_->render(*frame, textures_, target, *shown)
+                                              : renderer_->render(*frame, textures_, target);
         if (!kDrawn.has_value()) {
             fail(kDrawn.error());
             return;
@@ -137,6 +165,12 @@ public:
         if (*kDrawn) {
             ++submitted_;
             drawing_ = true;
+            if (kRead) {
+                readWidth_ = target.width;
+                readHeight_ = target.height;
+            }
+            lastWidth_ = target.width;
+            lastHeight_ = target.height;
         }
     }
 
@@ -152,20 +186,25 @@ public:
             statistics = renderer_->statistics();
             // Before the device, which the Runtime holds past the World.
             renderer_.reset();
+            display_.reset();
         }
         bool captured = false;
         if (capture_.has_value() && last_.has_value()) {
-            const std::vector<std::byte> kImage = tgaOf(*last_, frames_->width(), frames_->height());
+            const std::vector<std::byte> kImage = tgaOf(*last_, capturedWidth_, capturedHeight_);
             std::ofstream file{*capture_, std::ios::binary};
             file.write(reinterpret_cast<const char*>(kImage.data()), static_cast<std::streamsize>(kImage.size()));
             captured = static_cast<bool>(file);
         }
         emitter_.log(diagnostics::Severity::Info,
-                     kOffscreenSummary,
-                     "what the device drew of one client's canvas, offscreen",
-                     {diagnostics::field("width", frames_->width()),
-                      diagnostics::field("height", frames_->height()),
+                     kDrawingSummary,
+                     "what the device drew of one client's canvas",
+                     {diagnostics::field("window", windows_ != nullptr),
+                      diagnostics::field("width", lastWidth_),
+                      diagnostics::field("height", lastHeight_),
                       diagnostics::field("frames", statistics.frames),
+                      diagnostics::field("framesShown", statistics.framesShown),
+                      diagnostics::field("framesNotShown", statistics.framesNotShown),
+                      diagnostics::field("framesHidden", framesHidden_),
                       diagnostics::field("framesWaiting", statistics.framesWaiting),
                       diagnostics::field("framesBusy", framesBusy_),
                       diagnostics::field("framesWithoutDevice", framesWithoutDevice_),
@@ -189,6 +228,8 @@ private:
             mostCovered_ = std::max(mostCovered_, lastCovered_);
             if (capture_.has_value()) {
                 last_ = std::move(*pixels);
+                capturedWidth_ = readWidth_;
+                capturedHeight_ = readHeight_;
             }
         }
     }
@@ -203,6 +244,16 @@ private:
     }
 
     render::DeviceHolder* devices_ = nullptr;
+    window::Surfaces* windows_ = nullptr;
+    std::unique_ptr<render::Display> display_;
+    std::uint64_t framesHidden_ = 0;
+    /// The last frame drawn's size, and that of the frames read back.
+    std::uint32_t lastWidth_ = 0;
+    std::uint32_t lastHeight_ = 0;
+    std::uint32_t readWidth_ = 0;
+    std::uint32_t readHeight_ = 0;
+    std::uint32_t capturedWidth_ = 0;
+    std::uint32_t capturedHeight_ = 0;
     render_canvas::CanvasFrames* frames_ = nullptr;
     TextureSource textures_;
     std::uint64_t readEvery_ = 60;
@@ -222,7 +273,7 @@ private:
 };
 
 result::Result<composition::ParticipantOwner> make(composition::ParticipantContext& context) noexcept {
-    auto participant = std::make_unique<OffscreenParticipant>();
+    auto participant = std::make_unique<DrawingParticipant>();
     RAWFRAME_TRY(participant->load(context));
     return composition::ParticipantOwner{participant.release()};
 }
@@ -231,13 +282,13 @@ result::Result<composition::ParticipantOwner> make(composition::ParticipantConte
 
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
     registrar.submit(composition::ParticipantDeclaration{
-        .identity = "rawframe.render_canvas_gpu.offscreen",
+        .identity = "rawframe.render_canvas_gpu.drawing",
         .factory = &make,
         .scope = composition::LifetimeScope::World,
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(300)},
-        .observabilityIdentity = "render_canvas_gpu.offscreen",
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(120)},
+        .observabilityIdentity = "render_canvas_gpu.drawing",
         .budgetOwner = "render",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::Present),
     });

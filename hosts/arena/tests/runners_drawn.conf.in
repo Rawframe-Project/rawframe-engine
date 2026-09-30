@@ -17,4 +17,4 @@ render.device = any
 canvas.offscreen = true
 canvas.width = 640
 canvas.height = 360
-canvas.offscreen_capture = @CAPTURE@
+canvas.capture = @CAPTURE@

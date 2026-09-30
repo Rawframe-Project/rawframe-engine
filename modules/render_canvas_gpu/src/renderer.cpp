@@ -225,8 +225,10 @@ struct CanvasRenderer::State {
         return usable;
     }
 
-    result::Result<bool>
-    render(const render_canvas::CanvasFrame& frame, const TextureSource& textures, const OffscreenTarget& target) {
+    result::Result<bool> render(const render_canvas::CanvasFrame& frame,
+                                const TextureSource& textures,
+                                const OffscreenTarget& target,
+                                const std::optional<ShownOn>& shown) {
         if (target.width == 0 || target.height == 0 || target.width > limits.maximumSide ||
             target.height > limits.maximumSide) {
             return refuse(result::ErrorClass::OutOfRange,
@@ -285,6 +287,8 @@ struct CanvasRenderer::State {
         }
         mrhiTextureDef targetDef = mrhiDefaultTextureDef();
         targetDef.format = mrhi_formatRgba8UnormSrgb;
+        // Shown, the picture's bytes are read through its linear twin.
+        targetDef.viewFormats[0] = shown.has_value() ? mrhi_formatRgba8Unorm : mrhi_formatNone;
         targetDef.width = target.width;
         targetDef.height = target.height;
         mrhiResourceId image{};
@@ -353,6 +357,15 @@ struct CanvasRenderer::State {
             }
             reading = made;
         }
+        std::optional<std::uint64_t> displaying;
+        if (shown.has_value()) {
+            auto added = shown->display->add(shown->surface, render::requestKey(image.index1, image.generation));
+            if (!added.has_value()) {
+                static_cast<void>(mrhiDropFrame(native));
+                return std::unexpected<result::Error>{std::move(added).error()};
+            }
+            displaying = *added;
+        }
         if (const mrhiResult kCompiled = mrhiCompileFrame(native); kCompiled != mrhi_success) {
             static_cast<void>(mrhiDropFrame(native));
             return failed("the frame could not be compiled", kCompiled);
@@ -361,6 +374,12 @@ struct CanvasRenderer::State {
             !kRecorded.has_value()) {
             static_cast<void>(mrhiDropFrame(native));
             return std::unexpected<result::Error>{kRecorded.error().clone()};
+        }
+        if (displaying.has_value()) {
+            if (auto recorded = shown->display->record(*displaying); !recorded.has_value()) {
+                static_cast<void>(mrhiDropFrame(native));
+                return std::unexpected<result::Error>{std::move(recorded).error()};
+            }
         }
         mrhiRequestId token{};
         if (const mrhiResult kSubmitted = mrhiSubmitFrame(native, &token); kSubmitted != mrhi_success) {
@@ -374,6 +393,9 @@ struct CanvasRenderer::State {
         frame_ = render::requestKey(token.index1, token.generation);
         frameDone = false;
         ++statistics.frames;
+        if (shown.has_value()) {
+            ++(displaying.has_value() ? statistics.framesShown : statistics.framesNotShown);
+        }
         return true;
     }
 
@@ -533,7 +555,17 @@ result::Result<std::unique_ptr<CanvasRenderer>> CanvasRenderer::create(render::D
 result::Result<bool> CanvasRenderer::render(const render_canvas::CanvasFrame& frame,
                                             const TextureSource& textures,
                                             const OffscreenTarget& target) {
-    return state_->render(frame, textures, target);
+    return state_->render(frame, textures, target, std::nullopt);
+}
+
+result::Result<bool> CanvasRenderer::render(const render_canvas::CanvasFrame& frame,
+                                            const TextureSource& textures,
+                                            const OffscreenTarget& target,
+                                            const ShownOn& shown) {
+    if (shown.display == nullptr) {
+        return refuse(result::ErrorClass::InvalidArgument, CanvasGpuError::State, "a picture is shown by a display");
+    }
+    return state_->render(frame, textures, target, shown);
 }
 
 result::Result<bool> CanvasRenderer::done() {

@@ -12,6 +12,7 @@
 // where Maul RHI does. Client only.
 
 #include "rawframe/render/device.h"
+#include "rawframe/render/display.h"
 #include "rawframe/render_canvas/canvas.h"
 #include "rawframe/result/result.h"
 #include "rawframe/texture/texture.h"
@@ -40,6 +41,14 @@ struct OffscreenTarget {
     bool readBack = false;
 };
 
+/// A window's surface a frame's picture is shown on (D280): the picture is
+/// drawn into its offscreen target of the surface's size, then `display`
+/// draws it over the surface's image, which the frame presents.
+struct ShownOn {
+    render::Display* display = nullptr;
+    std::uint64_t surface = 0;
+};
+
 /// SPEC-0024's limit points as the canvas's GPU half has them.
 struct RendererLimits {
     /// Textures held on the device at once; a draw naming one past them is
@@ -47,7 +56,9 @@ struct RendererLimits {
     std::size_t maximumTextures = 256;
     /// SPEC-0024's `upload_bytes_per_frame`: a texture that would pass it
     /// waits for a later frame (`deferred`), its draws left out until then.
-    std::uint64_t uploadBytesPerFrame = std::uint64_t{64} << 20U;
+    /// Three quarters of what the device uploads in a frame, the rest kept
+    /// for the frame's corners; a texture larger than it is never drawn.
+    std::uint64_t uploadBytesPerFrame = render::kFrameUploadBytes / 4 * 3;
     /// An offscreen target's sides.
     std::uint32_t maximumSide = 8192;
 };
@@ -61,6 +72,10 @@ struct RendererStatistics {
     /// Draws left out: their texture not ready, in a format the device does
     /// not take, deferred, or past the textures held.
     std::uint64_t drawsLeftOut = 0;
+    /// Frames shown on a window's surface, and those asked to be that were
+    /// not: the surface had no image, or its pipeline was being made.
+    std::uint64_t framesShown = 0;
+    std::uint64_t framesNotShown = 0;
     std::uint64_t texturesUploaded = 0;
     std::uint64_t uploadBytes = 0;
     std::uint64_t uploadsDeferred = 0;
@@ -85,6 +100,11 @@ public:
     /// submitted; false while the pipeline is still being made. Never waits.
     [[nodiscard]] result::Result<bool>
     render(const render_canvas::CanvasFrame& frame, const TextureSource& textures, const OffscreenTarget& target);
+    /// The same, and the picture shown on a window's surface.
+    [[nodiscard]] result::Result<bool> render(const render_canvas::CanvasFrame& frame,
+                                              const TextureSource& textures,
+                                              const OffscreenTarget& target,
+                                              const ShownOn& shown);
 
     /// Whether the last frame submitted is done on the GPU, its pixels
     /// ready if it read them back. Never waits.
