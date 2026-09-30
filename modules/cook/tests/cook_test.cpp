@@ -17,6 +17,7 @@
 #include "rawframe/cook/errors.h"
 #include "rawframe/cook/game.h"
 #include "rawframe/cook/kest.h"
+#include "rawframe/cook/material.h"
 #include "rawframe/cook/mesh.h"
 #include "rawframe/cook/mod.h"
 #include "rawframe/cook/scene.h"
@@ -24,6 +25,7 @@
 #include "rawframe/cook/texture.h"
 #include "rawframe/kest_library/library.h"
 #include "rawframe/localization/table.h"
+#include "rawframe/material/material.h"
 #include "rawframe/mesh/errors.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/test/scratch.h"
@@ -578,6 +580,54 @@ RAWFRAME_TEST(AGltfCooksIntoAMeshWithItsBuffers) {
     writeText(kProps / "shard.gltf", gltf);
     const CookReport kOutside = kCook();
     RAWFRAME_EXPECT(kOutside.failures.size() == 1 && kOutside.failures[0].domain() == mesh::kMeshDomain);
+}
+
+RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {
+    const Project kProject;
+    const fs::path kLooks = kProject.sources / "looks";
+    material::Material brass{.doubleSided = true};
+    brass.surface.baseColor = {0.9F, 0.7F, 0.3F};
+    brass.surface.baseMetalness = 1;
+    brass.surface.specularRoughness = 0.4F;
+    const auto kText = material::writeMaterial(material::documentOf(brass, 0x2f00000000000002ULL));
+    RAWFRAME_EXPECT(kText.has_value());
+    if (!kText.has_value()) {
+        return;
+    }
+    writeText(kLooks / "brass.rfmaterial", *kText);
+    writeText(kLooks / "brass.rfmaterial.rfmeta", sidecar("000000000000000000000000000000c1", "", "rawframe.material"));
+    static const std::array<Importer, 2> kImporters = {audioImporter(), materialImporter()};
+    const auto kCook = [&kProject] {
+        auto report = cookSources(CookRequest{
+            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+        RAWFRAME_EXPECT(report.has_value());
+        return report.has_value() ? std::move(*report) : CookReport{};
+    };
+    const CookReport kFirst = kCook();
+    RAWFRAME_EXPECT(kFirst.failures.empty());
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value());
+    bool found = false;
+    for (const content::ManifestEntry& each :
+         kManifest.has_value() ? *kManifest : std::vector<content::ManifestEntry>{}) {
+        if (each.type.value == material::kMaterialType &&
+            each.representation.text() == material::kMaterialRepresentation) {
+            const std::string kBytes = readText(kProject.output / each.locator);
+            const auto kRead = material::decode(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
+            found = kRead.has_value() && *kRead == brass;
+        }
+    }
+    RAWFRAME_EXPECT(found);
+    // A material that does not compile fails, visibly: here, an input
+    // connected round to its own node.
+    std::string connected = *kText;
+    connected.replace(
+        connected.find("\"base_metalness\": 1"),
+        19,
+        "\"base_metalness\": {\n          \"node\": \"2f00000000000002\",\n          \"output\": \"out\"\n        }");
+    writeText(kLooks / "brass.rfmaterial", connected);
+    const CookReport kRefused = kCook();
+    RAWFRAME_EXPECT(kRefused.failures.size() == 1);
 }
 
 RAWFRAME_TEST(AnImageCooksIntoATextureAsItsSettingsSay) {
