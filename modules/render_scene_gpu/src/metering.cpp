@@ -147,9 +147,9 @@ Metering::record(const Pipelines& pipelines, mrhiResourceId scene, std::uint32_t
         bufferAt(1, exposure_, sizeof(ExposureBlock)),
         bufferAt(2, histogram_, sizeof(kEmpty)),
         bufferAt(3, meterResource_, sizeof(MeterBlock))};
-    // Every other texel each way: a workgroup of 16 by 16 covers 32 by 32.
-    const std::uint32_t kAcross = (width + 31) / 32;
-    const std::uint32_t kDown = (height + 31) / 32;
+    // Every fourth texel each way: a workgroup of 16 by 16 covers 64 by 64.
+    const std::uint32_t kAcross = (width + 63) / 64;
+    const std::uint32_t kDown = (height + 63) / 64;
     if (mrhiBeginPass(native_, histogramPass_) != mrhi_success ||
         mrhiSetComputePipeline(native_, histogramPass_, pipelines.histogram.compute) != mrhi_success ||
         mrhiSetBindings(native_, histogramPass_, 0, kBindings.data(), kBindings.size()) != mrhi_success ||

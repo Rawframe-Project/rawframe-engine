@@ -1,10 +1,10 @@
 // The camera's metering (D293, ADR-0051), compute entry "histogram": every
-// other texel each way of the frame's pre-exposed light, its luminance
+// fourth texel each way of the frame's pre-exposed light, its luminance
 // taken back to candela per square meter by the exposure it was drawn
 // with, counted into 128 bins: the first for no light, the rest spanning
 // log2 luminance from -8 to 24, the last also taking light the target
-// could not hold. Each workgroup counts its texels in shared
-// bins, then adds them to the frame's.
+// could not hold. Each workgroup counts its texels in shared bins, then
+// adds them to the frame's.
 
 #version 450
 #extension GL_EXT_samplerless_texture_functions : require
@@ -39,7 +39,7 @@ void main()
     }
     barrier();
     const ivec2 kSize = textureSize(scene, 0);
-    const ivec2 kTexel = ivec2(gl_GlobalInvocationID.xy) * 2;
+    const ivec2 kTexel = ivec2(gl_GlobalInvocationID.xy) * 4;
     if (kTexel.x < kSize.x && kTexel.y < kSize.y) {
         const vec3 kColor = texelFetch(scene, kTexel, 0).rgb;
         const float kLuminance = dot(kColor, vec3(0.2126, 0.7152, 0.0722)) / max(exposure.value.y, 1e-30);

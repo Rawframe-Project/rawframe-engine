@@ -24,7 +24,7 @@ fn histogram(@builtin(local_invocation_index) index: u32, @builtin(global_invoca
     }
     workgroupBarrier();
     let size = vec2i(textureDimensions(scene, 0));
-    let texel = vec2i(invocation.xy) * 2;
+    let texel = vec2i(invocation.xy) * 4;
     if (texel.x < size.x && texel.y < size.y) {
         let color = textureLoad(scene, texel, 0).rgb;
         let luminance = dot(color, vec3f(0.2126, 0.7152, 0.0722)) / max(exposure.y, 1e-30);
