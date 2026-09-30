@@ -5,7 +5,9 @@
 // the point and spot lights of its cluster (D290), each where its squares
 // of the punctual shadows' atlas say it reaches (D292); and by the sky
 // (brighter facing up, and seen in reflection), or by its picture, all
-// around and reflected by roughness (D322); in physical units, times the exposure the device
+// around and reflected by roughness (D322), its reflection the reflection
+// probe's that holds the model where one does, projected onto the probe's
+// box (D325); in physical units, times the exposure the device
 // holds (the camera's, or its metering's, D293), so the scene target holds
 // pre-exposed scene-linear light (ADR-0047). And how far the point moved
 // on the screen since the frame before, for the temporal pass (D291).
@@ -54,6 +56,8 @@ layout(location = 4) in vec3 inBefore;
 layout(location = 5) flat in uint inMaterial;
 layout(location = 6) in vec2 inUv;
 layout(location = 7) in vec4 inTangent;
+// The reflection probe it reflects, nought for the sky's picture (D325).
+layout(location = 8) flat in uint inProbe;
 
 layout(set = 0, binding = 1) uniform texture2D shadowMap;
 layout(set = 0, binding = 2) uniform samplerShadow shadowSampler;
@@ -140,6 +144,32 @@ layout(set = 0, binding = 17) uniform sampler normalSampler;
 // reflects it.
 layout(set = 0, binding = 18) uniform textureCube environmentTexture;
 layout(set = 0, binding = 19) uniform sampler environmentSampler;
+
+// What each model reflects (D325): the sky's picture first, then each
+// reflection probe, the one the draw's run binds at slot 18. Its box's
+// middle relative to the eye and its levels, nought for none; its half
+// sides, nought for the sky's, which is not projected; and its light's
+// scale.
+struct Probe {
+    vec4 place;
+    vec4 extent;
+    vec4 light;
+};
+
+layout(set = 0, binding = 20, std430) readonly buffer Probes
+{
+    Probe probes[];
+};
+
+// Where a reflection from `placed` along `mirrored` meets the probe's box,
+// as seen from its middle, the way its picture was taken: a point outside
+// the box as if on its side.
+vec3 projected(Probe probe, vec3 placed, vec3 mirrored)
+{
+    const vec3 kLocal = clamp(placed - probe.place.xyz, -probe.extent.xyz, probe.extent.xyz);
+    const vec3 kFar = (probe.extent.xyz - kLocal * sign(mirrored)) / max(abs(mirrored), vec3(1e-5));
+    return kLocal + mirrored * min(min(kFar.x, kFar.y), kFar.z);
+}
 
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
@@ -386,26 +416,29 @@ void main()
                          punctual(inPlaced, kNormal, kSurface, kToEye);
     // The sky above and the ground below (D304): their light across the
     // normal's side, diffused, and along the reflection, the Fresnel of a
-    // rough surface (reflection probes replace this, ADR-0051); what the
-    // material occludes of both.
+    // rough surface; what the material occludes of both.
     const float kNv = max(dot(kNormal, kToEye), 0.0);
     const vec3 kSheen = kSurface.headOn + (max(vec3(1.0 - kSurface.roughness), kSurface.headOn) - kSurface.headOn) *
                                               pow(1.0 - kNv, 5.0);
     const vec3 kMirrored = reflect(-kToEye, kNormal);
-    const vec3 kAround = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kNormal.y);
-    const vec3 kAlong = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
-    vec3 sky = kOcclusion * ((1.0 - kSheen) * kSurface.diffuse * kAround + kSheen * kAlong);
-    // With the sky's picture (D322): its irradiance across the normal's
-    // side, and along the reflection its level for the roughness, weighed
-    // by the split sum.
+    // With the sky's picture (D322), its irradiance across the normal's
+    // side.
+    vec3 around = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kNormal.y);
     if (frame.environment.w > 0.5) {
-        const vec3 kReflected = textureLod(samplerCube(environmentTexture, environmentSampler),
-                                           kMirrored,
-                                           kSurface.roughness * (frame.environment.w - 1.0)).rgb;
-        const vec2 kScaleBias = environmentBrdf(kSurface.roughness, kNv);
-        sky = kOcclusion * frame.sky.rgb *
-              ((1.0 - kSheen) * kSurface.diffuse * irradianceAt(kNormal) +
-               (kSurface.headOn * kScaleBias.x + kScaleBias.y) * kReflected);
+        around = frame.sky.rgb * irradianceAt(kNormal);
     }
-    outColor = vec4((kDirect + sky + kGlow) * exposure.value.y, kOpacity);
+    // Along the reflection, the sky's picture's or the probe's level for
+    // the roughness, weighed by the split sum (D322, D325).
+    vec3 along = kSheen * mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
+    const Probe kProbe = probes[min(inProbe, uint(probes.length()) - 1u)];
+    if (kProbe.place.w > 0.5) {
+        const vec3 kToward = kProbe.extent.x > 0.0 ? projected(kProbe, inPlaced, kMirrored) : kMirrored;
+        const vec3 kReflected = textureLod(samplerCube(environmentTexture, environmentSampler),
+                                           kToward,
+                                           kSurface.roughness * (kProbe.place.w - 1.0)).rgb;
+        const vec2 kScaleBias = environmentBrdf(kSurface.roughness, kNv);
+        along = (kSurface.headOn * kScaleBias.x + kScaleBias.y) * kProbe.light.rgb * kReflected;
+    }
+    const vec3 kSky = kOcclusion * ((1.0 - kSheen) * kSurface.diffuse * around + along);
+    outColor = vec4((kDirect + kSky + kGlow) * exposure.value.y, kOpacity);
 }

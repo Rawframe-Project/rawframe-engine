@@ -70,6 +70,9 @@ struct SceneRenderer::State {
     std::shared_ptr<const texture::Texture> dark;
     std::shared_ptr<const texture::Texture> environment;
     std::array<std::array<float, 4>, 9> irradiance{};
+    /// The reflection probes' pictures this frame asks for, and their
+    /// levels (D325).
+    std::map<std::uint64_t, std::uint32_t> probeLevels;
     /// What the next frame draws.
     const render_scene::SceneFrame* frame = nullptr;
     MeshSource meshes;
@@ -119,6 +122,15 @@ struct SceneRenderer::State {
                     irradiance = irradianceOf(*kPicture);
                     environment = kPicture;
                 }
+            }
+        }
+        // Each reflection probe's picture, if it is one (D325).
+        probeLevels.clear();
+        for (const render_scene::SceneProbe& kProbe : scene.probes) {
+            const std::shared_ptr<const texture::Texture> kPicture = sampled ? sampled(kProbe.environment) : nullptr;
+            if (kPicture != nullptr && isEnvironment(*kPicture)) {
+                static_cast<void>(textures->choose(kProbe.environment, kPicture));
+                probeLevels[kProbe.environment] = static_cast<std::uint32_t>(kPicture->levels.size());
             }
         }
         for (const std::vector<render_scene::SceneDraw>* kList :
@@ -281,6 +293,9 @@ struct SceneRenderer::State {
         mrhiResourceId skyResource{};
         /// The sky's picture bound this frame, or the dark cube (D322).
         std::uint64_t environment = kNoEnvironment;
+        /// What the models reflect (D325).
+        Reflections reflections;
+        mrhiResourceId probesResource{};
         std::uint32_t width = 0;
         std::uint32_t height = 0;
         /// Where each texel's point moved, the temporal pass's input (D291).
@@ -311,7 +326,8 @@ struct SceneRenderer::State {
             (std::uint64_t{frame->draws.size()} * kInstanceBytes) +
             (std::uint64_t{frame->lights3d.size()} * sizeof(LightBlock)) +
             (std::uint64_t{frame->lightShadows.slots.size()} * (sizeof(SlotBlock) + sizeof(Matrix4))) +
-            ((std::uint64_t{frame->clusters.ranges.size()} + frame->clusters.indices.size()) * sizeof(std::uint32_t));
+            ((std::uint64_t{frame->clusters.ranges.size()} + frame->clusters.indices.size()) * sizeof(std::uint32_t)) +
+            ((std::uint64_t{frame->probes.size()} + 1) * sizeof(ProbeBlock));
         const std::uint64_t kBudget =
             kPlacementBytes < limits.uploadBytesPerFrame ? limits.uploadBytesPerFrame - kPlacementBytes : 0;
         // White's four bytes and the dark cube's 48 are kept aside, so they
@@ -359,6 +375,18 @@ struct SceneRenderer::State {
             now.block.environment = {0, 0, 0, static_cast<float>(environment->levels.size())};
             now.block.irradiance = irradiance;
         }
+        // What each model reflects: a probe's picture where it is held this
+        // frame, else the sky's (D325).
+        now.reflections =
+            reflectionsOf(*frame,
+                          now.environment,
+                          static_cast<std::uint32_t>(now.block.environment[3]),
+                          [this](std::uint64_t id) -> std::uint32_t {
+                              const auto kFound = probeLevels.find(id);
+                              return kFound != probeLevels.end() && textures->cube(id) && textures->resource(id) != 0
+                                         ? kFound->second
+                                         : 0;
+                          });
         now.sky = SkyBlock{.light = now.block.sky,
                            .environment = now.block.environment,
                            .toDirection = inverseOf(now.block.viewProjection),
@@ -385,7 +413,8 @@ struct SceneRenderer::State {
              {std::pair{now.materials.size() * sizeof(render_scene::MaterialBlob), &now.materialsResource},
               std::pair{now.lights.size() * sizeof(LightBlock), &now.lightsResource},
               std::pair{now.ranges.size() * sizeof(std::uint32_t), &now.rangesResource},
-              std::pair{now.indices.size() * sizeof(std::uint32_t), &now.indicesResource}}) {
+              std::pair{now.indices.size() * sizeof(std::uint32_t), &now.indicesResource},
+              std::pair{now.reflections.blocks.size() * sizeof(ProbeBlock), &now.probesResource}}) {
             mrhiBufferDef def = mrhiDefaultBufferDef();
             def.size = kBytes;
             if (mrhiDeclareBuffer(native, &def, kMade) != mrhi_success) {
@@ -472,7 +501,8 @@ struct SceneRenderer::State {
                                           wholeOf(now.lightsResource, mrhi_accessCopyDestination),
                                           wholeOf(now.materialsResource, mrhi_accessCopyDestination),
                                           wholeOf(now.rangesResource, mrhi_accessCopyDestination),
-                                          wholeOf(now.indicesResource, mrhi_accessCopyDestination)};
+                                          wholeOf(now.indicesResource, mrhi_accessCopyDestination),
+                                          wholeOf(now.probesResource, mrhi_accessCopyDestination)};
         if (now.draws || now.casters) {
             writes.push_back(wholeOf(now.instances, mrhi_accessCopyDestination));
         }
@@ -546,7 +576,7 @@ struct SceneRenderer::State {
         reads.push_back(wholeOf(now.skyResource, mrhi_accessUniform));
         reads.push_back(wholeOf(metering->exposure(), mrhi_accessStorageRead));
         for (const mrhiResourceId kLights :
-             {now.lightsResource, now.rangesResource, now.indicesResource, now.slotsResource}) {
+             {now.lightsResource, now.rangesResource, now.indicesResource, now.slotsResource, now.probesResource}) {
             reads.push_back(wholeOf(kLights, mrhi_accessStorageRead));
         }
         reads.push_back(mrhiAccess{.resource = now.lightShadowMap,
@@ -669,7 +699,13 @@ struct SceneRenderer::State {
                             now.indicesResource,
                             0,
                             now.indices.data(),
-                            now.indices.size() * sizeof(std::uint32_t)) != mrhi_success) {
+                            now.indices.size() * sizeof(std::uint32_t)) != mrhi_success ||
+            mrhiWriteBuffer(native,
+                            now.upload,
+                            now.probesResource,
+                            0,
+                            now.reflections.blocks.data(),
+                            now.reflections.blocks.size() * sizeof(ProbeBlock)) != mrhi_success) {
             return failed("the frame's lights could not be written", mrhi_errorCapacity);
         }
         if (mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock)) != mrhi_success ||
@@ -703,11 +739,12 @@ struct SceneRenderer::State {
         }
         RAWFRAME_TRY(castShadows(now));
         // The scene's table: slots 10 to 17 are each run's textures; 18 and
-        // 19 the sky's picture (D322).
+        // 19 the sky's picture (D322), or the run's probe's; 20 what each
+        // reflects (D325).
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
             samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
-        const std::array<mrhiBinding, 20> kFrameBinding = {
+        const std::array<mrhiBinding, 21> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, now.shadowMap),
             samplerAt(2, pipelines.shadowSampler),
@@ -727,17 +764,18 @@ struct SceneRenderer::State {
             textureAt(16, {}),
             samplerAt(17, {}),
             kPicture,
-            kPictureSampler};
+            kPictureSampler,
+            bufferAt(20, now.probesResource, now.reflections.blocks.size() * sizeof(ProbeBlock))};
         std::array<mrhiBinding, 4> skyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
                                                  bufferAt(1, metering->exposure(), sizeof(ExposureBlock)),
                                                  kPicture,
                                                  kPictureSampler};
         skyBinding[2].slot = 2;
         skyBinding[3].slot = 3;
-        // Runs of models drawn with `pipeline` in `pass`.
         // Runs of models drawn with `pipeline` in `pass`, the table set
         // again where a run samples another texture than the one before
-        // (D309): white for none, and for one not held this frame.
+        // (D309), white for none and for one not held this frame, or
+        // reflects another probe (D325).
         const auto kDrawRuns = [this, &now, &kFrameBinding](mrhiPassId pass,
                                                             mrhiGraphicsPipelineId pipeline,
                                                             const Runs& runs) -> result::Status {
@@ -748,18 +786,21 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 20> binding = kFrameBinding;
-            std::optional<render_scene::SceneTextures> bound;
+            std::array<mrhiBinding, 21> binding = kFrameBinding;
+            std::optional<std::pair<render_scene::SceneTextures, std::uint32_t>> bound;
             for (const Run& run : runs) {
-                if (bound != run.texture) {
+                if (bound != std::pair{run.texture, run.probe}) {
                     bindTexture(binding[10], binding[11], run.texture.base);
                     bindTexture(binding[12], binding[13], run.texture.packed);
                     bindTexture(binding[14], binding[15], run.texture.emission);
                     bindTexture(binding[16], binding[17], run.texture.normal);
+                    const std::vector<std::uint64_t>& kCubes = now.reflections.cubes;
+                    binding[18].resource =
+                        resourceOf(textures->resource(run.probe < kCubes.size() ? kCubes[run.probe] : kCubes[0]));
                     if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
                         return failed("a material's texture could not be bound", mrhi_errorState);
                     }
-                    bound = run.texture;
+                    bound = std::pair{run.texture, run.probe};
                 }
                 RAWFRAME_TRY(held->bind(pass, *run.mesh));
                 if (mrhiDrawIndexed(native, pass, run.indexCount, run.count, run.firstIndex, 0, run.first) !=

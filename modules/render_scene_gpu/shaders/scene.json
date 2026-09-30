@@ -16,7 +16,8 @@
                 {"location": 11, "type": "float32", "components": 4},
                 {"location": 12, "type": "float32", "components": 1},
                 {"location": 13, "type": "float32", "components": 2},
-                {"location": 14, "type": "float32", "components": 4}],
+                {"location": 14, "type": "float32", "components": 4},
+                {"location": 15, "type": "float32", "components": 1}],
      "variables": [{"location": 0, "type": "float32", "components": 3},
                    {"location": 1, "type": "float32", "components": 4},
                    {"location": 2, "type": "float32", "components": 3},
@@ -24,7 +25,8 @@
                    {"location": 4, "type": "float32", "components": 3},
                    {"location": 5, "type": "uint32", "components": 1},
                    {"location": 6, "type": "float32", "components": 2},
-                   {"location": 7, "type": "float32", "components": 4}]},
+                   {"location": 7, "type": "float32", "components": 4},
+                   {"location": 8, "type": "uint32", "components": 1}]},
     {"name": "fs", "stage": "fragment",
      "variables": [{"location": 0, "type": "float32", "components": 3},
                    {"location": 1, "type": "float32", "components": 4},
@@ -33,7 +35,8 @@
                    {"location": 4, "type": "float32", "components": 3},
                    {"location": 5, "type": "uint32", "components": 1},
                    {"location": 6, "type": "float32", "components": 2},
-                   {"location": 7, "type": "float32", "components": 4}],
+                   {"location": 7, "type": "float32", "components": 4},
+                   {"location": 8, "type": "uint32", "components": 1}],
      "outputs": [{"location": 0, "type": "float32", "components": 4},
                  {"location": 1, "type": "float32", "components": 2}]},
     {"name": "cut", "stage": "fragment",
@@ -69,7 +72,8 @@
     {"table": 0, "slot": 17, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"},
     {"table": 0, "slot": 18, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "float", "view_dimension": "cube", "multisampled": false},
-    {"table": 0, "slot": 19, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"}
+    {"table": 0, "slot": 19, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"},
+    {"table": 0, "slot": 20, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 48}
   ],
   "constants": []
 }

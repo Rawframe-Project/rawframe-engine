@@ -89,7 +89,7 @@ result::Status Pipelines::make() {
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
         mrhiVertexBufferLayout{.stride = kInstanceBytes, .stepMode = mrhi_stepInstance}};
-    constexpr std::array<mrhiVertexAttribute, 15> kAttributes = {
+    constexpr std::array<mrhiVertexAttribute, 16> kAttributes = {
         mrhiVertexAttribute{.buffer = 0, .location = 0, .format = mrhi_vertexFloat32x3, .offset = 0},
         mrhiVertexAttribute{.buffer = 0, .location = 1, .format = mrhi_vertexFloat32x3, .offset = 12},
         mrhiVertexAttribute{.buffer = 0, .location = 13, .format = mrhi_vertexFloat32x2, .offset = 24},
@@ -104,7 +104,8 @@ result::Status Pipelines::make() {
         mrhiVertexAttribute{.buffer = 1, .location = 10, .format = mrhi_vertexFloat32x4, .offset = 116},
         mrhiVertexAttribute{.buffer = 1, .location = 11, .format = mrhi_vertexFloat32x4, .offset = 132},
         mrhiVertexAttribute{.buffer = 1, .location = 12, .format = mrhi_vertexFloat32, .offset = 148},
-        mrhiVertexAttribute{.buffer = 0, .location = 14, .format = mrhi_vertexFloat32x4, .offset = 32}};
+        mrhiVertexAttribute{.buffer = 0, .location = 14, .format = mrhi_vertexFloat32x4, .offset = 32},
+        mrhiVertexAttribute{.buffer = 1, .location = 15, .format = mrhi_vertexFloat32, .offset = 152}};
     mrhiGraphicsPipelineDef models = mrhiDefaultGraphicsPipelineDef();
     models.shader = sceneShader;
     models.vertexEntry = "vs";

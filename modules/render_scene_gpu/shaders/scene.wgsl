@@ -63,6 +63,24 @@ struct ShadowSlot {
 @group(0) @binding(18) var environmentTexture: texture_cube<f32>;
 @group(0) @binding(19) var environmentSampler: sampler;
 
+// What each model reflects (D325): the sky's picture first, then each
+// reflection probe; scene.frag's Probe.
+struct Probe {
+    place: vec4f,
+    extent: vec4f,
+    light: vec4f,
+}
+
+@group(0) @binding(20) var<storage, read> probes: array<Probe>;
+
+// Where a reflection meets the probe's box, as seen from its middle:
+// scene.frag's projected.
+fn projected(probe: Probe, placed: vec3f, mirrored: vec3f) -> vec3f {
+    let local = clamp(placed - probe.place.xyz, -probe.extent.xyz, probe.extent.xyz);
+    let far = (probe.extent.xyz - local * sign(mirrored)) / max(abs(mirrored), vec3f(1e-5));
+    return local + mirrored * min(min(far.x, far.y), far.z);
+}
+
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
 fn channelOf(texel: vec4f, channel: f32) -> f32 {
@@ -82,6 +100,7 @@ struct Placed {
     @location(5) @interpolate(flat) material: u32,
     @location(6) uv: vec2f,
     @location(7) tangent: vec4f,
+    @location(8) @interpolate(flat) probe: u32,
 }
 
 struct Shaded {
@@ -94,7 +113,8 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
       @location(3) model1: vec4f, @location(4) model2: vec4f, @location(5) normal0: vec3f,
       @location(6) normal1: vec3f, @location(7) normal2: vec3f, @location(8) color: vec4f,
       @location(9) previous0: vec4f, @location(10) previous1: vec4f, @location(11) previous2: vec4f,
-      @location(12) material: f32, @location(13) uv: vec2f, @location(14) tangent: vec4f) -> Placed {
+      @location(12) material: f32, @location(13) uv: vec2f, @location(14) tangent: vec4f,
+      @location(15) probe: f32) -> Placed {
     let vertex = vec4f(position, 1.0);
     let placed = vec3f(dot(model0, vertex), dot(model1, vertex), dot(model2, vertex));
     var out: Placed;
@@ -107,6 +127,7 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
     out.before = (frame.previous * vec4f(was, 1.0)).xyw;
     out.material = u32(material);
     out.uv = uv;
+    out.probe = u32(probe);
     let turned = vec3f(dot(model0.xyz, tangent.xyz), dot(model1.xyz, tangent.xyz), dot(model2.xyz, tangent.xyz));
     let mirror = select(1.0, -1.0, dot(model0.xyz, cross(model1.xyz, model2.xyz)) < 0.0);
     out.tangent = vec4f(turned, tangent.w * mirror);
@@ -240,7 +261,7 @@ fn punctual(placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec
 @fragment
 fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
       @location(3) now: vec3f, @location(4) before: vec3f, @location(5) @interpolate(flat) material: u32,
-      @location(6) uv: vec2f, @location(7) tangent: vec4f) -> Shaded {
+      @location(6) uv: vec2f, @location(7) tangent: vec4f, @location(8) @interpolate(flat) probe: u32) -> Shaded {
     let toEye = normalize(-placed);
     let at = min(material, arrayLength(&materials) / 9u - 1u) * 9u;
     let base = materials[at];
@@ -301,16 +322,20 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let sheen = surface.headOn + (max(vec3f(1.0 - surface.roughness), surface.headOn) - surface.headOn) *
                                      pow(1.0 - nv, 5.0);
     let mirrored = reflect(-toEye, n);
-    let around = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * n.y);
-    let along = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
-    var sky = occlusion * ((1.0 - sheen) * surface.diffuse * around + sheen * along);
+    var around = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * n.y);
     if (frame.environment.w > 0.5) {
-        let picture = textureSampleLevel(environmentTexture, environmentSampler, mirrored,
-                                         surface.roughness * (frame.environment.w - 1.0)).rgb;
-        let scaleBias = environmentBrdf(surface.roughness, nv);
-        sky = occlusion * frame.sky.rgb *
-              ((1.0 - sheen) * surface.diffuse * irradianceAt(n) + (surface.headOn * scaleBias.x + scaleBias.y) * picture);
+        around = frame.sky.rgb * irradianceAt(n);
     }
+    var along = sheen * mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
+    let chosen = probes[min(probe, arrayLength(&probes) - 1u)];
+    if (chosen.place.w > 0.5) {
+        let toward = select(mirrored, projected(chosen, placed, mirrored), chosen.extent.x > 0.0);
+        let picture = textureSampleLevel(environmentTexture, environmentSampler, toward,
+                                         surface.roughness * (chosen.place.w - 1.0)).rgb;
+        let scaleBias = environmentBrdf(surface.roughness, nv);
+        along = (surface.headOn * scaleBias.x + scaleBias.y) * chosen.light.rgb * picture;
+    }
+    let sky = occlusion * ((1.0 - sheen) * surface.diffuse * around + along);
     out.color = vec4f((direct + sky + emission.rgb * glow) * exposure.y, opacity);
     return out;
 }

@@ -2,7 +2,9 @@
 // each point of the target looks, a face of the cube a way; a texture that
 // is not an environment is none; a mirror reflects what is behind the eye;
 // a rough white ball under a uniform picture is as bright as the sky, and
-// under a picture bright above, its top outshines its underside.
+// under a picture bright above, its top outshines its underside; a model a
+// reflection probe holds reflects the probe's picture, projected onto its
+// box, and the sky's where the probe's is not held (D325).
 
 #include "fixture.h"
 #include "rawframe/render/frame.h"
@@ -188,4 +190,68 @@ RAWFRAME_TEST(SurfacesAreLitByThePictureAndReflectIt) {
         print("underside", at(*kAbove, kSide / 2, 44));
         RAWFRAME_EXPECT(at(*kAbove, kSide / 2, 20)[0] > at(*kAbove, kSide / 2, 44)[0] + 60);
     }
+}
+
+RAWFRAME_TEST(AModelReflectsTheProbeThatHoldsIt) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // The sky's picture and the room's: green along +X, blue along -X,
+    // white above, black below, yellow behind (+Z), red ahead (-Z); and a
+    // green room.
+    constexpr std::uint64_t kRoom = 0x3a9e1c75d20b48f6ULL;
+    constexpr std::uint64_t kGreen = 0x7c2d5e18a94b03f1ULL;
+    const std::shared_ptr<const texture::Texture> kCube =
+        cubeOf({{{0, 1, 0}, {0, 0, 1}, {1, 1, 1}, {0, 0, 0}, {1, 1, 0}, {1, 0, 0}}});
+    const std::shared_ptr<const texture::Texture> kGreenCube =
+        cubeOf({{{0, 1, 0}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}}});
+    bool held = true;
+    const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) -> std::shared_ptr<const texture::Texture> {
+        if (id == kPicture || (id == kRoom && held)) {
+            return kCube;
+        }
+        return id == kGreen && held ? kGreenCube : nullptr;
+    };
+    const auto kCenter = [&](const SceneFrame& frame) {
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes, kTextures);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        return kPixels.has_value() ? at(*kPixels, kSide / 2, kSide / 2) : std::array<int, 3>{};
+    };
+    render_scene::MaterialBlob mirror = render_scene::noMaterial();
+    mirror[3] = 1;
+    mirror[7] = 0;
+    // A mirror ball four meters ahead in a green room around it: green,
+    // where the sky's picture would show yellow.
+    SceneFrame frame = facing(0, 0);
+    render_scene::SceneDraw ball = box(4, 0.5F, {1, 1, 1, 1}, render_scene::kSphere);
+    ball.material = 1;
+    ball.probe = 1;
+    frame.materials = {render_scene::noMaterial(), mirror};
+    frame.draws = {ball};
+    frame.probes = {{.position = {0, 0, -4}, .half = {3, 3, 3}, .environment = kGreen, .intensity = 20000}};
+    const std::array<int, 3> kGreenRoom = kCenter(frame);
+    print("green room", kGreenRoom);
+    RAWFRAME_EXPECT(mostly(kGreenRoom, 1));
+    // In a long low room whose middle is five meters to its right, what it
+    // reflects behind the eye meets the room's back wall far to the left of
+    // the room's middle, where its picture is blue: projected onto the box.
+    frame.probes = {{.position = {5, 0, -4}, .half = {6, 3, 1.5F}, .environment = kRoom, .intensity = 20000}};
+    const std::array<int, 3> kProjected = kCenter(frame);
+    print("projected", kProjected);
+    RAWFRAME_EXPECT(mostly(kProjected, 2));
+    // With the room's picture not held, the sky's: yellow behind the eye.
+    held = false;
+    const std::array<int, 3> kSky = kCenter(frame);
+    print("sky in its place", kSky);
+    RAWFRAME_EXPECT(kSky[0] > 100 && kSky[1] > 100 && kSky[2] + 60 < kSky[1]);
 }
