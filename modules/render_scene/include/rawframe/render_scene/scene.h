@@ -50,6 +50,17 @@ struct Camera {
     float exposure = 0;
 };
 
+/// `rawframe.model.AutoExposure` as C++ reads it.
+struct AutoExposure {
+    float minimum = 0;
+    float maximum = 0;
+    float brighten = 0;
+    float darken = 0;
+    float compensation = 0;
+    float low = 0;
+    float high = 0;
+};
+
 /// `rawframe.model.Sun` as C++ reads it.
 struct Sun {
     float directionX = 0;
@@ -125,6 +136,11 @@ struct SceneCamera {
     /// EV100 (ADR-0047).
     float exposure = 15;
     float aspect = 16.0F / 9.0F;
+    /// The exposure metered from what the view sees, starting from
+    /// `exposure`, if the camera asks (D293); and the seconds since the
+    /// frame before, on the Host's timeline.
+    std::optional<AutoExposure> metering;
+    float elapsed = 0;
 };
 
 /// Column-major, as shaders read them.
@@ -271,6 +287,20 @@ struct SceneShadows {
 
 /// What the queue stage builds: the view, the light, and the draws in the
 /// order a device draws them, grouped by mesh; and what was left out.
+/// ADR-0051's metering (D293): whether the frame's exposure follows what it
+/// sees; its bounds, rates, compensation, and the fractions of its pixels
+/// left out, made sound (finite, the maximum above the minimum, the rates
+/// not negative, the fractions within nought and one, low below high); the
+/// seconds since the frame before, at most a quarter; and whether the
+/// exposure goes at once to what it measures, not at the rates: when the
+/// metering starts, or the eye cuts away.
+struct SceneMetering {
+    bool enabled = false;
+    AutoExposure settings;
+    float elapsed = 0;
+    bool snap = false;
+};
+
 /// ADR-0051's temporal inputs (D291). Whether the frame is antialiased
 /// over time; its subpixel jitter, a pixel's fraction across and down in
 /// [-0.5, 0.5), which the GPU half applies to the projection at its size;
@@ -299,6 +329,7 @@ struct SceneFrame {
     SceneShadows shadows;
     SceneTemporal temporal;
     SceneLightShadows lightShadows;
+    SceneMetering metering;
     /// The punctual lights that reach the view, and the clusters they are
     /// culled into (D290).
     std::vector<SceneLight> lights3d;
@@ -426,6 +457,7 @@ private:
 struct GameScene {
     std::vector<schema::ComponentTypeId> models;
     std::optional<schema::ComponentTypeId> camera;
+    std::optional<schema::ComponentTypeId> autoExposure;
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
     std::vector<schema::ComponentTypeId> points;
@@ -436,7 +468,7 @@ struct GameScene {
 /// Finds the game's components of `rawframe.model`'s types, whose layouts
 /// in `program` must be what this module reads, and its meshes. Refuses
 /// (`NoModels`) a game with no model component, and (`BadComponents`) one
-/// with two cameras, suns, or skies.
+/// with two cameras, auto-exposures, suns, or skies.
 [[nodiscard]] result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const kest::Program& program);
 
 } // namespace rawframe::render_scene

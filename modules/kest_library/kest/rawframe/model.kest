@@ -54,6 +54,26 @@ struct Camera {
     exposure: f32
 }
 
+// A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
+// the same entity as its camera, whose `exposure` it starts from: the
+// frame's light measured in a histogram of its luminance, the darkest
+// `low` and the brightest past `high` of its pixels (fractions, nought to
+// one) left out, the rest averaged into an EV100 less `compensation`
+// stops, kept between `minimum` and `maximum`, and reached at `brighten`
+// EV a second when the picture must brighten and `darken` when it must
+// darken; at once when the metering starts or the eye cuts away. One
+// whose maximum is not above its minimum meters nothing. Without one, the
+// camera's `exposure` holds.
+struct AutoExposure {
+    minimum: f32
+    maximum: f32
+    brighten: f32
+    darken: f32
+    compensation: f32
+    low: f32
+    high: f32
+}
+
 // The sun (ADR-0051's directional light), on any entity: light arriving
 // along the direction (`directionX`, `directionY`, `directionZ`), the way
 // it travels, `illuminance` lux on a surface facing it (about 100,000 at

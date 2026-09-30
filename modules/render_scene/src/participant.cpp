@@ -132,6 +132,7 @@ public:
         RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
         client_ = client;
         cameraComponent_ = game->camera;
+        autoExposureComponent_ = game->autoExposure;
         gameMeshes_ = game->meshes.size();
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .sun = game->sun,
@@ -150,7 +151,7 @@ public:
         return {};
     }
 
-    void runHostPhase(composition::HostPhase phase, const composition::HostFrame& /*frame*/) noexcept override {
+    void runHostPhase(composition::HostPhase phase, const composition::HostFrame& frame) noexcept override {
         if (clients_ == nullptr) {
             return;
         }
@@ -160,6 +161,11 @@ public:
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
             camera_.aspect = static_cast<float>(width_) / static_cast<float>(height_);
+            // The seconds since the frame before, on the Host's timeline
+            // (D293): nought for the first.
+            camera_.elapsed =
+                presented_.has_value() ? static_cast<float>((frame.now - *presented_).nanoseconds) / 1e9F : 0.0F;
+            presented_ = frame.now;
             const SceneFrame& kFrame = scene_->queue(camera_);
             queued_ = &kFrame;
             ++frames_;
@@ -273,6 +279,15 @@ private:
         camera_.fovY = view.fovY;
         camera_.near = view.near;
         camera_.exposure = view.exposure;
+        camera_.metering.reset();
+        if (autoExposureComponent_.has_value()) {
+            if (const auto kMetering = kView.world->registry().find(*autoExposureComponent_)) {
+                if (const auto* asked =
+                        static_cast<const AutoExposure*>(kView.world->getErased(kView.owned, *kMetering))) {
+                    camera_.metering = *asked;
+                }
+            }
+        }
         if (const auto kPose = kView.world->registry().key<physics3d::Pose3D>()) {
             if (const auto* pose = kView.world->get(kView.owned, *kPose)) {
                 camera_.eye = {pose->x + view.offsetX, pose->y + view.offsetY, pose->z + view.offsetZ};
@@ -286,6 +301,8 @@ private:
     ShadowSettings shadows_;
     SceneCamera camera_;
     std::optional<schema::ComponentTypeId> cameraComponent_;
+    std::optional<schema::ComponentTypeId> autoExposureComponent_;
+    std::optional<execution::MonotonicInstant> presented_;
     std::size_t gameMeshes_ = 0;
     /// Frames seen through the player's own camera.
     std::uint64_t viewed_ = 0;

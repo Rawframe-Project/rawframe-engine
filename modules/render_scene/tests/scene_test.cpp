@@ -287,19 +287,22 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
     // A Kest type is laid out when a function uses it.
     const std::string kUses =
         "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky],\n"
-        "        lamps: [model.PointLight], torches: [model.SpotLight]) {\n}\n";
+        "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
     const std::string kLamps = "component 9c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.lamp rawframe.model.PointLight\n"
                                "component ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.torch rawframe.model.SpotLight\n";
-    const std::string kView = "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n";
+    const std::string kView =
+        "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n"
+        "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
                     kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
                     kLoaded->camera == schema::ComponentTypeId::fromText("7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->meshes.empty() && kLoaded->points == (std::vector<schema::ComponentTypeId>{kPointId}) &&
-                    kLoaded->spots == (std::vector<schema::ComponentTypeId>{kSpotId}));
+                    kLoaded->spots == (std::vector<schema::ComponentTypeId>{kSpotId}) &&
+                    kLoaded->autoExposure == schema::ComponentTypeId::fromText("bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -586,4 +589,36 @@ RAWFRAME_TEST(PunctualShadowsShareOneAtlasByCover) {
     const SceneFrame& kNone = none->queue(kCamera);
     RAWFRAME_EXPECT(kNone.lightShadows.side == 0 && kNone.lightShadows.slots.empty() &&
                     kNone.lights3d[0].shadowSlots == 0);
+}
+
+RAWFRAME_TEST(AMeteredCameraIsMadeSound) {
+    Rig rig;
+    SceneCamera camera{.fovY = 1, .near = 0.1F, .aspect = 1};
+    RAWFRAME_EXPECT(!rig.frame(camera).metering.enabled);
+    // A negative rate, fractions past one, and a long pause: stopped,
+    // clamped, and cut to a quarter second; the first metered frame goes
+    // at once to what it measures, the next at the rates, and one after
+    // the eye cuts away at once again.
+    camera.metering = AutoExposure{
+        .minimum = 8, .maximum = 16, .brighten = -1, .darken = 2, .compensation = 1, .low = 0.9F, .high = 1.5F};
+    camera.elapsed = 3;
+    const SceneMetering kMetering = rig.frame(camera).metering;
+    RAWFRAME_EXPECT(kMetering.enabled && kMetering.settings.minimum == 8 && kMetering.settings.maximum == 16 &&
+                    kMetering.settings.brighten == 0 && kMetering.settings.darken == 2 &&
+                    kMetering.settings.low == 0.9F && kMetering.settings.high == 1 && kMetering.elapsed == 0.25F &&
+                    kMetering.snap);
+    RAWFRAME_EXPECT(!rig.frame(camera).metering.snap);
+    camera.eye = {0, 0, 40};
+    RAWFRAME_EXPECT(rig.frame(camera).metering.snap);
+    RAWFRAME_EXPECT(!rig.frame(camera).metering.snap);
+    // A meter not yet set, all nought, or with its bounds out of order,
+    // meters nothing.
+    SceneCamera unset = camera;
+    unset.metering = AutoExposure{};
+    RAWFRAME_EXPECT(!rig.frame(unset).metering.enabled);
+    unset.metering = AutoExposure{.minimum = 16, .maximum = 8, .high = 1};
+    RAWFRAME_EXPECT(!rig.frame(unset).metering.enabled);
+    // A value not finite meters nothing.
+    camera.metering->compensation = std::numeric_limits<float>::quiet_NaN();
+    RAWFRAME_EXPECT(!rig.frame(camera).metering.enabled);
 }

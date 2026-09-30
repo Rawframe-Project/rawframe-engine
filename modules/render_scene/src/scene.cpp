@@ -51,6 +51,35 @@ Bounded bounded(std::shared_ptr<const mesh::Mesh> made) {
     return Bounded{.mesh = std::move(made), .center = kCenter, .radius = radius};
 }
 
+/// The camera's metering made sound (D293): off when it asks for none, a
+/// value is not finite, or its maximum is not above its minimum (a camera's
+/// meter not yet set is all nought); the rates not negative,
+/// the fractions within nought and one with low below high, and the
+/// seconds since the frame before at most a quarter.
+SceneMetering meteringOf(const SceneCamera& camera) noexcept {
+    if (!camera.metering.has_value()) {
+        return {};
+    }
+    AutoExposure asked = *camera.metering;
+    if (!std::ranges::all_of(
+            std::array{
+                asked.minimum, asked.maximum, asked.brighten, asked.darken, asked.compensation, asked.low, asked.high},
+            [](float value) {
+                return std::isfinite(value);
+            })) {
+        return {};
+    }
+    if (asked.maximum <= asked.minimum) {
+        return {};
+    }
+    asked.brighten = std::max(asked.brighten, 0.0F);
+    asked.darken = std::max(asked.darken, 0.0F);
+    asked.low = std::clamp(asked.low, 0.0F, 1.0F);
+    asked.high = std::clamp(asked.high, asked.low, 1.0F);
+    const float kElapsed = std::isfinite(camera.elapsed) ? std::clamp(camera.elapsed, 0.0F, 0.25F) : 0.0F;
+    return {.enabled = true, .settings = asked, .elapsed = kElapsed};
+}
+
 /// Whether an instance's values are all ones it can be drawn with.
 bool wellFormed(const ModelInstance& instance) noexcept {
     const Model& kModel = instance.model;
@@ -125,6 +154,10 @@ struct Scene::State {
     std::optional<std::array<double, 3>> previousEye;
     Matrix previousViewProjection{};
     std::uint64_t frames = 0;
+    /// Whether the eye went on from the frame before, not first nor cut
+    /// away; and whether that frame was metered.
+    bool continuous = false;
+    bool meteredBefore = false;
 
     void lights() {
         const Sun kSun = sunNow.value_or(Sun{
@@ -286,6 +319,7 @@ struct Scene::State {
         // near plane and falls toward nought.
         frame.projection = Matrix{kFocal / kAspect, 0, 0, 0, 0, kFocal, 0, 0, 0, 0, 0, -1, 0, 0, kNear, 0};
         frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;
+        frame.metering = meteringOf(camera);
         frame.forward = kForward;
         const bool kShadows = kSees && settings.shadows.cascades > 0 && settings.shadows.side > 0 &&
                               settings.shadows.distance > kNear &&
@@ -404,6 +438,8 @@ struct Scene::State {
             ++frame.drawn;
         }
         temporal(camera, kSees);
+        frame.metering.snap = frame.metering.enabled && (!meteredBefore || !continuous);
+        meteredBefore = frame.metering.enabled;
         clusterLights(frame,
                       punctual,
                       camera,
@@ -428,9 +464,9 @@ struct Scene::State {
         for (std::size_t axis = 0; axis < 3 && previousEye.has_value(); ++axis) {
             moved[axis] = camera.eye[axis] - (*previousEye)[axis];
         }
-        now.history =
-            now.enabled && previousEye.has_value() &&
-            (moved[0] * moved[0]) + (moved[1] * moved[1]) + (moved[2] * moved[2]) <= kCutDistance * kCutDistance;
+        continuous = previousEye.has_value() && (moved[0] * moved[0]) + (moved[1] * moved[1]) + (moved[2] * moved[2]) <=
+                                                    kCutDistance * kCutDistance;
+        now.history = now.enabled && continuous;
         now.previousViewProjection = kViewProjection;
         if (now.history) {
             // The frame before's eye-relative places are this frame's moved
@@ -613,6 +649,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             loaded.models.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.Camera")) {
             RAWFRAME_TRY(kOne(loaded.camera, component.id, "a game has at most one 3D camera: a client has one view"));
+        } else if (world_kest::ofEngineType(component, "rawframe.model.AutoExposure")) {
+            RAWFRAME_TRY(kOne(loaded.autoExposure, component.id, "a game has at most one auto-exposure: one view"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.Sun")) {
             RAWFRAME_TRY(kOne(loaded.sun, component.id, "a game has at most one sun"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.Sky")) {
@@ -658,6 +696,16 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"fovY", offsetof(Camera, fovY)},
                            {"near", offsetof(Camera, near)},
                            {"exposure", offsetof(Camera, exposure)}}));
+    RAWFRAME_TRY(kLaidOut(loaded.autoExposure.has_value(),
+                          "rawframe.model.AutoExposure",
+                          sizeof(AutoExposure),
+                          {{"minimum", offsetof(AutoExposure, minimum)},
+                           {"maximum", offsetof(AutoExposure, maximum)},
+                           {"brighten", offsetof(AutoExposure, brighten)},
+                           {"darken", offsetof(AutoExposure, darken)},
+                           {"compensation", offsetof(AutoExposure, compensation)},
+                           {"low", offsetof(AutoExposure, low)},
+                           {"high", offsetof(AutoExposure, high)}}));
     RAWFRAME_TRY(kLaidOut(loaded.sun.has_value(),
                           "rawframe.model.Sun",
                           sizeof(Sun),
