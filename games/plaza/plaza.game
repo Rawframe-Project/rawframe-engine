@@ -14,8 +14,10 @@ collision class walker 5f23859a6c00ebba
 mesh 6d3cbd2231e069f1 mound.gltf
 
 # What the models are made of (D303): the strollers are brass, the pillars
-# polished marble, and the floor paved, its slabs a texture (D309);
-# everything else has no material and is its color.
+# polished marble, and the floor paved, its slabs a texture (D309), kept
+# exact: the browser test's software renderer pays dearly for sampling
+# BC7, and its page runs the game on the same thread; everything else has
+# no material and is its color.
 texture 9f822820a44af4fc paving.png
 material 6d2c9bd611d50fdf brass.rfmaterial
 material e4443f63fe935232 marble.rfmaterial

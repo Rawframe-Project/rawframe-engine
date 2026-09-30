@@ -2,5 +2,7 @@
   "schema": 1,
   "resourceId": "f3b8e1fbc19d97b55507c1852d0bbfee",
   "importer": "rawframe.texture",
-  "settings": {}
+  "settings": {
+    "exact": true
+  }
 }
