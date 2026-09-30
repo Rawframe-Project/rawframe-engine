@@ -56,6 +56,7 @@ struct Pipelines {
     mrhiShaderId occlusionShader{};
     mrhiShaderId bloomShader{};
     mrhiShaderId reflectShader{};
+    mrhiShaderId motionShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -84,6 +85,10 @@ struct Pipelines {
     Asked blurOcclusion;
     /// The screen-space reflections (D331).
     Asked march;
+    /// The motion blur's tiles, their neighbors, and its gathering (D334).
+    Asked motionTiles;
+    Asked motionNeighbors;
+    Asked motionGather;
     Asked lit;
     /// The masked models lit only where their depth is the prepass's
     /// (D310).

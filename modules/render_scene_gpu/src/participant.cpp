@@ -145,7 +145,8 @@ public:
                       diagnostics::field("framesSmoothed", statistics.framesSmoothed),
                       diagnostics::field("framesOccluded", statistics.framesOccluded),
                       diagnostics::field("framesBloomed", statistics.framesBloomed),
-                      diagnostics::field("framesReflected", statistics.framesReflected)});
+                      diagnostics::field("framesReflected", statistics.framesReflected),
+                      diagnostics::field("framesMotionBlurred", statistics.framesMotionBlurred)});
     }
 
 private:

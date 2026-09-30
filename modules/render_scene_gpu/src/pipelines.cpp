@@ -4,6 +4,7 @@
 #include "generated/bloom_container.h"
 #include "generated/fxaa_container.h"
 #include "generated/meter_container.h"
+#include "generated/motion_container.h"
 #include "generated/occlusion_container.h"
 #include "generated/reflect_container.h"
 #include "generated/scene_container.h"
@@ -33,25 +34,10 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked : {&casting,
-                         &cutCasting,
-                         &depth,
-                         &cutout,
-                         &surfaces,
-                         &cutSurfaces,
-                         &occlude,
-                         &blurOcclusion,
-                         &march,
-                         &lit,
-                         &maskedLit,
-                         &glass,
-                         &sky,
-                         &temporal,
-                         &tonemap,
-                         &fxaa,
-                         &bloomFirst,
-                         &bloomDown,
-                         &bloomUp}) {
+    for (Asked* asked : {&casting, &cutCasting,    &depth,     &cutout,      &surfaces,        &cutSurfaces,
+                         &occlude, &blurOcclusion, &march,     &motionTiles, &motionNeighbors, &motionGather,
+                         &lit,     &maskedLit,     &glass,     &sky,         &temporal,        &tonemap,
+                         &fxaa,    &bloomFirst,    &bloomDown, &bloomUp}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -71,7 +57,8 @@ Pipelines::~Pipelines() {
                                        fxaaShader,
                                        occlusionShader,
                                        bloomShader,
-                                       reflectShader}) {
+                                       reflectShader,
+                                       motionShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -117,6 +104,7 @@ result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kOcclusionContainer, occlusionShader));
     RAWFRAME_TRY(makeShader(kBloomContainer, bloomShader));
     RAWFRAME_TRY(makeShader(kReflectContainer, reflectShader));
+    RAWFRAME_TRY(makeShader(kMotionContainer, motionShader));
     // Each vertex of the mesh, then each draw's placement.
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
@@ -214,6 +202,31 @@ result::Status Pipelines::make() {
     marching.colorTargetCount = 1;
     marching.colorTargets[0].format = kReflectionFormat;
     RAWFRAME_TRY(ask(marching, march));
+    // The motion blur's tiles and their neighbors, then its gathering, each
+    // a triangle over its target (D334).
+    for (const auto& [kEntry, kLabel, kFormat, kAsked] :
+         {std::tuple{
+              std::string_view{"tile"}, std::string_view{"rawframe.scene.motion.tiles"}, kMotionFormat, &motionTiles},
+          std::tuple{std::string_view{"neighbor"},
+                     std::string_view{"rawframe.scene.motion.neighbors"},
+                     kMotionFormat,
+                     &motionNeighbors},
+          std::tuple{std::string_view{"gather"},
+                     std::string_view{"rawframe.scene.motion.gather"},
+                     kSceneFormat,
+                     &motionGather}}) {
+        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+        def.label = kLabel.data();
+        def.labelLength = kLabel.size();
+        def.shader = motionShader;
+        def.vertexEntry = "vs";
+        def.vertexEntryLength = 2;
+        def.fragmentEntry = kEntry.data();
+        def.fragmentEntryLength = kEntry.size();
+        def.colorTargetCount = 1;
+        def.colorTargets[0].format = kFormat;
+        RAWFRAME_TRY(ask(def, *kAsked));
+    }
     // The casters into the sun's shadow map: the vertex's place alone,
     // pushed from the sun by its slope (the depth half of ADR-0051's
     // bias; the normal half is where the map is read).
@@ -412,9 +425,10 @@ result::Status Pipelines::make() {
 
 result::Result<bool> Pipelines::ready() {
     bool all = true;
-    for (Asked* asked : {&casting,       &cutCasting, &depth,   &cutout,    &surfaces,   &cutSurfaces, &occlude,
-                         &blurOcclusion, &march,      &lit,     &maskedLit, &glass,      &sky,         &histogram,
-                         &adapt,         &temporal,   &tonemap, &fxaa,      &bloomFirst, &bloomDown,   &bloomUp}) {
+    for (Asked* asked : {&casting,  &cutCasting,    &depth, &cutout,      &surfaces,        &cutSurfaces,
+                         &occlude,  &blurOcclusion, &march, &motionTiles, &motionNeighbors, &motionGather,
+                         &lit,      &maskedLit,     &glass, &sky,         &histogram,       &adapt,
+                         &temporal, &tonemap,       &fxaa,  &bloomFirst,  &bloomDown,       &bloomUp}) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {
