@@ -1,0 +1,25 @@
+{
+  "root_block_bytes": 0,
+  "entries": [
+    {"name": "vs", "stage": "vertex",
+     "inputs": [{"location": 0, "type": "float32", "components": 3},
+                {"location": 1, "type": "float32", "components": 3},
+                {"location": 2, "type": "float32", "components": 4},
+                {"location": 3, "type": "float32", "components": 4},
+                {"location": 4, "type": "float32", "components": 4},
+                {"location": 5, "type": "float32", "components": 3},
+                {"location": 6, "type": "float32", "components": 3},
+                {"location": 7, "type": "float32", "components": 3},
+                {"location": 8, "type": "float32", "components": 4}],
+     "variables": [{"location": 0, "type": "float32", "components": 3},
+                   {"location": 1, "type": "float32", "components": 4}]},
+    {"name": "fs", "stage": "fragment",
+     "variables": [{"location": 0, "type": "float32", "components": 3},
+                   {"location": 1, "type": "float32", "components": 4}],
+     "outputs": [{"location": 0, "type": "float32", "components": 4}]}
+  ],
+  "bindings": [
+    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex", "fragment"], "min_size": 128}
+  ],
+  "constants": []
+}

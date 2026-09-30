@@ -53,11 +53,12 @@ input_kest: input document world_kest world_replication kest world composition e
 world_audio: game_content assets content audio physics2d physics3d world_replication world_kest kest world composition schema execution diagnostics document result base
 render_canvas: game_content assets content texture physics2d world_replication world_kest kest world composition schema execution diagnostics result base
 render_scene: physics3d mesh world_replication world_kest kest world composition schema execution diagnostics result base
+render_scene_gpu: render render_scene mesh composition diagnostics result base
 render_canvas_gpu: render render_canvas window texture composition diagnostics result base
 world_localization: localization world_kest game_content content composition execution diagnostics result base
 host: composition execution diagnostics result base
 dedicated_server: host game_content network_quic physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
-arena: host game_content input_kest world_audio world_localization audio network_loopback render render_canvas render_canvas_gpu render_scene physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
+arena: host game_content input_kest world_audio world_localization audio network_loopback render render_canvas render_canvas_gpu render_scene render_scene_gpu physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 web_client: window_host window host game_content input_kest network_web render render_canvas render_canvas_gpu physics2d physics3d world_animation world_audio world_replication world_kest world_runtime composition execution diagnostics result base
 bots: host game_content input_kest world_animation world_audio world_localization audio network_quic world_replication render_canvas world_kest world_runtime composition diagnostics result base
 client: window_host host game_content input_kest network_quic window world_animation world_audio render render_canvas render_canvas_gpu world_kest world_localization world_replication world_runtime composition diagnostics result base
