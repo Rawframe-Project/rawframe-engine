@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "9b849390983a226f": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": {
+          "node": "ccccefa318eab68e",
+          "output": "color"
+        },
+        "specular_roughness": 0.8
+      }
+    },
+    "ccccefa318eab68e": {
+      "type": "rawframe/sample_texture_2d@1",
+      "params": {
+        "texture": "9f822820a44af4fc"
+      },
+      "inputs": {}
+    }
+  }
+}

@@ -16,6 +16,7 @@ const WALKER: u64 = 0x5f23859a6c00ebba
 // The materials plaza.game's `material` lines name.
 const BRASS: u64 = 0x6d2c9bd611d50fdf
 const MARBLE: u64 = 0xe4443f63fe935232
+const PAVING: u64 = 0xb6b2fb38f649a30b
 
 // A player's entity arrives with its components zeroed: here it becomes a
 // walker standing somewhere on the plaza.
@@ -181,8 +182,8 @@ fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], po
 // What a client draws of a body (D283): the engine's mesh of its shape at
 // its size, or, for one made of the game's triangles, that mesh as it is,
 // in a color for what it is: walkers blue, what moves by itself steel,
-// what is pushed about wood, the floor paving, pillars stone, and the
-// rest sandstone. A capsule's mesh is stretched to the capsule's height,
+// what is pushed about wood, the floor paving (its slabs a texture),
+// pillars stone, and the rest sandstone. A capsule's mesh is stretched to the capsule's height,
 // its caps with it. A client gives every body it mirrors a look; no server
 // carries one.
 fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
@@ -204,6 +205,7 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
         }
         if b.shape == physics3d.BOX && b.width > 20.0 && b.height < 1.0 {
             look.color = 0x8C8C84FF
+            look.material = PAVING
         }
         if b.motion == physics3d.KINEMATIC {
             look.color = 0x9AA3ADFF
