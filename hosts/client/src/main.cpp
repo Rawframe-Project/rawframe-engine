@@ -1,6 +1,7 @@
 // A desktop client (D249): one window, and a Host playing a Kest game on a
 // server over QUIC as the process's own player, whose input comes from the
-// window. Heard, not yet seen: nothing is drawn until the renderer exists.
+// window. Where Maul RHI is built, its canvas is drawn on the one device and
+// shown in the window (D280); elsewhere it is heard, not yet seen.
 //
 //   rawframe-client [--config <file>]
 //
@@ -27,6 +28,11 @@
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
 
+#if RAWFRAME_CLIENT_DRAWS
+#include "rawframe/render/registrar.h"
+#include "rawframe/render_canvas_gpu/registrar.h"
+#endif
+
 #include <array>
 #include <cstdio>
 
@@ -34,7 +40,13 @@ namespace {
 
 using namespace rawframe;
 
-constexpr std::array<composition::RegistrarEntry, 10> kRegistrars = {
+#if RAWFRAME_CLIENT_DRAWS
+constexpr std::size_t kDrawing = 2;
+#else
+constexpr std::size_t kDrawing = 0;
+#endif
+
+constexpr std::array<composition::RegistrarEntry, 10 + kDrawing> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"network_quic", &network_quic::registerParticipants, network_quic::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
@@ -47,6 +59,11 @@ constexpr std::array<composition::RegistrarEntry, 10> kRegistrars = {
     composition::RegistrarEntry{
         "world_replication", &world_replication::registerParticipants, world_replication::kScopes},
     composition::RegistrarEntry{"world_runtime", &world_runtime::registerParticipants, world_runtime::kScopes},
+#if RAWFRAME_CLIENT_DRAWS
+    composition::RegistrarEntry{"render", &render::registerParticipants, render::kScopes},
+    composition::RegistrarEntry{
+        "render_canvas_gpu", &render_canvas_gpu::registerParticipants, render_canvas_gpu::kScopes},
+#endif
 };
 
 host::HostExit play(const host::HostRequest& request) noexcept {

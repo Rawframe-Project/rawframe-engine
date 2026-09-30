@@ -9,6 +9,14 @@ rawframe_host(NAME client OUTPUT rawframe-client
     DEPS window_host host game_content input_kest network_quic window world_animation world_audio render_canvas world_kest world_localization
          world_replication world_runtime composition diagnostics result base
 )
+# Where Maul RHI is built, the client draws its canvas on the one device and
+# shows it in its window (D280).
+set(RAWFRAME_CLIENT_DRAWS OFF)
+if(TARGET rawframe_render_canvas_gpu)
+    set(RAWFRAME_CLIENT_DRAWS ON)
+    target_link_libraries(rawframe_host_client PRIVATE rawframe::render rawframe::render_canvas_gpu)
+endif()
+target_compile_definitions(rawframe_host_client PRIVATE RAWFRAME_CLIENT_DRAWS=$<BOOL:${RAWFRAME_CLIENT_DRAWS}>)
 
 # A window needs a display: an X server of its own, where xvfb-run can
 # start one.
@@ -23,4 +31,25 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                      games/runners/runners.game /dev/null ${CMAKE_CURRENT_SOURCE_DIR}/tests/player.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(client_plays_runners PROPERTIES PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,[^\n]*\"stalled\":0,")
+    # The same, drawn on the one device and shown in the window (D280): its
+    # frames shown, and the screen lit by what they drew.
+    if(RAWFRAME_CLIENT_DRAWS)
+        set(CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/runners_content)
+        set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/client_drawn.tga)
+        configure_file(tests/drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/drawn.conf @ONLY)
+        add_test(NAME client_drawn
+                 COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/drawn.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_drawn PROPERTIES
+                             FIXTURES_REQUIRED runners_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"framesShown\":[1-9][0-9]+,")
+        if(RAWFRAME_SANITIZE STREQUAL "thread")
+            set_tests_properties(client_drawn PROPERTIES ENVIRONMENT
+                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
+        endif()
+    endif()
 endif()

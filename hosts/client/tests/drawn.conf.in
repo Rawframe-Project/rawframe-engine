@@ -1,0 +1,8 @@
+# The client's own player, drawn on the one device and shown in its window
+# (D280): its textures read from runners' content cooked into the build
+# tree, a software rasterizer allowed, and the picture read back once in
+# sixty frames, the last written to a TGA image in the build tree.
+bots.player = true
+render.device = any
+content.root = @CONTENT@
+canvas.capture = @CAPTURE@
