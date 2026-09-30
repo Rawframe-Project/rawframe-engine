@@ -22,6 +22,11 @@ constexpr mrhiFormat kSceneFormat = mrhi_formatRgba16Float;
 /// Where each texel's point moved since the frame before (D291).
 constexpr mrhiFormat kMotionFormat = mrhi_formatRg16Float;
 constexpr mrhiFormat kDepthFormat = mrhi_formatDepth32Float;
+/// Each point's normal and roughness, the prepass's auxiliary target when
+/// a screen-space effect asks for it (ADR-0051, D327).
+constexpr mrhiFormat kSurfaceFormat = mrhi_formatRgba16Float;
+/// What of the light from all around reaches each point (D327).
+constexpr mrhiFormat kAmbientFormat = mrhi_formatR8Unorm;
 /// The frame's picture, as `render` declares it.
 constexpr mrhiFormat kPictureFormat = mrhi_formatRgba8UnormSrgb;
 
@@ -46,6 +51,7 @@ struct Pipelines {
     mrhiShaderId skyShader{};
     mrhiShaderId meterShader{};
     mrhiShaderId fxaaShader{};
+    mrhiShaderId occlusionShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -65,6 +71,13 @@ struct Pipelines {
     /// The masked models' depth, cut where their opacity falls below their
     /// cutoff (D310).
     Asked cutout;
+    /// The prepass leaving each point's surface too, for the ambient
+    /// occlusion (D327), whole and masked.
+    Asked surfaces;
+    Asked cutSurfaces;
+    /// The ambient occlusion, and its blur (D327).
+    Asked occlude;
+    Asked blurOcclusion;
     Asked lit;
     /// The masked models lit only where their depth is the prepass's
     /// (D310).

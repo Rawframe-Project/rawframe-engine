@@ -251,8 +251,9 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "\"gameMaterials\":6,\"unknownMaterials\":0,\"materialTextures\":1,\"texturesReady\":1,\"environments\":2,")
     if(RAWFRAME_ARENA_DRAWS)
         # The plaza drawn on the one device offscreen (D284): frames drawn,
-        # its models in instanced calls, its meshes uploaded once each, and
-        # the pictures read back lit in many shades.
+        # its models in instanced calls, its meshes uploaded once each, its
+        # ambient occlusion found (D327), and the pictures read back lit in
+        # many shades.
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.tga)
         configure_file(tests/plaza_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf @ONLY)
         add_test(NAME plaza_drawn
@@ -263,7 +264,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],[^\n]*\"framesOccluded\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(plaza_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

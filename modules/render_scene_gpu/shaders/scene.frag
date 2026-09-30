@@ -13,6 +13,7 @@
 // on the screen since the frame before, for the temporal pass (D291).
 
 #version 450
+#extension GL_EXT_samplerless_texture_functions : require
 
 layout(set = 0, binding = 0, std140) uniform Frame
 {
@@ -44,6 +45,8 @@ layout(set = 0, binding = 0, std140) uniform Frame
     // spherical harmonics' coefficients.
     vec4 environment;
     vec4 irradiance[9];
+    // Whether the view's ambient occlusion is on (D327).
+    vec4 occlusion;
 }
 frame;
 
@@ -170,6 +173,10 @@ vec3 projected(Probe probe, vec3 placed, vec3 mirrored)
     const vec3 kFar = (probe.extent.xyz - kLocal * sign(mirrored)) / max(abs(mirrored), vec3(1e-5));
     return kLocal + mirrored * min(min(kFar.x, kFar.y), kFar.z);
 }
+
+// What of the light from all around reaches each texel (D327), where the
+// view's ambient occlusion is on: at half the target's size.
+layout(set = 0, binding = 21) uniform texture2D occlusionTexture;
 
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
@@ -439,6 +446,13 @@ void main()
         const vec2 kScaleBias = environmentBrdf(kSurface.roughness, kNv);
         along = (kSurface.headOn * kScaleBias.x + kScaleBias.y) * kProbe.light.rgb * kReflected;
     }
-    const vec3 kSky = kOcclusion * ((1.0 - kSheen) * kSurface.diffuse * around + along);
+    // What of it reaches the point (D327): for an opaque model, what the
+    // ambient occlusion found; a translucent one the prepass never saw
+    // takes all of it. An opaque model's alpha, interpolated, can fall a
+    // hair short of one.
+    const float kReaches = frame.occlusion.x > 0.5 && kOpacity >= 0.999
+                               ? texelFetch(occlusionTexture, ivec2(gl_FragCoord.xy) / 2, 0).r
+                               : 1.0;
+    const vec3 kSky = kOcclusion * kReaches * ((1.0 - kSheen) * kSurface.diffuse * around + along);
     outColor = vec4((kDirect + kSky + kGlow) * exposure.value.y, kOpacity);
 }

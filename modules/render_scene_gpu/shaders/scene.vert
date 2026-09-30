@@ -35,6 +35,8 @@ layout(set = 0, binding = 0, std140) uniform Frame
     // The sky's picture's levels and irradiance (D322).
     vec4 environment;
     vec4 irradiance[9];
+    // Whether the view's ambient occlusion is on (D327).
+    vec4 occlusion;
 }
 frame;
 

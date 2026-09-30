@@ -5,6 +5,7 @@
 #include "environment.h"
 #include "meshes.h"
 #include "metering.h"
+#include "occlusion.h"
 #include "pipelines.h"
 #include "rawframe/render/textures.h"
 #include "rawframe/render_scene_gpu/errors.h"
@@ -63,6 +64,8 @@ struct SceneRenderer::State {
     std::optional<Metering> metering;
     /// Its light read back for a tool (D326).
     std::optional<LightCapturing> capturing;
+    /// Its ambient occlusion, when a view asks (D327).
+    std::optional<OcclusionPass> occlusion;
     std::optional<DeviceMeshes> held;
     /// The materials' textures (D309), and the white one a material
     /// sampling none samples, held as texture nought.
@@ -255,6 +258,8 @@ struct SceneRenderer::State {
         mrhiResourceId instances{};
         mrhiResourceId blockResource{};
         mrhiResourceId scene{};
+        /// The prepass's depth.
+        mrhiResourceId depth{};
         mrhiPassId upload{};
         mrhiPassId depthPass{};
         mrhiPassId litPass{};
@@ -474,11 +479,10 @@ struct SceneRenderer::State {
                                          .minDepth = 0,
                                          .maxDepth = 1});
         }
-        mrhiResourceId depthTarget{};
         // The models' pipeline writes the motion whether or not it is read.
         for (const auto& [kFormat, kMade] : {std::pair{kSceneFormat, &now.scene},
                                              std::pair{kMotionFormat, &now.motion},
-                                             std::pair{kDepthFormat, &depthTarget}}) {
+                                             std::pair{kDepthFormat, &now.depth}}) {
             mrhiTextureDef def = mrhiDefaultTextureDef();
             def.format = kFormat;
             def.width = open.width;
@@ -515,6 +519,7 @@ struct SceneRenderer::State {
         // Antialiased over time, the temporal pass blends the frame with the
         // picture before into the other kept picture (D291).
         RAWFRAME_TRY(temporal->declare(*frame, open.width, open.height, writes));
+        RAWFRAME_TRY(occlusion->declare(*frame, now.block, open.width, open.height, writes));
         writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.pictureResource, mrhi_accessCopyDestination));
@@ -599,7 +604,16 @@ struct SceneRenderer::State {
         mrhiPassDef depthDef = mrhiDefaultPassDef();
         depthDef.accesses = reads.data();
         depthDef.accessCount = static_cast<std::uint32_t>(reads.size());
-        depthDef.depthTarget = mrhiDepthTarget{.resource = depthTarget,
+        // With the ambient occlusion, each point's surface beside its
+        // depth (D327).
+        if (occlusion->enabled()) {
+            depthDef.colorTargets[0].resource = occlusion->surfaces();
+            depthDef.colorTargets[0].load = mrhi_loadClear;
+            depthDef.colorTargets[0].store = mrhi_storeKeep;
+            depthDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 1, .blue = 0, .alpha = 1};
+            depthDef.colorTargetCount = 1;
+        }
+        depthDef.depthTarget = mrhiDepthTarget{.resource = now.depth,
                                                .mip = 0,
                                                .layer = 0,
                                                .depthLoad = mrhi_loadClear,
@@ -612,9 +626,16 @@ struct SceneRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &depthDef, &now.depthPass); kAdded != mrhi_success) {
             return failed("the depth pass could not be added", kAdded);
         }
+        RAWFRAME_TRY(occlusion->addPasses(now.depth));
         // The models, then the sky where none lies, drawn with the exposure
-        // the device holds (D293).
+        // the device holds (D293), reading what the occlusion found.
+        std::vector<mrhiAccess> litReads = reads;
+        if (occlusion->enabled()) {
+            litReads.push_back(wholeOf(occlusion->reaching(), mrhi_accessSampled));
+        }
         mrhiPassDef litDef = depthDef;
+        litDef.accesses = litReads.data();
+        litDef.accessCount = static_cast<std::uint32_t>(litReads.size());
         litDef.colorTargets[0].resource = now.scene;
         litDef.colorTargets[0].load = mrhi_loadClear;
         litDef.colorTargets[0].store = mrhi_storeKeep;
@@ -719,6 +740,7 @@ struct SceneRenderer::State {
         }
         RAWFRAME_TRY(metering->write(now.upload));
         RAWFRAME_TRY(temporal->write(now.upload));
+        RAWFRAME_TRY(occlusion->write(now.upload));
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
             if (mrhiWriteBuffer(native, now.upload, now.cascades[at], 0, &now.block.cascades[at], sizeof(Matrix4)) !=
                 mrhi_success) {
@@ -744,11 +766,12 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(castShadows(now));
         // The scene's table: slots 10 to 17 are each run's textures; 18 and
         // 19 the sky's picture (D322), or the run's probe's; 20 what each
-        // reflects (D325).
+        // reflects (D325); 21 what the ambient occlusion found, or white
+        // (D327).
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
             samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
-        const std::array<mrhiBinding, 21> kFrameBinding = {
+        const std::array<mrhiBinding, 22> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, now.shadowMap),
             samplerAt(2, pipelines.shadowSampler),
@@ -769,7 +792,8 @@ struct SceneRenderer::State {
             samplerAt(17, {}),
             kPicture,
             kPictureSampler,
-            bufferAt(20, now.probesResource, now.reflections.blocks.size() * sizeof(ProbeBlock))};
+            bufferAt(20, now.probesResource, now.reflections.blocks.size() * sizeof(ProbeBlock)),
+            textureAt(21, occlusion->enabled() ? occlusion->reaching() : resourceOf(textures->resource(0)))};
         std::array<mrhiBinding, 4> skyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
                                                  bufferAt(1, metering->exposure(), sizeof(ExposureBlock)),
                                                  kPicture,
@@ -790,7 +814,11 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 21> binding = kFrameBinding;
+            std::array<mrhiBinding, 22> binding = kFrameBinding;
+            // The prepass, which the occlusion comes after, reads white.
+            if (pass.index1 == now.depthPass.index1 && pass.generation == now.depthPass.generation) {
+                binding[21] = textureAt(21, resourceOf(textures->resource(0)));
+            }
             std::optional<std::pair<render_scene::SceneTextures, std::uint32_t>> bound;
             for (const Run& run : runs) {
                 if (bound != std::pair{run.texture, run.probe}) {
@@ -817,14 +845,18 @@ struct SceneRenderer::State {
         // The opaque models, their depth first, the masked cut there
         // (D310); then, lit, the sky where none lies; then the translucent
         // over both (D305).
-        for (const auto& [kPass, kPipeline, kLit] : {std::tuple{now.depthPass, pipelines.depth.pipeline, false},
-                                                     std::tuple{now.litPass, pipelines.lit.pipeline, true}}) {
+        // With the ambient occlusion, the prepass leaves each point's
+        // surface too, and the occlusion is found between the two (D327).
+        const bool kSurfaces = occlusion->enabled();
+        for (const auto& [kPass, kPipeline, kLit] :
+             {std::tuple{now.depthPass, (kSurfaces ? pipelines.surfaces : pipelines.depth).pipeline, false},
+              std::tuple{now.litPass, pipelines.lit.pipeline, true}}) {
             if (mrhiBeginPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not begin", mrhi_errorState);
             }
             RAWFRAME_TRY(kDrawRuns(kPass, kPipeline, now.placed.runs));
-            RAWFRAME_TRY(kDrawRuns(
-                kPass, kLit ? pipelines.maskedLit.pipeline : pipelines.cutout.pipeline, now.placed.maskedRuns));
+            const Asked& kMasked = kLit ? pipelines.maskedLit : kSurfaces ? pipelines.cutSurfaces : pipelines.cutout;
+            RAWFRAME_TRY(kDrawRuns(kPass, kMasked.pipeline, now.placed.maskedRuns));
             if (kLit && (mrhiSetGraphicsPipeline(native, kPass, pipelines.sky.pipeline) != mrhi_success ||
                          mrhiSetBindings(native, kPass, 0, skyBinding.data(), skyBinding.size()) != mrhi_success ||
                          mrhiDraw(native, kPass, 3, 1, 0, 0) != mrhi_success)) {
@@ -835,6 +867,9 @@ struct SceneRenderer::State {
             }
             if (mrhiEndPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not end", mrhi_errorState);
+            }
+            if (!kLit) {
+                RAWFRAME_TRY(occlusion->record(pipelines, now.depth));
             }
         }
         RAWFRAME_TRY(capturing->record(now.scene));
@@ -877,6 +912,7 @@ struct SceneRenderer::State {
         if (submitted) {
             ++statistics.frames;
             statistics.framesSmoothed += declared->smoothed ? 1 : 0;
+            statistics.framesOccluded += occlusion->enabled() ? 1 : 0;
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;
@@ -924,6 +960,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->metering.emplace(device.native());
     state->temporal.emplace(device.native());
     state->capturing.emplace(device);
+    state->occlusion.emplace(device.native());
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }

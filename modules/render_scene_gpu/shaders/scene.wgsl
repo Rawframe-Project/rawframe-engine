@@ -1,5 +1,6 @@
-// The 3D scene's models (D284, D289, D290, D291, D292, D293, D309, D310), for WebGPU: the entries of
-// scene.vert, scene.frag, and scene.cut.frag.
+// The 3D scene's models (D284, D289, D290, D291, D292, D293, D309, D310,
+// D327), for WebGPU: the entries of scene.vert, scene.frag,
+// scene.cut.frag, scene.normal.frag, and scene.cutnormal.frag.
 
 struct Frame {
     viewProjection: mat4x4f,
@@ -19,6 +20,7 @@ struct Frame {
     ground: vec4f,
     environment: vec4f,
     irradiance: array<vec4f, 9>,
+    occlusion: vec4f,
 }
 
 struct Light {
@@ -62,6 +64,8 @@ struct ShadowSlot {
 // The sky's picture (D322).
 @group(0) @binding(18) var environmentTexture: texture_cube<f32>;
 @group(0) @binding(19) var environmentSampler: sampler;
+// What of the light from all around reaches each texel (D327).
+@group(0) @binding(21) var occlusionTexture: texture_2d<f32>;
 
 // What each model reflects (D325): the sky's picture first, then each
 // reflection probe; scene.frag's Probe.
@@ -259,7 +263,7 @@ fn punctual(placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec
 }
 
 @fragment
-fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
+fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
       @location(3) now: vec3f, @location(4) before: vec3f, @location(5) @interpolate(flat) material: u32,
       @location(6) uv: vec2f, @location(7) tangent: vec4f, @location(8) @interpolate(flat) probe: u32) -> Shaded {
     let toEye = normalize(-placed);
@@ -335,7 +339,11 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
         let scaleBias = environmentBrdf(surface.roughness, nv);
         along = (surface.headOn * scaleBias.x + scaleBias.y) * chosen.light.rgb * picture;
     }
-    let sky = occlusion * ((1.0 - sheen) * surface.diffuse * around + along);
+    var reaches = 1.0;
+    if (frame.occlusion.x > 0.5 && opacity >= 0.999) {
+        reaches = textureLoad(occlusionTexture, vec2i(position.xy) / 2, 0).r;
+    }
+    let sky = occlusion * reaches * ((1.0 - sheen) * surface.diffuse * around + along);
     out.color = vec4f((direct + sky + emission.rgb * glow) * exposure.y, opacity);
     return out;
 }
@@ -351,4 +359,30 @@ fn cut(@location(1) color: vec4f, @location(5) @interpolate(flat) material: u32,
     if (opacity < rest.z) {
         discard;
     }
+}
+
+// The models' surfaces in the prepass when a screen-space effect asks
+// (D327): scene.normal.frag.
+@fragment
+fn normal(@location(0) normal: vec3f, @location(2) placed: vec3f, @location(5) @interpolate(flat) material: u32)
+    -> @location(0) vec4f {
+    let at = min(material, arrayLength(&materials) / 9u - 1u) * 9u;
+    let n = normalize(normal);
+    return vec4f(select(n, -n, dot(n, placed) > 0.0), materials[at + 1u].w);
+}
+
+// The masked models' surfaces in the prepass: scene.cutnormal.frag.
+@fragment
+fn cutNormal(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
+             @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f) -> @location(0) vec4f {
+    let at = min(material, arrayLength(&materials) / 9u - 1u) * 9u;
+    let rest = materials[at + 3u];
+    let mapped = materials[at + 4u];
+    let sampled = textureSample(baseTexture, baseSampler, uv * mapped.xy + mapped.zw);
+    let opacity = rest.x * color.a * select(1.0, sampled.a, (u32(rest.w) & 4u) != 0u);
+    if (opacity < rest.z) {
+        discard;
+    }
+    let n = normalize(normal);
+    return vec4f(select(n, -n, dot(n, placed) > 0.0), materials[at + 1u].w);
 }

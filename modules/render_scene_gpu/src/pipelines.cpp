@@ -3,6 +3,7 @@
 #include "blocks.h"
 #include "generated/fxaa_container.h"
 #include "generated/meter_container.h"
+#include "generated/occlusion_container.h"
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
 #include "generated/sky_container.h"
@@ -13,6 +14,7 @@
 
 #include <array>
 #include <string>
+#include <tuple>
 
 namespace rawframe::render_scene_gpu {
 
@@ -29,8 +31,21 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked :
-         {&casting, &cutCasting, &depth, &cutout, &lit, &maskedLit, &glass, &sky, &temporal, &tonemap, &fxaa}) {
+    for (Asked* asked : {&casting,
+                         &cutCasting,
+                         &depth,
+                         &cutout,
+                         &surfaces,
+                         &cutSurfaces,
+                         &occlude,
+                         &blurOcclusion,
+                         &lit,
+                         &maskedLit,
+                         &glass,
+                         &sky,
+                         &temporal,
+                         &tonemap,
+                         &fxaa}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -41,8 +56,14 @@ Pipelines::~Pipelines() {
     for (const mrhiSamplerId kSampler : materialSamplers) {
         static_cast<void>(mrhiDestroySampler(native, kSampler));
     }
-    for (const mrhiShaderId kShader :
-         {sceneShader, tonemapShader, shadowShader, temporalShader, skyShader, meterShader, fxaaShader}) {
+    for (const mrhiShaderId kShader : {sceneShader,
+                                       tonemapShader,
+                                       shadowShader,
+                                       temporalShader,
+                                       skyShader,
+                                       meterShader,
+                                       fxaaShader,
+                                       occlusionShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -85,6 +106,7 @@ result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kSkyContainer, skyShader));
     RAWFRAME_TRY(makeShader(kMeterContainer, meterShader));
     RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
+    RAWFRAME_TRY(makeShader(kOcclusionContainer, occlusionShader));
     // Each vertex of the mesh, then each draw's placement.
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
@@ -133,6 +155,41 @@ result::Status Pipelines::make() {
     cutDef.fragmentEntry = "cut";
     cutDef.fragmentEntryLength = 3;
     RAWFRAME_TRY(ask(cutDef, cutout));
+    // With the ambient occlusion (D327), the prepass also leaves each
+    // point's surface: whole, and masked.
+    mrhiGraphicsPipelineDef surfacesDef = prepass;
+    constexpr std::string_view kSurfacesLabel = "rawframe.scene.depth.surfaces";
+    surfacesDef.label = kSurfacesLabel.data();
+    surfacesDef.labelLength = kSurfacesLabel.size();
+    surfacesDef.fragmentEntry = "normal";
+    surfacesDef.fragmentEntryLength = 6;
+    surfacesDef.colorTargetCount = 1;
+    surfacesDef.colorTargets[0].format = kSurfaceFormat;
+    RAWFRAME_TRY(ask(surfacesDef, surfaces));
+    mrhiGraphicsPipelineDef cutSurfacesDef = surfacesDef;
+    constexpr std::string_view kCutSurfacesLabel = "rawframe.scene.depth.surfaces.masked";
+    cutSurfacesDef.label = kCutSurfacesLabel.data();
+    cutSurfacesDef.labelLength = kCutSurfacesLabel.size();
+    cutSurfacesDef.fragmentEntry = "cutNormal";
+    cutSurfacesDef.fragmentEntryLength = 9;
+    RAWFRAME_TRY(ask(cutSurfacesDef, cutSurfaces));
+    // The ambient occlusion from the prepass's depth and surfaces, then
+    // blurred, each a triangle over the target.
+    for (const auto& [kEntry, kLabel, kAsked] :
+         {std::tuple{std::string_view{"occlude"}, std::string_view{"rawframe.scene.occlusion"}, &occlude},
+          std::tuple{std::string_view{"blur"}, std::string_view{"rawframe.scene.occlusion.blur"}, &blurOcclusion}}) {
+        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+        def.label = kLabel.data();
+        def.labelLength = kLabel.size();
+        def.shader = occlusionShader;
+        def.vertexEntry = "vs";
+        def.vertexEntryLength = 2;
+        def.fragmentEntry = kEntry.data();
+        def.fragmentEntryLength = kEntry.size();
+        def.colorTargetCount = 1;
+        def.colorTargets[0].format = kAmbientFormat;
+        RAWFRAME_TRY(ask(def, *kAsked));
+    }
     // The casters into the sun's shadow map: the vertex's place alone,
     // pushed from the sun by its slope (the depth half of ADR-0051's
     // bias; the normal half is where the map is read).
@@ -310,6 +367,10 @@ result::Result<bool> Pipelines::ready() {
                          &cutCasting,
                          &depth,
                          &cutout,
+                         &surfaces,
+                         &cutSurfaces,
+                         &occlude,
+                         &blurOcclusion,
                          &lit,
                          &maskedLit,
                          &glass,

@@ -85,6 +85,7 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     block.sky = {kLights.sky[0], kLights.sky[1], kLights.sky[2], 0};
     block.ground = {kLights.ground[0], kLights.ground[1], kLights.ground[2], 0};
     block.exposure = {factorOf(frame.exposure), 0, 0, 0};
+    block.occlusion = {frame.occlusion.enabled ? 1.0F : 0.0F, 0, 0, 0};
     block.forward = {frame.forward[0], frame.forward[1], frame.forward[2], 0};
     const render_scene::SceneShadows& kShadows = frame.shadows;
     for (std::size_t at = 0; at < kShadows.count; ++at) {
