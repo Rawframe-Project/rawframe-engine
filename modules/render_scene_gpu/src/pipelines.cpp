@@ -1,6 +1,7 @@
 #include "pipelines.h"
 
 #include "blocks.h"
+#include "generated/fxaa_container.h"
 #include "generated/meter_container.h"
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
@@ -28,16 +29,16 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked : {&casting, &depth, &lit, &sky, &temporal, &tonemap}) {
+    for (Asked* asked : {&casting, &depth, &lit, &sky, &temporal, &tonemap, &fxaa}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
         static_cast<void>(mrhiDestroyComputePipeline(native, asked->compute));
     }
     static_cast<void>(mrhiDestroySampler(native, shadowSampler));
-    static_cast<void>(mrhiDestroySampler(native, historySampler));
+    static_cast<void>(mrhiDestroySampler(native, filteredSampler));
     for (const mrhiShaderId kShader :
-         {sceneShader, tonemapShader, shadowShader, temporalShader, skyShader, meterShader}) {
+         {sceneShader, tonemapShader, shadowShader, temporalShader, skyShader, meterShader, fxaaShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -79,6 +80,7 @@ result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kTemporalContainer, temporalShader));
     RAWFRAME_TRY(makeShader(kSkyContainer, skyShader));
     RAWFRAME_TRY(makeShader(kMeterContainer, meterShader));
+    RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
     // Each vertex of the mesh, then each draw's placement.
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
@@ -203,8 +205,8 @@ result::Status Pipelines::make() {
     blendingDef.addressU = mrhi_addressClampToEdge;
     blendingDef.addressV = mrhi_addressClampToEdge;
     blendingDef.addressW = mrhi_addressClampToEdge;
-    if (const mrhiResult kMade = mrhiCreateSampler(native, &blendingDef, &historySampler); kMade != mrhi_success) {
-        return failed("the temporal sampler could not be made", kMade);
+    if (const mrhiResult kMade = mrhiCreateSampler(native, &blendingDef, &filteredSampler); kMade != mrhi_success) {
+        return failed("the filtering sampler could not be made", kMade);
     }
     mrhiGraphicsPipelineDef picture = mrhiDefaultGraphicsPipelineDef();
     constexpr std::string_view kPictureLabel = "rawframe.scene.tonemap";
@@ -217,12 +219,19 @@ result::Status Pipelines::make() {
     picture.fragmentEntryLength = 2;
     picture.colorTargetCount = 1;
     picture.colorTargets[0].format = kPictureFormat;
-    return ask(picture, tonemap);
+    RAWFRAME_TRY(ask(picture, tonemap));
+    // FXAA: the tonemapped picture into the frame's (D296).
+    mrhiGraphicsPipelineDef smoothed = picture;
+    constexpr std::string_view kFxaaLabel = "rawframe.scene.fxaa";
+    smoothed.label = kFxaaLabel.data();
+    smoothed.labelLength = kFxaaLabel.size();
+    smoothed.shader = fxaaShader;
+    return ask(smoothed, fxaa);
 }
 
 result::Result<bool> Pipelines::ready() {
     bool all = true;
-    for (Asked* asked : {&casting, &depth, &lit, &sky, &histogram, &adapt, &temporal, &tonemap}) {
+    for (Asked* asked : {&casting, &depth, &lit, &sky, &histogram, &adapt, &temporal, &tonemap, &fxaa}) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {

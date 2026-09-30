@@ -628,3 +628,63 @@ RAWFRAME_TEST(EveryTonemapperKeepsMiddleGrey) {
     RAWFRAME_EXPECT(std::abs(kAgx - 127) <= 2 && std::abs(kNeutral - kAgx) <= 2 && std::abs(kLinear - kAgx) <= 2);
     RAWFRAME_EXPECT(kBrightLinear == 255 && kBrightAgx < 250 && kBrightAgx > kAgx);
 }
+
+RAWFRAME_TEST(FxaaSoftensSlantedEdgesAlone) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A black box turned a twelfth of a turn about the view's axis, before
+    // a middle grey sky: its edges are stairs of whole texels.
+    SceneFrame frame = looking();
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.sky = {50, 50, 50};
+    frame.shadows.count = 0;
+    frame.exposure = std::log2(50.0F / (1.2F * 0.18F));
+    SceneDraw turned = box(8, 2, {0, 0, 0, 1});
+    const float kCos = std::cos(std::numbers::pi_v<float> / 6);
+    const float kSin = std::sin(std::numbers::pi_v<float> / 6);
+    turned.model[0] = 2 * kCos;
+    turned.model[1] = 2 * kSin;
+    turned.model[4] = -2 * kSin;
+    turned.model[5] = 2 * kCos;
+    turned.normal[0] = kCos / 2;
+    turned.normal[1] = kSin / 2;
+    turned.normal[4] = -kSin / 2;
+    turned.normal[5] = kCos / 2;
+    frame.draws = {turned};
+    const auto kHard = drawn(**framer, **made, frame, kMeshes);
+    frame.fxaa = true;
+    const auto kSoft = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kHard.has_value() && kSoft.has_value());
+    if (!kHard.has_value() || !kSoft.has_value()) {
+        return;
+    }
+    // Texels neither sky nor box: the stairs' blend.
+    const int kSky = at(*kHard, 2, 2)[0];
+    const int kBox = at(*kHard, 32, 32)[0];
+    const auto kBetween = [kSky, kBox](const std::vector<std::byte>& pixels) {
+        int count = 0;
+        for (std::uint32_t y = 0; y < kSide; ++y) {
+            for (std::uint32_t x = 0; x < kSide; ++x) {
+                const int kRed = at(pixels, x, y)[0];
+                count += kRed > kBox + 12 && kRed < kSky - 12 ? 1 : 0;
+            }
+        }
+        return count;
+    };
+    std::printf("sky %d, box %d; between, hard %d, with FXAA %d\n", kSky, kBox, kBetween(*kHard), kBetween(*kSoft));
+    RAWFRAME_EXPECT(kSky > kBox + 100 && kBetween(*kHard) < 8 && kBetween(*kSoft) > 30);
+    // Away from the edges, nothing changes.
+    RAWFRAME_EXPECT(at(*kSoft, 2, 2) == at(*kHard, 2, 2) && at(*kSoft, 32, 32) == at(*kHard, 32, 32));
+    RAWFRAME_EXPECT((*made)->statistics().framesSmoothed >= 1);
+}

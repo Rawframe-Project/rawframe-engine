@@ -337,6 +337,10 @@ struct SceneRenderer::State {
         std::uint32_t height = 0;
         /// Where each texel's point moved, the temporal pass's input (D291).
         mrhiResourceId motion{};
+        /// With FXAA, the tonemapped picture it reads, and its pass (D296).
+        bool smoothed = false;
+        mrhiResourceId display{};
+        mrhiPassId fxaaPass{};
         bool draws = false;
         bool casters = false;
     };
@@ -487,6 +491,17 @@ struct SceneRenderer::State {
                 return failed("a target could not be declared", kDeclared);
             }
         }
+        now.smoothed = frame->fxaa;
+        if (now.smoothed) {
+            mrhiTextureDef def = mrhiDefaultTextureDef();
+            def.format = kPictureFormat;
+            def.width = open.width;
+            def.height = open.height;
+            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &def, &now.display);
+                kDeclared != mrhi_success) {
+                return failed("a target could not be declared", kDeclared);
+            }
+        }
 
         // The upload pass writes what the drawing reads.
         std::vector<mrhiAccess> writes = {wholeOf(now.blockResource, mrhi_accessCopyDestination),
@@ -621,7 +636,9 @@ struct SceneRenderer::State {
         }
         RAWFRAME_TRY(metering->addPasses(now.scene));
         RAWFRAME_TRY(temporal->addPass(now.scene, now.motion));
-        // The picture: every pixel of it written, over whatever was there.
+        // The picture: every pixel of it written, over whatever was there;
+        // with FXAA, the tonemapped picture first, then FXAA over it into
+        // the frame's (D296).
         const mrhiAccess kScene = wholeOf(temporal->shown(now.scene), mrhi_accessSampled);
         mrhiPassDef pictureDef = mrhiDefaultPassDef();
         pictureDef.colorTargets[0].resource = resourceOf(open.picture);
@@ -629,12 +646,25 @@ struct SceneRenderer::State {
         pictureDef.colorTargets[0].store = mrhi_storeKeep;
         pictureDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
         pictureDef.colorTargetCount = 1;
-        const std::array<mrhiAccess, 2> kPictureReads = {kScene, wholeOf(now.pictureResource, mrhi_accessUniform)};
-        pictureDef.accesses = kPictureReads.data();
-        pictureDef.accessCount = static_cast<std::uint32_t>(kPictureReads.size());
         pictureDef.neverCull = true;
-        if (const mrhiResult kAdded = mrhiAddPass(native, &pictureDef, &now.picturePass); kAdded != mrhi_success) {
+        mrhiPassDef tonemapDef = pictureDef;
+        if (now.smoothed) {
+            tonemapDef.colorTargets[0].resource = now.display;
+            tonemapDef.colorTargets[0].load = mrhi_loadDiscard;
+        }
+        const std::array<mrhiAccess, 2> kPictureReads = {kScene, wholeOf(now.pictureResource, mrhi_accessUniform)};
+        tonemapDef.accesses = kPictureReads.data();
+        tonemapDef.accessCount = static_cast<std::uint32_t>(kPictureReads.size());
+        if (const mrhiResult kAdded = mrhiAddPass(native, &tonemapDef, &now.picturePass); kAdded != mrhi_success) {
             return failed("the picture's pass could not be added", kAdded);
+        }
+        const mrhiAccess kDisplay = wholeOf(now.display, mrhi_accessSampled);
+        pictureDef.accesses = &kDisplay;
+        pictureDef.accessCount = 1;
+        if (now.smoothed) {
+            if (const mrhiResult kAdded = mrhiAddPass(native, &pictureDef, &now.fxaaPass); kAdded != mrhi_success) {
+                return failed("the FXAA pass could not be added", kAdded);
+            }
         }
         declared = std::move(now);
         return {};
@@ -837,6 +867,32 @@ struct SceneRenderer::State {
             mrhiEndPass(native, now.picturePass) != mrhi_success) {
             return failed("the picture could not be drawn", mrhi_errorState);
         }
+        if (!now.smoothed) {
+            return {};
+        }
+        const std::array<mrhiBinding, 2> kDisplayBinding = {mrhiBinding{.slot = 0,
+                                                                        .resource = now.display,
+                                                                        .offset = 0,
+                                                                        .size = 0,
+                                                                        .viewKind = mrhi_texture2d,
+                                                                        .viewFormat = mrhi_formatNone,
+                                                                        .range = kSceneBinding[0].range,
+                                                                        .sampler = {}},
+                                                            mrhiBinding{.slot = 1,
+                                                                        .resource = {},
+                                                                        .offset = 0,
+                                                                        .size = 0,
+                                                                        .viewKind = mrhi_texture2d,
+                                                                        .viewFormat = mrhi_formatNone,
+                                                                        .range = {},
+                                                                        .sampler = pipelines.filteredSampler}};
+        if (mrhiBeginPass(native, now.fxaaPass) != mrhi_success ||
+            mrhiSetGraphicsPipeline(native, now.fxaaPass, pipelines.fxaa.pipeline) != mrhi_success ||
+            mrhiSetBindings(native, now.fxaaPass, 0, kDisplayBinding.data(), kDisplayBinding.size()) != mrhi_success ||
+            mrhiDraw(native, now.fxaaPass, 3, 1, 0, 0) != mrhi_success ||
+            mrhiEndPass(native, now.fxaaPass) != mrhi_success) {
+            return failed("the picture could not be antialiased", mrhi_errorState);
+        }
         return {};
     }
 
@@ -851,6 +907,7 @@ struct SceneRenderer::State {
                 statistics.uploadBytes += bytesOf(*mesh->source);
             }
             ++statistics.frames;
+            statistics.framesSmoothed += declared->smoothed ? 1 : 0;
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;

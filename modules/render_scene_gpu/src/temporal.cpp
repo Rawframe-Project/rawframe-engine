@@ -150,7 +150,7 @@ result::Status TemporalPass::record(const Pipelines& pipelines, mrhiResourceId s
                                                               .viewKind = mrhi_texture2d,
                                                               .viewFormat = mrhi_formatNone,
                                                               .range = {},
-                                                              .sampler = pipelines.historySampler},
+                                                              .sampler = pipelines.filteredSampler},
                                                   mrhiBinding{.slot = 4,
                                                               .resource = state_,
                                                               .offset = 0,

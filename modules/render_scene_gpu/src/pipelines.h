@@ -43,13 +43,15 @@ struct Pipelines {
     mrhiShaderId temporalShader{};
     mrhiShaderId skyShader{};
     mrhiShaderId meterShader{};
+    mrhiShaderId fxaaShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
-    /// Blends four texels of the picture before.
-    mrhiSamplerId historySampler{};
+    /// Blends four texels, clamped at the edges: the picture before's
+    /// (D291) and FXAA's taps (D296).
+    mrhiSamplerId filteredSampler{};
     /// The shadow maps' casters, the depth prepass, the lit models, the sky
-    /// behind them, the metering's two steps (D293), the temporal pass, and
-    /// the picture.
+    /// behind them, the metering's two steps (D293), the temporal pass, the
+    /// picture, and FXAA over it (D296).
     Asked casting;
     Asked depth;
     Asked lit;
@@ -58,6 +60,7 @@ struct Pipelines {
     Asked adapt;
     Asked temporal;
     Asked tonemap;
+    Asked fxaa;
 
     Pipelines() = default;
     Pipelines(const Pipelines&) = delete;

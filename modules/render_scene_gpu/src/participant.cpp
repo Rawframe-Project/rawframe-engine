@@ -96,7 +96,8 @@ public:
                       diagnostics::field("uploadsDeferred", statistics.uploadsDeferred),
                       diagnostics::field("framesResolved", statistics.framesResolved),
                       diagnostics::field("historyReused", statistics.historyReused),
-                      diagnostics::field("framesMetered", statistics.framesMetered)});
+                      diagnostics::field("framesMetered", statistics.framesMetered),
+                      diagnostics::field("framesSmoothed", statistics.framesSmoothed)});
     }
 
 private:

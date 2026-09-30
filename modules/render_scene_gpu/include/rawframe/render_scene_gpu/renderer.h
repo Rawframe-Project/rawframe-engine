@@ -65,6 +65,8 @@ struct RendererStatistics {
     std::uint64_t historyReused = 0;
     /// Frames whose exposure was metered from what they saw (D293).
     std::uint64_t framesMetered = 0;
+    /// Frames antialiased by FXAA (D296).
+    std::uint64_t framesSmoothed = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the
