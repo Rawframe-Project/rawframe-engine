@@ -1,7 +1,8 @@
 // Coverage-guided fuzzing of a Radiance picture as the importer decodes it
 // (D321): a file from anyone meets the run-length reader through the
 // limits, and what decodes cooks into a cube its own reader takes back
-// exactly.
+// exactly, and encodes to Radiance again decoding to the same light
+// (D326).
 
 #include "rawframe/texture/texture.h"
 #include "rawframe/texture_import/import.h"
@@ -16,6 +17,11 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     const auto kImage = texture_import::decodeRadiance(kBytes, {.maximumSide = 256});
     if (!kImage.has_value()) {
         return 0;
+    }
+    const auto kAgain = texture_import::decodeRadiance(texture_import::encodeRadiance(*kImage), {.maximumSide = 256});
+    if (!kAgain.has_value() || kAgain->width != kImage->width || kAgain->height != kImage->height ||
+        kAgain->rgb != kImage->rgb) {
+        std::abort();
     }
     const auto kCooked = texture_import::cookEnvironment(*kImage, {.side = 4, .levels = 3, .samples = 4});
     if (!kCooked.has_value()) {

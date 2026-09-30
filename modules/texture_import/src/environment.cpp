@@ -236,8 +236,18 @@ FacePoint faceOf(const Vec& direction) noexcept {
     return point;
 }
 
+} // namespace
+
+std::array<double, 3> pictureDirection(double u, double v) noexcept {
+    const double kAround = (u - 0.5) * 2 * std::numbers::pi;
+    const double kUp = (0.5 - v) * std::numbers::pi;
+    return {std::sin(kAround) * std::cos(kUp), std::sin(kUp), -std::cos(kAround) * std::cos(kUp)};
+}
+
+namespace {
+
 /// The picture's light in a direction, bilinear, wrapping across and
-/// clamped at the poles.
+/// clamped at the poles: where `pictureDirection` puts it.
 Rgb pictureAt(const LightImage& image, const Vec& direction) noexcept {
     const double kU = 0.5 + (std::atan2(direction[0], -direction[2]) / (2 * std::numbers::pi));
     const double kV = 0.5 - (std::asin(std::clamp(direction[1], -1.0, 1.0)) / std::numbers::pi);

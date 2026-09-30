@@ -1,13 +1,17 @@
 // Environments (D321): a Radiance picture decodes alike from flat and
 // run-length scanlines, and broken or other pictures are refused; its cube
 // looks each way the picture does, holds a uniform sky at every level, and
-// its rougher levels spread the light without adding or losing any.
+// its rougher levels spread the light without adding or losing any. A
+// picture of light encodes to Radiance and decodes back within RGBE's
+// precision (D326), and a point of a picture shows the direction the cube
+// samples it from.
 
 #include "rawframe/test/test.h"
 #include "rawframe/texture/errors.h"
 #include "rawframe/texture/texture.h"
 #include "rawframe/texture_import/import.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -300,4 +304,92 @@ RAWFRAME_TEST(EnvironmentSettingsOutsideTheirRangesAreRefused) {
     LightImage shortSky = kSky;
     shortSky.rgb.pop_back();
     RAWFRAME_EXPECT(refusedWith(cookEnvironment(shortSky, {.side = 16, .levels = 5}), TextureError::BadTexture));
+}
+
+RAWFRAME_TEST(APictureOfLightEncodesToRadianceAndBack) {
+    // Wide enough to be run-length encoded, and too narrow: flats, ramps,
+    // black, below nought, not a number, and very bright.
+    for (const std::uint32_t kWidth : {300U, 5U}) {
+        LightImage image{.width = kWidth, .height = 3};
+        for (std::uint32_t row = 0; row < image.height; ++row) {
+            for (std::uint32_t x = 0; x < kWidth; ++x) {
+                const float kRamp = static_cast<float>(x) * 0.37F;
+                const std::array<float, 3> kLight = row == 0     ? std::array<float, 3>{2, 2, 2}
+                                                    : row == 1   ? std::array<float, 3>{kRamp, kRamp * 0.5F, 1e4F}
+                                                    : x % 3 == 0 ? std::array<float, 3>{0, -1, std::nanf("")}
+                                                                 : std::array<float, 3>{0.01F, 5e5F, 3};
+                image.rgb.insert(image.rgb.end(), kLight.begin(), kLight.end());
+            }
+        }
+        const std::vector<std::byte> kEncoded = encodeRadiance(image);
+        const auto kDecoded = decodeRadiance(kEncoded);
+        RAWFRAME_EXPECT(kDecoded.has_value() && kDecoded->width == kWidth && kDecoded->height == 3 &&
+                        kDecoded->rgb.size() == image.rgb.size());
+        if (!kDecoded.has_value() || kDecoded->rgb.size() != image.rgb.size()) {
+            continue;
+        }
+        bool within = true;
+        for (std::size_t texel = 0; texel < image.rgb.size() / 3; ++texel) {
+            float most = 0;
+            for (std::size_t channel = 0; channel < 3; ++channel) {
+                const float kValue = image.rgb[(texel * 3) + channel];
+                most = std::max(most, std::isnan(kValue) ? 0.0F : kValue);
+            }
+            for (std::size_t channel = 0; channel < 3; ++channel) {
+                const float kValue = image.rgb[(texel * 3) + channel];
+                const float kExpected = std::isnan(kValue) || kValue < 0 ? 0.0F : kValue;
+                within = within && std::abs(kDecoded->rgb[(texel * 3) + channel] - kExpected) <= most / 128;
+            }
+        }
+        RAWFRAME_EXPECT(within);
+        // Flat rows encode short.
+        if (kWidth == 300) {
+            RAWFRAME_EXPECT(kEncoded.size() < std::size_t{300} * 3 * 4 * 3 / 4);
+        }
+    }
+}
+
+RAWFRAME_TEST(APictureShowsTheDirectionTheCubeSamplesItFrom) {
+    const auto kNear = [](const std::array<double, 3>& got, const std::array<double, 3>& expected) {
+        return std::abs(got[0] - expected[0]) < 1e-9 && std::abs(got[1] - expected[1]) < 1e-9 &&
+               std::abs(got[2] - expected[2]) < 1e-9;
+    };
+    RAWFRAME_EXPECT(kNear(pictureDirection(0.5, 0.5), {0, 0, -1}) && kNear(pictureDirection(0.75, 0.5), {1, 0, 0}) &&
+                    kNear(pictureDirection(0.25, 0.5), {-1, 0, 0}) && kNear(pictureDirection(0, 0.5), {0, 0, 1}) &&
+                    std::abs(pictureDirection(0.3, 0)[1] - 1) < 1e-9 &&
+                    std::abs(pictureDirection(0.3, 1)[1] + 1) < 1e-9);
+    // A picture bright only where one direction points cooks to a cube
+    // bright that way.
+    LightImage image{.width = 64, .height = 32, .rgb = std::vector<float>(std::size_t{64} * 32 * 3, 0.0F)};
+    const std::array<double, 3> kWay = pictureDirection((40 + 0.5) / 64.0, (10 + 0.5) / 32.0);
+    for (std::uint32_t row = 9; row <= 11; ++row) {
+        for (std::uint32_t x = 39; x <= 41; ++x) {
+            image.rgb[((std::size_t{row} * 64) + x) * 3] = 1000;
+        }
+    }
+    const auto kCube = cookEnvironment(image, {.side = 16, .levels = 1, .samples = 1});
+    RAWFRAME_EXPECT(kCube.has_value());
+    if (!kCube.has_value()) {
+        return;
+    }
+    // The face the direction meets is the one with the brightest texel.
+    const double kX = std::abs(kWay[0]);
+    const double kY = std::abs(kWay[1]);
+    const double kZ = std::abs(kWay[2]);
+    const std::size_t kFace = kX >= kY && kX >= kZ ? (kWay[0] > 0 ? 0 : 1)
+                              : kY >= kZ           ? (kWay[1] > 0 ? 2 : 3)
+                                                   : (kWay[2] > 0 ? 4 : 5);
+    const std::vector<std::byte>& kBytes = kCube->levels[0].bytes;
+    const std::size_t kFaceBytes = kBytes.size() / 6;
+    std::size_t brightest = 0;
+    float most = -1;
+    for (std::size_t at = 0; at + 8 <= kBytes.size(); at += 8) {
+        const auto kHalf = static_cast<std::uint16_t>(std::to_integer<unsigned>(kBytes[at]) |
+                                                      (std::to_integer<unsigned>(kBytes[at + 1]) << 8U));
+        if (texture::floatOf(kHalf) > most) {
+            most = texture::floatOf(kHalf);
+            brightest = at / kFaceBytes;
+        }
+    }
+    RAWFRAME_EXPECT(brightest == kFace);
 }

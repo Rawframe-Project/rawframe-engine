@@ -11,6 +11,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/texture/texture.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -66,6 +67,17 @@ struct LightImage {
 /// side past the limit, before its texels are allocated.
 [[nodiscard]] result::Result<LightImage> decodeRadiance(std::span<const std::byte> source,
                                                         const DecodeLimits& limits = {});
+
+/// A picture of light as a Radiance file (D326): RGBE texels, each
+/// scanline run-length encoded where its width allows (8 to 32767), flat
+/// otherwise; rows top first. Light below nought, and not a number, is
+/// black; past what RGBE holds, the most it does.
+[[nodiscard]] std::vector<std::byte> encodeRadiance(const LightImage& image);
+
+/// The direction the point (`u` across, `v` down, each from 0 to 1) of an
+/// equirectangular picture shows, as `cookEnvironment` reads the picture
+/// (D326): a unit vector.
+[[nodiscard]] std::array<double, 3> pictureDirection(double u, double v) noexcept;
 
 /// How an environment is cooked. A cube's face is `side` texels square, a
 /// power of two; its `levels` run from a mirror's reflection (level nought)

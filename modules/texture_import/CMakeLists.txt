@@ -4,7 +4,7 @@
 # depend on it. Wuffs is memory-safe by construction, so the decoder may
 # face files that are not an author's own.
 rawframe_module(NAME texture_import
-    SOURCES src/environment.cpp src/import.cpp
+    SOURCES src/environment.cpp src/import.cpp src/radiance.cpp
     DEPS texture result base
 )
 target_link_libraries(rawframe_texture_import PRIVATE rawframe_wuffs rawframe_bc7enc)
