@@ -53,6 +53,29 @@ public:
         }
         width_ = static_cast<std::uint32_t>(kWidth);
         height_ = static_cast<std::uint32_t>(kHeight);
+        // The sun's shadows (ADR-0051's typed cascade configuration, a
+        // profile's values; D289).
+        const ShadowSettings kShadowDefaults;
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kCascades,
+                            configuration.unsignedInteger("scene.shadow_cascades", kShadowDefaults.cascades));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kSide,
+                            configuration.unsignedInteger("scene.shadow_side", kShadowDefaults.side));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kDistance,
+                            configuration.unsignedInteger("scene.shadow_distance",
+                                                          static_cast<std::uint64_t>(kShadowDefaults.distance)));
+        if (kCascades > 4 || kSide < 64 || kSide > 4096 || kDistance < 1 || kDistance > 10000) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             composition::kCompositionDomain,
+                             code(composition::CompositionError::BadConfiguration),
+                             "scene.shadow_cascades is 0 to 4, scene.shadow_side 64 to 4096 texels, and "
+                             "scene.shadow_distance 1 to 10000 meters")
+                    .error()};
+        }
+        shadows_ = ShadowSettings{.cascades = static_cast<std::uint32_t>(kCascades),
+                                  .distance = static_cast<float>(kDistance),
+                                  .logarithmicBlend = kShadowDefaults.logarithmicBlend,
+                                  .side = static_cast<std::uint32_t>(kSide)};
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
         }
@@ -82,8 +105,11 @@ public:
         client_ = client;
         cameraComponent_ = game->camera;
         gameMeshes_ = game->meshes.size();
-        settings_ = SceneSettings{
-            .models = std::move(game->models), .sun = game->sun, .sky = game->sky, .meshes = std::move(game->meshes)};
+        settings_ = SceneSettings{.models = std::move(game->models),
+                                  .sun = game->sun,
+                                  .sky = game->sky,
+                                  .meshes = std::move(game->meshes),
+                                  .shadows = shadows_};
         return {};
     }
 
@@ -213,6 +239,7 @@ private:
     world_replication::ClientWorlds* clients_ = nullptr;
     std::optional<std::size_t> client_;
     SceneSettings settings_;
+    ShadowSettings shadows_;
     SceneCamera camera_;
     std::optional<schema::ComponentTypeId> cameraComponent_;
     std::size_t gameMeshes_ = 0;

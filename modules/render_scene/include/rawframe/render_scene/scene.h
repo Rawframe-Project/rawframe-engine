@@ -133,6 +133,34 @@ struct SceneLights {
     std::array<float, 3> sky{0, 0, 0};
 };
 
+/// One cascade of the sun's shadow map (ADR-0051): a light-space box
+/// holding the part of the view from the cascade before it to `far`.
+struct ShadowCascade {
+    /// Eye-relative World space to the cascade's clip space: x and y across
+    /// its square, reversed-Z depth, one toward the sun.
+    Matrix viewProjection{};
+    /// Where along the view it ends, in meters from the eye.
+    float far = 0;
+    /// The World size of one of its texels, for the normal bias.
+    float texel = 0;
+};
+
+/// The sun's shadows as the view stage derives them (ADR-0051's cascaded
+/// shadow maps): up to four cascades, nearest first, and the models that
+/// cast into them, in draw order. None without a sun or shadows.
+struct SceneShadows {
+    std::size_t count = 0;
+    std::array<ShadowCascade, 4> cascades{};
+    /// Each cascade's square's side in texels.
+    std::uint32_t side = 0;
+    /// Where shadows end, in meters from the eye; they fade over the last
+    /// cascade's last tenth.
+    float distance = 0;
+    std::vector<SceneDraw> casters;
+    /// Casters left out past the models' limit.
+    std::size_t overLimit = 0;
+};
+
 /// What the queue stage builds: the view, the light, and the draws in the
 /// order a device draws them, grouped by mesh; and what was left out.
 struct SceneFrame {
@@ -140,6 +168,10 @@ struct SceneFrame {
     /// infinite far).
     Matrix view{};
     Matrix projection{};
+    /// Where the eye looks, in the World's axes: what a cascade is chosen
+    /// by.
+    std::array<float, 3> forward{0, 0, -1};
+    SceneShadows shadows;
     /// EV100.
     float exposure = 15;
     SceneLights lights;
@@ -163,6 +195,17 @@ struct SceneLimits {
     std::size_t maximumModels = 16384;
 };
 
+/// ADR-0051's typed cascade configuration, a profile's values: how many
+/// cascades, how far shadows reach, how the splits blend a logarithmic
+/// scheme (one) with a uniform one (nought), and each cascade's side in
+/// texels. Cascades of nought draw no shadows.
+struct ShadowSettings {
+    std::uint32_t cascades = 4;
+    float distance = 100;
+    float logarithmicBlend = 0.8F;
+    std::uint32_t side = 1024;
+};
+
 struct SceneSettings {
     /// The game's components of `rawframe.model.Model`'s type, in its order:
     /// an entity may show one of each.
@@ -173,6 +216,7 @@ struct SceneSettings {
     /// The game's meshes, by their identities.
     std::vector<SceneMesh> meshes;
     SceneLimits limits;
+    ShadowSettings shadows;
 };
 
 class Scene {

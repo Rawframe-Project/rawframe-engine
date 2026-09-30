@@ -20,6 +20,10 @@ namespace rawframe::render_scene {
 ///                  plays, else 0)
 ///   scene.width    the view's width in pixels (1280), for its aspect
 ///   scene.height   the view's height in pixels (720)
+///   scene.shadow_cascades  the sun's shadow cascades, 0 to 4 (4; 0 for no
+///                          shadows)
+///   scene.shadow_side      a cascade's side in texels, 64 to 4096 (1024)
+///   scene.shadow_distance  how far shadows reach, in meters (100)
 ///
 /// The game is the Runtime's game files (`rawframe.world_kest.game_files`),
 /// whose `rawframe.model` components and meshes it reads.

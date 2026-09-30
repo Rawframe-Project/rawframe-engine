@@ -135,6 +135,87 @@ struct Scene::State {
                         .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance}};
     }
 
+    /// The sun's cascades for this view (ADR-0051): the view from the near
+    /// plane to the shadows' distance split between them, the logarithmic
+    /// and uniform schemes blended; each a square in the sun's axes around
+    /// its slice's bounding sphere, whose radius depends only on the lens so
+    /// the square keeps its size as the eye turns, placed on whole texels
+    /// of the World, not the eye, so it does not shimmer as the eye moves.
+    /// Its depth reaches the shadows' distance toward the sun, for casters
+    /// between the sun and the view.
+    void cascades(const SceneCamera& camera, const std::array<Vector, 3>& axes, float half, float aspect, float near) {
+        const ShadowSettings& kSettings = settings.shadows;
+        SceneShadows& shadows = frame.shadows;
+        shadows.count = std::min<std::size_t>(kSettings.cascades, shadows.cascades.size());
+        shadows.side = kSettings.side;
+        shadows.distance = kSettings.distance;
+        const Vector& kToSun = frame.lights.toSun;
+        // The sun's axes: across its square, then along its light.
+        const Vector kAlong = {-kToSun[0], -kToSun[1], -kToSun[2]};
+        const Vector kAcross =
+            normalized(cross(kAlong, std::abs(kAlong[1]) < 0.99F ? Vector{0, 1, 0} : Vector{1, 0, 0}));
+        const Vector kUpward = cross(kAcross, kAlong);
+        const auto kDot = [](const Vector& left, const std::array<double, 3>& right) {
+            return (left[0] * right[0]) + (left[1] * right[1]) + (left[2] * right[2]);
+        };
+        const auto kDotF = [](const Vector& left, const Vector& right) {
+            return (left[0] * right[0]) + (left[1] * right[1]) + (left[2] * right[2]);
+        };
+        const Vector& kForward = axes[2];
+        const float kTan = std::tan(half);
+        float start = near;
+        for (std::size_t at = 0; at < shadows.count; ++at) {
+            const float kPart = static_cast<float>(at + 1) / static_cast<float>(shadows.count);
+            const float kUniform = near + ((kSettings.distance - near) * kPart);
+            const float kLogarithmic = near * std::pow(kSettings.distance / near, kPart);
+            const float kEnd =
+                (kSettings.logarithmicBlend * kLogarithmic) + ((1 - kSettings.logarithmicBlend) * kUniform);
+            // The slice's bounding sphere: its center on the view's axis,
+            // where it is nearest all eight corners.
+            const float kNearHalf = start * kTan;
+            const float kFarHalf = kEnd * kTan;
+            const float kNearCorner = kNearHalf * kNearHalf * (1 + (aspect * aspect));
+            const float kFarCorner = kFarHalf * kFarHalf * (1 + (aspect * aspect));
+            const float kMiddle = std::clamp(
+                ((kEnd * kEnd) - (start * start) + kFarCorner - kNearCorner) / (2 * (kEnd - start)), start, kEnd);
+            const float kRadiusRaw = std::sqrt(std::max(((kEnd - kMiddle) * (kEnd - kMiddle)) + kFarCorner,
+                                                        ((kMiddle - start) * (kMiddle - start)) + kNearCorner));
+            // Rounded up to a sixteenth of a meter, so it is the same frame
+            // to frame.
+            const float kRadius = std::ceil(kRadiusRaw * 16) / 16;
+            const float kTexel = 2 * kRadius / static_cast<float>(kSettings.side);
+            const Vector kCenter = {kForward[0] * kMiddle, kForward[1] * kMiddle, kForward[2] * kMiddle};
+            // Snapped on the World's texels: the eye's place in the sun's
+            // axes in doubles, the center's offset from it in floats.
+            const double kEyeAcross = kDot(kAcross, camera.eye);
+            const double kEyeUpward = kDot(kUpward, camera.eye);
+            const double kWorldAcross = std::floor((kEyeAcross + kDotF(kAcross, kCenter)) / kTexel) * kTexel;
+            const double kWorldUpward = std::floor((kEyeUpward + kDotF(kUpward, kCenter)) / kTexel) * kTexel;
+            const auto kCenterAcross = static_cast<float>(kWorldAcross - kEyeAcross);
+            const auto kCenterUpward = static_cast<float>(kWorldUpward - kEyeUpward);
+            const float kCenterAlong = kDotF(kAlong, kCenter);
+            // Depth one toward the sun, at the shadows' distance before the
+            // sphere; nought behind it.
+            const float kNearest = kCenterAlong - kRadius - kSettings.distance;
+            const float kFarthest = kCenterAlong + kRadius;
+            const float kDepth = kFarthest - kNearest;
+            Matrix& matrix = shadows.cascades[at].viewProjection;
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                matrix[(axis * 4) + 0] = kAcross[axis] / kRadius;
+                matrix[(axis * 4) + 1] = kUpward[axis] / kRadius;
+                matrix[(axis * 4) + 2] = -kAlong[axis] / kDepth;
+                matrix[(axis * 4) + 3] = 0;
+            }
+            matrix[12] = -kCenterAcross / kRadius;
+            matrix[13] = -kCenterUpward / kRadius;
+            matrix[14] = kFarthest / kDepth;
+            matrix[15] = 1;
+            shadows.cascades[at].far = kEnd;
+            shadows.cascades[at].texel = kTexel;
+            start = kEnd;
+        }
+    }
+
     const SceneFrame& queue(const SceneCamera& camera) {
         frame.draws.clear();
         frame.drawn = 0;
@@ -143,6 +224,9 @@ struct Scene::State {
         frame.malformed = 0;
         frame.unknownMeshes = 0;
         frame.overLimit = 0;
+        frame.shadows.count = 0;
+        frame.shadows.casters.clear();
+        frame.shadows.overLimit = 0;
         lights();
         order.clear();
         for (const ModelInstance& instance : extracted) {
@@ -186,6 +270,13 @@ struct Scene::State {
         // near plane and falls toward nought.
         frame.projection = Matrix{kFocal / kAspect, 0, 0, 0, 0, kFocal, 0, 0, 0, 0, 0, -1, 0, 0, kNear, 0};
         frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;
+        frame.forward = kForward;
+        const bool kShadows = kSees && settings.shadows.cascades > 0 && settings.shadows.side > 0 &&
+                              settings.shadows.distance > kNear &&
+                              (frame.lights.sun[0] > 0 || frame.lights.sun[1] > 0 || frame.lights.sun[2] > 0);
+        if (kShadows) {
+            cascades(camera, {kRight, kUp, kForward}, kHalf, kAspect, kNear);
+        }
         // The view's side planes in the eye's axes, each normal pointing
         // out: what lies past one by more than its radius is out of view.
         const float kWide = std::atan(std::tan(kHalf) * kAspect);
@@ -229,6 +320,29 @@ struct Scene::State {
             }
             const float kRadius =
                 kBounds.radius * std::max({std::abs(kScale[0]), std::abs(kScale[1]), std::abs(kScale[2])});
+            SceneDraw draw{.mesh = kModel.mesh, .entity = instance->entity};
+            for (std::size_t column = 0; column < 3; ++column) {
+                for (std::size_t row = 0; row < 3; ++row) {
+                    draw.model[(column * 4) + row] = kTurn[column][row] * kScale[column];
+                    draw.normal[(column * 4) + row] = kTurn[column][row] / kScale[column];
+                }
+            }
+            draw.model[12] = kPlace[0];
+            draw.model[13] = kPlace[1];
+            draw.model[14] = kPlace[2];
+            draw.model[15] = 1;
+            const Vector kColor = colorOf(kModel.color);
+            draw.color = {kColor[0], kColor[1], kColor[2], static_cast<float>(kModel.color & 0xFFU) / 255.0F};
+            // A model near enough casts into the shadows, seen or not: a
+            // caster behind the eye still shades what is before it.
+            const float kAway = std::sqrt((center[0] * center[0]) + (center[1] * center[1]) + (center[2] * center[2]));
+            if (frame.shadows.count > 0 && kAway - kRadius <= frame.shadows.distance) {
+                if (frame.shadows.casters.size() < settings.limits.maximumModels) {
+                    frame.shadows.casters.push_back(draw);
+                } else {
+                    ++frame.shadows.overLimit;
+                }
+            }
             const Vector kSeen = {(kRight[0] * center[0]) + (kRight[1] * center[1]) + (kRight[2] * center[2]),
                                   (kUp[0] * center[0]) + (kUp[1] * center[1]) + (kUp[2] * center[2]),
                                   -((kForward[0] * center[0]) + (kForward[1] * center[1]) + (kForward[2] * center[2]))};
@@ -247,19 +361,6 @@ struct Scene::State {
                 ++frame.overLimit;
                 continue;
             }
-            SceneDraw draw{.mesh = kModel.mesh, .entity = instance->entity};
-            for (std::size_t column = 0; column < 3; ++column) {
-                for (std::size_t row = 0; row < 3; ++row) {
-                    draw.model[(column * 4) + row] = kTurn[column][row] * kScale[column];
-                    draw.normal[(column * 4) + row] = kTurn[column][row] / kScale[column];
-                }
-            }
-            draw.model[12] = kPlace[0];
-            draw.model[13] = kPlace[1];
-            draw.model[14] = kPlace[2];
-            draw.model[15] = 1;
-            const Vector kColor = colorOf(kModel.color);
-            draw.color = {kColor[0], kColor[1], kColor[2], static_cast<float>(kModel.color & 0xFFU) / 255.0F};
             frame.draws.push_back(draw);
             ++frame.drawn;
         }

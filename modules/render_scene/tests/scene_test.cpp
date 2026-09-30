@@ -302,3 +302,71 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                             "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look Model\n");
     RAWFRAME_EXPECT(!kOwn.has_value() && kOwn.error().code() == code(RenderSceneError::BadComponents));
 }
+
+namespace {
+
+/// Where `matrix` puts an eye-relative point, x, y, and depth.
+std::array<float, 3> clipOf(const Matrix& matrix, const std::array<float, 3>& point) {
+    std::array<float, 3> out{};
+    for (std::size_t row = 0; row < 3; ++row) {
+        out[row] =
+            (matrix[row] * point[0]) + (matrix[4 + row] * point[1]) + (matrix[8 + row] * point[2]) + matrix[12 + row];
+    }
+    return out;
+}
+
+} // namespace
+
+RAWFRAME_TEST(TheSunsCascadesCoverTheViewAndHoldStill) {
+    Rig rig;
+    const auto kAt = [](double x, double y, double z) {
+        return physics3d::Pose3D{.x = x, .y = y, .z = z, .qw = 1};
+    };
+    // Ahead, behind the eye but near, and beyond the shadows' reach.
+    rig.spawn(Model{.mesh = kBox}, kAt(1000, 0, -10));
+    rig.spawn(Model{.mesh = kBox}, kAt(1000, 0, 10));
+    rig.spawn(Model{.mesh = kBox}, kAt(1000, 0, -300));
+    const SceneCamera kCamera{.eye = {1000, 2, 0}, .fovY = 1, .near = 0.1F, .aspect = 1.5F};
+    const SceneFrame& kFrame = rig.frame(kCamera);
+    const SceneShadows& kShadows = kFrame.shadows;
+    RAWFRAME_EXPECT(kShadows.count == 4 && kShadows.side == 1024 && near(kShadows.distance, 100));
+    // Nearest first, the last at the shadows' distance, each texel its
+    // square's side over the texels.
+    float before = 0;
+    for (std::size_t at = 0; at < kShadows.count; ++at) {
+        RAWFRAME_EXPECT(kShadows.cascades[at].far > before && kShadows.cascades[at].texel > 0);
+        before = kShadows.cascades[at].far;
+    }
+    RAWFRAME_EXPECT(near(kShadows.cascades[3].far, 100, 0.01F));
+    // The box ahead is in the first cascades' squares, its depth between
+    // nought and one; the two near ones cast, the far one does not, though
+    // it is drawn (the view has no far plane); the one behind is not.
+    const std::array<float, 3> kInFirst = clipOf(kShadows.cascades[1].viewProjection, {0, -2, -10});
+    RAWFRAME_EXPECT(std::abs(kInFirst[0]) < 1 && std::abs(kInFirst[1]) < 1 && kInFirst[2] > 0 && kInFirst[2] < 1);
+    RAWFRAME_EXPECT(kShadows.casters.size() == 2 && kFrame.draws.size() == 2);
+    // Nearer the sun is deeper: a point above another is nearer one.
+    const std::array<float, 3> kAbove = clipOf(kShadows.cascades[1].viewProjection, {0, 8, -10});
+    RAWFRAME_EXPECT(kAbove[2] > kInFirst[2]);
+
+    // The eye moves a little: a point of the World stays on the same part
+    // of its texel, so the shadows do not shimmer.
+    const auto kTexelPart = [](const SceneFrame& frame, const std::array<double, 3>& eye) {
+        const std::array<float, 3> kPoint = {
+            static_cast<float>(1003 - eye[0]), static_cast<float>(0 - eye[1]), static_cast<float>(-12 - eye[2])};
+        const std::array<float, 3> kClip = clipOf(frame.shadows.cascades[0].viewProjection, kPoint);
+        const float kTexels = (kClip[0] + 1) / 2 * static_cast<float>(frame.shadows.side);
+        return kTexels - std::floor(kTexels);
+    };
+    const float kFirst = kTexelPart(kFrame, kCamera.eye);
+    SceneCamera moved = kCamera;
+    moved.eye = {1000.013, 2.007, 0.021};
+    const float kSecond = kTexelPart(rig.frame(moved), moved.eye);
+    RAWFRAME_EXPECT(std::abs(kFirst - kSecond) < 0.02F || std::abs(std::abs(kFirst - kSecond) - 1) < 0.02F);
+
+    // Without the sun's light, no shadows.
+    const world::EntityHandle kLight = *rig.world.create();
+    Sun dark{.illuminance = 0};
+    RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSunId), &dark).has_value());
+    const SceneFrame& kDark = rig.frame(kCamera);
+    RAWFRAME_EXPECT(kDark.shadows.count == 0 && kDark.shadows.casters.empty());
+}
