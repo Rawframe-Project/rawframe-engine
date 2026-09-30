@@ -7,6 +7,7 @@
 #include "pipelines.h"
 #include "rawframe/render/textures.h"
 #include "rawframe/render_scene_gpu/errors.h"
+#include "runs.h"
 #include "tables.h"
 #include "temporal.h"
 
@@ -134,132 +135,6 @@ struct SceneRenderer::State {
                     }
                 }
             }
-        }
-    }
-
-    /// The placements of the draws whose mesh is here, in order, and the
-    /// runs of one mesh and one material texture each: an instanced draw
-    /// apiece, from its first instance.
-    struct Run {
-        const HeldMesh* mesh = nullptr;
-        /// The mesh's indices it draws (D314).
-        std::uint32_t firstIndex = 0;
-        std::uint32_t indexCount = 0;
-        std::uint32_t first = 0;
-        std::uint32_t count = 0;
-        render_scene::SceneTextures texture;
-    };
-    using Runs = std::vector<Run>;
-
-    /// A shadow square's casters: the solid by mesh, the masked by mesh
-    /// and texture, cut (D310).
-    struct Casters {
-        Runs solid;
-        Runs masked;
-
-        [[nodiscard]] bool empty() const noexcept {
-            return solid.empty() && masked.empty();
-        }
-    };
-
-    struct Placed {
-        std::vector<float> instances;
-        /// The opaque draws', the translucent draws' (D305), then each of
-        /// the sun's cascades' casters' (D298), then each square of the
-        /// punctual shadows' atlas's (D292).
-        Runs runs;
-        /// The masked draws', cut in the depth prepass (D310).
-        Runs maskedRuns;
-        Runs translucentRuns;
-        std::array<Casters, 4> cascadeRuns;
-        std::vector<Casters> slotRuns;
-    };
-
-    Placed place(const render_scene::SceneFrame& scene, const std::map<std::uint64_t, const HeldMesh*>& usable) {
-        Placed placed;
-        std::uint32_t count = 0;
-        const std::span<const render_scene::SceneDraw> kDraws = scene.draws;
-        const std::size_t kOpaque = kDraws.size() - std::min(scene.translucent, kDraws.size());
-        // The opaque, then the masked: a material with a cutoff (D310).
-        const auto kSplit = [&scene](std::span<const render_scene::SceneDraw> draws) {
-            std::pair<std::vector<render_scene::SceneDraw>, std::vector<render_scene::SceneDraw>> split;
-            for (const render_scene::SceneDraw& draw : draws) {
-                const bool kMasked = draw.material < scene.materials.size() && scene.materials[draw.material][14] > 0;
-                (kMasked ? split.second : split.first).push_back(draw);
-            }
-            return split;
-        };
-        const auto [kSolid, kMasked] = kSplit(kDraws.first(kOpaque));
-        append(kSolid, usable, scene.textures, placed, placed.runs, count, true);
-        append(kMasked, usable, scene.textures, placed, placed.maskedRuns, count, true);
-        append(kDraws.subspan(kOpaque), usable, scene.textures, placed, placed.translucentRuns, count, true);
-        const std::span<const render_scene::SceneDraw> kSunCasters = scene.shadows.casters;
-        for (std::size_t at = 0; at < scene.shadows.count && at < placed.cascadeRuns.size(); ++at) {
-            const render_scene::ShadowCascade& kCascade = scene.shadows.cascades[at];
-            const auto [kCastSolid, kCastMasked] =
-                kSplit(kSunCasters.subspan(kCascade.firstCaster, kCascade.casterCount));
-            append(kCastSolid, usable, {}, placed, placed.cascadeRuns[at].solid, count, false);
-            append(kCastMasked, usable, scene.textures, placed, placed.cascadeRuns[at].masked, count, false);
-        }
-        const std::span<const render_scene::SceneDraw> kCasters = scene.lightShadows.casters;
-        for (const render_scene::ShadowSlot& slot : scene.lightShadows.slots) {
-            const auto [kCastSolid, kCastMasked] = kSplit(kCasters.subspan(slot.firstCaster, slot.casterCount));
-            Casters& casters = placed.slotRuns.emplace_back();
-            append(kCastSolid, usable, {}, placed, casters.solid, count, false);
-            append(kCastMasked, usable, scene.textures, placed, casters.masked, count, false);
-        }
-        return placed;
-    }
-
-    /// The draws' placements, and their runs; a shadow's casters' by mesh
-    /// alone (`materialTextures` none).
-    void append(std::span<const render_scene::SceneDraw> draws,
-                const std::map<std::uint64_t, const HeldMesh*>& usable,
-                std::span<const render_scene::SceneTextures> materialTextures,
-                Placed& placed,
-                Runs& runs,
-                std::uint32_t& count,
-                bool counted) {
-        for (const render_scene::SceneDraw& draw : draws) {
-            const auto kMesh = usable.find(draw.mesh);
-            if (kMesh == usable.end()) {
-                statistics.modelsLeftOut += counted ? 1 : 0;
-                continue;
-            }
-            // The model's rows, then the normals' columns, then the color.
-            for (std::size_t row = 0; row < 3; ++row) {
-                for (std::size_t column = 0; column < 4; ++column) {
-                    placed.instances.push_back(draw.model[(column * 4) + row]);
-                }
-            }
-            for (std::size_t column = 0; column < 3; ++column) {
-                for (std::size_t row = 0; row < 3; ++row) {
-                    placed.instances.push_back(draw.normal[(column * 4) + row]);
-                }
-            }
-            placed.instances.insert(placed.instances.end(), draw.color.begin(), draw.color.end());
-            for (std::size_t row = 0; row < 3; ++row) {
-                for (std::size_t column = 0; column < 4; ++column) {
-                    placed.instances.push_back(draw.previous[(column * 4) + row]);
-                }
-            }
-            placed.instances.push_back(static_cast<float>(draw.material));
-            const render_scene::SceneTextures kTexture = draw.material < materialTextures.size()
-                                                             ? materialTextures[draw.material]
-                                                             : render_scene::SceneTextures{};
-            const auto kIndices = static_cast<std::uint32_t>(kMesh->second->source->indices.size());
-            const std::uint32_t kCount = draw.indexCount != 0 ? draw.indexCount : kIndices - draw.firstIndex;
-            if (runs.empty() || runs.back().mesh != kMesh->second || runs.back().firstIndex != draw.firstIndex ||
-                runs.back().indexCount != kCount || runs.back().texture != kTexture) {
-                runs.push_back({.mesh = kMesh->second,
-                                .firstIndex = draw.firstIndex,
-                                .indexCount = kCount,
-                                .first = count,
-                                .count = 0,
-                                .texture = kTexture});
-            }
-            ++runs.back().count;
-            ++count;
         }
     }
 
@@ -444,7 +319,7 @@ struct SceneRenderer::State {
         const std::uint64_t kWhite = std::min<std::uint64_t>(kBudget, 4 + 48);
         const std::map<std::uint64_t, const HeldMesh*> kUsable = meshesOf(*frame, meshes, kBudget - kWhite);
         texturesOf(*frame, held->left() + kWhite);
-        now.placed = place(*frame, kUsable);
+        now.placed = placeDraws(*frame, kUsable, statistics.modelsLeftOut);
         now.block = blockOf(*frame, open.width, open.height);
         now.lights = lightsOf(*frame);
         now.ranges = now.block.clusterGrid[3] > 0 ? frame->clusters.ranges : std::vector<std::uint32_t>{0, 0};
