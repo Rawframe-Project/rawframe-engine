@@ -17,12 +17,16 @@
 // is drawn in the canvas through the browser's WebGPU with Maul RHI's page
 // side (D282): frames are shown, WebGPU reports no error, and a screenshot
 // of the canvas shows what was drawn.
+// The sample 3D game plays the same way when named (D287): plaza, its
+// walker walked by W and made to jump, its scene drawn in the canvas (its
+// models seen through the player's camera and drawn), and neither sound nor
+// sprites asked of it.
 // Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser from where
 // Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test is
 // skipped (77).
 //
 // usage: browser_play.mjs <rawframe-server> <rawframe-web-client.wasm> <maul-window.mjs> <repository>
-//                         <rawframe-cook> <rawframe-build> <rawframe-bots> <maul-rhi.mjs>
+//                         <rawframe-cook> <rawframe-build> <rawframe-bots> <maul-rhi.mjs> [game]
 import { execFileSync, spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
@@ -35,7 +39,10 @@ import { argv, env } from 'node:process';
 import { inflateSync } from 'node:zlib';
 import { end } from './verdict.mjs';
 
-const [serverPath, wasmPath, windowPath, repository, cookPath, buildPath, botsPath, devicePath] = argv.slice(2);
+const [serverPath, wasmPath, windowPath, repository, cookPath, buildPath, botsPath, devicePath, named] = argv.slice(2);
+// runners, or plaza.
+const name = named ?? 'runners';
+const plaza = name === 'plaza';
 let puppeteer;
 try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
@@ -50,20 +57,20 @@ if (!existsSync(browserPath)) {
 }
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const work = await mkdtemp(join(tmpdir(), 'rawframe-play-'));
-const game = join(repository, 'games/runners');
+const game = join(repository, 'games', name);
 
-// Runners cooked, packed for the web, signed, installed, and composed. The
+// The game cooked, packed for the web, signed, installed, and composed. The
 // publisher's secret key is gone before anything is served.
 const run = (path, args) => execFileSync(path, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
 const library = join(work, 'library');
 run(cookPath, [game, join(work, 'cooked'), join(work, 'cache')]);
 const kid = run(buildPath, ['key', 'rawframe', join(library, 'keys')]).split(' ')[1].trim();
-run(buildPath, [join(work, 'cooked'), join(work, 'build'), 'rawframe/runners', '0.1.0', 'web', 'wasm32', 'client',
+run(buildPath, [join(work, 'cooked'), join(work, 'build'), `rawframe/${name}`, '0.1.0', 'web', 'wasm32', 'client',
                 'build.development', 'tool', join(library, 'keys', `${kid}.key`)]);
 await unlink(join(library, 'keys', `${kid}.key`));
 const root = run(buildPath, ['install', join(work, 'build'), library]).split(' ')[1].trim();
-run(buildPath, ['compose', library, root, 'tool', join(work, 'runners.composition')]);
-const gameResource = /"resourceId": "([0-9a-f]+)"/.exec(await readFile(join(game, 'runners.game.rfmeta'), 'utf8'))[1];
+run(buildPath, ['compose', library, root, 'tool', join(work, `${name}.composition`)]);
+const gameResource = /"resourceId": "([0-9a-f]+)"/.exec(await readFile(join(game, `${name}.game.rfmeta`), 'utf8'))[1];
 
 /** A UDP port nothing holds right now. */
 const port = await new Promise((resolve) => {
@@ -78,7 +85,7 @@ await writeFile(join(work, 'server.conf'), [
     'host.iteration_rate = 120',
     'world.tick_rate = 60',
     `kest.game_resource = ${gameResource}`,
-    `content.composition = ${join(work, 'runners.composition')}`,
+    `content.composition = ${join(work, `${name}.composition`)}`,
     `content.library = ${library}`,
     'network.quic.self_signed = true',
     'network.quic.webtransport = true',
@@ -102,11 +109,11 @@ if (fingerprint === undefined) {
     end(1);
 }
 
-// Two native runners from the same Composition, until asked to stop.
+// Two native players from the same Composition, until asked to stop.
 await writeFile(join(work, 'bots.conf'), [
     'host.iteration_rate = 120',
     `kest.game_resource = ${gameResource}`,
-    `content.composition = ${join(work, 'runners.composition')}`,
+    `content.composition = ${join(work, `${name}.composition`)}`,
     `content.library = ${library}`,
     'kest.plan_only = true',
     `network.quic.pin_file = ${join(work, 'fingerprint')}`,
@@ -138,14 +145,16 @@ async function list(directory) {
 await list(library);
 const setup = {
     fingerprint,
+    composition: `${name}.composition`,
     files,
     configuration: [
         'host.iteration_rate = 120',
         `kest.game_resource = ${gameResource}`,
-        'content.composition = runners.composition',
+        `content.composition = ${name}.composition`,
         'content.library = library',
         'kest.plan_only = true',
-        'audio.play = sink',
+        // The plaza makes no sound: it has no mixer to play.
+        ...(plaza ? [] : ['audio.play = sink']),
         'bots.player = true',
         'render.device = any',
         `bots.endpoint = https://127.0.0.1:${port}/rawframe`,
@@ -169,7 +178,7 @@ const hold = async (path, url) => {
         throw new Error('a file was refused: ' + path);
     }
 };
-await hold('runners.composition', '/runners.composition');
+await hold(setup.composition, '/' + setup.composition);
 for (const path of setup.files) {
     await hold('library/' + path, '/library/' + path);
 }
@@ -218,8 +227,8 @@ const http = createServer(async (request, response) => {
             await serve(devicePath);
         } else if (url.startsWith('/page/')) {
             await serve(join(repository, 'hosts/web_client/page', normalize(url.slice(6))));
-        } else if (url === '/runners.composition') {
-            await serve(join(work, 'runners.composition'));
+        } else if (url === `/${name}.composition`) {
+            await serve(join(work, `${name}.composition`));
         } else if (url.startsWith('/library/')) {
             await serve(join(library, normalize(url.slice(9))));
         } else {
@@ -302,15 +311,17 @@ try {
     await tab.goto(`http://127.0.0.1:${http.address().port}/`);
     await until(/page: play 0/, 30000);
     await until(/"code":"bots_admitted"/, 30000);
-    // The canvas takes the focus, then D is held: the runner runs.
+    // The canvas takes the focus, then D (W in the plaza) is held: the
+    // player runs.
+    const forward = plaza ? 'KeyW' : 'KeyD';
     await tab.click('canvas');
-    await tab.keyboard.down('KeyD');
+    await tab.keyboard.down(forward);
     await sleep(1000);
     await tab.keyboard.down('Space');
     await sleep(200);
     await tab.keyboard.up('Space');
     await sleep(800);
-    await tab.keyboard.up('KeyD');
+    await tab.keyboard.up(forward);
     await sleep(500);
     // What the canvas shows before the stop.
     const shown = litPixels(await (await tab.$('canvas')).screenshot({ type: 'png' }));
@@ -341,14 +352,23 @@ try {
     console.log(`page: the canvas drew ${drawn ? drawn[1] : 'no'} sprites, ${drawn ? drawn[2] : 'no'} animated, ` +
                 `with ${drawn ? drawn[3] : 'no'} textures, ${viewed ? viewed[1] : 'no'} frames through the ` +
                 `player's camera`);
-    verdict = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
-                      field('confirmed') > 100 && felt !== null && Number(felt[1]) > 0 && drawn !== null &&
-                      Number(drawn[1]) > 0 && Number(drawn[2]) > 0 && Number(drawn[3]) === 2 && viewed !== null &&
-                      Number(viewed[1]) > 0 && heard.frames > 48000 && drawing !== null &&
-                      Number(drawing[1]) > 0 && shown > 1000 && gpuErrors.length === 0 &&
-                      heard.peak > 0.05
-                  ? 0
-                  : 1;
+    // The plaza's walker, seen in 3D through the camera its present system
+    // placed, its models drawn on the device.
+    const seen3d = /"code":"scene_summary"[^\n]*"framesViewed":(\d+)[^\n]*"modelsDrawn":(\d+)/.exec(clientLog);
+    const drawn3d = /"code":"scene_drawing_summary"[^\n]*"models":(\d+),[^\n]*"modelsLeftOut":0,/.exec(clientLog);
+    if (plaza) {
+        console.log(`page: the scene drew ${drawn3d ? drawn3d[1] : 'no'} models, ${seen3d ? seen3d[1] : 'no'} frames ` +
+                    `through the player's camera`);
+    }
+    const played = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
+                   field('confirmed') > 100 && drawing !== null && Number(drawing[1]) > 0 && shown > 1000 &&
+                   gpuErrors.length === 0;
+    const runnersPlayed = felt !== null && Number(felt[1]) > 0 && drawn !== null && Number(drawn[1]) > 0 &&
+                          Number(drawn[2]) > 0 && Number(drawn[3]) === 2 && viewed !== null && Number(viewed[1]) > 0 &&
+                          heard.frames > 48000 && heard.peak > 0.05;
+    const plazaPlayed = seen3d !== null && Number(seen3d[1]) > 0 && Number(seen3d[2]) > 0 && drawn3d !== null &&
+                        Number(drawn3d[1]) > 0;
+    verdict = played && (plaza ? plazaPlayed : runnersPlayed) ? 0 : 1;
 } catch (error) {
     console.log(`page: ${error.message}`);
 } finally {

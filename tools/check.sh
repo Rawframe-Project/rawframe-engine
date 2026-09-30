@@ -113,25 +113,28 @@ else
         # browser are installed: RAWFRAME_NODE_MODULES and
         # PUPPETEER_CACHE_DIR, or under /opt/webtest, which any user
         # (the CI runner's too) can read.
-        step "web play"
-        play_status=0
-        RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
-            PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
-            tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
-            out/clang-development/hosts/dedicated_server/rawframe-server \
-            out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
-            out/wasm-development/third_party/maul-window/maul-window.mjs "$PWD" \
-            out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
-            out/clang-development/hosts/bots/rawframe-bots out/wasm-development/third_party/maul-rhi/maul-rhi.mjs \
-            >out/web-play.log 2>&1 ||
-            play_status=$?
-        if [ "$play_status" -eq 77 ]; then
-            echo "web play skipped: no Puppeteer or no browser for it"
-        elif [ "$play_status" -ne 0 ]; then
-            tail -30 out/web-play.log; fail "web play"
-        else
-            grep '^page:' out/web-play.log
-        fi
+        # Runners, then the plaza, the sample 3D game (D287).
+        for game in runners plaza; do
+            step "web play $game"
+            play_status=0
+            RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
+                PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
+                tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
+                out/clang-development/hosts/dedicated_server/rawframe-server \
+                out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
+                out/wasm-development/third_party/maul-window/maul-window.mjs "$PWD" \
+                out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
+                out/clang-development/hosts/bots/rawframe-bots out/wasm-development/third_party/maul-rhi/maul-rhi.mjs \
+                "$game" >"out/web-play-$game.log" 2>&1 ||
+                play_status=$?
+            if [ "$play_status" -eq 77 ]; then
+                echo "web play skipped: no Puppeteer or no browser for it"
+            elif [ "$play_status" -ne 0 ]; then
+                tail -30 "out/web-play-$game.log"; fail "web play $game"
+            else
+                grep '^page:' "out/web-play-$game.log"
+            fi
+        done
     fi
     # Every engine shader's WGSL compiled by the browser's WebGPU (D286).
     if [ "$failures" -eq 0 ]; then
