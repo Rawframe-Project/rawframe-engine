@@ -93,7 +93,9 @@ public:
                       diagnostics::field("modelsLeftOut", statistics.modelsLeftOut),
                       diagnostics::field("meshesUploaded", statistics.meshesUploaded),
                       diagnostics::field("uploadBytes", statistics.uploadBytes),
-                      diagnostics::field("uploadsDeferred", statistics.uploadsDeferred)});
+                      diagnostics::field("uploadsDeferred", statistics.uploadsDeferred),
+                      diagnostics::field("framesResolved", statistics.framesResolved),
+                      diagnostics::field("historyReused", statistics.historyReused)});
     }
 
 private:

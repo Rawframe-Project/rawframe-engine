@@ -2,7 +2,9 @@
 // the sun (Lambert), where the sun's shadow map says it reaches (D289), by
 // the point and spot lights of its cluster (D290), and by the sky (brighter
 // facing up), in physical units, times the camera's exposure, so the scene
-// target holds pre-exposed scene-linear light (ADR-0047).
+// target holds pre-exposed scene-linear light (ADR-0047); and how far the
+// point moved on the screen since the frame before, for the temporal pass
+// (D291).
 
 #version 450
 
@@ -25,12 +27,18 @@ layout(set = 0, binding = 0, std140) uniform Frame
     // (D290).
     vec4 clusterGrid;
     vec4 clusterDepth;
+    // The view and projection without the jitter, and the frame before's
+    // taking this frame's places (D291).
+    mat4 unjittered;
+    mat4 previous;
 }
 frame;
 
 layout(location = 0) in vec3 inNormal;
 layout(location = 1) in vec4 inColor;
 layout(location = 2) in vec3 inPlaced;
+layout(location = 3) in vec3 inNow;
+layout(location = 4) in vec3 inBefore;
 
 layout(set = 0, binding = 1) uniform texture2D shadowMap;
 layout(set = 0, binding = 2) uniform samplerShadow shadowSampler;
@@ -61,6 +69,9 @@ layout(set = 0, binding = 5, std430) readonly buffer Indices
 };
 
 layout(location = 0) out vec4 outColor;
+// Where the point is on the target less where it was, in the target's
+// coordinates, rows top first.
+layout(location = 1) out vec2 outMotion;
 
 const float kPi = 3.14159265;
 
@@ -100,7 +111,7 @@ vec3 punctual(vec3 placed, vec3 normal)
     if (frame.clusterGrid.w == 0.0) {
         return vec3(0.0);
     }
-    const vec4 kClip = frame.viewProjection * vec4(placed, 1.0);
+    const vec4 kClip = frame.unjittered * vec4(placed, 1.0);
     const vec2 kSeen = kClip.xy / kClip.w;
     const uvec3 kGrid = uvec3(frame.clusterGrid.xyz);
     const uint kX = min(uint(max((kSeen.x * 0.5 + 0.5) * frame.clusterGrid.x, 0.0)), kGrid.x - 1u);
@@ -138,4 +149,5 @@ void main()
     const vec3 kLight = (frame.sun.rgb * kFacing + punctual(inPlaced, kNormal)) / kPi +
                         frame.sky.rgb * (0.5 + 0.5 * kNormal.y);
     outColor = vec4(inColor.rgb * kLight * frame.exposure.x, 1.0);
+    outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);
 }

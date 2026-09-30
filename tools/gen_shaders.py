@@ -23,6 +23,7 @@ CONTAINERS = (
     ("render_canvas_gpu", "sprite", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "scene", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "shadow", (("vert", "vs"),)),
+    ("render_scene_gpu", "temporal", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "tonemap", (("vert", "vs"), ("frag", "fs"))),
 )
 

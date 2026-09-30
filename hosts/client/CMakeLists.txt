@@ -54,7 +54,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
         endif()
         # The plaza, its walker's scene drawn in 3D and shown in the window
-        # (D286): the scene's models drawn in frames the window showed, the
+        # (D286): the scene's models drawn in frames the window showed,
+        # antialiased over time, each reusing the picture before (D291), the
         # screen lit by them, and the picture read back in many shades.
         set(PLAZA_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/plaza_content)
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/client_plaza.tga)
@@ -70,7 +71,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
+                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"historyReused\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(client_plaza_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

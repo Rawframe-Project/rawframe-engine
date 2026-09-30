@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <utility>
 
 namespace rawframe::render_scene_gpu {
 
@@ -15,18 +17,31 @@ float exposureOf(float ev100) noexcept {
 
 } // namespace
 
-FrameBlock blockOf(const render_scene::SceneFrame& frame) noexcept {
+FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, std::uint32_t height) noexcept {
     FrameBlock block;
-    // The projection times the view, column-major.
-    for (std::size_t column = 0; column < 4; ++column) {
-        for (std::size_t row = 0; row < 4; ++row) {
-            float sum = 0;
-            for (std::size_t k = 0; k < 4; ++k) {
-                sum += frame.projection[(k * 4) + row] * frame.view[(column * 4) + k];
+    // The projection times the view, column-major; jittered, a point ahead
+    // moves right by twice the jitter over the width in clip space, and
+    // down likewise, as the distance ahead divides it. A frame not
+    // antialiased over time is never jittered.
+    render_scene::Matrix jittered = frame.projection;
+    if (frame.temporal.enabled) {
+        jittered[8] -= 2 * frame.temporal.jitter[0] / static_cast<float>(std::max<std::uint32_t>(width, 1));
+        jittered[9] += 2 * frame.temporal.jitter[1] / static_cast<float>(std::max<std::uint32_t>(height, 1));
+    }
+    for (const auto& [kProjection, kInto] :
+         {std::pair{static_cast<const render_scene::Matrix*>(&jittered), &block.viewProjection},
+          std::pair{&frame.projection, &block.unjittered}}) {
+        for (std::size_t column = 0; column < 4; ++column) {
+            for (std::size_t row = 0; row < 4; ++row) {
+                float sum = 0;
+                for (std::size_t k = 0; k < 4; ++k) {
+                    sum += (*kProjection)[(k * 4) + row] * frame.view[(column * 4) + k];
+                }
+                (*kInto)[(column * 4) + row] = sum;
             }
-            block.viewProjection[(column * 4) + row] = sum;
         }
     }
+    block.previous = frame.temporal.enabled ? frame.temporal.previousViewProjection : block.unjittered;
     const render_scene::SceneLights& kLights = frame.lights;
     block.toSun = {kLights.toSun[0], kLights.toSun[1], kLights.toSun[2], 0};
     block.sun = {kLights.sun[0], kLights.sun[1], kLights.sun[2], 0};

@@ -59,11 +59,16 @@ struct RendererStatistics {
     std::uint64_t meshesUploaded = 0;
     std::uint64_t uploadBytes = 0;
     std::uint64_t uploadsDeferred = 0;
+    /// Frames antialiased over time, and those of them that reused the
+    /// picture before (D291).
+    std::uint64_t framesResolved = 0;
+    std::uint64_t historyReused = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the
-/// model's rows, the normals' columns, and the color.
-inline constexpr std::uint32_t kInstanceBytes = 100;
+/// model's rows, the normals' columns, the color, and the model's rows the
+/// frame before (D291).
+inline constexpr std::uint32_t kInstanceBytes = 148;
 
 class SceneRenderer final : public render::FrameRecorder {
 public:

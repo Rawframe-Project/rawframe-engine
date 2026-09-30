@@ -1,4 +1,4 @@
-// The 3D scene's models (D284, D289, D290), for WebGPU: the entries of
+// The 3D scene's models (D284, D289, D290, D291), for WebGPU: the entries of
 // scene.vert and scene.frag.
 
 struct Frame {
@@ -14,6 +14,8 @@ struct Frame {
     cascades: array<mat4x4f, 4>,
     clusterGrid: vec4f,
     clusterDepth: vec4f,
+    unjittered: mat4x4f,
+    previous: mat4x4f,
 }
 
 struct Light {
@@ -35,12 +37,20 @@ struct Placed {
     @location(0) normal: vec3f,
     @location(1) color: vec4f,
     @location(2) placed: vec3f,
+    @location(3) now: vec3f,
+    @location(4) before: vec3f,
+}
+
+struct Shaded {
+    @location(0) color: vec4f,
+    @location(1) motion: vec2f,
 }
 
 @vertex
 fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) model0: vec4f,
       @location(3) model1: vec4f, @location(4) model2: vec4f, @location(5) normal0: vec3f,
-      @location(6) normal1: vec3f, @location(7) normal2: vec3f, @location(8) color: vec4f) -> Placed {
+      @location(6) normal1: vec3f, @location(7) normal2: vec3f, @location(8) color: vec4f,
+      @location(9) previous0: vec4f, @location(10) previous1: vec4f, @location(11) previous2: vec4f) -> Placed {
     let vertex = vec4f(position, 1.0);
     let placed = vec3f(dot(model0, vertex), dot(model1, vertex), dot(model2, vertex));
     var out: Placed;
@@ -48,6 +58,9 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
     out.normal = mat3x3f(normal0, normal1, normal2) * normal;
     out.color = color;
     out.placed = placed;
+    let was = vec3f(dot(previous0, vertex), dot(previous1, vertex), dot(previous2, vertex));
+    out.now = (frame.unjittered * vec4f(placed, 1.0)).xyw;
+    out.before = (frame.previous * vec4f(was, 1.0)).xyw;
     return out;
 }
 
@@ -76,7 +89,7 @@ fn punctual(placed: vec3f, normal: vec3f) -> vec3f {
     if (frame.clusterGrid.w == 0.0) {
         return vec3f(0.0);
     }
-    let clip = frame.viewProjection * vec4f(placed, 1.0);
+    let clip = frame.unjittered * vec4f(placed, 1.0);
     let seen = clip.xy / clip.w;
     let grid = vec3u(frame.clusterGrid.xyz);
     let x = min(u32(max((seen.x * 0.5 + 0.5) * frame.clusterGrid.x, 0.0)), grid.x - 1u);
@@ -107,9 +120,13 @@ fn punctual(placed: vec3f, normal: vec3f) -> vec3f {
 }
 
 @fragment
-fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f) -> @location(0) vec4f {
+fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
+      @location(3) now: vec3f, @location(4) before: vec3f) -> Shaded {
     let n = normalize(normal);
     let facing = max(dot(n, frame.toSun.xyz), 0.0) * sunlit(placed, n);
     let light = (frame.sun.rgb * facing + punctual(placed, n)) / kPi + frame.sky.rgb * (0.5 + 0.5 * n.y);
-    return vec4f(color.rgb * light * frame.exposure.x, 1.0);
+    var out: Shaded;
+    out.color = vec4f(color.rgb * light * frame.exposure.x, 1.0);
+    out.motion = (now.xy / now.z - before.xy / before.z) * vec2f(0.5, -0.5);
+    return out;
 }

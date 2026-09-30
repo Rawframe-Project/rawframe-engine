@@ -29,8 +29,12 @@ struct FrameBlock {
     /// (D290).
     std::array<float, 4> clusterGrid{};
     std::array<float, 4> clusterDepth{};
+    /// The view and projection without the jitter, and the frame before's
+    /// taking this frame's places (D291).
+    Matrix4 unjittered{};
+    Matrix4 previous{};
 };
-static_assert(sizeof(FrameBlock) == 480, "the scene's shaders read the frame as 480 bytes");
+static_assert(sizeof(FrameBlock) == 608, "the scene's shaders read the frame as 608 bytes");
 
 /// A point or spot light as the scene's shaders read it (std430, D290).
 struct LightBlock {
@@ -41,8 +45,16 @@ struct LightBlock {
 };
 static_assert(sizeof(LightBlock) == 64, "the scene's shaders read a light as 64 bytes");
 
-/// The frame's view and light as the scene's shaders read them.
-FrameBlock blockOf(const render_scene::SceneFrame& frame) noexcept;
+/// What the temporal pass reads (D291): whether the picture before may be
+/// reused.
+struct TemporalBlock {
+    std::array<float, 4> state{};
+};
+
+/// The frame's view and light as the scene's shaders read them, for a
+/// target of `width` by `height`: the jitter moves the picture by its
+/// fraction of a pixel right and down.
+FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, std::uint32_t height) noexcept;
 
 /// The frame's lights as the shaders read them, never none: a buffer bound
 /// is never empty.

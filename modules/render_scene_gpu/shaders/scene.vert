@@ -1,7 +1,9 @@
 // The 3D scene's models (D284), vertex entry "vs": a mesh's vertex placed
 // by its instance's model rows relative to the eye, then seen through the
-// frame's view and reversed-Z projection. The depth prepass runs the same
-// entry, so both land every vertex on the same depth.
+// frame's view and reversed-Z projection, jittered. The depth prepass runs
+// the same entry, so both land every vertex on the same depth. Where the
+// vertex is seen without the jitter, and where it was seen the frame
+// before, go on for its motion (D291).
 
 #version 450
 
@@ -24,6 +26,10 @@ layout(set = 0, binding = 0, std140) uniform Frame
     // (D290).
     vec4 clusterGrid;
     vec4 clusterDepth;
+    // The view and projection without the jitter, and the frame before's
+    // taking this frame's places (D291).
+    mat4 unjittered;
+    mat4 previous;
 }
 frame;
 
@@ -36,10 +42,15 @@ layout(location = 5) in vec3 inNormal0;
 layout(location = 6) in vec3 inNormal1;
 layout(location = 7) in vec3 inNormal2;
 layout(location = 8) in vec4 inColor;
+layout(location = 9) in vec4 inPrevious0;
+layout(location = 10) in vec4 inPrevious1;
+layout(location = 11) in vec4 inPrevious2;
 
 layout(location = 0) out vec3 outNormal;
 layout(location = 1) out vec4 outColor;
 layout(location = 2) out vec3 outPlaced;
+layout(location = 3) out vec3 outNow;
+layout(location = 4) out vec3 outBefore;
 
 invariant gl_Position;
 
@@ -51,4 +62,7 @@ void main()
     outNormal = mat3(inNormal0, inNormal1, inNormal2) * inNormal;
     outColor = inColor;
     outPlaced = kPlaced;
+    const vec3 kWas = vec3(dot(inPrevious0, kVertex), dot(inPrevious1, kVertex), dot(inPrevious2, kVertex));
+    outNow = (frame.unjittered * vec4(kPlaced, 1.0)).xyw;
+    outBefore = (frame.previous * vec4(kWas, 1.0)).xyw;
 }

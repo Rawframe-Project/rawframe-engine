@@ -2,10 +2,12 @@
 // drawn into a target and read back. A box ahead is drawn where the view
 // puts it, over the sky; a nearer model hides a farther one whatever their
 // order (the depth prepass, reversed-Z); the sun lights what faces it; a
-// draw whose mesh is not given is left out; and a mesh is uploaded once,
-// its draws of one mesh one instanced call; the sun casts shadows; and a
-// point light lights what is near it, a spot only what its cone reaches. Skips where no adapter
-// answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
+// draw whose mesh is not given is left out; a mesh is uploaded once, its
+// draws of one mesh one instanced call; the sun casts shadows; a point
+// light lights what is near it, a spot only what its cone reaches; and,
+// antialiased over time, an edge's texels blend what the jittered frames
+// saw of it, and a moving box leaves no ghost where it was. Skips where no
+// adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
 // `render`'s framer (D285), as the frame participant makes them.
 
 #include "rawframe/render/device.h"
@@ -17,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 
 using namespace rawframe;
 using render_scene::SceneDraw;
@@ -52,11 +55,14 @@ constexpr std::uint32_t kSide = 64;
 constexpr std::uint64_t kMissing = 9;
 
 /// A view from the origin along -Z, a square field a quarter turn high, as
-/// the queue stage would make it, with the engine's default light.
-SceneFrame looking() {
+/// the queue stage would make it, with the engine's default light; not
+/// antialiased over time unless asked, so a frame is drawn alone.
+SceneFrame looking(bool temporal = false) {
     const auto kSchema = *schema::RegistryBuilder{}.freeze();
     auto scene = *render_scene::Scene::create(*kSchema, {});
-    return scene->queue({.fovY = 1.5707964F, .near = 0.1F, .exposure = 15, .aspect = 1});
+    SceneFrame made = scene->queue({.fovY = 1.5707964F, .near = 0.1F, .exposure = 15, .aspect = 1});
+    made.temporal.enabled = temporal;
+    return made;
 }
 
 /// A box of half sides `half` at `z` meters ahead, in sRGB `color`.
@@ -294,4 +300,73 @@ RAWFRAME_TEST(PointAndSpotLightsLightWhatTheyReach) {
                 at(*kUp, 32, 39)[0]);
     RAWFRAME_EXPECT(at(*kDark, 32, 39)[0] < 10 && kBelow[0] > 100 && at(*kLamp, 2, 34)[0] < kBelow[0] / 2);
     RAWFRAME_EXPECT(at(*kDown, 32, 39)[0] > 100 && at(*kUp, 32, 39)[0] < 10);
+}
+
+RAWFRAME_TEST(TemporalAntiAliasingBlendsEdgesWithoutGhosts) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A box whose near face's left edge falls a quarter texel right of
+    // texel 27's center, on the middle row, still: its motion nought.
+    SceneFrame frame = looking(true);
+    RAWFRAME_EXPECT(frame.temporal.enabled && !frame.temporal.history);
+    frame.shadows.count = 0;
+    SceneDraw still = box(8, 0.9379F, {1, 1, 1, 1});
+    still.previous = still.model;
+    frame.draws = {still};
+    SceneFrame alone = frame;
+    alone.temporal.enabled = false;
+    const auto kAlone = drawn(**framer, **made, alone, kMeshes);
+    RAWFRAME_EXPECT(kAlone.has_value());
+    if (!kAlone.has_value()) {
+        return;
+    }
+    const int kSky = at(*kAlone, 20, 32)[0];
+    const int kBox = at(*kAlone, 32, 32)[0];
+    RAWFRAME_EXPECT(at(*kAlone, 27, 32)[0] == kSky && at(*kAlone, 28, 32)[0] == kBox);
+    // Twenty-four jittered frames, each reusing the picture before: the
+    // edge's texel shows the box's share of it.
+    std::optional<std::vector<std::byte>> blended;
+    for (std::uint64_t index = 0; index < 24; ++index) {
+        frame.temporal.jitter = render_scene::temporalJitter(index);
+        frame.temporal.history = index > 0;
+        blended = drawn(**framer, **made, frame, kMeshes);
+    }
+    RAWFRAME_EXPECT(blended.has_value());
+    if (!blended.has_value()) {
+        return;
+    }
+    const int kEdge = at(*blended, 27, 32)[0];
+    std::printf("sky %d, box %d, the edge alone %d, blended %d, inside %d\n",
+                kSky,
+                kBox,
+                at(*kAlone, 27, 32)[0],
+                kEdge,
+                at(*blended, 32, 32)[0]);
+    RAWFRAME_EXPECT(kEdge > kSky + 10 && kEdge < kBox - 10 && std::abs(at(*blended, 32, 32)[0] - kBox) < 4 &&
+                    std::abs(at(*blended, 20, 32)[0] - kSky) < 4);
+    RAWFRAME_EXPECT((*made)->statistics().framesResolved >= 24 && (*made)->statistics().historyReused >= 23);
+    // The box moves two meters right in one frame: where it was is the sky
+    // again at once, and where it is, the box.
+    SceneDraw moved = still;
+    moved.model[12] = 2;
+    frame.draws = {moved};
+    frame.temporal.jitter = render_scene::temporalJitter(24);
+    const auto kMoved = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kMoved.has_value());
+    if (!kMoved.has_value()) {
+        return;
+    }
+    std::printf("where it was %d, where it is %d\n", at(*kMoved, 30, 32)[0], at(*kMoved, 42, 32)[0]);
+    RAWFRAME_EXPECT(std::abs(at(*kMoved, 30, 32)[0] - kSky) < 6 && std::abs(at(*kMoved, 42, 32)[0] - kBox) < 6);
 }
