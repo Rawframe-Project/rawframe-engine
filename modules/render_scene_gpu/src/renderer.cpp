@@ -47,7 +47,14 @@ static_assert(sizeof(FrameBlock) == 128, "the scene's shaders read the frame as 
 
 constexpr mrhiFormat kSceneFormat = mrhi_formatRgba16Float;
 constexpr mrhiFormat kDepthFormat = mrhi_formatDepth32Float;
+/// The frame's picture, as `render` declares it.
 constexpr mrhiFormat kPictureFormat = mrhi_formatRgba8UnormSrgb;
+
+/// A resource of the open frame from the key `render` names it by.
+mrhiResourceId resourceOf(std::uint64_t key) noexcept {
+    return mrhiResourceId{.index1 = static_cast<std::uint32_t>(key >> 32U),
+                          .generation = static_cast<std::uint32_t>(key)};
+}
 
 mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
     return mrhiAccess{
@@ -129,12 +136,9 @@ struct SceneRenderer::State {
     Asked lit;
     Asked tonemap;
     std::map<std::uint64_t, Held> held;
-    /// The last frame submitted, and its readback, if it read one.
-    std::optional<std::uint64_t> frame_;
-    std::optional<mrhiRequestId> readback;
-    std::size_t readbackBytes = 0;
-    bool frameDone = false;
-    std::optional<std::vector<std::byte>> pixels;
+    /// What the next frame draws.
+    const render_scene::SceneFrame* frame = nullptr;
+    MeshSource meshes;
 
     ~State() {
         if (native == nullptr) {
@@ -254,18 +258,18 @@ struct SceneRenderer::State {
     /// The meshes this frame draws, made on the device as needed; those
     /// still to upload within the frame's budget are marked. A draw whose
     /// mesh is not here is left out.
-    std::map<std::uint64_t, Held*> prepare(const render_scene::SceneFrame& frame,
-                                           const MeshSource& meshes,
-                                           std::uint64_t budget,
-                                           std::vector<Held*>& uploads) {
+    std::map<std::uint64_t, Held*> meshesOf(const render_scene::SceneFrame& scene,
+                                            const MeshSource& given,
+                                            std::uint64_t budget,
+                                            std::vector<Held*>& uploading) {
         std::map<std::uint64_t, Held*> usable;
-        for (const render_scene::SceneDraw& draw : frame.draws) {
+        for (const render_scene::SceneDraw& draw : scene.draws) {
             if (usable.contains(draw.mesh)) {
                 continue;
             }
             auto found = held.find(draw.mesh);
             if (found == held.end()) {
-                std::shared_ptr<const mesh::Mesh> source = meshes ? meshes(draw.mesh) : nullptr;
+                std::shared_ptr<const mesh::Mesh> source = given ? given(draw.mesh) : nullptr;
                 if (source == nullptr || source->positions.empty() || source->indices.empty() ||
                     held.size() >= limits.maximumMeshes) {
                     continue;
@@ -294,7 +298,7 @@ struct SceneRenderer::State {
                     continue;
                 }
                 budget -= kBytes;
-                uploads.push_back(&mesh);
+                uploading.push_back(&mesh);
             }
             usable.emplace(draw.mesh, &mesh);
         }
@@ -329,10 +333,10 @@ struct SceneRenderer::State {
         std::vector<std::tuple<const Held*, std::uint32_t, std::uint32_t>> runs;
     };
 
-    Placed place(const render_scene::SceneFrame& frame, const std::map<std::uint64_t, Held*>& usable) {
+    Placed place(const render_scene::SceneFrame& scene, const std::map<std::uint64_t, Held*>& usable) {
         Placed placed;
         std::uint32_t count = 0;
-        for (const render_scene::SceneDraw& draw : frame.draws) {
+        for (const render_scene::SceneDraw& draw : scene.draws) {
             const auto kMesh = usable.find(draw.mesh);
             if (kMesh == usable.end()) {
                 ++statistics.modelsLeftOut;
@@ -359,113 +363,103 @@ struct SceneRenderer::State {
         return placed;
     }
 
-    result::Result<bool>
-    render(const render_scene::SceneFrame& frame, const MeshSource& meshes, const SceneTarget& target) {
-        if (target.width == 0 || target.height == 0 || target.width > limits.maximumSide ||
-            target.height > limits.maximumSide) {
-            return refuse(result::ErrorClass::OutOfRange,
-                          SceneGpuError::OverLimit,
-                          "a target's sides are from 1 to the renderer's maximum");
+    /// What the open frame declared, until it is recorded and ends.
+    struct Declared {
+        std::vector<Held*> uploads;
+        Placed placed;
+        FrameBlock block;
+        std::map<const Held*, std::pair<mrhiResourceId, mrhiResourceId>> imported;
+        mrhiResourceId instances{};
+        mrhiResourceId blockResource{};
+        mrhiResourceId scene{};
+        mrhiPassId upload{};
+        mrhiPassId depthPass{};
+        mrhiPassId litPass{};
+        mrhiPassId picturePass{};
+        bool draws = false;
+    };
+
+    result::Status declare(render::Frame& open) {
+        declared.reset();
+        if (frame == nullptr) {
+            return {};
         }
         device->pump();
-        if (device->lost()) {
-            return refuse(result::ErrorClass::Unavailable, SceneGpuError::State, "the device was lost");
-        }
         RAWFRAME_TRY_ASSIGN(const bool kReady, ready());
         if (!kReady) {
             ++statistics.framesWaiting;
-            return false;
+            return {};
         }
-        takeDone();
+        Declared now;
         // The placements come first in the frame's uploads; the meshes share
         // what is left.
-        const std::uint64_t kPlacementBytes = std::uint64_t{frame.draws.size()} * kInstanceBytes;
+        const std::uint64_t kPlacementBytes = std::uint64_t{frame->draws.size()} * kInstanceBytes;
         const std::uint64_t kBudget =
             kPlacementBytes < limits.uploadBytesPerFrame ? limits.uploadBytesPerFrame - kPlacementBytes : 0;
-        std::vector<Held*> uploads;
-        const std::map<std::uint64_t, Held*> kUsable = prepare(frame, meshes, kBudget, uploads);
-        const Placed kPlaced = place(frame, kUsable);
-        const FrameBlock kBlock = blockOf(frame);
-
-        const mrhiFrameDef kFrame = mrhiDefaultFrameDef();
-        if (const mrhiResult kBegun = mrhiBeginFrame(native, &kFrame); kBegun != mrhi_success) {
-            return failed("a frame could not begin", kBegun);
-        }
-        const auto kDrop = [this](std::string_view why, mrhiResult outcome) {
-            static_cast<void>(mrhiDropFrame(native));
-            return failed(why, outcome);
-        };
+        const std::map<std::uint64_t, Held*> kUsable = meshesOf(*frame, meshes, kBudget, now.uploads);
+        now.placed = place(*frame, kUsable);
+        now.block = blockOf(*frame);
         // Everything this frame uses: the meshes it draws, imported; its
         // placements and view; and its targets.
-        std::map<const Held*, std::pair<mrhiResourceId, mrhiResourceId>> imported;
         for (const auto& [id, mesh] : kUsable) {
             mrhiResourceId vertices{};
             mrhiResourceId indices{};
             if (const mrhiResult kImported = mrhiImportBuffer(native, mesh->vertices, &vertices);
                 kImported != mrhi_success) {
-                return kDrop("a mesh could not join the frame", kImported);
+                return failed("a mesh could not join the frame", kImported);
             }
             if (const mrhiResult kImported = mrhiImportBuffer(native, mesh->indices, &indices);
                 kImported != mrhi_success) {
-                return kDrop("a mesh could not join the frame", kImported);
+                return failed("a mesh could not join the frame", kImported);
             }
-            imported.emplace(mesh, std::pair{vertices, indices});
+            now.imported.emplace(mesh, std::pair{vertices, indices});
         }
-        const bool kDraws = !kPlaced.runs.empty();
-        mrhiResourceId instances{};
-        if (kDraws) {
+        now.draws = !now.placed.runs.empty();
+        if (now.draws) {
             mrhiBufferDef def = mrhiDefaultBufferDef();
-            def.size = kPlaced.instances.size() * sizeof(float);
-            if (mrhiDeclareBuffer(native, &def, &instances) != mrhi_success) {
-                return kDrop("the frame's placements could not be declared", mrhi_errorCapacity);
+            def.size = now.placed.instances.size() * sizeof(float);
+            if (mrhiDeclareBuffer(native, &def, &now.instances) != mrhi_success) {
+                return failed("the frame's placements could not be declared", mrhi_errorCapacity);
             }
         }
         mrhiBufferDef blockDef = mrhiDefaultBufferDef();
         blockDef.size = sizeof(FrameBlock);
-        mrhiResourceId block{};
-        if (mrhiDeclareBuffer(native, &blockDef, &block) != mrhi_success) {
-            return kDrop("the frame's view could not be declared", mrhi_errorCapacity);
+        if (mrhiDeclareBuffer(native, &blockDef, &now.blockResource) != mrhi_success) {
+            return failed("the frame's view could not be declared", mrhi_errorCapacity);
         }
-        const auto kDeclare = [this](mrhiFormat format, const SceneTarget& size, mrhiResourceId& made) {
-            mrhiTextureDef def = mrhiDefaultTextureDef();
-            def.format = format;
-            def.width = size.width;
-            def.height = size.height;
-            return mrhiDeclareTexture(native, &def, &made);
-        };
-        mrhiResourceId scene{};
         mrhiResourceId depthTarget{};
-        mrhiResourceId picture{};
-        for (const auto& [kFormat, kMade] : {std::pair{kSceneFormat, &scene},
-                                             std::pair{kDepthFormat, &depthTarget},
-                                             std::pair{kPictureFormat, &picture}}) {
-            if (const mrhiResult kDeclared = kDeclare(kFormat, target, *kMade); kDeclared != mrhi_success) {
-                return kDrop("a target could not be declared", kDeclared);
+        for (const auto& [kFormat, kMade] :
+             {std::pair{kSceneFormat, &now.scene}, std::pair{kDepthFormat, &depthTarget}}) {
+            mrhiTextureDef def = mrhiDefaultTextureDef();
+            def.format = kFormat;
+            def.width = open.width;
+            def.height = open.height;
+            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &def, kMade); kDeclared != mrhi_success) {
+                return failed("a target could not be declared", kDeclared);
             }
         }
 
         // The upload pass writes what the drawing reads.
-        std::vector<mrhiAccess> writes = {wholeOf(block, mrhi_accessCopyDestination)};
-        if (kDraws) {
-            writes.push_back(wholeOf(instances, mrhi_accessCopyDestination));
+        std::vector<mrhiAccess> writes = {wholeOf(now.blockResource, mrhi_accessCopyDestination)};
+        if (now.draws) {
+            writes.push_back(wholeOf(now.instances, mrhi_accessCopyDestination));
         }
-        for (const Held* mesh : uploads) {
-            writes.push_back(wholeOf(imported.at(mesh).first, mrhi_accessCopyDestination));
-            writes.push_back(wholeOf(imported.at(mesh).second, mrhi_accessCopyDestination));
+        for (const Held* mesh : now.uploads) {
+            writes.push_back(wholeOf(now.imported.at(mesh).first, mrhi_accessCopyDestination));
+            writes.push_back(wholeOf(now.imported.at(mesh).second, mrhi_accessCopyDestination));
         }
         mrhiPassDef uploadDef = mrhiDefaultPassDef();
         uploadDef.passClass = mrhi_passTransfer;
         uploadDef.accesses = writes.data();
         uploadDef.accessCount = static_cast<std::uint32_t>(writes.size());
-        mrhiPassId upload{};
-        if (const mrhiResult kAdded = mrhiAddPass(native, &uploadDef, &upload); kAdded != mrhi_success) {
-            return kDrop("the upload pass could not be added", kAdded);
+        if (const mrhiResult kAdded = mrhiAddPass(native, &uploadDef, &now.upload); kAdded != mrhi_success) {
+            return failed("the upload pass could not be added", kAdded);
         }
-        std::vector<mrhiAccess> reads = {wholeOf(block, mrhi_accessUniform)};
-        if (kDraws) {
-            reads.push_back(wholeOf(instances, mrhi_accessVertex));
+        std::vector<mrhiAccess> reads = {wholeOf(now.blockResource, mrhi_accessUniform)};
+        if (now.draws) {
+            reads.push_back(wholeOf(now.instances, mrhi_accessVertex));
         }
-        for (const auto& [mesh, resources] : imported) {
+        for (const auto& [mesh, resources] : now.imported) {
             reads.push_back(wholeOf(resources.first, mrhi_accessVertex));
             reads.push_back(wholeOf(resources.second, mrhi_accessIndex));
         }
@@ -482,89 +476,79 @@ struct SceneRenderer::State {
                                                .stencilStore = mrhi_storeDiscard,
                                                .clearStencil = 0,
                                                .readOnly = false};
-        mrhiPassId depthPass{};
-        if (const mrhiResult kAdded = mrhiAddPass(native, &depthDef, &depthPass); kAdded != mrhi_success) {
-            return kDrop("the depth pass could not be added", kAdded);
+        if (const mrhiResult kAdded = mrhiAddPass(native, &depthDef, &now.depthPass); kAdded != mrhi_success) {
+            return failed("the depth pass could not be added", kAdded);
         }
         // Behind every model, the sky's light.
-        const float kExposure = kBlock.exposure[0];
+        const float kExposure = now.block.exposure[0];
         mrhiPassDef litDef = depthDef;
-        litDef.colorTargets[0].resource = scene;
+        litDef.colorTargets[0].resource = now.scene;
         litDef.colorTargets[0].load = mrhi_loadClear;
         litDef.colorTargets[0].store = mrhi_storeKeep;
-        litDef.colorTargets[0].clear = mrhiClearColor{.red = kBlock.sky[0] * kExposure,
-                                                      .green = kBlock.sky[1] * kExposure,
-                                                      .blue = kBlock.sky[2] * kExposure,
+        litDef.colorTargets[0].clear = mrhiClearColor{.red = now.block.sky[0] * kExposure,
+                                                      .green = now.block.sky[1] * kExposure,
+                                                      .blue = now.block.sky[2] * kExposure,
                                                       .alpha = 1};
         litDef.colorTargetCount = 1;
         litDef.depthTarget.depthLoad = mrhi_loadKeep;
         litDef.depthTarget.depthStore = mrhi_storeKeep;
         litDef.depthTarget.readOnly = true;
-        mrhiPassId litPass{};
-        if (const mrhiResult kAdded = mrhiAddPass(native, &litDef, &litPass); kAdded != mrhi_success) {
-            return kDrop("the models' pass could not be added", kAdded);
+        if (const mrhiResult kAdded = mrhiAddPass(native, &litDef, &now.litPass); kAdded != mrhi_success) {
+            return failed("the models' pass could not be added", kAdded);
         }
-        const mrhiAccess kScene = wholeOf(scene, mrhi_accessSampled);
+        // The picture: every pixel of it written, over whatever was there.
+        const mrhiAccess kScene = wholeOf(now.scene, mrhi_accessSampled);
         mrhiPassDef pictureDef = mrhiDefaultPassDef();
-        pictureDef.colorTargets[0].resource = picture;
-        pictureDef.colorTargets[0].load = mrhi_loadClear;
+        pictureDef.colorTargets[0].resource = resourceOf(open.picture);
+        pictureDef.colorTargets[0].load = open.clearsPicture() ? mrhi_loadClear : mrhi_loadKeep;
         pictureDef.colorTargets[0].store = mrhi_storeKeep;
         pictureDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
         pictureDef.colorTargetCount = 1;
         pictureDef.accesses = &kScene;
         pictureDef.accessCount = 1;
         pictureDef.neverCull = true;
-        mrhiPassId picturePass{};
-        if (const mrhiResult kAdded = mrhiAddPass(native, &pictureDef, &picturePass); kAdded != mrhi_success) {
-            return kDrop("the picture's pass could not be added", kAdded);
+        if (const mrhiResult kAdded = mrhiAddPass(native, &pictureDef, &now.picturePass); kAdded != mrhi_success) {
+            return failed("the picture's pass could not be added", kAdded);
         }
-        const mrhiAccess kRead = wholeOf(picture, mrhi_accessCopySource);
-        std::optional<mrhiPassId> reading;
-        if (target.readBack) {
-            mrhiPassDef def = mrhiDefaultPassDef();
-            def.passClass = mrhi_passTransfer;
-            def.accesses = &kRead;
-            def.accessCount = 1;
-            def.neverCull = true;
-            mrhiPassId made{};
-            if (const mrhiResult kAdded = mrhiAddPass(native, &def, &made); kAdded != mrhi_success) {
-                return kDrop("the reading pass could not be added", kAdded);
-            }
-            reading = made;
-        }
-        if (const mrhiResult kCompiled = mrhiCompileFrame(native); kCompiled != mrhi_success) {
-            return kDrop("the frame could not be compiled", kCompiled);
-        }
+        declared = std::move(now);
+        return {};
+    }
 
-        // Recorded.
-        if (mrhiBeginPass(native, upload) != mrhi_success ||
-            mrhiWriteBuffer(native, upload, block, 0, &kBlock, sizeof(FrameBlock)) != mrhi_success ||
-            (kDraws &&
-             mrhiWriteBuffer(
-                 native, upload, instances, 0, kPlaced.instances.data(), kPlaced.instances.size() * sizeof(float)) !=
-                 mrhi_success)) {
-            return kDrop("the frame's placements could not be written", mrhi_errorCapacity);
+    result::Status record() {
+        if (!declared.has_value()) {
+            return {};
         }
-        for (const Held* mesh : uploads) {
+        const Declared& now = *declared;
+        if (mrhiBeginPass(native, now.upload) != mrhi_success ||
+            mrhiWriteBuffer(native, now.upload, now.blockResource, 0, &now.block, sizeof(FrameBlock)) != mrhi_success ||
+            (now.draws && mrhiWriteBuffer(native,
+                                          now.upload,
+                                          now.instances,
+                                          0,
+                                          now.placed.instances.data(),
+                                          now.placed.instances.size() * sizeof(float)) != mrhi_success)) {
+            return failed("the frame's placements could not be written", mrhi_errorCapacity);
+        }
+        for (const Held* mesh : now.uploads) {
             const std::vector<float> kVertices = verticesOf(*mesh->source);
-            const auto& [kVertexResource, kIndexResource] = imported.at(mesh);
+            const auto& [kVertexResource, kIndexResource] = now.imported.at(mesh);
             if (mrhiWriteBuffer(
-                    native, upload, kVertexResource, 0, kVertices.data(), kVertices.size() * sizeof(float)) !=
+                    native, now.upload, kVertexResource, 0, kVertices.data(), kVertices.size() * sizeof(float)) !=
                     mrhi_success ||
                 mrhiWriteBuffer(native,
-                                upload,
+                                now.upload,
                                 kIndexResource,
                                 0,
                                 mesh->source->indices.data(),
                                 mesh->source->indices.size() * 4) != mrhi_success) {
-                return kDrop("a mesh could not be written", mrhi_errorCapacity);
+                return failed("a mesh could not be written", mrhi_errorCapacity);
             }
         }
-        if (mrhiEndPass(native, upload) != mrhi_success) {
-            return kDrop("the upload pass could not end", mrhi_errorState);
+        if (mrhiEndPass(native, now.upload) != mrhi_success) {
+            return failed("the upload pass could not end", mrhi_errorState);
         }
         const std::array<mrhiBinding, 1> kFrameBinding = {mrhiBinding{.slot = 0,
-                                                                      .resource = block,
+                                                                      .resource = now.blockResource,
                                                                       .offset = 0,
                                                                       .size = sizeof(FrameBlock),
                                                                       .viewKind = mrhi_texture2d,
@@ -572,18 +556,18 @@ struct SceneRenderer::State {
                                                                       .range = {},
                                                                       .sampler = {}}};
         for (const auto& [kPass, kPipeline] :
-             {std::pair{depthPass, depth.pipeline}, std::pair{litPass, lit.pipeline}}) {
+             {std::pair{now.depthPass, depth.pipeline}, std::pair{now.litPass, lit.pipeline}}) {
             if (mrhiBeginPass(native, kPass) != mrhi_success) {
-                return kDrop("a scene pass could not begin", mrhi_errorState);
+                return failed("a scene pass could not begin", mrhi_errorState);
             }
-            if (kDraws) {
+            if (now.draws) {
                 if (mrhiSetGraphicsPipeline(native, kPass, kPipeline) != mrhi_success ||
                     mrhiSetBindings(native, kPass, 0, kFrameBinding.data(), kFrameBinding.size()) != mrhi_success ||
-                    mrhiSetVertexBuffer(native, kPass, 1, instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
-                    return kDrop("the models could not be set up", mrhi_errorState);
+                    mrhiSetVertexBuffer(native, kPass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
+                    return failed("the models could not be set up", mrhi_errorState);
                 }
-                for (const auto& [kMesh, kFirst, kCount] : kPlaced.runs) {
-                    const auto& [kVertexResource, kIndexResource] = imported.at(kMesh);
+                for (const auto& [kMesh, kFirst, kCount] : now.placed.runs) {
+                    const auto& [kVertexResource, kIndexResource] = now.imported.at(kMesh);
                     if (mrhiSetVertexBuffer(native, kPass, 0, kVertexResource, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
                         mrhiSetIndexBuffer(native, kPass, kIndexResource, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) !=
                             mrhi_success ||
@@ -594,83 +578,51 @@ struct SceneRenderer::State {
                                         0,
                                         0,
                                         kFirst) != mrhi_success) {
-                        return kDrop("a model could not be drawn", mrhi_errorState);
+                        return failed("a model could not be drawn", mrhi_errorState);
                     }
                 }
             }
             if (mrhiEndPass(native, kPass) != mrhi_success) {
-                return kDrop("a scene pass could not end", mrhi_errorState);
+                return failed("a scene pass could not end", mrhi_errorState);
             }
         }
         const std::array<mrhiBinding, 1> kSceneBinding = {mrhiBinding{
             .slot = 0,
-            .resource = scene,
+            .resource = now.scene,
             .offset = 0,
             .size = 0,
             .viewKind = mrhi_texture2d,
             .viewFormat = mrhi_formatNone,
             .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
             .sampler = {}}};
-        if (mrhiBeginPass(native, picturePass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native, picturePass, tonemap.pipeline) != mrhi_success ||
-            mrhiSetBindings(native, picturePass, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
-            mrhiDraw(native, picturePass, 3, 1, 0, 0) != mrhi_success ||
-            mrhiEndPass(native, picturePass) != mrhi_success) {
-            return kDrop("the picture could not be drawn", mrhi_errorState);
+        if (mrhiBeginPass(native, now.picturePass) != mrhi_success ||
+            mrhiSetGraphicsPipeline(native, now.picturePass, tonemap.pipeline) != mrhi_success ||
+            mrhiSetBindings(native, now.picturePass, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
+            mrhiDraw(native, now.picturePass, 3, 1, 0, 0) != mrhi_success ||
+            mrhiEndPass(native, now.picturePass) != mrhi_success) {
+            return failed("the picture could not be drawn", mrhi_errorState);
         }
-        readback.reset();
-        pixels.reset();
-        if (reading.has_value()) {
-            const mrhiTextureCopy kSource{.resource = picture};
-            const mrhiExtent3d kExtent{.width = target.width, .height = target.height, .depthOrLayers = 1};
-            mrhiRequestId request{};
-            if (mrhiBeginPass(native, *reading) != mrhi_success ||
-                mrhiReadTexture(native, *reading, &kSource, &kExtent, &request) != mrhi_success ||
-                mrhiEndPass(native, *reading) != mrhi_success) {
-                return kDrop("the picture could not be read back", mrhi_errorState);
-            }
-            readback = request;
-            readbackBytes = std::size_t{target.width} * target.height * 4;
-        }
-        mrhiRequestId token{};
-        if (const mrhiResult kSubmitted = mrhiSubmitFrame(native, &token); kSubmitted != mrhi_success) {
-            return failed("the frame could not be submitted", kSubmitted);
-        }
-        for (Held* mesh : uploads) {
-            mesh->uploaded = true;
-            ++statistics.meshesUploaded;
-            statistics.uploadBytes += bytesOf(*mesh->source);
-        }
-        frame_ = render::requestKey(token.index1, token.generation);
-        frameDone = false;
-        ++statistics.frames;
-        statistics.models += kPlaced.instances.size() * sizeof(float) / kInstanceBytes;
-        statistics.drawCalls += kPlaced.runs.size();
-        return true;
+        return {};
     }
 
-    /// Takes the last frame's answer, and its pixels once they are ready.
-    void takeDone() {
-        if (!frame_.has_value() || frameDone) {
+    void ended(bool submitted) noexcept {
+        if (!declared.has_value()) {
             return;
         }
-        device->pump();
-        if (const auto kAnswer = device->answer(*frame_)) {
-            frameDone = true;
-        }
-        if (frameDone && readback.has_value()) {
-            if (const auto kAnswer = device->answer(render::requestKey(readback->index1, readback->generation));
-                kAnswer.has_value() && kAnswer->has_value()) {
-                std::vector<std::byte> bytes(readbackBytes);
-                std::size_t taken = 0;
-                if (mrhiTakeReadback(native, *readback, bytes.data(), bytes.size(), &taken) == mrhi_success &&
-                    taken == bytes.size()) {
-                    pixels = std::move(bytes);
-                }
-                readback.reset();
+        if (submitted) {
+            for (Held* mesh : declared->uploads) {
+                mesh->uploaded = true;
+                ++statistics.meshesUploaded;
+                statistics.uploadBytes += bytesOf(*mesh->source);
             }
+            ++statistics.frames;
+            statistics.models += declared->placed.instances.size() * sizeof(float) / kInstanceBytes;
+            statistics.drawCalls += declared->placed.runs.size();
         }
+        declared.reset();
     }
+
+    std::optional<Declared> declared;
 };
 
 SceneRenderer::SceneRenderer(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
@@ -691,33 +643,21 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }
 
-result::Result<bool>
-SceneRenderer::render(const render_scene::SceneFrame& frame, const MeshSource& meshes, const SceneTarget& target) {
-    return state_->render(frame, meshes, target);
+void SceneRenderer::prepare(const render_scene::SceneFrame* frame, MeshSource meshes) {
+    state_->frame = frame;
+    state_->meshes = std::move(meshes);
 }
 
-result::Result<bool> SceneRenderer::done() {
-    state_->takeDone();
-    return state_->frameDone;
+result::Status SceneRenderer::declare(render::Frame& frame) {
+    return state_->declare(frame);
 }
 
-result::Status SceneRenderer::finish(std::uint64_t nanoseconds) {
-    if (!state_->frame_.has_value() || state_->frameDone) {
-        return {};
-    }
-    const std::uint64_t kKey = *state_->frame_;
-    const mrhiRequestId kToken{.index1 = static_cast<std::uint32_t>(kKey >> 32U),
-                               .generation = static_cast<std::uint32_t>(kKey)};
-    if (const mrhiResult kWaited = mrhiWaitFrame(state_->native, kToken, nanoseconds); kWaited != mrhi_success) {
-        return failed("the frame did not finish", kWaited);
-    }
-    state_->takeDone();
-    return {};
+result::Status SceneRenderer::record(render::Frame& /*frame*/) {
+    return state_->record();
 }
 
-std::optional<std::vector<std::byte>> SceneRenderer::pixels() {
-    state_->takeDone();
-    return std::exchange(state_->pixels, std::nullopt);
+void SceneRenderer::ended(bool submitted) noexcept {
+    state_->ended(submitted);
 }
 
 const RendererStatistics& SceneRenderer::statistics() const noexcept {

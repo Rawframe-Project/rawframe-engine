@@ -4,9 +4,11 @@
 // order (the depth prepass, reversed-Z); the sun lights what faces it; a
 // draw whose mesh is not given is left out; and a mesh is uploaded once,
 // its draws of one mesh one instanced call. Skips where no adapter
-// answers, unless RAWFRAME_REQUIRE_GPU is set.
+// answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
+// `render`'s framer (D285), as the frame participant makes them.
 
 #include "rawframe/render/device.h"
+#include "rawframe/render/frame.h"
 #include "rawframe/render_scene_gpu/renderer.h"
 #include "rawframe/test/test.h"
 
@@ -74,27 +76,26 @@ std::array<int, 3> at(const std::vector<std::byte>& pixels, std::uint32_t x, std
             std::to_integer<int>(pixels[kAt + 2])};
 }
 
-struct Drawn {
-    std::optional<std::vector<std::byte>> pixels;
-};
-
-/// One frame drawn and read back; the pipelines are made as the device
-/// answers, a few frames at most.
-std::optional<std::vector<std::byte>>
-drawn(render_scene_gpu::SceneRenderer& renderer, const SceneFrame& frame, const render_scene_gpu::MeshSource& meshes) {
-    for (int attempt = 0; attempt < 1000; ++attempt) {
-        const auto kDrawn = renderer.render(frame, meshes, {.width = kSide, .height = kSide, .readBack = true});
-        RAWFRAME_EXPECT(kDrawn.has_value());
-        if (!kDrawn.has_value()) {
-            std::printf("%s\n", std::string{kDrawn.error().description()}.c_str());
+/// One frame drawn and read back through `render`'s framer (D285); the
+/// pipelines are made as the device answers, a few frames at most.
+std::optional<std::vector<std::byte>> drawn(render::Framer& framer,
+                                            render_scene_gpu::SceneRenderer& renderer,
+                                            const SceneFrame& frame,
+                                            const render_scene_gpu::MeshSource& meshes) {
+    const std::array<render::FrameRecorder*, 1> kRecorders = {&renderer};
+    const std::uint64_t kBefore = renderer.statistics().frames;
+    for (int attempt = 0; attempt < 1000 && renderer.statistics().frames == kBefore; ++attempt) {
+        renderer.prepare(&frame, meshes);
+        RAWFRAME_EXPECT(framer.finish(5'000'000'000).has_value());
+        const auto kMade = framer.make(kRecorders, {.width = kSide, .height = kSide, .readBack = true});
+        RAWFRAME_EXPECT(kMade.has_value());
+        if (!kMade.has_value()) {
+            std::printf("%s\n", std::string{kMade.error().description()}.c_str());
             return std::nullopt;
         }
-        if (*kDrawn) {
-            RAWFRAME_EXPECT(renderer.finish(5'000'000'000).has_value());
-            return renderer.pixels();
-        }
     }
-    return std::nullopt;
+    RAWFRAME_EXPECT(framer.finish(5'000'000'000).has_value());
+    return framer.pixels();
 }
 
 } // namespace
@@ -105,8 +106,9 @@ RAWFRAME_TEST(TheSceneDrawsItsModelsInDepth) {
         return;
     }
     auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
-    RAWFRAME_EXPECT(made.has_value());
-    if (!made.has_value()) {
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
         return;
     }
     render_scene_gpu::SceneRenderer& renderer = **made;
@@ -121,7 +123,7 @@ RAWFRAME_TEST(TheSceneDrawsItsModelsInDepth) {
     // middle, and the sky is behind both.
     SceneFrame frame = looking();
     frame.draws = {box(5, 0.5F, {1, 0, 0, 1}), box(8, 3, {0, 1, 0, 1}), box(5, 1, {1, 1, 1, 1}, kMissing)};
-    const auto kPixels = drawn(renderer, frame, kMeshes);
+    const auto kPixels = drawn(**framer, renderer, frame, kMeshes);
     RAWFRAME_EXPECT(kPixels.has_value() && kPixels->size() == std::size_t{kSide} * kSide * 4);
     if (!kPixels.has_value() || kPixels->size() != std::size_t{kSide} * kSide * 4) {
         return;
@@ -155,7 +157,7 @@ RAWFRAME_TEST(TheSceneDrawsItsModelsInDepth) {
     SceneFrame unlit = frame;
     unlit.lights.sun = {0, 0, 0};
     unlit.draws.resize(1);
-    const auto kDark = drawn(renderer, unlit, kMeshes);
+    const auto kDark = drawn(**framer, renderer, unlit, kMeshes);
     RAWFRAME_EXPECT(kDark.has_value());
     if (kDark.has_value()) {
         const auto [kDarkRed, kDarkGreen, kDarkBlue] = at(*kDark, kSide / 2, kSide / 2);
@@ -170,16 +172,17 @@ RAWFRAME_TEST(AnEmptySceneIsTheSky) {
         return;
     }
     auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
-    RAWFRAME_EXPECT(made.has_value());
-    if (!made.has_value()) {
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
         return;
     }
-    const auto kPixels = drawn(**made, looking(), {});
+    const auto kPixels = drawn(**framer, **made, looking(), {});
     RAWFRAME_EXPECT(kPixels.has_value());
     if (kPixels.has_value()) {
         RAWFRAME_EXPECT(at(*kPixels, 0, 0) == at(*kPixels, kSide - 1, kSide - 1) && at(*kPixels, 0, 0)[0] > 20);
     }
-    // A target past the limit is refused.
-    const auto kHuge = (*made)->render(looking(), {}, {.width = 1U << 20U, .height = 1});
-    RAWFRAME_EXPECT(!kHuge.has_value());
+    // A picture past the limit is refused.
+    const std::array<render::FrameRecorder*, 1> kRecorders = {made->get()};
+    RAWFRAME_EXPECT(!(*framer)->make(kRecorders, {.width = 1U << 20U, .height = 1}).has_value());
 }

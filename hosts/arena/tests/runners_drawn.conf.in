@@ -1,6 +1,6 @@
 # Four bots play the sample platformer for three seconds while the first
-# one's canvas is drawn on the one device into an offscreen target, as its
-# player would see it (D279): one frame in sixty is read back, and its
+# one's canvas is drawn on the one device into an offscreen picture, as its
+# player would see it (D279, D285): one frame in sixty is read back, and its
 # sprites cover pixels; the last is written to a TGA image in the build
 # tree. Its textures are read from the game's content
 # cooked into the build tree. A software rasterizer may serve.
@@ -14,7 +14,7 @@ replication.endpoint = arena
 bots.count = 4
 bots.endpoint = arena
 render.device = any
-canvas.offscreen = true
-canvas.width = 640
-canvas.height = 360
-canvas.capture = @CAPTURE@
+render.offscreen = true
+render.width = 640
+render.height = 360
+render.capture = @CAPTURE@

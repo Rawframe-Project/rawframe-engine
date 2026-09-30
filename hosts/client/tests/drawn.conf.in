@@ -5,4 +5,4 @@
 bots.player = true
 render.device = any
 content.root = @CONTENT@
-canvas.capture = @CAPTURE@
+render.capture = @CAPTURE@

@@ -48,7 +48,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"width\":800,\"height\":600,[^\n]*\"framesShown\":[1-9][0-9]+,.*\"viewWidth\":800,\"viewHeight\":600,.*\"reconfigured\":[2-9]")
+                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"viewWidth\":800,\"viewHeight\":600,.*\"code\":\"frame_summary\"[^\n]*\"width\":800,\"height\":600,[^\n]*\"framesShown\":[1-9][0-9]+,.*\"reconfigured\":[2-9]")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(client_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

@@ -4,10 +4,12 @@
 // nearest); a half-clear sprite drawn after it blends over it in linear
 // light; a draw whose texture is not ready is left out; and a texture is
 // uploaded once, and again only when a reload replaces it. Skips where no
-// adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
+// adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
+// `render`'s framer (D285), as the frame participant makes them.
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/errors.h"
+#include "rawframe/render/frame.h"
 #include "rawframe/render_canvas_gpu/renderer.h"
 #include "rawframe/test/test.h"
 
@@ -113,19 +115,26 @@ RAWFRAME_TEST(TheCanvasDrawsItsFrameInOrder) {
     quad(frame, kQuarters, -1, 1, 0, 0, 0xFFFFFFFF);
     quad(frame, kWhite, -0.5F, 0.5F, 0.5F, -0.5F, 0x0000FF80);
     quad(frame, kMissing, 0.5F, 1, 1, 0.5F, 0xFFFFFFFF);
-    const render_canvas_gpu::OffscreenTarget kTarget{
-        .width = kSide, .height = kSide, .clear = {0, 0, 0, 1}, .readBack = true};
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(framer.has_value());
+    if (!framer.has_value()) {
+        return;
+    }
+    const std::array<render::FrameRecorder*, 1> kRecorders = {&renderer};
     const auto kDraw = [&] {
         // The pipeline is made as the device answers: a few frames at most.
-        for (int attempt = 0; attempt < 1000; ++attempt) {
-            const auto kRendered = renderer.render(frame, kTextures, kTarget);
-            RAWFRAME_EXPECT(kRendered.has_value());
-            if (!kRendered.has_value() || *kRendered) {
+        const std::uint64_t kBefore = renderer.statistics().frames;
+        for (int attempt = 0; attempt < 1000 && renderer.statistics().frames == kBefore; ++attempt) {
+            renderer.prepare(&frame, kTextures);
+            RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+            const auto kMade = (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true});
+            RAWFRAME_EXPECT(kMade.has_value());
+            if (!kMade.has_value()) {
                 break;
             }
         }
-        RAWFRAME_EXPECT(renderer.finish(10'000'000'000ULL).has_value());
-        auto pixels = renderer.pixels();
+        RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+        auto pixels = (*framer)->pixels();
         RAWFRAME_EXPECT(pixels.has_value() && pixels->size() == std::size_t{kSide} * kSide * 4);
         return pixels.value_or(std::vector<std::byte>(std::size_t{kSide} * kSide * 4));
     };
@@ -151,17 +160,21 @@ RAWFRAME_TEST(TheCanvasDrawsItsFrameInOrder) {
     RAWFRAME_EXPECT(near(kReloaded, 4, 4, {0, 255, 0, 255}));
 }
 
-RAWFRAME_TEST(ATargetPastItsLimitIsRefused) {
+RAWFRAME_TEST(ACanvasWithNothingQueuedDrawsNothing) {
     const auto kDevice = opened();
     if (kDevice == nullptr) {
         return;
     }
-    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice, {.maximumSide = 128});
-    RAWFRAME_EXPECT(made.has_value());
-    if (!made.has_value()) {
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
         return;
     }
-    const render_canvas_gpu::TextureSource kNone;
-    RAWFRAME_EXPECT(!(*made)->render(CanvasFrame{}, kNone, {.width = 129, .height = 8}).has_value());
-    RAWFRAME_EXPECT(!(*made)->render(CanvasFrame{}, kNone, {.width = 0, .height = 8}).has_value());
+    (*made)->prepare(nullptr, {});
+    const std::array<render::FrameRecorder*, 1> kRecorders = {made->get()};
+    RAWFRAME_EXPECT((*framer)->make(kRecorders, {.width = 8, .height = 8, .readBack = true}).value_or(false));
+    RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+    const auto kPixels = (*framer)->pixels();
+    RAWFRAME_EXPECT(kPixels.has_value() && (*made)->statistics().frames == 0);
 }

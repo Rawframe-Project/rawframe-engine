@@ -329,7 +329,7 @@ try {
     const drawn = /"code":"canvas_summary"[^\n]*"spritesDrawn":(\d+),"spritesAnimated":(\d+)[^\n]*"unknownTextures":0,[^\n]*"texturesReady":(\d+)/.exec(
         clientLog);
     const viewed = /"code":"canvas_summary"[^\n]*"framesViewed":(\d+)/.exec(clientLog);
-    const drawing = /"code":"drawing_summary"[^\n]*"framesShown":(\d+)/.exec(clientLog);
+    const drawing = /"code":"frame_summary"[^\n]*"framesShown":(\d+)/.exec(clientLog);
     console.log(`page: the device showed ${drawing ? drawing[1] : 'no'} frames in the canvas, whose screenshot ` +
                 `lit ${shown} pixels; WebGPU reported ${gpuErrors.length} errors`);
     for (const error of gpuErrors) {

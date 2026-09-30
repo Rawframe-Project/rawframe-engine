@@ -1,6 +1,6 @@
 # Two bots play the sample 3D game for three seconds while the first one's
 # scene is drawn on the one device into an offscreen picture, as its player
-# would see it (D284): one frame in sixty is read back and counted in
+# would see it (D284, D285): one frame in sixty is read back and counted in
 # colors; the last is written to a TGA image in the build tree. The mound's
 # mesh is read from the plaza's content cooked into the build tree. A
 # software rasterizer may serve.
@@ -14,7 +14,7 @@ replication.endpoint = arena
 bots.count = 2
 bots.endpoint = arena
 render.device = any
-scene.offscreen = true
-scene.width = 640
-scene.height = 360
-scene.capture = @CAPTURE@
+render.offscreen = true
+render.width = 640
+render.height = 360
+render.capture = @CAPTURE@

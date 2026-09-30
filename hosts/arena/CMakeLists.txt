@@ -149,7 +149,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"frames\":[1-9][0-9]+,.*\"draws\":[1-9][0-9]+,.*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,\"mostCovered\":[0-9]+,\"captured\":true")
+                             "\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(runners_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
@@ -250,7 +250,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"frames\":[1-9][0-9]+,.*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],.*\"readBacks\":[1-9][0-9]*,\"colors\":([1-9][0-9][0-9]+),\"captured\":true")
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(plaza_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
