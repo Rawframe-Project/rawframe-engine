@@ -1,8 +1,9 @@
-// The 3D scene's models (D284), fragment entry "fs": the base color lit by
-// the sun (Lambert), where the sun's shadow map says it reaches (D289); by
+// The 3D scene's models (D284), fragment entry "fs": the base color lit,
+// through ADR-0031's lit shading model (D299), by the sun, where the sun's
+// shadow map says it reaches (D289); by
 // the point and spot lights of its cluster (D290), each where its squares
 // of the punctual shadows' atlas say it reaches (D292); and by the sky
-// (brighter facing up); in physical units, times the exposure the device
+// (brighter facing up, and seen in reflection); in physical units, times the exposure the device
 // holds (the camera's, or its metering's, D293), so the scene target holds
 // pre-exposed scene-linear light (ADR-0047). And how far the point moved
 // on the screen since the frame before, for the temporal pass (D291).
@@ -106,6 +107,35 @@ layout(location = 1) out vec2 outMotion;
 
 const float kPi = 3.14159265;
 
+// The surface every model has until materials give models their own
+// (ADR-0031, D299): OpenPBR's defaults, a dielectric of index 1.5, which
+// reflects four hundredths head on, with a specular roughness of 0.3.
+const float kRoughness = 0.3;
+const vec3 kHeadOn = vec3(0.04);
+
+// Of the light arriving from `toward`, per unit of illuminance, what leaves
+// toward the eye, times the cosine it arrives at: glTF's metallic-roughness
+// BRDF, the base color's Lambert diffuse under Schlick's Fresnel, and GGX
+// with Smith's height-correlated visibility.
+vec3 reflected(vec3 base, vec3 normal, vec3 toEye, vec3 toward)
+{
+    const float kNl = max(dot(normal, toward), 0.0);
+    if (kNl <= 0.0) {
+        return vec3(0.0);
+    }
+    const vec3 kHalf = normalize(toEye + toward);
+    const float kNv = max(dot(normal, toEye), 1e-4);
+    const float kNh = max(dot(normal, kHalf), 0.0);
+    const float kAlpha = kRoughness * kRoughness;
+    const float kAlpha2 = kAlpha * kAlpha;
+    const vec3 kFresnel = kHeadOn + (1.0 - kHeadOn) * pow(1.0 - max(dot(toEye, kHalf), 0.0), 5.0);
+    const float kSpread = kNh * kNh * (kAlpha2 - 1.0) + 1.0;
+    const float kDistribution = kAlpha2 / (kPi * kSpread * kSpread);
+    const float kVisibility = 0.5 / (kNl * sqrt(kNv * kNv * (1.0 - kAlpha2) + kAlpha2) +
+                                     kNv * sqrt(kNl * kNl * (1.0 - kAlpha2) + kAlpha2));
+    return ((1.0 - kFresnel) * base / kPi + kFresnel * (kDistribution * kVisibility)) * kNl;
+}
+
 // How much of the sun reaches `placed`: its cascade chosen by how far ahead
 // it is, the point moved along its normal by a texel and a half of it (the
 // normal bias), and the map compared there, nearer the sun being greater
@@ -157,7 +187,7 @@ float lightShadow(ShadowSlot slot, vec3 placed, vec3 normal)
 // the cluster found by where the view puts it and how far ahead it is;
 // each light's inverse square windowed to nought at its range, a spot's
 // also faded across its cone's edge.
-vec3 punctual(vec3 placed, vec3 normal)
+vec3 punctual(vec3 placed, vec3 normal, vec3 base, vec3 toEye)
 {
     if (frame.clusterGrid.w == 0.0) {
         return vec3(0.0);
@@ -200,7 +230,7 @@ vec3 punctual(vec3 placed, vec3 normal)
             }
             falloff *= lightShadow(slots[slot], placed, normal);
         }
-        sum += kLight.intensity.rgb * (falloff * max(dot(normal, kToward), 0.0));
+        sum += kLight.intensity.rgb * falloff * reflected(base, normal, toEye, kToward);
     }
     return sum;
 }
@@ -208,9 +238,17 @@ vec3 punctual(vec3 placed, vec3 normal)
 void main()
 {
     const vec3 kNormal = normalize(inNormal);
-    const float kFacing = max(dot(kNormal, frame.toSun.xyz), 0.0) * sunlit(inPlaced, kNormal);
-    const vec3 kLight = (frame.sun.rgb * kFacing + punctual(inPlaced, kNormal)) / kPi +
-                        frame.sky.rgb * (0.5 + 0.5 * kNormal.y);
-    outColor = vec4(inColor.rgb * kLight * exposure.value.y, 1.0);
+    const vec3 kToEye = normalize(-inPlaced);
+    const vec3 kBase = inColor.rgb;
+    const vec3 kDirect = frame.sun.rgb * sunlit(inPlaced, kNormal) * reflected(kBase, kNormal, kToEye, frame.toSun.xyz) +
+                         punctual(inPlaced, kNormal, kBase, kToEye);
+    // The sky: its light from above the normal, diffused, and from along
+    // the reflection, the Fresnel of a rough surface (reflection probes
+    // replace this, ADR-0051).
+    const float kNv = max(dot(kNormal, kToEye), 0.0);
+    const vec3 kSheen = kHeadOn + (max(vec3(1.0 - kRoughness), kHeadOn) - kHeadOn) * pow(1.0 - kNv, 5.0);
+    const vec3 kMirrored = reflect(-kToEye, kNormal);
+    const vec3 kSky = frame.sky.rgb * ((1.0 - kSheen) * kBase * (0.5 + 0.5 * kNormal.y) + kSheen * (0.5 + 0.5 * kMirrored.y));
+    outColor = vec4((kDirect + kSky) * exposure.value.y, 1.0);
     outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);
 }

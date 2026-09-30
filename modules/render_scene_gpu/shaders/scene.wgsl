@@ -78,6 +78,28 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
 
 const kPi = 3.14159265;
 
+// The surface every model has until materials give models their own
+// (D299): OpenPBR's defaults.
+const kRoughness = 0.3;
+const kHeadOn = vec3f(0.04);
+
+fn reflected(base: vec3f, normal: vec3f, toEye: vec3f, toward: vec3f) -> vec3f {
+    let nl = max(dot(normal, toward), 0.0);
+    if (nl <= 0.0) {
+        return vec3f(0.0);
+    }
+    let halfway = normalize(toEye + toward);
+    let nv = max(dot(normal, toEye), 1e-4);
+    let nh = max(dot(normal, halfway), 0.0);
+    let alpha = kRoughness * kRoughness;
+    let alpha2 = alpha * alpha;
+    let fresnel = kHeadOn + (1.0 - kHeadOn) * pow(1.0 - max(dot(toEye, halfway), 0.0), 5.0);
+    let spread = nh * nh * (alpha2 - 1.0) + 1.0;
+    let distribution = alpha2 / (kPi * spread * spread);
+    let visibility = 0.5 / (nl * sqrt(nv * nv * (1.0 - alpha2) + alpha2) + nv * sqrt(nl * nl * (1.0 - alpha2) + alpha2));
+    return ((1.0 - fresnel) * base / kPi + fresnel * (distribution * visibility)) * nl;
+}
+
 fn sunlit(placed: vec3f, normal: vec3f) -> f32 {
     let count = i32(frame.shadow.x);
     let ahead = dot(placed, frame.forward.xyz);
@@ -112,7 +134,7 @@ fn lightShadow(slot: ShadowSlot, placed: vec3f, normal: vec3f) -> f32 {
     return textureSampleCompareLevel(lightShadowMap, shadowSampler, inAtlas, near / ahead);
 }
 
-fn punctual(placed: vec3f, normal: vec3f) -> vec3f {
+fn punctual(placed: vec3f, normal: vec3f, base: vec3f, toEye: vec3f) -> vec3f {
     if (frame.clusterGrid.w == 0.0) {
         return vec3f(0.0);
     }
@@ -155,7 +177,7 @@ fn punctual(placed: vec3f, normal: vec3f) -> vec3f {
             }
             falloff *= lightShadow(slots[slot], placed, normal);
         }
-        sum += light.intensity.rgb * (falloff * max(dot(normal, toward), 0.0));
+        sum += light.intensity.rgb * falloff * reflected(base, normal, toEye, toward);
     }
     return sum;
 }
@@ -164,10 +186,16 @@ fn punctual(placed: vec3f, normal: vec3f) -> vec3f {
 fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
       @location(3) now: vec3f, @location(4) before: vec3f) -> Shaded {
     let n = normalize(normal);
-    let facing = max(dot(n, frame.toSun.xyz), 0.0) * sunlit(placed, n);
-    let light = (frame.sun.rgb * facing + punctual(placed, n)) / kPi + frame.sky.rgb * (0.5 + 0.5 * n.y);
+    let toEye = normalize(-placed);
+    let base = color.rgb;
+    let direct = frame.sun.rgb * sunlit(placed, n) * reflected(base, n, toEye, frame.toSun.xyz) +
+                 punctual(placed, n, base, toEye);
+    let nv = max(dot(n, toEye), 0.0);
+    let sheen = kHeadOn + (max(vec3f(1.0 - kRoughness), kHeadOn) - kHeadOn) * pow(1.0 - nv, 5.0);
+    let mirrored = reflect(-toEye, n);
+    let sky = frame.sky.rgb * ((1.0 - sheen) * base * (0.5 + 0.5 * n.y) + sheen * (0.5 + 0.5 * mirrored.y));
     var out: Shaded;
-    out.color = vec4f(color.rgb * light * exposure.y, 1.0);
+    out.color = vec4f((direct + sky) * exposure.y, 1.0);
     out.motion = (now.xy / now.z - before.xy / before.z) * vec2f(0.5, -0.5);
     return out;
 }

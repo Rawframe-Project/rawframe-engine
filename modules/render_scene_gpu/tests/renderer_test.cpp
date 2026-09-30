@@ -755,3 +755,45 @@ RAWFRAME_TEST(PbrNeutralMeetsItsConformanceVectors) {
         }
     }
 }
+
+RAWFRAME_TEST(TheLitModelReflectsTheSunAndTheSky) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A black ball four meters ahead under the default sun and sky: with
+    // no diffuse light at all, what shows is reflected (D299). Where its
+    // normal halves the way to the sun and to the eye, the sun's highlight;
+    // at its rim, seen at a grazing angle, the sky more than head on.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    frame.draws = {box(4, 1.5F, {0, 0, 0, 1}, render_scene::kSphere)};
+    const auto kPixels = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    const int kHighlight = at(*kPixels, 35, 22)[0];
+    const int kBelow = at(*kPixels, 32, 40)[0];
+    // The sky alone, three stops brighter.
+    frame.lights.sun = {0, 0, 0};
+    frame.exposure -= 3;
+    const auto kSkyOnly = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kSkyOnly.has_value());
+    if (!kSkyOnly.has_value()) {
+        return;
+    }
+    const int kHeadOn = at(*kSkyOnly, 32, 30)[0];
+    const int kRim = at(*kSkyOnly, 20, 30)[0];
+    std::printf("highlight %d, below %d; sky alone head on %d, rim %d\n", kHighlight, kBelow, kHeadOn, kRim);
+    RAWFRAME_EXPECT(kHighlight > kBelow + 60 && kHeadOn > 0 && kRim > 2 * kHeadOn);
+}
