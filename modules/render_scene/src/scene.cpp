@@ -477,7 +477,7 @@ struct Scene::State {
         const auto kTranslucent = std::ranges::stable_partition(frame.draws, [this](const SceneDraw& draw) {
             return draw.material >= translucent.size() || !translucent[draw.material];
         });
-        frame.translucentFrom = static_cast<std::size_t>(kTranslucent.begin() - frame.draws.begin());
+        frame.translucent = kTranslucent.size();
         const auto kAway = [](const SceneDraw& draw) {
             return (draw.model[12] * draw.model[12]) + (draw.model[13] * draw.model[13]) +
                    (draw.model[14] * draw.model[14]);

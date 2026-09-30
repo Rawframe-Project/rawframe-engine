@@ -773,10 +773,10 @@ RAWFRAME_TEST(AModelsMaterialIsFoundByItsIdentity) {
 RAWFRAME_TEST(TranslucentModelsComeLastFarthestFirst) {
     auto schema = registry();
     world::World world{schema};
-    auto scene = *Scene::create(*schema,
-                                {.models = {kModelId},
-                                 .materials = {{.id = 0xa1, .blob = noMaterial(), .translucent = true},
-                                               {.id = 0xa2, .blob = noMaterial()}}});
+    auto scene = *Scene::create(
+        *schema,
+        {.models = {kModelId},
+         .materials = {{.id = 0xa1, .blob = noMaterial(), .translucent = true}, {.id = 0xa2, .blob = noMaterial()}}});
     // Glass at 5, 15, and 10 meters; opaque boxes at 20 and 8, one of them
     // with an opaque material.
     const auto kPlace = [&](std::uint64_t material, double away) {
@@ -792,7 +792,7 @@ RAWFRAME_TEST(TranslucentModelsComeLastFarthestFirst) {
     kPlace(0xa1, 10);
     scene->extract(world);
     const SceneFrame& kFrame = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
-    RAWFRAME_EXPECT(kFrame.draws.size() == 5 && kFrame.translucentFrom == 2);
+    RAWFRAME_EXPECT(kFrame.draws.size() == 5 && kFrame.translucent == 3);
     if (kFrame.draws.size() != 5) {
         return;
     }

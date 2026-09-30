@@ -423,10 +423,10 @@ struct SceneFrame {
     /// EV100.
     float exposure = 15;
     SceneLights lights;
-    /// The opaque draws, grouped by mesh, then from `translucentFrom` the
-    /// translucent ones, farthest first (D305).
+    /// The opaque draws, grouped by mesh, then the last `translucent` of
+    /// them the translucent ones, farthest first (D305).
     std::vector<SceneDraw> draws;
-    std::size_t translucentFrom = 0;
+    std::size_t translucent = 0;
     std::size_t drawn = 0;
     /// Outside the view.
     std::size_t culled = 0;
