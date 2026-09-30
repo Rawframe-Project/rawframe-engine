@@ -69,7 +69,8 @@ struct Sun {
 
 // The sky's light, arriving from every side (ADR-0051's ambient term):
 // `luminance` candela per square meter (about 5,000 on a clear day), in
-// `color`. A game declares at most one; without one, a clear day's.
+// `color`. A game declares at most one; without one, a clear day's: 5,000
+// in a clear blue (0x8FB8EBFF).
 struct Sky {
     luminance: f32
     color: u32

@@ -42,6 +42,9 @@ Vector colorOf(std::uint32_t color) noexcept {
     return {linearOf(color, 24), linearOf(color, 16), linearOf(color, 8)};
 }
 
+/// A clear sky's color, sRGB: the sky's default (D288).
+constexpr std::uint32_t kClearSky = 0x8FB8EBFF;
+
 /// A mesh with the sphere around it, in its own space.
 struct Bounded {
     std::shared_ptr<const mesh::Mesh> mesh;
@@ -119,7 +122,8 @@ struct Scene::State {
     void lights() {
         const Sun kSun = sunNow.value_or(Sun{
             .directionX = -0.3F, .directionY = -1.0F, .directionZ = -0.4F, .illuminance = 100000, .color = 0xFFFFFFFF});
-        const Sky kSky = skyNow.value_or(Sky{.luminance = 5000, .color = 0xFFFFFFFF});
+        // A clear day's sky: its light, and its blue.
+        const Sky kSky = skyNow.value_or(Sky{.luminance = 5000, .color = kClearSky});
         const Vector kToSun = normalized({-kSun.directionX, -kSun.directionY, -kSun.directionZ});
         const Vector kSunColor = colorOf(kSun.color);
         const Vector kSkyColor = colorOf(kSky.color);

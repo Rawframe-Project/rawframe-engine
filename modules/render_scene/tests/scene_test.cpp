@@ -242,10 +242,11 @@ RAWFRAME_TEST(ModelsDrawInTheOrderOfTheirMeshesThenEntities) {
 
 RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
     Rig rig;
-    // Without them: a sun at noon, from above, and a clear sky.
+    // Without them: a sun at noon, from above, and a clear blue sky.
     const SceneFrame& kDefault = rig.frame({});
-    RAWFRAME_EXPECT(near(kDefault.lights.sun[0], 100000, 1) && near(kDefault.lights.sky[2], 5000, 0.1F) &&
-                    kDefault.lights.toSun[1] > 0.8F);
+    RAWFRAME_EXPECT(near(kDefault.lights.sun[0], 100000, 1) &&
+                    near(kDefault.lights.sky[2], 5000 * std::pow((0xEB / 255.0F + 0.055F) / 1.055F, 2.4F), 0.5F) &&
+                    kDefault.lights.sky[0] < kDefault.lights.sky[2] && kDefault.lights.toSun[1] > 0.8F);
     const world::EntityHandle kLight = *rig.world.create();
     Sun sun{.directionX = 0, .directionY = -2, .directionZ = 0, .illuminance = 1000, .color = 0x808080FF};
     Sky sky{.luminance = 10, .color = 0x0000FFFF};

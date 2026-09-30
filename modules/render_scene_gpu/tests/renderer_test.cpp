@@ -143,8 +143,8 @@ RAWFRAME_TEST(TheSceneDrawsItsModelsInDepth) {
                 kSkyBlue);
     RAWFRAME_EXPECT(kRed > kRedGreen + 40 && kRed > kRedBlue + 40);
     RAWFRAME_EXPECT(kGreen > kGreenRed + 40 && kGreen > kGreenBlue + 40);
-    // The white sky, grey after exposure, and not black.
-    RAWFRAME_EXPECT(kSkyRed > 20 && std::abs(kSkyRed - kSkyGreen) < 4 && std::abs(kSkyRed - kSkyBlue) < 4);
+    // The clear sky behind them, blue, and not black.
+    RAWFRAME_EXPECT(kSkyRed > 20 && kSkyBlue > kSkyGreen && kSkyGreen > kSkyRed);
     // The two boxes are one instanced draw; the missing mesh's model is left
     // out.
     const render_scene_gpu::RendererStatistics& kCounts = renderer.statistics();
