@@ -23,7 +23,7 @@ localization: document result base
 mesh: result base
 texture: result base
 texture_import: texture result base
-mesh_import: mesh result base
+mesh_import: mesh material graph document result base
 cook: localization animation material graph mesh_import mesh texture_import texture scene world_kest input kest_library kest audio_import audio content document execution result base
 build: signature content document result base
 install: content signature document result base

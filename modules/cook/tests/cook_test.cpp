@@ -753,6 +753,60 @@ RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {
     RAWFRAME_EXPECT(kRefused.failures.size() == 1);
 }
 
+RAWFRAME_TEST(AGltfsMaterialsAndImagesCookIntoItsSubassets) {
+    const Project kProject;
+    const fs::path kProps = kProject.sources / "props";
+    std::string buffer;
+    for (const float kValue :
+         {0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 0.0F, 0.0F}) {
+        buffer.append(reinterpret_cast<const char*>(&kValue), sizeof(kValue));
+    }
+    writeText(kProps / "tile.bin", buffer);
+    fs::copy_file(fs::path{RAWFRAME_TEXTURE_DATA} / "pattern.png", kProps / "pattern.png");
+    writeText(kProps / "tile.gltf",
+              R"({"asset": {"version": "2.0"}, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}], )"
+              R"("meshes": [{"primitives": [{"attributes": {"POSITION": 0, "TEXCOORD_0": 1}, "material": 0}]}], )"
+              R"("materials": [{"name": "Tile", "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}, )"
+              R"("roughnessFactor": 0.5}}], )"
+              R"("textures": [{"source": 0}], "images": [{"name": "Pattern", "uri": "pattern.png"}], )"
+              R"("buffers": [{"uri": "tile.bin", "byteLength": 60}], )"
+              R"("bufferViews": [{"buffer": 0, "byteLength": 36}, {"buffer": 0, "byteOffset": 36, "byteLength": 24}], )"
+              R"("accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", )"
+              R"("min": [0, 0, 0], "max": [1, 1, 0]}, )"
+              R"({"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2"}]})");
+    const std::string kMaterialId = "8c41d7e2a95b4f03b6e1c9a4d7f20e58";
+    const std::string kTextureId = "e2b9054fa3c84d17a6f0b8c3e1d95a42";
+    writeText(kProps / "tile.gltf.rfmeta",
+              "{\n  \"schema\": 1,\n  \"resourceId\": \"000000000000000000000000000000a8\",\n  \"importer\": "
+              "\"rawframe.mesh\",\n  \"settings\": {\n    \"exact\": true\n  },\n  \"subassets\": {\n"
+              "    \"material/Tile\": \"" +
+                  kMaterialId + "\",\n    \"texture/Pattern\": \"" + kTextureId + "\"\n  }\n}\n");
+    static const std::array<Importer, 2> kImporters = {audioImporter(), meshImporter()};
+    const auto kReport = cookSources(CookRequest{
+        .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty());
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value() && kManifest->size() == 5);
+    const auto kBytesOf = [&](std::string_view id) {
+        const auto kFound = std::ranges::find(
+            *kManifest, content::ResourceId{base::parseBits128Hex(id).value}, &content::ManifestEntry::id);
+        RAWFRAME_EXPECT(kFound != kManifest->end());
+        const std::string kText =
+            kFound == kManifest->end() ? std::string{} : readText(kProject.output / kFound->locator);
+        return std::vector<std::byte>{std::as_bytes(std::span{kText}).begin(), std::as_bytes(std::span{kText}).end()};
+    };
+    // The game knows each subasset by its resource's first half: the part
+    // names its material by it, and the material its texture.
+    const auto kMesh = mesh::decode(kBytesOf("000000000000000000000000000000a8"));
+    RAWFRAME_EXPECT(kMesh.has_value() && kMesh->parts[0].material == 0x8c41d7e2a95b4f03ULL);
+    const auto kMaterial = material::decode(kBytesOf(kMaterialId));
+    RAWFRAME_EXPECT(kMaterial.has_value() && kMaterial->textures.base.id == 0xe2b9054fa3c84d17ULL &&
+                    kMaterial->textures.baseColor && kMaterial->surface.specularRoughness == 0.5F);
+    // Kept exact, as the sidecar says, and sRGB, since it is a color.
+    const auto kTexture = texture::decode(kBytesOf(kTextureId));
+    RAWFRAME_EXPECT(kTexture.has_value() && kTexture->format == texture::Format::Rgba8Srgb);
+}
+
 RAWFRAME_TEST(AnImageCooksIntoATextureAsItsSettingsSay) {
     const Project kProject;
     const fs::path kImages = kProject.sources / "images";

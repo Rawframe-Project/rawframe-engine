@@ -1,5 +1,6 @@
 #include "rawframe/mesh_import/import.h"
 
+#include "materials.h"
 #include "rawframe/mesh/errors.h"
 
 #include <array>
@@ -16,7 +17,8 @@ namespace {
 
 using mesh::MeshError;
 
-constexpr std::array<std::string_view, 1> kSupportedExtensions = {"KHR_mesh_quantization"};
+constexpr std::array<std::string_view, 4> kSupportedExtensions = {
+    "KHR_mesh_quantization", "KHR_materials_unlit", "KHR_materials_emissive_strength", "KHR_texture_transform"};
 
 /// Names what the glTF's buffer paths resolve against: with no directory in
 /// it, a path comes to `read` as the glTF wrote it, decoded.
@@ -212,8 +214,11 @@ struct Gathered {
     bool uvs = true;
 };
 
-result::Status
-gather(const cgltf_primitive& primitive, const Placement& placement, const ImportLimits& limits, Gathered& gathered) {
+result::Status gather(const cgltf_primitive& primitive,
+                      const Placement& placement,
+                      const ImportLimits& limits,
+                      MaterialMaker& materials,
+                      Gathered& gathered) {
     const cgltf_accessor* kPositions = attribute(primitive, cgltf_attribute_type_position);
     if (kPositions == nullptr) {
         return badSource("a primitive with no POSITION");
@@ -261,8 +266,10 @@ gather(const cgltf_primitive& primitive, const Placement& placement, const Impor
     for (const std::uint32_t kIndex : order) {
         gathered.mesh.indices.push_back(static_cast<std::uint32_t>(kBase + kIndex));
     }
-    gathered.mesh.parts.push_back(
-        {.firstIndex = static_cast<std::uint32_t>(kFirst), .indexCount = static_cast<std::uint32_t>(order.size())});
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kMaterial, materials.identityOf(primitive.material));
+    gathered.mesh.parts.push_back({.firstIndex = static_cast<std::uint32_t>(kFirst),
+                                   .indexCount = static_cast<std::uint32_t>(order.size()),
+                                   .material = kMaterial});
     return {};
 }
 
@@ -289,8 +296,10 @@ std::span<const std::string_view> supportedExtensions() noexcept {
     return kSupportedExtensions;
 }
 
-result::Result<mesh::Mesh>
-importGltf(std::span<const std::byte> source, const ReadFile& read, const ImportLimits& limits) {
+result::Result<Imported> importGltf(std::span<const std::byte> source,
+                                    const ReadFile& read,
+                                    const Identify& identify,
+                                    const ImportLimits& limits) {
     if (source.size() > limits.maximumBytes) {
         return overLimit("a glTF larger than its limits allow");
     }
@@ -325,6 +334,7 @@ importGltf(std::span<const std::byte> source, const ReadFile& read, const Import
         return badSource("a glTF with no scene places no mesh");
     }
     Gathered gathered;
+    MaterialMaker materials{read, identify};
     // Depth first, children in order; validation has refused cycles, and
     // the visit count bounds a node reached twice.
     std::vector<const cgltf_node*> pending;
@@ -341,7 +351,7 @@ importGltf(std::span<const std::byte> source, const ReadFile& read, const Import
         if (kNode->mesh != nullptr) {
             const Placement kPlacement = placement(*kNode);
             for (cgltf_size i = 0; i < kNode->mesh->primitives_count; ++i) {
-                RAWFRAME_TRY(gather(kNode->mesh->primitives[i], kPlacement, limits, gathered));
+                RAWFRAME_TRY(gather(kNode->mesh->primitives[i], kPlacement, limits, materials, gathered));
             }
         }
         for (cgltf_size i = kNode->children_count; i > 0; --i) {
@@ -357,8 +367,15 @@ importGltf(std::span<const std::byte> source, const ReadFile& read, const Import
     if (!gathered.uvs) {
         gathered.mesh.uvs.clear();
     }
+    if (materials.samples() && gathered.mesh.uvs.empty()) {
+        return result::fail(result::ErrorClass::Unsupported,
+                            mesh::kMeshDomain,
+                            mesh::code(MeshError::UnsupportedMaterial),
+                            "textured materials on a mesh without TEXCOORD_0 on every primitive");
+    }
     RAWFRAME_TRY(mesh::validate(gathered.mesh, limits.mesh));
-    return std::move(gathered.mesh);
+    return Imported{
+        .mesh = std::move(gathered.mesh), .materials = materials.takeMaterials(), .textures = materials.takeTextures()};
 }
 
 } // namespace rawframe::mesh_import
