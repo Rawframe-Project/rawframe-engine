@@ -311,6 +311,16 @@ try {
     });
     await tab.goto(`http://127.0.0.1:${http.address().port}/`);
     await until(/page: play 0/, 30000);
+    // The plaza's scene is drawn by a software rasterizer here: its canvas
+    // is made a quarter of the size, which the client follows as a window
+    // resized (D281), so the page's drawing leaves its game time to play.
+    if (plaza) {
+        await tab.evaluate(() => {
+            const canvas = document.querySelector('canvas');
+            canvas.style.width = '640px';
+            canvas.style.height = '360px';
+        });
+    }
     await until(/"code":"bots_admitted"/, 30000);
     // The canvas takes the focus, then D (W in the plaza) is held: the
     // player runs.
