@@ -16,6 +16,8 @@ mesh 6d3cbd2231e069f1 mound.gltf
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
 component 9b8e1f52-3c47-4d0a-a6e2-5f1d7c93b204 plaza.blade Blade
 component 2d6e0b91-7c35-4f48-9a1e-3b5c8d0f6a27 plaza.stroller Stroller
+component 8e4b2c17-6a39-4d05-b1f8-7c2e9d4a3f61 plaza.look rawframe.model.Model
+component 1f7d3a58-9c24-4e6b-8a03-5d9e1b7c2f84 plaza.view rawframe.model.Camera
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -69,9 +71,19 @@ spawn 1 plaza.stroller left=90 x=18 z=-8 rawframe.animation.animator graph=strol
 spawn 1 plaza.stroller left=60 x=0 z=18 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=30 x=-2 z=-20 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 
-replicate plaza.stroller rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick
+replicate plaza.stroller rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
 input plaza.stick
 interest rawframe.physics3d.pose x z within 30
 interpolate rawframe.physics3d.pose
 predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick
+
+# What a client draws (D283): every body it mirrors, by its shape and in
+# a color for what it is, the mound as its own mesh, through its own
+# walker's camera; no server carries a look or a view. The strollers have
+# no body yet, so none is drawn.
+presentation plaza.look on rawframe.physics3d.body
+present plaza.dress dress read rawframe.physics3d.body write plaza.look
+present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
+presentation plaza.view on player
+present plaza.frame frame read plaza.stick write plaza.view

@@ -2,7 +2,7 @@
 # networked Kest game (Tool role).
 rawframe_host(NAME arena OUTPUT rawframe-arena
     SOURCES src/main.cpp
-    DEPS host game_content input_kest world_audio world_localization network_loopback render_canvas physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
+    DEPS host game_content input_kest world_audio world_localization network_loopback render_canvas render_scene physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 )
 # Where Maul RHI is built, the arena can draw a client's canvas offscreen on
 # the one device (D279); elsewhere it counts draws without one.
@@ -223,6 +223,18 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(plaza_bots PROPERTIES
                          FIXTURES_REQUIRED plaza_content
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":30,\"bodiesRemoved\":0,\"bodiesRefused\":0,\"teleports\":0,.*\"targets\":[1-9][0-9]*,\"characterMoves\":[1-9][0-9]*,\"jointsMade\":1,\"jointsRemoved\":0,\"jointsRefused\":0.*\"instancesMade\":9,\"instancesRemoved\":0,\"animatorsRefused\":0,.*\"rootMotions\":[1-9][0-9]*,\"stagesRun\":[1-9][0-9]*")
+    # Two bots play the sample 3D game while the first one's mirrored World
+    # is seen in 3D (D283): its client dresses every body it mirrors by its
+    # shape, the mound as the game's own mesh, and sees them through its
+    # walker's camera; every model is drawn or culled, none malformed or of
+    # a mesh unknown.
+    configure_file(tests/plaza_seen.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen.conf @ONLY)
+    add_test(NAME plaza_seen
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(plaza_seen PROPERTIES
+                         FIXTURES_REQUIRED plaza_content
+                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":1")
     # Four bots predict their walkers in 3D: at least a thousand ticks
     # confirmed, the rollbacks only those of admission, and no checksum
     # diverged (D274).

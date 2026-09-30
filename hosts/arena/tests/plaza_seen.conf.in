@@ -1,0 +1,13 @@
+# Two bots play the sample 3D game for two seconds while the first one's
+# mirrored World is seen in 3D: its bodies dressed by its present systems,
+# through its walker's camera. The mound's mesh is read from the plaza's
+# content cooked into the build tree.
+host.maximum_iterations = 240
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/plaza/plaza.game
+content.root = @PLAZA_CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 2
+bots.endpoint = arena
