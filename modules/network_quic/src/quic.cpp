@@ -518,11 +518,16 @@ result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const n
 #if defined(__has_feature)
 #if __has_feature(thread_sanitizer)
 /// MsQuic is built without the thread sanitizer, so the sanitizer sees only
-/// the libc calls MsQuic makes. MsQuic hands a socket's teardown from one of
-/// its threads to another through epoll, which the sanitizer cannot see as
-/// synchronisation. That is the one report, and no stack of ours is in it.
+/// the libc calls MsQuic makes. MsQuic hands a socket's teardown, and a
+/// refused connection's (its CID lookup, its datagram lock, its packet
+/// keys' cipher state), from one of its threads to another through epoll,
+/// which the sanitizer cannot see as synchronisation (D335). No stack of
+/// ours is in these reports.
 extern "C" const char* __tsan_default_suppressions() {
-    return "race:CxPlatSocketContextUninitializeComplete\n";
+    return "race:CxPlatSocketContextUninitializeComplete\n"
+           "race:QuicLookupUninitialize\n"
+           "race:QuicDatagramUninitialize\n"
+           "race:EVP_CIPHER_CTX_reset\n";
 }
 #endif
 #endif
