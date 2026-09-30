@@ -171,11 +171,14 @@ std::vector<float> verticesOf(const mesh::Mesh& made) {
             }
         }
     }
+    const bool kMapped = made.uvs.size() == made.positions.size();
     std::vector<float> vertices;
-    vertices.reserve(made.positions.size() * 6);
+    vertices.reserve(made.positions.size() * (kVertexBytes / sizeof(float)));
     for (std::size_t at = 0; at < made.positions.size(); ++at) {
         vertices.insert(vertices.end(), made.positions[at].begin(), made.positions[at].end());
         vertices.insert(vertices.end(), normals[at].begin(), normals[at].end());
+        vertices.push_back(kMapped ? made.uvs[at][0] : 0.0F);
+        vertices.push_back(kMapped ? made.uvs[at][1] : 0.0F);
     }
     return vertices;
 }

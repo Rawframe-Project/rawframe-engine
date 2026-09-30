@@ -1,8 +1,10 @@
 #pragma once
 
+#include "rawframe/material/material.h"
 #include "rawframe/render/device.h"
 #include "rawframe/result/result.h"
 
+#include <array>
 #include <cstdint>
 #include <maul-rhi/pipeline.h>
 #include <maul-rhi/resources.h>
@@ -49,6 +51,9 @@ struct Pipelines {
     /// Blends four texels, clamped at the edges: the picture before's
     /// (D291) and FXAA's taps (D296).
     mrhiSamplerId filteredSampler{};
+    /// A material's texture's, by its declared filter and address (D309):
+    /// at `samplerOf`.
+    std::array<mrhiSamplerId, 4> materialSamplers{};
     /// The shadow maps' casters, the depth prepass, the lit models, the sky
     /// behind them, the metering's two steps (D293), the temporal pass, the
     /// picture, and FXAA over it (D296).
@@ -80,6 +85,12 @@ private:
     result::Status ask(const mrhiGraphicsPipelineDef& def, Asked& asked);
     result::Status ask(const mrhiComputePipelineDef& def, Asked& asked);
 };
+
+/// Where a material's filter and address put its sampler among
+/// `Pipelines::materialSamplers`.
+[[nodiscard]] constexpr std::size_t samplerOf(material::Filter filter, material::Address address) noexcept {
+    return (static_cast<std::size_t>(filter) * 2) + static_cast<std::size_t>(address);
+}
 
 /// Maul RHI's refusal, named.
 std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome);

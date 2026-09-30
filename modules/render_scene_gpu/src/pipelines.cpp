@@ -37,6 +37,9 @@ Pipelines::~Pipelines() {
     }
     static_cast<void>(mrhiDestroySampler(native, shadowSampler));
     static_cast<void>(mrhiDestroySampler(native, filteredSampler));
+    for (const mrhiSamplerId kSampler : materialSamplers) {
+        static_cast<void>(mrhiDestroySampler(native, kSampler));
+    }
     for (const mrhiShaderId kShader :
          {sceneShader, tonemapShader, shadowShader, temporalShader, skyShader, meterShader, fxaaShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
@@ -85,9 +88,10 @@ result::Status Pipelines::make() {
     constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
         mrhiVertexBufferLayout{.stride = kInstanceBytes, .stepMode = mrhi_stepInstance}};
-    constexpr std::array<mrhiVertexAttribute, 13> kAttributes = {
+    constexpr std::array<mrhiVertexAttribute, 14> kAttributes = {
         mrhiVertexAttribute{.buffer = 0, .location = 0, .format = mrhi_vertexFloat32x3, .offset = 0},
         mrhiVertexAttribute{.buffer = 0, .location = 1, .format = mrhi_vertexFloat32x3, .offset = 12},
+        mrhiVertexAttribute{.buffer = 0, .location = 13, .format = mrhi_vertexFloat32x2, .offset = 24},
         mrhiVertexAttribute{.buffer = 1, .location = 2, .format = mrhi_vertexFloat32x4, .offset = 0},
         mrhiVertexAttribute{.buffer = 1, .location = 3, .format = mrhi_vertexFloat32x4, .offset = 16},
         mrhiVertexAttribute{.buffer = 1, .location = 4, .format = mrhi_vertexFloat32x4, .offset = 32},
@@ -123,7 +127,7 @@ result::Status Pipelines::make() {
     // pushed from the sun by its slope (the depth half of ADR-0051's
     // bias; the normal half is where the map is read).
     constexpr std::array<mrhiVertexAttribute, 4> kCasterAttributes = {
-        kAttributes[0], kAttributes[2], kAttributes[3], kAttributes[4]};
+        kAttributes[0], kAttributes[3], kAttributes[4], kAttributes[5]};
     mrhiGraphicsPipelineDef casters = prepass;
     constexpr std::string_view kCastingLabel = "rawframe.scene.shadows";
     casters.label = kCastingLabel.data();
@@ -145,6 +149,27 @@ result::Status Pipelines::make() {
     samplerDef.compare = mrhi_compareGreaterEqual;
     if (const mrhiResult kMade = mrhiCreateSampler(native, &samplerDef, &shadowSampler); kMade != mrhi_success) {
         return failed("the shadow sampler could not be made", kMade);
+    }
+    // A material's texture's (D309): across its levels as it is filtered,
+    // repeated or clamped.
+    for (const material::Filter kFilter : {material::Filter::Linear, material::Filter::Nearest}) {
+        for (const material::Address kAddress : {material::Address::Repeat, material::Address::Clamp}) {
+            mrhiSamplerDef def = mrhiDefaultSamplerDef();
+            const mrhiFilter kHow = kFilter == material::Filter::Linear ? mrhi_filterLinear : mrhi_filterNearest;
+            def.magFilter = kHow;
+            def.minFilter = kHow;
+            def.mipFilter = kHow;
+            const mrhiAddressMode kAt =
+                kAddress == material::Address::Repeat ? mrhi_addressRepeat : mrhi_addressClampToEdge;
+            def.addressU = kAt;
+            def.addressV = kAt;
+            def.addressW = kAt;
+            if (const mrhiResult kMade =
+                    mrhiCreateSampler(native, &def, &materialSamplers[samplerOf(kFilter, kAddress)]);
+                kMade != mrhi_success) {
+                return failed("a material's sampler could not be made", kMade);
+            }
+        }
     }
     // The lit models, drawn where the prepass left their depth.
     constexpr std::string_view kLitLabel = "rawframe.scene.models";

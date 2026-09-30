@@ -979,3 +979,104 @@ RAWFRAME_TEST(TranslucentModelsBlendOverWhatIsBehindThem) {
     RAWFRAME_EXPECT(kBoxBehind[0] > 40 && kBoxBehind[0] < kBox[0] - 20 && kBoxBehind[2] > kBox[2] + 20);
     RAWFRAME_EXPECT(kSkyBehind != kSky && kSkyBehind[2] > 20);
 }
+
+RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // Two by two texels, red and green above, blue and white below.
+    texture::Texture quarters{.format = texture::Format::Rgba8Srgb};
+    quarters.levels.push_back({.width = 2,
+                               .height = 2,
+                               .bytes = {std::byte{255},
+                                         std::byte{0},
+                                         std::byte{0},
+                                         std::byte{255},
+                                         std::byte{0},
+                                         std::byte{255},
+                                         std::byte{0},
+                                         std::byte{255},
+                                         std::byte{0},
+                                         std::byte{0},
+                                         std::byte{255},
+                                         std::byte{255},
+                                         std::byte{255},
+                                         std::byte{255},
+                                         std::byte{255},
+                                         std::byte{255}}});
+    const auto kQuarters = std::make_shared<const texture::Texture>(std::move(quarters));
+    std::uint64_t asked = 0;
+    const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        ++asked;
+        return id == 0x77 ? kQuarters : nullptr;
+    };
+    // An unlit box whose material's color is the texture's, sampled
+    // nearest: its face toward the eye shows each texel in its quarter,
+    // the first row at the top.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
+    shown.material = 1;
+    frame.draws = {shown};
+    render_scene::MaterialBlob unlit = render_scene::noMaterial();
+    unlit[15] = 1 + 2;
+    frame.materials = {render_scene::noMaterial(), unlit};
+    const auto kQuartersOf = [&](std::uint64_t texture) {
+        frame.textures = {{},
+                          {.id = texture, .filter = material::Filter::Nearest, .address = material::Address::Clamp}};
+        (**made).prepare(&frame, kMeshes, kTextures);
+        const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
+        std::optional<std::vector<std::byte>> pixels;
+        const std::uint64_t kBefore = (**made).statistics().frames;
+        for (int attempt = 0; attempt < 1000 && (**made).statistics().frames == kBefore; ++attempt) {
+            RAWFRAME_EXPECT((**framer).finish(5'000'000'000).has_value());
+            RAWFRAME_EXPECT(
+                (**framer).make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
+        }
+        RAWFRAME_EXPECT((**framer).finish(5'000'000'000).has_value());
+        pixels = (**framer).pixels();
+        RAWFRAME_EXPECT(pixels.has_value());
+        return pixels.has_value()
+                   ? std::array{at(*pixels, 24, 24), at(*pixels, 40, 24), at(*pixels, 24, 40), at(*pixels, 40, 40)}
+                   : std::array<std::array<int, 3>, 4>{};
+    };
+    const auto [kRed, kGreen, kBlue, kWhite] = kQuartersOf(0x77);
+    // A texture that is not there is sampled as white.
+    const auto kNone = kQuartersOf(0x55);
+    std::printf("red %d %d %d, green %d %d %d, blue %d %d %d, white %d %d %d, none %d %d %d, uploaded %llu\n",
+                kRed[0],
+                kRed[1],
+                kRed[2],
+                kGreen[0],
+                kGreen[1],
+                kGreen[2],
+                kBlue[0],
+                kBlue[1],
+                kBlue[2],
+                kWhite[0],
+                kWhite[1],
+                kWhite[2],
+                kNone[0][0],
+                kNone[0][1],
+                kNone[0][2],
+                static_cast<unsigned long long>((**made).statistics().texturesUploaded));
+    RAWFRAME_EXPECT(kRed[0] > kRed[1] + 60 && kRed[0] > kRed[2] + 60);
+    RAWFRAME_EXPECT(kGreen[1] > kGreen[0] + 60 && kGreen[1] > kGreen[2] + 60);
+    RAWFRAME_EXPECT(kBlue[2] > kBlue[0] + 60 && kBlue[2] > kBlue[1] + 60);
+    RAWFRAME_EXPECT(kWhite[0] > 150 && std::abs(kWhite[0] - kWhite[2]) < 10);
+    for (const std::array<int, 3>& kQuarter : kNone) {
+        RAWFRAME_EXPECT(kQuarter == kWhite);
+    }
+    // The texture and white, each uploaded once.
+    RAWFRAME_EXPECT(asked > 0 && (**made).statistics().texturesUploaded == 2);
+}

@@ -32,6 +32,9 @@ public:
         meshes_ = [scene = scene_](std::uint64_t id) {
             return scene->mesh(id);
         };
+        textures_ = [scene = scene_](std::uint64_t id) {
+            return scene->texture(id);
+        };
         return {};
     }
 
@@ -69,7 +72,7 @@ public:
         }
         // The view follows the frame from the next one.
         scene_->resize(kPlanned->first, kPlanned->second);
-        renderer_->prepare(scene_->queued(), meshes_);
+        renderer_->prepare(scene_->queued(), meshes_, textures_);
         frames_->ready(*renderer_);
     }
 
@@ -92,6 +95,7 @@ public:
                       diagnostics::field("drawCalls", statistics.drawCalls),
                       diagnostics::field("modelsLeftOut", statistics.modelsLeftOut),
                       diagnostics::field("meshesUploaded", statistics.meshesUploaded),
+                      diagnostics::field("texturesUploaded", statistics.texturesUploaded),
                       diagnostics::field("uploadBytes", statistics.uploadBytes),
                       diagnostics::field("uploadsDeferred", statistics.uploadsDeferred),
                       diagnostics::field("framesResolved", statistics.framesResolved),
@@ -104,6 +108,7 @@ private:
     render::Frames* frames_ = nullptr;
     render_scene::SceneFrames* scene_ = nullptr;
     MeshSource meshes_;
+    TextureSource textures_;
     std::unique_ptr<SceneRenderer> renderer_;
     bool failed_ = false;
     diagnostics::Emitter emitter_;

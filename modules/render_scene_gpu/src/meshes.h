@@ -36,6 +36,10 @@ public:
     /// Starts choosing what the frame being declared draws, within
     /// `budget` bytes of uploads.
     void begin(std::uint64_t budget) noexcept;
+    /// What is left of the budget once the frame's meshes are chosen.
+    [[nodiscard]] std::uint64_t left() const noexcept {
+        return budget_;
+    }
     /// The mesh `id` for the frame, made from what `given` gives if it is
     /// not held; none while the frame cannot draw it.
     const HeldMesh* choose(std::uint64_t id, const MeshSource& given, RendererStatistics& statistics);

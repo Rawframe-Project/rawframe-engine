@@ -46,6 +46,7 @@ layout(location = 3) in vec3 inNow;
 layout(location = 4) in vec3 inBefore;
 // The model's material's place among the frame's materials.
 layout(location = 5) flat in uint inMaterial;
+layout(location = 6) in vec2 inUv;
 
 layout(set = 0, binding = 1) uniform texture2D shadowMap;
 layout(set = 0, binding = 2) uniform samplerShadow shadowSampler;
@@ -103,11 +104,17 @@ layout(set = 0, binding = 6) uniform texture2D lightShadowMap;
 // Every material's blob (D303), four vectors each: the base color and
 // metalness; the specular color times its weight, and the roughness; the
 // emission in nits, and the index of refraction; the opacity, the
-// occlusion, the alpha cutoff, and whether it is unlit.
+// occlusion, the alpha cutoff, and its flags: one when unlit, two when its
+// texture's color is the base color, four when its alpha is the opacity.
+// The texture the draw's material samples, and how (D309): white for one
+// sampling none.
 layout(set = 0, binding = 9, std430) readonly buffer Materials
 {
     vec4 materials[];
 };
+
+layout(set = 0, binding = 10) uniform texture2D baseTexture;
+layout(set = 0, binding = 11) uniform sampler baseSampler;
 
 layout(set = 0, binding = 7, std430) readonly buffer Slots
 {
@@ -262,14 +269,17 @@ void main()
     const vec4 kSpecular = materials[kAt + 1u];
     const vec4 kEmission = materials[kAt + 2u];
     const vec4 kRest = materials[kAt + 3u];
-    const vec3 kColor = inColor.rgb * kBase.rgb;
+    // Sampled before anything branches, so its derivatives hold.
+    const vec4 kSampled = texture(sampler2D(baseTexture, baseSampler), inUv);
+    const uint kFlags = uint(kRest.w);
+    const vec3 kColor = inColor.rgb * kBase.rgb * ((kFlags & 2u) != 0u ? kSampled.rgb : vec3(1.0));
     // How much of what is behind it a translucent model hides (D305): its
     // material's opacity times its color's alpha.
-    const float kOpacity = kRest.x * inColor.a;
+    const float kOpacity = kRest.x * inColor.a * ((kFlags & 4u) != 0u ? kSampled.a : 1.0);
     outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);
     // Unlit (KHR_materials_unlit): its color stands in the picture as it
     // is, whatever the exposure.
-    if (kRest.w > 0.5) {
+    if ((kFlags & 1u) != 0u) {
         outColor = vec4(kColor, kOpacity);
         return;
     }

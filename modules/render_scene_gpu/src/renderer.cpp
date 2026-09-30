@@ -4,6 +4,7 @@
 #include "meshes.h"
 #include "metering.h"
 #include "pipelines.h"
+#include "rawframe/render/textures.h"
 #include "rawframe/render_scene_gpu/errors.h"
 #include "temporal.h"
 
@@ -56,9 +57,14 @@ struct SceneRenderer::State {
     /// The exposure the device holds, and its metering (D293).
     std::optional<Metering> metering;
     std::optional<DeviceMeshes> held;
+    /// The materials' textures (D309), and the white one a material
+    /// sampling none samples, held as texture nought.
+    std::unique_ptr<render::DeviceTextures> textures;
+    std::shared_ptr<const texture::Texture> white;
     /// What the next frame draws.
     const render_scene::SceneFrame* frame = nullptr;
     MeshSource meshes;
+    TextureSource sampled;
 
     /// The meshes this frame draws, chosen within the frame's upload
     /// budget. A draw whose mesh is not chosen is left out.
@@ -79,10 +85,30 @@ struct SceneRenderer::State {
         return usable;
     }
 
+    /// The textures this frame's materials sample, white first, chosen
+    /// within `budget`; a material whose texture is not chosen samples
+    /// white.
+    void texturesOf(const render_scene::SceneFrame& scene, std::uint64_t budget) {
+        textures->begin(budget);
+        static_cast<void>(textures->choose(0, white));
+        for (const render_scene::SceneDraw& draw : scene.draws) {
+            const std::uint64_t kId = draw.material < scene.textures.size() ? scene.textures[draw.material].id : 0;
+            if (kId != 0) {
+                static_cast<void>(textures->choose(kId, sampled ? sampled(kId) : nullptr));
+            }
+        }
+    }
+
     /// The placements of the draws whose mesh is here, in order, and the
-    /// runs of one mesh each: an instanced draw apiece.
-    /// Mesh, first instance, instances.
-    using Runs = std::vector<std::tuple<const HeldMesh*, std::uint32_t, std::uint32_t>>;
+    /// runs of one mesh and one material texture each: an instanced draw
+    /// apiece, from its first instance.
+    struct Run {
+        const HeldMesh* mesh = nullptr;
+        std::uint32_t first = 0;
+        std::uint32_t count = 0;
+        render_scene::SceneTexture texture;
+    };
+    using Runs = std::vector<Run>;
 
     struct Placed {
         std::vector<float> instances;
@@ -100,13 +126,14 @@ struct SceneRenderer::State {
         std::uint32_t count = 0;
         const std::span<const render_scene::SceneDraw> kDraws = scene.draws;
         const std::size_t kOpaque = kDraws.size() - std::min(scene.translucent, kDraws.size());
-        append(kDraws.first(kOpaque), usable, placed, placed.runs, count, true);
-        append(kDraws.subspan(kOpaque), usable, placed, placed.translucentRuns, count, true);
+        append(kDraws.first(kOpaque), usable, scene.textures, placed, placed.runs, count, true);
+        append(kDraws.subspan(kOpaque), usable, scene.textures, placed, placed.translucentRuns, count, true);
         const std::span<const render_scene::SceneDraw> kSunCasters = scene.shadows.casters;
         for (std::size_t at = 0; at < scene.shadows.count && at < placed.cascadeRuns.size(); ++at) {
             const render_scene::ShadowCascade& kCascade = scene.shadows.cascades[at];
             append(kSunCasters.subspan(kCascade.firstCaster, kCascade.casterCount),
                    usable,
+                   {},
                    placed,
                    placed.cascadeRuns[at],
                    count,
@@ -116,6 +143,7 @@ struct SceneRenderer::State {
         for (const render_scene::ShadowSlot& slot : scene.lightShadows.slots) {
             append(kCasters.subspan(slot.firstCaster, slot.casterCount),
                    usable,
+                   {},
                    placed,
                    placed.slotRuns.emplace_back(),
                    count,
@@ -124,10 +152,13 @@ struct SceneRenderer::State {
         return placed;
     }
 
+    /// The draws' placements, and their runs; a shadow's casters' by mesh
+    /// alone (`materialTextures` none).
     void append(std::span<const render_scene::SceneDraw> draws,
                 const std::map<std::uint64_t, const HeldMesh*>& usable,
+                std::span<const render_scene::SceneTexture> materialTextures,
                 Placed& placed,
-                std::vector<std::tuple<const HeldMesh*, std::uint32_t, std::uint32_t>>& runs,
+                Runs& runs,
                 std::uint32_t& count,
                 bool counted) {
         for (const render_scene::SceneDraw& draw : draws) {
@@ -154,10 +185,13 @@ struct SceneRenderer::State {
                 }
             }
             placed.instances.push_back(static_cast<float>(draw.material));
-            if (runs.empty() || std::get<0>(runs.back()) != kMesh->second) {
-                runs.emplace_back(kMesh->second, count, 0);
+            const render_scene::SceneTexture kTexture = draw.material < materialTextures.size()
+                                                            ? materialTextures[draw.material]
+                                                            : render_scene::SceneTexture{};
+            if (runs.empty() || runs.back().mesh != kMesh->second || runs.back().texture != kTexture) {
+                runs.push_back({.mesh = kMesh->second, .first = count, .count = 0, .texture = kTexture});
             }
-            ++std::get<2>(runs.back());
+            ++runs.back().count;
             ++count;
         }
     }
@@ -199,15 +233,15 @@ struct SceneRenderer::State {
                 mrhiSetViewport(native, pass, &kSquare.viewport) != mrhi_success) {
                 return failed("a shadow square could not be set up", mrhi_errorState);
             }
-            for (const auto& [kMesh, kFirst, kCount] : *kSquare.casters) {
-                RAWFRAME_TRY(held->bind(pass, *kMesh));
+            for (const Run& run : *kSquare.casters) {
+                RAWFRAME_TRY(held->bind(pass, *run.mesh));
                 if (mrhiDrawIndexed(native,
                                     pass,
-                                    static_cast<std::uint32_t>(kMesh->source->indices.size()),
-                                    kCount,
+                                    static_cast<std::uint32_t>(run.mesh->source->indices.size()),
+                                    run.count,
                                     0,
                                     0,
-                                    kFirst) != mrhi_success) {
+                                    run.first) != mrhi_success) {
                     return failed("a caster could not be drawn", mrhi_errorState);
                 }
             }
@@ -321,7 +355,10 @@ struct SceneRenderer::State {
             ((std::uint64_t{frame->clusters.ranges.size()} + frame->clusters.indices.size()) * sizeof(std::uint32_t));
         const std::uint64_t kBudget =
             kPlacementBytes < limits.uploadBytesPerFrame ? limits.uploadBytesPerFrame - kPlacementBytes : 0;
-        const std::map<std::uint64_t, const HeldMesh*> kUsable = meshesOf(*frame, meshes, kBudget);
+        // White's four bytes are kept aside, so it is always there.
+        const std::uint64_t kWhite = std::min<std::uint64_t>(kBudget, 4);
+        const std::map<std::uint64_t, const HeldMesh*> kUsable = meshesOf(*frame, meshes, kBudget - kWhite);
+        texturesOf(*frame, held->left() + kWhite);
         now.placed = place(*frame, kUsable);
         now.block = blockOf(*frame, open.width, open.height);
         now.lights = lightsOf(*frame);
@@ -333,6 +370,10 @@ struct SceneRenderer::State {
         std::vector<mrhiAccess> meshWrites;
         std::vector<mrhiAccess> meshReads;
         RAWFRAME_TRY(held->import(meshWrites, meshReads));
+        RAWFRAME_TRY(textures->import());
+        for (const std::uint64_t kTexture : textures->uploading()) {
+            meshWrites.push_back(wholeOf(resourceOf(kTexture), mrhi_accessCopyDestination));
+        }
         now.draws = !now.placed.runs.empty() || !now.placed.translucentRuns.empty();
         const auto kAny = [](const Runs& runs) {
             return !runs.empty();
@@ -518,9 +559,12 @@ struct SceneRenderer::State {
             kAdded != mrhi_success) {
             return failed("the lights' shadow pass could not be added", kAdded);
         }
-        // The models' passes read the shadow map too: the scene's table
-        // holds it for both.
+        // The models' passes read the shadow map and the materials'
+        // textures too: the scene's table holds them for both.
         std::vector<mrhiAccess> reads = meshReads;
+        for (const std::uint64_t kTexture : textures->chosen()) {
+            reads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
+        }
         reads.push_back(wholeOf(now.blockResource, mrhi_accessUniform));
         reads.push_back(wholeOf(now.skyResource, mrhi_accessUniform));
         reads.push_back(wholeOf(metering->exposure(), mrhi_accessStorageRead));
@@ -676,6 +720,7 @@ struct SceneRenderer::State {
             }
         }
         RAWFRAME_TRY(held->write(now.upload));
+        RAWFRAME_TRY(textures->write(render::requestKey(now.upload.index1, now.upload.generation)));
         if (mrhiEndPass(native, now.upload) != mrhi_success) {
             return failed("the upload pass could not end", mrhi_errorState);
         }
@@ -690,7 +735,7 @@ struct SceneRenderer::State {
                                .range = {},
                                .sampler = {}};
         };
-        const std::array<mrhiBinding, 10> kFrameBinding = {
+        const std::array<mrhiBinding, 12> kFrameBinding = {
             mrhiBinding{.slot = 0,
                         .resource = now.blockResource,
                         .offset = 0,
@@ -736,10 +781,30 @@ struct SceneRenderer::State {
                         .sampler = {}},
             kStored(7, now.slotsResource, now.slots.size() * sizeof(SlotBlock)),
             kStored(8, metering->exposure(), sizeof(ExposureBlock)),
-            kStored(9, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob))};
+            kStored(9, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob)),
+            mrhiBinding{
+                .slot = 10,
+                .resource = {},
+                .offset = 0,
+                .size = 0,
+                .viewKind = mrhi_texture2d,
+                .viewFormat = mrhi_formatNone,
+                .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
+                .sampler = {}},
+            mrhiBinding{.slot = 11,
+                        .resource = {},
+                        .offset = 0,
+                        .size = 0,
+                        .viewKind = mrhi_texture2d,
+                        .viewFormat = mrhi_formatNone,
+                        .range = {},
+                        .sampler = {}}};
         const std::array<mrhiBinding, 2> kSkyBinding = {kStored(0, now.skyResource, sizeof(SkyBlock)),
                                                         kStored(1, metering->exposure(), sizeof(ExposureBlock))};
         // Runs of models drawn with `pipeline` in `pass`.
+        // Runs of models drawn with `pipeline` in `pass`, the table set
+        // again where a run samples another texture than the one before
+        // (D309): white for none, and for one not held this frame.
         const auto kDrawRuns = [this, &now, &kFrameBinding](mrhiPassId pass,
                                                             mrhiGraphicsPipelineId pipeline,
                                                             const Runs& runs) -> result::Status {
@@ -747,19 +812,30 @@ struct SceneRenderer::State {
                 return {};
             }
             if (mrhiSetGraphicsPipeline(native, pass, pipeline) != mrhi_success ||
-                mrhiSetBindings(native, pass, 0, kFrameBinding.data(), kFrameBinding.size()) != mrhi_success ||
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            for (const auto& [kMesh, kFirst, kCount] : runs) {
-                RAWFRAME_TRY(held->bind(pass, *kMesh));
+            std::array<mrhiBinding, 12> binding = kFrameBinding;
+            std::optional<render_scene::SceneTexture> bound;
+            for (const Run& run : runs) {
+                if (bound != run.texture) {
+                    const std::uint64_t kHeld = textures->resource(run.texture.id);
+                    binding[10].resource = resourceOf(kHeld != 0 ? kHeld : textures->resource(0));
+                    binding[11].sampler =
+                        pipelines.materialSamplers[samplerOf(run.texture.filter, run.texture.address)];
+                    if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
+                        return failed("a material's texture could not be bound", mrhi_errorState);
+                    }
+                    bound = run.texture;
+                }
+                RAWFRAME_TRY(held->bind(pass, *run.mesh));
                 if (mrhiDrawIndexed(native,
                                     pass,
-                                    static_cast<std::uint32_t>(kMesh->source->indices.size()),
-                                    kCount,
+                                    static_cast<std::uint32_t>(run.mesh->source->indices.size()),
+                                    run.count,
                                     0,
                                     0,
-                                    kFirst) != mrhi_success) {
+                                    run.first) != mrhi_success) {
                     return failed("a model could not be drawn", mrhi_errorState);
                 }
             }
@@ -846,6 +922,11 @@ struct SceneRenderer::State {
             return;
         }
         held->ended(submitted, statistics);
+        const std::uint64_t kUploaded = textures->statistics().texturesUploaded;
+        const std::uint64_t kBytes = textures->statistics().uploadBytes;
+        textures->ended(submitted);
+        statistics.texturesUploaded += textures->statistics().texturesUploaded - kUploaded;
+        statistics.textureBytes += textures->statistics().uploadBytes - kBytes;
         if (submitted) {
             ++statistics.frames;
             statistics.framesSmoothed += declared->smoothed ? 1 : 0;
@@ -882,6 +963,11 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->native = device.native();
     state->limits = limits;
     state->held.emplace(device.native(), limits.maximumMeshes);
+    RAWFRAME_TRY_ASSIGN(state->textures,
+                        render::DeviceTextures::create(device, {.maximumTextures = limits.maximumTextures + 1}));
+    texture::Texture white{.format = texture::Format::Rgba8Srgb};
+    white.levels.push_back({.width = 1, .height = 1, .bytes = std::vector<std::byte>(4, std::byte{0xFF})});
+    state->white = std::make_shared<const texture::Texture>(std::move(white));
     state->pipelines.device = &device;
     state->pipelines.native = device.native();
     RAWFRAME_TRY(state->pipelines.make());
@@ -891,9 +977,10 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }
 
-void SceneRenderer::prepare(const render_scene::SceneFrame* frame, MeshSource meshes) {
+void SceneRenderer::prepare(const render_scene::SceneFrame* frame, MeshSource meshes, TextureSource textures) {
     state_->frame = frame;
     state_->meshes = std::move(meshes);
+    state_->sampled = std::move(textures);
 }
 
 result::Status SceneRenderer::declare(render::Frame& frame) {

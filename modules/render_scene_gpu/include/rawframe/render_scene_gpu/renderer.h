@@ -18,6 +18,7 @@
 #include "rawframe/render/frame.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/result/result.h"
+#include "rawframe/texture/texture.h"
 
 #include <array>
 #include <cstddef>
@@ -31,17 +32,24 @@ namespace rawframe::render_scene_gpu {
 
 /// The mesh a draw names; none for one that cannot be drawn.
 using MeshSource = std::function<std::shared_ptr<const mesh::Mesh>(std::uint64_t id)>;
+/// The texture a material samples, decoded; none while it is not ready
+/// (D309).
+using TextureSource = std::function<std::shared_ptr<const texture::Texture>(std::uint64_t id)>;
 
 /// SPEC-0024's limit points as the scene's GPU half has them.
 struct RendererLimits {
     /// Meshes held on the device at once; a draw naming one past them is
     /// left out.
     std::size_t maximumMeshes = 1024;
+    /// Textures held at once; a material sampling one past them samples
+    /// white (D309).
+    std::size_t maximumTextures = 256;
     /// SPEC-0024's `upload_bytes_per_frame`: the frame's placements first,
-    /// then meshes; a mesh that would pass it waits for a later frame
-    /// (`deferred`), its draws left out until then. Three quarters of what
-    /// the device uploads in a frame; a mesh larger than what is left after
-    /// the placements is never drawn.
+    /// then meshes, then the materials' textures; a mesh that would pass it
+    /// waits for a later frame (`deferred`), its draws left out until then,
+    /// and a texture waits sampled as white. Three quarters of what the
+    /// device uploads in a frame; a mesh or texture larger than what is left
+    /// after the placements is never drawn.
     std::uint64_t uploadBytesPerFrame = render::kFrameUploadBytes / 4 * 3;
 };
 
@@ -57,6 +65,10 @@ struct RendererStatistics {
     /// held.
     std::uint64_t modelsLeftOut = 0;
     std::uint64_t meshesUploaded = 0;
+    /// The materials' textures uploaded (D309), and their bytes, apart
+    /// from the meshes'.
+    std::uint64_t texturesUploaded = 0;
+    std::uint64_t textureBytes = 0;
     std::uint64_t uploadBytes = 0;
     std::uint64_t uploadsDeferred = 0;
     /// Frames antialiased over time, and those of them that reused the
@@ -85,9 +97,9 @@ public:
     ~SceneRenderer() override;
 
     /// What the next frame draws: `frame`'s draws, the meshes they name
-    /// uploaded if they must be; nothing for none. Both are held until the
-    /// frame is made.
-    void prepare(const render_scene::SceneFrame* frame, MeshSource meshes);
+    /// and the textures their materials sample uploaded if they must be;
+    /// nothing for none. All are held until the frame is made.
+    void prepare(const render_scene::SceneFrame* frame, MeshSource meshes, TextureSource textures = {});
 
     [[nodiscard]] result::Status declare(render::Frame& frame) override;
     [[nodiscard]] result::Status record(render::Frame& frame) override;

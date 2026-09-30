@@ -1,4 +1,4 @@
-// The 3D scene's models (D284, D289, D290, D291, D292, D293), for WebGPU: the entries of
+// The 3D scene's models (D284, D289, D290, D291, D292, D293, D309), for WebGPU: the entries of
 // scene.vert and scene.frag.
 
 struct Frame {
@@ -46,6 +46,9 @@ struct ShadowSlot {
 @group(0) @binding(8) var<storage, read> exposure: vec4f;
 // Every material's blob (D303), four vectors each.
 @group(0) @binding(9) var<storage, read> materials: array<vec4f>;
+// The texture the draw's material samples, and how (D309).
+@group(0) @binding(10) var baseTexture: texture_2d<f32>;
+@group(0) @binding(11) var baseSampler: sampler;
 
 struct Placed {
     @invariant @builtin(position) position: vec4f,
@@ -55,6 +58,7 @@ struct Placed {
     @location(3) now: vec3f,
     @location(4) before: vec3f,
     @location(5) @interpolate(flat) material: u32,
+    @location(6) uv: vec2f,
 }
 
 struct Shaded {
@@ -67,7 +71,7 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
       @location(3) model1: vec4f, @location(4) model2: vec4f, @location(5) normal0: vec3f,
       @location(6) normal1: vec3f, @location(7) normal2: vec3f, @location(8) color: vec4f,
       @location(9) previous0: vec4f, @location(10) previous1: vec4f, @location(11) previous2: vec4f,
-      @location(12) material: f32) -> Placed {
+      @location(12) material: f32, @location(13) uv: vec2f) -> Placed {
     let vertex = vec4f(position, 1.0);
     let placed = vec3f(dot(model0, vertex), dot(model1, vertex), dot(model2, vertex));
     var out: Placed;
@@ -79,6 +83,7 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
     out.now = (frame.unjittered * vec4f(placed, 1.0)).xyw;
     out.before = (frame.previous * vec4f(was, 1.0)).xyw;
     out.material = u32(material);
+    out.uv = uv;
     return out;
 }
 
@@ -191,7 +196,8 @@ fn punctual(placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec
 
 @fragment
 fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
-      @location(3) now: vec3f, @location(4) before: vec3f, @location(5) @interpolate(flat) material: u32) -> Shaded {
+      @location(3) now: vec3f, @location(4) before: vec3f, @location(5) @interpolate(flat) material: u32,
+      @location(6) uv: vec2f) -> Shaded {
     let n = normalize(normal);
     let toEye = normalize(-placed);
     let at = min(material, arrayLength(&materials) / 4u - 1u) * 4u;
@@ -199,11 +205,14 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let specular = materials[at + 1u];
     let emission = materials[at + 2u];
     let rest = materials[at + 3u];
-    let tinted = color.rgb * base.rgb;
-    let opacity = rest.x * color.a;
+    // Sampled before anything branches, so its derivatives hold.
+    let sampled = textureSample(baseTexture, baseSampler, uv);
+    let flags = u32(rest.w);
+    let tinted = color.rgb * base.rgb * select(vec3f(1.0), sampled.rgb, (flags & 2u) != 0u);
+    let opacity = rest.x * color.a * select(1.0, sampled.a, (flags & 4u) != 0u);
     var out: Shaded;
     out.motion = (now.xy / now.z - before.xy / before.z) * vec2f(0.5, -0.5);
-    if (rest.w > 0.5) {
+    if ((flags & 1u) != 0u) {
         out.color = vec4f(tinted, opacity);
         return out;
     }

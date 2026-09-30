@@ -11,8 +11,9 @@ namespace rawframe::render_scene_gpu {
 /// One column-major matrix, as a cascade's view is written.
 using Matrix4 = std::array<float, 16>;
 
-/// A vertex as the scene pipeline reads it: its position, then its normal.
-constexpr std::uint32_t kVertexBytes = 24;
+/// A vertex as the scene pipeline reads it: its position, its normal, then
+/// its texture coordinates, nought for a mesh without them (D309).
+constexpr std::uint32_t kVertexBytes = 32;
 
 /// The frame's view and light as the scene's shaders read them (std140).
 struct FrameBlock {
@@ -132,7 +133,8 @@ std::vector<LightBlock> lightsOf(const render_scene::SceneFrame& frame);
 std::vector<SlotBlock> slotsOf(const render_scene::SceneFrame& frame);
 
 /// A mesh's vertices as the pipeline reads them, its normals made from its
-/// faces where it has none.
+/// faces where it has none, and its texture coordinates nought where it
+/// has none.
 std::vector<float> verticesOf(const mesh::Mesh& made);
 
 /// The bytes a mesh takes on the device: its vertices and indices.
