@@ -144,9 +144,11 @@ struct SceneRenderer::State {
 
     struct Placed {
         std::vector<float> instances;
-        /// The draws', then each of the sun's cascades' casters' (D298),
-        /// then each square of the punctual shadows' atlas's (D292).
+        /// The opaque draws', the translucent draws' (D305), then each of
+        /// the sun's cascades' casters' (D298), then each square of the
+        /// punctual shadows' atlas's (D292).
         Runs runs;
+        Runs translucentRuns;
         std::array<Runs, 4> cascadeRuns;
         std::vector<Runs> slotRuns;
     };
@@ -154,7 +156,10 @@ struct SceneRenderer::State {
     Placed place(const render_scene::SceneFrame& scene, const std::map<std::uint64_t, Held*>& usable) {
         Placed placed;
         std::uint32_t count = 0;
-        append(scene.draws, usable, placed, placed.runs, count, true);
+        const std::span<const render_scene::SceneDraw> kDraws = scene.draws;
+        const std::size_t kOpaque = kDraws.size() - std::min(scene.translucent, kDraws.size());
+        append(kDraws.first(kOpaque), usable, placed, placed.runs, count, true);
+        append(kDraws.subspan(kOpaque), usable, placed, placed.translucentRuns, count, true);
         const std::span<const render_scene::SceneDraw> kSunCasters = scene.shadows.casters;
         for (std::size_t at = 0; at < scene.shadows.count && at < placed.cascadeRuns.size(); ++at) {
             const render_scene::ShadowCascade& kCascade = scene.shadows.cascades[at];
@@ -401,7 +406,7 @@ struct SceneRenderer::State {
             }
             now.imported.emplace(mesh, std::pair{vertices, indices});
         }
-        now.draws = !now.placed.runs.empty();
+        now.draws = !now.placed.runs.empty() || !now.placed.translucentRuns.empty();
         const auto kAny = [](const Runs& runs) {
             return !runs.empty();
         };
@@ -829,37 +834,50 @@ struct SceneRenderer::State {
             kStored(9, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob))};
         const std::array<mrhiBinding, 2> kSkyBinding = {kStored(0, now.skyResource, sizeof(SkyBlock)),
                                                         kStored(1, metering->exposure(), sizeof(ExposureBlock))};
+        // Runs of models drawn with `pipeline` in `pass`.
+        const auto kDrawRuns = [this, &now, &kFrameBinding](mrhiPassId pass,
+                                                            mrhiGraphicsPipelineId pipeline,
+                                                            const Runs& runs) -> result::Status {
+            if (runs.empty()) {
+                return {};
+            }
+            if (mrhiSetGraphicsPipeline(native, pass, pipeline) != mrhi_success ||
+                mrhiSetBindings(native, pass, 0, kFrameBinding.data(), kFrameBinding.size()) != mrhi_success ||
+                mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
+                return failed("the models could not be set up", mrhi_errorState);
+            }
+            for (const auto& [kMesh, kFirst, kCount] : runs) {
+                const auto& [kVertexResource, kIndexResource] = now.imported.at(kMesh);
+                if (mrhiSetVertexBuffer(native, pass, 0, kVertexResource, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
+                    mrhiSetIndexBuffer(native, pass, kIndexResource, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) !=
+                        mrhi_success ||
+                    mrhiDrawIndexed(native,
+                                    pass,
+                                    static_cast<std::uint32_t>(kMesh->source->indices.size()),
+                                    kCount,
+                                    0,
+                                    0,
+                                    kFirst) != mrhi_success) {
+                    return failed("a model could not be drawn", mrhi_errorState);
+                }
+            }
+            return {};
+        };
+        // The opaque models, their depth first; then, lit, the sky where
+        // none lies; then the translucent over both (D305).
         for (const auto& [kPass, kPipeline, kLit] : {std::tuple{now.depthPass, pipelines.depth.pipeline, false},
                                                      std::tuple{now.litPass, pipelines.lit.pipeline, true}}) {
             if (mrhiBeginPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not begin", mrhi_errorState);
             }
-            if (now.draws) {
-                if (mrhiSetGraphicsPipeline(native, kPass, kPipeline) != mrhi_success ||
-                    mrhiSetBindings(native, kPass, 0, kFrameBinding.data(), kFrameBinding.size()) != mrhi_success ||
-                    mrhiSetVertexBuffer(native, kPass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
-                    return failed("the models could not be set up", mrhi_errorState);
-                }
-                for (const auto& [kMesh, kFirst, kCount] : now.placed.runs) {
-                    const auto& [kVertexResource, kIndexResource] = now.imported.at(kMesh);
-                    if (mrhiSetVertexBuffer(native, kPass, 0, kVertexResource, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
-                        mrhiSetIndexBuffer(native, kPass, kIndexResource, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) !=
-                            mrhi_success ||
-                        mrhiDrawIndexed(native,
-                                        kPass,
-                                        static_cast<std::uint32_t>(kMesh->source->indices.size()),
-                                        kCount,
-                                        0,
-                                        0,
-                                        kFirst) != mrhi_success) {
-                        return failed("a model could not be drawn", mrhi_errorState);
-                    }
-                }
-            }
+            RAWFRAME_TRY(kDrawRuns(kPass, kPipeline, now.placed.runs));
             if (kLit && (mrhiSetGraphicsPipeline(native, kPass, pipelines.sky.pipeline) != mrhi_success ||
                          mrhiSetBindings(native, kPass, 0, kSkyBinding.data(), kSkyBinding.size()) != mrhi_success ||
                          mrhiDraw(native, kPass, 3, 1, 0, 0) != mrhi_success)) {
                 return failed("the sky could not be drawn", mrhi_errorState);
+            }
+            if (kLit) {
+                RAWFRAME_TRY(kDrawRuns(kPass, pipelines.glass.pipeline, now.placed.translucentRuns));
             }
             if (mrhiEndPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not end", mrhi_errorState);
@@ -938,7 +956,7 @@ struct SceneRenderer::State {
                 statistics.historyReused += temporal->reused() ? 1 : 0;
             }
             statistics.models += declared->placed.instances.size() * sizeof(float) / kInstanceBytes;
-            statistics.drawCalls += declared->placed.runs.size();
+            statistics.drawCalls += declared->placed.runs.size() + declared->placed.translucentRuns.size();
         }
         temporal->ended(submitted);
         if (submitted && metering->metered()) {

@@ -263,11 +263,14 @@ void main()
     const vec4 kEmission = materials[kAt + 2u];
     const vec4 kRest = materials[kAt + 3u];
     const vec3 kColor = inColor.rgb * kBase.rgb;
+    // How much of what is behind it a translucent model hides (D305): its
+    // material's opacity times its color's alpha.
+    const float kOpacity = kRest.x * inColor.a;
     outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);
     // Unlit (KHR_materials_unlit): its color stands in the picture as it
     // is, whatever the exposure.
     if (kRest.w > 0.5) {
-        outColor = vec4(kColor, 1.0);
+        outColor = vec4(kColor, kOpacity);
         return;
     }
     const float kReflectance = (kEmission.w - 1.0) / (kEmission.w + 1.0);
@@ -287,5 +290,5 @@ void main()
     const vec3 kAround = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kNormal.y);
     const vec3 kAlong = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
     const vec3 kSky = kRest.y * ((1.0 - kSheen) * kSurface.diffuse * kAround + kSheen * kAlong);
-    outColor = vec4((kDirect + kSky + kEmission.rgb) * exposure.value.y, 1.0);
+    outColor = vec4((kDirect + kSky + kEmission.rgb) * exposure.value.y, kOpacity);
 }

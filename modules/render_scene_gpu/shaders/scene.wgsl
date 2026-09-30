@@ -200,10 +200,11 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let emission = materials[at + 2u];
     let rest = materials[at + 3u];
     let tinted = color.rgb * base.rgb;
+    let opacity = rest.x * color.a;
     var out: Shaded;
     out.motion = (now.xy / now.z - before.xy / before.z) * vec2f(0.5, -0.5);
     if (rest.w > 0.5) {
-        out.color = vec4f(tinted, 1.0);
+        out.color = vec4f(tinted, opacity);
         return out;
     }
     let reflectance = (emission.w - 1.0) / (emission.w + 1.0);
@@ -218,6 +219,6 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let around = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * n.y);
     let along = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
     let sky = rest.y * ((1.0 - sheen) * surface.diffuse * around + sheen * along);
-    out.color = vec4f((direct + sky + emission.rgb) * exposure.y, 1.0);
+    out.color = vec4f((direct + sky + emission.rgb) * exposure.y, opacity);
     return out;
 }

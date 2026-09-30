@@ -29,7 +29,7 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked : {&casting, &depth, &lit, &sky, &temporal, &tonemap, &fxaa}) {
+    for (Asked* asked : {&casting, &depth, &lit, &glass, &sky, &temporal, &tonemap, &fxaa}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -158,6 +158,20 @@ result::Status Pipelines::make() {
     models.colorTargets[0].format = kSceneFormat;
     models.colorTargets[1].format = kMotionFormat;
     RAWFRAME_TRY(ask(models, lit));
+    // The translucent models (D305): over the opaque ones and the sky,
+    // tested against their depth but writing none, blended by their
+    // opacity, and leaving the motion to what is behind them.
+    mrhiGraphicsPipelineDef glassDef = models;
+    constexpr std::string_view kGlassLabel = "rawframe.scene.translucent";
+    glassDef.label = kGlassLabel.data();
+    glassDef.labelLength = kGlassLabel.size();
+    glassDef.colorTargets[0].blend = true;
+    glassDef.colorTargets[0].color = {
+        .srcFactor = mrhi_blendSrcAlpha, .dstFactor = mrhi_blendOneMinusSrcAlpha, .operation = mrhi_blendAdd};
+    glassDef.colorTargets[0].alpha = {
+        .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendOneMinusSrcAlpha, .operation = mrhi_blendAdd};
+    glassDef.colorTargets[1].writeMask = 0;
+    RAWFRAME_TRY(ask(glassDef, glass));
     // The sky, where no model's depth lies: a triangle over the target at
     // reversed-Z's far end, into the models' targets.
     mrhiGraphicsPipelineDef behind = mrhiDefaultGraphicsPipelineDef();
@@ -232,7 +246,7 @@ result::Status Pipelines::make() {
 
 result::Result<bool> Pipelines::ready() {
     bool all = true;
-    for (Asked* asked : {&casting, &depth, &lit, &sky, &histogram, &adapt, &temporal, &tonemap, &fxaa}) {
+    for (Asked* asked : {&casting, &depth, &lit, &glass, &sky, &histogram, &adapt, &temporal, &tonemap, &fxaa}) {
         if (!asked->ready) {
             if (const auto kAnswer = device->answer(asked->request)) {
                 if (!kAnswer->has_value()) {

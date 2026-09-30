@@ -55,6 +55,8 @@ struct Pipelines {
     Asked casting;
     Asked depth;
     Asked lit;
+    /// The translucent models, blended over what is behind them (D305).
+    Asked glass;
     Asked sky;
     Asked histogram;
     Asked adapt;

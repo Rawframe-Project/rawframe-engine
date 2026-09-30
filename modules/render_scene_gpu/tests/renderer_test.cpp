@@ -917,3 +917,65 @@ RAWFRAME_TEST(TheGroundLightsWhatFacesDown) {
     RAWFRAME_EXPECT(at(*kWith, 32, 43)[0] > at(*kWithout, 32, 43)[0] + 20 &&
                     std::abs(at(*kWith, 32, 21)[0] - at(*kWithout, 32, 21)[0]) <= 3);
 }
+
+RAWFRAME_TEST(TranslucentModelsBlendOverWhatIsBehindThem) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A red box eight meters ahead, and before it a blue pane of glass
+    // half opaque (D305), wide enough to cover the box and the sky beside.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    SceneDraw pane = box(4, 1, {0, 0, 1, 1});
+    pane.model[0] = 3;
+    pane.model[10] = 0.05F;
+    pane.material = 1;
+    render_scene::MaterialBlob glass = render_scene::noMaterial();
+    glass[12] = 0.5F;
+    const auto kDrawn = [&](bool paned) {
+        frame.draws = {box(8, 1, {1, 0, 0, 1})};
+        if (paned) {
+            frame.draws.push_back(pane);
+        }
+        frame.translucent = paned ? 1 : 0;
+        frame.materials = {render_scene::noMaterial(), glass};
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        return kPixels.has_value() ? *kPixels : std::vector<std::byte>{};
+    };
+    const std::vector<std::byte> kBare = kDrawn(false);
+    const std::vector<std::byte> kPaned = kDrawn(true);
+    if (kBare.empty() || kPaned.empty()) {
+        return;
+    }
+    const std::array<int, 3> kBox = at(kBare, 32, 32);
+    const std::array<int, 3> kBoxBehind = at(kPaned, 32, 32);
+    const std::array<int, 3> kSky = at(kBare, 52, 32);
+    const std::array<int, 3> kSkyBehind = at(kPaned, 52, 32);
+    std::printf("box %d %d %d, behind glass %d %d %d; sky %d %d %d, behind glass %d %d %d\n",
+                kBox[0],
+                kBox[1],
+                kBox[2],
+                kBoxBehind[0],
+                kBoxBehind[1],
+                kBoxBehind[2],
+                kSky[0],
+                kSky[1],
+                kSky[2],
+                kSkyBehind[0],
+                kSkyBehind[1],
+                kSkyBehind[2]);
+    // The red shows through, less of it, and the glass's blue joins it.
+    RAWFRAME_EXPECT(kBoxBehind[0] > 40 && kBoxBehind[0] < kBox[0] - 20 && kBoxBehind[2] > kBox[2] + 20);
+    RAWFRAME_EXPECT(kSkyBehind != kSky && kSkyBehind[2] > 20);
+}
