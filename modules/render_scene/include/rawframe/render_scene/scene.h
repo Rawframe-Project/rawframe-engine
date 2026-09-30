@@ -107,6 +107,16 @@ struct Sky {
     std::uint64_t environment = 0;
 };
 
+/// `rawframe.model.ReflectionProbe` as C++ reads it (D325).
+struct ReflectionProbe {
+    float halfX = 0;
+    float halfY = 0;
+    float halfZ = 0;
+    float intensity = 0;
+    std::uint32_t priority = 0;
+    std::uint64_t environment = 0;
+};
+
 /// `rawframe.model.PointLight` as C++ reads it.
 struct PointLight {
     float lumens = 0;
@@ -248,6 +258,9 @@ struct SceneDraw {
     /// what its motion is measured from (D291); the model itself where it
     /// was not drawn then.
     Matrix previous{};
+    /// The reflection probe it reflects, one past its place in the frame's
+    /// probes; nought for the sky's picture (D325).
+    std::uint32_t probe = 0;
 };
 
 /// The light a frame is drawn in, linear Rec. 709 (ADR-0047) in physical
@@ -274,6 +287,24 @@ struct LightInstance {
     SpotLight light;
     std::array<double, 3> position{};
     std::array<float, 4> rotation{0, 0, 0, 1};
+};
+
+/// A reflection probe as the extract stage copies it out of the World,
+/// where its entity's pose puts it (D325).
+struct ProbeInstance {
+    world::EntityHandle entity;
+    ReflectionProbe probe;
+    std::array<double, 3> position{};
+};
+
+/// A reflection probe as a device reads it (D325): its box's middle
+/// relative to the eye, its half sides, what it holds, and its light's
+/// scale.
+struct SceneProbe {
+    std::array<float, 3> position{};
+    std::array<float, 3> half{};
+    std::uint64_t environment = 0;
+    float intensity = 0;
 };
 
 /// A punctual light as a device reads it (D290): where it is relative to
@@ -460,6 +491,10 @@ struct SceneFrame {
     std::size_t lightsOverLimit = 0;
     /// Lights a full cluster could not name, counted once each time.
     std::size_t clusterOverflow = 0;
+    /// The reflection probes a draw names (D325), the nearest to the eye
+    /// first, at most the limit; and those past it.
+    std::vector<SceneProbe> probes;
+    std::size_t probesOverLimit = 0;
     /// EV100.
     float exposure = 15;
     SceneLights lights;
@@ -498,6 +533,8 @@ struct SceneLimits {
     std::size_t maximumLightsPerCluster = 64;
     /// ADR-0051's maximum shadow-casting punctual lights per view (D292).
     std::size_t maximumShadowedLights = 8;
+    /// ADR-0051's reflection probes a view resolves at once (D325).
+    std::size_t maximumProbes = 32;
 };
 
 /// ADR-0051's one typed atlas for the punctual lights' shadows (D292), a
@@ -545,6 +582,8 @@ struct SceneSettings {
     /// The game's point and spot light components.
     std::vector<schema::ComponentTypeId> points;
     std::vector<schema::ComponentTypeId> spots;
+    /// The game's reflection probe components (D325).
+    std::vector<schema::ComponentTypeId> probes;
     /// The game's meshes, by their identities.
     std::vector<SceneMesh> meshes;
     /// The game's materials, by their identities (D303).
@@ -577,6 +616,7 @@ public:
 
     [[nodiscard]] std::span<const ModelInstance> extracted() const noexcept;
     [[nodiscard]] std::span<const LightInstance> extractedLights() const noexcept;
+    [[nodiscard]] std::span<const ProbeInstance> extractedProbes() const noexcept;
 
     /// The mesh a Model names by `id`: the game's or the engine's; none for
     /// another.
@@ -600,6 +640,7 @@ struct GameScene {
     std::optional<schema::ComponentTypeId> sky;
     std::vector<schema::ComponentTypeId> points;
     std::vector<schema::ComponentTypeId> spots;
+    std::vector<schema::ComponentTypeId> probes;
     std::vector<SceneMesh> meshes;
 };
 

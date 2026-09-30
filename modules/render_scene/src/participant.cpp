@@ -13,6 +13,7 @@
 #include "rawframe/world_replication/client_worlds.h"
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -30,8 +31,8 @@ constexpr diagnostics::EventIdentity kTexturesUnavailable{"scene", "textures_una
 constexpr diagnostics::EventIdentity kTextureUnread{"scene", "texture_unavailable"};
 constexpr diagnostics::EventIdentity kTextureReloaded{"scene", "texture_reloaded"};
 constexpr diagnostics::EventIdentity kTexturesRead{"scene", "textures_read"};
-constexpr diagnostics::EventIdentity kSkyUnknown{"scene", "sky_picture_unknown"};
-constexpr diagnostics::EventIdentity kSkyUnread{"scene", "sky_picture_unavailable"};
+constexpr diagnostics::EventIdentity kEnvironmentUnknown{"scene", "environment_unknown"};
+constexpr diagnostics::EventIdentity kEnvironmentUnread{"scene", "environment_unavailable"};
 /// The decoded levels the materials' textures may hold.
 constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
 constexpr std::string_view kMaybe[] = {
@@ -224,6 +225,7 @@ public:
                                   .sky = game->sky,
                                   .points = std::move(game->points),
                                   .spots = std::move(game->spots),
+                                  .probes = std::move(game->probes),
                                   .meshes = std::move(game->meshes),
                                   .materials = std::move(materials),
                                   .shadows = shadows_,
@@ -273,7 +275,10 @@ public:
                 presented_.has_value() ? static_cast<float>((frame.now - *presented_).nanoseconds) / 1e9F : 0.0F;
             presented_ = frame.now;
             const SceneFrame& kFrame = scene_->queue(camera_);
-            askSky(kFrame.lights.environment);
+            askEnvironment(kFrame.lights.environment);
+            for (const render_scene::SceneProbe& kProbe : kFrame.probes) {
+                askEnvironment(kProbe.environment);
+            }
             queued_ = &kFrame;
             ++frames_;
             drawn_ += kFrame.drawn;
@@ -318,9 +323,8 @@ public:
              diagnostics::field("materialTextures", static_cast<std::uint64_t>(sampled_)),
              diagnostics::field("texturesReady",
                                 static_cast<std::uint64_t>(textures_ != nullptr ? textures_->counts().ready : 0)),
-             diagnostics::field("environments", environments_),
-             diagnostics::field("environmentsReady",
-                                static_cast<std::uint64_t>(sky_ != nullptr ? sky_->counts().ready : 0)),
+             diagnostics::field("environments", environmentsRead_),
+             diagnostics::field("environmentsReady", environmentsReady()),
              diagnostics::field("lightsLit", lightsLit_),
              diagnostics::field("lightsCulled", lightsCulled_),
              diagnostics::field("lightsOverLimit", lightsOverLimit_),
@@ -361,8 +365,8 @@ public:
     }
 
     std::shared_ptr<const texture::Texture> texture(std::uint64_t id) const override {
-        if (sky_ != nullptr && id == skyId_) {
-            return sky_->texture(id, tick_);
+        if (const auto kEnvironment = environments_.find(id); kEnvironment != environments_.end()) {
+            return kEnvironment->second != nullptr ? kEnvironment->second->texture(id, tick_) : nullptr;
         }
         return textures_ != nullptr ? textures_->texture(id, tick_) : nullptr;
     }
@@ -433,29 +437,28 @@ private:
         return {};
     }
 
-    /// Asks for the sky's picture the frame names, on the World's first
-    /// naming it or naming another (D322): a texture the game declares,
-    /// read alone, so a game's other textures are never read for it. One
-    /// it does not declare, or that cannot be asked for, is none, and is
-    /// said so once.
-    void askSky(std::uint64_t id) noexcept {
-        if (id == 0 || id == skyId_) {
+    /// Asks for an environment the frame names, the sky's picture or a
+    /// reflection probe's, on its first naming (D322, D325): a texture the
+    /// game declares, read alone and held, so a game's other textures are
+    /// never read for it. One it does not declare, or that cannot be asked
+    /// for, is none, and is said so once.
+    void askEnvironment(std::uint64_t id) noexcept {
+        if (id == 0 || environments_.contains(id)) {
             return;
         }
-        skyId_ = id;
-        sky_ = nullptr;
+        std::unique_ptr<game_textures::GameTextures>& reader = environments_[id];
         const auto kDeclared = std::ranges::find(declaredTextures_, id, &world_kest::GameTextureResource::id);
         if (kDeclared == declaredTextures_.end()) {
             emitter_.log(diagnostics::Severity::Warning,
-                         kSkyUnknown,
-                         "the sky names a picture the game does not declare: it has none",
+                         kEnvironmentUnknown,
+                         "an environment names a picture the game does not declare: it has none",
                          {diagnostics::field("texture", graph::nodeIdText(id))});
             return;
         }
         if (!reading_.has_value()) {
             return;
         }
-        ++environments_;
+        ++environmentsRead_;
         auto made = game_textures::GameTextures::create(*reading_->store,
                                                         *reading_->cpu,
                                                         reading_->owner,
@@ -465,23 +468,35 @@ private:
                                                         kTextureBudgetBytes);
         if (!made.has_value()) {
             emitter_.log(diagnostics::Severity::Warning,
-                         kSkyUnread,
-                         "the sky's picture could not be asked for: it has none",
+                         kEnvironmentUnread,
+                         "an environment's picture could not be asked for: it has none",
                          {diagnostics::field("texture", graph::nodeIdText(id)),
                           diagnostics::field("reason", std::string{made.error().description()})});
             return;
         }
-        sky_ = std::move(*made);
+        reader = std::move(*made);
+    }
+
+    /// The environments read and ready.
+    [[nodiscard]] std::uint64_t environmentsReady() const noexcept {
+        std::uint64_t ready = 0;
+        for (const auto& [kId, kReader] : environments_) {
+            ready += kReader != nullptr ? kReader->counts().ready : 0;
+        }
+        return ready;
     }
 
     /// Takes finished reads and reloads; a texture that fails is sampled
-    /// as white, and a sky's picture that fails is none.
+    /// as white, and an environment that fails is none.
     void updateTextures() noexcept {
-        if (sky_ != nullptr) {
-            for (const auto& [kId, kError] : sky_->update(tick_).failed) {
+        for (const auto& [kEnvironment, kReader] : environments_) {
+            if (kReader == nullptr) {
+                continue;
+            }
+            for (const auto& [kId, kError] : kReader->update(tick_).failed) {
                 emitter_.log(diagnostics::Severity::Warning,
-                             kSkyUnread,
-                             "the sky's picture could not be read: it has none",
+                             kEnvironmentUnread,
+                             "an environment's picture could not be read: it has none",
                              {diagnostics::field("texture", graph::nodeIdText(kId)),
                               diagnostics::field("reason", std::string{kError.description()})});
             }
@@ -618,9 +633,9 @@ private:
     };
     std::optional<Reading> reading_;
     std::vector<world_kest::GameTextureResource> declaredTextures_;
-    std::unique_ptr<game_textures::GameTextures> sky_;
-    std::uint64_t skyId_ = 0;
-    std::uint64_t environments_ = 0;
+    /// The environments asked for, by texture; none for one that has none.
+    std::map<std::uint64_t, std::unique_ptr<game_textures::GameTextures>> environments_;
+    std::uint64_t environmentsRead_ = 0;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
     /// The point and spot lights each frame lit with, culled, and left out

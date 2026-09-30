@@ -144,6 +144,23 @@ struct Sky {
     environment: u64
 }
 
+// A reflection probe (ADR-0051, D325), on any entity, at its pose: a box
+// `halfX`, `halfY`, and `halfZ` meters from its middle to its sides along
+// the World's axes, and what is seen from its middle, `environment`, a
+// game texture cooked as an environment (D321), its light times
+// `intensity` in candela per square meter. A model whose middle is in its
+// box reflects it, each reflection projected onto the box, in place of
+// the sky's picture; where boxes overlap, the higher `priority` wins, then
+// the smaller box. Sides of nought, or no environment, are no probe.
+struct ReflectionProbe {
+    halfX: f32
+    halfY: f32
+    halfZ: f32
+    intensity: f32
+    priority: u32
+    environment: u64
+}
+
 // A point light (ADR-0051), on any entity, at its pose: `lumens` of
 // luminous power spread evenly (a lumen over 4π is a candela), reaching
 // `range` meters, where it has faded to nought, in `color` (0xRRGGBBAA,

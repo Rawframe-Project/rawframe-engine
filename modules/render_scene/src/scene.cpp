@@ -1,6 +1,7 @@
 #include "rawframe/render_scene/scene.h"
 
 #include "lights.h"
+#include "probes.h"
 #include "rawframe/material/material.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
@@ -156,6 +157,9 @@ struct Scene::State {
     std::optional<world::ColumnQuery> sky;
     /// The point lights' queries, then the spot lights'.
     std::vector<std::pair<world::ColumnQuery, bool>> lightQueries;
+    /// The reflection probes' queries, and what the frame extracted (D325).
+    std::vector<world::ColumnQuery> probeQueries;
+    std::vector<ProbeInstance> probes;
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
     std::map<std::uint64_t, Bounded> meshes;
@@ -513,6 +517,8 @@ struct Scene::State {
             frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
             ++frame.drawn;
         }
+        // Each draw's reflection probe (D325), before the draws are grouped.
+        resolveProbes(frame, probes, camera.eye, settings.limits.maximumProbes);
         // The translucent after the opaque, farthest first, so each blends
         // over what is behind it (D305); the opaque keep their order.
         const auto kTranslucent = std::ranges::stable_partition(frame.draws, [this](const SceneDraw& draw) {
@@ -526,10 +532,12 @@ struct Scene::State {
         std::ranges::stable_sort(kTranslucent, [&kAway](const SceneDraw& left, const SceneDraw& right) {
             return kAway(left) > kAway(right);
         });
-        // The opaque by their material's texture, so a device binds each
-        // once (D309); within one, by mesh as they were.
+        // The opaque by their material's texture and their probe, so a
+        // device binds each once (D309, D325); within one, by mesh as they
+        // were.
         const auto kTextureOf = [this](const SceneDraw& draw) {
-            return draw.material < frame.textures.size() ? frame.textures[draw.material] : SceneTextures{};
+            return std::pair{draw.material < frame.textures.size() ? frame.textures[draw.material] : SceneTextures{},
+                             draw.probe};
         };
         std::ranges::stable_sort(std::ranges::subrange(frame.draws.begin(), kTranslucent.begin()),
                                  [&kTextureOf](const SceneDraw& left, const SceneDraw& right) {
@@ -658,6 +666,10 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(SpotLight)));
         state->lightQueries.emplace_back(std::move(query), true);
     }
+    for (const schema::ComponentTypeId kId : settings.probes) {
+        RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(ReflectionProbe)));
+        state->probeQueries.push_back(std::move(query));
+    }
     for (const std::uint64_t kId : {kBox, kSphere, kCylinder, kCapsule}) {
         state->meshes.emplace(kId, bounded(engineMesh(kId)));
     }
@@ -756,6 +768,23 @@ void Scene::extract(world::World& world) {
             }
         });
     }
+    state.probes.clear();
+    for (world::ColumnQuery& query : state.probeQueries) {
+        query.forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                ProbeInstance instance{.entity = chunk.entities[row]};
+                std::memcpy(
+                    &instance.probe, chunk.columns[0] + (row * sizeof(ReflectionProbe)), sizeof(ReflectionProbe));
+                if (state.pose) {
+                    if (const auto* pose =
+                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
+                        instance.position = {pose->x, pose->y, pose->z};
+                    }
+                }
+                state.probes.push_back(instance);
+            }
+        });
+    }
 }
 
 const SceneFrame& Scene::queue(const SceneCamera& camera) {
@@ -783,6 +812,10 @@ std::span<const ModelInstance> Scene::extracted() const noexcept {
 
 std::span<const LightInstance> Scene::extractedLights() const noexcept {
     return state_->punctual;
+}
+
+std::span<const ProbeInstance> Scene::extractedProbes() const noexcept {
+    return state_->probes;
 }
 
 std::shared_ptr<const mesh::Mesh> Scene::mesh(std::uint64_t id) const {
@@ -819,6 +852,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             loaded.points.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.SpotLight")) {
             loaded.spots.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.model.ReflectionProbe")) {
+            loaded.probes.push_back(component.id);
         }
     }
     if (loaded.models.empty()) {
@@ -915,6 +950,15 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"outer", offsetof(SpotLight, outer)},
                            {"color", offsetof(SpotLight, color)},
                            {"shadows", offsetof(SpotLight, shadows)}}));
+    RAWFRAME_TRY(kLaidOut(!loaded.probes.empty(),
+                          "rawframe.model.ReflectionProbe",
+                          sizeof(ReflectionProbe),
+                          {{"halfX", offsetof(ReflectionProbe, halfX)},
+                           {"halfY", offsetof(ReflectionProbe, halfY)},
+                           {"halfZ", offsetof(ReflectionProbe, halfZ)},
+                           {"intensity", offsetof(ReflectionProbe, intensity)},
+                           {"priority", offsetof(ReflectionProbe, priority)},
+                           {"environment", offsetof(ReflectionProbe, environment)}}));
     for (const physics3d::BodyMesh& kMesh : game.meshes()) {
         loaded.meshes.push_back(SceneMesh{.id = kMesh.id, .mesh = kMesh.mesh});
     }

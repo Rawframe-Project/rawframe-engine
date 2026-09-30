@@ -5,8 +5,9 @@
 // unknown mesh is left out and counted; models draw in the order of their
 // meshes, then entities, and the limit leaves out a suffix of it; the sun
 // and sky light in linear physical units; point and spot lights light in
-// candela, are culled by their reach, and name the clusters they reach; and
-// a game's scene loads against its program.
+// candela, are culled by their reach, and name the clusters they reach; a
+// draw reflects the reflection probe that holds it; and a game's scene
+// loads against its program.
 
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
@@ -35,6 +36,7 @@ constexpr auto kSunId = schema::ComponentTypeId::fromText("5c8e1f52-7d04-4a2b-9e
 constexpr auto kSkyId = schema::ComponentTypeId::fromText("6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr auto kPointId = schema::ComponentTypeId::fromText("9c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr auto kSpotId = schema::ComponentTypeId::fromText("ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
+constexpr auto kProbeId = schema::ComponentTypeId::fromText("dc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr std::uint64_t kRock = 0xc1;
 
 /// The registry holds a name as a view: each is a literal.
@@ -51,6 +53,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(plain<Sky>(kSkyId, "test.sky"));
     builder.add(plain<PointLight>(kPointId, "test.lamp"));
     builder.add(plain<SpotLight>(kSpotId, "test.torch"));
+    builder.add(plain<ReflectionProbe>(kProbeId, "test.probe"));
     builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }
@@ -75,6 +78,7 @@ struct Rig {
                                 .sky = kSkyId,
                                 .points = {kPointId},
                                 .spots = {kSpotId},
+                                .probes = {kProbeId},
                                 .meshes = {{.id = kRock, .mesh = rock()}},
                                 .limits = limits});
     }
@@ -309,12 +313,14 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
     const std::string kUses =
         "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky],\n"
         "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
-        "        grades: [model.Grading]) {\n}\n";
+        "        grades: [model.Grading], probes: [model.ReflectionProbe]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
     const std::string kLamps = "component 9c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.lamp rawframe.model.PointLight\n"
-                               "component ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.torch rawframe.model.SpotLight\n";
+                               "component ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.torch rawframe.model.SpotLight\n"
+                               "component dc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.probe "
+                               "rawframe.model.ReflectionProbe\n";
     const std::string kView = "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n"
                               "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n"
                               "component cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.grade rawframe.model.Grading\n";
@@ -324,6 +330,7 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                     kLoaded->camera == schema::ComponentTypeId::fromText("7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->meshes.empty() && kLoaded->points == (std::vector<schema::ComponentTypeId>{kPointId}) &&
                     kLoaded->spots == (std::vector<schema::ComponentTypeId>{kSpotId}) &&
+                    kLoaded->probes == (std::vector<schema::ComponentTypeId>{kProbeId}) &&
                     kLoaded->autoExposure ==
                         schema::ComponentTypeId::fromText("bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->grading == schema::ComponentTypeId::fromText("cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
@@ -894,4 +901,56 @@ RAWFRAME_TEST(OpaqueModelsAreGroupedByTheirMaterialsTexture) {
         order.emplace_back(kFrame.textures[draw.material], draw.mesh);
     }
     RAWFRAME_EXPECT(kFrame.draws.size() == 12 && std::ranges::is_sorted(order));
+}
+
+RAWFRAME_TEST(ADrawReflectsTheProbeThatHoldsIt) {
+    // Far from the origin, so the boxes are placed relative to the eye.
+    constexpr double kX = 100000;
+    const auto kAt = [](double x, double y, double z) {
+        return physics3d::Pose3D{.x = kX + x, .y = y, .z = z, .qw = 1};
+    };
+    const auto kPlace = [&kAt](Rig& rig, ReflectionProbe probe, double x, double z) {
+        const world::EntityHandle kEntity = *rig.world.create();
+        RAWFRAME_EXPECT(rig.world.insertErased(kEntity, *rig.schema->find(kProbeId), &probe).has_value());
+        RAWFRAME_EXPECT(rig.world.insert(kEntity, *rig.schema->key<physics3d::Pose3D>(), kAt(x, 0, z)).has_value());
+    };
+    const auto kRoom = [&kPlace](Rig& rig) {
+        // A hall; a closet in it, smaller; a stage overlapping the hall's
+        // side, of a higher priority; and two that hold nothing: one with no
+        // picture, one with no size.
+        kPlace(rig, {.halfX = 10, .halfY = 10, .halfZ = 10, .intensity = 1, .environment = 0xe1}, 0, -10);
+        kPlace(rig, {.halfX = 2, .halfY = 2, .halfZ = 2, .intensity = 1, .environment = 0xe2}, 0, -10);
+        kPlace(rig, {.halfX = 3, .halfY = 3, .halfZ = 3, .intensity = 2, .priority = 1, .environment = 0xe3}, 8, -10);
+        kPlace(rig, {.halfX = 50, .halfY = 50, .halfZ = 50, .intensity = 1}, 0, 0);
+        kPlace(rig, {.halfX = 50, .halfY = 0, .halfZ = 50, .intensity = 1, .environment = 0xe4}, 0, 0);
+    };
+    Rig rig;
+    kRoom(rig);
+    // In the closet, on the stage, in the hall only, and outside all.
+    rig.spawn(Model{.mesh = kBox, .color = 0xFF0000FF}, kAt(0, 0, -10));
+    rig.spawn(Model{.mesh = kBox, .color = 0x00FF00FF}, kAt(8, 0, -10));
+    rig.spawn(Model{.mesh = kBox, .color = 0x0000FFFF}, kAt(-7, 0, -10));
+    rig.spawn(Model{.mesh = kBox, .color = 0xFFFFFFFF}, kAt(0, 0, -40));
+    const SceneFrame& kFrame = rig.frame({.eye = {kX, 0, 0}, .fovY = 2});
+    RAWFRAME_EXPECT(kFrame.probes.size() == 3 && kFrame.probesOverLimit == 0 && kFrame.draws.size() == 4);
+    const auto kReflects = [&kFrame](float red, float green, float blue) -> std::uint64_t {
+        for (const SceneDraw& kDraw : kFrame.draws) {
+            if (near(kDraw.color[0], red) && near(kDraw.color[1], green) && near(kDraw.color[2], blue)) {
+                return kDraw.probe == 0 ? 0 : kFrame.probes[kDraw.probe - 1].environment;
+            }
+        }
+        return 0xdead;
+    };
+    RAWFRAME_EXPECT(kReflects(1, 0, 0) == 0xe2 && kReflects(0, 1, 0) == 0xe3 && kReflects(0, 0, 1) == 0xe1 &&
+                    kReflects(1, 1, 1) == 0);
+    // Placed relative to the eye, as the draws are.
+    for (const SceneProbe& kProbe : kFrame.probes) {
+        RAWFRAME_EXPECT(near(kProbe.position[2], -10) && std::abs(kProbe.position[0]) <= 8);
+    }
+    // Over the limit, the farthest from the eye are left out and counted.
+    Rig few{{.maximumProbes = 2}};
+    kRoom(few);
+    const SceneFrame& kFew = few.frame({.eye = {kX, 0, 0}});
+    RAWFRAME_EXPECT(kFew.probes.size() == 2 && kFew.probesOverLimit == 1 && kFew.probes[0].environment != 0xe3 &&
+                    kFew.probes[1].environment != 0xe3);
 }
