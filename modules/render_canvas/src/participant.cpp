@@ -4,6 +4,7 @@
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
 #include "rawframe/render_canvas/errors.h"
+#include "rawframe/render_canvas/frames.h"
 #include "rawframe/render_canvas/registrar.h"
 #include "rawframe/render_canvas/textures.h"
 #include "rawframe/world_kest/game_files.h"
@@ -24,6 +25,7 @@ constexpr diagnostics::EventIdentity kUnreadTexture{"canvas", "texture_unavailab
 constexpr diagnostics::EventIdentity kTextureReloaded{"canvas", "texture_reloaded"};
 constexpr diagnostics::EventIdentity kTextureNotReloaded{"canvas", "texture_reload_failed"};
 constexpr diagnostics::EventIdentity kTexturesRead{"canvas", "textures_read"};
+constexpr std::string_view kProvided[] = {kCanvasFrames.name};
 constexpr std::string_view kMaybe[] = {
     world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
 /// The decoded levels the canvas holds at most.
@@ -45,8 +47,9 @@ std::string identityText(std::uint64_t id) {
 /// in `present`. Idle without a game that has sprites or without clients.
 /// It reads the game's textures from the Runtime's cooked content
 /// (`rawframe.content.game`) when the process has some; without it, it
-/// draws on, every draw waiting for its texture.
-class CanvasParticipant final : public composition::Participant {
+/// draws on, every draw waiting for its texture. The frame it queued is
+/// lent to a device's recording (`rawframe.render_canvas.frames`).
+class CanvasParticipant final : public composition::Participant, public CanvasFrames {
 public:
     result::Status load(composition::ParticipantContext& context) {
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
@@ -90,6 +93,8 @@ public:
         }
         cameraComponent_ = game->camera;
         camera_.aspect = static_cast<float>(kWidth) / static_cast<float>(kHeight);
+        width_ = static_cast<std::uint32_t>(kWidth);
+        height_ = static_cast<std::uint32_t>(kHeight);
         settings_ = CanvasSettings{.sprites = std::move(game->sprites), .textures = std::move(game->textures)};
         if (context.has(game_content::kGameContent.name) && context.cpuExecutor() != nullptr &&
             !files->textures().empty()) {
@@ -131,6 +136,7 @@ public:
         }
         if (phase == composition::HostPhase::PresentationExtract) {
             ++tick_;
+            queued_ = nullptr;
             if (textures_ != nullptr) {
                 const TextureChanges kChanges = textures_->update(tick_);
                 for (const auto& [kId, kError] : kChanges.failed) {
@@ -166,6 +172,7 @@ public:
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
             const CanvasFrame& kFrame = canvas_->queue(camera_);
+            queued_ = &kFrame;
             // What a device would draw this frame: the draws whose texture
             // is decoded and held.
             for (const CanvasDraw& draw : kFrame.draws) {
@@ -210,6 +217,29 @@ public:
                       diagnostics::field("texturesFailed", static_cast<std::uint64_t>(kTextures.failed)),
                       diagnostics::field("texturesReloaded", reloaded_),
                       diagnostics::field("textureBytes", kTextures.bytes)});
+    }
+
+    composition::CapabilityObject provide(std::string_view capability) noexcept override {
+        if (capability == kCanvasFrames.name) {
+            return composition::provideAs<CanvasFrames>(*this);
+        }
+        return {};
+    }
+
+    const CanvasFrame* queued() const noexcept override {
+        return queued_;
+    }
+
+    std::uint32_t width() const noexcept override {
+        return width_;
+    }
+
+    std::uint32_t height() const noexcept override {
+        return height_;
+    }
+
+    std::shared_ptr<const texture::Texture> texture(std::uint64_t id) const override {
+        return textures_ != nullptr ? textures_->texture(id, tick_) : nullptr;
     }
 
 private:
@@ -266,6 +296,9 @@ private:
     std::uint64_t tick_ = 0;
     std::uint64_t drawsWaiting_ = 0;
     bool extracted_ = false;
+    const CanvasFrame* queued_ = nullptr;
+    std::uint32_t width_ = 1280;
+    std::uint32_t height_ = 720;
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
     std::uint64_t animated_ = 0;
@@ -292,6 +325,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .identity = "rawframe.render_canvas.canvas",
         .factory = &make,
         .scope = composition::LifetimeScope::World,
+        .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
         // Textures are decoded on the CPU executor.
         .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
