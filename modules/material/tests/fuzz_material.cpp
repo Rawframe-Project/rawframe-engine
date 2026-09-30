@@ -1,6 +1,7 @@
 // Coverage-guided fuzzing of the surface materials a mod's Build can hold:
 // the reader takes the canonical form only, so what it accepts writes back
-// to the very same text, and compiling it never fails but by refusal.
+// to the very same text, compiling it never fails but by refusal, and what
+// compiles is cooked and read back as it was.
 
 #include "rawframe/material/material.h"
 
@@ -21,6 +22,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     }
     if (const auto kCompiled = material::compile(*kRead); kCompiled.has_value()) {
         static_cast<void>(material::blobOf(*kCompiled));
+        const auto kDecoded = material::decode(material::encode(*kCompiled));
+        if (!kDecoded.has_value() || *kDecoded != *kCompiled) {
+            std::abort();
+        }
     }
     return 0;
 }
