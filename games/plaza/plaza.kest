@@ -13,6 +13,10 @@ import rawframe.world
 // The walkers' collision class (plaza.game).
 const WALKER: u64 = 0x5f23859a6c00ebba
 
+// The materials plaza.game's `material` lines name.
+const BRASS: u64 = 0x6d2c9bd611d50fdf
+const MARBLE: u64 = 0xe4443f63fe935232
+
 // A player's entity arrives with its components zeroed: here it becomes a
 // walker standing somewhere on the plaza.
 fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], characters: [physics3d.Character3D]) {
@@ -185,18 +189,18 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
     let i = 0
     while i < count {
         let b = bodies[i]
-        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0xC8B48CFF)
+        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0xC8B48CFF, u64(0))
         if b.shape == physics3d.SPHERE {
-            look = model.Model(model.SPHERE, b.width, b.width, b.width, 0xC8B48CFF)
+            look = model.Model(model.SPHERE, b.width, b.width, b.width, 0xC8B48CFF, u64(0))
         }
         if b.shape == physics3d.CAPSULE {
-            look = model.Model(model.CAPSULE, b.width, (b.height + b.width) * 0.5, b.width, 0xC8B48CFF)
+            look = model.Model(model.CAPSULE, b.width, (b.height + b.width) * 0.5, b.width, 0xC8B48CFF, u64(0))
         }
         if b.shape == physics3d.CYLINDER {
-            look = model.Model(model.CYLINDER, b.width, b.height, b.width, 0xE6E0D2FF)
+            look = model.Model(model.CYLINDER, b.width, b.height, b.width, 0xE6E0D2FF, MARBLE)
         }
         if b.shape == physics3d.MESH {
-            look = model.Model(u64(0), 1.0, 1.0, 1.0, 0x5E8C3AFF)
+            look = model.Model(u64(0), 1.0, 1.0, 1.0, 0x5E8C3AFF, u64(0))
         }
         if b.shape == physics3d.BOX && b.width > 20.0 && b.height < 1.0 {
             look.color = 0x8C8C84FF
@@ -254,12 +258,12 @@ fn meter(count: i32, sticks: [controls.Stick], meters: [model.AutoExposure]) {
     }
 }
 
-// What a client draws of a stroller (D288): an orange capsule of the
+// What a client draws of a stroller (D288): a brass capsule (D303) of the
 // walkers' girth, 1.8 meters tall, where its pose stands.
 fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
     let i = 0
     while i < count {
-        figures[i] = model.Model(model.CAPSULE, 0.3, 0.45, 0.3, 0xE08A3CFF)
+        figures[i] = model.Model(model.CAPSULE, 0.3, 0.45, 0.3, 0xFFFFFFFF, BRASS)
         i = i + 1
     }
 }

@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "5c1e8a2f7b3d9046": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": [
+          0.95,
+          0.72,
+          0.35
+        ],
+        "base_metalness": 1,
+        "specular_roughness": 0.35
+      }
+    }
+  }
+}

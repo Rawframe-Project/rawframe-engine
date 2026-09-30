@@ -13,6 +13,11 @@ collision class walker 5f23859a6c00ebba
 # cooked content).
 mesh 6d3cbd2231e069f1 mound.gltf
 
+# What the models are made of (D303): the strollers are brass, the pillars
+# polished marble; everything else has no material and is its color.
+material 6d2c9bd611d50fdf brass.rfmaterial
+material e4443f63fe935232 marble.rfmaterial
+
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
 component 9b8e1f52-3c47-4d0a-a6e2-5f1d7c93b204 plaza.blade Blade
 component 2d6e0b91-7c35-4f48-9a1e-3b5c8d0f6a27 plaza.stroller Stroller
