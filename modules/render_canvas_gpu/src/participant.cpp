@@ -1,6 +1,7 @@
 #include "rawframe/base/platform.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
+#include "rawframe/render/capture.h"
 #include "rawframe/render/device.h"
 #include "rawframe/render/display.h"
 #include "rawframe/render_canvas/frames.h"
@@ -42,29 +43,6 @@ std::uint64_t coveredOf(const std::vector<std::byte>& pixels) noexcept {
     }
     return covered;
 }
-
-#if RAWFRAME_FILE_SYSTEM
-/// A frame's pixels, RGBA8 rows top first, as an uncompressed TGA image:
-/// the simplest file every image tool opens.
-std::vector<std::byte> tgaOf(const std::vector<std::byte>& pixels, std::uint32_t width, std::uint32_t height) {
-    std::vector<std::byte> image(18 + pixels.size());
-    image[2] = std::byte{2};
-    image[12] = static_cast<std::byte>(width & 0xFFU);
-    image[13] = static_cast<std::byte>(width >> 8U);
-    image[14] = static_cast<std::byte>(height & 0xFFU);
-    image[15] = static_cast<std::byte>(height >> 8U);
-    image[16] = std::byte{32};
-    // Eight bits of alpha, rows top first.
-    image[17] = std::byte{0x28};
-    for (std::size_t at = 0; at + 3 < pixels.size(); at += 4) {
-        image[18 + at] = pixels[at + 2];
-        image[18 + at + 1] = pixels[at + 1];
-        image[18 + at + 2] = pixels[at];
-        image[18 + at + 3] = pixels[at + 3];
-    }
-    return image;
-}
-#endif
 
 /// Draws the canvas's frames on the one device, one on the GPU at a time:
 /// shown on the process's window where it has one, else offscreen when
@@ -209,7 +187,7 @@ public:
         bool captured = false;
         if (capture_.has_value() && last_.has_value()) {
 #if RAWFRAME_FILE_SYSTEM
-            const std::vector<std::byte> kImage = tgaOf(*last_, capturedWidth_, capturedHeight_);
+            const std::vector<std::byte> kImage = render::tgaOf(*last_, capturedWidth_, capturedHeight_);
             std::ofstream file{*capture_, std::ios::binary};
             file.write(reinterpret_cast<const char*>(kImage.data()), static_cast<std::streamsize>(kImage.size()));
             captured = static_cast<bool>(file);
