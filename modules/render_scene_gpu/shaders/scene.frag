@@ -34,6 +34,8 @@ layout(set = 0, binding = 0, std140) uniform Frame
     // taking this frame's places (D291).
     mat4 unjittered;
     mat4 previous;
+    // The ground's luminance below the horizon (D304).
+    vec4 ground;
 }
 frame;
 
@@ -274,14 +276,16 @@ void main()
                                      kSpecular.w);
     const vec3 kDirect = frame.sun.rgb * sunlit(inPlaced, kNormal) * reflected(kSurface, kNormal, kToEye, frame.toSun.xyz) +
                          punctual(inPlaced, kNormal, kSurface, kToEye);
-    // The sky: its light from above the normal, diffused, and from along
-    // the reflection, the Fresnel of a rough surface (reflection probes
-    // replace this, ADR-0051); what the material occludes of both.
+    // The sky above and the ground below (D304): their light across the
+    // normal's side, diffused, and along the reflection, the Fresnel of a
+    // rough surface (reflection probes replace this, ADR-0051); what the
+    // material occludes of both.
     const float kNv = max(dot(kNormal, kToEye), 0.0);
     const vec3 kSheen = kSurface.headOn + (max(vec3(1.0 - kSurface.roughness), kSurface.headOn) - kSurface.headOn) *
                                               pow(1.0 - kNv, 5.0);
     const vec3 kMirrored = reflect(-kToEye, kNormal);
-    const vec3 kSky = frame.sky.rgb * kRest.y *
-                      ((1.0 - kSheen) * kSurface.diffuse * (0.5 + 0.5 * kNormal.y) + kSheen * (0.5 + 0.5 * kMirrored.y));
+    const vec3 kAround = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kNormal.y);
+    const vec3 kAlong = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
+    const vec3 kSky = kRest.y * ((1.0 - kSheen) * kSurface.diffuse * kAround + kSheen * kAlong);
     outColor = vec4((kDirect + kSky + kEmission.rgb) * exposure.value.y, 1.0);
 }

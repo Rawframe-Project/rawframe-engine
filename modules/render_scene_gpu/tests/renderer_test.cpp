@@ -91,6 +91,7 @@ SceneDraw box(float z, float half, std::array<float, 4> color, std::uint64_t mes
 SceneFrame lamplit(bool spot) {
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.lights.sky = {0, 0, 0};
     frame.exposure = 0;
     frame.shadows.count = 0;
@@ -217,6 +218,7 @@ RAWFRAME_TEST(TheSceneDrawsItsModelsInDepth) {
     const std::uint64_t kAsked = asked;
     SceneFrame unlit = frame;
     unlit.lights.sun = {0, 0, 0};
+    unlit.lights.ground = {0, 0, 0};
     unlit.draws.resize(1);
     const auto kDark = drawn(**framer, renderer, unlit, kMeshes);
     RAWFRAME_EXPECT(kDark.has_value());
@@ -316,6 +318,7 @@ RAWFRAME_TEST(PointAndSpotLightsLightWhatTheyReach) {
     // clusters themselves.
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.lights.sky = {0, 0, 0};
     frame.exposure = 0;
     frame.shadows.count = 0;
@@ -488,6 +491,7 @@ RAWFRAME_TEST(AMeteredExposureFindsTheScenesLight) {
     // a tenth of a second a frame.
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.lights.sky = {50, 50, 50};
     frame.shadows.count = 0;
     frame.metering = {
@@ -557,6 +561,7 @@ RAWFRAME_TEST(ACamerasGradeShapesThePicture) {
     // A white sky exposed to middle grey, then a straw-coloured one.
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.lights.sky = {50, 50, 50};
     frame.shadows.count = 0;
     frame.exposure = std::log2(50.0F) + 3;
@@ -608,6 +613,7 @@ RAWFRAME_TEST(EveryTonemapperKeepsMiddleGrey) {
     // then one ten times brighter.
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.lights.sky = {50, 50, 50};
     frame.shadows.count = 0;
     frame.exposure = std::log2(50.0F / (1.2F * 0.18F));
@@ -652,6 +658,7 @@ RAWFRAME_TEST(FxaaSoftensSlantedEdgesAlone) {
     // a middle grey sky: its edges are stairs of whole texels.
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.lights.sky = {50, 50, 50};
     frame.shadows.count = 0;
     frame.exposure = std::log2(50.0F / (1.2F * 0.18F));
@@ -713,6 +720,7 @@ RAWFRAME_TEST(PbrNeutralMeetsItsConformanceVectors) {
     // D295).
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.shadows.count = 0;
     frame.tonemapper = render_scene::Tonemapper::PbrNeutral;
     frame.exposure = std::log2(1.41371F / 1.2F);
@@ -786,6 +794,7 @@ RAWFRAME_TEST(TheLitModelReflectsTheSunAndTheSky) {
     const int kBelow = at(*kPixels, 32, 40)[0];
     // The sky alone, three stops brighter.
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.exposure -= 3;
     const auto kSkyOnly = drawn(**framer, **made, frame, kMeshes);
     RAWFRAME_EXPECT(kSkyOnly.has_value());
@@ -817,6 +826,7 @@ RAWFRAME_TEST(AMaterialShapesItsModelsSurface) {
     SceneFrame frame = looking();
     frame.shadows.count = 0;
     frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
     frame.lights.sky = {0, 0, 0};
     frame.exposure = std::log2(50.0F / (1.2F * 0.18F));
     SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
@@ -871,4 +881,39 @@ RAWFRAME_TEST(AMaterialShapesItsModelsSurface) {
                 kRough);
     RAWFRAME_EXPECT(kDark[0] == 0 && kUnlit[1] > kUnlit[0] + 60 && std::abs(kGlowing[0] - 128) <= 3 &&
                     kSmooth > kRough + 30);
+}
+
+RAWFRAME_TEST(TheGroundLightsWhatFacesDown) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A white ball under the default sun and sky (D304): its underside is
+    // lit by what the ground gives back, and its top is not.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    frame.draws = {box(4, 1.5F, {1, 1, 1, 1}, render_scene::kSphere)};
+    const auto kWith = drawn(**framer, **made, frame, kMeshes);
+    frame.lights.ground = {0, 0, 0};
+    const auto kWithout = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kWith.has_value() && kWithout.has_value());
+    if (!kWith.has_value() || !kWithout.has_value()) {
+        return;
+    }
+    std::printf("underside %d without the ground %d; top %d and %d\n",
+                at(*kWith, 32, 43)[0],
+                at(*kWithout, 32, 43)[0],
+                at(*kWith, 32, 21)[0],
+                at(*kWithout, 32, 21)[0]);
+    RAWFRAME_EXPECT(at(*kWith, 32, 43)[0] > at(*kWithout, 32, 43)[0] + 20 &&
+                    std::abs(at(*kWith, 32, 21)[0] - at(*kWithout, 32, 21)[0]) <= 3);
 }

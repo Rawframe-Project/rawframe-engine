@@ -16,6 +16,7 @@ struct Frame {
     clusterDepth: vec4f,
     unjittered: mat4x4f,
     previous: mat4x4f,
+    ground: vec4f,
 }
 
 struct Light {
@@ -214,8 +215,9 @@ fn fs(@location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed
     let sheen = surface.headOn + (max(vec3f(1.0 - surface.roughness), surface.headOn) - surface.headOn) *
                                      pow(1.0 - nv, 5.0);
     let mirrored = reflect(-toEye, n);
-    let sky = frame.sky.rgb * rest.y *
-              ((1.0 - sheen) * surface.diffuse * (0.5 + 0.5 * n.y) + sheen * (0.5 + 0.5 * mirrored.y));
+    let around = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * n.y);
+    let along = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
+    let sky = rest.y * ((1.0 - sheen) * surface.diffuse * around + sheen * along);
     out.color = vec4f((direct + sky + emission.rgb) * exposure.y, 1.0);
     return out;
 }

@@ -30,6 +30,8 @@ layout(set = 0, binding = 0, std140) uniform Frame
     // taking this frame's places (D291).
     mat4 unjittered;
     mat4 previous;
+    // The ground's luminance below the horizon (D304).
+    vec4 ground;
 }
 frame;
 

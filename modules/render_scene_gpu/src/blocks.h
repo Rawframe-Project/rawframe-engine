@@ -37,8 +37,10 @@ struct FrameBlock {
     /// taking this frame's places (D291).
     Matrix4 unjittered{};
     Matrix4 previous{};
+    /// The ground's luminance below the horizon (D304).
+    std::array<float, 4> ground{};
 };
-static_assert(sizeof(FrameBlock) == 608, "the scene's shaders read the frame as 608 bytes");
+static_assert(sizeof(FrameBlock) == 624, "the scene's shaders read the frame as 624 bytes");
 
 /// A point or spot light as the scene's shaders read it (std430, D290).
 struct LightBlock {
