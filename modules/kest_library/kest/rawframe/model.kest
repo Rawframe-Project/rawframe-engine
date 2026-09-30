@@ -103,6 +103,15 @@ struct AmbientOcclusion {
     intensity: f32
 }
 
+// A camera's bloom (ADR-0051, D328), on the same entity as its camera: the
+// scene's light spread wide around where it is, as a lens and an eye
+// spread it, before the grade and the tonemapper; `intensity` of it (a
+// fraction, nought to one) mixed with the light as it is. An intensity
+// not above nought spreads none.
+struct Bloom {
+    intensity: f32
+}
+
 // A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
 // the same entity as its camera, whose `exposure` it starts from: the
 // frame's light measured in a histogram of its luminance, the darkest

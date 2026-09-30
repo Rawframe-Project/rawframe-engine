@@ -373,6 +373,7 @@ struct Scene::State {
         frame.metering = meteringOf(camera);
         frame.grading = gradingOf(camera.grading);
         frame.occlusion = occlusionOf(camera.occlusion);
+        frame.bloom = bloomOf(camera.bloom);
         frame.tonemapper = camera.tonemapper <= static_cast<std::uint32_t>(Tonemapper::Linear)
                                ? static_cast<Tonemapper>(camera.tonemapper)
                                : Tonemapper::Agx;
@@ -845,6 +846,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             RAWFRAME_TRY(kOne(loaded.autoExposure, component.id, "a game has at most one auto-exposure: one view"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.Grading")) {
             RAWFRAME_TRY(kOne(loaded.grading, component.id, "a game has at most one grading: one view"));
+        } else if (world_kest::ofEngineType(component, "rawframe.model.Bloom")) {
+            RAWFRAME_TRY(kOne(loaded.bloom, component.id, "a game has at most one bloom: one view"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.AmbientOcclusion")) {
             RAWFRAME_TRY(kOne(loaded.occlusion, component.id, "a game has at most one ambient occlusion: one view"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.Sun")) {
@@ -906,6 +909,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"compensation", offsetof(AutoExposure, compensation)},
                            {"low", offsetof(AutoExposure, low)},
                            {"high", offsetof(AutoExposure, high)}}));
+    RAWFRAME_TRY(kLaidOut(
+        loaded.bloom.has_value(), "rawframe.model.Bloom", sizeof(Bloom), {{"intensity", offsetof(Bloom, intensity)}}));
     RAWFRAME_TRY(kLaidOut(
         loaded.occlusion.has_value(),
         "rawframe.model.AmbientOcclusion",

@@ -313,8 +313,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
     const std::string kUses =
         "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky],\n"
         "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
-        "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion]) "
-        "{\n}\n";
+        "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion],\n"
+        "        blooms: [model.Bloom]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
@@ -326,7 +326,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                               "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n"
                               "component cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.grade rawframe.model.Grading\n"
                               "component ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.hidden "
-                              "rawframe.model.AmbientOcclusion\n";
+                              "rawframe.model.AmbientOcclusion\n"
+                              "component fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.bloom rawframe.model.Bloom\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
                     kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
@@ -337,7 +338,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                     kLoaded->autoExposure ==
                         schema::ComponentTypeId::fromText("bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
                     kLoaded->grading == schema::ComponentTypeId::fromText("cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->occlusion == schema::ComponentTypeId::fromText("ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
+                    kLoaded->occlusion == schema::ComponentTypeId::fromText("ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+                    kLoaded->bloom == schema::ComponentTypeId::fromText("fc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -957,6 +959,15 @@ RAWFRAME_TEST(ADrawReflectsTheProbeThatHoldsIt) {
     const SceneFrame& kFew = few.frame({.eye = {kX, 0, 0}});
     RAWFRAME_EXPECT(kFew.probes.size() == 2 && kFew.probesOverLimit == 1 && kFew.probes[0].environment != 0xe3 &&
                     kFew.probes[1].environment != 0xe3);
+}
+
+RAWFRAME_TEST(ACamerasBloomIsMadeSound) {
+    RAWFRAME_EXPECT(!bloomOf(std::nullopt).enabled && !bloomOf(Bloom{.intensity = 0}).enabled &&
+                    !bloomOf(Bloom{.intensity = std::nanf("")}).enabled);
+    const SceneBloom kAsked = bloomOf(Bloom{.intensity = 0.15F});
+    RAWFRAME_EXPECT(kAsked.enabled && kAsked.intensity == 0.15F && bloomOf(Bloom{.intensity = 3}).intensity == 1);
+    Rig rig;
+    RAWFRAME_EXPECT(rig.frame({.bloom = Bloom{.intensity = 0.2F}}).bloom.enabled && !rig.frame({}).bloom.enabled);
 }
 
 RAWFRAME_TEST(ACamerasAmbientOcclusionIsMadeSound) {
