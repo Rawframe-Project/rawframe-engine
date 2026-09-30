@@ -1,0 +1,22 @@
+# The plaza's reflection probe baked (D326): a bot plays the sample 3D game
+# while its scene is drawn offscreen on the one device, and once sixty
+# frames were presented the probe's picture is drawn six ways from its
+# middle and written, as Radiance, into the build tree. The plaza's content
+# is read cooked. A software rasterizer may serve.
+host.maximum_iterations = 240
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/plaza/plaza.game
+content.root = @PLAZA_CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 1
+bots.endpoint = arena
+render.device = any
+render.offscreen = true
+render.width = 128
+render.height = 128
+scene.shadow_side = 512
+bake.directory = @BAKED@
+bake.after = 60
+bake.width = 256
