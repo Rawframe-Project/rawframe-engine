@@ -3,7 +3,8 @@
 // The cooked mesh (ADR-0058's mesh family): triangles in the canonical space
 // of ADR-0046, meters with +Y up, in a form Rawframe owns. Import tooling
 // writes it; the runtime reads it and decodes no source format. It holds
-// geometry only, so a server may read it for collision.
+// geometry, and what each part is drawn with only by identity, so a server
+// may read it for collision.
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
@@ -30,6 +31,9 @@ using Vector3 = std::array<float, 3>;
 struct Part {
     std::uint32_t firstIndex = 0;
     std::uint32_t indexCount = 0;
+    /// The game's material it is drawn with, by the identity a Model would
+    /// name it by (D314); nought for the Model's own.
+    std::uint64_t material = 0;
 
     friend bool operator==(const Part&, const Part&) noexcept = default;
 };
@@ -63,10 +67,11 @@ struct MeshLimits {
 
 /// The cooked form, all little-endian: the signature, the version, a byte of
 /// attributes (1 normals, 2 texture coordinates), the vertex, index, and
-/// part counts as 32 bits each, then the parts, the positions, the normals
-/// and texture coordinates when present, and the indices as 32 bits each.
+/// part counts as 32 bits each, then the parts (first index and count as
+/// 32 bits each, the material as 64), the positions, the normals and
+/// texture coordinates when present, and the indices as 32 bits each.
 inline constexpr std::array<char, 4> kCookedMeshSignature = {'R', 'F', 'M', 'S'};
-inline constexpr std::uint8_t kCookedMeshVersion = 1;
+inline constexpr std::uint8_t kCookedMeshVersion = 2;
 
 /// Refuses what `validate` refuses.
 [[nodiscard]] result::Result<std::vector<std::byte>> encode(const Mesh& mesh, const MeshLimits& limits = {});

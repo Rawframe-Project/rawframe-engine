@@ -37,13 +37,14 @@ Mesh triangle() {
                 .parts = {{.firstIndex = 0, .indexCount = 3}}};
 }
 
-/// Two parts, every attribute.
+/// Two parts, the second with a material of its own, every attribute.
 Mesh quad() {
     return Mesh{.positions = {{-1.0F, 0.0F, -1.0F}, {1.0F, 0.0F, -1.0F}, {1.0F, 0.0F, 1.0F}, {-1.0F, 0.0F, 1.0F}},
                 .normals = {{0.0F, 1.0F, 0.0F}, {0.0F, 1.0F, 0.0F}, {0.0F, 1.0F, 0.0F}, {0.0F, 1.0F, 0.0F}},
                 .uvs = {{0.0F, 0.0F}, {1.0F, 0.0F}, {1.0F, 1.0F}, {0.0F, 1.0F}},
                 .indices = {0, 2, 1, 0, 3, 2},
-                .parts = {{.firstIndex = 0, .indexCount = 3}, {.firstIndex = 3, .indexCount = 3}}};
+                .parts = {{.firstIndex = 0, .indexCount = 3},
+                          {.firstIndex = 3, .indexCount = 3, .material = 0x8c41d7e2a95b4f03ULL}}};
 }
 
 } // namespace
@@ -52,9 +53,9 @@ RAWFRAME_TEST(ACookedMeshHasFixedBytes) {
     const auto kBytes = encode(triangle());
     RAWFRAME_EXPECT(kBytes.has_value());
     // Changing the format moves this, and needs a new version.
-    RAWFRAME_EXPECT(hex(*kBytes) == "52464d530100"
+    RAWFRAME_EXPECT(hex(*kBytes) == "52464d530200"
                                     "030000000300000001000000"
-                                    "0000000003000000"
+                                    "00000000030000000000000000000000"
                                     "000000000000000000000000"
                                     "0000803f0000000000000000"
                                     "000000000000803f00000000"

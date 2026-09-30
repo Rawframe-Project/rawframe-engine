@@ -13,6 +13,7 @@ namespace {
 constexpr std::uint8_t kNormals = 1;
 constexpr std::uint8_t kUvs = 2;
 constexpr std::size_t kHeaderBytes = 4 + 1 + 1 + (3 * 4);
+constexpr std::size_t kPartBytes = 4 + 4 + 8;
 
 std::unexpected<result::Error> bad(std::string_view why) {
     return result::fail(result::ErrorClass::InvalidArgument, kMeshDomain, code(MeshError::BadMesh), why);
@@ -117,7 +118,8 @@ result::Result<std::vector<std::byte>> encode(const Mesh& mesh, const MeshLimits
     const std::uint8_t kAttributes =
         static_cast<std::uint8_t>((mesh.normals.empty() ? 0U : kNormals) | (mesh.uvs.empty() ? 0U : kUvs));
     std::vector<std::byte> out;
-    out.reserve(kHeaderBytes + (mesh.parts.size() * 8) + (mesh.positions.size() * 32) + (mesh.indices.size() * 4));
+    out.reserve(kHeaderBytes + (mesh.parts.size() * kPartBytes) + (mesh.positions.size() * 32) +
+                (mesh.indices.size() * 4));
     for (const char kCharacter : kCookedMeshSignature) {
         out.push_back(static_cast<std::byte>(kCharacter));
     }
@@ -129,6 +131,8 @@ result::Result<std::vector<std::byte>> encode(const Mesh& mesh, const MeshLimits
     for (const Part& kPart : mesh.parts) {
         putU32(out, kPart.firstIndex);
         putU32(out, kPart.indexCount);
+        putU32(out, static_cast<std::uint32_t>(kPart.material));
+        putU32(out, static_cast<std::uint32_t>(kPart.material >> 32U));
     }
     putFloats(out, {mesh.positions.data()->data(), mesh.positions.size() * 3});
     if (!mesh.normals.empty()) {
@@ -162,7 +166,7 @@ result::Result<Mesh> decode(std::span<const std::byte> bytes, const MeshLimits& 
     RAWFRAME_TRY(withinLimits(kVertices, kIndices, kParts, limits));
     // Within the limits, none of this can overflow a 64-bit size.
     const std::size_t kPerVertex = 3 + ((kAttributes & kNormals) != 0 ? 3 : 0) + ((kAttributes & kUvs) != 0 ? 2 : 0);
-    if (bytes.size() != kHeaderBytes + (kParts * 8) + (kVertices * kPerVertex * 4) + (kIndices * 4)) {
+    if (bytes.size() != kHeaderBytes + (kParts * kPartBytes) + (kVertices * kPerVertex * 4) + (kIndices * 4)) {
         return bad("a cooked mesh is not as long as its counts say");
     }
     Mesh mesh;
@@ -170,6 +174,8 @@ result::Result<Mesh> decode(std::span<const std::byte> bytes, const MeshLimits& 
     for (Part& part : mesh.parts) {
         part.firstIndex = getU32(bytes, at);
         part.indexCount = getU32(bytes, at);
+        part.material = getU32(bytes, at);
+        part.material |= std::uint64_t{getU32(bytes, at)} << 32U;
     }
     mesh.positions.resize(kVertices);
     getVectors(bytes, at, mesh.positions);
