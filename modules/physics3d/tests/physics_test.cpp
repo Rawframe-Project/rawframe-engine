@@ -7,6 +7,7 @@
 #include "rawframe/world/schedule.h"
 #include "rawframe/world/world.h"
 
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <numbers>
@@ -400,6 +401,52 @@ RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
     RAWFRAME_EXPECT(kOn.ground == static_cast<std::uint8_t>(physics::Ground::Grounded) && kOn.groundNormalY > 0.99F);
     RAWFRAME_EXPECT(std::abs(scene.velocity(kRunner).x) < 0.05F && std::abs(scene.velocity(kRunner).y) < 0.05F);
     RAWFRAME_EXPECT(scene.physics->statistics().characterMoves == 120);
+}
+
+RAWFRAME_TEST(ACharacterAmongStaticBoxesMovesByTheSameBitsEverywhere) {
+    // Three crates, one on the other two, a character running at them from
+    // every side in turn, and another started inside one: what a browser
+    // predicts beside them must be what a native server steps, bit for bit
+    // (D315).
+    Scene scene;
+    scene.body(kGround, {});
+    constexpr Body3D kStill{.motion = static_cast<std::uint8_t>(Motion::Static),
+                            .shape = static_cast<std::uint8_t>(Shape::Box),
+                            .width = 0.5F,
+                            .height = 0.5F,
+                            .depth = 0.5F};
+    scene.body(kStill, {.x = 0, .y = 1, .z = 0, .qw = 1});
+    scene.body(kStill, {.x = 1.1, .y = 1, .z = 0.2, .qw = 1});
+    scene.body(kStill, {.x = 0.55, .y = 2, .z = 0.1, .qw = 1});
+    const world::EntityHandle kRunner = scene.character({.x = -2, .y = 1.3, .z = 1});
+    const world::EntityHandle kInside = scene.character({.x = 0.3, .y = 1.3, .z = 0.1});
+    std::uint64_t digest = 0xcbf29ce484222325ULL;
+    const auto kMix = [&digest](const void* bytes, std::size_t size) {
+        for (std::size_t at = 0; at < size; ++at) {
+            digest = (digest ^ static_cast<const unsigned char*>(bytes)[at]) * 0x100000001b3ULL;
+        }
+    };
+    constexpr std::array<std::array<float, 2>, 8> kRuns = {
+        {{4, -1}, {4, 1}, {1, -4}, {-4, -1}, {-1, 4}, {3, 3}, {-3, -3}, {0, -4}}};
+    for (int tick = 0; tick < 480; ++tick) {
+        const auto& [kX, kZ] = kRuns[static_cast<std::size_t>(tick / 60)];
+        Velocity3D& wanted = scene.velocity(kRunner);
+        const bool kGrounded =
+            scene.characterOf(kRunner).ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
+        wanted = Velocity3D{.x = kX, .y = kGrounded ? 0 : wanted.y - (20.0F / 60), .z = kZ};
+        Velocity3D& stuck = scene.velocity(kInside);
+        stuck = Velocity3D{.x = -kZ, .y = stuck.y - (20.0F / 60), .z = kX};
+        scene.run(1);
+        const Pose3D& kAt = scene.pose(kRunner);
+        kMix(&kAt, sizeof(kAt));
+        kMix(&scene.pose(kInside), sizeof(Pose3D));
+        kMix(&scene.characterOf(kRunner).ground, 1);
+    }
+    // The same bits on every compiler and target the check builds, x86-64
+    // and wasm32 alike: a moved digest says why in its commit.
+    RAWFRAME_EXPECT(digest == 0xf6fe53d849adc15fULL);
+    // Both were moved every tick.
+    RAWFRAME_EXPECT(scene.physics->statistics().characterMoves == 960);
 }
 
 RAWFRAME_TEST(ACharacterSlidesDownASteepSlopeAndStandsOnAGentleOne) {
