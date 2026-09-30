@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "2f00000000000002": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": [
+          0.8,
+          0.1,
+          0.1
+        ],
+        "specular_roughness": 0.5
+      }
+    }
+  },
+  "states": {
+    "blend": "masked",
+    "alpha_cutoff": 0.25,
+    "double_sided": true
+  }
+}
+

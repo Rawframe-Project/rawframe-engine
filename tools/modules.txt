@@ -16,6 +16,7 @@ game_content: signature content composition document execution diagnostics resul
 audio: world schema execution diagnostics document result base
 audio_import: audio result base
 graph: document result base
+material: graph document result base
 animation: graph document result base
 animation_import: animation result base
 localization: document result base
