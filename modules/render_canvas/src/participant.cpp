@@ -203,6 +203,8 @@ public:
                      "what one client's canvas drew",
                      {diagnostics::field("frames", frames_),
                       diagnostics::field("framesViewed", viewed_),
+                      diagnostics::field("viewWidth", width_),
+                      diagnostics::field("viewHeight", height_),
                       diagnostics::field("spritesDrawn", drawn_),
                       diagnostics::field("spritesAnimated", animated_),
                       diagnostics::field("culled", culled_),
@@ -236,6 +238,15 @@ public:
 
     std::uint32_t height() const noexcept override {
         return height_;
+    }
+
+    void resize(std::uint32_t width, std::uint32_t height) noexcept override {
+        if (width == 0 || height == 0) {
+            return;
+        }
+        width_ = width;
+        height_ = height;
+        camera_.aspect = static_cast<float>(width) / static_cast<float>(height);
     }
 
     std::shared_ptr<const texture::Texture> texture(std::uint64_t id) const override {

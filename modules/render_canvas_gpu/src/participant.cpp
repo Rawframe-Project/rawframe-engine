@@ -154,6 +154,8 @@ public:
             }
             target.width = kPrepared->second.size.width;
             target.height = kPrepared->second.size.height;
+            // The view follows the window from the next frame.
+            frames_->resize(target.width, target.height);
             shown = ShownOn{.display = display_.get(), .surface = kPrepared->first};
         }
         const auto kDrawn = shown.has_value() ? renderer_->render(*frame, textures_, target, *shown)

@@ -24,9 +24,14 @@ public:
     /// iteration's `presentation_extract`; none in an iteration that queued
     /// none, and while the canvas is idle.
     [[nodiscard]] virtual const CanvasFrame* queued() const noexcept = 0;
-    /// The view's size in pixels (`canvas.width`, `canvas.height`).
+    /// The view's size in pixels: `canvas.width` and `canvas.height` until
+    /// what shows it sets another.
     [[nodiscard]] virtual std::uint32_t width() const noexcept = 0;
     [[nodiscard]] virtual std::uint32_t height() const noexcept = 0;
+    /// The view's size from the next frame on, as the window it is shown in
+    /// has it (D281): the camera's aspect follows. Sides of nought are
+    /// ignored.
+    virtual void resize(std::uint32_t width, std::uint32_t height) noexcept = 0;
     /// The texture the game names `id`, decoded and held, for the frame
     /// queued; none while it is not ready.
     [[nodiscard]] virtual std::shared_ptr<const texture::Texture> texture(std::uint64_t id) const = 0;
