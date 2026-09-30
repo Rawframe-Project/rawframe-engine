@@ -8,6 +8,7 @@
 #include "meshes.h"
 #include "metering.h"
 #include "occlusion.h"
+#include "picture.h"
 #include "pipelines.h"
 #include "rawframe/render/textures.h"
 #include "rawframe/render_scene_gpu/errors.h"
@@ -67,6 +68,9 @@ struct SceneRenderer::State {
     std::optional<ReflectionPass> reflecting;
     /// Its bloom, when a view asks (D328).
     std::optional<BloomPass> bloom;
+    /// Its picture, graded and tonemapped, and antialiased by FXAA when a
+    /// view asks (D294 to D296).
+    std::optional<PicturePass> picture;
     std::optional<DeviceMeshes> held;
     /// The materials' textures (D309), and the white one a material
     /// sampling none samples, held as texture nought.
@@ -201,7 +205,6 @@ struct SceneRenderer::State {
         mrhiPassId upload{};
         mrhiPassId depthPass{};
         mrhiPassId litPass{};
-        mrhiPassId picturePass{};
         /// The sun's shadow map, each cascade's view, and the pass drawing
         /// the casters into it.
         mrhiResourceId shadowMap{};
@@ -230,10 +233,6 @@ struct SceneRenderer::State {
         mrhiResourceId materialsResource{};
         mrhiResourceId rangesResource{};
         mrhiResourceId indicesResource{};
-        /// The camera's grade and tonemapper, as the picture's pass reads
-        /// them (D294, D295).
-        PictureBlock picture;
-        mrhiResourceId pictureResource{};
         /// The sky's light, as its pass reads it (D293); the target's size.
         SkyBlock sky;
         mrhiResourceId skyResource{};
@@ -246,10 +245,6 @@ struct SceneRenderer::State {
         std::uint32_t height = 0;
         /// Where each texel's point moved, the temporal pass's input (D291).
         mrhiResourceId motion{};
-        /// With FXAA, the tonemapped picture it reads, and its pass (D296).
-        bool smoothed = false;
-        mrhiResourceId display{};
-        mrhiPassId fxaaPass{};
         bool draws = false;
         bool casters = false;
     };
@@ -338,12 +333,6 @@ struct SceneRenderer::State {
                            .toDirection = inverseOf(now.block.viewProjection),
                            .unjittered = now.block.unjittered,
                            .previous = now.block.previous};
-        now.picture = pictureOf(*frame);
-        mrhiBufferDef pictureBlockDef = mrhiDefaultBufferDef();
-        pictureBlockDef.size = sizeof(PictureBlock);
-        if (mrhiDeclareBuffer(native, &pictureBlockDef, &now.pictureResource) != mrhi_success) {
-            return failed("the picture's grade could not be declared", mrhi_errorCapacity);
-        }
         mrhiBufferDef skyDef = mrhiDefaultBufferDef();
         skyDef.size = sizeof(SkyBlock);
         if (mrhiDeclareBuffer(native, &skyDef, &now.skyResource) != mrhi_success) {
@@ -429,17 +418,6 @@ struct SceneRenderer::State {
                 return failed("a target could not be declared", kDeclared);
             }
         }
-        now.smoothed = frame->fxaa;
-        if (now.smoothed) {
-            mrhiTextureDef def = mrhiDefaultTextureDef();
-            def.format = kPictureFormat;
-            def.width = open.width;
-            def.height = open.height;
-            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &def, &now.display);
-                kDeclared != mrhi_success) {
-                return failed("a target could not be declared", kDeclared);
-            }
-        }
 
         // The upload pass writes what the drawing reads.
         std::vector<mrhiAccess> writes = {wholeOf(now.blockResource, mrhi_accessCopyDestination),
@@ -480,12 +458,9 @@ struct SceneRenderer::State {
             }
         }
         RAWFRAME_TRY(bloom->declare(*frame, open.width, open.height));
-        if (bloom->enabled()) {
-            now.picture.bloom = {frame->bloom.intensity, 1.0F / static_cast<float>(bloom->levels()), 0, 0};
-        }
+        RAWFRAME_TRY(picture->declare(*frame, open.width, open.height, bloom->enabled() ? bloom->levels() : 0, writes));
         writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
-        writes.push_back(wholeOf(now.pictureResource, mrhi_accessCopyDestination));
         RAWFRAME_TRY(metering->declare(*frame, writes));
         for (const mrhiResourceId kView : now.slotViews) {
             writes.push_back(wholeOf(kView, mrhi_accessCopyDestination));
@@ -623,39 +598,10 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(metering->addPasses(now.scene));
         RAWFRAME_TRY(temporal->addPass(now.scene, now.motion));
         RAWFRAME_TRY(bloom->addPasses(temporal->shown(now.scene)));
-        // The picture: every pixel of it written, over whatever was there;
-        // with FXAA, the tonemapped picture first, then FXAA over it into
-        // the frame's (D296).
-        const mrhiAccess kScene = wholeOf(temporal->shown(now.scene), mrhi_accessSampled);
-        mrhiPassDef pictureDef = mrhiDefaultPassDef();
-        pictureDef.colorTargets[0].resource = resourceOf(open.picture);
-        pictureDef.colorTargets[0].load = open.clearsPicture() ? mrhi_loadClear : mrhi_loadKeep;
-        pictureDef.colorTargets[0].store = mrhi_storeKeep;
-        pictureDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
-        pictureDef.colorTargetCount = 1;
-        pictureDef.neverCull = true;
-        mrhiPassDef tonemapDef = pictureDef;
-        if (now.smoothed) {
-            tonemapDef.colorTargets[0].resource = now.display;
-            tonemapDef.colorTargets[0].load = mrhi_loadDiscard;
-        }
-        std::vector<mrhiAccess> pictureReads = {kScene, wholeOf(now.pictureResource, mrhi_accessUniform)};
-        if (bloom->enabled()) {
-            pictureReads.push_back(wholeOf(bloom->spread(), mrhi_accessSampled));
-        }
-        tonemapDef.accesses = pictureReads.data();
-        tonemapDef.accessCount = static_cast<std::uint32_t>(pictureReads.size());
-        if (const mrhiResult kAdded = mrhiAddPass(native, &tonemapDef, &now.picturePass); kAdded != mrhi_success) {
-            return failed("the picture's pass could not be added", kAdded);
-        }
-        const mrhiAccess kDisplay = wholeOf(now.display, mrhi_accessSampled);
-        pictureDef.accesses = &kDisplay;
-        pictureDef.accessCount = 1;
-        if (now.smoothed) {
-            if (const mrhiResult kAdded = mrhiAddPass(native, &pictureDef, &now.fxaaPass); kAdded != mrhi_success) {
-                return failed("the FXAA pass could not be added", kAdded);
-            }
-        }
+        RAWFRAME_TRY(picture->addPasses(temporal->shown(now.scene),
+                                        bloom->enabled() ? bloom->spread() : mrhiResourceId{},
+                                        resourceOf(open.picture),
+                                        open.clearsPicture()));
         declared = std::move(now);
         return {};
     }
@@ -705,11 +651,10 @@ struct SceneRenderer::State {
                             now.reflections.blocks.size() * sizeof(ProbeBlock)) != mrhi_success) {
             return failed("the frame's lights could not be written", mrhi_errorCapacity);
         }
-        if (mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock)) != mrhi_success ||
-            mrhiWriteBuffer(native, now.upload, now.pictureResource, 0, &now.picture, sizeof(PictureBlock)) !=
-                mrhi_success) {
+        if (mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock)) != mrhi_success) {
             return failed("the sky's light could not be written", mrhi_errorCapacity);
         }
+        RAWFRAME_TRY(picture->write(now.upload));
         RAWFRAME_TRY(metering->write(now.upload));
         RAWFRAME_TRY(temporal->write(now.upload));
         RAWFRAME_TRY(occlusion->write(now.upload));
@@ -855,33 +800,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(metering->record(pipelines, now.scene, now.width, now.height));
         RAWFRAME_TRY(temporal->record(pipelines, now.scene, now.motion));
         RAWFRAME_TRY(bloom->record(pipelines, temporal->shown(now.scene)));
-        // The bloom's spread light, or the scene's where there is none,
-        // which the picture's shader does not read then (D328).
-        const std::array<mrhiBinding, 4> kSceneBinding = {
-            textureAt(0, temporal->shown(now.scene)),
-            bufferAt(1, now.pictureResource, sizeof(PictureBlock)),
-            textureAt(2, bloom->enabled() ? bloom->spread() : temporal->shown(now.scene)),
-            samplerAt(3, pipelines.filteredSampler)};
-        if (mrhiBeginPass(native, now.picturePass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native, now.picturePass, pipelines.tonemap.pipeline) != mrhi_success ||
-            mrhiSetBindings(native, now.picturePass, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
-            mrhiDraw(native, now.picturePass, 3, 1, 0, 0) != mrhi_success ||
-            mrhiEndPass(native, now.picturePass) != mrhi_success) {
-            return failed("the picture could not be drawn", mrhi_errorState);
-        }
-        if (!now.smoothed) {
-            return {};
-        }
-        const std::array<mrhiBinding, 2> kDisplayBinding = {textureAt(0, now.display),
-                                                            samplerAt(1, pipelines.filteredSampler)};
-        if (mrhiBeginPass(native, now.fxaaPass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native, now.fxaaPass, pipelines.fxaa.pipeline) != mrhi_success ||
-            mrhiSetBindings(native, now.fxaaPass, 0, kDisplayBinding.data(), kDisplayBinding.size()) != mrhi_success ||
-            mrhiDraw(native, now.fxaaPass, 3, 1, 0, 0) != mrhi_success ||
-            mrhiEndPass(native, now.fxaaPass) != mrhi_success) {
-            return failed("the picture could not be antialiased", mrhi_errorState);
-        }
-        return {};
+        return picture->record(pipelines);
     }
 
     void ended(bool submitted) noexcept {
@@ -896,7 +815,7 @@ struct SceneRenderer::State {
         statistics.textureBytes += textures->statistics().uploadBytes - kBytes;
         if (submitted) {
             ++statistics.frames;
-            statistics.framesSmoothed += declared->smoothed ? 1 : 0;
+            statistics.framesSmoothed += picture->smoothed() ? 1 : 0;
             statistics.framesOccluded += occlusion->enabled() ? 1 : 0;
             statistics.framesBloomed += bloom->enabled() ? 1 : 0;
             statistics.framesReflected += reflecting->enabled() ? 1 : 0;
@@ -950,6 +869,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->occlusion.emplace(device.native());
     state->reflecting.emplace(device.native());
     state->bloom.emplace(device.native());
+    state->picture.emplace(device.native());
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }
