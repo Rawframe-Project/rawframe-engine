@@ -87,7 +87,15 @@ public:
     /// importer cooks can name another of the source's subassets. Refused
     /// (`UnmappedSubasset`, naming the key) when it maps it to none: an
     /// identity is given by whoever authors the sidecar, never by a cook.
-    [[nodiscard]] result::Result<content::ResourceId> subasset(std::string_view key) const;
+    [[nodiscard]] result::Result<content::ResourceId> subasset(std::string_view key);
+
+    /// Makes `subasset` give a key the sidecar does not map a new identity
+    /// from `fresh`, rather than refuse it: what `mapSubassets` cooks with.
+    void assignWith(std::function<content::ResourceId()> fresh);
+    /// The keys given identities so, and the identities.
+    [[nodiscard]] const std::map<std::string, content::ResourceId, std::less<>>& assigned() const noexcept {
+        return assigned_;
+    }
 
     /// Every read so far, in path order.
     [[nodiscard]] std::vector<Read> reads() const;
@@ -103,6 +111,8 @@ private:
     std::map<std::string, std::vector<std::byte>> files_;
     std::map<std::pair<std::string, std::string>, std::vector<std::string>> listings_;
     std::map<std::string, content::ResourceId, std::less<>> subassets_;
+    std::function<content::ResourceId()> fresh_;
+    std::map<std::string, content::ResourceId, std::less<>> assigned_;
 };
 
 /// One registered importer: who it is, what settings it takes, and how it
@@ -153,6 +163,24 @@ struct CookReport {
 /// request's own (an unreadable sources directory, an output inside it);
 /// what failed while cooking is in the report.
 [[nodiscard]] result::Result<CookReport> cookSources(const CookRequest& request);
+
+/// What `mapSubassets` did: each sidecar it wrote, by its path under the
+/// sources, with the keys it added; and what failed, in sidecar order.
+struct MapReport {
+    std::vector<std::pair<std::string, std::vector<std::string>>> written;
+    std::vector<result::Error> failures;
+};
+
+/// Gives each subasset an importer finds in a source, and the source's
+/// sidecar does not map, an identity from `fresh`, and writes each sidecar
+/// that gained one (ADR-0024: identity is given by authoring tooling, never
+/// by a cook). A key already mapped keeps its identity, and one the source
+/// no longer has stays. A source that does not cook for another reason is a
+/// failure, and its sidecar is left as it was. Errors are the request's
+/// own (an unreadable sources directory).
+[[nodiscard]] result::Result<MapReport> mapSubassets(const std::filesystem::path& sources,
+                                                     std::span<const Importer> importers,
+                                                     const std::function<content::ResourceId()>& fresh);
 
 /// The digest of a file, for a toolchain's identity.
 [[nodiscard]] result::Result<base::Sha256Digest> digestOfFile(const std::filesystem::path& path);

@@ -373,6 +373,55 @@ RAWFRAME_TEST(ASourcesSubassetsAreResourcesItsSidecarNames) {
     }
 }
 
+RAWFRAME_TEST(AuthoringToolingGivesUnmappedSubassetsTheirIdentities) {
+    const Project kProject;
+    writeText(kProject.sources / "parts.txt", "left=one\nright=two\nup=three");
+    writeText(kProject.sources / "parts.txt.rfmeta",
+              splitSidecar("    \"part/gone\": \"000000000000000000000000000000b9\",\n"
+                           "    \"part/left\": \"000000000000000000000000000000b1\""));
+    writeText(kProject.sources / "broken.txt", "x=y");
+    writeText(kProject.sources / "broken.txt.rfmeta", "{\n  \"schema\": 2\n}\n");
+    static const std::array<Importer, 2> kImporters = {
+        audioImporter(),
+        Importer{.identity = "test.split",
+                 .normalize = [](const document::Value*) -> result::Result<std::string> {
+                     return std::string{};
+                 },
+                 .cook = &split}};
+    std::uint64_t next = 0xc0;
+    const auto kFresh = [&next] {
+        return content::ResourceId{base::Bits128{.high = 0, .low = next++}};
+    };
+    const auto kMapped = mapSubassets(kProject.sources, kImporters, kFresh);
+    RAWFRAME_EXPECT(kMapped.has_value());
+    if (!kMapped.has_value()) {
+        return;
+    }
+    // The parts sidecar gained its two unmapped keys, in key order; the
+    // broken one is a failure, left as it was; the sounds needed nothing.
+    RAWFRAME_EXPECT(kMapped->written.size() == 1 && kMapped->written[0].first == "parts.txt.rfmeta" &&
+                    kMapped->written[0].second == (std::vector<std::string>{"part/right", "part/up"}));
+    RAWFRAME_EXPECT(kMapped->failures.size() == 1);
+    RAWFRAME_EXPECT(readText(kProject.sources / "broken.txt.rfmeta") == "{\n  \"schema\": 2\n}\n");
+    const auto kSidecar = content::readSidecar(readText(kProject.sources / "parts.txt.rfmeta"));
+    RAWFRAME_EXPECT(kSidecar.has_value() && kSidecar->subassets.size() == 4);
+    if (kSidecar.has_value()) {
+        // What was mapped keeps its identity, and what the source no longer
+        // has stays.
+        RAWFRAME_EXPECT(kSidecar->subassets.at("part/left").value.low == 0xb1 &&
+                        kSidecar->subassets.at("part/gone").value.low == 0xb9);
+        RAWFRAME_EXPECT(kSidecar->subassets.at("part/right").value.low == 0xc0 &&
+                        kSidecar->subassets.at("part/up").value.low == 0xc1);
+        RAWFRAME_EXPECT(content::writeSidecar(*kSidecar) == readText(kProject.sources / "parts.txt.rfmeta"));
+    }
+    // Nothing more to give.
+    const auto kAgain = mapSubassets(kProject.sources, kImporters, kFresh);
+    RAWFRAME_EXPECT(kAgain.has_value() && kAgain->written.empty());
+    // And the source cooks.
+    fs::remove(kProject.sources / "broken.txt.rfmeta");
+    RAWFRAME_EXPECT(cookSplit(kProject).failures.empty());
+}
+
 RAWFRAME_TEST(AKestProjectCooksIntoItsFiles) {
     const Project kProject;
     const fs::path kGame = kProject.sources / "game";

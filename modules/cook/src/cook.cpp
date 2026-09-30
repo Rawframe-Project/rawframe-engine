@@ -276,6 +276,28 @@ void toCache(const std::filesystem::path& cache,
     }
 }
 
+/// Every sidecar under `sources`, relative to it, in path order: never in
+/// the order a directory lists.
+result::Result<std::vector<std::string>> sidecarsUnder(const std::filesystem::path& sources) {
+    std::error_code error;
+    std::vector<std::string> sidecars;
+    for (auto entry = std::filesystem::recursive_directory_iterator{sources, error};
+         !error && entry != std::filesystem::recursive_directory_iterator{};
+         entry.increment(error)) {
+        const std::string kName = entry->path().filename().string();
+        if (entry->is_regular_file() && kName.ends_with(content::kSidecarSuffix) &&
+            kName.size() > content::kSidecarSuffix.size()) {
+            sidecars.push_back(entry->path().lexically_relative(sources).generic_string());
+        }
+    }
+    if (error) {
+        return std::unexpected<result::Error>{
+            failure(CookError::BadRequest, "the sources cannot be listed", sources.string())};
+    }
+    std::ranges::sort(sidecars);
+    return sidecars;
+}
+
 } // namespace
 
 result::Result<base::Sha256Digest> digestOfFile(const std::filesystem::path& path) {
@@ -292,8 +314,15 @@ Reads::Reads(std::filesystem::path sources,
     : sources_(std::move(sources)), directory_(std::move(directory)), subassets_(std::move(subassets)) {
 }
 
-result::Result<content::ResourceId> Reads::subasset(std::string_view key) const {
+result::Result<content::ResourceId> Reads::subasset(std::string_view key) {
     const auto kFound = subassets_.find(key);
+    if (kFound == subassets_.end() && fresh_) {
+        const auto kAssigned = assigned_.find(key);
+        if (kAssigned != assigned_.end()) {
+            return kAssigned->second;
+        }
+        return assigned_.emplace(std::string{key}, fresh_()).first->second;
+    }
     if (kFound == subassets_.end()) {
         return std::unexpected<result::Error>{
             failure(CookError::UnmappedSubasset, "a subasset the sidecar maps to no resource", "")
@@ -373,6 +402,10 @@ std::vector<Reads::Read> Reads::reads() const {
     return made;
 }
 
+void Reads::assignWith(std::function<content::ResourceId()> fresh) {
+    fresh_ = std::move(fresh);
+}
+
 base::Sha256Digest Reads::digestOfListing(std::span<const std::string> names) {
     base::Sha256 digest;
     for (const std::string& name : names) {
@@ -396,26 +429,11 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
             failure(CookError::BadRequest, "the output is inside the sources", request.output.string())};
     }
 
-    // Every sidecar, in path order: never in the order a directory lists.
-    std::vector<std::string> sidecars;
-    for (auto entry = std::filesystem::recursive_directory_iterator{kSources, error};
-         !error && entry != std::filesystem::recursive_directory_iterator{};
-         entry.increment(error)) {
-        const std::string kName = entry->path().filename().string();
-        if (entry->is_regular_file() && kName.ends_with(content::kSidecarSuffix) &&
-            kName.size() > content::kSidecarSuffix.size()) {
-            sidecars.push_back(entry->path().lexically_relative(kSources).generic_string());
-        }
-    }
-    if (error) {
-        return std::unexpected<result::Error>{
-            failure(CookError::BadRequest, "the sources cannot be listed", request.sources.string())};
-    }
-    std::ranges::sort(sidecars);
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::string> kSidecars, sidecarsUnder(kSources));
 
     CookReport report;
     std::vector<Planned> plan;
-    for (const std::string& sidecar : sidecars) {
+    for (const std::string& sidecar : kSidecars) {
         const auto kText = readFile(kSources / sidecar);
         if (!kText.has_value()) {
             report.failures.push_back(failure(CookError::BadSidecar, "the sidecar cannot be read", sidecar));
@@ -593,6 +611,71 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
     if (!writeText(kOutput / "content.manifest", kManifest) ||
         !writeText(kOutput / "cook.receipt", document::write(receipt))) {
         report.failures.push_back(failure(CookError::WriteFailed, "the manifest or receipt cannot be written", ""));
+    }
+    return report;
+}
+
+result::Result<MapReport> mapSubassets(const std::filesystem::path& sources,
+                                       std::span<const Importer> importers,
+                                       const std::function<content::ResourceId()>& fresh) {
+    std::error_code error;
+    const std::filesystem::path kSources = std::filesystem::canonical(sources, error);
+    if (error || !std::filesystem::is_directory(kSources)) {
+        return std::unexpected<result::Error>{
+            failure(CookError::BadRequest, "the sources are not a directory", sources.string())};
+    }
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::string> kSidecars, sidecarsUnder(kSources));
+    MapReport report;
+    for (const std::string& path : kSidecars) {
+        const auto kText = readFile(kSources / path);
+        auto read =
+            kText.has_value()
+                ? content::readSidecar(std::string_view{reinterpret_cast<const char*>(kText->data()), kText->size()})
+                : result::Result<content::Sidecar>{std::unexpected<result::Error>{
+                      failure(CookError::BadSidecar, "the sidecar cannot be read", path)}};
+        if (!read.has_value()) {
+            report.failures.push_back(std::move(read).error().withContext("path", path));
+            continue;
+        }
+        const auto kImporter = std::ranges::find(importers, read->importer, &Importer::identity);
+        if (kImporter == importers.end()) {
+            report.failures.push_back(failure(CookError::UnknownImporter, "no importer of that identity", path));
+            continue;
+        }
+        auto settings = kImporter->normalize(read->settings ? &*read->settings : nullptr);
+        const std::string kSource = path.substr(0, path.size() - content::kSidecarSuffix.size());
+        const auto kBytes = readFile(kSources / kSource);
+        if (!settings.has_value() || !kBytes.has_value()) {
+            report.failures.push_back(settings.has_value()
+                                          ? failure(CookError::MissingSource, "the sidecar's source is missing", path)
+                                          : std::move(settings).error().withContext("path", path));
+            continue;
+        }
+        // One cook, giving what it asks of an identity and what it makes of
+        // a subasset one; the artifacts are left.
+        Reads reads{kSources, std::filesystem::path{kSource}.parent_path(), read->subassets};
+        reads.assignWith(fresh);
+        auto cooked = kImporter->cook(*kBytes, *settings, reads);
+        if (!cooked.has_value()) {
+            report.failures.push_back(std::move(cooked).error().withContext("path", kSource));
+            continue;
+        }
+        for (const Subasset& subasset : cooked->subassets) {
+            static_cast<void>(reads.subasset(subasset.key));
+        }
+        if (reads.assigned().empty()) {
+            continue;
+        }
+        std::vector<std::string> added;
+        for (const auto& [kKey, kId] : reads.assigned()) {
+            read->subassets.emplace(kKey, kId);
+            added.push_back(kKey);
+        }
+        if (!writeText(kSources / path, content::writeSidecar(*read))) {
+            report.failures.push_back(failure(CookError::WriteFailed, "the sidecar cannot be written", path));
+            continue;
+        }
+        report.written.emplace_back(path, std::move(added));
     }
     return report;
 }
