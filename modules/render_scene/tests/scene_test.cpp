@@ -360,7 +360,36 @@ RAWFRAME_TEST(TheSunsCascadesCoverTheViewAndHoldStill) {
     // it is drawn (the view has no far plane); the one behind is not.
     const std::array<float, 3> kInFirst = clipOf(kShadows.cascades[1].viewProjection, {0, -2, -10});
     RAWFRAME_EXPECT(std::abs(kInFirst[0]) < 1 && std::abs(kInFirst[1]) < 1 && kInFirst[2] > 0 && kInFirst[2] < 1);
-    RAWFRAME_EXPECT(kShadows.casters.size() == 2 && kFrame.draws.size() == 2);
+    RAWFRAME_EXPECT(kFrame.draws.size() == 2);
+    // Each cascade names its own casters, one run after another (D298):
+    // the far box in none, the others where their spheres reach.
+    std::uint32_t named = 0;
+    std::array<std::uint32_t, 4> ahead{};
+    std::array<std::uint32_t, 4> behind{};
+    for (std::size_t at = 0; at < kShadows.count; ++at) {
+        const ShadowCascade& kCascade = kShadows.cascades[at];
+        RAWFRAME_EXPECT(kCascade.firstCaster == named);
+        named += kCascade.casterCount;
+        for (std::uint32_t caster = 0; caster < kCascade.casterCount; ++caster) {
+            const float kZ = kShadows.casters[kCascade.firstCaster + caster].model[14];
+            RAWFRAME_EXPECT(near(kZ, -10) || near(kZ, 10));
+            (kZ < 0 ? ahead : behind)[at] += 1;
+        }
+    }
+    std::printf("cascades' casters ahead %u %u %u %u, behind %u %u %u %u\n",
+                ahead[0],
+                ahead[1],
+                ahead[2],
+                ahead[3],
+                behind[0],
+                behind[1],
+                behind[2],
+                behind[3]);
+    // The sun is high: the box ahead reaches even the first cascade, which
+    // ends 5.5 m ahead; the one behind, twenty meters from the first two's
+    // spheres, only the last two.
+    RAWFRAME_EXPECT(named == kShadows.casters.size() && ahead == (std::array<std::uint32_t, 4>{1, 1, 1, 1}) &&
+                    behind == (std::array<std::uint32_t, 4>{0, 0, 1, 1}));
     // Nearer the sun is deeper: a point above another is nearer one.
     const std::array<float, 3> kAbove = clipOf(kShadows.cascades[1].viewProjection, {0, 8, -10});
     RAWFRAME_EXPECT(kAbove[2] > kInFirst[2]);

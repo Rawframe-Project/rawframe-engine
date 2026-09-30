@@ -151,6 +151,8 @@ struct Scene::State {
     /// kept for the view asks for shadows (D292).
     std::vector<ShadowCandidate> candidates;
     std::vector<bool> shadowed;
+    /// The models near enough to cast into the sun's cascades (D298).
+    std::vector<ShadowCandidate> sunCandidates;
     std::optional<std::array<double, 3>> previousEye;
     Matrix previousViewProjection{};
     std::uint64_t frames = 0;
@@ -273,6 +275,7 @@ struct Scene::State {
         frame.clusterOverflow = 0;
         lights();
         candidates.clear();
+        sunCandidates.clear();
         const bool kLightShadows =
             settings.lightShadows.side > 0 && std::ranges::any_of(punctual, [](const LightInstance& light) {
                 return light.light.shadows && light.light.lumens > 0;
@@ -407,11 +410,7 @@ struct Scene::State {
                 candidates.push_back({.draw = draw, .center = center, .radius = kRadius});
             }
             if (frame.shadows.count > 0 && kAway - kRadius <= frame.shadows.distance) {
-                if (frame.shadows.casters.size() < settings.limits.maximumModels) {
-                    frame.shadows.casters.push_back(draw);
-                } else {
-                    ++frame.shadows.overLimit;
-                }
+                sunCandidates.push_back({.draw = draw, .center = center, .radius = kRadius});
             }
             const Vector kSeen = {(kRight[0] * center[0]) + (kRight[1] * center[1]) + (kRight[2] * center[2]),
                                   (kUp[0] * center[0]) + (kUp[1] * center[1]) + (kUp[2] * center[2]),
@@ -441,6 +440,7 @@ struct Scene::State {
             frame.draws.push_back(draw);
             ++frame.drawn;
         }
+        castIntoCascades();
         temporal(camera, kSees);
         frame.metering.snap = frame.metering.enabled && (!meteredBefore || !continuous);
         meteredBefore = frame.metering.enabled;
@@ -453,6 +453,43 @@ struct Scene::State {
                       shadowed);
         shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
         return frame;
+    }
+
+    /// Each cascade's casters (D298): the models whose bounding spheres
+    /// reach its box, which runs from the shadows' distance toward the sun
+    /// to past its slice, in draw order, one after another; a model in two
+    /// cascades is in both. Past the models' limit, the rest are left out.
+    void castIntoCascades() {
+        SceneShadows& shadows = frame.shadows;
+        for (std::size_t at = 0; at < shadows.count; ++at) {
+            ShadowCascade& cascade = shadows.cascades[at];
+            const Matrix& kSeen = cascade.viewProjection;
+            // How far a meter reaches along each of the cascade's axes.
+            std::array<float, 3> reach{};
+            for (std::size_t row = 0; row < 3; ++row) {
+                reach[row] = std::sqrt((kSeen[row] * kSeen[row]) + (kSeen[4 + row] * kSeen[4 + row]) +
+                                       (kSeen[8 + row] * kSeen[8 + row]));
+            }
+            cascade.firstCaster = static_cast<std::uint32_t>(shadows.casters.size());
+            for (const ShadowCandidate& candidate : sunCandidates) {
+                bool inside = true;
+                for (std::size_t row = 0; row < 3; ++row) {
+                    const float kAt = (kSeen[row] * candidate.center[0]) + (kSeen[4 + row] * candidate.center[1]) +
+                                      (kSeen[8 + row] * candidate.center[2]) + kSeen[12 + row];
+                    const float kMargin = candidate.radius * reach[row];
+                    inside = inside && kAt >= (row == 2 ? 0.0F : -1.0F) - kMargin && kAt <= 1 + kMargin;
+                }
+                if (!inside) {
+                    continue;
+                }
+                if (shadows.casters.size() < settings.limits.maximumModels) {
+                    shadows.casters.push_back(candidate.draw);
+                } else {
+                    ++shadows.overLimit;
+                }
+            }
+            cascade.casterCount = static_cast<std::uint32_t>(shadows.casters.size()) - cascade.firstCaster;
+        }
     }
 
     /// The temporal inputs (D291): the jitter, and the frame before's view

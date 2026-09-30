@@ -298,11 +298,15 @@ struct ShadowCascade {
     float far = 0;
     /// The World size of one of its texels, for the normal bias.
     float texel = 0;
+    /// Its casters, a run of `SceneShadows::casters` (D298).
+    std::uint32_t firstCaster = 0;
+    std::uint32_t casterCount = 0;
 };
 
 /// The sun's shadows as the view stage derives them (ADR-0051's cascaded
 /// shadow maps): up to four cascades, nearest first, and the models that
-/// cast into them, in draw order. None without a sun or shadows.
+/// cast into each, cascade by cascade, in draw order (D298). None without
+/// a sun or shadows.
 struct SceneShadows {
     std::size_t count = 0;
     std::array<ShadowCascade, 4> cascades{};
@@ -312,7 +316,7 @@ struct SceneShadows {
     /// cascade's last tenth.
     float distance = 0;
     std::vector<SceneDraw> casters;
-    /// Casters left out past the models' limit.
+    /// Casters left out past the models' limit, once for each cascade.
     std::size_t overLimit = 0;
 };
 
