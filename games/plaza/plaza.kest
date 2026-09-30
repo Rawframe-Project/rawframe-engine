@@ -18,6 +18,9 @@ const BRASS: u64 = 0x6d2c9bd611d50fdf
 const MARBLE: u64 = 0xe4443f63fe935232
 const PAVING: u64 = 0xb6b2fb38f649a30b
 
+// The sky's picture plaza.game's `texture` line names (D322).
+const SKY: u64 = 0xa97797a3a58f6d7a
+
 // A player's entity arrives with its components zeroed: here it becomes a
 // walker standing somewhere on the plaza.
 fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], characters: [physics3d.Character3D]) {
@@ -257,6 +260,17 @@ fn meter(count: i32, sticks: [controls.Stick], meters: [model.AutoExposure]) {
     let i = 0
     while i < count {
         meters[i] = model.AutoExposure(5.0, 17.0, 3.0, 1.0, 1.0, 0.1, 0.9)
+        i = i + 1
+    }
+}
+
+// The sky a client sees and is lit by (D322): the clear day's picture,
+// the sun's own disc left out, its sky averaging 5,000 candela per square
+// meter as the default sky does, its ground the picture's.
+fn sky(count: i32, sticks: [controls.Stick], skies: [model.Sky]) {
+    let i = 0
+    while i < count {
+        skies[i] = model.Sky(5000.0, 0xFFFFFFFF, u32(0), SKY)
         i = i + 1
     }
 }

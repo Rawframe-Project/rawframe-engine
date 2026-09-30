@@ -92,16 +92,17 @@ RAWFRAME_TEST(AGameKnowsItsMeshesSubassetsCookedOrNot) {
                 const std::vector<std::string> kKnown = resourcesOf(*kFromCooked);
                 RAWFRAME_EXPECT(kKnown == resourcesOf(*kFromSources));
                 // The crate's planks and iron, the mound's grass, and the
-                // planks' texture, beside the materials and texture the
-                // game's lines name.
+                // planks' texture, beside the materials and textures the
+                // game's lines name, the sky's picture among them (D322).
                 for (const std::string_view kSubasset : {"4fa8f5945fc4b1ae crate.gltf#material/Iron subasset",
                                                          "ea67406491ff8d5d crate.gltf#material/Planks subasset",
                                                          "3aa889e544dcfceb mound.gltf#material/Grass subasset",
                                                          "71cc8dbcf82d6cfa crate.gltf#texture/Planks",
-                                                         "9f822820a44af4fc paving.png"}) {
+                                                         "9f822820a44af4fc paving.png",
+                                                         "a97797a3a58f6d7a sky.hdr"}) {
                     RAWFRAME_EXPECT(std::ranges::contains(kKnown, kSubasset));
                 }
-                RAWFRAME_EXPECT(kKnown.size() == 8);
+                RAWFRAME_EXPECT(kKnown.size() == 9);
             }
         }
     }
