@@ -326,9 +326,10 @@ struct SceneRenderer::State {
         mrhiResourceId lightsResource{};
         mrhiResourceId rangesResource{};
         mrhiResourceId indicesResource{};
-        /// The camera's grade, as the picture's pass reads it (D294).
-        GradeBlock grade;
-        mrhiResourceId gradeResource{};
+        /// The camera's grade and tonemapper, as the picture's pass reads
+        /// them (D294, D295).
+        PictureBlock picture;
+        mrhiResourceId pictureResource{};
         /// The sky's light, as its pass reads it (D293); the target's size.
         SkyBlock sky;
         mrhiResourceId skyResource{};
@@ -397,11 +398,11 @@ struct SceneRenderer::State {
         now.width = open.width;
         now.height = open.height;
         now.sky.light = now.block.sky;
-        now.grade = gradeOf(*frame);
-        mrhiBufferDef gradeDef = mrhiDefaultBufferDef();
-        gradeDef.size = sizeof(GradeBlock);
-        if (mrhiDeclareBuffer(native, &gradeDef, &now.gradeResource) != mrhi_success) {
-            return failed("the grade could not be declared", mrhi_errorCapacity);
+        now.picture = pictureOf(*frame);
+        mrhiBufferDef pictureBlockDef = mrhiDefaultBufferDef();
+        pictureBlockDef.size = sizeof(PictureBlock);
+        if (mrhiDeclareBuffer(native, &pictureBlockDef, &now.pictureResource) != mrhi_success) {
+            return failed("the picture's grade could not be declared", mrhi_errorCapacity);
         }
         mrhiBufferDef skyDef = mrhiDefaultBufferDef();
         skyDef.size = sizeof(SkyBlock);
@@ -503,7 +504,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(temporal->declare(*frame, open.width, open.height, writes));
         writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
-        writes.push_back(wholeOf(now.gradeResource, mrhi_accessCopyDestination));
+        writes.push_back(wholeOf(now.pictureResource, mrhi_accessCopyDestination));
         RAWFRAME_TRY(metering->declare(*frame, writes));
         for (const mrhiResourceId kView : now.slotViews) {
             writes.push_back(wholeOf(kView, mrhi_accessCopyDestination));
@@ -628,7 +629,7 @@ struct SceneRenderer::State {
         pictureDef.colorTargets[0].store = mrhi_storeKeep;
         pictureDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
         pictureDef.colorTargetCount = 1;
-        const std::array<mrhiAccess, 2> kPictureReads = {kScene, wholeOf(now.gradeResource, mrhi_accessUniform)};
+        const std::array<mrhiAccess, 2> kPictureReads = {kScene, wholeOf(now.pictureResource, mrhi_accessUniform)};
         pictureDef.accesses = kPictureReads.data();
         pictureDef.accessCount = static_cast<std::uint32_t>(kPictureReads.size());
         pictureDef.neverCull = true;
@@ -673,7 +674,8 @@ struct SceneRenderer::State {
             return failed("the frame's lights could not be written", mrhi_errorCapacity);
         }
         if (mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock)) != mrhi_success ||
-            mrhiWriteBuffer(native, now.upload, now.gradeResource, 0, &now.grade, sizeof(GradeBlock)) != mrhi_success) {
+            mrhiWriteBuffer(native, now.upload, now.pictureResource, 0, &now.picture, sizeof(PictureBlock)) !=
+                mrhi_success) {
             return failed("the sky's light could not be written", mrhi_errorCapacity);
         }
         RAWFRAME_TRY(metering->write(now.upload));
@@ -821,9 +823,9 @@ struct SceneRenderer::State {
                 .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}},
                 .sampler = {}},
             mrhiBinding{.slot = 1,
-                        .resource = now.gradeResource,
+                        .resource = now.pictureResource,
                         .offset = 0,
-                        .size = sizeof(GradeBlock),
+                        .size = sizeof(PictureBlock),
                         .viewKind = mrhi_texture2d,
                         .viewFormat = mrhi_formatNone,
                         .range = {},

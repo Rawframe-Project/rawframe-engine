@@ -1,8 +1,10 @@
 // The scene's picture (D284), fragment entry "fs": the pre-exposed
 // scene-linear light of the texel under it, graded as the camera asks
 // (D294, ADR-0051: white balance, ASC CDL, saturation, contrast about
-// middle grey), then mapped for display by AgX (ADR-0047's default), in
-// linear light for the sRGB picture to encode.
+// middle grey), then mapped for display by the camera's tonemapper (D295,
+// ADR-0047's closed set: AgX, the default; Khronos PBR Neutral; linear),
+// each keeping middle grey where AgX puts it, in linear light for the
+// sRGB picture to encode.
 // AgX as Troy Sobotka made it, fitted by Benjamin Wrensch.
 
 #version 450
@@ -12,12 +14,14 @@ layout(set = 0, binding = 0) uniform texture2D scene;
 
 // The grade: the white balance's rows; the slope, with the saturation;
 // the offset, with the contrast; the power, with whether to grade at all.
+// Then the tonemapper's number, and what it scales light by first.
 layout(set = 0, binding = 1, std140) uniform Grade
 {
     vec4 balance[3];
     vec4 slope;
     vec4 offset;
     vec4 power;
+    vec4 tonemapper;
 }
 grade;
 
@@ -44,6 +48,25 @@ vec3 graded(vec3 color)
     return 0.18 * pow(color / 0.18, vec3(grade.offset.w));
 }
 
+// Khronos PBR Neutral, as Khronos specifies it.
+vec3 neutral(vec3 color)
+{
+    const float kStart = 0.8 - 0.04;
+    const float kDesaturation = 0.15;
+    const float kLeast = min(color.r, min(color.g, color.b));
+    const float kOffset = kLeast < 0.08 ? kLeast - 6.25 * kLeast * kLeast : 0.04;
+    color -= kOffset;
+    const float kPeak = max(color.r, max(color.g, color.b));
+    if (kPeak < kStart) {
+        return color;
+    }
+    const float kRoom = 1.0 - kStart;
+    const float kNewPeak = 1.0 - kRoom * kRoom / (kPeak + kRoom - kStart);
+    color *= kNewPeak / kPeak;
+    const float kGrey = 1.0 - 1.0 / (kDesaturation * (kPeak - kNewPeak) + 1.0);
+    return mix(color, vec3(kNewPeak), kGrey);
+}
+
 void main()
 {
     const mat3 kInset = mat3(0.842479062253094, 0.0423282422610123, 0.0423756549057051, 0.0784335999999992,
@@ -55,7 +78,16 @@ void main()
     const float kHighest = 4.026069;
     const ivec2 kSize = textureSize(scene, 0);
     const ivec2 kTexel = min(ivec2(inUv * vec2(kSize)), kSize - 1);
-    vec3 color = kInset * max(graded(texelFetch(scene, kTexel, 0).rgb), vec3(1e-10));
+    const vec3 kLight = graded(texelFetch(scene, kTexel, 0).rgb) * grade.tonemapper.y;
+    if (grade.tonemapper.x > 1.5) {
+        outColor = vec4(clamp(kLight, 0.0, 1.0), 1.0);
+        return;
+    }
+    if (grade.tonemapper.x > 0.5) {
+        outColor = vec4(clamp(neutral(max(kLight, vec3(0.0))), 0.0, 1.0), 1.0);
+        return;
+    }
+    vec3 color = kInset * max(kLight, vec3(1e-10));
     color = (clamp(log2(color), kLowest, kHighest) - kLowest) / (kHighest - kLowest);
     color = kOutset * contrast(color);
     outColor = vec4(pow(max(color, vec3(0.0)), vec3(2.2)), 1.0);

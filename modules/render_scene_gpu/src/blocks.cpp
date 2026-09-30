@@ -21,15 +21,28 @@ ExposureBlock exposureOf(float ev100) noexcept {
     return {.value = {ev100, factorOf(ev100), 0, 0}};
 }
 
-GradeBlock gradeOf(const render_scene::SceneFrame& frame) noexcept {
+PictureBlock pictureOf(const render_scene::SceneFrame& frame) noexcept {
     const render_scene::SceneGrading& kGrade = frame.grading;
-    GradeBlock block;
+    PictureBlock block;
     for (std::size_t row = 0; row < 3; ++row) {
         block.balance[row] = {kGrade.balance[row * 3], kGrade.balance[(row * 3) + 1], kGrade.balance[(row * 3) + 2], 0};
     }
     block.slope = {kGrade.slope[0], kGrade.slope[1], kGrade.slope[2], kGrade.saturation};
     block.offset = {kGrade.offset[0], kGrade.offset[1], kGrade.offset[2], kGrade.contrast};
     block.power = {kGrade.power[0], kGrade.power[1], kGrade.power[2], kGrade.enabled ? 1.0F : 0.0F};
+    // What middle grey (0.18) is scaled by for each operator to come out
+    // as AgX's 0.2145 (ADR-0047's normalization across operators).
+    switch (frame.tonemapper) {
+    case render_scene::Tonemapper::Agx:
+        block.tonemapper = {0, 1, 0, 0};
+        break;
+    case render_scene::Tonemapper::PbrNeutral:
+        block.tonemapper = {1, 1.41371F, 0, 0};
+        break;
+    case render_scene::Tonemapper::Linear:
+        block.tonemapper = {2, 1.19149F, 0, 0};
+        break;
+    }
     return block;
 }
 

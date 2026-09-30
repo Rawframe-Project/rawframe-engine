@@ -8,6 +8,7 @@ struct Grade {
     slope: vec4f,
     offset: vec4f,
     power: vec4f,
+    tonemapper: vec4f,
 }
 
 @group(0) @binding(1) var<uniform> grade: Grade;
@@ -44,6 +45,26 @@ fn graded(light: vec3f) -> vec3f {
     return 0.18 * pow(color / 0.18, vec3f(grade.offset.w));
 }
 
+fn neutral(light: vec3f) -> vec3f {
+    let start = 0.8 - 0.04;
+    let desaturation = 0.15;
+    let least = min(light.r, min(light.g, light.b));
+    var offset = 0.04;
+    if (least < 0.08) {
+        offset = least - 6.25 * least * least;
+    }
+    var color = light - offset;
+    let peak = max(color.r, max(color.g, color.b));
+    if (peak < start) {
+        return color;
+    }
+    let room = 1.0 - start;
+    let newPeak = 1.0 - room * room / (peak + room - start);
+    color *= newPeak / peak;
+    let grey = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+    return mix(color, vec3f(newPeak), grey);
+}
+
 @fragment
 fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
     let inset = mat3x3f(0.842479062253094, 0.0423282422610123, 0.0423756549057051, 0.0784335999999992,
@@ -55,7 +76,14 @@ fn fs(@location(0) uv: vec2f) -> @location(0) vec4f {
     let highest = 4.026069;
     let size = vec2i(textureDimensions(scene, 0));
     let texel = min(vec2i(uv * vec2f(size)), size - 1);
-    var color = inset * max(graded(textureLoad(scene, texel, 0).rgb), vec3f(1e-10));
+    let light = graded(textureLoad(scene, texel, 0).rgb) * grade.tonemapper.y;
+    if (grade.tonemapper.x > 1.5) {
+        return vec4f(clamp(light, vec3f(0.0), vec3f(1.0)), 1.0);
+    }
+    if (grade.tonemapper.x > 0.5) {
+        return vec4f(clamp(neutral(max(light, vec3f(0.0))), vec3f(0.0), vec3f(1.0)), 1.0);
+    }
+    var color = inset * max(light, vec3f(1e-10));
     color = (clamp(log2(color), vec3f(lowest), vec3f(highest)) - lowest) / (highest - lowest);
     color = outset * contrast(color);
     return vec4f(pow(max(color, vec3f(0.0)), vec3f(2.2)), 1.0);

@@ -88,19 +88,22 @@ MeterBlock meterOf(const render_scene::SceneFrame& frame) noexcept;
 /// The metering's histogram: its bins, the first for no light.
 inline constexpr std::uint32_t kHistogramBins = 128;
 
-/// The camera's grade as the picture's pass reads it (D294, std140): the
+/// What the picture's pass reads (std140): the camera's grade (D294), the
 /// white balance's rows; the slope, with the saturation; the offset, with
-/// the contrast; the power, with one when it grades at all.
-struct GradeBlock {
+/// the contrast; the power, with one when it grades at all; and its
+/// tonemapper (D295): its number, and the factor that keeps middle grey
+/// where AgX puts it.
+struct PictureBlock {
     std::array<std::array<float, 4>, 3> balance{};
     std::array<float, 4> slope{};
     std::array<float, 4> offset{};
     std::array<float, 4> power{};
+    std::array<float, 4> tonemapper{};
 };
-static_assert(sizeof(GradeBlock) == 96, "the picture's shader reads a grade as 96 bytes");
+static_assert(sizeof(PictureBlock) == 112, "the picture's shader reads its block as 112 bytes");
 
-/// The frame's grade as the picture's pass reads it.
-GradeBlock gradeOf(const render_scene::SceneFrame& frame) noexcept;
+/// The frame's grade and tonemapper as the picture's pass reads them.
+PictureBlock pictureOf(const render_scene::SceneFrame& frame) noexcept;
 
 /// What the sky's pass reads (D293): its light in candela per square meter.
 struct SkyBlock {
