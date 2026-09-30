@@ -107,7 +107,8 @@ struct SceneRenderer::State {
                     continue;
                 }
                 const render_scene::SceneTextures& kTextures = scene.textures[draw.material];
-                for (const std::uint64_t kId : {kTextures.base.id, kTextures.packed.id, kTextures.emission.id}) {
+                for (const std::uint64_t kId :
+                     {kTextures.base.id, kTextures.packed.id, kTextures.emission.id, kTextures.normal.id}) {
                     if (kId != 0) {
                         static_cast<void>(textures->choose(kId, sampled ? sampled(kId) : nullptr));
                     }
@@ -783,8 +784,8 @@ struct SceneRenderer::State {
             return failed("the upload pass could not end", mrhi_errorState);
         }
         RAWFRAME_TRY(castShadows(now));
-        // The scene's table: slots 10 to 15 are each run's textures.
-        const std::array<mrhiBinding, 16> kFrameBinding = {
+        // The scene's table: slots 10 to 17 are each run's textures.
+        const std::array<mrhiBinding, 18> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, now.shadowMap),
             samplerAt(2, pipelines.shadowSampler),
@@ -800,7 +801,9 @@ struct SceneRenderer::State {
             textureAt(12, {}),
             samplerAt(13, {}),
             textureAt(14, {}),
-            samplerAt(15, {})};
+            samplerAt(15, {}),
+            textureAt(16, {}),
+            samplerAt(17, {})};
         const std::array<mrhiBinding, 2> kSkyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
                                                         bufferAt(1, metering->exposure(), sizeof(ExposureBlock))};
         // Runs of models drawn with `pipeline` in `pass`.
@@ -817,13 +820,14 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 16> binding = kFrameBinding;
+            std::array<mrhiBinding, 18> binding = kFrameBinding;
             std::optional<render_scene::SceneTextures> bound;
             for (const Run& run : runs) {
                 if (bound != run.texture) {
                     bindTexture(binding[10], binding[11], run.texture.base);
                     bindTexture(binding[12], binding[13], run.texture.packed);
                     bindTexture(binding[14], binding[15], run.texture.emission);
+                    bindTexture(binding[16], binding[17], run.texture.normal);
                     if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
                         return failed("a material's texture could not be bound", mrhi_errorState);
                     }

@@ -149,6 +149,75 @@ std::vector<SlotBlock> slotsOf(const render_scene::SceneFrame& frame) {
     return made;
 }
 
+std::vector<std::array<float, 4>> tangentsOf(const mesh::Mesh& made, std::span<const mesh::Vector3> normals) {
+    using Vector = std::array<double, 3>;
+    const auto kMinus = [](const Vector& left, const Vector& right) {
+        return Vector{left[0] - right[0], left[1] - right[1], left[2] - right[2]};
+    };
+    const auto kDot = [](const Vector& left, const Vector& right) {
+        return (left[0] * right[0]) + (left[1] * right[1]) + (left[2] * right[2]);
+    };
+    const auto kCross = [](const Vector& left, const Vector& right) {
+        return Vector{(left[1] * right[2]) - (left[2] * right[1]),
+                      (left[2] * right[0]) - (left[0] * right[2]),
+                      (left[0] * right[1]) - (left[1] * right[0])};
+    };
+    const auto kWide = [](const auto& value) {
+        return Vector{value[0], value[1], value[2]};
+    };
+    // Each face's direction of rising u and of falling v (up the image,
+    // glTF's normal-map green), weighted by the face's size in both.
+    std::vector<Vector> alongU(made.positions.size(), Vector{0, 0, 0});
+    std::vector<Vector> upV(made.positions.size(), Vector{0, 0, 0});
+    if (made.uvs.size() == made.positions.size()) {
+        for (std::size_t at = 0; at + 2 < made.indices.size(); at += 3) {
+            const std::uint32_t kA = made.indices[at];
+            const std::uint32_t kB = made.indices[at + 1];
+            const std::uint32_t kC = made.indices[at + 2];
+            const Vector kE1 = kMinus(kWide(made.positions[kB]), kWide(made.positions[kA]));
+            const Vector kE2 = kMinus(kWide(made.positions[kC]), kWide(made.positions[kA]));
+            const double kDu1 = made.uvs[kB][0] - made.uvs[kA][0];
+            const double kDv1 = made.uvs[kB][1] - made.uvs[kA][1];
+            const double kDu2 = made.uvs[kC][0] - made.uvs[kA][0];
+            const double kDv2 = made.uvs[kC][1] - made.uvs[kA][1];
+            const double kArea = (kDu1 * kDv2) - (kDu2 * kDv1);
+            if (kArea == 0 || !std::isfinite(kArea)) {
+                continue;
+            }
+            const double kR = 1 / kArea;
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                const double kU = ((kE1[axis] * kDv2) - (kE2[axis] * kDv1)) * kR;
+                const double kV = ((kE2[axis] * kDu1) - (kE1[axis] * kDu2)) * kR;
+                for (const std::uint32_t kCorner : {kA, kB, kC}) {
+                    alongU[kCorner][axis] += kU;
+                    upV[kCorner][axis] -= kV;
+                }
+            }
+        }
+    }
+    std::vector<std::array<float, 4>> tangents(made.positions.size());
+    for (std::size_t at = 0; at < made.positions.size(); ++at) {
+        Vector normal = kWide(normals[at]);
+        const double kLength = std::sqrt(kDot(normal, normal));
+        normal = kLength > 0 ? Vector{normal[0] / kLength, normal[1] / kLength, normal[2] / kLength} : Vector{0, 1, 0};
+        // Across the normal: rising u, or, with none, any direction across.
+        Vector across = kMinus(alongU[at],
+                               Vector{normal[0] * kDot(normal, alongU[at]),
+                                      normal[1] * kDot(normal, alongU[at]),
+                                      normal[2] * kDot(normal, alongU[at])});
+        if (kDot(across, across) < 1e-20) {
+            across = kCross(std::abs(normal[1]) < 0.9 ? Vector{0, 1, 0} : Vector{1, 0, 0}, normal);
+        }
+        const double kAcross = std::sqrt(kDot(across, across));
+        const double kSide = kDot(kCross(normal, across), upV[at]) < 0 ? -1 : 1;
+        tangents[at] = {static_cast<float>(across[0] / kAcross),
+                        static_cast<float>(across[1] / kAcross),
+                        static_cast<float>(across[2] / kAcross),
+                        static_cast<float>(kSide)};
+    }
+    return tangents;
+}
+
 std::vector<float> verticesOf(const mesh::Mesh& made) {
     std::vector<mesh::Vector3> normals = made.normals;
     if (normals.size() != made.positions.size()) {
@@ -172,6 +241,7 @@ std::vector<float> verticesOf(const mesh::Mesh& made) {
         }
     }
     const bool kMapped = made.uvs.size() == made.positions.size();
+    const std::vector<std::array<float, 4>> kTangents = tangentsOf(made, normals);
     std::vector<float> vertices;
     vertices.reserve(made.positions.size() * (kVertexBytes / sizeof(float)));
     for (std::size_t at = 0; at < made.positions.size(); ++at) {
@@ -179,6 +249,7 @@ std::vector<float> verticesOf(const mesh::Mesh& made) {
         vertices.insert(vertices.end(), normals[at].begin(), normals[at].end());
         vertices.push_back(kMapped ? made.uvs[at][0] : 0.0F);
         vertices.push_back(kMapped ? made.uvs[at][1] : 0.0F);
+        vertices.insert(vertices.end(), kTangents[at].begin(), kTangents[at].end());
     }
     return vertices;
 }

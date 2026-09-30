@@ -41,7 +41,7 @@ fn vsCut(@location(0) position: vec3f, @location(2) model0: vec4f, @location(3) 
 
 @fragment
 fn cut(@location(1) color: vec4f, @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f) {
-    let at = min(material, arrayLength(&materials) / 8u - 1u) * 8u;
+    let at = min(material, arrayLength(&materials) / 9u - 1u) * 9u;
     let rest = materials[at + 3u];
     let mapped = materials[at + 4u];
     let sampled = textureSample(baseTexture, baseSampler, uv * mapped.xy + mapped.zw);

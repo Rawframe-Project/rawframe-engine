@@ -50,6 +50,8 @@ layout(location = 11) in vec4 inPrevious2;
 layout(location = 12) in float inMaterial;
 // The vertex's texture coordinates, the mesh's first set (D309).
 layout(location = 13) in vec2 inUv;
+// The vertex's tangent and the bitangent's sign (D313).
+layout(location = 14) in vec4 inTangent;
 
 layout(location = 0) out vec3 outNormal;
 layout(location = 1) out vec4 outColor;
@@ -58,6 +60,7 @@ layout(location = 3) out vec3 outNow;
 layout(location = 4) out vec3 outBefore;
 layout(location = 5) flat out uint outMaterial;
 layout(location = 6) out vec2 outUv;
+layout(location = 7) out vec4 outTangent;
 
 invariant gl_Position;
 
@@ -74,4 +77,9 @@ void main()
     outBefore = (frame.previous * vec4(kWas, 1.0)).xyw;
     outMaterial = uint(inMaterial);
     outUv = inUv;
+    // A tangent turns with the model; a mirrored model flips its sign.
+    const vec3 kTurned = vec3(dot(inModel0.xyz, inTangent.xyz), dot(inModel1.xyz, inTangent.xyz),
+                              dot(inModel2.xyz, inTangent.xyz));
+    const float kMirror = dot(inModel0.xyz, cross(inModel1.xyz, inModel2.xyz)) < 0.0 ? -1.0 : 1.0;
+    outTangent = vec4(kTurned, inTangent.w * kMirror);
 }

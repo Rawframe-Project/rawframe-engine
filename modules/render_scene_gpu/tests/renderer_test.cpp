@@ -1254,3 +1254,75 @@ RAWFRAME_TEST(PackedAndEmissionTexturesShapeTheSurface) {
         "glowing %d above, %d below; under the sky %d above, %d below\n", kGlowAbove, kGlowBelow, kSkyAbove, kSkyBelow);
     RAWFRAME_EXPECT(std::abs(kGlowAbove - 128) <= 3 && kGlowBelow == 0 && kSkyAbove > 60 && kSkyBelow < 5);
 }
+
+RAWFRAME_TEST(ANormalTextureBendsTheLight) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A tangent-space normal leaning 45 degrees one way, as glTF encodes
+    // it: toward rising u (red), or up the image (green).
+    const auto kLeaning = [](std::byte red, std::byte green) {
+        texture::Texture leaning{.format = texture::Format::Rgba8};
+        leaning.levels.push_back({.width = 1, .height = 1, .bytes = {red, green, std::byte{219}, std::byte{255}}});
+        return std::make_shared<const texture::Texture>(std::move(leaning));
+    };
+    const auto kRight = kLeaning(std::byte{218}, std::byte{128});
+    const auto kUp = kLeaning(std::byte{128}, std::byte{218});
+    std::shared_ptr<const texture::Texture> given;
+    const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == 0x77 ? given : nullptr;
+    };
+    // A rough white box facing the eye, lit by the sun alone from a side
+    // at 45 degrees; the middle of its face read.
+    material::Material rough;
+    rough.surface.baseColor = {1, 1, 1};
+    rough.surface.specularRoughness = 1;
+    const auto kLit = [&](std::array<float, 3> toSun, bool bent) {
+        SceneFrame frame = looking();
+        frame.shadows.count = 0;
+        frame.lights.sky = {0, 0, 0};
+        frame.lights.ground = {0, 0, 0};
+        frame.lights.toSun = toSun;
+        SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
+        shown.material = 1;
+        frame.draws = {shown};
+        material::Material surface = rough;
+        if (bent) {
+            surface.textures.normal.id = 0x77;
+        }
+        frame.materials = {render_scene::noMaterial(), material::blobOf(surface)};
+        frame.textures = {{}, {.normal = {.id = bent ? 0x77ULL : 0ULL}}};
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes, kTextures);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        return kPixels.has_value() ? at(*kPixels, 32, 32)[0] : -1;
+    };
+    const float kSlant = std::sqrt(0.5F);
+    const int kFlatRight = kLit({kSlant, 0, kSlant}, false);
+    const int kFlatLeft = kLit({-kSlant, 0, kSlant}, false);
+    given = kRight;
+    const int kBentTowardRight = kLit({kSlant, 0, kSlant}, true);
+    const int kBentAwayLeft = kLit({-kSlant, 0, kSlant}, true);
+    given = kUp;
+    const int kBentTowardAbove = kLit({0, kSlant, kSlant}, true);
+    const int kBentAwayBelow = kLit({0, -kSlant, kSlant}, true);
+    std::printf("flat %d right, %d left; leaning right: sun right %d, left %d; leaning up: sun above %d, below %d\n",
+                kFlatRight,
+                kFlatLeft,
+                kBentTowardRight,
+                kBentAwayLeft,
+                kBentTowardAbove,
+                kBentAwayBelow);
+    RAWFRAME_EXPECT(std::abs(kFlatRight - kFlatLeft) <= 2 && kBentTowardRight > kFlatRight + 10 &&
+                    kBentAwayLeft + 60 < kFlatLeft && kBentTowardAbove > kFlatRight + 10 &&
+                    kBentAwayBelow + 60 < kFlatLeft);
+}

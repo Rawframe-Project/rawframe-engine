@@ -4,6 +4,7 @@
 #include "rawframe/render_scene/scene.h"
 
 #include <array>
+#include <span>
 #include <vector>
 
 namespace rawframe::render_scene_gpu {
@@ -11,9 +12,10 @@ namespace rawframe::render_scene_gpu {
 /// One column-major matrix, as a cascade's view is written.
 using Matrix4 = std::array<float, 16>;
 
-/// A vertex as the scene pipeline reads it: its position, its normal, then
-/// its texture coordinates, nought for a mesh without them (D309).
-constexpr std::uint32_t kVertexBytes = 32;
+/// A vertex as the scene pipeline reads it: its position, its normal, its
+/// texture coordinates, nought for a mesh without them (D309), then its
+/// tangent and the bitangent's sign (D313).
+constexpr std::uint32_t kVertexBytes = 48;
 
 /// The frame's view and light as the scene's shaders read them (std140).
 struct FrameBlock {
@@ -133,9 +135,16 @@ std::vector<LightBlock> lightsOf(const render_scene::SceneFrame& frame);
 std::vector<SlotBlock> slotsOf(const render_scene::SceneFrame& frame);
 
 /// A mesh's vertices as the pipeline reads them, its normals made from its
-/// faces where it has none, and its texture coordinates nought where it
-/// has none.
+/// faces where it has none, its texture coordinates nought where it has
+/// none, and its tangents made from its faces' coordinates (D313).
 std::vector<float> verticesOf(const mesh::Mesh& made);
+
+/// Each vertex's tangent, the direction its texture coordinates' u rises
+/// across its normal, and the sign that makes the bitangent the normal
+/// crossed with it point up the image (glTF's convention): Lengyel's
+/// per-face accumulation, not MikkTSpace (D313). Any direction across the
+/// normal, and a sign of one, where the mesh has no coordinates.
+std::vector<std::array<float, 4>> tangentsOf(const mesh::Mesh& made, std::span<const mesh::Vector3> normals);
 
 /// The bytes a mesh takes on the device: its vertices and indices.
 std::uint64_t bytesOf(const mesh::Mesh& made) noexcept;

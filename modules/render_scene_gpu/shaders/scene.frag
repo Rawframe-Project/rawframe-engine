@@ -47,6 +47,7 @@ layout(location = 4) in vec3 inBefore;
 // The model's material's place among the frame's materials.
 layout(location = 5) flat in uint inMaterial;
 layout(location = 6) in vec2 inUv;
+layout(location = 7) in vec4 inTangent;
 
 layout(set = 0, binding = 1) uniform texture2D shadowMap;
 layout(set = 0, binding = 2) uniform samplerShadow shadowSampler;
@@ -101,15 +102,16 @@ exposure;
 
 // The punctual shadows' atlas, and its squares.
 layout(set = 0, binding = 6) uniform texture2D lightShadowMap;
-// Every material's blob (D303), eight vectors each: the base color and
+// Every material's blob (D303), nine vectors each: the base color and
 // metalness; the specular color times its weight, and the roughness; the
 // emission in nits, and the index of refraction; the opacity, the
 // occlusion, the alpha cutoff, and its flags: one when unlit, two when its
 // base texture's color multiplies the base color, four when its alpha
-// multiplies the opacity; the base, packed, and emission textures' scale
-// and offset (D311); the packed texture's channels for the metalness, the
-// roughness, and the occlusion, and whether the emission texture's color
-// multiplies the emission (D312).
+// multiplies the opacity, eight when the emission texture's color
+// multiplies the emission, sixteen when the normal texture bends the
+// normal; the base, packed, emission, and normal textures' scale and
+// offset (D311); the packed texture's channels for the metalness, the
+// roughness, and the occlusion, and the normal's scale (D312, D313).
 // The texture the draw's material samples, and how (D309): white for one
 // sampling none.
 layout(set = 0, binding = 9, std430) readonly buffer Materials
@@ -124,6 +126,9 @@ layout(set = 0, binding = 12) uniform texture2D packedTexture;
 layout(set = 0, binding = 13) uniform sampler packedSampler;
 layout(set = 0, binding = 14) uniform texture2D emissionTexture;
 layout(set = 0, binding = 15) uniform sampler emissionSampler;
+// The normal texture (D313).
+layout(set = 0, binding = 16) uniform texture2D normalTexture;
+layout(set = 0, binding = 17) uniform sampler normalSampler;
 
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
@@ -278,9 +283,8 @@ vec3 punctual(vec3 placed, vec3 normal, Surface surface, vec3 toEye)
 
 void main()
 {
-    const vec3 kNormal = normalize(inNormal);
     const vec3 kToEye = normalize(-inPlaced);
-    const uint kAt = min(inMaterial, uint(materials.length()) / 8u - 1u) * 8u;
+    const uint kAt = min(inMaterial, uint(materials.length()) / 9u - 1u) * 9u;
     const vec4 kBase = materials[kAt];
     const vec4 kSpecular = materials[kAt + 1u];
     const vec4 kEmission = materials[kAt + 2u];
@@ -290,7 +294,8 @@ void main()
     const vec4 kBaseMap = materials[kAt + 4u];
     const vec4 kPackedMap = materials[kAt + 5u];
     const vec4 kEmissionMap = materials[kAt + 6u];
-    const vec4 kChannels = materials[kAt + 7u];
+    const vec4 kNormalMap = materials[kAt + 7u];
+    const vec4 kChannels = materials[kAt + 8u];
     const uint kFlags = uint(kRest.w);
     // The coordinates' derivatives, taken before anything branches, so a
     // texture is sampled only where its material has one.
@@ -307,10 +312,22 @@ void main()
                              kDx * kPackedMap.xy, kDy * kPackedMap.xy);
     }
     vec3 glow = vec3(1.0);
-    if (kChannels.w > 0.5) {
+    if ((kFlags & 8u) != 0u) {
         glow = textureGrad(sampler2D(emissionTexture, emissionSampler), inUv * kEmissionMap.xy + kEmissionMap.zw,
                            kDx * kEmissionMap.xy, kDy * kEmissionMap.xy).rgb;
     }
+    // The normal, bent by the normal texture across the tangent frame
+    // (D313): its x and y scaled, glTF's green up the image.
+    vec3 normal = normalize(inNormal);
+    if ((kFlags & 16u) != 0u) {
+        vec3 bent = textureGrad(sampler2D(normalTexture, normalSampler), inUv * kNormalMap.xy + kNormalMap.zw,
+                                kDx * kNormalMap.xy, kDy * kNormalMap.xy).xyz * 2.0 - 1.0;
+        bent.xy *= kChannels.w;
+        const vec3 kAcross = normalize(inTangent.xyz - normal * dot(normal, inTangent.xyz));
+        const vec3 kUp = cross(normal, kAcross) * inTangent.w;
+        normal = normalize(kAcross * bent.x + kUp * bent.y + normal * bent.z);
+    }
+    const vec3 kNormal = normal;
     const vec3 kColor = inColor.rgb * kBase.rgb * ((kFlags & 2u) != 0u ? sampled.rgb : vec3(1.0));
     // How much of what is behind it a translucent model hides (D305): its
     // material's opacity times its color's alpha.
