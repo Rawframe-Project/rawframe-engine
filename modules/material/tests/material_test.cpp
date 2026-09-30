@@ -143,3 +143,21 @@ RAWFRAME_TEST(TheHashAndTheBlobFollowTheMaterial) {
                     kBlob[10] == 0 && kBlob[11] == 1.5F && kBlob[14] == 0 && kBlob[15] == 1);
     RAWFRAME_EXPECT(blobOf(red())[14] == 0.25F);
 }
+
+RAWFRAME_TEST(ACookedMaterialDecodesAsItWasEncoded) {
+    const std::vector<std::byte> kBytes = encode(red());
+    const auto kDecoded = decode(kBytes);
+    RAWFRAME_EXPECT(kBytes.size() == 80 && kDecoded.has_value() && *kDecoded == red());
+    // Anything else is refused: short, another format, a value out of the
+    // contract's range, a state out of its set.
+    RAWFRAME_EXPECT(refusedWith(decode(std::span{kBytes}.first(79)), MaterialError::Invalid));
+    std::vector<std::byte> other = kBytes;
+    other[4] = std::byte{2};
+    RAWFRAME_EXPECT(refusedWith(decode(other), MaterialError::Invalid));
+    Material metallic = red();
+    metallic.surface.baseMetalness = 2;
+    RAWFRAME_EXPECT(refusedWith(decode(encode(metallic)), MaterialError::Invalid));
+    std::vector<std::byte> blended = kBytes;
+    blended[9] = std::byte{3};
+    RAWFRAME_EXPECT(refusedWith(decode(blended), MaterialError::Invalid));
+}

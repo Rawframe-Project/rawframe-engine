@@ -4,6 +4,7 @@
 #include "rawframe/material/errors.h"
 
 #include <algorithm>
+#include <bit>
 #include <charconv>
 #include <cmath>
 #include <optional>
@@ -130,6 +131,18 @@ const std::array<Parameter, 10> kParameters = {{
          return &s.specularWeight;
      }},
 }};
+
+/// In the contract's order (SPEC-0026's table), as cooked bytes are.
+const std::array<Parameter, 10> kContractOrder = {kParameters[1],
+                                                  kParameters[2],
+                                                  kParameters[9],
+                                                  kParameters[6],
+                                                  kParameters[8],
+                                                  kParameters[7],
+                                                  kParameters[3],
+                                                  kParameters[4],
+                                                  kParameters[5],
+                                                  kParameters[0]};
 
 const Parameter* parameterNamed(std::string_view name) {
     const auto kFound = std::ranges::find(kParameters, name, &Parameter::name);
@@ -407,6 +420,73 @@ result::Result<base::Sha256Digest> semanticHash(const graph::Document& surface) 
         return asMaterial(std::move(hashed).error());
     }
     return *hashed;
+}
+
+std::vector<std::byte> encode(const Material& made) {
+    std::vector<std::byte> bytes;
+    const auto kPut = [&bytes](std::uint32_t word) {
+        for (std::size_t at = 0; at < 4; ++at) {
+            bytes.push_back(static_cast<std::byte>((word >> (at * 8)) & 0xFFU));
+        }
+    };
+    for (const char kLetter : std::string_view{"RFMT"}) {
+        bytes.push_back(static_cast<std::byte>(kLetter));
+    }
+    kPut(1);
+    bytes.push_back(static_cast<std::byte>(made.shading));
+    bytes.push_back(static_cast<std::byte>(made.blend));
+    bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
+    bytes.push_back(std::byte{0});
+    kPut(std::bit_cast<std::uint32_t>(made.alphaCutoff));
+    Surface surface = made.surface;
+    for (const Parameter& parameter : kContractOrder) {
+        const float* kValue = parameter.place(surface);
+        for (std::size_t channel = 0; channel < parameter.channels; ++channel) {
+            kPut(std::bit_cast<std::uint32_t>(kValue[channel]));
+        }
+    }
+    return bytes;
+}
+
+result::Result<Material> decode(std::span<const std::byte> bytes) {
+    constexpr std::size_t kSize = 16 + (4 * 16);
+    if (bytes.size() != kSize || std::string_view{reinterpret_cast<const char*>(bytes.data()), 4} != "RFMT") {
+        return invalid("a cooked material is RFMT, its format, states, and Surface");
+    }
+    const auto kWord = [&bytes](std::size_t at) {
+        std::uint32_t word = 0;
+        for (std::size_t each = 0; each < 4; ++each) {
+            word |= std::to_integer<std::uint32_t>(bytes[at + each]) << (each * 8);
+        }
+        return word;
+    };
+    const auto kShading = std::to_integer<std::uint8_t>(bytes[8]);
+    const auto kBlend = std::to_integer<std::uint8_t>(bytes[9]);
+    const auto kSided = std::to_integer<std::uint8_t>(bytes[10]);
+    if (kWord(4) != 1 || kShading > 1 || kBlend > 2 || kSided > 1 || bytes[11] != std::byte{0}) {
+        return invalid("a cooked material is format 1, its states in their sets");
+    }
+    Material made{.shading = static_cast<Shading>(kShading),
+                  .blend = static_cast<Blend>(kBlend),
+                  .alphaCutoff = std::bit_cast<float>(kWord(12)),
+                  .doubleSided = kSided == 1};
+    std::size_t at = 16;
+    for (const Parameter& parameter : kContractOrder) {
+        float* place = parameter.place(made.surface);
+        for (std::size_t channel = 0; channel < parameter.channels; ++channel, at += 4) {
+            place[channel] = std::bit_cast<float>(kWord(at));
+        }
+    }
+    // Its ranges are the document's: written as one and checked.
+    if (!(made.alphaCutoff >= 0 && made.alphaCutoff <= 1)) {
+        return invalid("a cooked material's alpha cutoff is from nought to one");
+    }
+    Material checked = made;
+    checked.alphaCutoff = made.blend == Blend::Masked ? made.alphaCutoff : 0.5F;
+    if (!validateSurface(documentOf(checked, 1)).has_value()) {
+        return invalid("a cooked material is within the Surface contract's ranges");
+    }
+    return made;
 }
 
 std::array<float, kBlobFloats> blobOf(const Material& made) noexcept {

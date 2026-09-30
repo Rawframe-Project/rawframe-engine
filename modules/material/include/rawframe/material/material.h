@@ -51,9 +51,12 @@
 #include "rawframe/result/result.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::material {
 
@@ -96,6 +99,12 @@ struct Material {
     friend bool operator==(const Material&, const Material&) = default;
 };
 
+/// The cooked material's resource type and representation (ADR-0024): a
+/// compiled `Material`, little-endian, which a runtime decodes without the
+/// document.
+inline constexpr base::Bits128 kMaterialType = base::parseBits128Hex("06e95486decf73eaeea9ad8ca0cc02a8").value;
+inline constexpr std::string_view kMaterialRepresentation = "rawframe.material";
+
 /// The one type a surface material's output is.
 inline constexpr std::string_view kSurfaceType = "rawframe/surface@1";
 
@@ -123,6 +132,15 @@ inline constexpr std::string_view kSurfaceType = "rawframe/surface@1";
 /// SPEC-0028's semantic hash: the surface node's inputs, the states, blind
 /// to ids and drawings.
 [[nodiscard]] result::Result<base::Sha256Digest> semanticHash(const graph::Document& surface);
+
+/// A compiled material's bytes: `RFMT`, format 1, its states (shading,
+/// blend, double sided, a byte each and one of nought), its alpha cutoff,
+/// then its Surface's sixteen numbers in the contract's order.
+[[nodiscard]] std::vector<std::byte> encode(const Material& made);
+
+/// Refuses (`Invalid`) bytes `encode` would not make, or a material out of
+/// the contract's ranges: cooked content is checked as it is read.
+[[nodiscard]] result::Result<Material> decode(std::span<const std::byte> bytes);
 
 /// ADR-0031's typed data blob, what a device reads of a material: the base
 /// color and metalness; the specular color times its weight, and the
