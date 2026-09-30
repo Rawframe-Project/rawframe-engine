@@ -108,6 +108,8 @@ public:
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .sun = game->sun,
                                   .sky = game->sky,
+                                  .points = std::move(game->points),
+                                  .spots = std::move(game->spots),
                                   .meshes = std::move(game->meshes),
                                   .shadows = shadows_};
         return {};
@@ -138,6 +140,10 @@ public:
             unknownMeshes_ += kFrame.unknownMeshes;
             overLimit_ += kFrame.overLimit;
             mostDraws_ = std::max(mostDraws_, kFrame.draws.size());
+            lightsLit_ += kFrame.lights3d.size();
+            lightsCulled_ += kFrame.lightsCulled;
+            lightsOverLimit_ += kFrame.lightsOverLimit;
+            clusterOverflow_ += kFrame.clusterOverflow;
         }
     }
 
@@ -159,7 +165,11 @@ public:
                       diagnostics::field("unknownMeshes", unknownMeshes_),
                       diagnostics::field("overLimit", overLimit_),
                       diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
-                      diagnostics::field("gameMeshes", static_cast<std::uint64_t>(gameMeshes_))});
+                      diagnostics::field("gameMeshes", static_cast<std::uint64_t>(gameMeshes_)),
+                      diagnostics::field("lightsLit", lightsLit_),
+                      diagnostics::field("lightsCulled", lightsCulled_),
+                      diagnostics::field("lightsOverLimit", lightsOverLimit_),
+                      diagnostics::field("clusterOverflow", clusterOverflow_)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -258,6 +268,12 @@ private:
     std::uint64_t unknownMeshes_ = 0;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
+    /// The point and spot lights each frame lit with, culled, and left out
+    /// at the limit; a cluster's lights past its limit (D290).
+    std::uint64_t lightsLit_ = 0;
+    std::uint64_t lightsCulled_ = 0;
+    std::uint64_t lightsOverLimit_ = 0;
+    std::uint64_t clusterOverflow_ = 0;
     diagnostics::Emitter emitter_;
 };
 

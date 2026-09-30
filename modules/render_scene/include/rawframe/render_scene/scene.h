@@ -65,6 +65,22 @@ struct Sky {
     std::uint32_t color = 0xFFFFFFFF;
 };
 
+/// `rawframe.model.PointLight` as C++ reads it.
+struct PointLight {
+    float lumens = 0;
+    float range = 0;
+    std::uint32_t color = 0xFFFFFFFF;
+};
+
+/// `rawframe.model.SpotLight` as C++ reads it.
+struct SpotLight {
+    float lumens = 0;
+    float range = 0;
+    float inner = 0;
+    float outer = 0;
+    std::uint32_t color = 0xFFFFFFFF;
+};
+
 /// The engine's own meshes (`rawframe.model`'s BOX, SPHERE, CYLINDER, and
 /// CAPSULE), each one meter from its center to its sides.
 inline constexpr std::uint64_t kBox = 0x3ff8cd61f01cf46bULL;
@@ -133,6 +149,49 @@ struct SceneLights {
     std::array<float, 3> sky{0, 0, 0};
 };
 
+/// A punctual light as the extract stage copies it out of the World, where
+/// its entity's pose puts it (D290): a point's or a spot's.
+struct LightInstance {
+    world::EntityHandle entity;
+    bool spot = false;
+    SpotLight light;
+    std::array<double, 3> position{};
+    std::array<float, 4> rotation{0, 0, 0, 1};
+};
+
+/// A punctual light as a device reads it (D290): where it is relative to
+/// the eye, its reach, its intensity (linear color times candela), and, for
+/// a spot, the way it shines and the cosines of its cone.
+struct SceneLight {
+    std::array<float, 3> position{};
+    float range = 0;
+    std::array<float, 3> intensity{};
+    bool spot = false;
+    std::array<float, 3> direction{0, 0, -1};
+    /// Nought and minus one for a point: every way is inside.
+    float cosInner = -1;
+    float cosOuter = -1;
+};
+
+/// ADR-0051's one clustered structure for the view (D290): screen tiles by
+/// exponential depth slices, each cluster naming the lights that reach it.
+/// Built by the view stage; a device reads a cluster's lights by where a
+/// point is on the screen and how far ahead.
+struct SceneClusters {
+    std::uint32_t tilesX = 16;
+    std::uint32_t tilesY = 9;
+    std::uint32_t slices = 24;
+    /// The depths the slices divide, exponentially: nearer than `near` is
+    /// the first slice, farther than `far` the last.
+    float near = 0.1F;
+    float far = 500;
+    /// Each cluster's first index and count in `indices`, x fastest, then
+    /// y from the top, then slices from the eye.
+    std::vector<std::uint32_t> ranges;
+    /// Lights by their place in the frame's lights.
+    std::vector<std::uint32_t> indices;
+};
+
 /// One cascade of the sun's shadow map (ADR-0051): a light-space box
 /// holding the part of the view from the cascade before it to `far`.
 struct ShadowCascade {
@@ -172,6 +231,14 @@ struct SceneFrame {
     /// by.
     std::array<float, 3> forward{0, 0, -1};
     SceneShadows shadows;
+    /// The punctual lights that reach the view, and the clusters they are
+    /// culled into (D290).
+    std::vector<SceneLight> lights3d;
+    SceneClusters clusters;
+    std::size_t lightsCulled = 0;
+    std::size_t lightsOverLimit = 0;
+    /// Lights a full cluster could not name, counted once each time.
+    std::size_t clusterOverflow = 0;
     /// EV100.
     float exposure = 15;
     SceneLights lights;
@@ -193,6 +260,10 @@ struct SceneFrame {
 /// it are left out, from the last in draw order, counted as over the limit.
 struct SceneLimits {
     std::size_t maximumModels = 16384;
+    /// ADR-0051's maximum clustered lights per view and per-cluster cap for
+    /// lights (D290).
+    std::size_t maximumLights = 256;
+    std::size_t maximumLightsPerCluster = 64;
 };
 
 /// ADR-0051's typed cascade configuration, a profile's values: how many
@@ -213,6 +284,9 @@ struct SceneSettings {
     /// The game's sun and sky components, if it declares them.
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
+    /// The game's point and spot light components.
+    std::vector<schema::ComponentTypeId> points;
+    std::vector<schema::ComponentTypeId> spots;
     /// The game's meshes, by their identities.
     std::vector<SceneMesh> meshes;
     SceneLimits limits;
@@ -240,6 +314,7 @@ public:
     const SceneFrame& queue(const SceneCamera& camera);
 
     [[nodiscard]] std::span<const ModelInstance> extracted() const noexcept;
+    [[nodiscard]] std::span<const LightInstance> extractedLights() const noexcept;
 
     /// The mesh a Model names by `id`: the game's or the engine's; none for
     /// another.
@@ -259,6 +334,8 @@ struct GameScene {
     std::optional<schema::ComponentTypeId> camera;
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
+    std::vector<schema::ComponentTypeId> points;
+    std::vector<schema::ComponentTypeId> spots;
     std::vector<SceneMesh> meshes;
 };
 

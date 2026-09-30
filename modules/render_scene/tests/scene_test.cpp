@@ -4,8 +4,9 @@
 // plane; what is off the view, draws nothing, is malformed, or names an
 // unknown mesh is left out and counted; models draw in the order of their
 // meshes, then entities, and the limit leaves out a suffix of it; the sun
-// and sky light in linear physical units; and a game's scene loads against
-// its program.
+// and sky light in linear physical units; point and spot lights light in
+// candela, are culled by their reach, and name the clusters they reach; and
+// a game's scene loads against its program.
 
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
@@ -29,6 +30,8 @@ constexpr auto kModelId = schema::ComponentTypeId::fromText("3c8e1f52-7d04-4a2b-
 constexpr auto kHatId = schema::ComponentTypeId::fromText("4c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr auto kSunId = schema::ComponentTypeId::fromText("5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr auto kSkyId = schema::ComponentTypeId::fromText("6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
+constexpr auto kPointId = schema::ComponentTypeId::fromText("9c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
+constexpr auto kSpotId = schema::ComponentTypeId::fromText("ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr std::uint64_t kRock = 0xc1;
 
 /// The registry holds a name as a view: each is a literal.
@@ -43,6 +46,8 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(plain<Model>(kHatId, "test.hat"));
     builder.add(plain<Sun>(kSunId, "test.sun"));
     builder.add(plain<Sky>(kSkyId, "test.sky"));
+    builder.add(plain<PointLight>(kPointId, "test.lamp"));
+    builder.add(plain<SpotLight>(kSpotId, "test.torch"));
     builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }
@@ -65,6 +70,8 @@ struct Rig {
                                {.models = {kModelId, kHatId},
                                 .sun = kSunId,
                                 .sky = kSkyId,
+                                .points = {kPointId},
+                                .spots = {kSpotId},
                                 .meshes = {{.id = kRock, .mesh = rock()}},
                                 .limits = limits});
     }
@@ -279,16 +286,20 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
     };
     // A Kest type is laid out when a function uses it.
     const std::string kUses =
-        "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky]) {\n}\n";
+        "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky],\n"
+        "        lamps: [model.PointLight], torches: [model.SpotLight]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
+    const std::string kLamps = "component 9c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.lamp rawframe.model.PointLight\n"
+                               "component ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.torch rawframe.model.SpotLight\n";
     const std::string kView = "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n";
-    const auto kLoaded = kLoad(kUses, kModel + kLights + kView);
+    const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
                     kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
                     kLoaded->camera == schema::ComponentTypeId::fromText("7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->meshes.empty());
+                    kLoaded->meshes.empty() && kLoaded->points == (std::vector<schema::ComponentTypeId>{kPointId}) &&
+                    kLoaded->spots == (std::vector<schema::ComponentTypeId>{kSpotId}));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -369,4 +380,76 @@ RAWFRAME_TEST(TheSunsCascadesCoverTheViewAndHoldStill) {
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSunId), &dark).has_value());
     const SceneFrame& kDark = rig.frame(kCamera);
     RAWFRAME_EXPECT(kDark.shadows.count == 0 && kDark.shadows.casters.empty());
+}
+
+RAWFRAME_TEST(PointAndSpotLightsLightInCandelaAndNameTheirClusters) {
+    Rig rig;
+    const auto kPlace = [&rig](auto light, schema::ComponentTypeId as, physics3d::Pose3D pose) {
+        const world::EntityHandle kEntity = *rig.world.create();
+        RAWFRAME_EXPECT(rig.world.insertErased(kEntity, *rig.schema->find(as), &light).has_value());
+        RAWFRAME_EXPECT(rig.world.insert(kEntity, *rig.schema->key<physics3d::Pose3D>(), pose).has_value());
+    };
+    // Ahead of the eye: a white lamp, and a torch turned to shine down.
+    kPlace(PointLight{.lumens = 800, .range = 5, .color = 0xFFFFFFFF}, kPointId, {.x = 500, .y = 1, .z = -10, .qw = 1});
+    const float kDown = std::sin(std::numbers::pi_v<float> / 4);
+    kPlace(SpotLight{.lumens = 314.159F, .range = 8, .inner = 0.2F, .outer = 0.5F, .color = 0xFFFFFFFF},
+           kSpotId,
+           {.x = 503, .y = 3, .z = -20, .qx = -kDown, .qw = kDown});
+    // Behind the eye, out of reach; and one that gives no light.
+    kPlace(PointLight{.lumens = 800, .range = 5, .color = 0xFFFFFFFF}, kPointId, {.x = 500, .y = 1, .z = 20, .qw = 1});
+    kPlace(PointLight{.lumens = 0, .range = 5, .color = 0xFFFFFFFF}, kPointId, {.x = 500, .y = 1, .z = -5, .qw = 1});
+    RAWFRAME_EXPECT(rig.scene->extractedLights().empty());
+    const SceneCamera kCamera{.eye = {500, 1, 0}, .fovY = 1, .near = 0.1F, .aspect = 16.0F / 9};
+    const SceneFrame& kFrame = rig.frame(kCamera);
+    RAWFRAME_EXPECT(rig.scene->extractedLights().size() == 4);
+    RAWFRAME_EXPECT(kFrame.lights3d.size() == 2 && kFrame.lightsCulled == 2 && kFrame.lightsOverLimit == 0);
+    // A lumen over the sphere is a candela for a point, over π for a spot;
+    // each is placed relative to the eye, and the spot shines along its -Z.
+    const SceneLight& kLamp = kFrame.lights3d[0];
+    const SceneLight& kTorch = kFrame.lights3d[1];
+    RAWFRAME_EXPECT(!kLamp.spot && near(kLamp.intensity[0], 800 / (4 * std::numbers::pi_v<float>), 0.01F) &&
+                    near(kLamp.position[2], -10) && near(kLamp.position[1], 0));
+    RAWFRAME_EXPECT(kTorch.spot && near(kTorch.intensity[1], 100, 0.01F) && near(kTorch.direction[1], -1, 1e-3F) &&
+                    near(kTorch.cosInner, std::cos(0.2F)) && near(kTorch.cosOuter, std::cos(0.5F)));
+    // The lamp, ten ahead in the middle of the view, names the middle
+    // tiles of the slice ten ahead, and no cluster far from it.
+    const SceneClusters& kClusters = kFrame.clusters;
+    RAWFRAME_EXPECT(kClusters.ranges.size() == std::size_t{kClusters.tilesX} * kClusters.tilesY * kClusters.slices * 2);
+    const auto kNames = [&kClusters](std::uint32_t x, std::uint32_t y, std::uint32_t slice, std::uint32_t light) {
+        const std::size_t kCluster = (((std::size_t{slice} * kClusters.tilesY) + y) * kClusters.tilesX) + x;
+        const std::uint32_t kFirst = kClusters.ranges[kCluster * 2];
+        const std::uint32_t kCount = kClusters.ranges[(kCluster * 2) + 1];
+        for (std::uint32_t at = kFirst; at < kFirst + kCount; ++at) {
+            if (kClusters.indices[at] == light) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto kSliceOf = [&kClusters](float ahead) {
+        return static_cast<std::uint32_t>(std::log(ahead / kClusters.near) * static_cast<float>(kClusters.slices) /
+                                          std::log(kClusters.far / kClusters.near));
+    };
+    RAWFRAME_EXPECT(kNames(kClusters.tilesX / 2, kClusters.tilesY / 2, kSliceOf(10), 0));
+    RAWFRAME_EXPECT(!kNames(0, 0, kSliceOf(10), 0) && !kNames(kClusters.tilesX / 2, kClusters.tilesY / 2, 0, 0) &&
+                    !kNames(kClusters.tilesX / 2, kClusters.tilesY / 2, kSliceOf(100), 0));
+    RAWFRAME_EXPECT(kNames(kClusters.tilesX / 2, kClusters.tilesY / 2, kSliceOf(20), 1) && kFrame.clusterOverflow == 0);
+
+    // More lights than a cluster holds: the rest are counted, not lost
+    // silently.
+    SceneLimits limits;
+    limits.maximumLightsPerCluster = 3;
+    Rig crowded(limits);
+    for (int at = 0; at < 5; ++at) {
+        const world::EntityHandle kEntity = *crowded.world.create();
+        PointLight lamp{.lumens = 100, .range = 2, .color = 0xFFFFFFFF};
+        RAWFRAME_EXPECT(crowded.world.insertErased(kEntity, *crowded.schema->find(kPointId), &lamp).has_value());
+        const physics3d::Pose3D kPose{.z = -6.0 - (0.01 * at), .qw = 1};
+        RAWFRAME_EXPECT(crowded.world.insert(kEntity, *crowded.schema->key<physics3d::Pose3D>(), kPose).has_value());
+    }
+    const SceneFrame& kCrowded = crowded.frame({.fovY = 1, .near = 0.1F, .aspect = 1});
+    RAWFRAME_EXPECT(kCrowded.lights3d.size() == 5 && kCrowded.clusterOverflow > 0);
+    for (std::size_t at = 1; at < kCrowded.clusters.ranges.size(); at += 2) {
+        RAWFRAME_EXPECT(kCrowded.clusters.ranges[at] <= 3);
+    }
 }
