@@ -91,6 +91,18 @@ struct Grading {
     tint: f32
 }
 
+// A camera's screen-space ambient occlusion (ADR-0051, D327), on the same
+// entity as its camera: the light a point takes from all around (the sky's
+// and the ground's, its picture's, a reflection probe's) less where the
+// surfaces within `radius` meters of it hide what is above it, the hiding
+// taken `intensity` times (one as found, nought none). A radius or an
+// intensity not above nought occludes nothing; the direct light of the
+// sun and the lamps is never occluded here, since their shadows are.
+struct AmbientOcclusion {
+    radius: f32
+    intensity: f32
+}
+
 // A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
 // the same entity as its camera, whose `exposure` it starts from: the
 // frame's light measured in a histogram of its luminance, the darkest

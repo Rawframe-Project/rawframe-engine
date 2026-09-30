@@ -188,6 +188,7 @@ public:
         cameraComponent_ = game->camera;
         autoExposureComponent_ = game->autoExposure;
         gradingComponent_ = game->grading;
+        occlusionComponent_ = game->occlusion;
         gameMeshes_ = game->meshes.size();
         // The game's materials from its cooked content; one that cannot be
         // read is drawn as none, and said so when the scene starts.
@@ -583,6 +584,15 @@ private:
                 }
             }
         }
+        camera_.occlusion.reset();
+        if (occlusionComponent_.has_value()) {
+            if (const auto kOcclusion = kView.world->registry().find(*occlusionComponent_)) {
+                if (const auto* asked =
+                        static_cast<const AmbientOcclusion*>(kView.world->getErased(kView.owned, *kOcclusion))) {
+                    camera_.occlusion = *asked;
+                }
+            }
+        }
         if (autoExposureComponent_.has_value()) {
             if (const auto kMetering = kView.world->registry().find(*autoExposureComponent_)) {
                 if (const auto* asked =
@@ -606,6 +616,7 @@ private:
     std::optional<schema::ComponentTypeId> cameraComponent_;
     std::optional<schema::ComponentTypeId> autoExposureComponent_;
     std::optional<schema::ComponentTypeId> gradingComponent_;
+    std::optional<schema::ComponentTypeId> occlusionComponent_;
     std::optional<execution::MonotonicInstant> presented_;
     std::size_t gameMeshes_ = 0;
     /// Frames seen through the player's own camera.

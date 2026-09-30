@@ -62,6 +62,12 @@ enum class Tonemapper : std::uint8_t {
     Linear = 2
 };
 
+/// `rawframe.model.AmbientOcclusion` as C++ reads it (D327).
+struct AmbientOcclusion {
+    float radius = 0;
+    float intensity = 0;
+};
+
 /// `rawframe.model.Grading` as C++ reads it.
 struct Grading {
     float slopeR = 1;
@@ -226,6 +232,8 @@ struct SceneCamera {
     std::optional<AutoExposure> metering;
     /// The camera's grading, if it asks (D294).
     std::optional<Grading> grading;
+    /// The camera's ambient occlusion, if it asks (D327).
+    std::optional<AmbientOcclusion> occlusion;
     /// The camera's tonemapper, as its component numbers it: another
     /// number is AgX (D295).
     std::uint32_t tonemapper = 0;
@@ -449,6 +457,20 @@ struct SceneGrading {
 /// The grading a camera's `Grading` asks for, made sound (D294).
 [[nodiscard]] SceneGrading gradingOf(const std::optional<Grading>& asked) noexcept;
 
+/// ADR-0051's screen-space ambient occlusion (D327): whether the view has
+/// it, how far around a point it looks, in meters (a hundredth to ten),
+/// and how strongly it takes what it finds (up to four).
+struct SceneOcclusion {
+    bool enabled = false;
+    float radius = 0;
+    float intensity = 0;
+};
+
+/// The occlusion a camera's `AmbientOcclusion` asks for, made sound
+/// (D327): none for a value not finite, or a radius or an intensity not
+/// above nought.
+[[nodiscard]] SceneOcclusion occlusionOf(const std::optional<AmbientOcclusion>& asked) noexcept;
+
 /// ADR-0051's temporal inputs (D291). Whether the frame is antialiased
 /// over time; its subpixel jitter, a pixel's fraction across and down in
 /// [-0.5, 0.5), which the GPU half applies to the projection at its size;
@@ -479,6 +501,7 @@ struct SceneFrame {
     SceneLightShadows lightShadows;
     SceneMetering metering;
     SceneGrading grading;
+    SceneOcclusion occlusion;
     Tonemapper tonemapper = Tonemapper::Agx;
     /// Whether the tonemapped picture is antialiased by FXAA (D296): never
     /// with the temporal inputs, which are then off.
@@ -636,6 +659,7 @@ struct GameScene {
     std::optional<schema::ComponentTypeId> camera;
     std::optional<schema::ComponentTypeId> autoExposure;
     std::optional<schema::ComponentTypeId> grading;
+    std::optional<schema::ComponentTypeId> occlusion;
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
     std::vector<schema::ComponentTypeId> points;
@@ -647,7 +671,8 @@ struct GameScene {
 /// Finds the game's components of `rawframe.model`'s types, whose layouts
 /// in `program` must be what this module reads, and its meshes. Refuses
 /// (`NoModels`) a game with no model component, and (`BadComponents`) one
-/// with two cameras, auto-exposures, gradings, suns, or skies.
+/// with two cameras, auto-exposures, gradings, ambient occlusions, suns, or
+/// skies.
 [[nodiscard]] result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const kest::Program& program);
 
 } // namespace rawframe::render_scene

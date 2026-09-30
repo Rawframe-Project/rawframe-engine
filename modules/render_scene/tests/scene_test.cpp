@@ -313,7 +313,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
     const std::string kUses =
         "fn show(models: [model.Model], views: [model.Camera], suns: [model.Sun], skies: [model.Sky],\n"
         "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
-        "        grades: [model.Grading], probes: [model.ReflectionProbe]) {\n}\n";
+        "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion]) "
+        "{\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
@@ -323,7 +324,9 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                                "rawframe.model.ReflectionProbe\n";
     const std::string kView = "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n"
                               "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n"
-                              "component cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.grade rawframe.model.Grading\n";
+                              "component cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.grade rawframe.model.Grading\n"
+                              "component ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.hidden "
+                              "rawframe.model.AmbientOcclusion\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
                     kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
@@ -333,7 +336,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                     kLoaded->probes == (std::vector<schema::ComponentTypeId>{kProbeId}) &&
                     kLoaded->autoExposure ==
                         schema::ComponentTypeId::fromText("bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-                    kLoaded->grading == schema::ComponentTypeId::fromText("cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
+                    kLoaded->grading == schema::ComponentTypeId::fromText("cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+                    kLoaded->occlusion == schema::ComponentTypeId::fromText("ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -953,4 +957,20 @@ RAWFRAME_TEST(ADrawReflectsTheProbeThatHoldsIt) {
     const SceneFrame& kFew = few.frame({.eye = {kX, 0, 0}});
     RAWFRAME_EXPECT(kFew.probes.size() == 2 && kFew.probesOverLimit == 1 && kFew.probes[0].environment != 0xe3 &&
                     kFew.probes[1].environment != 0xe3);
+}
+
+RAWFRAME_TEST(ACamerasAmbientOcclusionIsMadeSound) {
+    RAWFRAME_EXPECT(!occlusionOf(std::nullopt).enabled);
+    const SceneOcclusion kAsked = occlusionOf(AmbientOcclusion{.radius = 0.5F, .intensity = 1.5F});
+    RAWFRAME_EXPECT(kAsked.enabled && kAsked.radius == 0.5F && kAsked.intensity == 1.5F);
+    // Out of range, kept in it; not finite, or not above nought, none.
+    const SceneOcclusion kFar = occlusionOf(AmbientOcclusion{.radius = 50, .intensity = 9});
+    RAWFRAME_EXPECT(kFar.enabled && kFar.radius == 10 && kFar.intensity == 4);
+    RAWFRAME_EXPECT(!occlusionOf(AmbientOcclusion{.radius = 0, .intensity = 1}).enabled &&
+                    !occlusionOf(AmbientOcclusion{.radius = 1, .intensity = -1}).enabled &&
+                    !occlusionOf(AmbientOcclusion{.radius = std::nanf(""), .intensity = 1}).enabled);
+    // A camera that asks has it in its frame.
+    Rig rig;
+    RAWFRAME_EXPECT(rig.frame({.occlusion = AmbientOcclusion{.radius = 1, .intensity = 1}}).occlusion.enabled &&
+                    !rig.frame({}).occlusion.enabled);
 }
