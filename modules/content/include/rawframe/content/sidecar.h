@@ -45,4 +45,8 @@ struct Sidecar {
 /// the document's own error) otherwise.
 [[nodiscard]] result::Result<Sidecar> readSidecar(std::string_view text);
 
+/// The canonical text of `sidecar`, which `readSidecar` reads back as it:
+/// what tooling writes when it gives a source or a subasset an identity.
+[[nodiscard]] std::string writeSidecar(const Sidecar& sidecar);
+
 } // namespace rawframe::content

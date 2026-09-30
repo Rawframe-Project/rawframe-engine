@@ -73,4 +73,27 @@ result::Result<Sidecar> readSidecar(std::string_view text) {
     return sidecar;
 }
 
+std::string writeSidecar(const Sidecar& sidecar) {
+    const auto kHex = [](base::Bits128 id) {
+        std::array<char, base::kBits128HexDigits> digits{};
+        base::formatBits128Hex(id, digits);
+        return std::string{digits.data(), digits.size()};
+    };
+    Value written = Value::object();
+    written.add("schema", Value::integer(1));
+    written.add("resourceId", Value::string(kHex(sidecar.id.value)));
+    written.add("importer", Value::string(sidecar.importer));
+    if (sidecar.settings.has_value()) {
+        written.add("settings", *sidecar.settings);
+    }
+    if (!sidecar.subassets.empty()) {
+        Value subassets = Value::object();
+        for (const auto& [kKey, kId] : sidecar.subassets) {
+            subassets.add(kKey, Value::string(kHex(kId.value)));
+        }
+        written.add("subassets", std::move(subassets));
+    }
+    return document::write(written);
+}
+
 } // namespace rawframe::content
