@@ -224,17 +224,23 @@ struct SceneCamera {
 /// Column-major, as shaders read them.
 using Matrix = std::array<float, 16>;
 
-/// One model to draw: its mesh, where it is relative to the eye (the
-/// World's axes, meters), and its surface's base color in linear light.
+/// One model to draw, or a run of its mesh's parts that draw with one
+/// material (D314): its mesh and the run's indices, where it is relative to
+/// the eye (the World's axes, meters), and its surface's base color in
+/// linear light.
 struct SceneDraw {
     std::uint64_t mesh = 0;
+    std::uint32_t firstIndex = 0;
+    /// Nought for every index from the first.
+    std::uint32_t indexCount = 0;
     /// Model space to eye-relative World space: turn, scale, and place.
     Matrix model{};
     /// Normals' turn: the inverse transpose of the model's upper 3 by 3,
     /// columns of four with the last nought.
     Matrix normal{};
     std::array<float, 4> color{1, 1, 1, 1};
-    /// Its material's place in the frame's materials (D303).
+    /// Its material's place in the frame's materials (D303): the Model's
+    /// when it names one, else its parts' own (D314).
     std::uint32_t material = 0;
     world::EntityHandle entity;
     /// Where the model was the frame before, relative to this frame's eye:

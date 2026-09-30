@@ -37,10 +37,20 @@ constexpr std::uint32_t kClearSky = 0x8FB8EBFF;
 constexpr std::uint32_t kGround = 0x7C7C7CFF;
 
 /// A mesh with the sphere around it, in its own space.
+/// A run of a mesh's parts that draw with one material: its indices and
+/// the material's identity, nought for the Model's.
+struct Run {
+    std::uint32_t firstIndex = 0;
+    std::uint32_t indexCount = 0;
+    std::uint64_t material = 0;
+};
+
 struct Bounded {
     std::shared_ptr<const mesh::Mesh> mesh;
     Vector center{};
     float radius = 0;
+    /// Its parts, the next joined to one of the same material.
+    std::vector<Run> runs;
 };
 
 Bounded bounded(std::shared_ptr<const mesh::Mesh> made) {
@@ -58,7 +68,16 @@ Bounded bounded(std::shared_ptr<const mesh::Mesh> made) {
         const Vector kAway = {kPosition[0] - kCenter[0], kPosition[1] - kCenter[1], kPosition[2] - kCenter[2]};
         radius = std::max(radius, std::sqrt((kAway[0] * kAway[0]) + (kAway[1] * kAway[1]) + (kAway[2] * kAway[2])));
     }
-    return Bounded{.mesh = std::move(made), .center = kCenter, .radius = radius};
+    std::vector<Run> runs;
+    for (const mesh::Part& kPart : made->parts) {
+        if (!runs.empty() && runs.back().material == kPart.material) {
+            runs.back().indexCount += kPart.indexCount;
+        } else {
+            runs.push_back(
+                {.firstIndex = kPart.firstIndex, .indexCount = kPart.indexCount, .material = kPart.material});
+        }
+    }
+    return Bounded{.mesh = std::move(made), .center = kCenter, .radius = radius, .runs = std::move(runs)};
 }
 
 /// The camera's metering made sound (D293): off when it asks for none, a
@@ -402,14 +421,6 @@ struct Scene::State {
             const float kRadius =
                 kBounds.radius * std::max({std::abs(kScale[0]), std::abs(kScale[1]), std::abs(kScale[2])});
             SceneDraw draw{.mesh = kModel.mesh, .entity = instance->entity};
-            if (kModel.material != 0) {
-                const auto kMaterial = materials.find(kModel.material);
-                if (kMaterial == materials.end()) {
-                    ++frame.unknownMaterials;
-                } else {
-                    draw.material = kMaterial->second;
-                }
-            }
             for (std::size_t column = 0; column < 3; ++column) {
                 for (std::size_t row = 0; row < 3; ++row) {
                     draw.model[(column * 4) + row] = kTurn[column][row] * kScale[column];
@@ -435,14 +446,43 @@ struct Scene::State {
             }
             const Vector kColor = colorOf(kModel.color);
             draw.color = {kColor[0], kColor[1], kColor[2], static_cast<float>(kModel.color & 0xFFU) / 255.0F};
+            // A draw for each run of parts of one material: the Model's for
+            // all when it names one, else each part's own (D314); runs that
+            // come to one material are one draw.
+            const auto kPlaceOf = [&](std::uint64_t id) -> std::uint32_t {
+                if (id == 0) {
+                    return 0;
+                }
+                const auto kMaterial = materials.find(id);
+                if (kMaterial == materials.end()) {
+                    ++frame.unknownMaterials;
+                    return 0;
+                }
+                return kMaterial->second;
+            };
+            std::vector<SceneDraw> runs;
+            const std::uint32_t kOwn = kPlaceOf(kModel.material);
+            for (const Run& kRun : kBounds.runs) {
+                const std::uint32_t kAt = kModel.material != 0 ? kOwn : kPlaceOf(kRun.material);
+                if (!runs.empty() && runs.back().material == kAt) {
+                    runs.back().indexCount += kRun.indexCount;
+                    continue;
+                }
+                draw.firstIndex = kRun.firstIndex;
+                draw.indexCount = kRun.indexCount;
+                draw.material = kAt;
+                runs.push_back(draw);
+            }
             // A model near enough casts into the shadows, seen or not: a
             // caster behind the eye still shades what is before it.
             const float kAway = std::sqrt((center[0] * center[0]) + (center[1] * center[1]) + (center[2] * center[2]));
-            if (kLightShadows) {
-                candidates.push_back({.draw = draw, .center = center, .radius = kRadius});
-            }
-            if (frame.shadows.count > 0 && kAway - kRadius <= frame.shadows.distance) {
-                sunCandidates.push_back({.draw = draw, .center = center, .radius = kRadius});
+            for (const SceneDraw& kRun : runs) {
+                if (kLightShadows) {
+                    candidates.push_back({.draw = kRun, .center = center, .radius = kRadius});
+                }
+                if (frame.shadows.count > 0 && kAway - kRadius <= frame.shadows.distance) {
+                    sunCandidates.push_back({.draw = kRun, .center = center, .radius = kRadius});
+                }
             }
             const Vector kSeen = {(kRight[0] * center[0]) + (kRight[1] * center[1]) + (kRight[2] * center[2]),
                                   (kUp[0] * center[0]) + (kUp[1] * center[1]) + (kUp[2] * center[2]),
@@ -469,7 +509,7 @@ struct Scene::State {
                 }
             }
             now.position = instance->position;
-            frame.draws.push_back(draw);
+            frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
             ++frame.drawn;
         }
         // The translucent after the opaque, farthest first, so each blends

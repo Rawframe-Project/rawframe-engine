@@ -1,5 +1,6 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
+#include "rawframe/content/errors.h"
 #include "rawframe/game_content/game_content.h"
 #include "rawframe/game_textures/game_textures.h"
 #include "rawframe/material/material.h"
@@ -190,7 +191,10 @@ public:
                                                           .packed = sceneTextureOf(read->textures.packed),
                                                           .emission = sceneTextureOf(read->textures.emission),
                                                           .normal = sceneTextureOf(read->textures.normal)}});
-                    } else {
+                    } else if (!each.subasset || read.error().domain() != content::kContentDomain ||
+                               read.error().code() != content::code(content::ContentError::ResourceNotFound)) {
+                        // A mesh's subasset its source no longer has names
+                        // no resource and is no material (D314).
                         unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});
                     }
                 }

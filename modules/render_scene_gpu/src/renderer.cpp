@@ -122,6 +122,9 @@ struct SceneRenderer::State {
     /// apiece, from its first instance.
     struct Run {
         const HeldMesh* mesh = nullptr;
+        /// The mesh's indices it draws (D314).
+        std::uint32_t firstIndex = 0;
+        std::uint32_t indexCount = 0;
         std::uint32_t first = 0;
         std::uint32_t count = 0;
         render_scene::SceneTextures texture;
@@ -224,8 +227,16 @@ struct SceneRenderer::State {
             const render_scene::SceneTextures kTexture = draw.material < materialTextures.size()
                                                              ? materialTextures[draw.material]
                                                              : render_scene::SceneTextures{};
-            if (runs.empty() || runs.back().mesh != kMesh->second || runs.back().texture != kTexture) {
-                runs.push_back({.mesh = kMesh->second, .first = count, .count = 0, .texture = kTexture});
+            const auto kIndices = static_cast<std::uint32_t>(kMesh->second->source->indices.size());
+            const std::uint32_t kCount = draw.indexCount != 0 ? draw.indexCount : kIndices - draw.firstIndex;
+            if (runs.empty() || runs.back().mesh != kMesh->second || runs.back().firstIndex != draw.firstIndex ||
+                runs.back().indexCount != kCount || runs.back().texture != kTexture) {
+                runs.push_back({.mesh = kMesh->second,
+                                .firstIndex = draw.firstIndex,
+                                .indexCount = kCount,
+                                .first = count,
+                                .count = 0,
+                                .texture = kTexture});
             }
             ++runs.back().count;
             ++count;
@@ -250,13 +261,8 @@ struct SceneRenderer::State {
         }
         const auto kDraw = [this, pass](const Run& run) -> result::Status {
             RAWFRAME_TRY(held->bind(pass, *run.mesh));
-            if (mrhiDrawIndexed(native,
-                                pass,
-                                static_cast<std::uint32_t>(run.mesh->source->indices.size()),
-                                run.count,
-                                0,
-                                0,
-                                run.first) != mrhi_success) {
+            if (mrhiDrawIndexed(native, pass, run.indexCount, run.count, run.firstIndex, 0, run.first) !=
+                mrhi_success) {
                 return failed("a caster could not be drawn", mrhi_errorState);
             }
             return {};
@@ -834,13 +840,8 @@ struct SceneRenderer::State {
                     bound = run.texture;
                 }
                 RAWFRAME_TRY(held->bind(pass, *run.mesh));
-                if (mrhiDrawIndexed(native,
-                                    pass,
-                                    static_cast<std::uint32_t>(run.mesh->source->indices.size()),
-                                    run.count,
-                                    0,
-                                    0,
-                                    run.first) != mrhi_success) {
+                if (mrhiDrawIndexed(native, pass, run.indexCount, run.count, run.firstIndex, 0, run.first) !=
+                    mrhi_success) {
                     return failed("a model could not be drawn", mrhi_errorState);
                 }
             }

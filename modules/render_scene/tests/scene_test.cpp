@@ -17,8 +17,10 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <memory>
 #include <numbers>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -768,6 +770,58 @@ RAWFRAME_TEST(AModelsMaterialIsFoundByItsIdentity) {
                     kFrame.unknownMaterials == 1);
     // None is white, so a model's color is its base color.
     RAWFRAME_EXPECT(noMaterial()[0] == 1 && noMaterial()[7] == 0.3F && noMaterial()[15] == 0);
+}
+
+RAWFRAME_TEST(AMeshsPartsDrawWithTheirOwnMaterials) {
+    // Four parts: two of the brass, then one of none, then one of the stone.
+    auto crate = std::make_shared<mesh::Mesh>(*engineMesh(kBox));
+    const auto kThird = static_cast<std::uint32_t>(crate->indices.size() / 3);
+    const auto kSixth = kThird / 2;
+    crate->parts = {{.firstIndex = 0, .indexCount = kSixth, .material = 0xa1},
+                    {.firstIndex = kSixth, .indexCount = kSixth, .material = 0xa1},
+                    {.firstIndex = kThird, .indexCount = kThird, .material = 0},
+                    {.firstIndex = 2 * kThird,
+                     .indexCount = static_cast<std::uint32_t>(crate->indices.size()) - (2 * kThird),
+                     .material = 0xa2}};
+    constexpr std::uint64_t kCrate = 0xc4a7e;
+    auto schema = registry();
+    world::World world{schema};
+    auto scene =
+        *Scene::create(*schema,
+                       {.models = {kModelId},
+                        .meshes = {{.id = kCrate, .mesh = crate}},
+                        .materials = {{.id = 0xa1, .blob = noMaterial()}, {.id = 0xa2, .blob = noMaterial()}}});
+    const auto kPlace = [&](std::uint64_t material, double z) {
+        const world::EntityHandle kEntity = *world.create();
+        Model model{.mesh = kCrate, .material = material};
+        RAWFRAME_EXPECT(world.insertErased(kEntity, *schema->find(kModelId), &model).has_value());
+        RAWFRAME_EXPECT(
+            world.insert(kEntity, *schema->key<physics3d::Pose3D>(), physics3d::Pose3D{.z = z, .qw = 1}).has_value());
+    };
+    kPlace(0, -10);
+    scene->extract(world);
+    const SceneFrame& kOwn = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
+    // A draw for each run of one material, the two brass parts joined.
+    std::vector<std::tuple<std::uint32_t, std::uint32_t, std::uint32_t>> runs;
+    for (const SceneDraw& draw : kOwn.draws) {
+        runs.emplace_back(draw.firstIndex, draw.indexCount, draw.material);
+    }
+    std::ranges::sort(runs);
+    RAWFRAME_EXPECT(kOwn.drawn == 1 &&
+                    runs == (std::vector<std::tuple<std::uint32_t, std::uint32_t, std::uint32_t>>{
+                                {0, kThird, 1},
+                                {kThird, kThird, 0},
+                                {2 * kThird, static_cast<std::uint32_t>(crate->indices.size()) - (2 * kThird), 2}}));
+
+    // A Model naming a material draws every part with it, in one draw.
+    kPlace(0xa2, -12);
+    scene->extract(world);
+    const SceneFrame& kBoth = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
+    RAWFRAME_EXPECT(kBoth.drawn == 2 && kBoth.draws.size() == 4);
+    RAWFRAME_EXPECT(std::ranges::count_if(kBoth.draws, [&](const SceneDraw& draw) {
+                        return draw.firstIndex == 0 && draw.indexCount == crate->indices.size() && draw.material == 2;
+                    }) == 1);
+    RAWFRAME_EXPECT(kBoth.unknownMaterials == 0);
 }
 
 RAWFRAME_TEST(TranslucentModelsComeLastFarthestFirst) {
