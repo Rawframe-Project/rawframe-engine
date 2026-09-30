@@ -1,3 +1,4 @@
+#include "frames.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/render/device.h"
@@ -311,6 +312,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .budgetOwner = "render",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::PlatformPoll),
     });
+    registerFrames(registrar);
 }
 
 } // namespace rawframe::render

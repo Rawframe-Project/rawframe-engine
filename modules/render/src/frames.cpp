@@ -1,0 +1,358 @@
+#include "frames.h"
+
+#include "rawframe/base/platform.h"
+#include "rawframe/composition/composition.h"
+#include "rawframe/composition/configuration.h"
+#include "rawframe/render/capture.h"
+#include "rawframe/render/frame.h"
+#include "rawframe/render/registrar.h"
+
+#include <algorithm>
+#include <memory>
+#include <optional>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
+#if RAWFRAME_FILE_SYSTEM
+#include <fstream>
+#endif
+
+namespace rawframe::render {
+
+namespace {
+
+constexpr diagnostics::EventIdentity kFrameSummary{"render", "frame_summary"};
+constexpr diagnostics::EventIdentity kFailed{"render", "frame_failed"};
+constexpr std::string_view kProvided[] = {kFrames.name};
+constexpr std::string_view kMaybe[] = {kDevice.name, window::kSurfaces.name};
+constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
+/// How long stopping waits for the last frame: lavapipe draws a view in
+/// milliseconds.
+constexpr std::uint64_t kFinishNanoseconds = 100'000'000;
+/// Colors counted in a picture at most: a lit scene has many shades, an
+/// empty picture one.
+constexpr std::size_t kMostColors = 4096;
+
+/// The pixels of a read-back picture drawn over: those not the black it
+/// was cleared to.
+std::uint64_t coveredOf(const std::vector<std::byte>& pixels) noexcept {
+    std::uint64_t covered = 0;
+    for (std::size_t at = 0; at + 3 < pixels.size(); at += 4) {
+        if (pixels[at] != std::byte{0} || pixels[at + 1] != std::byte{0} || pixels[at + 2] != std::byte{0}) {
+            ++covered;
+        }
+    }
+    return covered;
+}
+
+/// The colors of a read-back picture, up to `kMostColors`.
+std::uint64_t colorsOf(const std::vector<std::byte>& pixels) {
+    std::unordered_set<std::uint32_t> colors;
+    for (std::size_t at = 0; at + 3 < pixels.size() && colors.size() < kMostColors; at += 4) {
+        colors.insert(std::to_integer<std::uint32_t>(pixels[at]) |
+                      (std::to_integer<std::uint32_t>(pixels[at + 1]) << 8U) |
+                      (std::to_integer<std::uint32_t>(pixels[at + 2]) << 16U));
+    }
+    return colors.size();
+}
+
+/// Owns the frames (D285): at the start of each `present` it plans the
+/// Host iteration's frame, at the first window's size where the process
+/// has windows, else offscreen when asked; the bridges that joined prepare
+/// their parts and say they are ready, and the last makes the frame. Some
+/// are read back.
+class FrameParticipant final : public composition::Participant, public Frames {
+public:
+    result::Status load(composition::ParticipantContext& context) {
+        const composition::Configuration& configuration = context.configuration();
+        const std::optional<std::string_view> kOffscreen = configuration.text("render.offscreen");
+        if (kOffscreen.has_value() && *kOffscreen != "true" && *kOffscreen != "false") {
+            return badConfiguration("render.offscreen is true or false");
+        }
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kWidth, configuration.unsignedInteger("render.width", 1280));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeight, configuration.unsignedInteger("render.height", 720));
+        if (kWidth == 0 || kHeight == 0 || kWidth > 8192 || kHeight > 8192) {
+            return badConfiguration("render.width and render.height are 1 to 8192 pixels");
+        }
+        width_ = static_cast<std::uint32_t>(kWidth);
+        height_ = static_cast<std::uint32_t>(kHeight);
+        RAWFRAME_TRY_ASSIGN(readEvery_, configuration.unsignedInteger("render.read_every", 60));
+        capture_ = configuration.path("render.capture");
+#if !RAWFRAME_FILE_SYSTEM
+        if (capture_.has_value()) {
+            // A capture is a file, and there are none here.
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
+                                                               composition::kCompositionDomain,
+                                                               code(composition::CompositionError::BadConfiguration),
+                                                               "render.capture names a file, and there are none here")
+                                                      .error()};
+        }
+#endif
+        if (!context.has(kDevice.name)) {
+            return {};
+        }
+        if (context.has(window::kSurfaces.name)) {
+            RAWFRAME_TRY_ASSIGN(windows_, context.capability(window::kSurfaces));
+        } else if (kOffscreen != "true") {
+            return {};
+        }
+        RAWFRAME_TRY_ASSIGN(devices_, context.capability(kDevice));
+        return {};
+    }
+
+    result::Status start(composition::ParticipantContext& context) noexcept override {
+        emitter_ = context.emitter();
+        return {};
+    }
+
+    void runHostPhase(composition::HostPhase /*phase*/, const composition::HostFrame& /*frame*/) noexcept override {
+        // The last iteration's plan, if a recorder never said it was ready.
+        if (planned_.has_value() && !made_) {
+            ++framesIncomplete_;
+        }
+        planned_.reset();
+        made_ = false;
+        ready_.clear();
+        if (devices_ == nullptr || failed_ || joined_.empty()) {
+            return;
+        }
+        Device* device = devices_->ready();
+        if (device == nullptr) {
+            ++framesWithoutDevice_;
+            return;
+        }
+        if (framer_ == nullptr) {
+            auto made = Framer::create(*device);
+            if (!made.has_value()) {
+                fail(made.error());
+                return;
+            }
+            framer_ = std::move(*made);
+        }
+        const auto kDone = framer_->done();
+        if (!kDone.has_value()) {
+            fail(kDone.error());
+            return;
+        }
+        if (!*kDone) {
+            ++framesBusy_;
+            return;
+        }
+        takePixels();
+        target_ = FrameTarget{.width = width_,
+                              .height = height_,
+                              .readBack = readEvery_ != 0 && (submitted_ + 1) % readEvery_ == 0,
+                              .surface = std::nullopt};
+        if (windows_ != nullptr) {
+            // Shown on the window, drawn at its size; a window that shows
+            // nothing this frame is not drawn for.
+            const auto kPrepared =
+                windows_->states().empty() ? std::nullopt : devices_->prepare(windows_->states()[0].window);
+            if (!kPrepared.has_value() || !kPrepared->second.drawable) {
+                ++framesHidden_;
+                return;
+            }
+            target_.width = kPrepared->second.size.width;
+            target_.height = kPrepared->second.size.height;
+            target_.surface = kPrepared->first;
+        }
+        planned_ = std::pair{target_.width, target_.height};
+    }
+
+    void stop() noexcept override {
+        if (devices_ == nullptr) {
+            return;
+        }
+        FramerStatistics statistics;
+        if (framer_ != nullptr) {
+            if (framer_->finish(kFinishNanoseconds).has_value()) {
+                takePixels();
+            }
+            statistics = framer_->statistics();
+            // Before the device, which the Runtime holds past the World.
+            framer_.reset();
+        }
+        bool captured = false;
+        if (capture_.has_value() && last_.has_value()) {
+#if RAWFRAME_FILE_SYSTEM
+            const std::vector<std::byte> kImage = tgaOf(*last_, capturedWidth_, capturedHeight_);
+            std::ofstream file{*capture_, std::ios::binary};
+            file.write(reinterpret_cast<const char*>(kImage.data()), static_cast<std::streamsize>(kImage.size()));
+            captured = static_cast<bool>(file);
+#endif
+        }
+        emitter_.log(diagnostics::Severity::Info,
+                     kFrameSummary,
+                     "the frames made on the device",
+                     {diagnostics::field("window", windows_ != nullptr),
+                      diagnostics::field("width", lastWidth_),
+                      diagnostics::field("height", lastHeight_),
+                      diagnostics::field("frames", statistics.frames),
+                      diagnostics::field("framesShown", statistics.framesShown),
+                      diagnostics::field("framesNotShown", statistics.framesNotShown),
+                      diagnostics::field("framesHidden", framesHidden_),
+                      diagnostics::field("framesBusy", framesBusy_ + statistics.framesBusy),
+                      diagnostics::field("framesWithoutDevice", framesWithoutDevice_),
+                      diagnostics::field("framesIncomplete", framesIncomplete_),
+                      diagnostics::field("readBacks", readBacks_),
+                      diagnostics::field("coveredPixels", lastCovered_),
+                      diagnostics::field("mostCovered", mostCovered_),
+                      diagnostics::field("colors", lastColors_),
+                      diagnostics::field("captured", captured)});
+    }
+
+    composition::CapabilityObject provide(std::string_view capability) noexcept override {
+        if (capability == kFrames.name) {
+            return composition::provideAs<Frames>(*this);
+        }
+        return {};
+    }
+
+    Device* device() noexcept override {
+        return devices_ != nullptr && !failed_ ? devices_->ready() : nullptr;
+    }
+
+    std::optional<std::pair<std::uint32_t, std::uint32_t>> planned() const noexcept override {
+        return made_ ? std::nullopt : planned_;
+    }
+
+    void join(FrameRecorder& recorder, std::uint32_t order) override {
+        leave(recorder);
+        joined_.insert(std::ranges::upper_bound(joined_, order, {}, &Joined::order),
+                       Joined{.recorder = &recorder, .order = order});
+    }
+
+    void leave(FrameRecorder& recorder) noexcept override {
+        std::erase_if(joined_, [&](const Joined& joined) {
+            return joined.recorder == &recorder;
+        });
+        ready_.erase(&recorder);
+    }
+
+    void ready(FrameRecorder& recorder) noexcept override {
+        if (!planned_.has_value() || made_ || failed_) {
+            return;
+        }
+        ready_.insert(&recorder);
+        if (!std::ranges::all_of(joined_, [&](const Joined& joined) {
+                return ready_.contains(joined.recorder);
+            })) {
+            return;
+        }
+        made_ = true;
+        std::vector<FrameRecorder*> recorders;
+        for (const Joined& joined : joined_) {
+            recorders.push_back(joined.recorder);
+        }
+        const auto kMade = framer_->make(recorders, target_);
+        if (!kMade.has_value()) {
+            fail(kMade.error());
+            return;
+        }
+        if (*kMade) {
+            ++submitted_;
+            lastWidth_ = target_.width;
+            lastHeight_ = target_.height;
+            if (target_.readBack) {
+                readWidth_ = target_.width;
+                readHeight_ = target_.height;
+            }
+        }
+    }
+
+private:
+    struct Joined {
+        FrameRecorder* recorder = nullptr;
+        std::uint32_t order = 0;
+    };
+
+    static result::Status badConfiguration(std::string_view why) {
+        return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                           composition::kCompositionDomain,
+                                                           code(composition::CompositionError::BadConfiguration),
+                                                           why)
+                                                  .error()};
+    }
+
+    void takePixels() {
+        if (auto pixels = framer_->pixels()) {
+            ++readBacks_;
+            lastCovered_ = coveredOf(*pixels);
+            mostCovered_ = std::max(mostCovered_, lastCovered_);
+            lastColors_ = colorsOf(*pixels);
+            if (capture_.has_value()) {
+                last_ = std::move(*pixels);
+                capturedWidth_ = readWidth_;
+                capturedHeight_ = readHeight_;
+            }
+        }
+    }
+
+    /// Reported once; no more frames are made.
+    void fail(const result::Error& error) noexcept {
+        failed_ = true;
+        emitter_.log(diagnostics::Severity::Error,
+                     kFailed,
+                     "a frame could not be made: no more are",
+                     {diagnostics::field("reason", std::string{error.description()})});
+    }
+
+    DeviceHolder* devices_ = nullptr;
+    window::Surfaces* windows_ = nullptr;
+    std::unique_ptr<Framer> framer_;
+    /// In order.
+    std::vector<Joined> joined_;
+    std::unordered_set<FrameRecorder*> ready_;
+    std::optional<std::pair<std::uint32_t, std::uint32_t>> planned_;
+    FrameTarget target_;
+    bool made_ = false;
+    bool failed_ = false;
+    std::uint32_t width_ = 1280;
+    std::uint32_t height_ = 720;
+    std::uint64_t readEvery_ = 60;
+    std::optional<std::string> capture_;
+    /// The last frame read back, kept for the capture.
+    std::optional<std::vector<std::byte>> last_;
+    std::uint32_t lastWidth_ = 0;
+    std::uint32_t lastHeight_ = 0;
+    std::uint32_t readWidth_ = 0;
+    std::uint32_t readHeight_ = 0;
+    std::uint32_t capturedWidth_ = 0;
+    std::uint32_t capturedHeight_ = 0;
+    std::uint64_t submitted_ = 0;
+    std::uint64_t framesHidden_ = 0;
+    std::uint64_t framesBusy_ = 0;
+    std::uint64_t framesWithoutDevice_ = 0;
+    std::uint64_t framesIncomplete_ = 0;
+    std::uint64_t readBacks_ = 0;
+    std::uint64_t lastCovered_ = 0;
+    std::uint64_t mostCovered_ = 0;
+    std::uint64_t lastColors_ = 0;
+    diagnostics::Emitter emitter_;
+};
+
+result::Result<composition::ParticipantOwner> make(composition::ParticipantContext& context) noexcept {
+    auto participant = std::make_unique<FrameParticipant>();
+    RAWFRAME_TRY(participant->load(context));
+    return composition::ParticipantOwner{participant.release()};
+}
+
+} // namespace
+
+void registerFrames(composition::ParticipantRegistrar& registrar) noexcept {
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = "rawframe.render.frame",
+        .factory = &make,
+        .scope = composition::LifetimeScope::World,
+        .providedCapabilities = kProvided,
+        .optionalCapabilities = kMaybe,
+        .eligibility = {.roles = ~kServer},
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(110)},
+        .observabilityIdentity = "render.frame",
+        .budgetOwner = "render",
+        .hostPhases = composition::hostPhaseBit(composition::HostPhase::Present),
+    });
+}
+
+} // namespace rawframe::render
