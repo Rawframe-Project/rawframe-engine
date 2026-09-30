@@ -1,5 +1,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
+#include "rawframe/game_content/game_content.h"
+#include "rawframe/material/material.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
 #include "rawframe/render_scene/frames.h"
@@ -19,7 +21,24 @@ namespace {
 
 constexpr diagnostics::EventIdentity kSceneSummary{"scene", "scene_summary"};
 constexpr std::string_view kProvided[] = {kSceneFrames.name};
-constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name, world_kest::kGameFiles.name};
+constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
+constexpr std::string_view kMaybe[] = {
+    world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
+
+/// A material's cooked bytes, read and waited for, decoded (D303).
+result::Result<material::Material> readMaterial(content::ContentStore& store, base::Bits128 id) {
+    RAWFRAME_TRY_ASSIGN(execution::AsyncHandle<content::VerifiedContent> read,
+                        store.read(content::ResourceRef{.id = content::ResourceId{id},
+                                                        .type = content::ResourceTypeId{material::kMaterialType}}));
+    RAWFRAME_TRY_ASSIGN(
+        const content::VerifiedContent kRead,
+        execution::toResult(read.wait(),
+                            execution::CancellationMapping{.errorClass = result::ErrorClass::Unavailable,
+                                                           .domain = kRenderSceneDomain,
+                                                           .code = code(RenderSceneError::MaterialUnreadable),
+                                                           .description = "a material's read was cancelled"}));
+    return material::decode(kRead.bytes());
+}
 
 /// A client's view without a camera of its own: behind its player and
 /// above, looking a little down, in a sunny day's exposure.
@@ -137,12 +156,34 @@ public:
         autoExposureComponent_ = game->autoExposure;
         gradingComponent_ = game->grading;
         gameMeshes_ = game->meshes.size();
+        // The game's materials from its cooked content; one that cannot be
+        // read is drawn as none, and said so when the scene starts.
+        std::vector<SceneMaterial> materials;
+        if (!files->materials().empty() && context.has(game_content::kGameContent.name)) {
+            RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
+            if (content->held()) {
+                const std::array<content::AdmittedRepresentation, 1> kAdmitted = {content::AdmittedRepresentation{
+                    .type = content::ResourceTypeId{material::kMaterialType},
+                    .representation = *content::RepresentationId::parse(material::kMaterialRepresentation)}};
+                RAWFRAME_TRY(content->admit(kAdmitted));
+                for (const world_kest::GameMaterialResource& each : files->materials()) {
+                    auto read = readMaterial(content->store(), each.material);
+                    if (read.has_value()) {
+                        materials.push_back({.id = each.id, .blob = material::blobOf(*read)});
+                    } else {
+                        unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});
+                    }
+                }
+            }
+        }
+        gameMaterials_ = materials.size();
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .sun = game->sun,
                                   .sky = game->sky,
                                   .points = std::move(game->points),
                                   .spots = std::move(game->spots),
                                   .meshes = std::move(game->meshes),
+                                  .materials = std::move(materials),
                                   .shadows = shadows_,
                                   .lightShadows = lightShadows_,
                                   .antiAliasing = antiAliasing_};
@@ -151,6 +192,12 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        for (const auto& [kPath, kReason] : unreadMaterials_) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kMaterialUnread,
+                         "a material could not be read: its models are drawn with none",
+                         {diagnostics::field("material", kPath), diagnostics::field("reason", kReason)});
+        }
         return {};
     }
 
@@ -177,6 +224,7 @@ public:
             hidden_ += kFrame.hidden;
             malformed_ += kFrame.malformed;
             unknownMeshes_ += kFrame.unknownMeshes;
+            unknownMaterials_ += kFrame.unknownMaterials;
             overLimit_ += kFrame.overLimit;
             mostDraws_ = std::max(mostDraws_, kFrame.draws.size());
             lightsLit_ += kFrame.lights3d.size();
@@ -207,6 +255,8 @@ public:
                       diagnostics::field("overLimit", overLimit_),
                       diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
                       diagnostics::field("gameMeshes", static_cast<std::uint64_t>(gameMeshes_)),
+                      diagnostics::field("gameMaterials", static_cast<std::uint64_t>(gameMaterials_)),
+                      diagnostics::field("unknownMaterials", unknownMaterials_),
                       diagnostics::field("lightsLit", lightsLit_),
                       diagnostics::field("lightsCulled", lightsCulled_),
                       diagnostics::field("lightsOverLimit", lightsOverLimit_),
@@ -330,6 +380,10 @@ private:
     std::uint64_t hidden_ = 0;
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownMeshes_ = 0;
+    std::uint64_t unknownMaterials_ = 0;
+    std::size_t gameMaterials_ = 0;
+    /// Materials that could not be read, and why, said at start.
+    std::vector<std::pair<std::string, std::string>> unreadMaterials_;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
     /// The point and spot lights each frame lit with, culled, and left out

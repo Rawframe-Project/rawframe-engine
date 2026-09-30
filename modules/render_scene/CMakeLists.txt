@@ -5,7 +5,7 @@
 # and links none of this. The device half is render_scene_gpu's.
 rawframe_module(NAME render_scene
     SOURCES src/grading.cpp src/lights.cpp src/meshes.cpp src/participant.cpp src/scene.cpp
-    DEPS physics3d mesh world_replication world_kest kest world composition schema execution diagnostics result base
+    DEPS material graph game_content content physics3d mesh world_replication world_kest kest world composition schema execution diagnostics result base
 )
 
 rawframe_module_tests(NAME render_scene SOURCES tests/scene_test.cpp)

@@ -13,6 +13,7 @@
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -713,4 +714,45 @@ RAWFRAME_TEST(ACamerasGradeAndTonemapperAreMadeSound) {
     RAWFRAME_EXPECT(rig.frame(camera).tonemapper == Tonemapper::Linear);
     camera.tonemapper = 7;
     RAWFRAME_EXPECT(rig.frame(camera).tonemapper == Tonemapper::Agx);
+}
+
+RAWFRAME_TEST(AModelsMaterialIsFoundByItsIdentity) {
+    // A game with two materials, the second given twice: the later wins.
+    MaterialBlob brass = noMaterial();
+    brass[3] = 1;
+    MaterialBlob stone = noMaterial();
+    stone[7] = 0.9F;
+    MaterialBlob stoner = stone;
+    stoner[7] = 1;
+    auto schema = registry();
+    world::World world{schema};
+    auto scene = *Scene::create(
+        *schema,
+        {.models = {kModelId},
+         .materials = {{.id = 0xa1, .blob = brass}, {.id = 0xa2, .blob = stone}, {.id = 0xa2, .blob = stoner}}});
+    for (const std::uint64_t kMaterial : {0xa1ULL, 0ULL, 0xa2ULL, 0xffULL}) {
+        const world::EntityHandle kEntity = *world.create();
+        Model model{.mesh = kBox, .material = kMaterial};
+        RAWFRAME_EXPECT(world.insertErased(kEntity, *schema->find(kModelId), &model).has_value());
+        RAWFRAME_EXPECT(world
+                            .insert(kEntity,
+                                    *schema->key<physics3d::Pose3D>(),
+                                    physics3d::Pose3D{.z = -10.0 - static_cast<double>(kMaterial & 1U), .qw = 1})
+                            .has_value());
+    }
+    scene->extract(world);
+    const SceneFrame& kFrame = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
+    RAWFRAME_EXPECT(kFrame.materials.size() == 3 && kFrame.materials[0] == noMaterial() &&
+                    kFrame.materials[1] == brass && kFrame.materials[2] == stoner);
+    // None's, the brass, the stone, and one the game has not, drawn with
+    // none and counted.
+    std::vector<std::uint32_t> places;
+    for (const SceneDraw& draw : kFrame.draws) {
+        places.push_back(draw.material);
+    }
+    std::ranges::sort(places);
+    RAWFRAME_EXPECT(kFrame.draws.size() == 4 && places == (std::vector<std::uint32_t>{0, 0, 1, 2}) &&
+                    kFrame.unknownMaterials == 1);
+    // None is white, so a model's color is its base color.
+    RAWFRAME_EXPECT(noMaterial()[0] == 1 && noMaterial()[7] == 0.3F && noMaterial()[15] == 0);
 }

@@ -36,6 +36,7 @@ struct Model {
     float scaleY = 1;
     float scaleZ = 1;
     std::uint32_t color = 0xFFFFFFFF;
+    std::uint64_t material = 0;
 };
 
 /// `rawframe.model.Camera` as C++ reads it.
@@ -132,6 +133,19 @@ inline constexpr std::uint64_t kCapsule = 0x63ed148327123836ULL;
 [[nodiscard]] std::shared_ptr<const mesh::Mesh> engineMesh(std::uint64_t id);
 
 /// A mesh the scene may draw, by the identity a Model names it by.
+/// A compiled material as a device reads it (`material::blobOf`, D303).
+using MaterialBlob = std::array<float, 16>;
+
+/// A model without a material: OpenPBR's surface but for a white base
+/// color, so the model's color is its base color.
+[[nodiscard]] MaterialBlob noMaterial() noexcept;
+
+/// A game's material, by the identity its `material` line gives it.
+struct SceneMaterial {
+    std::uint64_t id = 0;
+    MaterialBlob blob{};
+};
+
 struct SceneMesh {
     std::uint64_t id = 0;
     std::shared_ptr<const mesh::Mesh> mesh;
@@ -187,6 +201,8 @@ struct SceneDraw {
     /// columns of four with the last nought.
     Matrix normal{};
     std::array<float, 4> color{1, 1, 1, 1};
+    /// Its material's place in the frame's materials (D303).
+    std::uint32_t material = 0;
     world::EntityHandle entity;
     /// Where the model was the frame before, relative to this frame's eye:
     /// what its motion is measured from (D291); the model itself where it
@@ -410,6 +426,11 @@ struct SceneFrame {
     std::size_t malformed = 0;
     /// A mesh neither the engine's nor the game's.
     std::size_t unknownMeshes = 0;
+    /// A material the game has not, drawn with none.
+    std::size_t unknownMaterials = 0;
+    /// Every material's blob (ADR-0031, D303), a draw naming its place: the
+    /// first none's, then the game's in the order they were given.
+    std::vector<MaterialBlob> materials;
     std::size_t overLimit = 0;
 };
 
@@ -473,6 +494,8 @@ struct SceneSettings {
     std::vector<schema::ComponentTypeId> spots;
     /// The game's meshes, by their identities.
     std::vector<SceneMesh> meshes;
+    /// The game's materials, by their identities (D303).
+    std::vector<SceneMaterial> materials;
     SceneLimits limits;
     ShadowSettings shadows;
     LightShadowSettings lightShadows;

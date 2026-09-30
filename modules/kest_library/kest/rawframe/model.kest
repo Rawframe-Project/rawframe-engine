@@ -9,8 +9,11 @@ module rawframe.model
 // A mesh drawn at the pose: the game's cooked mesh of the identity its
 // `mesh` line gives it, or one of the engine's own below, scaled by
 // `scaleX`, `scaleY`, and `scaleZ` along the pose's own axes, and turned
-// as the pose turns. `color` is its surface's base color, 0xRRGGBBAA in
-// sRGB; an alpha of nought, a scale of nought, or mesh nought draws
+// as the pose turns. `material` is the game's surface material of the
+// identity its `material` line gives it (D303), or nought for none: a
+// plain surface, OpenPBR's but for a white base color. `color`, 0xRRGGBBAA
+// in sRGB, tints the material's base color, so without one it is the base
+// color; an alpha of nought, a scale of nought, or mesh nought draws
 // nothing.
 struct Model {
     mesh: u64
@@ -18,6 +21,7 @@ struct Model {
     scaleY: f32
     scaleZ: f32
     color: u32
+    material: u64
 }
 
 // The engine's own meshes, each one meter from its center to its sides,

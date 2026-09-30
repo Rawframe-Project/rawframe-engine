@@ -1,6 +1,7 @@
 #include "rawframe/render_scene/scene.h"
 
 #include "lights.h"
+#include "rawframe/material/material.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
 #include "rawframe/world/column_query.h"
@@ -16,6 +17,12 @@
 #include <tuple>
 
 namespace rawframe::render_scene {
+
+MaterialBlob noMaterial() noexcept {
+    material::Material plain;
+    plain.surface.baseColor = {1, 1, 1};
+    return material::blobOf(plain);
+}
 
 namespace {
 
@@ -130,6 +137,8 @@ struct Scene::State {
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
     std::map<std::uint64_t, Bounded> meshes;
+    /// Each game material's place in the frame's materials.
+    std::map<std::uint64_t, std::uint32_t> materials;
     std::vector<ModelInstance> extracted;
     std::optional<Sun> sunNow;
     std::optional<Sky> skyNow;
@@ -265,6 +274,7 @@ struct Scene::State {
         frame.hidden = 0;
         frame.malformed = 0;
         frame.unknownMeshes = 0;
+        frame.unknownMaterials = 0;
         frame.overLimit = 0;
         frame.shadows.count = 0;
         frame.shadows.casters.clear();
@@ -378,6 +388,14 @@ struct Scene::State {
             const float kRadius =
                 kBounds.radius * std::max({std::abs(kScale[0]), std::abs(kScale[1]), std::abs(kScale[2])});
             SceneDraw draw{.mesh = kModel.mesh, .entity = instance->entity};
+            if (kModel.material != 0) {
+                const auto kMaterial = materials.find(kModel.material);
+                if (kMaterial == materials.end()) {
+                    ++frame.unknownMaterials;
+                } else {
+                    draw.material = kMaterial->second;
+                }
+            }
             for (std::size_t column = 0; column < 3; ++column) {
                 for (std::size_t row = 0; row < 3; ++row) {
                     draw.model[(column * 4) + row] = kTurn[column][row] * kScale[column];
@@ -572,6 +590,21 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
             state->meshes.insert_or_assign(kMesh.id, bounded(kMesh.mesh));
         }
     }
+    // The frame's materials: none's first, then the game's; a later line of
+    // an identity replaces an earlier.
+    state->frame.materials = {noMaterial()};
+    for (const SceneMaterial& kMaterial : settings.materials) {
+        if (kMaterial.id == 0) {
+            continue;
+        }
+        const auto [kAt, kNew] =
+            state->materials.try_emplace(kMaterial.id, static_cast<std::uint32_t>(state->frame.materials.size()));
+        if (kNew) {
+            state->frame.materials.push_back(kMaterial.blob);
+        } else {
+            state->frame.materials[kAt->second] = kMaterial.blob;
+        }
+    }
     state->settings = std::move(settings);
     if (const auto kPose = registry.find(physics3d::Pose3D::kComponentTypeId)) {
         state->pose = *kPose;
@@ -728,7 +761,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"scaleX", offsetof(Model, scaleX)},
                            {"scaleY", offsetof(Model, scaleY)},
                            {"scaleZ", offsetof(Model, scaleZ)},
-                           {"color", offsetof(Model, color)}}));
+                           {"color", offsetof(Model, color)},
+                           {"material", offsetof(Model, material)}}));
     RAWFRAME_TRY(kLaidOut(loaded.camera.has_value(),
                           "rawframe.model.Camera",
                           sizeof(Camera),
