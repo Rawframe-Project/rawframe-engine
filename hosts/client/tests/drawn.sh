@@ -7,6 +7,8 @@
 # Run under an X server whose root window is black (Xvfb -br), from the
 # repository root.
 #
+# Its window is resized to 800 by 600 once the screen is lit.
+#
 # usage: drawn.sh <rawframe-server> <rawframe-client> <client settings>
 set -uo pipefail
 
@@ -15,7 +17,7 @@ log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 bash "$here/../../bots/tests/play.sh" "$1" "$2" 0 1 480 games/runners/runners.game /dev/null "$3" >"$log" 2>&1 &
 play=$!
-python3 "$here/screen.py" "$play"
+python3 "$here/screen.py" "$play" "" 800x600
 wait "$play"
 status=$?
 if grep -q '"device_unavailable"' "$log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then

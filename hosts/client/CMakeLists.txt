@@ -32,7 +32,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(client_plays_runners PROPERTIES PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,[^\n]*\"stalled\":0,")
     # The same, drawn on the one device and shown in the window (D280): its
-    # frames shown, and the screen lit by what they drew.
+    # frames shown, and the screen lit by what they drew. The window is
+    # resized while it plays, and the surface, the picture, and the view
+    # follow it (D281).
     if(RAWFRAME_CLIENT_DRAWS)
         set(CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/runners_content)
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/client_drawn.tga)
@@ -46,7 +48,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"framesShown\":[1-9][0-9]+,")
+                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"width\":800,\"height\":600,[^\n]*\"framesShown\":[1-9][0-9]+,.*\"viewWidth\":800,\"viewHeight\":600,.*\"reconfigured\":[2-9]")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(client_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
