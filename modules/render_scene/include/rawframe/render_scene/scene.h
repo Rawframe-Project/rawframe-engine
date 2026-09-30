@@ -145,6 +145,9 @@ using MaterialBlob = std::array<float, 16>;
 struct SceneMaterial {
     std::uint64_t id = 0;
     MaterialBlob blob{};
+    /// Whether it blends over what is behind it (SPEC-0026's `translucent`,
+    /// D305).
+    bool translucent = false;
 };
 
 struct SceneMesh {
@@ -420,7 +423,10 @@ struct SceneFrame {
     /// EV100.
     float exposure = 15;
     SceneLights lights;
+    /// The opaque draws, grouped by mesh, then from `translucentFrom` the
+    /// translucent ones, farthest first (D305).
     std::vector<SceneDraw> draws;
+    std::size_t translucentFrom = 0;
     std::size_t drawn = 0;
     /// Outside the view.
     std::size_t culled = 0;

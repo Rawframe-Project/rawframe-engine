@@ -769,3 +769,34 @@ RAWFRAME_TEST(AModelsMaterialIsFoundByItsIdentity) {
     // None is white, so a model's color is its base color.
     RAWFRAME_EXPECT(noMaterial()[0] == 1 && noMaterial()[7] == 0.3F && noMaterial()[15] == 0);
 }
+
+RAWFRAME_TEST(TranslucentModelsComeLastFarthestFirst) {
+    auto schema = registry();
+    world::World world{schema};
+    auto scene = *Scene::create(*schema,
+                                {.models = {kModelId},
+                                 .materials = {{.id = 0xa1, .blob = noMaterial(), .translucent = true},
+                                               {.id = 0xa2, .blob = noMaterial()}}});
+    // Glass at 5, 15, and 10 meters; opaque boxes at 20 and 8, one of them
+    // with an opaque material.
+    const auto kPlace = [&](std::uint64_t material, double away) {
+        const world::EntityHandle kEntity = *world.create();
+        Model model{.mesh = kBox, .material = material};
+        RAWFRAME_EXPECT(world.insertErased(kEntity, *schema->find(kModelId), &model).has_value());
+        RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<physics3d::Pose3D>(), {.z = -away, .qw = 1}).has_value());
+    };
+    kPlace(0xa1, 5);
+    kPlace(0, 20);
+    kPlace(0xa1, 15);
+    kPlace(0xa2, 8);
+    kPlace(0xa1, 10);
+    scene->extract(world);
+    const SceneFrame& kFrame = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
+    RAWFRAME_EXPECT(kFrame.draws.size() == 5 && kFrame.translucentFrom == 2);
+    if (kFrame.draws.size() != 5) {
+        return;
+    }
+    RAWFRAME_EXPECT(kFrame.draws[0].material != 1 && kFrame.draws[1].material != 1);
+    RAWFRAME_EXPECT(near(kFrame.draws[2].model[14], -15) && near(kFrame.draws[3].model[14], -10) &&
+                    near(kFrame.draws[4].model[14], -5));
+}

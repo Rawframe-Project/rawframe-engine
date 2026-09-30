@@ -170,8 +170,10 @@ public:
                 for (const world_kest::GameMaterialResource& each : files->materials()) {
                     auto read = readMaterial(content->store(), each.material);
                     if (read.has_value()) {
-                        materials.push_back({.id = each.id, .blob = material::blobOf(*read)});
-                        if (read->blend != material::Blend::Opaque) {
+                        materials.push_back({.id = each.id,
+                                             .blob = material::blobOf(*read),
+                                             .translucent = read->blend == material::Blend::Translucent});
+                        if (read->blend == material::Blend::Masked) {
                             projected_.push_back(each.path);
                         }
                     } else {
@@ -202,11 +204,12 @@ public:
                          "a material could not be read: its models are drawn with none",
                          {diagnostics::field("material", kPath), diagnostics::field("reason", kReason)});
         }
-        // SPEC-0026's projection, declared: the passes carry no alpha yet.
+        // SPEC-0026's projection, declared: the depth prepass tests no
+        // alpha yet.
         for (const std::string& kPath : projected_) {
             emitter_.log(diagnostics::Severity::Warning,
                          kMaterialProjected,
-                         "a masked or translucent material is drawn opaque until the scene's passes carry alpha",
+                         "a masked material is drawn opaque until the depth prepass tests alpha",
                          {diagnostics::field("material", kPath)});
         }
         return {};
@@ -395,8 +398,8 @@ private:
     std::size_t gameMaterials_ = 0;
     /// Materials that could not be read, and why, said at start.
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;
-    /// Materials drawn otherwise than they ask (masked or translucent drawn
-    /// opaque), said at start.
+    /// Materials drawn otherwise than they ask (masked drawn opaque), said
+    /// at start.
     std::vector<std::string> projected_;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;

@@ -140,8 +140,10 @@ struct Scene::State {
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
     std::map<std::uint64_t, Bounded> meshes;
-    /// Each game material's place in the frame's materials.
+    /// Each game material's place in the frame's materials, and whether
+    /// the material at each place is translucent.
     std::map<std::uint64_t, std::uint32_t> materials;
+    std::vector<bool> translucent;
     std::vector<ModelInstance> extracted;
     std::optional<Sun> sunNow;
     std::optional<Sky> skyNow;
@@ -470,6 +472,19 @@ struct Scene::State {
             frame.draws.push_back(draw);
             ++frame.drawn;
         }
+        // The translucent after the opaque, farthest first, so each blends
+        // over what is behind it (D305); the opaque keep their order.
+        const auto kTranslucent = std::ranges::stable_partition(frame.draws, [this](const SceneDraw& draw) {
+            return draw.material >= translucent.size() || !translucent[draw.material];
+        });
+        frame.translucentFrom = static_cast<std::size_t>(kTranslucent.begin() - frame.draws.begin());
+        const auto kAway = [](const SceneDraw& draw) {
+            return (draw.model[12] * draw.model[12]) + (draw.model[13] * draw.model[13]) +
+                   (draw.model[14] * draw.model[14]);
+        };
+        std::ranges::stable_sort(kTranslucent, [&kAway](const SceneDraw& left, const SceneDraw& right) {
+            return kAway(left) > kAway(right);
+        });
         castIntoCascades();
         temporal(camera, kSees);
         frame.metering.snap = frame.metering.enabled && (!meteredBefore || !continuous);
@@ -605,6 +620,7 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
     // The frame's materials: none's first, then the game's; a later line of
     // an identity replaces an earlier.
     state->frame.materials = {noMaterial()};
+    state->translucent = {false};
     for (const SceneMaterial& kMaterial : settings.materials) {
         if (kMaterial.id == 0) {
             continue;
@@ -613,8 +629,10 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
             state->materials.try_emplace(kMaterial.id, static_cast<std::uint32_t>(state->frame.materials.size()));
         if (kNew) {
             state->frame.materials.push_back(kMaterial.blob);
+            state->translucent.push_back(kMaterial.translucent);
         } else {
             state->frame.materials[kAt->second] = kMaterial.blob;
+            state->translucent[kAt->second] = kMaterial.translucent;
         }
     }
     state->settings = std::move(settings);
