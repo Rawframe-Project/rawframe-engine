@@ -19,8 +19,10 @@ constexpr diagnostics::EventIdentity kFailed{"scene", "scene_drawing_failed"};
 constexpr std::string_view kMaybe[] = {render::kFrames.name, render_scene::kSceneFrames.name};
 constexpr std::string_view kProvided[] = {kSceneCaptures.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
-/// The scene's place in a frame: first (SPEC-0024).
+/// The scene's place in a frame: first (SPEC-0024); and its post
+/// processes over the composed picture's, after the canvas (D351).
 constexpr std::uint32_t kOrder = 0;
+constexpr std::uint32_t kComposedOrder = 2;
 
 /// Records the scene's frames into the frames `render` makes (D285): in
 /// each `present` that plans a frame, the view takes the frame's size and
@@ -70,6 +72,7 @@ public:
             }
             renderer_ = std::move(*made);
             frames_->join(*renderer_, kOrder);
+            frames_->join(renderer_->composed(), kComposedOrder);
         }
         const auto kPlanned = frames_->planned();
         if (!kPlanned.has_value()) {
@@ -87,6 +90,7 @@ public:
             renderer_->prepare(scene_->queued(), meshes_, textures_);
         }
         frames_->ready(*renderer_);
+        frames_->ready(renderer_->composed());
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -124,6 +128,7 @@ public:
         RendererStatistics statistics;
         if (renderer_ != nullptr) {
             statistics = renderer_->statistics();
+            frames_->leave(renderer_->composed());
             frames_->leave(*renderer_);
             renderer_.reset();
         }

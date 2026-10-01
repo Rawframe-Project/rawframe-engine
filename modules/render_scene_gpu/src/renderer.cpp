@@ -95,6 +95,21 @@ struct SceneRenderer::State {
     std::optional<PicturePass> picture;
     /// Its post processes, where a view's camera has them (D350).
     std::optional<PostProcessPass> post;
+    /// What it draws over the composed picture, after the canvas (D351),
+    /// and whether the open frame has that.
+    struct Composed final : render::FrameRecorder {
+        State* state = nullptr;
+        result::Status declare(render::Frame& open) override {
+            return state->declareComposed(open);
+        }
+        result::Status record(render::Frame& /*open*/) override {
+            return state->recordComposed();
+        }
+        void ended(bool /*submitted*/) noexcept override {
+        }
+    };
+    Composed composed;
+    bool composing = false;
     std::optional<DeviceMeshes> held;
     /// The materials' textures (D309), and the white one a material
     /// sampling none samples, held as texture nought.
@@ -568,6 +583,30 @@ struct SceneRenderer::State {
         return {};
     }
 
+    /// The post processes over the composed picture: each into a picture
+    /// of its own, the first reading the frame's, and the last copied back
+    /// into it (D351).
+    result::Status declareComposed(render::Frame& open) {
+        composing = false;
+        if (!declared.has_value() || post->at(material::Insertion::FinalOutput) == 0) {
+            return {};
+        }
+        const mrhiResourceId kPicture = resourceOf(open.picture);
+        RAWFRAME_TRY_ASSIGN(
+            const mrhiResourceId kLast,
+            post->addStage(material::Insertion::FinalOutput, kPicture, open.width, open.height, {}, false));
+        RAWFRAME_TRY(post->addCopy(kLast, kPicture));
+        composing = true;
+        return {};
+    }
+
+    result::Status recordComposed() {
+        if (!composing) {
+            return {};
+        }
+        return post->record(pipelines, material::Insertion::FinalOutput);
+    }
+
     result::Status record() {
         if (!declared.has_value()) {
             return {};
@@ -799,6 +838,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->bloom.emplace(device.native());
     state->picture.emplace(device.native());
     state->post.emplace(device.native());
+    state->composed.state = state.get();
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }
@@ -819,6 +859,10 @@ result::Status SceneRenderer::record(render::Frame& /*frame*/) {
 
 void SceneRenderer::ended(bool submitted) noexcept {
     state_->ended(submitted);
+}
+
+render::FrameRecorder& SceneRenderer::composed() noexcept {
+    return state_->composed;
 }
 
 const RendererStatistics& SceneRenderer::statistics() const noexcept {

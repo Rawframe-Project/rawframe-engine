@@ -22,13 +22,13 @@ struct PostBlock {
 };
 static_assert(sizeof(PostBlock) == 96, "a post process's shader reads its block as 96 bytes");
 
-/// A frame's post processes (ADR-0051, D348 to D350), each a pass over the
+/// A frame's post processes (ADR-0051, D348 to D351), each a pass over the
 /// chain's picture at its material's insertion point, in the camera's
 /// order there: after the temporal slot and before the tonemapper over
 /// scene-linear light, after the tonemapper and over the scene's output
-/// over the display-referred picture. The composed picture's
-/// (`final_output`) wait for a hook after the canvas, left out and
-/// counted.
+/// over the display-referred picture, and over the composed picture
+/// (`final_output`) once the canvas has drawn, copied back into it. One
+/// whose pass a frame does not add is left out and counted.
 class PostProcessPass {
 public:
     explicit PostProcessPass(mrhiDevice* native) noexcept;
@@ -58,7 +58,12 @@ public:
     /// Its writes, in the upload pass.
     result::Status write(mrhiPassId upload);
 
-    /// Its passes at `insertion` recorded.
+    /// A pass copying `from` into `into`, kept from what it was: the last
+    /// over the composed picture, which reads it and so cannot write it.
+    result::Status addCopy(mrhiResourceId from, mrhiResourceId into);
+
+    /// Its passes at `insertion` recorded, and the copy after those over
+    /// the composed picture.
     result::Status record(const Pipelines& pipelines, material::Insertion insertion);
 
     /// The post processes run, and those left out, this frame.
@@ -78,6 +83,9 @@ private:
 
     mrhiDevice* native_ = nullptr;
     std::vector<Step> steps_;
+    /// The copy back into the composed picture, its block declared when a
+    /// post process is over it.
+    Step copy_;
     std::size_t leftOut_ = 0;
 };
 

@@ -95,8 +95,8 @@ struct RendererStatistics {
     /// Frames whose models' passes were multisampled (D343).
     std::uint64_t framesMultisampled = 0;
     /// Post processes run, summed over the frames, and those left out: by
-    /// the scene's stage, or waiting for a hook after the canvas
-    /// (`final_output`, D350).
+    /// the scene's stage, or over a composed picture no recorder drew
+    /// (`final_output`, D350, D351).
     std::uint64_t postProcessesRun = 0;
     std::uint64_t postProcessesLeftOut = 0;
 };
@@ -136,6 +136,13 @@ public:
     void ended(bool submitted) noexcept override;
 
     [[nodiscard]] const RendererStatistics& statistics() const noexcept;
+
+    /// What the scene draws over the composed picture (`final_output` post
+    /// processes, D351): a recorder of its own, to be recorded after every
+    /// other that draws the picture (the canvas), drawing only what the
+    /// scene's frame in the same frame asks. Without it, those are left
+    /// out and counted.
+    [[nodiscard]] render::FrameRecorder& composed() noexcept;
 
     /// Reads back the light of the next frame submitted with a scene, one
     /// the device reads back at once (`render::kReadbackBytes`), for a

@@ -3,7 +3,8 @@
 // tonemapper, or after the temporal slot, comes out without red through
 // the linear tonemapper; a red wash over the scene's output comes after
 // FXAA; a texture laid over the picture shows its color; and one over the
-// composed picture is left out and counted.
+// composed picture is drawn by the scene's second recorder, and left out
+// and counted without it.
 
 #include "fixture.h"
 #include "rawframe/material/post_process.h"
@@ -13,6 +14,7 @@
 #include "rawframe/texture/texture.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <memory>
 
@@ -140,15 +142,32 @@ RAWFRAME_TEST(PostProcessesRunWhereTheyAreInserted) {
         RAWFRAME_EXPECT(kPixel[0] == 0 && kPixel[1] == 255 && kPixel[2] == 0);
     }
 
-    // Over the composed picture: left out, and counted, until a hook after
-    // the canvas exists.
+    // Over the composed picture: left out, and counted, where nothing
+    // records it; drawn after the scene's other recorders by its own
+    // (D351), here whole black.
     const std::uint64_t kLeftOut = (*made)->statistics().postProcessesLeftOut;
     const material::PostProcess kComposed{.insertion = material::Insertion::FinalOutput, .constant = {0, 0, 0, 1}};
     SceneFrame composed = seen();
     composed.postProcesses = {processOf(kComposed), processOf(kFade, 0.5F)};
-    const auto kComposedPixels = kDraw(composed);
-    RAWFRAME_EXPECT(kComposedPixels.has_value() && (*made)->statistics().postProcessesLeftOut > kLeftOut);
-    if (kComposedPixels.has_value() && kHalf.has_value()) {
-        RAWFRAME_EXPECT(at(*kComposedPixels, 32, 32) == at(*kHalf, 32, 32));
+    const auto kAlone = kDraw(composed);
+    RAWFRAME_EXPECT(kAlone.has_value() && (*made)->statistics().postProcessesLeftOut > kLeftOut);
+    if (kAlone.has_value() && kHalf.has_value()) {
+        RAWFRAME_EXPECT(at(*kAlone, 32, 32) == at(*kHalf, 32, 32));
+    }
+    const std::array<render::FrameRecorder*, 2> kBoth = {&**made, &(*made)->composed()};
+    const std::uint64_t kRun = (*made)->statistics().postProcessesRun;
+    const std::uint64_t kStillOut = (*made)->statistics().postProcessesLeftOut;
+    for (int attempt = 0; attempt < 1000 && (*made)->statistics().postProcessesRun < kRun + 2; ++attempt) {
+        (*made)->prepare(&composed, kMeshes, kTextures);
+        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((*framer)->make(kBoth, {.width = kSide, .height = kSide, .readBack = true}).has_value());
+    }
+    RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+    const auto kComposedPixels = (*framer)->pixels();
+    RAWFRAME_EXPECT(kComposedPixels.has_value() && (*made)->statistics().postProcessesLeftOut == kStillOut);
+    if (kComposedPixels.has_value()) {
+        const auto kPixel = at(*kComposedPixels, 32, 32);
+        std::printf("composed: %d %d %d\n", kPixel[0], kPixel[1], kPixel[2]);
+        RAWFRAME_EXPECT(kPixel[0] == 0 && kPixel[1] == 0 && kPixel[2] == 0);
     }
 }

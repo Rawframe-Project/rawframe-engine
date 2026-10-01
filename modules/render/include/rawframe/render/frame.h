@@ -136,7 +136,8 @@ public:
     /// nothing).
     [[nodiscard]] virtual std::optional<std::pair<std::uint32_t, std::uint32_t>> planned() const noexcept = 0;
     /// Joins every frame from the next ready on, recorded in `order`'s
-    /// order: the scene is 0, the canvas 1.
+    /// order: the scene is 0, the canvas 1, and the scene's post processes
+    /// over the composed picture 2 (D351).
     virtual void join(FrameRecorder& recorder, std::uint32_t order) = 0;
     /// Leaves the frames, before the recorder ends.
     virtual void leave(FrameRecorder& recorder) noexcept = 0;
