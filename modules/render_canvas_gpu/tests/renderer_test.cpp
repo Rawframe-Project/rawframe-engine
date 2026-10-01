@@ -3,7 +3,9 @@
 // lands the right way up, each texel whole (exact textures are sampled
 // nearest); a half-clear sprite drawn after it blends over it in linear
 // light; a draw whose texture is not ready is left out; and a texture is
-// uploaded once, and again only when a reload replaces it. Skips where no
+// uploaded once, and again only when a reload replaces it; and draws blend
+// by their materials (D356): added, multiplied, a sprite with no texture
+// drawn white, and an emission added where nothing covers. Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
 // `render`'s framer (D285), as the frame participant makes them.
 
@@ -55,8 +57,14 @@ constexpr std::uint64_t kMissing = 9;
 
 /// A quad from (`left`, `top`) to (`right`, `bottom`) in the canvas's clip
 /// space, y up, the whole texture across it.
-void quad(
-    CanvasFrame& frame, std::uint64_t texture, float left, float top, float right, float bottom, std::uint32_t color) {
+void quad(CanvasFrame& frame,
+          std::uint64_t texture,
+          float left,
+          float top,
+          float right,
+          float bottom,
+          std::uint32_t color,
+          std::uint32_t material = 0) {
     const auto kFirst = static_cast<std::uint32_t>(frame.vertices.size());
     frame.vertices.push_back(CanvasVertex{.x = left, .y = top, .u = 0, .v = 0, .color = color});
     frame.vertices.push_back(CanvasVertex{.x = right, .y = top, .u = 1, .v = 0, .color = color});
@@ -66,7 +74,7 @@ void quad(
     for (const std::uint32_t kCorner : {0U, 1U, 2U, 0U, 2U, 3U}) {
         frame.indices.push_back(kFirst + kCorner);
     }
-    frame.draws.push_back(CanvasDraw{.texture = texture, .firstIndex = kIndex, .indexCount = 6});
+    frame.draws.push_back(CanvasDraw{.texture = texture, .material = material, .firstIndex = kIndex, .indexCount = 6});
 }
 
 std::shared_ptr<const texture::Texture> image(std::uint32_t side, std::initializer_list<std::uint8_t> texels) {
@@ -148,15 +156,17 @@ RAWFRAME_TEST(TheCanvasDrawsItsFrameInOrder) {
     RAWFRAME_EXPECT(near(kPixels, 28, 28, {187, 187, 255, 255}) && near(kPixels, 40, 40, {0, 0, 188, 255}));
     // The missing texture drew nothing; the rest is the clear color.
     RAWFRAME_EXPECT(near(kPixels, 56, 4, {0, 0, 0, 255}) && near(kPixels, 60, 60, {0, 0, 0, 255}));
+    // Two textures uploaded, and the white a sprite with no texture
+    // samples (D356).
     RAWFRAME_EXPECT(renderer.statistics().draws == 2 && renderer.statistics().drawsLeftOut == 1 &&
-                    renderer.statistics().texturesUploaded == 2);
+                    renderer.statistics().texturesUploaded == 3);
 
     // The same textures again are not uploaded again; a reload's new one is.
     static_cast<void>(kDraw());
-    RAWFRAME_EXPECT(renderer.statistics().texturesUploaded == 2 && renderer.statistics().texturesReplaced == 0);
+    RAWFRAME_EXPECT(renderer.statistics().texturesUploaded == 3 && renderer.statistics().texturesReplaced == 0);
     quarters = image(2, {0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255});
     const std::vector<std::byte> kReloaded = kDraw();
-    RAWFRAME_EXPECT(renderer.statistics().texturesUploaded == 3 && renderer.statistics().texturesReplaced == 1);
+    RAWFRAME_EXPECT(renderer.statistics().texturesUploaded == 4 && renderer.statistics().texturesReplaced == 1);
     RAWFRAME_EXPECT(near(kReloaded, 4, 4, {0, 255, 0, 255}));
 }
 
@@ -177,4 +187,50 @@ RAWFRAME_TEST(ACanvasWithNothingQueuedDrawsNothing) {
     RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
     const auto kPixels = (*framer)->pixels();
     RAWFRAME_EXPECT(kPixels.has_value() && (*made)->statistics().frames == 0);
+}
+
+RAWFRAME_TEST(TheCanvasDrawsByItsMaterials) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const auto kWhiteTexel = image(1, {255, 255, 255, 255});
+    const render_canvas_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == kWhite ? kWhiteTexel : nullptr;
+    };
+    // None; blue added; red multiplied; green; and a red glow over nothing.
+    const std::array<material::CanvasMaterial, 5> kMaterials = {
+        material::CanvasMaterial{.shading = material::Shading::Unlit},
+        material::CanvasMaterial{.blend = material::CanvasBlend::Additive, .color = {0, 0, 1, 1}},
+        material::CanvasMaterial{.blend = material::CanvasBlend::Multiply, .color = {1, 0, 0, 1}},
+        material::CanvasMaterial{.color = {0, 1, 0, 1}},
+        material::CanvasMaterial{.color = {0, 0, 0, 0}, .emission = {0.5F, 0, 0}}};
+    CanvasFrame frame;
+    frame.materials = kMaterials;
+    // Grey over the view, then a quadrant of each.
+    quad(frame, kWhite, -1, 1, 1, -1, 0x808080FF);
+    quad(frame, kWhite, -1, 1, 0, 0, 0xFFFFFFFF, 1);
+    quad(frame, kWhite, 0, 1, 1, 0, 0xFFFFFFFF, 2);
+    quad(frame, 0, -1, 0, 0, -1, 0xFFFFFFFF, 3);
+    quad(frame, kWhite, 0, 0, 1, -1, 0xFFFFFFFF, 4);
+    const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
+    for (int attempt = 0; attempt < 1000 && (*made)->statistics().frames == 0; ++attempt) {
+        (*made)->prepare(&frame, kTextures);
+        RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+        RAWFRAME_EXPECT((*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
+    }
+    RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+    const auto kPixels = (*framer)->pixels();
+    RAWFRAME_EXPECT(kPixels.has_value() && (*made)->statistics().draws == 5);
+    if (kPixels.has_value()) {
+        // Grey is 0.216 in linear light: 0.716 with the glow is 218.
+        RAWFRAME_EXPECT(near(*kPixels, 16, 16, {128, 128, 255, 255}) && near(*kPixels, 48, 16, {128, 0, 0, 255}) &&
+                        near(*kPixels, 16, 48, {0, 255, 0, 255}) && near(*kPixels, 48, 48, {218, 128, 128, 255}));
+    }
 }
