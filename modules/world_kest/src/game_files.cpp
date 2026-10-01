@@ -645,17 +645,18 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
         game.textures_.push_back(
             GameTextureResource{.id = texture.id, .path = texture.path, .texture = (*kSidecarRead)->id.value});
     }
-    // Each material, by the resource its sidecar names: a surface or a
-    // post process (D348).
+    // Each material, by the resource its sidecar names: a surface, a post
+    // process (D348), or a canvas material (D355).
     for (const GameMaterial& material : game.description_.materials) {
         const auto kSidecarText = reader.read(material.path + std::string{content::kSidecarSuffix});
         const auto kSidecarRead =
             kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
         if (!kSidecarRead.has_value() || !kSidecarRead->has_value() ||
-            ((*kSidecarRead)->importer != "rawframe.material" && (*kSidecarRead)->importer != "rawframe.postprocess")) {
-            return unreadable(
-                "a material the game names has a sidecar naming rawframe.material or rawframe.postprocess",
-                material.path);
+            ((*kSidecarRead)->importer != "rawframe.material" && (*kSidecarRead)->importer != "rawframe.postprocess" &&
+             (*kSidecarRead)->importer != "rawframe.canvasmaterial")) {
+            return unreadable("a material the game names has a sidecar naming rawframe.material, "
+                              "rawframe.postprocess, or rawframe.canvasmaterial",
+                              material.path);
         }
         game.materials_.push_back(
             GameMaterialResource{.id = material.id, .path = material.path, .material = (*kSidecarRead)->id.value});

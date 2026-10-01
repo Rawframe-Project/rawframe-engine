@@ -26,6 +26,7 @@
 #include "rawframe/cook/texture.h"
 #include "rawframe/kest_library/library.h"
 #include "rawframe/localization/table.h"
+#include "rawframe/material/canvas.h"
 #include "rawframe/material/material.h"
 #include "rawframe/material/post_process.h"
 #include "rawframe/mesh/errors.h"
@@ -734,6 +735,32 @@ RAWFRAME_TEST(APostProcessCooksIntoItsFoldedForm) {
     const auto kWrong =
         cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kImporters});
     RAWFRAME_EXPECT(kWrong.has_value() && kWrong->failures.size() == 1);
+}
+
+RAWFRAME_TEST(ACanvasMaterialCooksIntoItsFoldedForm) {
+    // A sheet's texture tinted red and added, glowing faintly (D355).
+    const Project kProject;
+    fs::copy_file(fs::path{RAWFRAME_MATERIAL_SEEDS} / "glowing.canvas", kProject.sources / "glow.rfmaterial");
+    writeText(kProject.sources / "glow.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000c4", "", "rawframe.canvasmaterial"));
+    static const std::array<Importer, 2> kImporters = {audioImporter(), canvasImporter()};
+    const auto kReport =
+        cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kImporters});
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty() && kReport->variants == 1);
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value());
+    bool found = false;
+    for (const content::ManifestEntry& each :
+         kManifest.has_value() ? *kManifest : std::vector<content::ManifestEntry>{}) {
+        if (each.type.value == material::kCanvasMaterialType &&
+            each.representation.text() == material::kCanvasMaterialRepresentation) {
+            const std::string kBytes = readText(kProject.output / each.locator);
+            const auto kRead = material::decodeCanvas(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
+            found = kRead.has_value() && kRead->blend == material::CanvasBlend::Additive &&
+                    (kRead->colorTexture == std::array<float, 4>{1, 0.5F, 0.5F, 1});
+        }
+    }
+    RAWFRAME_EXPECT(found);
 }
 
 RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {

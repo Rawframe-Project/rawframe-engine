@@ -12,5 +12,6 @@ if(TARGET rawframe_cook_tests)
     target_compile_definitions(rawframe_cook_tests PRIVATE
         RAWFRAME_COOK_DATA="${PROJECT_SOURCE_DIR}/modules/audio_import/tests/data/"
         RAWFRAME_SAMPLE_GAMES="${PROJECT_SOURCE_DIR}/games/"
+        RAWFRAME_MATERIAL_SEEDS="${PROJECT_SOURCE_DIR}/modules/material/tests/canvas_seeds/"
         RAWFRAME_TEXTURE_DATA="${PROJECT_SOURCE_DIR}/modules/texture_import/tests/data/")
 endif()

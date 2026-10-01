@@ -1,6 +1,7 @@
 #include "rawframe/cook/material.h"
 
 #include "rawframe/cook/errors.h"
+#include "rawframe/material/canvas.h"
 #include "rawframe/material/material.h"
 #include "rawframe/material/post_process.h"
 
@@ -70,6 +71,18 @@ result::Result<Artifact> cookPostProcess(std::span<const std::byte> source, std:
                     .report = {{"variants", 1}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial - 1}}};
 }
 
+/// A canvas material folds to one form (D355): one variant.
+result::Result<Artifact> cookCanvas(std::span<const std::byte> source, std::string_view, Reads&) {
+    const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
+    RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, material::readCanvas(kText));
+    RAWFRAME_TRY_ASSIGN(const material::CanvasMaterial kCompiled, material::compileCanvas(kDocument));
+    return Artifact{.type = content::ResourceTypeId{material::kCanvasMaterialType},
+                    .representation = *content::RepresentationId::parse(material::kCanvasMaterialRepresentation),
+                    .bytes = material::encodeCanvas(kCompiled),
+                    .subassets = {},
+                    .report = {{"variants", 1}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial - 1}}};
+}
+
 } // namespace
 
 Importer materialImporter() noexcept {
@@ -78,6 +91,10 @@ Importer materialImporter() noexcept {
 
 Importer postProcessImporter() noexcept {
     return Importer{.identity = "rawframe.postprocess", .normalize = &normalize, .cook = &cookPostProcess};
+}
+
+Importer canvasImporter() noexcept {
+    return Importer{.identity = "rawframe.canvasmaterial", .normalize = &normalize, .cook = &cookCanvas};
 }
 
 } // namespace rawframe::cook

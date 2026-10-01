@@ -12,5 +12,9 @@ namespace rawframe::cook {
 /// The post-process importer (`rawframe.postprocess`, D348): a post
 /// process's graph document, read and folded alike. It takes no settings.
 [[nodiscard]] Importer postProcessImporter() noexcept;
+/// The canvas material importer (`rawframe.canvasmaterial`, D355): a
+/// canvas material's graph document, read and folded alike. It takes no
+/// settings.
+[[nodiscard]] Importer canvasImporter() noexcept;
 
 } // namespace rawframe::cook
