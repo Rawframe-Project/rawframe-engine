@@ -2,6 +2,7 @@
 
 #include "tables.h"
 
+#include <algorithm>
 #include <array>
 #include <maul-rhi/encoder.h>
 #include <optional>
@@ -65,6 +66,187 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
         return failed("a shadow pass could not end", mrhi_errorState);
     }
     return {};
+}
+
+namespace {
+
+mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
+    return mrhiAccess{
+        .resource = resource,
+        .kind = kind,
+        .range = {
+            .baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = MRHI_REMAINING, .aspect = {}}};
+}
+
+mrhiAccess depthOf(mrhiResourceId resource) noexcept {
+    return mrhiAccess{
+        .resource = resource,
+        .kind = mrhi_accessSampled,
+        .range = {
+            .baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = mrhi_aspectDepthOnly}};
+}
+
+} // namespace
+
+ShadowPasses::ShadowPasses(mrhiDevice* native) noexcept : native_(native) {
+}
+
+result::Status
+ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& block, std::vector<mrhiAccess>& writes) {
+    // The shadow map: the cascades' squares two by two, or a texel
+    // nothing reads the depth of when there are none.
+    cascadeCount_ = frame.shadows.count;
+    side_ = cascadeCount_ > 0 ? frame.shadows.side : 1;
+    cascadeMatrices_ = block.cascades;
+    mrhiTextureDef sunDef = mrhiDefaultTextureDef();
+    sunDef.format = kShadowFormat;
+    sunDef.width = cascadeCount_ > 0 ? 2 * side_ : 1;
+    sunDef.height = sunDef.width;
+    if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &sunDef, &sunMap_); kDeclared != mrhi_success) {
+        return failed("the shadow map could not be declared", kDeclared);
+    }
+    for (std::size_t at = 0; at < cascadeCount_; ++at) {
+        mrhiBufferDef def = mrhiDefaultBufferDef();
+        def.size = sizeof(Matrix4);
+        if (mrhiDeclareBuffer(native_, &def, &cascades_[at]) != mrhi_success) {
+            return failed("a cascade's view could not be declared", mrhi_errorCapacity);
+        }
+        writes.push_back(wholeOf(cascades_[at], mrhi_accessCopyDestination));
+    }
+    // The punctual lights' atlas: their squares, or a texel nothing reads
+    // the depth of when there are none; each square's view.
+    const render_scene::SceneLightShadows& kLightShadows = frame.lightShadows;
+    slots_ = slotsOf(frame);
+    slotMatrices_.clear();
+    slotViews_.clear();
+    slotViewports_.clear();
+    mrhiTextureDef atlasDef = mrhiDefaultTextureDef();
+    atlasDef.format = kShadowFormat;
+    atlasDef.width = std::max<std::uint32_t>(kLightShadows.side, 1);
+    atlasDef.height = atlasDef.width;
+    if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &atlasDef, &lightMap_); kDeclared != mrhi_success) {
+        return failed("the lights' shadow atlas could not be declared", kDeclared);
+    }
+    mrhiBufferDef slotsDef = mrhiDefaultBufferDef();
+    slotsDef.size = squareBytes();
+    if (mrhiDeclareBuffer(native_, &slotsDef, &slotsResource_) != mrhi_success) {
+        return failed("the lights' shadow squares could not be declared", mrhi_errorCapacity);
+    }
+    writes.push_back(wholeOf(slotsResource_, mrhi_accessCopyDestination));
+    for (const render_scene::ShadowSlot& slot : kLightShadows.slots) {
+        mrhiBufferDef def = mrhiDefaultBufferDef();
+        def.size = sizeof(Matrix4);
+        if (mrhiDeclareBuffer(native_, &def, &slotViews_.emplace_back()) != mrhi_success) {
+            return failed("a shadow square's view could not be declared", mrhi_errorCapacity);
+        }
+        writes.push_back(wholeOf(slotViews_.back(), mrhi_accessCopyDestination));
+        slotMatrices_.push_back(slot.viewProjection);
+        slotViewports_.push_back({.x = static_cast<float>(slot.x),
+                                  .y = static_cast<float>(slot.y),
+                                  .width = static_cast<float>(slot.side),
+                                  .height = static_cast<float>(slot.side),
+                                  .minDepth = 0,
+                                  .maxDepth = 1});
+    }
+    return {};
+}
+
+result::Status ShadowPasses::addPasses(const std::vector<mrhiAccess>& reads) {
+    std::vector<mrhiAccess> sunReads = reads;
+    for (std::size_t at = 0; at < cascadeCount_; ++at) {
+        sunReads.push_back(wholeOf(cascades_[at], mrhi_accessUniform));
+    }
+    mrhiPassDef sunDef = mrhiDefaultPassDef();
+    sunDef.accesses = sunReads.data();
+    sunDef.accessCount = static_cast<std::uint32_t>(sunReads.size());
+    sunDef.depthTarget = mrhiDepthTarget{.resource = sunMap_,
+                                         .mip = 0,
+                                         .layer = 0,
+                                         .depthLoad = mrhi_loadClear,
+                                         .depthStore = mrhi_storeKeep,
+                                         .clearDepth = 0,
+                                         .stencilLoad = mrhi_loadDiscard,
+                                         .stencilStore = mrhi_storeDiscard,
+                                         .clearStencil = 0,
+                                         .readOnly = false};
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &sunDef, &sunPass_); kAdded != mrhi_success) {
+        return failed("the shadow pass could not be added", kAdded);
+    }
+    std::vector<mrhiAccess> slotReads = reads;
+    for (const mrhiResourceId kView : slotViews_) {
+        slotReads.push_back(wholeOf(kView, mrhi_accessUniform));
+    }
+    mrhiPassDef lightDef = sunDef;
+    lightDef.accesses = slotReads.data();
+    lightDef.accessCount = static_cast<std::uint32_t>(slotReads.size());
+    lightDef.depthTarget.resource = lightMap_;
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &lightDef, &lightPass_); kAdded != mrhi_success) {
+        return failed("the lights' shadow pass could not be added", kAdded);
+    }
+    return {};
+}
+
+result::Status ShadowPasses::write(mrhiPassId upload) {
+    for (std::size_t at = 0; at < cascadeCount_; ++at) {
+        if (mrhiWriteBuffer(native_, upload, cascades_[at], 0, &cascadeMatrices_[at], sizeof(Matrix4)) !=
+            mrhi_success) {
+            return failed("a cascade's view could not be written", mrhi_errorCapacity);
+        }
+    }
+    if (mrhiWriteBuffer(native_, upload, slotsResource_, 0, slots_.data(), squareBytes()) != mrhi_success) {
+        return failed("the lights' shadow squares could not be written", mrhi_errorCapacity);
+    }
+    for (std::size_t at = 0; at < slotViews_.size(); ++at) {
+        if (mrhiWriteBuffer(native_, upload, slotViews_[at], 0, &slotMatrices_[at], sizeof(Matrix4)) != mrhi_success) {
+            return failed("a shadow square's view could not be written", mrhi_errorCapacity);
+        }
+    }
+    return {};
+}
+
+result::Status ShadowPasses::record(const Casting& with, const Placed& placed) {
+    // The sun's cascades, each its square of the map two by two; and the
+    // punctual lights' squares of their atlas.
+    std::vector<Square> squares;
+    const auto kSide = static_cast<float>(side_);
+    for (std::size_t at = 0; at < cascadeCount_; ++at) {
+        squares.push_back({.view = cascades_[at],
+                           .viewport = {.x = static_cast<float>(at % 2) * kSide,
+                                        .y = static_cast<float>(at / 2) * kSide,
+                                        .width = kSide,
+                                        .height = kSide,
+                                        .minDepth = 0,
+                                        .maxDepth = 1},
+                           .casters = &placed.cascadeRuns[at]});
+    }
+    RAWFRAME_TRY(cast(with, sunPass_, squares));
+    squares.clear();
+    for (std::size_t at = 0; at < slotViews_.size(); ++at) {
+        squares.push_back({.view = slotViews_[at], .viewport = slotViewports_[at], .casters = &placed.slotRuns[at]});
+    }
+    return cast(with, lightPass_, squares);
+}
+
+void ShadowPasses::readBy(std::vector<mrhiAccess>& reads) const {
+    reads.push_back(wholeOf(slotsResource_, mrhi_accessStorageRead));
+    reads.push_back(depthOf(lightMap_));
+    reads.push_back(depthOf(sunMap_));
+}
+
+mrhiResourceId ShadowPasses::sunMap() const noexcept {
+    return sunMap_;
+}
+
+mrhiResourceId ShadowPasses::lightMap() const noexcept {
+    return lightMap_;
+}
+
+mrhiResourceId ShadowPasses::squares() const noexcept {
+    return slotsResource_;
+}
+
+std::uint64_t ShadowPasses::squareBytes() const noexcept {
+    return slots_.size() * sizeof(SlotBlock);
 }
 
 } // namespace rawframe::render_scene_gpu

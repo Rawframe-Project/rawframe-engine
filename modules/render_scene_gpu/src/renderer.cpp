@@ -74,6 +74,8 @@ struct SceneRenderer::State {
     std::optional<ReflectionPass> reflecting;
     /// Its contact shadows, when a view asks (D338).
     std::optional<ContactPass> contact;
+    /// The shadow maps (D289, D292).
+    std::optional<ShadowPasses> shadows;
     /// The decals' textures (D339).
     std::optional<DecalAtlas> decalAtlas;
     /// The reflection probes' pictures (D340).
@@ -193,30 +195,6 @@ struct SceneRenderer::State {
                        .materialsBytes = now.materials.size() * sizeof(render_scene::MaterialBlob)};
     }
 
-    /// The sun's cascades, each its square of the map two by two; and the
-    /// punctual lights' squares of their atlas.
-    result::Status castShadows(const Declared& now) {
-        std::vector<Square> squares;
-        const auto kSide = static_cast<float>(now.side);
-        for (std::size_t at = 0; at < now.cascadeCount; ++at) {
-            squares.push_back({.view = now.cascades[at],
-                               .viewport = {.x = static_cast<float>(at % 2) * kSide,
-                                            .y = static_cast<float>(at / 2) * kSide,
-                                            .width = kSide,
-                                            .height = kSide,
-                                            .minDepth = 0,
-                                            .maxDepth = 1},
-                               .casters = &now.placed.cascadeRuns[at]});
-        }
-        RAWFRAME_TRY(cast(castingOf(now), now.shadowPass, squares));
-        squares.clear();
-        for (std::size_t at = 0; at < now.slotViews.size(); ++at) {
-            squares.push_back(
-                {.view = now.slotViews[at], .viewport = now.slotViewports[at], .casters = &now.placed.slotRuns[at]});
-        }
-        return cast(castingOf(now), now.lightShadowPass, squares);
-    }
-
     /// What the open frame declared, until it is recorded and ends.
     struct Declared {
         Placed placed;
@@ -232,23 +210,6 @@ struct SceneRenderer::State {
         mrhiPassId upload{};
         mrhiPassId depthPass{};
         mrhiPassId litPass{};
-        /// The sun's shadow map, each cascade's view, and the pass drawing
-        /// the casters into it.
-        mrhiResourceId shadowMap{};
-        std::array<mrhiResourceId, 4> cascades{};
-        std::size_t cascadeCount = 0;
-        std::uint32_t side = 0;
-        mrhiPassId shadowPass{};
-        /// The punctual lights' shadow atlas, its squares as the shaders read
-        /// them, each square's view and where it lies, and the pass drawing
-        /// their casters (D292).
-        mrhiResourceId lightShadowMap{};
-        std::vector<SlotBlock> slots;
-        mrhiResourceId slotsResource{};
-        std::vector<Matrix4> slotMatrices;
-        std::vector<mrhiResourceId> slotViews;
-        std::vector<mrhiViewport> slotViewports;
-        mrhiPassId lightShadowPass{};
         /// The frame's lights, each cluster's first index and count, and
         /// the indices (D290), as written and as declared.
         std::vector<LightBlock> lights;
@@ -378,56 +339,6 @@ struct SceneRenderer::State {
                 return failed("the frame's lights could not be declared", mrhi_errorCapacity);
             }
         }
-        // The shadow map: the cascades' squares two by two, or a texel
-        // nothing reads the depth of when there are none.
-        now.cascadeCount = frame->shadows.count;
-        now.side = now.cascadeCount > 0 ? frame->shadows.side : 1;
-        mrhiTextureDef shadowDef = mrhiDefaultTextureDef();
-        shadowDef.format = kShadowFormat;
-        shadowDef.width = now.cascadeCount > 0 ? 2 * now.side : 1;
-        shadowDef.height = shadowDef.width;
-        if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &shadowDef, &now.shadowMap);
-            kDeclared != mrhi_success) {
-            return failed("the shadow map could not be declared", kDeclared);
-        }
-        for (std::size_t at = 0; at < now.cascadeCount; ++at) {
-            mrhiBufferDef def = mrhiDefaultBufferDef();
-            def.size = sizeof(Matrix4);
-            if (mrhiDeclareBuffer(native, &def, &now.cascades[at]) != mrhi_success) {
-                return failed("a cascade's view could not be declared", mrhi_errorCapacity);
-            }
-        }
-        // The punctual lights' atlas: their squares, or a texel nothing reads
-        // the depth of when there are none; each square's view.
-        const render_scene::SceneLightShadows& kLightShadows = frame->lightShadows;
-        now.slots = slotsOf(*frame);
-        mrhiTextureDef atlasDef = mrhiDefaultTextureDef();
-        atlasDef.format = kShadowFormat;
-        atlasDef.width = std::max<std::uint32_t>(kLightShadows.side, 1);
-        atlasDef.height = atlasDef.width;
-        if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &atlasDef, &now.lightShadowMap);
-            kDeclared != mrhi_success) {
-            return failed("the lights' shadow atlas could not be declared", kDeclared);
-        }
-        mrhiBufferDef slotsDef = mrhiDefaultBufferDef();
-        slotsDef.size = now.slots.size() * sizeof(SlotBlock);
-        if (mrhiDeclareBuffer(native, &slotsDef, &now.slotsResource) != mrhi_success) {
-            return failed("the lights' shadow squares could not be declared", mrhi_errorCapacity);
-        }
-        for (const render_scene::ShadowSlot& slot : kLightShadows.slots) {
-            mrhiBufferDef def = mrhiDefaultBufferDef();
-            def.size = sizeof(Matrix4);
-            if (mrhiDeclareBuffer(native, &def, &now.slotViews.emplace_back()) != mrhi_success) {
-                return failed("a shadow square's view could not be declared", mrhi_errorCapacity);
-            }
-            now.slotMatrices.push_back(slot.viewProjection);
-            now.slotViewports.push_back({.x = static_cast<float>(slot.x),
-                                         .y = static_cast<float>(slot.y),
-                                         .width = static_cast<float>(slot.side),
-                                         .height = static_cast<float>(slot.side),
-                                         .minDepth = 0,
-                                         .maxDepth = 1});
-        }
         // The models' pipeline writes the motion whether or not it is read.
         for (const auto& [kFormat, kMade] : {std::pair{kSceneFormat, &now.scene},
                                              std::pair{kMotionFormat, &now.motion},
@@ -450,9 +361,7 @@ struct SceneRenderer::State {
         if (now.draws || now.casters) {
             writes.push_back(wholeOf(now.instances, mrhi_accessCopyDestination));
         }
-        for (std::size_t at = 0; at < now.cascadeCount; ++at) {
-            writes.push_back(wholeOf(now.cascades[at], mrhi_accessCopyDestination));
-        }
+        RAWFRAME_TRY(shadows->declare(*frame, now.block, writes));
         // Antialiased over time, the temporal pass blends the frame with the
         // picture before into the other kept picture (D291).
         RAWFRAME_TRY(temporal->declare(*frame, open.width, open.height, writes));
@@ -508,12 +417,8 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(bloom->declare(*frame, kBlooming, open.width, open.height));
         RAWFRAME_TRY(picture->declare(
             *frame, kSmoothing, open.width, open.height, bloom->enabled() ? bloom->levels() : 0, writes));
-        writes.push_back(wholeOf(now.slotsResource, mrhi_accessCopyDestination));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
         RAWFRAME_TRY(metering->declare(*frame, writes));
-        for (const mrhiResourceId kView : now.slotViews) {
-            writes.push_back(wholeOf(kView, mrhi_accessCopyDestination));
-        }
         writes.insert(writes.end(), meshWrites.begin(), meshWrites.end());
         mrhiPassDef uploadDef = mrhiDefaultPassDef();
         uploadDef.passClass = mrhi_passTransfer;
@@ -536,38 +441,7 @@ struct SceneRenderer::State {
         for (const std::uint64_t kTexture : textures->chosen()) {
             meshReads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
         }
-        std::vector<mrhiAccess> shadowReads = meshReads;
-        for (std::size_t at = 0; at < now.cascadeCount; ++at) {
-            shadowReads.push_back(wholeOf(now.cascades[at], mrhi_accessUniform));
-        }
-        mrhiPassDef shadowDef2 = mrhiDefaultPassDef();
-        shadowDef2.accesses = shadowReads.data();
-        shadowDef2.accessCount = static_cast<std::uint32_t>(shadowReads.size());
-        shadowDef2.depthTarget = mrhiDepthTarget{.resource = now.shadowMap,
-                                                 .mip = 0,
-                                                 .layer = 0,
-                                                 .depthLoad = mrhi_loadClear,
-                                                 .depthStore = mrhi_storeKeep,
-                                                 .clearDepth = 0,
-                                                 .stencilLoad = mrhi_loadDiscard,
-                                                 .stencilStore = mrhi_storeDiscard,
-                                                 .clearStencil = 0,
-                                                 .readOnly = false};
-        if (const mrhiResult kAdded = mrhiAddPass(native, &shadowDef2, &now.shadowPass); kAdded != mrhi_success) {
-            return failed("the shadow pass could not be added", kAdded);
-        }
-        std::vector<mrhiAccess> slotReads = meshReads;
-        for (const mrhiResourceId kView : now.slotViews) {
-            slotReads.push_back(wholeOf(kView, mrhi_accessUniform));
-        }
-        mrhiPassDef atlasPassDef = shadowDef2;
-        atlasPassDef.accesses = slotReads.data();
-        atlasPassDef.accessCount = static_cast<std::uint32_t>(slotReads.size());
-        atlasPassDef.depthTarget.resource = now.lightShadowMap;
-        if (const mrhiResult kAdded = mrhiAddPass(native, &atlasPassDef, &now.lightShadowPass);
-            kAdded != mrhi_success) {
-            return failed("the lights' shadow pass could not be added", kAdded);
-        }
+        RAWFRAME_TRY(shadows->addPasses(meshReads));
         // The models' passes read the shadow map too: the scene's table
         // holds it for both.
         std::vector<mrhiAccess> reads = meshReads;
@@ -585,24 +459,10 @@ struct SceneRenderer::State {
             reads.push_back(wholeOf(probeAtlas->atlas(), mrhi_accessSampled));
         }
         reads.push_back(wholeOf(metering->exposure(), mrhi_accessStorageRead));
-        for (const mrhiResourceId kLights :
-             {now.lightsResource, now.rangesResource, now.indicesResource, now.slotsResource}) {
+        for (const mrhiResourceId kLights : {now.lightsResource, now.rangesResource, now.indicesResource}) {
             reads.push_back(wholeOf(kLights, mrhi_accessStorageRead));
         }
-        reads.push_back(mrhiAccess{.resource = now.lightShadowMap,
-                                   .kind = mrhi_accessSampled,
-                                   .range = {.baseMip = 0,
-                                             .mipCount = MRHI_REMAINING,
-                                             .baseLayer = 0,
-                                             .layerCount = 1,
-                                             .aspect = mrhi_aspectDepthOnly}});
-        reads.push_back(mrhiAccess{.resource = now.shadowMap,
-                                   .kind = mrhi_accessSampled,
-                                   .range = {.baseMip = 0,
-                                             .mipCount = MRHI_REMAINING,
-                                             .baseLayer = 0,
-                                             .layerCount = 1,
-                                             .aspect = mrhi_aspectDepthOnly}});
+        shadows->readBy(reads);
         mrhiPassDef depthDef = mrhiDefaultPassDef();
         depthDef.accesses = reads.data();
         depthDef.accessCount = static_cast<std::uint32_t>(reads.size());
@@ -731,23 +591,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(probeAtlas->write(now.upload));
         RAWFRAME_TRY(motionBlur->write(now.upload));
         RAWFRAME_TRY(focus->write(now.upload));
-        for (std::size_t at = 0; at < now.cascadeCount; ++at) {
-            if (mrhiWriteBuffer(native, now.upload, now.cascades[at], 0, &now.block.cascades[at], sizeof(Matrix4)) !=
-                mrhi_success) {
-                return failed("a cascade's view could not be written", mrhi_errorCapacity);
-            }
-        }
-        if (mrhiWriteBuffer(
-                native, now.upload, now.slotsResource, 0, now.slots.data(), now.slots.size() * sizeof(SlotBlock)) !=
-            mrhi_success) {
-            return failed("the lights' shadow squares could not be written", mrhi_errorCapacity);
-        }
-        for (std::size_t at = 0; at < now.slotViews.size(); ++at) {
-            if (mrhiWriteBuffer(native, now.upload, now.slotViews[at], 0, &now.slotMatrices[at], sizeof(Matrix4)) !=
-                mrhi_success) {
-                return failed("a shadow square's view could not be written", mrhi_errorCapacity);
-            }
-        }
+        RAWFRAME_TRY(shadows->write(now.upload));
         RAWFRAME_TRY(held->write(now.upload));
         RAWFRAME_TRY(textures->write(render::requestKey(now.upload.index1, now.upload.generation)));
         if (mrhiEndPass(native, now.upload) != mrhi_success) {
@@ -755,7 +599,7 @@ struct SceneRenderer::State {
         }
         RAWFRAME_TRY(decalAtlas->record(pipelines));
         RAWFRAME_TRY(probeAtlas->record(pipelines));
-        RAWFRAME_TRY(castShadows(now));
+        RAWFRAME_TRY(shadows->record(castingOf(now), now.placed));
         // The scene's table: slots 10 to 17 are each run's textures; 18 and
         // 19 the sky's picture (D322); 20 the reflection probes (D325); 21
         // what the ambient occlusion found, or white (D327); 22 what the
@@ -770,13 +614,13 @@ struct SceneRenderer::State {
             samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
         const std::array<mrhiBinding, 28> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
-            depthAt(1, now.shadowMap),
+            depthAt(1, shadows->sunMap()),
             samplerAt(2, pipelines.shadowSampler),
             bufferAt(3, now.lightsResource, now.lights.size() * sizeof(LightBlock)),
             bufferAt(4, now.rangesResource, now.ranges.size() * 4),
             bufferAt(5, now.indicesResource, now.indices.size() * 4),
-            depthAt(6, now.lightShadowMap),
-            bufferAt(7, now.slotsResource, now.slots.size() * sizeof(SlotBlock)),
+            depthAt(6, shadows->lightMap()),
+            bufferAt(7, shadows->squares(), shadows->squareBytes()),
             bufferAt(8, metering->exposure(), sizeof(ExposureBlock)),
             bufferAt(9, now.materialsResource, now.materials.size() * sizeof(render_scene::MaterialBlob)),
             textureAt(10, {}),
@@ -964,6 +808,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->occlusion.emplace(device.native());
     state->reflecting.emplace(device.native());
     state->contact.emplace(device.native());
+    state->shadows.emplace(device.native());
     state->decalAtlas.emplace(device.native());
     RAWFRAME_TRY(state->decalAtlas->make());
     state->probeAtlas.emplace(device.native());
