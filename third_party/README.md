@@ -13,7 +13,9 @@ apply to vendored files; the code is upstream's, not ours.
 | Maul Unicode 0.2.0 | `Rawframe-Project/maul-unicode` | `de28bfc4cdd7a38993bfa0492ee1ac0cb7e9ace5` | MIT (its UCD tables: Unicode-3.0) | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
 | Maul Window 0.1.0 and main to `bf9502d` (the web without Emscripten, mwin-0022, D250; Xbox pads through Windows.Gaming.Input, mwin-0023, D251) | `Rawframe-Project/maul-window` | `bf9502defa010b615bbdf4527fe85818582df37a` | MIT (its gamepad tables: SDL_GameControllerDB, zlib) | `include/`, `src/`, `cmake/`, `protocols/`, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |
 | Maul RHI, unreleased main at `668ffc8` (its Vulkan driver natively, Windows included; its WebGPU driver on the web, built with wasm32-wasi, D282) | `Rawframe-Project/maul-rhi` | `668ffc8c68005c6cea6828b7d1e0daf86c9576c2` | MIT (its Khronos headers: Apache-2.0 or MIT) | `include/`, `src/`, `khronos/`, `cmake/`, `tools/mrhi_container.py` and the `docs/contract/mrhi.json` it reads, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |
-| Maul UI, unreleased main at `43df2ae` (its core: node tree, flex layout, style, draw-command list; its text component off, D374) | `Rawframe-Project/maul-ui` | `43df2aec5e812e5896013a5edd35d30c7f3fb0af` | MIT | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE`, `THIRD_PARTY.md` |
+| Maul UI, unreleased main at `efc67a3` (its core: node tree, flex layout, style, draw-command list; its text component on, over FreeType, HarfBuzz, and Maul Unicode below, D383) | `Rawframe-Project/maul-ui` | `efc67a3628b098d5b18850dd5a5b554e04882348` | MIT | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE`, `THIRD_PARTY.md` |
+| FreeType 2.14.3, Maul UI's text component's (D383) | `freetype/freetype` release archive, SHA-256 `36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f` | 2.14.3 | FreeType License (FTL; dual with GPLv2, the FTL is the one taken) | `include/`, `src/` of the modules Maul UI builds (`base`, `cff`, `psaux`, `pshinter`, `psnames`, `sfnt`, `smooth`, `truetype`), `LICENSE.TXT`, `docs/FTL.TXT` |
+| HarfBuzz 14.5.1, Maul UI's text component's (D383) | `harfbuzz/harfbuzz` release archive, SHA-256 `7e2fa4e8c7c98e8d8140671f5772542afaaa6acccfbd746506886b6d85f7f8d6` | 14.5.1 | MIT ("Old MIT") | `src/` without its build files, scripts, and generator sources, `COPYING` |
 | miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 (stb_vorbis v1.22: public domain or MIT) | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |
 | MsQuic 2.6.1 | `microsoft/msquic` | `a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83` | MIT | build files, `src/` without tests, tools, or Windows PGO data, notices |
 | XDP for Windows, MsQuic's submodule | `microsoft/xdp-for-windows` | `d372b52577a724e04fa4c06acb90bbfa4719fc25`, the revision MsQuic's pin names | MIT | `published/external` (headers MsQuic's Windows datapath includes), `LICENSE`, at `msquic/submodules/xdp-for-windows` |
@@ -30,6 +32,12 @@ web build, its libcrypto alone for wasm32-wasi (tools/build_openssl_wasm.sh,
 with cmake/openssl_wasi_shim.h forced in for the chmod wasi-libc lacks). Moving
 its pin moves both: the revision in third_party/quic.cmake and
 third_party/openssl_wasm.cmake.
+
+FreeType and HarfBuzz are vendored by tools/update_text_deps.sh from their
+release archives, checked by the SHA-256 Maul UI's
+cmake/TextDependencies.cmake pins; move them when that file moves. Maul UI's
+build finds them, and the vendored Maul Unicode, through
+FETCHCONTENT_SOURCE_DIR_* (third_party/maul_ui.cmake): nothing is fetched.
 
 To move the Kest pin, run `tools/update_kest.sh <kest checkout> <revision>`,
 build, run the full check, and commit the result with the new revision in this

@@ -95,6 +95,9 @@ typedef struct muiTextBlock
     // muiShapedGlyph.
     muiBuffer glyphs;
     uint32_t glyphCount;
+    // A byte per byte: 1 where HarfBuzz marks the cluster starting there
+    // unsafe to break.
+    muiBuffer unsafe;
     // length + 1 sums from the start of the text: of advances in font
     // units (int64_t), and of clusters (uint32_t).
     muiBuffer advances;

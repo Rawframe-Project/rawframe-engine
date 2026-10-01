@@ -74,44 +74,75 @@ static uint32_t SplitItems(const muiTextBlock* block, muiTextItem* items)
     return count;
 }
 
-static bool ShapeItem(muiTextService* service, muiTextBlock* block, hb_buffer_t* buffer,
-                      const muiFont* font, muiTextItem* item)
+// Glyphs being appended to: the buffer, how many it holds, and the
+// per-byte unsafe-to-break marks to set, if any.
+typedef struct Output
+{
+    muiBuffer* glyphs;
+    uint32_t* count;
+    uint8_t* unsafe;
+} Output;
+
+// Shapes bytes from to up to to of a piece of text as one item of the
+// level and script, the piece being the context, and appends its glyphs
+// with clusters as offsets in the whole text, which starts offset bytes
+// before the piece.
+static bool ShapeRange(muiTextService* service, hb_buffer_t* buffer, const muiFont* font,
+                       const muiTextBlock* block, uint32_t offset, uint32_t length,
+                       const muiTextItem* range, Output* out)
 {
     hb_buffer_clear_contents(buffer);
-    hb_buffer_set_direction(buffer, (item->level & 1) != 0 ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
-    hb_buffer_set_script(buffer, (hb_script_t)item->script);
+    hb_buffer_set_direction(buffer, (range->level & 1) != 0 ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
+    hb_buffer_set_script(buffer, (hb_script_t)range->script);
     // Default ignorables, such as bidi controls, draw nothing, so they
     // get no glyphs.
     unsigned int flags = HB_BUFFER_FLAG_REMOVE_DEFAULT_IGNORABLES;
-    flags |= item->start == 0 ? HB_BUFFER_FLAG_BOT : 0u;
-    flags |= item->end == block->length ? HB_BUFFER_FLAG_EOT : 0u;
+    flags |= range->start == 0 ? HB_BUFFER_FLAG_BOT : 0u;
+    flags |= range->end == block->length ? HB_BUFFER_FLAG_EOT : 0u;
     hb_buffer_set_flags(buffer, (hb_buffer_flags_t)flags);
-    hb_buffer_add_utf8(buffer, block->text.data, (int)block->length, item->start,
-                       (int)(item->end - item->start));
+    const char* text = block->text.data;
+    hb_buffer_add_utf8(buffer, text + offset, (int)length, range->start - offset,
+                       (int)(range->end - range->start));
     hb_shape(font->shapingFont, buffer, nullptr, 0);
     if (!hb_buffer_allocation_successful(buffer))
     {
         return false;
     }
     unsigned int count = hb_buffer_get_length(buffer);
-    if (!muiReserveKeeping(&service->allocator, &block->glyphs,
-                           ((size_t)block->glyphCount + count) * sizeof(muiShapedGlyph),
-                           (size_t)block->glyphCount * sizeof(muiShapedGlyph)))
+    if (!muiReserveKeeping(&service->allocator, out->glyphs,
+                           ((size_t)*out->count + count) * sizeof(muiShapedGlyph),
+                           (size_t)*out->count * sizeof(muiShapedGlyph)))
     {
         return false;
     }
     const hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer, nullptr);
     const hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, nullptr);
-    muiShapedGlyph* glyphs = (muiShapedGlyph*)block->glyphs.data + block->glyphCount;
+    muiShapedGlyph* glyphs = (muiShapedGlyph*)out->glyphs->data + *out->count;
     for (unsigned int i = 0; i < count; i++)
     {
-        glyphs[i] = (muiShapedGlyph){infos[i].codepoint, infos[i].cluster, positions[i].x_advance,
+        uint32_t cluster = infos[i].cluster + offset;
+        glyphs[i] = (muiShapedGlyph){infos[i].codepoint, cluster, positions[i].x_advance,
                                      positions[i].x_offset, positions[i].y_offset};
+        if (out->unsafe != nullptr &&
+            (hb_glyph_info_get_glyph_flags(&infos[i]) & HB_GLYPH_FLAG_UNSAFE_TO_BREAK) != 0)
+        {
+            out->unsafe[cluster] = 1;
+        }
     }
-    item->firstGlyph = block->glyphCount;
-    item->glyphCount = count;
-    block->glyphCount += count;
+    *out->count += count;
     return true;
+}
+
+static hb_buffer_t* MakeBuffer(const muiTextService* service)
+{
+    hb_buffer_t* buffer = hb_buffer_create();
+    if (!hb_buffer_allocation_successful(buffer))
+    {
+        hb_buffer_destroy(buffer);
+        return nullptr;
+    }
+    hb_buffer_set_unicode_funcs(buffer, service->unicode);
+    return buffer;
 }
 
 // Sums of advances and of cluster starts before each byte. A cluster's
@@ -146,10 +177,13 @@ static bool Shape(muiTextService* service, muiTextBlock* block, const muiFont* f
 {
     block->glyphCount = 0;
     block->itemCount = 0;
-    if (!ResolveLevels(service, block, rtl))
+    uint32_t length = block->length;
+    if (!ResolveLevels(service, block, rtl) ||
+        !muiReserve(&service->allocator, &block->unsafe, length + 1u))
     {
         return false;
     }
+    memset(block->unsafe.data, 0, length + 1u);
     uint32_t count = SplitItems(block, nullptr);
     if (!muiReserve(&service->allocator, &block->items, (count + 1u) * sizeof(muiTextItem)))
     {
@@ -158,15 +192,14 @@ static bool Shape(muiTextService* service, muiTextBlock* block, const muiFont* f
     muiTextItem* items = block->items.data;
     (void)SplitItems(block, items);
     block->itemCount = count;
-    hb_buffer_t* buffer = hb_buffer_create();
-    bool shaped = hb_buffer_allocation_successful(buffer);
-    if (shaped)
-    {
-        hb_buffer_set_unicode_funcs(buffer, service->unicode);
-    }
+    hb_buffer_t* buffer = MakeBuffer(service);
+    bool shaped = buffer != nullptr;
+    Output out = {&block->glyphs, &block->glyphCount, block->unsafe.data};
     for (uint32_t i = 0; shaped && i < count; i++)
     {
-        shaped = ShapeItem(service, block, buffer, font, &items[i]);
+        items[i].firstGlyph = block->glyphCount;
+        shaped = ShapeRange(service, buffer, font, block, 0, length, &items[i], &out);
+        items[i].glyphCount = block->glyphCount - items[i].firstGlyph;
     }
     hb_buffer_destroy(buffer);
     return shaped && SumAdvances(service, block);
@@ -183,4 +216,52 @@ bool muiShapeTextBlock(muiTextService* service, muiTextBlock* block, const muiFo
     block->shapedFont = fontKey;
     block->shapedRtl = rtl;
     return block->shaped;
+}
+
+bool muiIsBreakUnsafe(const muiTextBlock* block, uint32_t offset)
+{
+    if (offset == 0 || offset >= block->length)
+    {
+        return false;
+    }
+    const uint32_t* clusters = block->clusters.data;
+    const uint8_t* unsafe = block->unsafe.data;
+    return clusters[offset + 1] == clusters[offset] || unsafe[offset] != 0;
+}
+
+bool muiShapeTextLine(muiTextService* service, const muiTextBlock* block, const muiFont* font,
+                      uint32_t start, uint32_t end, muiTextLineShape* out)
+{
+    out->glyphCount = 0;
+    out->itemCount = 0;
+    const muiTextItem* items = block->items.data;
+    uint32_t pieces = 0;
+    for (uint32_t i = 0; i < block->itemCount; i++)
+    {
+        pieces += items[i].end > start && items[i].start < end ? 1u : 0u;
+    }
+    if (!muiReserve(&service->allocator, out->items, (pieces + 1u) * sizeof(muiTextItem)))
+    {
+        return false;
+    }
+    hb_buffer_t* buffer = MakeBuffer(service);
+    bool shaped = buffer != nullptr;
+    Output glyphs = {out->glyphs, &out->glyphCount, nullptr};
+    muiTextItem* own = out->items->data;
+    for (uint32_t i = 0; shaped && i < block->itemCount; i++)
+    {
+        if (items[i].end <= start || items[i].start >= end)
+        {
+            continue;
+        }
+        muiTextItem* piece = &own[out->itemCount++];
+        *piece = items[i];
+        piece->start = items[i].start > start ? items[i].start : start;
+        piece->end = items[i].end < end ? items[i].end : end;
+        piece->firstGlyph = out->glyphCount;
+        shaped = ShapeRange(service, buffer, font, block, start, end - start, piece, &glyphs);
+        piece->glyphCount = out->glyphCount - piece->firstGlyph;
+    }
+    hb_buffer_destroy(buffer);
+    return shaped;
 }

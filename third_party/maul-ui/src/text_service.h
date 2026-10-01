@@ -40,6 +40,9 @@ struct muiTextService
     muiBuffer runs;
     muiBuffer glyphs;
     muiBuffer workspace;
+    // A line shaped on its own: its items and glyphs.
+    muiBuffer lineItems;
+    muiBuffer lineGlyphs;
 };
 
 #endif // MAUL_UI_SRC_TEXT_SERVICE_H

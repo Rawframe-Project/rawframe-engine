@@ -135,6 +135,8 @@ static void Release(muiTextService* service)
     muiFreeBuffer(&service->allocator, &service->runs);
     muiFreeBuffer(&service->allocator, &service->glyphs);
     muiFreeBuffer(&service->allocator, &service->workspace);
+    muiFreeBuffer(&service->allocator, &service->lineItems);
+    muiFreeBuffer(&service->allocator, &service->lineGlyphs);
     if (service->unicode != nullptr)
     {
         hb_unicode_funcs_destroy(service->unicode);

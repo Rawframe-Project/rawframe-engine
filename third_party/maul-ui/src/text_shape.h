@@ -22,4 +22,24 @@
 bool muiShapeTextBlock(muiTextService* service, muiTextBlock* block, const muiFont* font,
                        uint64_t fontKey, bool rtl);
 
+// Whether a line breaking before the byte at offset would shape
+// differently from the block: HarfBuzz marks the cluster there unsafe to
+// break, or no cluster starts there, as inside a ligature.
+bool muiIsBreakUnsafe(const muiTextBlock* block, uint32_t offset);
+
+// A line shaped on its own: its pieces of the block's items, with their
+// glyphs, in the buffers given.
+typedef struct muiTextLineShape
+{
+    muiBuffer* items;
+    uint32_t itemCount;
+    muiBuffer* glyphs;
+    uint32_t glyphCount;
+} muiTextLineShape;
+
+// Shapes bytes from start up to end of a shaped block alone, as a line
+// broken there is, its items cut to them; false when memory runs out.
+bool muiShapeTextLine(muiTextService* service, const muiTextBlock* block, const muiFont* font,
+                      uint32_t start, uint32_t end, muiTextLineShape* out);
+
 #endif // MAUL_UI_SRC_TEXT_SHAPE_H

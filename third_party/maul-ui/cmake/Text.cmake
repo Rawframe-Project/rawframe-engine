@@ -32,8 +32,9 @@ else()
     target_include_directories(maul-ui SYSTEM PRIVATE
         $<TARGET_PROPERTY:maul_ui_freetype,INTERFACE_INCLUDE_DIRECTORIES>
         $<TARGET_PROPERTY:maul_ui_harfbuzz,INTERFACE_INCLUDE_DIRECTORIES>)
-    # HarfBuzz's locks, where the C library does not hold them already.
-    if(NOT WIN32 AND NOT EMSCRIPTEN)
+    # HarfBuzz's locks, where the C library does not hold them already;
+    # the web builds HarfBuzz without threads (TextDependencies.cmake).
+    if(NOT WIN32 AND NOT EMSCRIPTEN AND NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")
         find_package(Threads REQUIRED)
         target_link_libraries(maul-ui PUBLIC ${CMAKE_THREAD_LIBS_INIT})
         string(STRIP "${MAUL_PKG_LIBS_PRIVATE} ${CMAKE_THREAD_LIBS_INIT}" MAUL_PKG_LIBS_PRIVATE)
