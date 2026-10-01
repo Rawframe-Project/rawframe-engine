@@ -3,7 +3,8 @@
 // stick axes combined and turned up positive; the cursor's place as the
 // mouse's pointer (D367); focus loss letting go of everything; a gamepad
 // that goes letting go of what it held; a haptic output felt through a
-// gamepad's motors (D251).
+// gamepad's motors (D251); touches as the touch screen's halves, split by
+// the window's width (D387).
 
 #include "rawframe/input/mapper.h"
 #include "rawframe/input_window/bridge.h"
@@ -29,6 +30,8 @@ constexpr std::size_t kZoom = 2;
 constexpr std::size_t kLook = 3;
 constexpr std::size_t kMove = 4;
 constexpr std::size_t kAim = 5;
+constexpr std::size_t kDash = 6;
+constexpr std::size_t kSteer = 7;
 
 Binding single(DeviceClass device, std::string_view name) {
     Binding binding;
@@ -52,8 +55,13 @@ ActionSet actions() {
     move.bindings = {single(DeviceClass::Gamepad, "stick_left")};
     Action aim{.id = 6, .name = "aim", .type = ValueType::Axis2D};
     aim.bindings = {single(DeviceClass::Mouse, "pointer")};
-    set.actions = {jump, fire, zoom, look, move, aim};
-    set.contexts.push_back(Context{.id = 10, .name = "play", .actions = {kJump, kFire, kZoom, kLook, kMove, kAim}});
+    Action dash{.id = 7, .name = "dash", .type = ValueType::Bool};
+    dash.bindings = {single(DeviceClass::Touch, "right")};
+    Action steer{.id = 8, .name = "steer", .type = ValueType::Axis2D};
+    steer.bindings = {single(DeviceClass::Touch, "stick_left")};
+    set.actions = {jump, fire, zoom, look, move, aim, dash, steer};
+    set.contexts.push_back(
+        Context{.id = 10, .name = "play", .actions = {kJump, kFire, kZoom, kLook, kMove, kAim, kDash, kSteer}});
     return set;
 }
 
@@ -253,4 +261,32 @@ RAWFRAME_TEST(AHapticOutputRunsAGamepadsMotors) {
         RAWFRAME_EXPECT(kHigh.low == 0 && kHigh.high == 1.0F && kHigh.milliseconds == 40 && kHigh.count == 3);
     }
     RAWFRAME_EXPECT(program.rig.bridge.unfelt() == 3);
+}
+
+RAWFRAME_TEST(TouchesAreTheTouchScreensHalves) {
+    Rig rig;
+    const auto kTouch = [&rig](window::EventKind kind, std::uint64_t id, float x, float y) {
+        window::Event touch = record(kind);
+        touch.touch = {.id = id, .position = {.x = x, .y = y}};
+        rig.take(touch);
+    };
+    window::Event resized = record(window::EventKind::Resized);
+    resized.size = {.width = 1000, .height = 600};
+    rig.take(resized);
+    kTouch(window::EventKind::TouchDown, 1, 100, 400);
+    kTouch(window::EventKind::TouchMoved, 1, 132, 400);
+    kTouch(window::EventKind::TouchDown, 2, 800, 300);
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kSteer).x, 0.5F) && rig.state(kDash).on);
+    // Cancelled as ended; focus lost lets go of the other.
+    kTouch(window::EventKind::TouchCancelled, 1, 0, 0);
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kSteer).x, 0) && rig.state(kDash).on);
+    rig.take(record(window::EventKind::FocusLost));
+    rig.commit();
+    RAWFRAME_EXPECT(!rig.state(kDash).on);
+    // A touch after begins afresh in its half.
+    kTouch(window::EventKind::TouchDown, 3, 900, 100);
+    rig.commit();
+    RAWFRAME_EXPECT(rig.state(kDash).on);
 }

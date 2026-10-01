@@ -47,7 +47,7 @@ constexpr std::array<std::string_view, 15> kPadButtons = {
 
 } // namespace
 
-Bridge::Bridge(input::Feed& feed) : feed_(&feed), nextDevice_(kMouse.value + 1) {
+Bridge::Bridge(input::Feed& feed) : feed_(&feed), touch_(feed, kTouchScreen), nextDevice_(kTouchScreen.value + 1) {
     feed_->connect(kKeyboard, input::DeviceClass::Keyboard);
     feed_->connect(kMouse, input::DeviceClass::Mouse);
 }
@@ -106,11 +106,25 @@ void Bridge::take(const window::Event& event) {
                        .x = event.motion.x,
                        .y = -event.motion.y});
         break;
+    case EventKind::TouchDown:
+        touch_.down(event.touch.id, event.touch.position.x, event.touch.position.y);
+        break;
+    case EventKind::TouchMoved:
+        touch_.move(event.touch.id, event.touch.position.x, event.touch.position.y);
+        break;
+    case EventKind::TouchUp:
+    case EventKind::TouchCancelled:
+        touch_.up(event.touch.id);
+        break;
+    case EventKind::Resized:
+        resize(event.size.width);
+        break;
     case EventKind::FocusLost:
     case EventKind::InputStateReset:
         // A gamepad's lost records included: letting go of every device is
         // the one release the mapper has, and never leaves one held.
         feed_->releaseAll();
+        touch_.forget();
         break;
     case EventKind::GamepadAdded:
         if (kPad == pads_.end()) {
@@ -142,6 +156,10 @@ void Bridge::take(const window::Event& event) {
     default:
         break;
     }
+}
+
+void Bridge::resize(float width) noexcept {
+    touch_.resize(width);
 }
 
 void Bridge::gamepadAxis(const window::Event& event) {

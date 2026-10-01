@@ -46,6 +46,10 @@ result::Status WindowHost::start(window::Windows& windows) {
 
 window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     bool closing = false;
+    // The touch screen's halves split the window as it is now (D387).
+    if (const auto kState = windows.state(window_); kState.has_value()) {
+        bridge_->resize(kState->size.width);
+    }
     while (std::optional<window::Event> event = windows.next()) {
         closing = closing || event->kind == window::EventKind::CloseRequested;
         bridge_->take(*event);
