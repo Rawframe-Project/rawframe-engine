@@ -4,8 +4,8 @@
 // SPEC-0032, D375): a tree's boxes drawn over the frame's picture in their
 // paint order, each a rounded box by its signed distance, its border
 // inside it, smoothed over a pixel, inside its clip, premultiplied and
-// blended over what is behind it in linear light. A box's clip is its
-// innermost one; its ancestors are not intersected yet.
+// blended over what is behind it in linear light, inside its clip and
+// every clip that one is inside (D377).
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"

@@ -1,9 +1,9 @@
 // The UI's draw list on the device (SPEC-0032, D375) on lavapipe: a tree's
 // rounded box drawn over the cleared picture, its fill inside its border,
 // nothing past its rounded corner, its edges smoothed; a box half clear
-// blends over what is behind it; and a clipping parent keeps its child
-// inside it. Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU
-// is set.
+// blends over what is behind it; a clipping parent keeps its child
+// inside it; and a child is kept inside every clip above it (D377).
+// Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
@@ -165,4 +165,48 @@ RAWFRAME_TEST(AClippingParentKeepsItsChildInside) {
     RAWFRAME_EXPECT(kInside[1] > 150 && kInside[2] > 40);
     RAWFRAME_EXPECT(near(at(*kPixels, 48, 8), {0, 0, 0}));
     RAWFRAME_EXPECT(near(at(*kPixels, 16, 24), {0, 0, 128}));
+}
+
+RAWFRAME_TEST(ANestedClipKeepsItsChildInsideEveryClipAbove) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto tree = ui::Tree::create(4);
+    if (!tree.has_value()) {
+        return;
+    }
+    ui::Tree& made = **tree;
+    const ui::Node kOuter = *made.add(1);
+    const ui::Node kInner = *made.add(2);
+    const ui::Node kChild = *made.add(3);
+    RAWFRAME_EXPECT(made.attach(kOuter, kInner).has_value());
+    RAWFRAME_EXPECT(made.attach(kInner, kChild).has_value());
+    // A blue window 40 square, in it a clear one 60 by 20 that clips too,
+    // and in that a green one 60 by 30.
+    RAWFRAME_EXPECT(
+        made.setLayout(kOuter, {.width = ui::pixels(40), .height = ui::pixels(40), .alignItems = ui::Align::Start})
+            .has_value());
+    RAWFRAME_EXPECT(
+        made.setLayout(kInner,
+                       {.width = ui::pixels(60), .height = ui::pixels(20), .alignItems = ui::Align::Start, .shrink = 0})
+            .has_value());
+    RAWFRAME_EXPECT(
+        made.setLayout(kChild, {.width = ui::pixels(60), .height = ui::pixels(30), .shrink = 0}).has_value());
+    RAWFRAME_EXPECT(made.setLook(kOuter, {.fill = 0x000080FF, .clip = true}).has_value());
+    RAWFRAME_EXPECT(made.setLook(kInner, {.clip = true}).has_value());
+    RAWFRAME_EXPECT(made.setLook(kChild, {.fill = 0x00FF00FF}).has_value());
+    RAWFRAME_EXPECT(made.layOut(kOuter, kSide, kSide).has_value());
+    ui::DrawList list;
+    RAWFRAME_EXPECT(made.draw(kOuter, 1, list).has_value() && list.boxes.size() == 2 && list.clips.size() == 3);
+    const auto kPixels = drawn(*kDevice, list);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    // Green inside both; past the outer window though inside the inner
+    // clip, black; below the inner clip though inside the green, blue.
+    RAWFRAME_EXPECT(near(at(*kPixels, 20, 10), {0, 255, 0}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 50, 10), {0, 0, 0}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 20, 25), {0, 0, 128}));
 }

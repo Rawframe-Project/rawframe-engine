@@ -48,34 +48,55 @@ mrhiBinding bufferAt(std::uint32_t slot, mrhiResourceId resource, std::uint64_t 
                        .sampler = {}};
 }
 
-/// A box as the shader reads it (ui.vert): eleven vectors of four.
-constexpr std::size_t kBoxFloats = 44;
+/// A box as the shader reads it (ui.vert): nine vectors of four; and a
+/// clip (ui.frag): three.
+constexpr std::size_t kBoxFloats = 36;
+constexpr std::size_t kClipFloats = 12;
 
-/// `box`, in the shader's layout and the picture's pixels, its clip
-/// resolved from `list`.
-std::array<float, kBoxFloats> blockOf(const ui::Box& box, const ui::DrawList& list) noexcept {
+/// `box`, in the shader's layout and the picture's pixels.
+std::array<float, kBoxFloats> blockOf(const ui::Box& box, float scale) noexcept {
     std::array<float, kBoxFloats> block{};
     std::size_t at = 0;
-    const auto kPut = [&](const std::array<float, 4>& values, float scale) {
+    const auto kPut = [&](const std::array<float, 4>& values, float by) {
         for (const float kValue : values) {
-            block[at++] = kValue * scale;
+            block[at++] = kValue * by;
         }
     };
-    const float kScale = list.scale;
-    kPut({box.rect.x, box.rect.y, box.rect.width, box.rect.height}, kScale);
-    kPut(box.radii, kScale);
+    kPut({box.rect.x, box.rect.y, box.rect.width, box.rect.height}, scale);
+    kPut(box.radii, scale);
     kPut(box.fill, 1);
-    kPut(box.borderWidths, kScale);
+    kPut(box.borderWidths, scale);
     for (const std::array<float, 4>& kColor : box.borderColors) {
         kPut(kColor, 1);
     }
-    if (box.clip != 0 && box.clip < list.clips.size()) {
-        const ui::Clip& kClip = list.clips[box.clip];
-        kPut({kClip.rect.x, kClip.rect.y, kClip.rect.width, kClip.rect.height}, kScale);
-        kPut(kClip.radii, kScale);
-        kPut({1, kClip.invert ? 1.0F : 0.0F, 0, 0}, 1);
-    }
+    kPut({static_cast<float>(box.clip), 0, 0, 0}, 1);
     return block;
+}
+
+/// `list`'s clips in the shader's layout and the picture's pixels, the
+/// first the placeholder for none; a parent that is not before its child
+/// is taken as none, so every chain ends.
+std::vector<float> clipsOf(const ui::DrawList& list) {
+    std::vector<float> clips(kClipFloats, 0);
+    for (std::size_t at = 1; at < list.clips.size(); ++at) {
+        const ui::Clip& kClip = list.clips[at];
+        const float kScale = list.scale;
+        const std::uint32_t kParent = kClip.parent < at ? kClip.parent : 0;
+        const std::array<float, kClipFloats> kBlock = {kClip.rect.x * kScale,
+                                                       kClip.rect.y * kScale,
+                                                       kClip.rect.width * kScale,
+                                                       kClip.rect.height * kScale,
+                                                       kClip.radii[0] * kScale,
+                                                       kClip.radii[1] * kScale,
+                                                       kClip.radii[2] * kScale,
+                                                       kClip.radii[3] * kScale,
+                                                       static_cast<float>(kParent),
+                                                       kClip.invert ? 1.0F : 0.0F,
+                                                       0,
+                                                       0};
+        clips.insert(clips.end(), kBlock.begin(), kBlock.end());
+    }
+    return clips;
 }
 
 } // namespace
@@ -92,9 +113,11 @@ struct UiRenderer::State {
     /// What the open frame declared, until it is recorded and ends.
     bool declared = false;
     std::vector<float> blocks;
+    std::vector<float> clips;
     std::array<float, 4> view{};
     mrhiResourceId viewResource{};
     mrhiResourceId boxesResource{};
+    mrhiResourceId clipsResource{};
     mrhiPassId upload{};
     mrhiPassId drawing{};
 
@@ -158,20 +181,27 @@ struct UiRenderer::State {
         }
         blocks.clear();
         for (const ui::Box& kBox : list->boxes) {
-            const std::array<float, kBoxFloats> kBlock = blockOf(kBox, *list);
+            ui::Box box = kBox;
+            box.clip = kBox.clip < list->clips.size() ? kBox.clip : 0;
+            const std::array<float, kBoxFloats> kBlock = blockOf(box, list->scale);
             blocks.insert(blocks.end(), kBlock.begin(), kBlock.end());
         }
+        clips = clipsOf(*list);
         view = {static_cast<float>(open.width), static_cast<float>(open.height), 0, 0};
         mrhiBufferDef viewDef = mrhiDefaultBufferDef();
         viewDef.size = sizeof(view);
         mrhiBufferDef boxesDef = mrhiDefaultBufferDef();
         boxesDef.size = blocks.size() * sizeof(float);
+        mrhiBufferDef clipsDef = mrhiDefaultBufferDef();
+        clipsDef.size = clips.size() * sizeof(float);
         if (mrhiDeclareBuffer(native, &viewDef, &viewResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &boxesDef, &boxesResource) != mrhi_success) {
+            mrhiDeclareBuffer(native, &boxesDef, &boxesResource) != mrhi_success ||
+            mrhiDeclareBuffer(native, &clipsDef, &clipsResource) != mrhi_success) {
             return failed("the UI's boxes could not be declared", mrhi_errorCapacity);
         }
-        const std::array<mrhiAccess, 2> kWrites = {wholeOf(viewResource, mrhi_accessCopyDestination),
-                                                   wholeOf(boxesResource, mrhi_accessCopyDestination)};
+        const std::array<mrhiAccess, 3> kWrites = {wholeOf(viewResource, mrhi_accessCopyDestination),
+                                                   wholeOf(boxesResource, mrhi_accessCopyDestination),
+                                                   wholeOf(clipsResource, mrhi_accessCopyDestination)};
         mrhiPassDef uploadDef = mrhiDefaultPassDef();
         uploadDef.passClass = mrhi_passTransfer;
         uploadDef.accesses = kWrites.data();
@@ -179,8 +209,9 @@ struct UiRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &uploadDef, &upload); kAdded != mrhi_success) {
             return failed("the UI's upload could not be added", kAdded);
         }
-        const std::array<mrhiAccess, 2> kReads = {wholeOf(viewResource, mrhi_accessUniform),
-                                                  wholeOf(boxesResource, mrhi_accessStorageRead)};
+        const std::array<mrhiAccess, 3> kReads = {wholeOf(viewResource, mrhi_accessUniform),
+                                                  wholeOf(boxesResource, mrhi_accessStorageRead),
+                                                  wholeOf(clipsResource, mrhi_accessStorageRead)};
         mrhiPassDef drawDef = mrhiDefaultPassDef();
         drawDef.colorTargets[0].resource = resourceOf(open.picture);
         drawDef.colorTargets[0].load = open.clearsPicture() ? mrhi_loadClear : mrhi_loadKeep;
@@ -205,11 +236,14 @@ struct UiRenderer::State {
             mrhiWriteBuffer(native, upload, viewResource, 0, view.data(), sizeof(view)) != mrhi_success ||
             mrhiWriteBuffer(native, upload, boxesResource, 0, blocks.data(), blocks.size() * sizeof(float)) !=
                 mrhi_success ||
+            mrhiWriteBuffer(native, upload, clipsResource, 0, clips.data(), clips.size() * sizeof(float)) !=
+                mrhi_success ||
             mrhiEndPass(native, upload) != mrhi_success) {
             return failed("the UI's boxes could not be written", mrhi_errorCapacity);
         }
-        const std::array<mrhiBinding, 2> kBindings = {bufferAt(0, viewResource, sizeof(view)),
-                                                      bufferAt(1, boxesResource, blocks.size() * sizeof(float))};
+        const std::array<mrhiBinding, 3> kBindings = {bufferAt(0, viewResource, sizeof(view)),
+                                                      bufferAt(1, boxesResource, blocks.size() * sizeof(float)),
+                                                      bufferAt(2, clipsResource, clips.size() * sizeof(float))};
         const auto kCount = static_cast<std::uint32_t>(blocks.size() / kBoxFloats);
         if (mrhiBeginPass(native, drawing) != mrhi_success ||
             mrhiSetGraphicsPipeline(native, drawing, pipeline) != mrhi_success ||

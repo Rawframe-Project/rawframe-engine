@@ -1,7 +1,8 @@
 // The UI's boxes (SPEC-0032, D375), fragment entry "fs": a rounded box by
 // its signed distance, its edge smoothed over a pixel, its border inside
-// it in the color of the side nearest, over its fill, inside its clip (or
-// outside it, inverted); premultiplied, in linear light.
+// it in the color of the side nearest, over its fill, inside its clip and
+// each clip that clip is inside (or outside one, inverted, D377);
+// premultiplied, in linear light.
 
 #version 450
 
@@ -12,9 +13,17 @@ struct Box
     vec4 fill;
     vec4 widths;
     vec4 borders[4];
-    vec4 clipRect;
-    vec4 clipRadii;
-    vec4 clipFlags;
+    // Its clip's index in the clips, nought for none.
+    vec4 clip;
+};
+
+// A clip: its rounded rectangle, its radii, and its parent's index and
+// whether it is inverted.
+struct Clip
+{
+    vec4 rect;
+    vec4 radii;
+    vec4 link;
 };
 
 layout(set = 0, binding = 1, std430) readonly buffer Boxes
@@ -22,6 +31,16 @@ layout(set = 0, binding = 1, std430) readonly buffer Boxes
     Box boxes[];
 }
 list;
+
+layout(set = 0, binding = 2, std430) readonly buffer Clips
+{
+    Clip clips[];
+}
+table;
+
+// The deepest chain of clips followed; the list's builder keeps parents
+// before their children, so a chain ends.
+const int kDeepestClip = 64;
 
 layout(location = 0) in vec2 inPixel;
 layout(location = 1) flat in uint inBox;
@@ -77,11 +96,12 @@ void main()
         }
     }
     vec4 color = mix(list.boxes[inBox].borders[side], list.boxes[inBox].fill, filled) * outer;
-    vec4 clipFlags = list.boxes[inBox].clipFlags;
-    if (clipFlags.x > 0.5)
+    int clip = int(list.boxes[inBox].clip.x);
+    for (int depth = 0; depth < kDeepestClip && clip > 0; ++depth)
     {
-        float kept = coverage(distanceTo(inPixel, list.boxes[inBox].clipRect, list.boxes[inBox].clipRadii));
-        color *= clipFlags.y > 0.5 ? 1.0 - kept : kept;
+        float kept = coverage(distanceTo(inPixel, table.clips[clip].rect, table.clips[clip].radii));
+        color *= table.clips[clip].link.y > 0.5 ? 1.0 - kept : kept;
+        clip = int(table.clips[clip].link.x);
     }
     outColor = color;
 }

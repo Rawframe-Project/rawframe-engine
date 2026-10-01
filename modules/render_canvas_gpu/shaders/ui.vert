@@ -19,9 +19,8 @@ struct Box
     vec4 fill;
     vec4 widths;
     vec4 borders[4];
-    vec4 clipRect;
-    vec4 clipRadii;
-    vec4 clipFlags;
+    // Its clip's index in the clips, nought for none.
+    vec4 clip;
 };
 
 layout(set = 0, binding = 1, std430) readonly buffer Boxes

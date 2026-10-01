@@ -1,4 +1,4 @@
-// The UI's boxes (SPEC-0032, D375), for WebGPU: the entries of
+// The UI's boxes (SPEC-0032, D375, D377), for WebGPU: the entries of
 // ui.vert and ui.frag.
 
 struct View {
@@ -11,13 +11,20 @@ struct Box {
     fill: vec4f,
     widths: vec4f,
     borders: array<vec4f, 4>,
-    clipRect: vec4f,
-    clipRadii: vec4f,
-    clipFlags: vec4f,
+    clip: vec4f,
+}
+
+struct Clip {
+    rect: vec4f,
+    radii: vec4f,
+    link: vec4f,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
 @group(0) @binding(1) var<storage, read> boxes: array<Box>;
+@group(0) @binding(2) var<storage, read> clips: array<Clip>;
+
+const kDeepestClip = 64;
 
 struct Corner {
     @builtin(position) position: vec4f,
@@ -77,9 +84,11 @@ fn fs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32) -> 
         }
     }
     var color = mix(box.borders[side], box.fill, filled) * outer;
-    if (box.clipFlags.x > 0.5) {
-        let kept = coverage(distanceTo(pixel, box.clipRect, box.clipRadii));
-        color *= select(kept, 1.0 - kept, box.clipFlags.y > 0.5);
+    var clip = i32(box.clip.x);
+    for (var depth = 0; depth < kDeepestClip && clip > 0; depth++) {
+        let kept = coverage(distanceTo(pixel, clips[clip].rect, clips[clip].radii));
+        color *= select(kept, 1.0 - kept, clips[clip].link.y > 0.5);
+        clip = i32(clips[clip].link.x);
     }
     return color;
 }
