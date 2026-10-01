@@ -141,20 +141,30 @@ public:
         const auto kLargest = static_cast<std::uint32_t>(std::min<std::uint64_t>(512, kAtlas / 4));
         lightShadows_ = LightShadowSettings{
             .side = static_cast<std::uint32_t>(kAtlas), .largest = kLargest, .smallest = kLargest / 4};
-        // ADR-0051's anti-aliasing method (D291, D296): temporal unless
-        // another is named; multisampling is not built yet.
+        // ADR-0051's anti-aliasing method (D291, D296, D343): temporal
+        // unless another is named; multisampling's samples, two or four.
         const std::string_view kMethod = configuration.text("scene.anti_aliasing").value_or("taa");
-        if (kMethod != "taa" && kMethod != "fxaa" && kMethod != "off") {
-            return std::unexpected<result::Error>{
-                result::fail(result::ErrorClass::InvalidArgument,
-                             composition::kCompositionDomain,
-                             code(composition::CompositionError::BadConfiguration),
-                             "scene.anti_aliasing is taa, fxaa, or off; msaa is not built yet")
-                    .error()};
+        if (kMethod != "taa" && kMethod != "fxaa" && kMethod != "msaa" && kMethod != "off") {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                               composition::kCompositionDomain,
+                                                               code(composition::CompositionError::BadConfiguration),
+                                                               "scene.anti_aliasing is taa, fxaa, msaa, or off")
+                                                      .error()};
         }
         antiAliasing_ = kMethod == "off"    ? AntiAliasing::Off
                         : kMethod == "fxaa" ? AntiAliasing::Fxaa
+                        : kMethod == "msaa" ? AntiAliasing::Msaa
                                             : AntiAliasing::Taa;
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kSamples,
+                            configuration.unsignedInteger("scene.msaa_samples", kDefaultMultisamples));
+        if (kSamples != 2 && kSamples != 4) {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                               composition::kCompositionDomain,
+                                                               code(composition::CompositionError::BadConfiguration),
+                                                               "scene.msaa_samples is 2 or 4")
+                                                      .error()};
+        }
+        multisamples_ = static_cast<std::uint32_t>(kSamples);
         // SPEC-0026's quality axis (D318): which of their qualities the
         // game's materials are drawn at, the high unless another is named.
         const std::string_view kQuality = configuration.text("scene.quality").value_or("high");
@@ -247,7 +257,8 @@ public:
                                   .materials = std::move(materials),
                                   .shadows = shadows_,
                                   .lightShadows = lightShadows_,
-                                  .antiAliasing = antiAliasing_};
+                                  .antiAliasing = antiAliasing_,
+                                  .multisamples = multisamples_};
         return {};
     }
 
@@ -738,6 +749,7 @@ private:
     /// The point and spot lights each frame lit with, culled, and left out
     /// at the limit; a cluster's lights past its limit (D290).
     AntiAliasing antiAliasing_ = AntiAliasing::Taa;
+    std::uint32_t multisamples_ = kDefaultMultisamples;
     material::Quality quality_ = material::Quality::High;
     LightShadowSettings lightShadows_;
     std::uint64_t lightsLit_ = 0;

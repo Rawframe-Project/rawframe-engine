@@ -591,7 +591,15 @@ RAWFRAME_TEST(TheTemporalInputsFollowTheEyeAndTheModels) {
     cheap->extract(rig.world);
     const SceneFrame& kCheap = cheap->queue(kCamera);
     RAWFRAME_EXPECT(kCheap.fxaa && !kCheap.temporal.enabled && !kCheap.temporal.history &&
-                    kCheap.temporal.jitter == (std::array<float, 2>{0, 0}));
+                    kCheap.temporal.jitter == (std::array<float, 2>{0, 0}) && kCheap.samples == 1);
+    // Multisampling takes its samples in the models' passes alone: no
+    // jitter, no history, no FXAA (D343).
+    auto sampled =
+        *Scene::create(*rig.schema, {.models = {kModelId}, .antiAliasing = AntiAliasing::Msaa, .multisamples = 2});
+    sampled->extract(rig.world);
+    const SceneFrame& kSampled = sampled->queue(kCamera);
+    RAWFRAME_EXPECT(kSampled.samples == 2 && !kSampled.fxaa && !kSampled.temporal.enabled &&
+                    kSampled.temporal.jitter == (std::array<float, 2>{0, 0}) && kPlain.samples == 1);
 }
 
 RAWFRAME_TEST(PunctualShadowsShareOneAtlasByCover) {

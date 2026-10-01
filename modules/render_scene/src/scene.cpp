@@ -630,6 +630,7 @@ struct Scene::State {
         SceneTemporal& now = frame.temporal;
         now.enabled = settings.antiAliasing == AntiAliasing::Taa && sees;
         frame.fxaa = settings.antiAliasing == AntiAliasing::Fxaa && sees;
+        frame.samples = settings.antiAliasing == AntiAliasing::Msaa && sees ? settings.multisamples : 1;
         now.jitter = now.enabled ? temporalJitter(frames) : std::array<float, 2>{0, 0};
         const Matrix kViewProjection = times(frame.projection, frame.view);
         std::array<double, 3> moved{};

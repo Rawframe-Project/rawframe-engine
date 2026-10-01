@@ -653,6 +653,10 @@ struct SceneFrame {
     /// Whether the tonemapped picture is antialiased by FXAA (D296): never
     /// with the temporal inputs, which are then off.
     bool fxaa = false;
+    /// The samples a pixel of the models' passes takes: one, or more where
+    /// multisampling antialiases the frame (D343), never with the temporal
+    /// inputs or FXAA.
+    std::uint32_t samples = 1;
     /// Whether the picture is dithered by under one step of its eight-bit
     /// encoding (ADR-0051's debanding, D332): on unless a test compares
     /// pixels exactly.
@@ -751,15 +755,21 @@ struct ShadowSettings {
     ShadowFilter filter = ShadowFilter::Soft;
 };
 
-/// ADR-0051's anti-aliasing methods that exist so far: none, the
-/// first-party temporal one, the default (D291), and FXAA, the cheap one,
-/// run on the display-referred picture after the tonemapper (D296).
-/// Multisampling joins the closed set when it is built.
+/// ADR-0051's closed set of anti-aliasing methods: none, the first-party
+/// temporal one, the default (D291), FXAA, the cheap one, run on the
+/// display-referred picture after the tonemapper (D296), and multisampling,
+/// the forward path's own, the models' passes taking several samples a
+/// pixel (D343).
 enum class AntiAliasing : std::uint8_t {
     Off,
     Taa,
-    Fxaa
+    Fxaa,
+    Msaa
 };
+
+/// The samples a pixel multisampling may take (ADR-0051's typed limit
+/// point, D343): two or four, four unless a profile says otherwise.
+inline constexpr std::uint32_t kDefaultMultisamples = 4;
 
 /// An eye moving farther than this in a frame cuts: the picture before is
 /// not reused.
@@ -787,6 +797,8 @@ struct SceneSettings {
     ShadowSettings shadows;
     LightShadowSettings lightShadows;
     AntiAliasing antiAliasing = AntiAliasing::Taa;
+    /// With multisampling, the samples a pixel takes: two or four (D343).
+    std::uint32_t multisamples = kDefaultMultisamples;
 };
 
 class Scene {
