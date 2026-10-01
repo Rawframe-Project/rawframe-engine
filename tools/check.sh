@@ -77,6 +77,14 @@ build_and_test() {
     fi
     built=$(date +%s)
     if ! ctest --test-dir "out/$preset" --output-on-failure -j "$jobs" >"out/$preset.test.log" 2>&1; then
+        # Each failed test's status and its output's last lines, cut short
+        # (its records are long), so a failure seen only under CI's load can
+        # be read there.
+        awk 'function flush() { if (shown) { print head; for (i = (n > 40 ? n - 39 : 1); i <= n; i++) print kept[i] } }
+             /Test +#[0-9]+: / { flush(); shown = /\*\*\*|Failed|Exception|Timeout/; head = $0; n = 0; next }
+             /^(The following tests|[0-9]+% tests passed)/ { flush(); shown = 0 }
+             shown { kept[++n] = substr($0, 1, 400) }
+             END { flush() }' "out/$preset.test.log"
         tail -30 "out/$preset.test.log"; fail "$preset tests"; return
     fi
     printf '   %s: built in %ss, tested in %ss\n' "$preset" "$((built - began))" "$(($(date +%s) - built))"
