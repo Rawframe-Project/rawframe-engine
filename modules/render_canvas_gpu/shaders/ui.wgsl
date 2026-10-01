@@ -1,5 +1,5 @@
-// The UI's boxes (SPEC-0032, D375, D377), for WebGPU: the entries of
-// ui.vert and ui.frag.
+// The UI's boxes and images (SPEC-0032, D375, D377, D378), for WebGPU:
+// the entries of ui.vert, ui.frag, ui.image.vert, and ui.image.frag.
 
 struct View {
     size: vec4f,
@@ -23,6 +23,18 @@ struct Clip {
 @group(0) @binding(0) var<uniform> view: View;
 @group(0) @binding(1) var<storage, read> boxes: array<Box>;
 @group(0) @binding(2) var<storage, read> clips: array<Clip>;
+
+struct Image {
+    rect: vec4f,
+    uv: vec4f,
+    slice: vec4f,
+    tint: vec4f,
+    clip: vec4f,
+}
+
+@group(0) @binding(3) var<storage, read> images: array<Image>;
+@group(0) @binding(4) var picture: texture_2d<f32>;
+@group(0) @binding(5) var pictureSampler: sampler;
 
 const kDeepestClip = 64;
 
@@ -85,6 +97,61 @@ fn fs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32) -> 
     }
     var color = mix(box.borders[side], box.fill, filled) * outer;
     var clip = i32(box.clip.x);
+    for (var depth = 0; depth < kDeepestClip && clip > 0; depth++) {
+        let kept = coverage(distanceTo(pixel, clips[clip].rect, clips[clip].radii));
+        color *= select(kept, 1.0 - kept, clips[clip].link.y > 0.5);
+        clip = i32(clips[clip].link.x);
+    }
+    return color;
+}
+
+struct Shown {
+    @builtin(position) position: vec4f,
+    @location(0) pixel: vec2f,
+    @location(1) @interpolate(flat) image: u32,
+}
+
+@vertex
+fn imageVs(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32) -> Shown {
+    var corners = array<vec2f, 6>(vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0), vec2f(0.0, 1.0),
+                                  vec2f(1.0, 0.0), vec2f(1.0, 1.0));
+    let rect = images[instance].rect;
+    let pixel = rect.xy + corners[index] * rect.zw;
+    var out: Shown;
+    out.position = vec4f(pixel.x / view.size.x * 2.0 - 1.0, 1.0 - pixel.y / view.size.y * 2.0, 0.0, 1.0);
+    out.pixel = pixel;
+    out.image = instance;
+    return out;
+}
+
+fn sliced(along: f32, extent: f32, size: f32, before: f32, after: f32, scale: f32) -> f32 {
+    var first = before * scale;
+    var last = after * scale;
+    if (first + last <= 0.0) {
+        return along / max(extent, 1e-4) * size;
+    }
+    let shrink = min(1.0, extent / (first + last));
+    first *= shrink;
+    last *= shrink;
+    if (along < first) {
+        return along / first * before;
+    }
+    if (along > extent - last) {
+        return size - (extent - along) / max(last, 1e-4) * after;
+    }
+    return before + (along - first) / max(extent - first - last, 1e-4) * (size - before - after);
+}
+
+@fragment
+fn imageFs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32) -> @location(0) vec4f {
+    let image = images[index];
+    let size = max(image.clip.yz, vec2f(1.0));
+    let texel = vec2f(sliced(pixel.x - image.rect.x, image.rect.z, size.x, image.slice.w, image.slice.y, image.clip.w),
+                      sliced(pixel.y - image.rect.y, image.rect.w, size.y, image.slice.x, image.slice.z, image.clip.w));
+    let at = image.uv.xy + texel / size * image.uv.zw;
+    let sampled = textureSample(picture, pictureSampler, at);
+    var color = vec4f(sampled.rgb * sampled.a, sampled.a) * image.tint;
+    var clip = i32(image.clip.x);
     for (var depth = 0; depth < kDeepestClip && clip > 0; depth++) {
         let kept = coverage(distanceTo(pixel, clips[clip].rect, clips[clip].radii));
         color *= select(kept, 1.0 - kept, clips[clip].link.y > 0.5);

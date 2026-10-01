@@ -2,7 +2,8 @@
 // rounded box drawn over the cleared picture, its fill inside its border,
 // nothing past its rounded corner, its edges smoothed; a box half clear
 // blends over what is behind it; a clipping parent keeps its child
-// inside it; and a child is kept inside every clip above it (D377).
+// inside it; a child is kept inside every clip above it (D377); and an
+// image is drawn stretched, or in nine slices, over its node's fill (D378).
 // Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "rawframe/render/device.h"
@@ -14,6 +15,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -74,7 +76,8 @@ bool near(const std::array<int, 4>& color, std::array<int, 3> expected, int with
 
 /// The list drawn over a cleared picture, read back once the box pipeline
 /// is made.
-std::optional<std::vector<std::byte>> drawn(render::Device& device, const ui::DrawList& list) {
+std::optional<std::vector<std::byte>>
+drawn(render::Device& device, const ui::DrawList& list, render_canvas_gpu::ImageSource images = {}) {
     auto framer = render::Framer::create(device);
     auto boxes = render_canvas_gpu::UiRenderer::create(device);
     RAWFRAME_EXPECT(framer.has_value() && boxes.has_value());
@@ -83,7 +86,7 @@ std::optional<std::vector<std::byte>> drawn(render::Device& device, const ui::Dr
     }
     const std::array<render::FrameRecorder*, 1> kRecorders = {boxes->get()};
     for (int attempt = 0; attempt < 1000 && (**boxes).statistics().frames == 0; ++attempt) {
-        (**boxes).prepare(&list);
+        (**boxes).prepare(&list, images);
         RAWFRAME_EXPECT(
             (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
         RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
@@ -209,4 +212,83 @@ RAWFRAME_TEST(ANestedClipKeepsItsChildInsideEveryClipAbove) {
     RAWFRAME_EXPECT(near(at(*kPixels, 20, 10), {0, 255, 0}));
     RAWFRAME_EXPECT(near(at(*kPixels, 50, 10), {0, 0, 0}));
     RAWFRAME_EXPECT(near(at(*kPixels, 20, 25), {0, 0, 128}));
+}
+
+namespace {
+
+/// A texture `side` texels square, each texel `color(x, y)`, exact sRGB,
+/// with a level below it at half its size, as a cooked texture has levels.
+std::shared_ptr<const texture::Texture>
+picture(std::uint32_t side, const std::function<std::array<std::uint8_t, 4>(std::uint32_t, std::uint32_t)>& color) {
+    texture::Texture made{.format = texture::Format::Rgba8Srgb};
+    texture::Level level{.width = side, .height = side, .bytes = {}};
+    for (std::uint32_t y = 0; y < side; ++y) {
+        for (std::uint32_t x = 0; x < side; ++x) {
+            for (const std::uint8_t kChannel : color(x, y)) {
+                level.bytes.push_back(std::byte{kChannel});
+            }
+        }
+    }
+    made.levels.push_back(std::move(level));
+    made.levels.push_back(texture::Level{.width = side / 2, .height = side / 2, .bytes = {}});
+    made.levels.back().bytes.resize(std::size_t{side / 2} * (side / 2) * 4, std::byte{0});
+    return std::make_shared<const texture::Texture>(std::move(made));
+}
+
+} // namespace
+
+RAWFRAME_TEST(AnImageIsDrawnStretchedOrInNineSlices) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto tree = ui::Tree::create(4);
+    if (!tree.has_value()) {
+        return;
+    }
+    ui::Tree& made = **tree;
+    const ui::Node kRow = *made.add(1);
+    const ui::Node kQuarters = *made.add(2);
+    const ui::Node kFramed = *made.add(3);
+    RAWFRAME_EXPECT(made.attach(kRow, kQuarters).has_value() && made.attach(kRow, kFramed).has_value());
+    RAWFRAME_EXPECT(
+        made.setLayout(kRow, {.width = ui::pixels(64), .height = ui::pixels(64), .alignItems = ui::Align::Start})
+            .has_value());
+    RAWFRAME_EXPECT(made.setLayout(kQuarters, {.width = ui::pixels(24), .height = ui::pixels(24)}).has_value());
+    RAWFRAME_EXPECT(made.setLayout(kFramed, {.width = ui::pixels(40), .height = ui::pixels(40)}).has_value());
+    // Four colored texels stretched over 24 pixels; a frame one texel wide
+    // in nine slices over 40, its border kept a pixel wide.
+    RAWFRAME_EXPECT(made.setLook(kQuarters, {.image = 1}).has_value());
+    RAWFRAME_EXPECT(made.setLook(kFramed, {.fill = 0x000080FF, .image = 2, .imageSlice = {1, 1, 1, 1}}).has_value());
+    RAWFRAME_EXPECT(made.layOut(kRow, kSide, kSide).has_value());
+    ui::DrawList list;
+    RAWFRAME_EXPECT(made.draw(kRow, 1, list).has_value() && list.images.size() == 2);
+    const auto kQuartersPicture = picture(2, [](std::uint32_t x, std::uint32_t y) {
+        return y == 0 ? (x == 0 ? std::array<std::uint8_t, 4>{255, 0, 0, 255}
+                                : std::array<std::uint8_t, 4>{0, 255, 0, 255})
+                      : (x == 0 ? std::array<std::uint8_t, 4>{0, 0, 255, 255}
+                                : std::array<std::uint8_t, 4>{255, 255, 255, 255});
+    });
+    // A red frame around a clear middle: the fill shows through.
+    const auto kFramePicture = picture(4, [](std::uint32_t x, std::uint32_t y) {
+        const bool kEdge = x == 0 || y == 0 || x == 3 || y == 3;
+        return kEdge ? std::array<std::uint8_t, 4>{255, 0, 0, 255} : std::array<std::uint8_t, 4>{0, 0, 0, 0};
+    });
+    const auto kPixels = drawn(*kDevice, list, [&](std::uint64_t id) {
+        return id == 1 ? kQuartersPicture : (id == 2 ? kFramePicture : nullptr);
+    });
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(near(at(*kPixels, 4, 4), {255, 0, 0}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 20, 4), {0, 255, 0}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 4, 20), {0, 0, 255}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 20, 20), {255, 255, 255}));
+    // The frame at x 24 to 64: its edge a pixel of red, its middle the
+    // fill's blue, however wide.
+    RAWFRAME_EXPECT(near(at(*kPixels, 24, 20), {255, 0, 0}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 26, 20), {0, 0, 128}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 44, 1), {0, 0, 128}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 44, 0), {255, 0, 0}));
 }

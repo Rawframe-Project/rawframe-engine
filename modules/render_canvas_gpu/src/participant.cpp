@@ -210,7 +210,10 @@ public:
         }
         ui_->resize(kPlanned->first, kPlanned->second);
         const ui::DrawList* drawn = ui_->drawn();
-        renderer_->prepare(drawn != nullptr && !drawn->boxes.empty() ? drawn : nullptr);
+        renderer_->prepare(drawn != nullptr && !drawn->commands.empty() ? drawn : nullptr,
+                           [ui = ui_](std::uint64_t id) {
+                               return ui->image(id);
+                           });
         frames_->ready(*renderer_);
     }
 
@@ -227,7 +230,10 @@ public:
         emitter_.log(diagnostics::Severity::Info,
                      kUiDrawingSummary,
                      "what the device drew of the local players' UI",
-                     {diagnostics::field("frames", statistics.frames), diagnostics::field("boxes", statistics.boxes)});
+                     {diagnostics::field("frames", statistics.frames),
+                      diagnostics::field("boxes", statistics.boxes),
+                      diagnostics::field("images", statistics.images),
+                      diagnostics::field("imagesWaiting", statistics.imagesWaiting)});
     }
 
 private:

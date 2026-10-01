@@ -7,12 +7,23 @@
     {"name": "fs", "stage": "fragment",
      "variables": [{"location": 0, "type": "float32", "components": 2},
                    {"location": 1, "type": "uint32", "components": 1}],
+     "outputs": [{"location": 0, "type": "float32", "components": 4}]},
+    {"name": "imageVs", "stage": "vertex",
+     "variables": [{"location": 0, "type": "float32", "components": 2},
+                   {"location": 1, "type": "uint32", "components": 1}]},
+    {"name": "imageFs", "stage": "fragment",
+     "variables": [{"location": 0, "type": "float32", "components": 2},
+                   {"location": 1, "type": "uint32", "components": 1}],
      "outputs": [{"location": 0, "type": "float32", "components": 4}]}
   ],
   "bindings": [
     {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex"], "min_size": 16},
     {"table": 0, "slot": 1, "kind": "read_only_storage_buffer", "stages": ["vertex", "fragment"], "min_size": 144},
-    {"table": 0, "slot": 2, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 48}
+    {"table": 0, "slot": 2, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 48},
+    {"table": 0, "slot": 3, "kind": "read_only_storage_buffer", "stages": ["vertex", "fragment"], "min_size": 80},
+    {"table": 0, "slot": 4, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 5, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"}
   ],
   "constants": []
 }
