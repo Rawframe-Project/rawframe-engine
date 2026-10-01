@@ -10,6 +10,7 @@
 #include "focus.h"
 #include "meshes.h"
 #include "metering.h"
+#include "models.h"
 #include "motion.h"
 #include "occlusion.h"
 #include "picture.h"
@@ -76,6 +77,8 @@ struct SceneRenderer::State {
     std::optional<ContactPass> contact;
     /// The shadow maps (D289, D292).
     std::optional<ShadowPasses> shadows;
+    /// The models' passes and their targets (D284, D343).
+    std::optional<ModelPasses> models;
     /// The decals' textures (D339).
     std::optional<DecalAtlas> decalAtlas;
     /// The reflection probes' pictures (D340).
@@ -212,15 +215,7 @@ struct SceneRenderer::State {
         FrameBlock block;
         mrhiResourceId instances{};
         mrhiResourceId blockResource{};
-        mrhiResourceId scene{};
-        /// The prepass's depth, and each point's surface beside it when a
-        /// screen-space effect reads them (D327, D331).
-        mrhiResourceId depth{};
-        bool surfaced = false;
-        mrhiResourceId surfaces{};
         mrhiPassId upload{};
-        mrhiPassId depthPass{};
-        mrhiPassId litPass{};
         /// The frame's lights, each cluster's first index and count, and
         /// the indices (D290), as written and as declared.
         std::vector<LightBlock> lights;
@@ -239,17 +234,6 @@ struct SceneRenderer::State {
         std::uint64_t environment = kNoEnvironment;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
-        /// Where each texel's point moved, the temporal pass's input (D291).
-        mrhiResourceId motion{};
-        /// The samples a pixel the models' passes take, and their targets
-        /// multisampled, each resolved into its one-sample twin above, the
-        /// depth by a pass of its own (D343).
-        std::uint32_t samples = 1;
-        mrhiResourceId sampledScene{};
-        mrhiResourceId sampledMotion{};
-        mrhiResourceId sampledDepth{};
-        mrhiResourceId sampledSurfaces{};
-        mrhiPassId resolvePass{};
         bool draws = false;
         bool casters = false;
     };
@@ -359,19 +343,6 @@ struct SceneRenderer::State {
                 return failed("the frame's lights could not be declared", mrhi_errorCapacity);
             }
         }
-        // The models' pipeline writes the motion whether or not it is read.
-        for (const auto& [kFormat, kMade] : {std::pair{kSceneFormat, &now.scene},
-                                             std::pair{kMotionFormat, &now.motion},
-                                             std::pair{kDepthFormat, &now.depth}}) {
-            mrhiTextureDef def = mrhiDefaultTextureDef();
-            def.format = kFormat;
-            def.width = open.width;
-            def.height = open.height;
-            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &def, kMade); kDeclared != mrhi_success) {
-                return failed("a target could not be declared", kDeclared);
-            }
-        }
-
         // The upload pass writes what the drawing reads.
         std::vector<mrhiAccess> writes = {wholeOf(now.blockResource, mrhi_accessCopyDestination),
                                           wholeOf(now.lightsResource, mrhi_accessCopyDestination),
@@ -421,17 +392,6 @@ struct SceneRenderer::State {
         now.block.reflections = {reflecting->enabled() ? 1.0F : 0.0F, 0, 0, 0};
         RAWFRAME_TRY(contact->declare(*frame, kContacting, now.block, open.width, open.height, writes));
         now.block.contact = {contact->enabled() ? 1.0F : 0.0F, 0, 0, 0};
-        now.surfaced = occlusion->enabled() || reflecting->enabled();
-        if (now.surfaced) {
-            mrhiTextureDef def = mrhiDefaultTextureDef();
-            def.format = kSurfaceFormat;
-            def.width = open.width;
-            def.height = open.height;
-            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &def, &now.surfaces);
-                kDeclared != mrhi_success) {
-                return failed("the prepass's surfaces could not be declared", kDeclared);
-            }
-        }
         // Multisampled where the view asks it, the device renders every
         // target so, and the pipelines, asked for the first count a view
         // asks, are made (D343).
@@ -440,23 +400,10 @@ struct SceneRenderer::State {
         }
         RAWFRAME_TRY_ASSIGN(const bool kSampling,
                             made(frame->samples > 1 && frame->samples == pipelines.samples, Effect::Multisampled));
-        now.samples = kSampling ? frame->samples : 1;
-        for (const auto& [kFormat, kMade, kWanted] : {std::tuple{kSceneFormat, &now.sampledScene, true},
-                                                      std::tuple{kMotionFormat, &now.sampledMotion, true},
-                                                      std::tuple{kDepthFormat, &now.sampledDepth, true},
-                                                      std::tuple{kSurfaceFormat, &now.sampledSurfaces, now.surfaced}}) {
-            if (now.samples == 1 || !kWanted) {
-                continue;
-            }
-            mrhiTextureDef def = mrhiDefaultTextureDef();
-            def.format = kFormat;
-            def.width = open.width;
-            def.height = open.height;
-            def.sampleCount = now.samples;
-            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &def, kMade); kDeclared != mrhi_success) {
-                return failed("a multisampled target could not be declared", kDeclared);
-            }
-        }
+        // With the ambient occlusion or the reflections, each point's
+        // surface beside its depth (D327, D331).
+        RAWFRAME_TRY(models->declare(
+            open.width, open.height, kSampling ? frame->samples : 1, occlusion->enabled() || reflecting->enabled()));
         RAWFRAME_TRY(motionBlur->declare(*frame, kBlurring, open.width, open.height, writes));
         RAWFRAME_TRY(focus->declare(*frame, kFocusing, open.width, open.height, writes));
         RAWFRAME_TRY(bloom->declare(*frame, kBlooming, open.width, open.height));
@@ -516,59 +463,10 @@ struct SceneRenderer::State {
             reads.push_back(wholeOf(kLights, mrhi_accessStorageRead));
         }
         shadows->readBy(reads);
-        mrhiPassDef depthDef = mrhiDefaultPassDef();
-        depthDef.accesses = reads.data();
-        depthDef.accessCount = static_cast<std::uint32_t>(reads.size());
-        // With the ambient occlusion or the reflections, each point's
-        // surface beside its depth (D327, D331).
-        // Multisampled, each target's samples resolved into its one-sample
-        // twin as its pass ends, which keeps them no longer (D343).
-        const bool kSampled = now.samples > 1;
-        const auto kTarget = [kSampled](mrhiColorTarget& target, mrhiResourceId many, mrhiResourceId single) {
-            target.resource = kSampled ? many : single;
-            target.resolve = kSampled ? single : mrhiResourceId{};
-            target.store = kSampled ? mrhi_storeDiscard : mrhi_storeKeep;
-            target.load = mrhi_loadClear;
-        };
-        if (now.surfaced) {
-            kTarget(depthDef.colorTargets[0], now.sampledSurfaces, now.surfaces);
-            depthDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 1, .blue = 0, .alpha = 1};
-            depthDef.colorTargetCount = 1;
-        }
-        depthDef.depthTarget = mrhiDepthTarget{.resource = kSampled ? now.sampledDepth : now.depth,
-                                               .mip = 0,
-                                               .layer = 0,
-                                               .depthLoad = mrhi_loadClear,
-                                               .depthStore = mrhi_storeKeep,
-                                               .clearDepth = 0,
-                                               .stencilLoad = mrhi_loadDiscard,
-                                               .stencilStore = mrhi_storeDiscard,
-                                               .clearStencil = 0,
-                                               .readOnly = false};
-        if (const mrhiResult kAdded = mrhiAddPass(native, &depthDef, &now.depthPass); kAdded != mrhi_success) {
-            return failed("the depth pass could not be added", kAdded);
-        }
-        // The multisampled depth's first sample, into the one-sample depth
-        // the screen-space effects and the post chain read.
-        if (kSampled) {
-            const mrhiAccess kSamples{
-                .resource = now.sampledDepth,
-                .kind = mrhi_accessSampled,
-                .range = {
-                    .baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1, .aspect = mrhi_aspectDepthOnly}};
-            mrhiPassDef resolveDef = mrhiDefaultPassDef();
-            resolveDef.accesses = &kSamples;
-            resolveDef.accessCount = 1;
-            resolveDef.depthTarget = depthDef.depthTarget;
-            resolveDef.depthTarget.resource = now.depth;
-            resolveDef.depthTarget.depthLoad = mrhi_loadDiscard;
-            if (const mrhiResult kAdded = mrhiAddPass(native, &resolveDef, &now.resolvePass); kAdded != mrhi_success) {
-                return failed("the depth's resolve could not be added", kAdded);
-            }
-        }
-        RAWFRAME_TRY(occlusion->addPasses(now.depth, now.surfaces));
-        RAWFRAME_TRY(reflecting->addPasses(now.depth, now.surfaces));
-        RAWFRAME_TRY(contact->addPasses(now.depth));
+        RAWFRAME_TRY(models->addPrepass(reads));
+        RAWFRAME_TRY(occlusion->addPasses(models->depth(), models->surfaces()));
+        RAWFRAME_TRY(reflecting->addPasses(models->depth(), models->surfaces()));
+        RAWFRAME_TRY(contact->addPasses(models->depth()));
         // The models, then the sky where none lies, drawn with the exposure
         // the device holds (D293), reading what the occlusion found and
         // what the reflections met.
@@ -582,28 +480,15 @@ struct SceneRenderer::State {
         if (contact->enabled()) {
             litReads.push_back(wholeOf(contact->lit(), mrhi_accessSampled));
         }
-        mrhiPassDef litDef = depthDef;
-        litDef.accesses = litReads.data();
-        litDef.accessCount = static_cast<std::uint32_t>(litReads.size());
-        kTarget(litDef.colorTargets[0], now.sampledScene, now.scene);
-        litDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
-        kTarget(litDef.colorTargets[1], now.sampledMotion, now.motion);
-        litDef.colorTargets[1].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 0};
-        litDef.colorTargetCount = 2;
-        litDef.depthTarget.depthLoad = mrhi_loadKeep;
-        litDef.depthTarget.depthStore = mrhi_storeKeep;
-        litDef.depthTarget.readOnly = true;
-        if (const mrhiResult kAdded = mrhiAddPass(native, &litDef, &now.litPass); kAdded != mrhi_success) {
-            return failed("the models' pass could not be added", kAdded);
-        }
-        RAWFRAME_TRY(capturing->declare(now.scene, open.width, open.height, now.block.exposure[0]));
-        RAWFRAME_TRY(metering->addPasses(now.scene));
-        RAWFRAME_TRY(temporal->addPass(now.scene, now.motion));
+        RAWFRAME_TRY(models->addLitPass(litReads));
+        RAWFRAME_TRY(capturing->declare(models->scene(), open.width, open.height, now.block.exposure[0]));
+        RAWFRAME_TRY(metering->addPasses(models->scene()));
+        RAWFRAME_TRY(temporal->addPass(models->scene(), models->motion()));
         // The post chain in ADR-0051's order: the temporal slot, the motion
         // blur, the depth of field, the bloom, then the picture.
-        RAWFRAME_TRY(motionBlur->addPasses(temporal->shown(now.scene), now.motion, now.depth));
-        RAWFRAME_TRY(focus->addPasses(motionBlur->shown(temporal->shown(now.scene)), now.depth));
-        const mrhiResourceId kShown = focus->shown(motionBlur->shown(temporal->shown(now.scene)));
+        RAWFRAME_TRY(motionBlur->addPasses(temporal->shown(models->scene()), models->motion(), models->depth()));
+        RAWFRAME_TRY(focus->addPasses(motionBlur->shown(temporal->shown(models->scene())), models->depth()));
+        const mrhiResourceId kShown = focus->shown(motionBlur->shown(temporal->shown(models->scene())));
         RAWFRAME_TRY(bloom->addPasses(kShown));
         RAWFRAME_TRY(picture->addPasses(kShown,
                                         bloom->enabled() ? bloom->spread() : mrhiResourceId{},
@@ -686,7 +571,7 @@ struct SceneRenderer::State {
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
             samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
-        const std::array<mrhiBinding, 28> kFrameBinding = {
+        const std::array<mrhiBinding, kTableSlots> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, shadows->sunMap()),
             samplerAt(2, pipelines.shadowSampler),
@@ -721,120 +606,27 @@ struct SceneRenderer::State {
                                                  kPictureSampler};
         skyBinding[2].slot = 2;
         skyBinding[3].slot = 3;
-        // Runs of models drawn with `pipeline` in `pass`, the table set
-        // again where a run samples another texture than the one before
-        // (D309), white for none and for one not held this frame.
-        const auto kDrawRuns = [this, &now, &kFrameBinding](mrhiPassId pass,
-                                                            mrhiGraphicsPipelineId pipeline,
-                                                            const Runs& runs) -> result::Status {
-            if (runs.empty()) {
-                return {};
-            }
-            if (mrhiSetGraphicsPipeline(native, pass, pipeline) != mrhi_success ||
-                mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
-                return failed("the models could not be set up", mrhi_errorState);
-            }
-            std::array<mrhiBinding, 28> binding = kFrameBinding;
-            // The prepass, which the occlusion, the reflections, and the
-            // contact shadows come after, reads white.
-            if (pass.index1 == now.depthPass.index1 && pass.generation == now.depthPass.generation) {
-                binding[21] = textureAt(21, resourceOf(textures->resource(0)));
-                binding[22] = textureAt(22, resourceOf(textures->resource(0)));
-                binding[23] = textureAt(23, resourceOf(textures->resource(0)));
-            }
-            std::optional<render_scene::SceneTextures> bound;
-            for (const Run& run : runs) {
-                if (bound != run.texture) {
-                    bindTexture(*textures, pipelines, binding[10], binding[11], run.texture.base);
-                    bindTexture(*textures, pipelines, binding[12], binding[13], run.texture.packed);
-                    bindTexture(*textures, pipelines, binding[14], binding[15], run.texture.emission);
-                    bindTexture(*textures, pipelines, binding[16], binding[17], run.texture.normal);
-                    if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
-                        return failed("a material's texture could not be bound", mrhi_errorState);
-                    }
-                    bound = run.texture;
-                }
-                RAWFRAME_TRY(held->bind(pass, *run.mesh));
-                if (mrhiDrawIndexed(native, pass, run.indexCount, run.count, run.firstIndex, 0, run.first) !=
-                    mrhi_success) {
-                    return failed("a model could not be drawn", mrhi_errorState);
-                }
-            }
-            return {};
-        };
         // The opaque models, their depth first, the masked cut there
         // (D310); then, lit, the sky where none lies; then the translucent
-        // over both (D305).
-        // With the ambient occlusion or the reflections, the prepass
-        // leaves each point's surface too, and they are found between the
-        // two (D327, D331).
-        // With decals to draw, the lit models' twins that lay them (D339).
-        // Multisampled, every pipeline's twin taking the frame's samples
-        // (D343).
-        const bool kDecaled = decalAtlas->drawn() > 0;
-        const bool kSurfaces = now.surfaced;
-        const bool kSampled = now.samples > 1;
-        const Multisampled& kMany = pipelines.multisampled;
-        const auto kPick = [kSampled](const Asked& single, const Asked& many) {
-            return (kSampled ? many : single).pipeline;
-        };
-        const mrhiGraphicsPipelineId kPrepass =
-            kSurfaces ? kPick(pipelines.surfaces, kMany.surfaces) : kPick(pipelines.depth, kMany.depth);
-        const mrhiGraphicsPipelineId kLitModels =
-            kDecaled ? kPick(pipelines.litDecaled, kMany.litDecaled) : kPick(pipelines.lit, kMany.lit);
-        for (const auto& [kPass, kPipeline, kLit] :
-             {std::tuple{now.depthPass, kPrepass, false}, std::tuple{now.litPass, kLitModels, true}}) {
-            if (mrhiBeginPass(native, kPass) != mrhi_success) {
-                return failed("a scene pass could not begin", mrhi_errorState);
-            }
-            RAWFRAME_TRY(kDrawRuns(kPass, kPipeline, now.placed.runs));
-            const mrhiGraphicsPipelineId kMasked =
-                kLit        ? (kDecaled ? kPick(pipelines.maskedLitDecaled, kMany.maskedLitDecaled)
-                                        : kPick(pipelines.maskedLit, kMany.maskedLit))
-                : kSurfaces ? kPick(pipelines.cutSurfaces, kMany.cutSurfaces)
-                            : kPick(pipelines.cutout, kMany.cutout);
-            RAWFRAME_TRY(kDrawRuns(kPass, kMasked, now.placed.maskedRuns));
-            if (kLit && (mrhiSetGraphicsPipeline(native, kPass, kPick(pipelines.sky, kMany.sky)) != mrhi_success ||
-                         mrhiSetBindings(native, kPass, 0, skyBinding.data(), skyBinding.size()) != mrhi_success ||
-                         mrhiDraw(native, kPass, 3, 1, 0, 0) != mrhi_success)) {
-                return failed("the sky could not be drawn", mrhi_errorState);
-            }
-            if (kLit) {
-                RAWFRAME_TRY(kDrawRuns(kPass,
-                                       kDecaled ? kPick(pipelines.glassDecaled, kMany.glassDecaled)
-                                                : kPick(pipelines.glass, kMany.glass),
-                                       now.placed.translucentRuns));
-            }
-            if (mrhiEndPass(native, kPass) != mrhi_success) {
-                return failed("a scene pass could not end", mrhi_errorState);
-            }
-            // The resolve, unless nothing reads the depth it leaves.
-            bool resolved = false;
-            if (!kLit && kSampled && mrhiIsPassKept(native, now.resolvePass, &resolved) != mrhi_success) {
-                return failed("the depth's resolve could not be looked at", mrhi_errorState);
-            }
-            if (resolved) {
-                const std::array<mrhiBinding, 1> kSamples = {depthAt(0, now.sampledDepth)};
-                if (mrhiBeginPass(native, now.resolvePass) != mrhi_success ||
-                    mrhiSetGraphicsPipeline(native, now.resolvePass, kMany.resolveDepth.pipeline) != mrhi_success ||
-                    mrhiSetBindings(native, now.resolvePass, 0, kSamples.data(), kSamples.size()) != mrhi_success ||
-                    mrhiDraw(native, now.resolvePass, 3, 1, 0, 0) != mrhi_success ||
-                    mrhiEndPass(native, now.resolvePass) != mrhi_success) {
-                    return failed("the depth could not be resolved", mrhi_errorState);
-                }
-            }
-            if (!kLit) {
-                RAWFRAME_TRY(occlusion->record(pipelines, now.depth));
-                RAWFRAME_TRY(reflecting->record(pipelines));
-                RAWFRAME_TRY(contact->record(pipelines));
-            }
-        }
-        RAWFRAME_TRY(capturing->record(now.scene));
-        RAWFRAME_TRY(metering->record(pipelines, now.scene, now.width, now.height));
-        RAWFRAME_TRY(temporal->record(pipelines, now.scene, now.motion));
+        // over both (D305). The occlusion, the reflections, and the contact
+        // shadows are found between the two (D327, D331, D338).
+        const Drawing kDrawing{.pipelines = &pipelines,
+                               .held = &*held,
+                               .textures = textures.get(),
+                               .instances = now.instances,
+                               .placed = &now.placed,
+                               .table = kFrameBinding};
+        RAWFRAME_TRY(models->recordPrepass(kDrawing));
+        RAWFRAME_TRY(occlusion->record(pipelines, models->depth()));
+        RAWFRAME_TRY(reflecting->record(pipelines));
+        RAWFRAME_TRY(contact->record(pipelines));
+        RAWFRAME_TRY(models->recordLit(kDrawing, decalAtlas->drawn() > 0, skyBinding));
+        RAWFRAME_TRY(capturing->record(models->scene()));
+        RAWFRAME_TRY(metering->record(pipelines, models->scene(), now.width, now.height));
+        RAWFRAME_TRY(temporal->record(pipelines, models->scene(), models->motion()));
         RAWFRAME_TRY(motionBlur->record(pipelines));
         RAWFRAME_TRY(focus->record(pipelines));
-        RAWFRAME_TRY(bloom->record(pipelines, focus->shown(motionBlur->shown(temporal->shown(now.scene)))));
+        RAWFRAME_TRY(bloom->record(pipelines, focus->shown(motionBlur->shown(temporal->shown(models->scene())))));
         return picture->record(pipelines);
     }
 
@@ -858,7 +650,7 @@ struct SceneRenderer::State {
             statistics.framesFocused += focus->enabled() ? 1 : 0;
             statistics.framesContactShadowed += contact->enabled() ? 1 : 0;
             statistics.decalsDrawn += decalAtlas->drawn();
-            statistics.framesMultisampled += declared->samples > 1 ? 1 : 0;
+            statistics.framesMultisampled += models->samples() > 1 ? 1 : 0;
             statistics.probesDrawn += probeAtlas->drawn();
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
@@ -918,6 +710,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
         state->sampleCounts &= device.sampleCounts(static_cast<std::uint32_t>(kFormat));
     }
     state->shadows.emplace(device.native());
+    state->models.emplace(device.native());
     state->decalAtlas.emplace(device.native());
     RAWFRAME_TRY(state->decalAtlas->make());
     state->probeAtlas.emplace(device.native());
