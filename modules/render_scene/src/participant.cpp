@@ -304,6 +304,7 @@ public:
             presented_ = frame.now;
             const SceneFrame& kFrame = scene_->queue(camera_);
             askPicture(kFrame.lights.environment);
+            askPicture(kFrame.grading.table);
             for (const render_scene::SceneProbe& kProbe : kFrame.probes) {
                 askPicture(kProbe.environment);
             }
@@ -486,11 +487,11 @@ private:
     }
 
     /// Asks for a picture the World names, the sky's, a reflection
-    /// probe's, or a decal's or its normals' (D342), on its first naming
-    /// (D322, D325, D339): a
-    /// texture the game declares, read alone and held, so a game's other
-    /// textures are never read for it. One it does not declare, or that
-    /// cannot be asked for, is none, and is said so once.
+    /// probe's, a decal's or its normals' (D342), or a grading table
+    /// (D344), on its first naming (D322, D325, D339): a texture the game
+    /// declares, read alone and held, so a game's other textures are never
+    /// read for it. One it does not declare, or that cannot be asked for,
+    /// is none, and is said so once.
     void askPicture(std::uint64_t id) noexcept {
         if (id == 0 || pictures_.contains(id)) {
             return;

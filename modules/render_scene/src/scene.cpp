@@ -1009,7 +1009,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"saturation", offsetof(Grading, saturation)},
                            {"contrast", offsetof(Grading, contrast)},
                            {"temperature", offsetof(Grading, temperature)},
-                           {"tint", offsetof(Grading, tint)}}));
+                           {"tint", offsetof(Grading, tint)},
+                           {"table", offsetof(Grading, table)}}));
     RAWFRAME_TRY(kLaidOut(loaded.sun.has_value(),
                           "rawframe.model.Sun",
                           sizeof(Sun),

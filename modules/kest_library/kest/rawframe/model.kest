@@ -73,8 +73,11 @@ const LINEAR: u32 = 2
 // magenta (above nought) or green, about minus one to one; then each
 // channel times its `slope`, plus its `offset`, to the power of its
 // `power` (ASC CDL); then `saturation` (one keeps it, nought is grey) and
-// `contrast` about middle grey (one keeps it). One with a power not above
-// nought grades nothing: a grade not yet set is all nought.
+// `contrast` about middle grey (one keeps it); then, with a `table` (a
+// game texture cooked from a `.cube` file), each color looked up in it
+// (D344), the table's coordinates the ACEScct curve's encoding of the
+// light as the exposure leaves it. One with a power not above nought
+// grades nothing: a grade not yet set is all nought.
 struct Grading {
     slopeR: f32
     slopeG: f32
@@ -89,6 +92,7 @@ struct Grading {
     contrast: f32
     temperature: f32
     tint: f32
+    table: u64
 }
 
 // A camera's screen-space ambient occlusion (ADR-0051, D327), on the same

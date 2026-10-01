@@ -109,6 +109,8 @@ struct Grading {
     float contrast = 1;
     float temperature = 0;
     float tint = 0;
+    /// A grading table, a game texture; nought for none (D344).
+    std::uint64_t table = 0;
 };
 
 /// `rawframe.model.AutoExposure` as C++ reads it.
@@ -525,8 +527,9 @@ struct SceneMetering {
 /// scene's linear light before the tonemapper: whether it grades; the white
 /// balance as one matrix of linear Rec. 709 (rows of three, the camera's
 /// temperature and tint taken through LMS); the ASC CDL slope, offset, and
-/// power; saturation; and contrast about middle grey. A grade with a value
-/// not finite or a power not above nought grades nothing.
+/// power; saturation; contrast about middle grey; and the grading table
+/// looked up last, nought for none (D344). A grade with a value not finite
+/// or a power not above nought grades nothing.
 struct SceneGrading {
     bool enabled = false;
     std::array<float, 9> balance{1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -535,6 +538,7 @@ struct SceneGrading {
     std::array<float, 3> power{1, 1, 1};
     float saturation = 1;
     float contrast = 1;
+    std::uint64_t table = 0;
 };
 
 /// The grading a camera's `Grading` asks for, made sound (D294).

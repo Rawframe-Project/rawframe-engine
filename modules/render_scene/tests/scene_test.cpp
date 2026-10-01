@@ -722,7 +722,9 @@ RAWFRAME_TEST(AMeteredCameraIsMadeSound) {
 RAWFRAME_TEST(ACamerasGradeAndTonemapperAreMadeSound) {
     // Neutral: the balance is the identity, and the rest passes light on.
     const SceneGrading kNeutral = gradingOf(Grading{});
-    RAWFRAME_EXPECT(kNeutral.enabled);
+    RAWFRAME_EXPECT(kNeutral.enabled && kNeutral.table == 0);
+    // A grading table passes through to be looked up (D344).
+    RAWFRAME_EXPECT(gradingOf(Grading{.table = 0x7a}).table == 0x7a);
     for (std::size_t at = 0; at < 9; ++at) {
         RAWFRAME_EXPECT(near(kNeutral.balance[at], at % 4 == 0 ? 1.0F : 0.0F, 2e-3F));
     }

@@ -70,7 +70,8 @@ SceneGrading gradingOf(const std::optional<Grading>& asked) noexcept {
                       .offset = {kGrade.offsetR, kGrade.offsetG, kGrade.offsetB},
                       .power = {kGrade.powerR, kGrade.powerG, kGrade.powerB},
                       .saturation = std::max(kGrade.saturation, 0.0F),
-                      .contrast = std::max(kGrade.contrast, 0.0F)};
+                      .contrast = std::max(kGrade.contrast, 0.0F),
+                      .table = kGrade.table};
     // The white the temperature and tint name, moved from D65 along the
     // daylight locus (warmer lowers its x less than cooler raises it), and
     // the light scaled in LMS by D65's white over it.
