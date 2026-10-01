@@ -1,8 +1,8 @@
+#include "pictures.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/game_content/game_content.h"
-#include "rawframe/game_textures/game_textures.h"
 #include "rawframe/material/material.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
@@ -18,10 +18,8 @@
 #include <array>
 #include <cmath>
 #include <cstring>
-#include <map>
 #include <memory>
 #include <optional>
-#include <set>
 #include <string>
 
 namespace rawframe::render_scene {
@@ -34,17 +32,8 @@ constexpr diagnostics::EventIdentity kSceneSummary{"scene", "scene_summary"};
 constexpr diagnostics::EventIdentity kParticlesSummary{"scene", "scene_particles_summary"};
 constexpr std::string_view kProvided[] = {kSceneFrames.name};
 constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
-constexpr diagnostics::EventIdentity kTextureUnknown{"scene", "material_texture_unknown"};
-constexpr diagnostics::EventIdentity kTexturesUnavailable{"scene", "textures_unavailable"};
-constexpr diagnostics::EventIdentity kTextureUnread{"scene", "texture_unavailable"};
-constexpr diagnostics::EventIdentity kTextureReloaded{"scene", "texture_reloaded"};
-constexpr diagnostics::EventIdentity kTexturesRead{"scene", "textures_read"};
-constexpr diagnostics::EventIdentity kPictureUnknown{"scene", "picture_unknown"};
-constexpr diagnostics::EventIdentity kPictureUnread{"scene", "picture_unavailable"};
 constexpr diagnostics::EventIdentity kViewRefused{"scene", "view_refused"};
 constexpr diagnostics::EventIdentity kViewsSummary{"scene", "scene_views_summary"};
-/// The decoded levels the materials' textures may hold.
-constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        game_content::kGameContent.name,
@@ -340,7 +329,7 @@ public:
             }
         }
         gameMaterials_ = materials.size();
-        RAWFRAME_TRY(readTextures(context, *files, materials, postProcesses));
+        RAWFRAME_TRY(pictures_.read(context, *files, materials, postProcesses));
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .sun = game->sun,
                                   .sky = game->sky,
@@ -369,18 +358,7 @@ public:
                          "a material could not be read: its models are drawn with none",
                          {diagnostics::field("material", kPath), diagnostics::field("reason", kReason)});
         }
-        for (const auto& [kPath, kTexture] : unknownTextures_) {
-            emitter_.log(diagnostics::Severity::Warning,
-                         kTextureUnknown,
-                         "a material samples a texture the game does not declare: it is sampled as white",
-                         {diagnostics::field("material", kPath), diagnostics::field("texture", kTexture)});
-        }
-        if (unreadTextures_.has_value()) {
-            emitter_.log(diagnostics::Severity::Warning,
-                         kTexturesUnavailable,
-                         "the materials' textures could not be asked for: they are sampled as white",
-                         {diagnostics::field("reason", *unreadTextures_)});
-        }
+        pictures_.start(emitter_);
         return {};
     }
 
@@ -397,7 +375,7 @@ public:
                 each.frame = nullptr;
             }
             ++tick_;
-            updateTextures();
+            pictures_.update(tick_);
             extract();
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
@@ -412,15 +390,7 @@ public:
             presented_ = frame.now;
             presentViews(frame.now);
             const SceneFrame& kFrame = scene_->queue(camera_);
-            askPicture(kFrame.lights.environment);
-            askPicture(kFrame.grading.table);
-            for (const render_scene::SceneProbe& kProbe : kFrame.probes) {
-                askPicture(kProbe.environment);
-            }
-            for (const render_scene::SceneDecal& kDecal : kFrame.decals) {
-                askPicture(kDecal.texture);
-                askPicture(kDecal.normal);
-            }
+            pictures_.askAll(kFrame);
             queued_ = &kFrame;
             if (!regionFrames_.empty() && regionFrames_[0].width != 0) {
                 regionFrames_[0].frame = &kFrame;
@@ -466,11 +436,10 @@ public:
             diagnostics::field("gameMeshes", static_cast<std::uint64_t>(gameMeshes_)),
             diagnostics::field("gameMaterials", static_cast<std::uint64_t>(gameMaterials_)),
             diagnostics::field("unknownMaterials", unknownMaterials_),
-            diagnostics::field("materialTextures", static_cast<std::uint64_t>(sampled_)),
-            diagnostics::field("texturesReady",
-                               static_cast<std::uint64_t>(textures_ != nullptr ? textures_->counts().ready : 0)),
-            diagnostics::field("pictures", picturesRead_),
-            diagnostics::field("picturesReady", picturesReady()),
+            diagnostics::field("materialTextures", pictures_.sampled()),
+            diagnostics::field("texturesReady", pictures_.texturesReady()),
+            diagnostics::field("pictures", pictures_.picturesRead()),
+            diagnostics::field("picturesReady", pictures_.picturesReady()),
             diagnostics::field("lightsLit", lightsLit_),
             diagnostics::field("lightsCulled", lightsCulled_),
             diagnostics::field("lightsOverLimit", lightsOverLimit_),
@@ -561,182 +530,10 @@ public:
     }
 
     std::shared_ptr<const texture::Texture> texture(std::uint64_t id) const override {
-        if (const auto kPicture = pictures_.find(id); kPicture != pictures_.end()) {
-            return kPicture->second != nullptr ? kPicture->second->texture(id, tick_) : nullptr;
-        }
-        return textures_ != nullptr ? textures_->texture(id, tick_) : nullptr;
+        return pictures_.texture(id, tick_);
     }
 
 private:
-    /// Asks for the textures `materials` and `postProcesses` sample, of
-    /// those the game declares, decoded on a CPU worker (D309); a material
-    /// sampling one it does not declare samples white, and is said so at
-    /// start.
-    result::Status readTextures(composition::ParticipantContext& context,
-                                const world_kest::GameFiles& files,
-                                std::vector<SceneMaterial>& materials,
-                                std::vector<ScenePostProcessMaterial>& postProcesses) {
-        std::set<std::uint64_t> sampled;
-        std::vector<std::pair<std::uint64_t, SceneTexture*>> named;
-        for (SceneMaterial& each : materials) {
-            for (SceneTexture* texture :
-                 {&each.textures.base, &each.textures.packed, &each.textures.emission, &each.textures.normal}) {
-                named.emplace_back(each.id, texture);
-            }
-        }
-        for (ScenePostProcessMaterial& each : postProcesses) {
-            named.emplace_back(each.id, &each.texture);
-        }
-        for (const auto& [kMaterial, texture] : named) {
-            if (texture->id == 0) {
-                continue;
-            }
-            // A render texture is drawn, not read (D361).
-            if (std::ranges::contains(
-                    files.description().renderTextures, texture->id, &world_kest::GameRenderTexture::id)) {
-                continue;
-            }
-            if (std::ranges::find(files.textures(), texture->id, &world_kest::GameTextureResource::id) ==
-                files.textures().end()) {
-                const auto kPath =
-                    std::ranges::find(files.materials(), kMaterial, &world_kest::GameMaterialResource::id);
-                unknownTextures_.emplace_back(kPath != files.materials().end() ? kPath->path : std::string{},
-                                              graph::nodeIdText(texture->id));
-                texture->id = 0;
-                continue;
-            }
-            sampled.insert(texture->id);
-        }
-        sampled_ = sampled.size();
-        if (!context.has(game_content::kGameContent.name) || context.cpuExecutor() == nullptr) {
-            return {};
-        }
-        RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
-        if (!content->held()) {
-            return {};
-        }
-        RAWFRAME_TRY(content->admit(game_textures::textureRepresentations()));
-        // What reading the sky's picture needs, when the World names one.
-        reading_ = Reading{.store = &content->store(),
-                           .cpu = context.cpuExecutor(),
-                           .owner = context.owner(),
-                           .scope = &context.scope(),
-                           .clock = &context.clock()};
-        declaredTextures_ = files.textures();
-        if (sampled.empty()) {
-            return {};
-        }
-        std::vector<world_kest::GameTextureResource> declared;
-        for (const world_kest::GameTextureResource& each : files.textures()) {
-            if (sampled.contains(each.id)) {
-                declared.push_back(each);
-            }
-        }
-        auto textures = game_textures::GameTextures::create(content->store(),
-                                                            *context.cpuExecutor(),
-                                                            context.owner(),
-                                                            context.scope(),
-                                                            context.clock(),
-                                                            std::move(declared),
-                                                            kTextureBudgetBytes);
-        if (textures.has_value()) {
-            textures_ = std::move(*textures);
-        } else {
-            unreadTextures_ = std::string{textures.error().description()};
-        }
-        return {};
-    }
-
-    /// Asks for a picture the World names, the sky's, a reflection
-    /// probe's, a decal's or its normals' (D342), or a grading table
-    /// (D344), on its first naming (D322, D325, D339): a texture the game
-    /// declares, read alone and held, so a game's other textures are never
-    /// read for it. One it does not declare, or that cannot be asked for,
-    /// is none, and is said so once.
-    void askPicture(std::uint64_t id) noexcept {
-        if (id == 0 || pictures_.contains(id)) {
-            return;
-        }
-        std::unique_ptr<game_textures::GameTextures>& reader = pictures_[id];
-        const auto kDeclared = std::ranges::find(declaredTextures_, id, &world_kest::GameTextureResource::id);
-        if (kDeclared == declaredTextures_.end()) {
-            emitter_.log(diagnostics::Severity::Warning,
-                         kPictureUnknown,
-                         "the World names a picture the game does not declare: it has none",
-                         {diagnostics::field("texture", graph::nodeIdText(id))});
-            return;
-        }
-        if (!reading_.has_value()) {
-            return;
-        }
-        ++picturesRead_;
-        auto made = game_textures::GameTextures::create(*reading_->store,
-                                                        *reading_->cpu,
-                                                        reading_->owner,
-                                                        *reading_->scope,
-                                                        *reading_->clock,
-                                                        {*kDeclared},
-                                                        kTextureBudgetBytes);
-        if (!made.has_value()) {
-            emitter_.log(diagnostics::Severity::Warning,
-                         kPictureUnread,
-                         "a picture the World names could not be asked for: it has none",
-                         {diagnostics::field("texture", graph::nodeIdText(id)),
-                          diagnostics::field("reason", std::string{made.error().description()})});
-            return;
-        }
-        reader = std::move(*made);
-    }
-
-    /// The pictures read and ready.
-    [[nodiscard]] std::uint64_t picturesReady() const noexcept {
-        std::uint64_t ready = 0;
-        for (const auto& [kId, kReader] : pictures_) {
-            ready += kReader != nullptr ? kReader->counts().ready : 0;
-        }
-        return ready;
-    }
-
-    /// Takes finished reads and reloads; a texture that fails is sampled
-    /// as white, and an environment that fails is none.
-    void updateTextures() noexcept {
-        for (const auto& [kPicture, kReader] : pictures_) {
-            if (kReader == nullptr) {
-                continue;
-            }
-            for (const auto& [kId, kError] : kReader->update(tick_).failed) {
-                emitter_.log(diagnostics::Severity::Warning,
-                             kPictureUnread,
-                             "a picture the World names could not be read: it has none",
-                             {diagnostics::field("texture", graph::nodeIdText(kId)),
-                              diagnostics::field("reason", std::string{kError.description()})});
-            }
-        }
-        if (textures_ == nullptr) {
-            return;
-        }
-        const game_textures::TextureChanges kChanges = textures_->update(tick_);
-        for (const auto& [kId, kError] : kChanges.failed) {
-            emitter_.log(diagnostics::Severity::Warning,
-                         kTextureUnread,
-                         "a material's texture could not be read: it is sampled as white",
-                         {diagnostics::field("texture", graph::nodeIdText(kId)),
-                          diagnostics::field("reason", std::string{kError.description()})});
-        }
-        for (const std::uint64_t kId : kChanges.reloaded) {
-            emitter_.log(diagnostics::Severity::Info,
-                         kTextureReloaded,
-                         "a material's texture was replaced by its new revision",
-                         {diagnostics::field("texture", graph::nodeIdText(kId))});
-        }
-        if (kChanges.read) {
-            emitter_.log(diagnostics::Severity::Info,
-                         kTexturesRead,
-                         "the materials' textures were read",
-                         {diagnostics::field("textures", static_cast<std::uint64_t>(textures_->counts().ready))});
-        }
-    }
-
     /// The client's World copied out, and the eye moved to its player,
     /// through the player's camera if it has one.
     void extract() noexcept {
@@ -815,15 +612,7 @@ private:
                 each.presented.has_value() ? static_cast<float>((now - *each.presented).nanoseconds) / 1e9F : 0.0F;
             each.presented = now;
             const SceneFrame& kFrame = each.scene->queue(each.camera);
-            askPicture(kFrame.lights.environment);
-            askPicture(kFrame.grading.table);
-            for (const SceneProbe& kProbe : kFrame.probes) {
-                askPicture(kProbe.environment);
-            }
-            for (const SceneDecal& kDecal : kFrame.decals) {
-                askPicture(kDecal.texture);
-                askPicture(kDecal.normal);
-            }
+            pictures_.askAll(kFrame);
             region.frame = &kFrame;
             ++playerFrames_;
         }
@@ -1031,8 +820,8 @@ private:
                 each.presented.has_value() ? static_cast<float>((now - *each.presented).nanoseconds) / 1e9F : 0.0F;
             each.presented = now;
             const SceneFrame& kFrame = each.scene->queue(each.camera);
-            askPicture(kFrame.lights.environment);
-            askPicture(kFrame.grading.table);
+            pictures_.ask(kFrame.lights.environment);
+            pictures_.ask(kFrame.grading.table);
             textureFrames_[at].frame = &kFrame;
             each.offered = &kFrame;
             ++viewsDrawn_;
@@ -1131,29 +920,9 @@ private:
     std::size_t gameMaterials_ = 0;
     /// Materials that could not be read, and why, said at start.
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;
-    /// The textures the materials sample (D309): held, the materials
-    /// naming one the game does not declare, and why they could not be
-    /// asked for.
-    std::unique_ptr<game_textures::GameTextures> textures_;
-    std::size_t sampled_ = 0;
+    /// The textures the materials sample and the pictures the World names.
+    ScenePictures pictures_;
     std::uint64_t tick_ = 0;
-    std::vector<std::pair<std::string, std::string>> unknownTextures_;
-    std::optional<std::string> unreadTextures_;
-    /// What reading a texture needs, kept from load; the textures the game
-    /// declares; and the sky's picture (D322), read on its own when the
-    /// World names it: its identity, and the pictures asked for.
-    struct Reading {
-        content::ContentStore* store = nullptr;
-        execution::Executor* cpu = nullptr;
-        execution::OwnerId owner;
-        execution::CancellationScope* scope = nullptr;
-        const execution::MonotonicSource* clock = nullptr;
-    };
-    std::optional<Reading> reading_;
-    std::vector<world_kest::GameTextureResource> declaredTextures_;
-    /// The environments asked for, by texture; none for one that has none.
-    std::map<std::uint64_t, std::unique_ptr<game_textures::GameTextures>> pictures_;
-    std::uint64_t picturesRead_ = 0;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
     /// The point and spot lights each frame lit with, culled, and left out
