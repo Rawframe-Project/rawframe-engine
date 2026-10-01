@@ -43,14 +43,14 @@ BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
 PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h|cgltf\.h|maul-rhi/|maul-window/)', re.MULTILINE)
 # Maul RHI is declared by the rendering cluster alone, and Maul Window by the
 # window module alone (ADR-0045): anywhere else, including one is refused.
-CLUSTERS = {"maul-rhi/": {"render", "render_canvas", "render_canvas_gpu", "render_scene", "render_scene_gpu", "particles_gpu"}, "maul-window/": {"window"}}
-CLUSTER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](maul-rhi/|maul-window/)', re.MULTILINE)
+CLUSTERS = {"maul-rhi/": {"render", "render_canvas", "render_canvas_gpu", "render_scene", "render_scene_gpu", "particles_gpu"}, "maul-window/": {"window"}, "maul-ui/": {"ui"}}
+CLUSTER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](maul-rhi/|maul-window/|maul-ui/)', re.MULTILINE)
 SERVER = "dedicated_server"
 NOT_IN_SERVER = {
     "audio", "world_audio", "localization", "world_localization", "authoring",
     "input", "input_kest", "network_loopback", "network_web", "window", "input_window", "window_host",
     "cook", "audio_import", "mesh_import", "animation_import", "texture_import", "build", "render_canvas",
-    "render", "render_canvas_gpu", "render_scene", "render_scene_gpu", "particles", "particles_gpu", "view",
+    "render", "render_canvas_gpu", "render_scene", "render_scene_gpu", "particles", "particles_gpu", "view", "ui",
 }
 # Source formats are decoded in import tooling only (ADR-0058): no process
 # that plays reaches an importer or the cook.
