@@ -100,7 +100,7 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
                     kShadows.filter == render_scene::ShadowFilter::Soft ? 1.0F : 0.0F};
     const render_scene::SceneClusters& kClusters = frame.clusters;
     const bool kClustered =
-        !frame.lights3d.empty() && kClusters.near > 0 && kClusters.far > kClusters.near &&
+        (!frame.lights3d.empty() || !frame.decals.empty()) && kClusters.near > 0 && kClusters.far > kClusters.near &&
         kClusters.ranges.size() == std::size_t{kClusters.tilesX} * kClusters.tilesY * kClusters.slices * 4;
     block.clusterGrid = {static_cast<float>(kClusters.tilesX),
                          static_cast<float>(kClusters.tilesY),

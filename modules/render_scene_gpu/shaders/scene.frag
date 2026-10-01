@@ -1,4 +1,6 @@
-// The 3D scene's models (D284), fragment entry "fs": the surface its
+// The 3D scene's models (D284), fragment entry "fs", and "fsDecaled",
+// compiled with DECALS for frames that draw decals, which lays them over
+// the base color first (D339): the surface its
 // material gives it (D303, ADR-0031's blob; the model's color tinting the
 // base color), lit through ADR-0031's lit shading model (D299) by the sun, where the sun's
 // shadow map says it reaches (D289); by
@@ -47,10 +49,12 @@ layout(set = 0, binding = 0, std140) uniform Frame
     vec4 environment;
     vec4 irradiance[9];
     // Whether the view's ambient occlusion is on (D327), its screen-space
-    // reflections (D331), and its contact shadows (D338).
+    // reflections (D331), its contact shadows (D338), and whether it has
+    // decals (D339).
     vec4 occlusion;
     vec4 reflections;
     vec4 contact;
+    vec4 decals;
 }
 frame;
 
@@ -190,6 +194,22 @@ layout(set = 0, binding = 22) uniform texture2D reflectionTexture;
 // How much of the sun's light the contact shadows let reach each texel
 // (D338), where the view's contact shadows are on.
 layout(set = 0, binding = 23) uniform texture2D contactTexture;
+
+// The frame's decals (D339): each one's box, tint, and layer of the atlas
+// its texture is drawn in, below nought for none.
+struct Decal
+{
+    mat4 toBox;
+    vec4 color;
+    vec4 layer;
+};
+
+layout(set = 0, binding = 24, std430) readonly buffer Decals
+{
+    Decal decals[];
+};
+
+layout(set = 0, binding = 25) uniform texture2DArray decalAtlas;
 
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
@@ -370,11 +390,10 @@ float lightShadow(ShadowSlot slot, vec3 placed, vec3 normal)
 // the cluster found by where the view puts it and how far ahead it is;
 // each light's inverse square windowed to nought at its range, a spot's
 // also faded across its cone's edge.
-vec3 punctual(vec3 placed, vec3 normal, Surface surface, vec3 toEye)
+// The cluster `placed` falls in, by where the view puts it and how far
+// ahead it is: its first index, its lights, and its decals (D339).
+uvec4 clusterOf(vec3 placed)
 {
-    if (frame.clusterGrid.w == 0.0) {
-        return vec3(0.0);
-    }
     const vec4 kClip = frame.unjittered * vec4(placed, 1.0);
     const vec2 kSeen = kClip.xy / kClip.w;
     const uvec3 kGrid = uvec3(frame.clusterGrid.xyz);
@@ -384,7 +403,43 @@ vec3 punctual(vec3 placed, vec3 normal, Surface surface, vec3 toEye)
     const uint kSlice = kAhead <= frame.clusterDepth.x
                             ? 0u
                             : min(uint(log(kAhead / frame.clusterDepth.x) * frame.clusterDepth.y), kGrid.z - 1u);
-    const uvec4 kRange = ranges[(kSlice * kGrid.y + kY) * kGrid.x + kX];
+    return ranges[(kSlice * kGrid.y + kY) * kGrid.x + kX];
+}
+
+#ifdef DECALS
+// The surface's color under the decals of its cluster (D339), each in the
+// frame's order over those before: inside a decal's box, its texture at
+// the place's spot of it, tinted, covers the color by its alpha, fading
+// toward the box's front and back and on surfaces turned from it. Its mip
+// is from the place's derivatives across the pixel, `along` and `aside`.
+vec3 decalled(uvec4 range, vec3 color, vec3 placed, vec3 normal, vec3 along, vec3 aside)
+{
+    const uvec4 kRange = range;
+    vec3 under = color;
+    for (uint at = kRange.x + kRange.y; at < kRange.x + kRange.y + kRange.z; ++at) {
+        const Decal kDecal = decals[indices[at]];
+        const vec3 kBox = (kDecal.toBox * vec4(placed, 1.0)).xyz;
+        if (kDecal.layer.x < 0.0 || any(greaterThan(abs(kBox), vec3(1.0)))) {
+            continue;
+        }
+        const mat3 kInto = mat3(kDecal.toBox);
+        const vec3 kFront = normalize(vec3(kDecal.toBox[0][2], kDecal.toBox[1][2], kDecal.toBox[2][2]));
+        const vec2 kAt = vec2(kBox.x * 0.5 + 0.5, 0.5 - kBox.y * 0.5);
+        const vec4 kTexel = textureGrad(sampler2DArray(decalAtlas, environmentSampler),
+                                        vec3(kAt, kDecal.layer.x),
+                                        (kInto * along).xy * vec2(0.5, -0.5),
+                                        (kInto * aside).xy * vec2(0.5, -0.5));
+        const float kCovers = kTexel.a * kDecal.color.a * smoothstep(0.0, 0.3, dot(normal, kFront)) *
+                              (1.0 - smoothstep(0.8, 1.0, abs(kBox.z)));
+        under = mix(under, kTexel.rgb * kDecal.color.rgb, kCovers);
+    }
+    return under;
+}
+#endif
+
+vec3 punctual(uvec4 range, vec3 placed, vec3 normal, Surface surface, vec3 toEye)
+{
+    const uvec4 kRange = range;
     vec3 sum = vec3(0.0);
     for (uint at = kRange.x; at < kRange.x + kRange.y; ++at) {
         const Light kLight = lights[indices[at]];
@@ -438,6 +493,14 @@ void main()
     // texture is sampled only where its material has one.
     const vec2 kDx = dFdx(inUv);
     const vec2 kDy = dFdy(inUv);
+#ifdef DECALS
+    // The place's, for the decals' textures (D339).
+    const vec3 kAlong = dFdx(inPlaced);
+    const vec3 kAside = dFdy(inPlaced);
+#endif
+    // The cluster's lights and decals, where either is clustered (D339).
+    const uvec4 kRange =
+        frame.clusterGrid.w > 0.0 || frame.decals.x > 0.5 ? clusterOf(inPlaced) : uvec4(0u);
     vec4 sampled = vec4(1.0);
     if ((kFlags & 6u) != 0u) {
         sampled = textureGrad(sampler2D(baseTexture, baseSampler), inUv * kBaseMap.xy + kBaseMap.zw,
@@ -465,7 +528,14 @@ void main()
         normal = normalize(kAcross * bent.x + kUp * bent.y + normal * bent.z);
     }
     const vec3 kNormal = normal;
-    const vec3 kColor = inColor.rgb * kBase.rgb * ((kFlags & 2u) != 0u ? sampled.rgb : vec3(1.0));
+    const vec3 kTinted = inColor.rgb * kBase.rgb * ((kFlags & 2u) != 0u ? sampled.rgb : vec3(1.0));
+#ifdef DECALS
+    // Entry "fsDecaled", for frames with decals: under them.
+    const vec3 kColor = frame.decals.x > 0.5 ? decalled(kRange, kTinted, inPlaced, normalize(inNormal), kAlong, kAside)
+                                             : kTinted;
+#else
+    const vec3 kColor = kTinted;
+#endif
     // How much of what is behind it a translucent model hides (D305): its
     // material's opacity times its color's alpha.
     const float kOpacity = kRest.x * inColor.a * ((kFlags & 4u) != 0u ? sampled.a : 1.0);
@@ -490,7 +560,7 @@ void main()
                                ? texelFetch(contactTexture, ivec2(gl_FragCoord.xy), 0).r
                                : 1.0;
     const vec3 kDirect = frame.sun.rgb * sunlit(inPlaced, kNormal) * kContact * reflected(kSurface, kNormal, kToEye, frame.toSun.xyz) +
-                         punctual(inPlaced, kNormal, kSurface, kToEye);
+                         punctual(kRange, inPlaced, kNormal, kSurface, kToEye);
     // The sky above and the ground below (D304): their light across the
     // normal's side, diffused, and along the reflection, the Fresnel of a
     // rough surface; what the material occludes of both.

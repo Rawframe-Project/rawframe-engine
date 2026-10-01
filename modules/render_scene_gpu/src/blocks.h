@@ -49,13 +49,14 @@ struct FrameBlock {
     std::array<float, 4> environment{};
     std::array<std::array<float, 4>, 9> irradiance{};
     /// One where the view's ambient occlusion is on (D327), where its
-    /// screen-space reflections are (D331), and where its contact shadows
-    /// are (D338).
+    /// screen-space reflections are (D331), where its contact shadows are
+    /// (D338), and where it draws decals (D339).
     std::array<float, 4> occlusion{};
     std::array<float, 4> reflections{};
     std::array<float, 4> contact{};
+    std::array<float, 4> decals{};
 };
-static_assert(sizeof(FrameBlock) == 832, "the scene's shaders read the frame as 832 bytes");
+static_assert(sizeof(FrameBlock) == 848, "the scene's shaders read the frame as 848 bytes");
 
 /// A point or spot light as the scene's shaders read it (std430, D290).
 struct LightBlock {

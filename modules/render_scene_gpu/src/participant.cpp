@@ -148,7 +148,8 @@ public:
                       diagnostics::field("framesReflected", statistics.framesReflected),
                       diagnostics::field("framesMotionBlurred", statistics.framesMotionBlurred),
                       diagnostics::field("framesFocused", statistics.framesFocused),
-                      diagnostics::field("framesContactShadowed", statistics.framesContactShadowed)});
+                      diagnostics::field("framesContactShadowed", statistics.framesContactShadowed),
+                      diagnostics::field("decalsDrawn", statistics.decalsDrawn)});
     }
 
 private:

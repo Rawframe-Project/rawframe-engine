@@ -5,6 +5,7 @@
 #include "capture.h"
 #include "casting.h"
 #include "contact.h"
+#include "decals.h"
 #include "environment.h"
 #include "focus.h"
 #include "meshes.h"
@@ -71,6 +72,8 @@ struct SceneRenderer::State {
     std::optional<ReflectionPass> reflecting;
     /// Its contact shadows, when a view asks (D338).
     std::optional<ContactPass> contact;
+    /// The decals' textures (D339).
+    std::optional<DecalAtlas> decalAtlas;
     /// Its motion blur, when a view asks (D334).
     std::optional<MotionBlurPass> motionBlur;
     /// Its depth of field, when a view asks (D336).
@@ -144,6 +147,10 @@ struct SceneRenderer::State {
                 static_cast<void>(textures->choose(kProbe.environment, kPicture));
                 probeLevels[kProbe.environment] = static_cast<std::uint32_t>(kPicture->levels.size());
             }
+        }
+        // Each decal's texture (D339).
+        for (const render_scene::SceneDecal& kDecal : scene.decals) {
+            static_cast<void>(textures->choose(kDecal.texture, sampled ? sampled(kDecal.texture) : nullptr));
         }
         for (const std::vector<render_scene::SceneDraw>* kList :
              {&scene.draws, &scene.shadows.casters, &scene.lightShadows.casters}) {
@@ -297,9 +304,11 @@ struct SceneRenderer::State {
         now.placed = placeDraws(*frame, kUsable, statistics.modelsLeftOut);
         now.block = blockOf(*frame, open.width, open.height);
         now.lights = lightsOf(*frame);
-        now.ranges = now.block.clusterGrid[3] > 0 ? frame->clusters.ranges : std::vector<std::uint32_t>{0, 0, 0, 0};
-        now.indices = now.block.clusterGrid[3] > 0 && !frame->clusters.indices.empty() ? frame->clusters.indices
-                                                                                       : std::vector<std::uint32_t>{0};
+        // The clusters, where the lights or the decals are clustered (D339).
+        const bool kClustered = now.block.clusterDepth[1] > 0;
+        now.ranges = kClustered ? frame->clusters.ranges : std::vector<std::uint32_t>{0, 0, 0, 0};
+        now.indices =
+            kClustered && !frame->clusters.indices.empty() ? frame->clusters.indices : std::vector<std::uint32_t>{0};
         // Everything this frame uses: the meshes it draws, imported; its
         // placements and view; and its targets.
         std::vector<mrhiAccess> meshWrites;
@@ -463,6 +472,9 @@ struct SceneRenderer::State {
         RAWFRAME_TRY_ASSIGN(const bool kBlooming, made(frame->bloom.enabled, Effect::Bloom));
         RAWFRAME_TRY_ASSIGN(const bool kSmoothing, made(frame->fxaa, Effect::Fxaa));
         RAWFRAME_TRY_ASSIGN(const bool kContacting, made(frame->contactShadows.enabled, Effect::ContactShadows));
+        RAWFRAME_TRY_ASSIGN(const bool kDecaling, made(!frame->decals.empty(), Effect::Decals));
+        RAWFRAME_TRY(decalAtlas->declare(*frame, kDecaling, *textures, writes));
+        now.block.decals = {decalAtlas->drawn() > 0 ? 1.0F : 0.0F, 0, 0, 0};
         RAWFRAME_TRY(occlusion->declare(*frame, kSurfaces && kOccluding, now.block, open.width, open.height, writes));
         // The reflections read the picture before, so only where it is
         // reused (D331).
@@ -507,6 +519,8 @@ struct SceneRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &uploadDef, &now.upload); kAdded != mrhi_success) {
             return failed("the upload pass could not be added", kAdded);
         }
+        // New decals' textures into the atlas, after their upload (D339).
+        RAWFRAME_TRY(decalAtlas->addPasses());
         // The shadow map first: its casters from each cascade's view.
         if (now.draws || now.casters) {
             meshReads.push_back(wholeOf(now.instances, mrhi_accessVertex));
@@ -554,6 +568,10 @@ struct SceneRenderer::State {
         std::vector<mrhiAccess> reads = meshReads;
         reads.push_back(wholeOf(now.blockResource, mrhi_accessUniform));
         reads.push_back(wholeOf(now.skyResource, mrhi_accessUniform));
+        reads.push_back(wholeOf(decalAtlas->blocks(), mrhi_accessStorageRead));
+        if (decalAtlas->drawn() > 0) {
+            reads.push_back(wholeOf(decalAtlas->atlas(), mrhi_accessSampled));
+        }
         reads.push_back(wholeOf(metering->exposure(), mrhi_accessStorageRead));
         for (const mrhiResourceId kLights :
              {now.lightsResource, now.rangesResource, now.indicesResource, now.slotsResource, now.probesResource}) {
@@ -703,6 +721,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(occlusion->write(now.upload));
         RAWFRAME_TRY(reflecting->write(now.upload));
         RAWFRAME_TRY(contact->write(now.upload));
+        RAWFRAME_TRY(decalAtlas->write(now.upload));
         RAWFRAME_TRY(motionBlur->write(now.upload));
         RAWFRAME_TRY(focus->write(now.upload));
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
@@ -727,16 +746,19 @@ struct SceneRenderer::State {
         if (mrhiEndPass(native, now.upload) != mrhi_success) {
             return failed("the upload pass could not end", mrhi_errorState);
         }
+        RAWFRAME_TRY(decalAtlas->record(pipelines));
         RAWFRAME_TRY(castShadows(now));
         // The scene's table: slots 10 to 17 are each run's textures; 18 and
         // 19 the sky's picture (D322), or the run's probe's; 20 what each
         // reflects (D325); 21 what the ambient occlusion found, or white
         // (D327); 22 what the screen-space reflections met, or white
-        // (D331); 23 what the contact shadows let through, or white (D338).
+        // (D331); 23 what the contact shadows let through, or white (D338);
+        // 24 and 25 the decals and their atlas, or white seen as an array
+        // where none is drawn (D339).
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
             samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
-        const std::array<mrhiBinding, 24> kFrameBinding = {
+        const std::array<mrhiBinding, 26> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, now.shadowMap),
             samplerAt(2, pipelines.shadowSampler),
@@ -760,7 +782,9 @@ struct SceneRenderer::State {
             bufferAt(20, now.probesResource, now.reflections.blocks.size() * sizeof(ProbeBlock)),
             textureAt(21, occlusion->enabled() ? occlusion->reaching() : resourceOf(textures->resource(0))),
             textureAt(22, reflecting->enabled() ? reflecting->reflected() : resourceOf(textures->resource(0))),
-            textureAt(23, contact->enabled() ? contact->lit() : resourceOf(textures->resource(0)))};
+            textureAt(23, contact->enabled() ? contact->lit() : resourceOf(textures->resource(0))),
+            bufferAt(24, decalAtlas->blocks(), decalAtlas->blockBytes()),
+            arrayAt(25, decalAtlas->drawn() > 0 ? decalAtlas->atlas() : resourceOf(textures->resource(0)))};
         std::array<mrhiBinding, 4> skyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
                                                  bufferAt(1, metering->exposure(), sizeof(ExposureBlock)),
                                                  kPicture,
@@ -781,7 +805,7 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 24> binding = kFrameBinding;
+            std::array<mrhiBinding, 26> binding = kFrameBinding;
             // The prepass, which the occlusion, the reflections, and the
             // contact shadows come after, reads white.
             if (pass.index1 == now.depthPass.index1 && pass.generation == now.depthPass.generation) {
@@ -818,15 +842,19 @@ struct SceneRenderer::State {
         // With the ambient occlusion or the reflections, the prepass
         // leaves each point's surface too, and they are found between the
         // two (D327, D331).
+        // With decals to draw, the lit models' twins that lay them (D339).
+        const bool kDecaled = decalAtlas->drawn() > 0;
         const bool kSurfaces = now.surfaced;
         for (const auto& [kPass, kPipeline, kLit] :
              {std::tuple{now.depthPass, (kSurfaces ? pipelines.surfaces : pipelines.depth).pipeline, false},
-              std::tuple{now.litPass, pipelines.lit.pipeline, true}}) {
+              std::tuple{now.litPass, (kDecaled ? pipelines.litDecaled : pipelines.lit).pipeline, true}}) {
             if (mrhiBeginPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not begin", mrhi_errorState);
             }
             RAWFRAME_TRY(kDrawRuns(kPass, kPipeline, now.placed.runs));
-            const Asked& kMasked = kLit ? pipelines.maskedLit : kSurfaces ? pipelines.cutSurfaces : pipelines.cutout;
+            const Asked& kMasked = kLit        ? (kDecaled ? pipelines.maskedLitDecaled : pipelines.maskedLit)
+                                   : kSurfaces ? pipelines.cutSurfaces
+                                               : pipelines.cutout;
             RAWFRAME_TRY(kDrawRuns(kPass, kMasked.pipeline, now.placed.maskedRuns));
             if (kLit && (mrhiSetGraphicsPipeline(native, kPass, pipelines.sky.pipeline) != mrhi_success ||
                          mrhiSetBindings(native, kPass, 0, skyBinding.data(), skyBinding.size()) != mrhi_success ||
@@ -834,7 +862,8 @@ struct SceneRenderer::State {
                 return failed("the sky could not be drawn", mrhi_errorState);
             }
             if (kLit) {
-                RAWFRAME_TRY(kDrawRuns(kPass, pipelines.glass.pipeline, now.placed.translucentRuns));
+                RAWFRAME_TRY(kDrawRuns(
+                    kPass, (kDecaled ? pipelines.glassDecaled : pipelines.glass).pipeline, now.placed.translucentRuns));
             }
             if (mrhiEndPass(native, kPass) != mrhi_success) {
                 return failed("a scene pass could not end", mrhi_errorState);
@@ -873,6 +902,7 @@ struct SceneRenderer::State {
             statistics.framesMotionBlurred += motionBlur->enabled() ? 1 : 0;
             statistics.framesFocused += focus->enabled() ? 1 : 0;
             statistics.framesContactShadowed += contact->enabled() ? 1 : 0;
+            statistics.decalsDrawn += decalAtlas->drawn();
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;
@@ -882,6 +912,7 @@ struct SceneRenderer::State {
                                     declared->placed.translucentRuns.size();
         }
         temporal->ended(submitted);
+        decalAtlas->ended(submitted);
         if (submitted && metering->metered()) {
             ++statistics.framesMetered;
         }
@@ -923,6 +954,8 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->occlusion.emplace(device.native());
     state->reflecting.emplace(device.native());
     state->contact.emplace(device.native());
+    state->decalAtlas.emplace(device.native());
+    RAWFRAME_TRY(state->decalAtlas->make());
     state->motionBlur.emplace(device.native());
     state->focus.emplace(device.native());
     state->bloom.emplace(device.native());

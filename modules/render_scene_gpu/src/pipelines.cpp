@@ -3,6 +3,7 @@
 #include "blocks.h"
 #include "generated/bloom_container.h"
 #include "generated/contact_container.h"
+#include "generated/decal_container.h"
 #include "generated/focus_container.h"
 #include "generated/fxaa_container.h"
 #include "generated/meter_container.h"
@@ -36,12 +37,12 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked : {&casting,         &cutCasting,   &depth,          &cutout,     &surfaces,
-                         &cutSurfaces,     &occlude,      &blurOcclusion,  &march,      &motionTiles,
-                         &motionNeighbors, &motionGather, &focusPrefilter, &focusBokeh, &focusCombine,
-                         &contactShade,    &lit,          &maskedLit,      &glass,      &sky,
-                         &temporal,        &tonemap,      &fxaa,           &bloomFirst, &bloomDown,
-                         &bloomUp}) {
+    for (Asked* asked :
+         {&casting,          &cutCasting,    &depth,        &cutout,       &surfaces,        &cutSurfaces,
+          &occlude,          &blurOcclusion, &march,        &motionTiles,  &motionNeighbors, &motionGather,
+          &focusPrefilter,   &focusBokeh,    &focusCombine, &contactShade, &decalFill,       &litDecaled,
+          &maskedLitDecaled, &glassDecaled,  &lit,          &maskedLit,    &glass,           &sky,
+          &temporal,         &tonemap,       &fxaa,         &bloomFirst,   &bloomDown,       &bloomUp}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -64,7 +65,8 @@ Pipelines::~Pipelines() {
                                        reflectShader,
                                        motionShader,
                                        focusShader,
-                                       contactShader}) {
+                                       contactShader,
+                                       decalShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -319,6 +321,7 @@ result::Status Pipelines::make() {
     // What the effects' pipelines are made from when a view first wants
     // them (D337).
     prepass_ = prepass;
+    shading_ = {models, maskedDef, glassDef};
     picture_ = picture;
     return {};
 }
@@ -487,6 +490,35 @@ result::Status Pipelines::askFor(Effect effect) {
         def.colorTargets[0].format = kAmbientFormat;
         return ask(def, contactShade);
     }
+    case Effect::Decals: {
+        // A decal's texture into one mip of its layer of the atlas (D339).
+        RAWFRAME_TRY(makeShader(kDecalContainer, decalShader));
+        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+        constexpr std::string_view kLabel = "rawframe.scene.decals.fill";
+        def.label = kLabel.data();
+        def.labelLength = kLabel.size();
+        def.shader = decalShader;
+        def.vertexEntry = "vs";
+        def.vertexEntryLength = 2;
+        def.fragmentEntry = "fill";
+        def.fragmentEntryLength = 4;
+        def.colorTargetCount = 1;
+        def.colorTargets[0].format = kPictureFormat;
+        RAWFRAME_TRY(ask(def, decalFill));
+        // The lit, masked, and translucent models under the decals.
+        constexpr std::array<std::string_view, 3> kLabels = {
+            "rawframe.scene.lit.decaled", "rawframe.scene.lit.masked.decaled", "rawframe.scene.glass.decaled"};
+        const std::array<Asked*, 3> kDecaled = {&litDecaled, &maskedLitDecaled, &glassDecaled};
+        for (std::size_t at = 0; at < kDecaled.size(); ++at) {
+            mrhiGraphicsPipelineDef decaled = shading_[at];
+            decaled.label = kLabels[at].data();
+            decaled.labelLength = kLabels[at].size();
+            decaled.fragmentEntry = "fsDecaled";
+            decaled.fragmentEntryLength = 9;
+            RAWFRAME_TRY(ask(decaled, *kDecaled[at]));
+        }
+        return {};
+    }
     case Effect::Fxaa: {
         RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
         // FXAA: the tonemapped picture into the frame's (D296).
@@ -555,6 +587,8 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
         return answered({&fxaa});
     case Effect::ContactShadows:
         return answered({&contactShade});
+    case Effect::Decals:
+        return answered({&decalFill, &litDecaled, &maskedLitDecaled, &glassDecaled});
     }
     return false;
 }

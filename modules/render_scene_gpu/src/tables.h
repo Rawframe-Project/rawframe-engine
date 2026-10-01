@@ -19,6 +19,8 @@ namespace rawframe::render_scene_gpu {
 [[nodiscard]] mrhiBinding depthAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
 /// A cube's six faces and every level, seen as a cube (D322).
 [[nodiscard]] mrhiBinding cubeAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
+/// Every layer and mip of a 2D array (D339).
+[[nodiscard]] mrhiBinding arrayAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
 [[nodiscard]] mrhiBinding samplerAt(std::uint32_t slot, mrhiSamplerId sampler) noexcept;
 
 /// A resource of the open frame from the key `render` names it by.

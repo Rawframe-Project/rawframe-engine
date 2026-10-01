@@ -17,17 +17,19 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WRITER = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_container.py")
-# Each container: its module, its name, and its stages' sources and entries.
+# Each container: its module, its name, and its stages' sources and entries,
+# with any names a stage is compiled with defined.
 CONTAINERS = (
     ("render", "display", (("vert", "vs"), ("frag", "fs"))),
     ("render_canvas_gpu", "sprite", (("vert", "vs"), ("frag", "fs"))),
-    ("render_scene_gpu", "scene", (("vert", "vs"), ("frag", "fs"), ("cut.frag", "cut"), ("normal.frag", "normal"),
-                                   ("cutnormal.frag", "cutNormal"))),
+    ("render_scene_gpu", "scene", (("vert", "vs"), ("frag", "fs"), ("frag", "fsDecaled", "DECALS"),
+                                   ("cut.frag", "cut"), ("normal.frag", "normal"), ("cutnormal.frag", "cutNormal"))),
     ("render_scene_gpu", "occlusion", (("vert", "vs"), ("frag", "occlude"), ("blur.frag", "blur"))),
     ("render_scene_gpu", "reflect", (("vert", "vs"), ("frag", "march"))),
     ("render_scene_gpu", "motion", (("vert", "vs"), ("tile.frag", "tile"), ("neighbor.frag", "neighbor"), ("gather.frag", "gather"))),
     ("render_scene_gpu", "focus", (("vert", "vs"), ("prefilter.frag", "prefilter"), ("bokeh.frag", "bokeh"), ("combine.frag", "combine"))),
     ("render_scene_gpu", "contact", (("vert", "vs"), ("frag", "shade"))),
+    ("render_scene_gpu", "decal", (("vert", "vs"), ("frag", "fill"))),
     ("render_scene_gpu", "fxaa", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "bloom", (("vert", "vs"), ("first.frag", "first"), ("down.frag", "down"), ("up.frag", "up"))),
     ("render_scene_gpu", "meter", (("histogram.comp", "histogram"), ("adapt.comp", "adapt"))),
@@ -46,10 +48,10 @@ def run(*command):
 
 def build(work, shaders, name, stages):
     modules = []
-    for suffix, entry in stages:
+    for suffix, entry, *defines in stages:
         module = os.path.join(work, f"{name}_{entry}.spv")
-        run("glslangValidator", "-V", "--target-env", "vulkan1.3", "-e", entry, "--source-entrypoint", "main",
-            "-o", module, os.path.join(shaders, f"{name}.{suffix}"))
+        run("glslangValidator", "-V", "--target-env", "vulkan1.3", *(f"-D{define}" for define in defines), "-e",
+            entry, "--source-entrypoint", "main", "-o", module, os.path.join(shaders, f"{name}.{suffix}"))
         modules.append(module)
     linked = os.path.join(work, f"{name}.spv")
     run("spirv-link", "--target-env", "vulkan1.3", *modules, "-o", linked)

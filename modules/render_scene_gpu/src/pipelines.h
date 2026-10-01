@@ -53,9 +53,10 @@ enum class Effect : std::uint8_t {
     DepthOfField,
     Bloom,
     Fxaa,
-    ContactShadows
+    ContactShadows,
+    Decals
 };
-inline constexpr std::size_t kEffects = 8;
+inline constexpr std::size_t kEffects = 9;
 
 /// The scene's shaders, samplers, and pipelines (D284 to D292): what every
 /// frame draws with asked of the device at once, each effect's when a view
@@ -77,6 +78,7 @@ struct Pipelines {
     mrhiShaderId motionShader{};
     mrhiShaderId focusShader{};
     mrhiShaderId contactShader{};
+    mrhiShaderId decalShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -115,6 +117,12 @@ struct Pipelines {
     Asked focusCombine;
     /// The contact shadows (D338).
     Asked contactShade;
+    /// A decal's texture drawn into the atlas, and the lit, masked, and
+    /// translucent models under the frame's decals (D339).
+    Asked decalFill;
+    Asked litDecaled;
+    Asked maskedLitDecaled;
+    Asked glassDecaled;
     Asked lit;
     /// The masked models lit only where their depth is the prepass's
     /// (D310).
@@ -159,10 +167,13 @@ private:
     result::Status ask(const mrhiComputePipelineDef& def, Asked& asked);
 
     /// Which effects have been asked for, and the prepass's and the
-    /// picture's pipelines, which their surfaces and FXAA are made from.
+    /// picture's pipelines, which the surfaces and FXAA are made from.
     std::array<bool, kEffects> asked_{};
     mrhiGraphicsPipelineDef prepass_{};
     mrhiGraphicsPipelineDef picture_{};
+    /// The lit, masked, and translucent models' pipelines, which their
+    /// decaled twins are made from.
+    std::array<mrhiGraphicsPipelineDef, 3> shading_{};
 };
 
 /// Where a material's filter and address put its sampler among

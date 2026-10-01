@@ -39,6 +39,18 @@
                    {"location": 8, "type": "uint32", "components": 1}],
      "outputs": [{"location": 0, "type": "float32", "components": 4},
                  {"location": 1, "type": "float32", "components": 2}]},
+    {"name": "fsDecaled", "stage": "fragment",
+     "variables": [{"location": 0, "type": "float32", "components": 3},
+                   {"location": 1, "type": "float32", "components": 4},
+                   {"location": 2, "type": "float32", "components": 3},
+                   {"location": 3, "type": "float32", "components": 3},
+                   {"location": 4, "type": "float32", "components": 3},
+                   {"location": 5, "type": "uint32", "components": 1},
+                   {"location": 6, "type": "float32", "components": 2},
+                   {"location": 7, "type": "float32", "components": 4},
+                   {"location": 8, "type": "uint32", "components": 1}],
+     "outputs": [{"location": 0, "type": "float32", "components": 4},
+                 {"location": 1, "type": "float32", "components": 2}]},
     {"name": "cut", "stage": "fragment",
      "variables": [{"location": 1, "type": "float32", "components": 4},
                    {"location": 5, "type": "uint32", "components": 1},
@@ -58,7 +70,7 @@
      "outputs": [{"location": 0, "type": "float32", "components": 4}]}
   ],
   "bindings": [
-    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex", "fragment"], "min_size": 832},
+    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex", "fragment"], "min_size": 848},
     {"table": 0, "slot": 1, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "depth", "view_dimension": "2d", "multisampled": false},
     {"table": 0, "slot": 2, "kind": "sampler", "stages": ["fragment"], "sampler": "comparison"},
@@ -91,7 +103,10 @@
     {"table": 0, "slot": 22, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "float", "view_dimension": "2d", "multisampled": false},
     {"table": 0, "slot": 23, "kind": "sampled_texture", "stages": ["fragment"],
-     "sample_type": "float", "view_dimension": "2d", "multisampled": false}
+     "sample_type": "float", "view_dimension": "2d", "multisampled": false},
+    {"table": 0, "slot": 24, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 96},
+    {"table": 0, "slot": 25, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "2d_array", "multisampled": false}
   ],
   "constants": []
 }

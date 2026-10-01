@@ -23,6 +23,7 @@ struct Frame {
     occlusion: vec4f,
     reflections: vec4f,
     contact: vec4f,
+    decals: vec4f,
 }
 
 struct Light {
@@ -72,6 +73,16 @@ struct ShadowSlot {
 @group(0) @binding(22) var reflectionTexture: texture_2d<f32>;
 // How much of the sun's light the contact shadows let through (D338).
 @group(0) @binding(23) var contactTexture: texture_2d<f32>;
+
+// The frame's decals (D339); scene.frag's Decal.
+struct Decal {
+    toBox: mat4x4f,
+    color: vec4f,
+    layer: vec4f,
+}
+
+@group(0) @binding(24) var<storage, read> decals: array<Decal>;
+@group(0) @binding(25) var decalAtlas: texture_2d_array<f32>;
 
 // What each model reflects (D325): the sky's picture first, then each
 // reflection probe; scene.frag's Probe.
@@ -263,10 +274,8 @@ fn lightShadow(slot: ShadowSlot, placed: vec3f, normal: vec3f) -> f32 {
     return lit;
 }
 
-fn punctual(placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec3f {
-    if (frame.clusterGrid.w == 0.0) {
-        return vec3f(0.0);
-    }
+// scene.frag's clusterOf.
+fn clusterOf(placed: vec3f) -> vec4u {
     let clip = frame.unjittered * vec4f(placed, 1.0);
     let seen = clip.xy / clip.w;
     let grid = vec3u(frame.clusterGrid.xyz);
@@ -277,7 +286,31 @@ fn punctual(placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec
     if (ahead > frame.clusterDepth.x) {
         slice = min(u32(log(ahead / frame.clusterDepth.x) * frame.clusterDepth.y), grid.z - 1u);
     }
-    let range = ranges[(slice * grid.y + y) * grid.x + x];
+    return ranges[(slice * grid.y + y) * grid.x + x];
+}
+
+// scene.frag's decalled.
+fn decalled(range: vec4u, color: vec3f, placed: vec3f, normal: vec3f, along: vec3f, aside: vec3f) -> vec3f {
+    var under = color;
+    for (var at = range.x + range.y; at < range.x + range.y + range.z; at += 1u) {
+        let decal = decals[indices[at]];
+        let box = (decal.toBox * vec4f(placed, 1.0)).xyz;
+        if (decal.layer.x < 0.0 || any(abs(box) > vec3f(1.0))) {
+            continue;
+        }
+        let into = mat3x3f(decal.toBox[0].xyz, decal.toBox[1].xyz, decal.toBox[2].xyz);
+        let front = normalize(vec3f(decal.toBox[0].z, decal.toBox[1].z, decal.toBox[2].z));
+        let spot = vec2f(box.x * 0.5 + 0.5, 0.5 - box.y * 0.5);
+        let texel = textureSampleGrad(decalAtlas, environmentSampler, spot, i32(decal.layer.x),
+                                      (into * along).xy * vec2f(0.5, -0.5), (into * aside).xy * vec2f(0.5, -0.5));
+        let covers = texel.a * decal.color.a * smoothstep(0.0, 0.3, dot(normal, front)) *
+                     (1.0 - smoothstep(0.8, 1.0, abs(box.z)));
+        under = mix(under, texel.rgb * decal.color.rgb, covers);
+    }
+    return under;
+}
+
+fn punctual(range: vec4u, placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec3f {
     var sum = vec3f(0.0);
     for (var at = range.x; at < range.x + range.y; at += 1u) {
         let light = lights[indices[at]];
@@ -311,10 +344,9 @@ fn punctual(placed: vec3f, normal: vec3f, surface: Surface, toEye: vec3f) -> vec
     return sum;
 }
 
-@fragment
-fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
-      @location(3) now: vec3f, @location(4) before: vec3f, @location(5) @interpolate(flat) material: u32,
-      @location(6) uv: vec2f, @location(7) tangent: vec4f, @location(8) @interpolate(flat) probe: u32) -> Shaded {
+// scene.frag's "fs" and, with `decaled`, "fsDecaled" (D339).
+fn shaded(position: vec4f, normal: vec3f, color: vec4f, placed: vec3f, now: vec3f, before: vec3f, material: u32,
+          uv: vec2f, tangent: vec4f, probe: u32, decaled: bool) -> Shaded {
     let toEye = normalize(-placed);
     let at = min(material, arrayLength(&materials) / 9u - 1u) * 9u;
     let base = materials[at];
@@ -331,6 +363,11 @@ fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(
     // texture is sampled only where its material has one.
     let dx = dpdx(uv);
     let dy = dpdy(uv);
+    // The cluster's lights and decals, where either is clustered (D339).
+    var range = vec4u(0u);
+    if (frame.clusterGrid.w > 0.0 || frame.decals.x > 0.5) {
+        range = clusterOf(placed);
+    }
     var sampled = vec4f(1.0);
     if ((flags & 6u) != 0u) {
         sampled = textureSampleGrad(baseTexture, baseSampler, uv * baseMap.xy + baseMap.zw, dx * baseMap.xy,
@@ -355,7 +392,10 @@ fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(
         let up = cross(n, across) * tangent.w;
         n = normalize(across * bent.x + up * bent.y + n * bent.z);
     }
-    let tinted = color.rgb * base.rgb * select(vec3f(1.0), sampled.rgb, (flags & 2u) != 0u);
+    var tinted = color.rgb * base.rgb * select(vec3f(1.0), sampled.rgb, (flags & 2u) != 0u);
+    if (decaled && frame.decals.x > 0.5) {
+        tinted = decalled(range, tinted, placed, normalize(normal), dpdx(placed), dpdy(placed));
+    }
     let opacity = rest.x * color.a * select(1.0, sampled.a, (flags & 4u) != 0u);
     let metalness = base.w * channelOf(packed, channels.x);
     let roughness = specular.w * channelOf(packed, channels.y);
@@ -374,7 +414,7 @@ fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(
         contacted = textureLoad(contactTexture, vec2i(position.xy), 0).r;
     }
     let direct = frame.sun.rgb * sunlit(placed, n) * contacted * reflected(surface, n, toEye, frame.toSun.xyz) +
-                 punctual(placed, n, surface, toEye);
+                 punctual(range, placed, n, surface, toEye);
     let nv = max(dot(n, toEye), 0.0);
     let sheen = surface.headOn + (max(vec3f(1.0 - surface.roughness), surface.headOn) - surface.headOn) *
                                      pow(1.0 - nv, 5.0);
@@ -409,6 +449,21 @@ fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(
 }
 
 // The masked models in the depth prepass (D310): scene.cut.frag.
+@fragment
+fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
+      @location(3) now: vec3f, @location(4) before: vec3f, @location(5) @interpolate(flat) material: u32,
+      @location(6) uv: vec2f, @location(7) tangent: vec4f, @location(8) @interpolate(flat) probe: u32) -> Shaded {
+    return shaded(position, normal, color, placed, now, before, material, uv, tangent, probe, false);
+}
+
+@fragment
+fn fsDecaled(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(1) color: vec4f,
+             @location(2) placed: vec3f, @location(3) now: vec3f, @location(4) before: vec3f,
+             @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f, @location(7) tangent: vec4f,
+             @location(8) @interpolate(flat) probe: u32) -> Shaded {
+    return shaded(position, normal, color, placed, now, before, material, uv, tangent, probe, true);
+}
+
 @fragment
 fn cut(@location(1) color: vec4f, @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f) {
     let at = min(material, arrayLength(&materials) / 9u - 1u) * 9u;
