@@ -138,6 +138,8 @@ struct SceneRenderer::State {
     const render_scene::SceneFrame* frame = nullptr;
     MeshSource meshes;
     TextureSource sampled;
+    /// The render textures' views this one samples (D361).
+    std::vector<TextureView*> views;
 
     /// The meshes this frame draws, chosen within the frame's upload
     /// budget. A draw whose mesh is not chosen is left out.
@@ -340,6 +342,13 @@ struct SceneRenderer::State {
         std::vector<mrhiAccess> meshReads;
         RAWFRAME_TRY(held->import(meshWrites, meshReads));
         RAWFRAME_TRY(textures->import());
+        // The render textures' pictures, drawn by the views before this one
+        // (D361).
+        for (const TextureView* kView : views) {
+            if (const std::optional<std::uint64_t> kPicture = kView->picture()) {
+                textures->lend(kView->id(), *kPicture);
+            }
+        }
         for (const std::uint64_t kTexture : textures->uploading()) {
             meshWrites.push_back(wholeOf(resourceOf(kTexture), mrhi_accessCopyDestination));
         }
@@ -889,10 +898,14 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }
 
-void SceneRenderer::prepare(const render_scene::SceneFrame* frame, MeshSource meshes, TextureSource textures) {
+void SceneRenderer::prepare(const render_scene::SceneFrame* frame,
+                            MeshSource meshes,
+                            TextureSource textures,
+                            std::span<TextureView* const> views) {
     state_->frame = frame;
     state_->meshes = std::move(meshes);
     state_->sampled = std::move(textures);
+    state_->views.assign(views.begin(), views.end());
 }
 
 result::Status SceneRenderer::declare(render::Frame& frame) {

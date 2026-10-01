@@ -26,6 +26,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace rawframe::render_scene_gpu {
@@ -121,6 +122,8 @@ inline constexpr std::uint32_t kInstanceBytes = 152;
 /// (D326): linear Rec. 709 in candela per square meter, red, green, and
 /// blue for each pixel, rows top first. Divided by the exposure the frame
 /// names: a metering camera's is off by what its metering moved.
+class TextureView;
+
 struct LightCapture {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
@@ -139,8 +142,13 @@ public:
 
     /// What the next frame draws: `frame`'s draws, the meshes they name
     /// and the textures their materials sample uploaded if they must be;
-    /// nothing for none. All are held until the frame is made.
-    void prepare(const render_scene::SceneFrame* frame, MeshSource meshes, TextureSource textures = {});
+    /// nothing for none; and `views`' pictures, which recorders before it
+    /// draw, sampled by the materials naming their render textures (D361).
+    /// All are held until the frame is made.
+    void prepare(const render_scene::SceneFrame* frame,
+                 MeshSource meshes,
+                 TextureSource textures = {},
+                 std::span<TextureView* const> views = {});
 
     [[nodiscard]] result::Status declare(render::Frame& frame) override;
     [[nodiscard]] result::Status record(render::Frame& frame) override;
@@ -167,6 +175,47 @@ public:
 
 private:
     explicit SceneRenderer(std::unique_ptr<State> state) noexcept;
+    std::unique_ptr<State> state_;
+};
+
+/// A render texture's view on the device (ADR-0052, D361): its picture, a
+/// texture kept from frame to frame, `width` by `height`, 8-bit sRGB, that
+/// a scene renderer of its own draws its view's frame into as it would a
+/// frame's picture, display-referred, its post processes over it; then
+/// lent to the player's view, whose materials name it by `id`. A frame in
+/// which no view names it keeps what it last drew; until one is drawn,
+/// none is lent, and the materials sample white.
+class TextureView final : public render::FrameRecorder {
+public:
+    /// On `device`, which must be ready and must outlive this.
+    [[nodiscard]] static result::Result<std::unique_ptr<TextureView>> create(render::Device& device,
+                                                                             std::uint64_t id,
+                                                                             std::uint32_t width,
+                                                                             std::uint32_t height,
+                                                                             RendererLimits limits = {});
+
+    ~TextureView() override;
+
+    /// What the next frame draws into it: `frame`, with the meshes and
+    /// textures it names; nothing for none.
+    void prepare(const render_scene::SceneFrame* frame, MeshSource meshes, TextureSource textures = {});
+
+    [[nodiscard]] result::Status declare(render::Frame& frame) override;
+    [[nodiscard]] result::Status record(render::Frame& frame) override;
+    void ended(bool submitted) noexcept override;
+
+    /// Its render texture's identity.
+    [[nodiscard]] std::uint64_t id() const noexcept;
+    /// Its picture in the open frame, named as `render::requestKey` names
+    /// ids, once a submitted frame drew into it; none before.
+    [[nodiscard]] std::optional<std::uint64_t> picture() const noexcept;
+    /// What its renderer drew, over every frame.
+    [[nodiscard]] const RendererStatistics& statistics() const noexcept;
+
+    struct State;
+
+private:
+    explicit TextureView(std::unique_ptr<State> state) noexcept;
     std::unique_ptr<State> state_;
 };
 

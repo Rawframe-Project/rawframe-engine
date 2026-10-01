@@ -55,6 +55,11 @@ public:
     bool choose(std::uint64_t id, const std::shared_ptr<const texture::Texture>& image);
     /// Brings every chosen texture into the open frame.
     [[nodiscard]] result::Status import();
+    /// Lends the drawer a texture another recorder made in the open frame,
+    /// `resource` (a render texture, D361), by the identity the drawer names
+    /// it by: chosen and sampled as any held texture is, never uploaded,
+    /// until the next `begin`.
+    void lend(std::uint64_t id, std::uint64_t resource);
 
     /// The chosen textures' ids in the open frame, for the passes that
     /// sample them to declare.

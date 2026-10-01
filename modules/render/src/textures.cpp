@@ -77,6 +77,8 @@ struct DeviceTextures::State {
     /// What the frame being declared chose, and the budget it has left.
     std::map<std::uint64_t, Held*> chosen;
     std::map<std::uint64_t, mrhiResourceId> imported;
+    /// Textures lent for the frame being declared, by identity (D361).
+    std::map<std::uint64_t, mrhiResourceId> lent;
     std::vector<std::uint64_t> uploads;
     std::uint64_t budget = 0;
 
@@ -110,6 +112,7 @@ result::Result<std::unique_ptr<DeviceTextures>> DeviceTextures::create(Device& d
 void DeviceTextures::begin(std::uint64_t budget) noexcept {
     state_->chosen.clear();
     state_->imported.clear();
+    state_->lent.clear();
     state_->uploads.clear();
     state_->budget = budget;
 }
@@ -183,11 +186,19 @@ result::Status DeviceTextures::import() {
     return {};
 }
 
+void DeviceTextures::lend(std::uint64_t id, std::uint64_t resource) {
+    state_->lent.insert_or_assign(id,
+                                  mrhiResourceId{.index1 = static_cast<std::uint32_t>(resource >> 32U),
+                                                 .generation = static_cast<std::uint32_t>(resource)});
+}
+
 std::vector<std::uint64_t> DeviceTextures::chosen() const {
     std::vector<std::uint64_t> resources;
-    resources.reserve(state_->imported.size());
-    for (const auto& [id, resource] : state_->imported) {
-        resources.push_back(requestKey(resource.index1, resource.generation));
+    resources.reserve(state_->imported.size() + state_->lent.size());
+    for (const auto& kTaken : {&state_->imported, &state_->lent}) {
+        for (const auto& [id, resource] : *kTaken) {
+            resources.push_back(requestKey(resource.index1, resource.generation));
+        }
     }
     return resources;
 }
@@ -202,8 +213,12 @@ std::vector<std::uint64_t> DeviceTextures::uploading() const {
 }
 
 std::uint64_t DeviceTextures::resource(std::uint64_t id) const noexcept {
-    const auto kFound = state_->imported.find(id);
-    return kFound == state_->imported.end() ? 0 : requestKey(kFound->second.index1, kFound->second.generation);
+    for (const auto& kTaken : {&state_->imported, &state_->lent}) {
+        if (const auto kFound = kTaken->find(id); kFound != kTaken->end()) {
+            return requestKey(kFound->second.index1, kFound->second.generation);
+        }
+    }
+    return 0;
 }
 
 bool DeviceTextures::cube(std::uint64_t id) const noexcept {

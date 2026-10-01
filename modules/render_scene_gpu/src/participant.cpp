@@ -7,8 +7,10 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace rawframe::render_scene_gpu {
 
@@ -71,6 +73,22 @@ public:
                 return;
             }
             renderer_ = std::move(*made);
+            // The render textures' views first, so the scene samples what
+            // they drew in the same frame (D361).
+            for (const render_scene::TextureFrame& kTexture : scene_->textureFrames()) {
+                auto view = TextureView::create(*device, kTexture.id, kTexture.width, kTexture.height);
+                if (!view.has_value()) {
+                    failed_ = true;
+                    emitter_.log(diagnostics::Severity::Error,
+                                 kFailed,
+                                 "a render texture could not be drawn: nothing more is",
+                                 {diagnostics::field("reason", std::string{view.error().description()})});
+                    return;
+                }
+                frames_->join(**view, kOrder);
+                views_.push_back(std::move(*view));
+                viewPointers_.push_back(views_.back().get());
+            }
             frames_->join(*renderer_, kOrder);
             frames_->join(renderer_->composed(), kComposedOrder);
         }
@@ -87,7 +105,12 @@ public:
                 asked_ = true;
             }
         } else {
-            renderer_->prepare(scene_->queued(), meshes_, textures_);
+            renderer_->prepare(scene_->queued(), meshes_, textures_, viewPointers_);
+        }
+        const std::span<const render_scene::TextureFrame> kTextures = scene_->textureFrames();
+        for (std::size_t at = 0; at < views_.size(); ++at) {
+            views_[at]->prepare(at < kTextures.size() ? kTextures[at].frame : nullptr, meshes_, textures_);
+            frames_->ready(*views_[at]);
         }
         frames_->ready(*renderer_);
         frames_->ready(renderer_->composed());
@@ -132,6 +155,13 @@ public:
             frames_->leave(*renderer_);
             renderer_.reset();
         }
+        std::uint64_t viewFrames = 0;
+        for (const std::unique_ptr<TextureView>& view : views_) {
+            viewFrames += view->statistics().frames;
+            frames_->leave(*view);
+        }
+        views_.clear();
+        viewPointers_.clear();
         emitter_.log(diagnostics::Severity::Info,
                      kDrawingSummary,
                      "what the device drew of one client's scene",
@@ -162,7 +192,8 @@ public:
                       diagnostics::field("emittersDrawn", statistics.emittersDrawn),
                       diagnostics::field("emittersLeftOut", statistics.emittersLeftOut),
                       diagnostics::field("particlesSpawned", statistics.particlesSpawned),
-                      diagnostics::field("ribbonsDrawn", statistics.ribbonsDrawn)});
+                      diagnostics::field("ribbonsDrawn", statistics.ribbonsDrawn),
+                      diagnostics::field("viewFrames", viewFrames)});
     }
 
 private:
@@ -171,6 +202,9 @@ private:
     MeshSource meshes_;
     TextureSource textures_;
     std::unique_ptr<SceneRenderer> renderer_;
+    /// The render textures' views (D361), drawn before the scene.
+    std::vector<std::unique_ptr<TextureView>> views_;
+    std::vector<TextureView*> viewPointers_;
     /// The frame a tool asked to capture, and whether the renderer was
     /// asked to read it.
     std::optional<render_scene::SceneFrame> capturing_;
