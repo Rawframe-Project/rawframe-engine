@@ -5,4 +5,7 @@
 rawframe_module(NAME ui SOURCES src/tree.cpp DEPS result base)
 target_link_libraries(rawframe_ui PRIVATE maul-ui)
 
-rawframe_module_tests(NAME ui SOURCES tests/tree_test.cpp)
+rawframe_module_tests(NAME ui SOURCES tests/text_test.cpp tests/tree_test.cpp)
+if(TARGET rawframe_ui_tests)
+    target_compile_definitions(rawframe_ui_tests PRIVATE RAWFRAME_UI_FONTS="${CMAKE_CURRENT_SOURCE_DIR}/tests/fonts/")
+endif()

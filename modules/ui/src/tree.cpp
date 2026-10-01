@@ -3,13 +3,19 @@
 #include "rawframe/ui/errors.h"
 
 #include <algorithm>
+#include <cmath>
 #include <maul-ui/context.h>
 #include <maul-ui/draw.h>
+#include <maul-ui/font.h>
 #include <maul-ui/layout.h>
 #include <maul-ui/node.h>
 #include <maul-ui/style.h>
+#include <maul-ui/text.h>
+#include <maul-ui/text_block.h>
+#include <maul-ui/text_style.h>
 #include <maul-ui/visual.h>
 #include <string_view>
+#include <unordered_map>
 
 namespace rawframe::ui {
 
@@ -31,6 +37,8 @@ result::Status checked(muiResult outcome, std::string_view why) {
         return refuse(UiError::Capacity, why);
     case mui_errorStale:
         return refuse(UiError::Stale, why);
+    case mui_errorFormat:
+        return refuse(UiError::Format, why);
     default:
         return refuse(UiError::Invalid, why);
     }
@@ -86,26 +94,95 @@ muiAlign alignOf(Align align) noexcept {
     return mui_alignAuto;
 }
 
+muiTextAlign textAlignOf(TextAlign align) noexcept {
+    switch (align) {
+    case TextAlign::Start:
+        return mui_textAlignStart;
+    case TextAlign::Center:
+        return mui_textAlignCenter;
+    case TextAlign::End:
+        return mui_textAlignEnd;
+    }
+    return mui_textAlignStart;
+}
+
+/// A node's text: its block in the text service, and the node, whose
+/// generation tells a node that took its slot after it was removed.
+struct Text {
+    muiNodeId node{};
+    muiTextBlockId block{};
+};
+
 } // namespace
 
 struct Tree::State {
     muiContext* context = nullptr;
+    muiTextService* text = nullptr;
+    muiTextHost host{};
+    std::unordered_map<std::uint64_t, muiFontId> fonts;
+    /// By the node's slot.
+    std::unordered_map<std::uint32_t, Text> texts;
 
     ~State() {
         muiDestroyContext(context);
+        muiDestroyTextService(text);
+    }
+
+    /// The text `node` shows; null for none.
+    [[nodiscard]] const Text* textOf(muiNodeId node) const noexcept {
+        const auto kFound = texts.find(node.index1);
+        return kFound == texts.end() || kFound->second.node.generation != node.generation ? nullptr : &kFound->second;
+    }
+
+    /// Whether `node` is sized by its content, as text sizes it.
+    [[nodiscard]] result::Status setContent(muiNodeId node, muiContentKind content) {
+        muiLayoutStyle style{};
+        RAWFRAME_TRY(checked(muiNode_GetLayoutStyle(context, node, &style), "a UI node's layout could not be read"));
+        if (style.content != content) {
+            style.content = content;
+            RAWFRAME_TRY(checked(muiNode_SetLayoutStyle(context, node, &style), "a UI node's layout was refused"));
+        }
+        return checked(muiNode_MarkContentChanged(context, node), "a UI node's text could not be marked");
     }
 };
+
+namespace {
+
+/// Maul UI's measure function: a node's text by its block, the host key
+/// staying the owner's.
+muiSize measureText(void* user, muiNodeId node, std::uint64_t, muiMeasureAxis width, muiMeasureAxis height) {
+    auto* state = static_cast<Tree::State*>(user);
+    const Text* kText = state->textOf(node);
+    if (kText == nullptr) {
+        return muiSize{.width = 0, .height = 0};
+    }
+    return muiMeasureText(&state->host, node, muiTextBlock_GetKey(kText->block), width, height);
+}
+
+void paintText(void* user, muiNodeId node, std::uint64_t, float width, float height, muiDrawSink* sink) {
+    auto* state = static_cast<Tree::State*>(user);
+    if (const Text* kText = state->textOf(node); kText != nullptr) {
+        muiPaintText(&state->host, node, muiTextBlock_GetKey(kText->block), width, height, sink);
+    }
+}
+
+} // namespace
 
 Tree::Tree(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
 }
 
 Tree::~Tree() = default;
 
-result::Result<std::unique_ptr<Tree>> Tree::create(std::uint32_t maximumNodes) {
+result::Result<std::unique_ptr<Tree>> Tree::create(std::uint32_t maximumNodes, std::uint32_t maximumFonts) {
     muiContextDef def = muiDefaultContextDef();
     def.limits.nodes = maximumNodes;
     auto state = std::make_unique<State>();
     RAWFRAME_TRY(checked(muiCreateContext(&def, &state->context), "a UI tree could not be made"));
+    muiTextServiceDef text = muiDefaultTextServiceDef();
+    text.limits.fonts = maximumFonts;
+    text.limits.textBlocks = maximumNodes;
+    RAWFRAME_TRY(checked(muiCreateTextService(&text, &state->text), "a UI tree's text could not be made"));
+    state->host = muiTextHost{.service = state->text, .context = state->context};
     return std::unique_ptr<Tree>{new Tree{std::move(state)}};
 }
 
@@ -127,7 +204,16 @@ result::Status Tree::detach(Node node) {
 }
 
 result::Status Tree::remove(Node node) {
-    return checked(muiDestroyNode(state_->context, idOf(node)), "a UI node could not be removed");
+    RAWFRAME_TRY(checked(muiDestroyNode(state_->context, idOf(node)), "a UI node could not be removed"));
+    // The subtree's text goes with it.
+    std::erase_if(state_->texts, [this](const auto& entry) {
+        if (muiNode_IsValid(state_->context, entry.second.node)) {
+            return false;
+        }
+        (void)muiDestroyTextBlock(state_->text, entry.second.block);
+        return true;
+    });
+    return {};
 }
 
 bool Tree::contains(Node node) const noexcept {
@@ -160,12 +246,18 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
         style.placement.anchorX = layout.placement.anchorX;
         style.placement.anchorY = layout.placement.anchorY;
     }
+    if (state_->textOf(idOf(node)) != nullptr) {
+        style.content = mui_contentHost;
+    }
     return checked(muiNode_SetLayoutStyle(state_->context, idOf(node), &style), "a UI node's layout was refused");
 }
 
 result::Status Tree::layOut(Node root, float width, float height) {
-    const muiLayoutInput kInput{
-        .availableWidth = width, .availableHeight = height, .measure = nullptr, .measureUser = nullptr, .timeNs = 0};
+    const muiLayoutInput kInput{.availableWidth = width,
+                                .availableHeight = height,
+                                .measure = measureText,
+                                .measureUser = state_.get(),
+                                .timeNs = 0};
     return checked(muiComputeLayout(state_->context, idOf(root), &kInput), "a UI tree could not be laid out");
 }
 
@@ -209,14 +301,105 @@ result::Status Tree::setLook(Node node, const Look& look) {
                    "a UI node's look was refused");
 }
 
+result::Result<Font> Tree::addFont(std::span<const std::byte> bytes, std::uint32_t face) {
+    muiFontDef def = muiDefaultFontDef();
+    def.data = bytes.data();
+    def.size = bytes.size();
+    def.faceIndex = face;
+    def.dataMode = mui_fontDataCopy;
+    muiFontId made{};
+    RAWFRAME_TRY(checked(muiCreateFont(state_->text, &def, &made), "a font could not be read"));
+    if (state_->fonts.empty()) {
+        RAWFRAME_TRY(checked(muiSetDefaultFont(state_->text, made), "a font could not be made the default"));
+    }
+    const Font kFont{.key = muiFont_GetKey(made)};
+    state_->fonts.emplace(kFont.key, made);
+    return kFont;
+}
+
+result::Status Tree::removeFont(Font font) {
+    const auto kFound = state_->fonts.find(font.key);
+    if (kFound == state_->fonts.end()) {
+        return refuse(UiError::Stale, "a font not in the tree could not be removed");
+    }
+    RAWFRAME_TRY(checked(muiDestroyFont(state_->text, kFound->second), "a font could not be removed"));
+    state_->fonts.erase(kFound);
+    return {};
+}
+
+result::Status Tree::setDefaultFont(Font font) {
+    const auto kFound = state_->fonts.find(font.key);
+    if (kFound == state_->fonts.end()) {
+        return refuse(UiError::Stale, "a font not in the tree could not be made the default");
+    }
+    return checked(muiSetDefaultFont(state_->text, kFound->second), "a font could not be made the default");
+}
+
+result::Status Tree::setText(Node node, std::string_view text, const TextLook& look) {
+    if (!(std::isfinite(look.size) && look.size > 0) || !(look.weight >= 1 && look.weight <= 1000) ||
+        !(std::isfinite(look.lineHeight) && look.lineHeight >= 0)) {
+        return refuse(UiError::Invalid, "a node's text look is out of range");
+    }
+    if (look.font.key != 0 && !state_->fonts.contains(look.font.key)) {
+        return refuse(UiError::Stale, "a node's text names a font not in the tree");
+    }
+    const muiNodeId kNode = idOf(node);
+    if (!muiNode_IsValid(state_->context, kNode)) {
+        return refuse(UiError::Stale, "text for a node not in the tree");
+    }
+    muiTextStyle values = muiDefaultTextStyle();
+    values.color = colorOf(look.color);
+    values.font = look.font.key;
+    values.size = muiDimension{.scale = 0, .offset = look.size, .kind = mui_dimensionValue};
+    if (look.lineHeight > 0) {
+        values.lineHeight = muiDimension{.scale = look.lineHeight, .offset = 0, .kind = mui_dimensionValue};
+    }
+    values.weight = look.weight;
+    values.align = textAlignOf(look.align);
+    values.wrap = look.wrap ? mui_textWrap : mui_textNoWrap;
+    RAWFRAME_TRY(checked(muiNode_SetTextValues(state_->context, kNode, &values, MUI_TEXT_PROPERTIES),
+                         "a node's text look was refused"));
+    if (const Text* kText = state_->textOf(kNode); kText != nullptr) {
+        RAWFRAME_TRY(checked(muiTextBlock_SetText(state_->text, kText->block, text.data(), text.size()),
+                             "a node's text could not be set"));
+    } else {
+        muiTextBlockId block{};
+        RAWFRAME_TRY(checked(muiCreateTextBlock(state_->text, text.data(), text.size(), &block),
+                             "a node's text could not be made"));
+        // A slot's earlier node is gone, and its text with it.
+        if (const auto kOld = state_->texts.find(kNode.index1); kOld != state_->texts.end()) {
+            (void)muiDestroyTextBlock(state_->text, kOld->second.block);
+        }
+        state_->texts.insert_or_assign(kNode.index1, Text{.node = kNode, .block = block});
+    }
+    return state_->setContent(kNode, mui_contentHost);
+}
+
+result::Status Tree::clearText(Node node) {
+    const muiNodeId kNode = idOf(node);
+    const Text* kText = state_->textOf(kNode);
+    if (kText == nullptr) {
+        return {};
+    }
+    (void)muiDestroyTextBlock(state_->text, kText->block);
+    state_->texts.erase(kNode.index1);
+    return state_->setContent(kNode, mui_contentNone);
+}
+
+std::uint64_t Tree::textFailures() const noexcept {
+    return muiGetTextServiceFailures(state_->text);
+}
+
 result::Status Tree::draw(Node root, float scale, DrawList& into) {
-    const muiDrawInput kInput{.surface = 0, .scale = scale, .paint = nullptr, .paintUser = nullptr};
+    const muiDrawInput kInput{.surface = 0, .scale = scale, .paint = paintText, .paintUser = state_.get()};
     RAWFRAME_TRY(checked(muiBuildDrawList(state_->context, idOf(root), &kInput), "a UI tree could not be drawn"));
     muiDrawList list{};
     RAWFRAME_TRY(checked(muiGetDrawList(state_->context, &list), "a UI tree's drawing could not be read"));
     into.boxes.clear();
     into.images.clear();
     into.shadows.clear();
+    into.glyphRuns.clear();
+    into.glyphs.clear();
     into.gradients.clear();
     into.commands.clear();
     into.clips.clear();
@@ -268,6 +451,28 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
                                           .spread = kShadow.spread,
                                           .inset = kShadow.inset != 0,
                                           .clip = kCommand.clip});
+            continue;
+        }
+        if (kCommand.kind == mui_drawGlyphRun && kCommand.transform == 0) {
+            const muiDrawGlyphRun& kRun = kCommand.glyphRun;
+            if (kRun.firstGlyph > list.glyphCount || kRun.glyphCount > list.glyphCount - kRun.firstGlyph) {
+                ++into.skipped;
+                continue;
+            }
+            into.commands.push_back(DrawCommand{.kind = DrawCommand::Kind::Glyphs,
+                                                .index = static_cast<std::uint32_t>(into.glyphRuns.size())});
+            into.glyphRuns.push_back(GlyphRun{.font = Font{.key = kRun.font},
+                                              .size = kRun.size,
+                                              .color = linearOf(kRun.color),
+                                              .x = kRun.originX,
+                                              .y = kRun.originY,
+                                              .first = static_cast<std::uint32_t>(into.glyphs.size()),
+                                              .count = kRun.glyphCount,
+                                              .clip = kCommand.clip});
+            for (std::uint32_t glyph = 0; glyph < kRun.glyphCount; ++glyph) {
+                const muiGlyph& kGlyph = list.glyphs[kRun.firstGlyph + glyph];
+                into.glyphs.push_back(Glyph{.id = kGlyph.id, .x = kGlyph.x, .y = kGlyph.y});
+            }
             continue;
         }
         if (kCommand.kind != mui_drawBox || kCommand.transform != 0) {

@@ -19,6 +19,8 @@ enum class UiError : std::uint32_t {
     Capacity = 2,
     /// A node no longer in the tree.
     Stale = 3,
+    /// Bytes that are not a font the tree reads (D384).
+    Format = 4,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(UiError error) noexcept {

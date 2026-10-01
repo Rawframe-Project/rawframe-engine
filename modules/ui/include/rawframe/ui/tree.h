@@ -5,13 +5,17 @@
 // out by SPEC-0030's Scale+Offset sizing and flexbox algebra into
 // rectangles relative to their parents, and drawn as SPEC-0032's
 // draw-command list. A node and a subtree that did not change are not laid
-// out or painted again. Maul UI's types stay inside this module.
+// out or painted again. A node may show text in a font the tree holds,
+// measured by its lines and drawn as glyph runs (D384). Maul UI's types stay
+// inside this module.
 
 #include "rawframe/result/result.h"
 
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::ui {
@@ -144,6 +148,35 @@ struct Look {
     GradientLook gradient;
 };
 
+/// A font a tree holds (D384), by the key Maul UI's text service gives it,
+/// never nought; the null font, nought, names the tree's default.
+struct Font {
+    std::uint64_t key = 0;
+    friend constexpr bool operator==(Font, Font) noexcept = default;
+};
+
+/// Where a node's lines sit across its content box: at the start, which
+/// the text's direction sets, the center, or the end.
+enum class TextAlign : std::uint8_t {
+    Start,
+    Center,
+    End
+};
+
+/// How a node's text is shown (D384): its font, its size in pixels (an em),
+/// its color 0xRRGGBBAA (sRGB, straight alpha), its line height times its
+/// size (nought for the font's own), its weight (400 regular, 700 bold),
+/// its lines' alignment, and whether they wrap to its width.
+struct TextLook {
+    Font font;
+    float size = 16;
+    std::uint32_t color = 0x000000FF;
+    float lineHeight = 0;
+    float weight = 400;
+    TextAlign align = TextAlign::Start;
+    bool wrap = true;
+};
+
 /// A node's border box from the last layout that reached it, relative to
 /// its parent's: x right, y down, in pixels.
 struct Rect {
@@ -212,13 +245,36 @@ struct Shadow {
     std::uint32_t clip = 0;
 };
 
-/// A command of a list in paint order: a box, an image, or a shadow, by its
-/// index in the list's own.
+/// A glyph of a run (D384): its id in the run's font and its place from the
+/// run's origin, in pixels, y down.
+struct Glyph {
+    std::uint32_t id = 0;
+    float x = 0;
+    float y = 0;
+};
+
+/// A run of glyphs to draw (D384): its font, its size in pixels (an em),
+/// its color, linear with premultiplied alpha, its origin on the baseline,
+/// its span of the list's glyphs, and its clip.
+struct GlyphRun {
+    Font font;
+    float size = 0;
+    std::array<float, 4> color{};
+    float x = 0;
+    float y = 0;
+    std::uint32_t first = 0;
+    std::uint32_t count = 0;
+    std::uint32_t clip = 0;
+};
+
+/// A command of a list in paint order: a box, an image, a shadow, or a run
+/// of glyphs, by its index in the list's own.
 struct DrawCommand {
     enum class Kind : std::uint8_t {
         Box,
         Image,
-        Shadow
+        Shadow,
+        Glyphs
     };
     Kind kind = Kind::Box;
     std::uint32_t index = 0;
@@ -233,14 +289,17 @@ struct Clip {
     bool invert = false;
 };
 
-/// What a tree draws: its boxes, images, and shadows, `commands` saying
-/// their paint order, and its clips, the first a placeholder for none, in
-/// logical pixels, `scale` device pixels each. Commands generation 1 does
-/// not draw yet (glyph runs, transformed ones) are counted, not kept.
+/// What a tree draws: its boxes, images, shadows, and glyph runs,
+/// `commands` saying their paint order, and its clips, the first a
+/// placeholder for none, in logical pixels, `scale` device pixels each.
+/// Transformed commands, which generation 1 does not draw, are counted, not
+/// kept.
 struct DrawList {
     std::vector<Box> boxes;
     std::vector<Image> images;
     std::vector<Shadow> shadows;
+    std::vector<GlyphRun> glyphRuns;
+    std::vector<Glyph> glyphs;
     std::vector<DrawCommand> commands;
     std::vector<Clip> clips;
     /// The first a placeholder for none.
@@ -259,8 +318,10 @@ struct Node {
 
 class Tree {
 public:
-    /// A tree of at most `maximumNodes` nodes, their room reserved now.
-    [[nodiscard]] static result::Result<std::unique_ptr<Tree>> create(std::uint32_t maximumNodes = 4096);
+    /// A tree of at most `maximumNodes` nodes and `maximumFonts` fonts,
+    /// their room reserved now.
+    [[nodiscard]] static result::Result<std::unique_ptr<Tree>> create(std::uint32_t maximumNodes = 4096,
+                                                                      std::uint32_t maximumFonts = 64);
 
     Tree(const Tree&) = delete;
     Tree& operator=(const Tree&) = delete;
@@ -272,7 +333,7 @@ public:
     [[nodiscard]] result::Status attach(Node parent, Node child);
     /// `node` becomes a root with its subtree; a root stays as it is.
     [[nodiscard]] result::Status detach(Node node);
-    /// `node` and its subtree are gone.
+    /// `node` and its subtree are gone, with their text.
     [[nodiscard]] result::Status remove(Node node);
     /// Whether `node` is still in the tree.
     [[nodiscard]] bool contains(Node node) const noexcept;
@@ -290,6 +351,28 @@ public:
 
     /// `node`'s look; refused for a negative radius.
     [[nodiscard]] result::Status setLook(Node node, const Look& look);
+    /// A font read from a TrueType or OpenType file's bytes, copied, or
+    /// from `face` of a collection; refused for bytes that are not one,
+    /// checked as hostile, and past the limit. The first becomes the
+    /// default.
+    [[nodiscard]] result::Result<Font> addFont(std::span<const std::byte> bytes, std::uint32_t face = 0);
+    /// `font` is gone; text in it draws nothing, and in the default font,
+    /// when it was that, nothing until another is made the default.
+    [[nodiscard]] result::Status removeFont(Font font);
+    /// The font the null font names.
+    [[nodiscard]] result::Status setDefaultFont(Font font);
+    /// `node` shows `text`, UTF-8 (ill-formed sequences as U+FFFD), in
+    /// `look`, and is measured by its lines: broken where Unicode allows,
+    /// ordered by the bidirectional algorithm, shaped by HarfBuzz. Its
+    /// children inherit the look. Refused for a size that is not above
+    /// nought, a weight outside 1 to 1000, or a negative line height.
+    [[nodiscard]] result::Status setText(Node node, std::string_view text, const TextLook& look);
+    /// `node` shows no text and has no size of its own again.
+    [[nodiscard]] result::Status clearText(Node node);
+    /// The times text could not be laid out for want of memory, and so
+    /// measured as empty and drew nothing.
+    [[nodiscard]] std::uint64_t textFailures() const noexcept;
+
     /// What `root`'s subtree, laid out, draws, into `into`, its last
     /// contents replaced; `scale` device pixels a pixel, which edges snap to.
     [[nodiscard]] result::Status draw(Node root, float scale, DrawList& into);
