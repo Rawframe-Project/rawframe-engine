@@ -25,8 +25,8 @@ using namespace rawframe::input_kest;
 
 namespace {
 
-/// runners.Stick: run, jump, aimX, aimY, fire.
-using Stick = std::array<float, 5>;
+/// runners.Stick: run, jump, aimX, aimY, fire, pointed, targetX, targetY.
+using Stick = std::array<float, 8>;
 
 /// The sample game `path` names, its directory's files held in memory as a
 /// web client holds them (D166), with `from` replaced by `to` in its
@@ -302,4 +302,41 @@ RAWFRAME_TEST(TheSampleReadsThePlayersView) {
     // A window without size gives a view without size.
     views.window({});
     RAWFRAME_EXPECT(play(**player, 1)[0][4] == 2000);
+}
+
+RAWFRAME_TEST(ARunnerAimsWhereTheMousePoints) {
+    // Runners' sample (D368): the pointer, less the view's place, picked
+    // onto the level's plane; the aim, when pushed, wins.
+    input::Feed feed;
+    view::PlayerViews views;
+    SourceSettings settings = runners();
+    settings.feed = &feed;
+    settings.views = &views;
+    auto sources = makeInputSources(settings);
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto source = (*sources)->playerSource(0);
+    RAWFRAME_EXPECT(source.has_value());
+    if (!source.has_value()) {
+        return;
+    }
+    constexpr input::DeviceId kKeyboard{1};
+    constexpr input::DeviceId kMouse{2};
+    feed.connect(kKeyboard, input::DeviceClass::Keyboard);
+    feed.connect(kMouse, input::DeviceClass::Mouse);
+    const input::Control kPointer = *input::controlNamed(input::DeviceClass::Mouse, "pointer");
+    feed.submit({.device = kMouse, .control = kPointer, .x = 960, .y = 180});
+    // No view yet: nothing pointed at.
+    RAWFRAME_EXPECT(play(**source, 1)[0][5] == 0);
+    views.window({.width = 1280, .height = 720});
+    views.tell(0, {.left = 0.5F, .width = 0.5F}, view::Orthographic{.middle = {10, 5}, .height = 10});
+    const Stick kAtPointer = play(**source, 1)[0];
+    RAWFRAME_EXPECT(kAtPointer[5] == 1 && std::abs(kAtPointer[6] - 10) < 1e-4F &&
+                    std::abs(kAtPointer[7] - 7.5F) < 1e-4F);
+    feed.submit(
+        {.device = kKeyboard, .control = *input::controlNamed(input::DeviceClass::Keyboard, "arrow_up"), .x = 1});
+    const Stick kAimed = play(**source, 1)[0];
+    RAWFRAME_EXPECT(kAimed[5] == 0 && kAimed[3] == 1);
 }

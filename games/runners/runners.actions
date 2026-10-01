@@ -80,6 +80,18 @@
           "control": "trigger_right"
         }
       ]
+    },
+    {
+      "actionId": "7c3e91a5d40b26f8",
+      "name": "point",
+      "valueType": "axis2d",
+      "displayName": "Point",
+      "bindings": [
+        {
+          "device": "mouse",
+          "control": "pointer"
+        }
+      ]
     }
   ],
   "contexts": [
@@ -90,7 +102,8 @@
         "run",
         "jump",
         "aim",
-        "fire"
+        "fire",
+        "point"
       ]
     }
   ],

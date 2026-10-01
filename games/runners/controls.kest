@@ -4,11 +4,16 @@ module controls
 // the game and a client's sample program (sample.kest) share the one type.
 
 // What a player asks for, each -1 to 1: to run left or right, to jump (above
-// a half), where to aim, and to fire (above a half).
+// a half), where to aim, and to fire (above a half); and whether it aims at
+// a World point instead (above a half), the one its mouse points at, in
+// meters (D368).
 struct Stick {
     run: f32
     jump: f32
     aimX: f32
     aimY: f32
     fire: f32
+    pointed: f32
+    targetX: f32
+    targetY: f32
 }

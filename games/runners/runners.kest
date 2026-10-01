@@ -12,6 +12,7 @@ import rawframe.random
 import rawframe.replication
 import rawframe.sound
 import rawframe.world
+import std.math
 
 // The runners' collision class (runners.game): what a shot meets.
 const RUNNER: u64 = 0x2ebcd16c10c5f6a4
@@ -187,7 +188,8 @@ fn run(count: i32, sticks: [controls.Stick], characters: [physics2d.Character2D]
 
 // A shot every third of a second while firing: from the runner's side it
 // faces, thirty meters out, at the other runners where its player saw them;
-// each one cues the runner's shot sound.
+// each one cues the runner's shot sound. A player pointing at a World point
+// shoots along the line to it, from the side it lies on (D368).
 fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: [replication.Perception], scores: [Score],
          emitters: [sound.Emitter]) {
     let i = 0
@@ -199,12 +201,23 @@ fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: 
         if ready && sticks[i].fire > 0.5 {
             let side: f64 = 0.35
             let reach: f32 = 30.0
-            if sticks[i].aimX < 0.0 {
+            let rise: f32 = sticks[i].aimY * 15.0
+            if sticks[i].pointed > 0.5 {
+                let dx = f64(sticks[i].targetX) - poses[i].x
+                let dy = f64(sticks[i].targetY) - (poses[i].y + 0.2)
+                let length = math.sqrt(dx * dx + dy * dy)
+                if length > 0.001 {
+                    reach = f32(dx / length * 30.0)
+                    rise = f32(dy / length * 30.0)
+                }
+                if dx < 0.0 {
+                    side = -0.35
+                }
+            } else if sticks[i].aimX < 0.0 {
                 side = -0.35
                 reach = -30.0
             }
-            let hit = physics2d.castRayAtAmong(RUNNER, poses[i].x + side, poses[i].y + 0.2, reach,
-                                               sticks[i].aimY * 15.0, seen[i])
+            let hit = physics2d.castRayAtAmong(RUNNER, poses[i].x + side, poses[i].y + 0.2, reach, rise, seen[i])
             scores[i].shots = scores[i].shots + 1
             emitters[i].sound = SHOT
             emitters[i].cue = emitters[i].cue + 1
