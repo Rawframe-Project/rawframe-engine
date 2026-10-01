@@ -17,6 +17,8 @@ struct Grade {
 // The bloom's spread light (D328).
 @group(0) @binding(2) var bloom: texture_2d<f32>;
 @group(0) @binding(3) var blended: sampler;
+// The grading table (D344).
+@group(0) @binding(4) var table: texture_3d<f32>;
 
 struct Corner {
     @builtin(position) position: vec4f,
@@ -36,6 +38,23 @@ fn contrast(x: vec3f) -> vec3f {
     let x2 = x * x;
     let x4 = x2 * x2;
     return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+}
+
+// tonemap.frag's acescct, linearOf, and tabled.
+fn acescct(light: vec3f) -> vec3f {
+    return mix(10.5402377416545 * light + 0.0729055341958355, (log2(max(light, vec3f(1e-10))) + 9.72) / 17.52,
+               step(vec3f(0.0078125), light));
+}
+
+fn linearOf(code: vec3f) -> vec3f {
+    return mix((code - 0.0729055341958355) / 10.5402377416545, exp2(code * 17.52 - 9.72),
+               step(vec3f(0.155251141552511), code));
+}
+
+fn tabled(light: vec3f) -> vec3f {
+    let side = vec3f(textureDimensions(table, 0));
+    let at = clamp(acescct(light), vec3f(0.0), vec3f(1.0)) * (side - 1.0) / side + 0.5 / side;
+    return linearOf(textureSampleLevel(table, blended, at, 0.0).rgb);
 }
 
 fn graded(light: vec3f) -> vec3f {
@@ -104,7 +123,11 @@ fn fs(@builtin(position) position: vec4f, @location(0) uv: vec2f) -> @location(0
     if (grade.bloom.x > 0.0) {
         seen = mix(seen, spread, grade.bloom.x);
     }
-    let light = graded(seen) * grade.tonemapper.y;
+    var looked = graded(seen);
+    if (grade.display.y > 0.5) {
+        looked = tabled(looked);
+    }
+    let light = looked * grade.tonemapper.y;
     if (grade.tonemapper.x > 1.5) {
         return shown(light, position.xy);
     }

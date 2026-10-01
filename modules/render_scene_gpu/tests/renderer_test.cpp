@@ -1046,9 +1046,9 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
     for (const std::array<int, 3>& kQuarter : kNone) {
         RAWFRAME_EXPECT(kQuarter == kWhite);
     }
-    // The texture, white, and the dark cube bound for no sky's picture
-    // (D322), each uploaded once.
-    RAWFRAME_EXPECT(asked > 0 && (**made).statistics().texturesUploaded == 3);
+    // The texture, white, the dark cube bound for no sky's picture (D322),
+    // and the plain grading table for none (D344), each uploaded once.
+    RAWFRAME_EXPECT(asked > 0 && (**made).statistics().texturesUploaded == 4);
 }
 
 RAWFRAME_TEST(AMaskedMaterialIsCutWhereItsTextureIsClear) {

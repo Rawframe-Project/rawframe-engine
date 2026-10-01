@@ -13,7 +13,9 @@
     {"table": 0, "slot": 1, "kind": "uniform_buffer", "stages": ["fragment"], "min_size": 144},
     {"table": 0, "slot": 2, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "float", "view_dimension": "2d", "multisampled": false},
-    {"table": 0, "slot": 3, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"}
+    {"table": 0, "slot": 3, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"},
+    {"table": 0, "slot": 4, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "3d", "multisampled": false}
   ],
   "constants": []
 }

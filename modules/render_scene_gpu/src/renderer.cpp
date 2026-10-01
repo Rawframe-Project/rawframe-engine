@@ -97,6 +97,9 @@ struct SceneRenderer::State {
     /// The sky's picture (D322): the black cube bound where there is
     /// none, the picture last seen, and its irradiance.
     std::shared_ptr<const texture::Texture> dark;
+    /// The grading table that changes nothing, bound where a frame looks up
+    /// none (D344).
+    std::shared_ptr<const texture::Texture> plain;
     std::shared_ptr<const texture::Texture> environment;
     std::array<std::array<float, 4>, 9> irradiance{};
     /// The samples a pixel the device renders every target of the models'
@@ -136,6 +139,11 @@ struct SceneRenderer::State {
         textures->begin(budget);
         static_cast<void>(textures->choose(0, white));
         static_cast<void>(textures->choose(kNoEnvironment, dark));
+        static_cast<void>(textures->choose(kNoTable, plain));
+        // The grading table, if the grade has one (D344).
+        if (const std::uint64_t kTable = scene.grading.table; kTable != 0 && sampled) {
+            static_cast<void>(textures->choose(kTable, sampled(kTable)));
+        }
         // The sky's picture, if it is one; its irradiance taken again only
         // for another picture.
         if (const std::uint64_t kSky = scene.lights.environment; kSky != 0 && sampled) {
@@ -277,9 +285,9 @@ struct SceneRenderer::State {
             ((std::uint64_t{frame->probes.size()} + 1) * sizeof(ProbeBlock));
         const std::uint64_t kBudget =
             kPlacementBytes < limits.uploadBytesPerFrame ? limits.uploadBytesPerFrame - kPlacementBytes : 0;
-        // White's four bytes and the dark cube's 48 are kept aside, so they
-        // are always there.
-        const std::uint64_t kWhite = std::min<std::uint64_t>(kBudget, 4 + 48);
+        // White's four bytes, the dark cube's 48, and the plain table's 64
+        // are kept aside, so they are always there.
+        const std::uint64_t kWhite = std::min<std::uint64_t>(kBudget, 4 + 48 + 64);
         const std::map<std::uint64_t, const HeldMesh*> kUsable = meshesOf(*frame, meshes, kBudget - kWhite);
         texturesOf(*frame, held->left() + kWhite);
         now.placed = placeDraws(*frame, kUsable, statistics.modelsLeftOut);
@@ -452,8 +460,16 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(motionBlur->declare(*frame, kBlurring, open.width, open.height, writes));
         RAWFRAME_TRY(focus->declare(*frame, kFocusing, open.width, open.height, writes));
         RAWFRAME_TRY(bloom->declare(*frame, kBlooming, open.width, open.height));
-        RAWFRAME_TRY(picture->declare(
-            *frame, kSmoothing, open.width, open.height, bloom->enabled() ? bloom->levels() : 0, writes));
+        const std::uint64_t kTable = frame->grading.table;
+        const bool kTabled = kTable != 0 && textures->volume(kTable) && textures->resource(kTable) != 0;
+        RAWFRAME_TRY(picture->declare(*frame,
+                                      kSmoothing,
+                                      open.width,
+                                      open.height,
+                                      bloom->enabled() ? bloom->levels() : 0,
+                                      resourceOf(textures->resource(kTabled ? kTable : kNoTable)),
+                                      kTabled,
+                                      writes));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
         RAWFRAME_TRY(metering->declare(*frame, writes));
         writes.insert(writes.end(), meshWrites.begin(), meshWrites.end());
@@ -882,11 +898,12 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->limits = limits;
     state->held.emplace(device.native(), limits.maximumMeshes);
     RAWFRAME_TRY_ASSIGN(state->textures,
-                        render::DeviceTextures::create(device, {.maximumTextures = limits.maximumTextures + 1}));
+                        render::DeviceTextures::create(device, {.maximumTextures = limits.maximumTextures + 3}));
     texture::Texture white{.format = texture::Format::Rgba8Srgb};
     white.levels.push_back({.width = 1, .height = 1, .bytes = std::vector<std::byte>(4, std::byte{0xFF})});
     state->white = std::make_shared<const texture::Texture>(std::move(white));
     state->dark = darkCube();
+    state->plain = plainTable();
     state->pipelines.device = &device;
     state->pipelines.native = device.native();
     RAWFRAME_TRY(state->pipelines.make());

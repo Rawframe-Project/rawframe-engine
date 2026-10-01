@@ -2,7 +2,8 @@
 // scene-linear light of the texel under it, mixed with the bloom's spread
 // light as the camera asks (D328), graded as the camera asks
 // (D294, ADR-0051: white balance, ASC CDL, saturation, contrast about
-// middle grey), then mapped for display by the camera's tonemapper (D295,
+// middle grey, then its grading table, D344), then mapped for display by
+// the camera's tonemapper (D295,
 // ADR-0047's closed set: AgX, the default; Khronos PBR Neutral; linear),
 // each keeping middle grey where AgX puts it, in linear light for the
 // sRGB picture to encode, dithered by under one step of that encoding
@@ -36,6 +37,10 @@ grade;
 layout(set = 0, binding = 2) uniform texture2D bloom;
 layout(set = 0, binding = 3) uniform sampler blended;
 
+// The grading table (D344): a volume of colors, red along x, green along
+// y, blue along its slices, each axis the ACEScct curve's encoding.
+layout(set = 0, binding = 4) uniform texture3D table;
+
 layout(location = 0) in vec2 inUv;
 
 layout(location = 0) out vec4 outColor;
@@ -45,6 +50,31 @@ vec3 contrast(vec3 x)
     const vec3 kX2 = x * x;
     const vec3 kX4 = kX2 * kX2;
     return 15.5 * kX4 * kX2 - 40.14 * kX4 * x + 31.96 * kX4 - 6.868 * kX2 * x + 0.4298 * kX2 + 0.1191 * x - 0.00232;
+}
+
+// The ACEScct curve (S-2016-001) and its inverse: linear light to the
+// encoding a grading table is laid out along, and back.
+vec3 acescct(vec3 linear)
+{
+    return mix(10.5402377416545 * linear + 0.0729055341958355,
+               (log2(max(linear, vec3(1e-10))) + 9.72) / 17.52,
+               step(vec3(0.0078125), linear));
+}
+
+vec3 linearOf(vec3 encoded)
+{
+    return mix((encoded - 0.0729055341958355) / 10.5402377416545,
+               exp2(encoded * 17.52 - 9.72),
+               step(vec3(0.155251141552511), encoded));
+}
+
+// The light looked up in the grading table, its texels' middles at the
+// encoding's nought and one.
+vec3 tabled(vec3 light)
+{
+    const vec3 kSide = vec3(textureSize(table, 0));
+    const vec3 kAt = clamp(acescct(light), 0.0, 1.0) * (kSide - 1.0) / kSide + 0.5 / kSide;
+    return linearOf(textureLod(sampler3D(table, blended), kAt, 0.0).rgb);
 }
 
 vec3 graded(vec3 color)
@@ -118,7 +148,11 @@ void main()
     if (grade.bloom.x > 0.0) {
         seen = mix(seen, textureLod(sampler2D(bloom, blended), inUv, 0.0).rgb * grade.bloom.y, grade.bloom.x);
     }
-    const vec3 kLight = graded(seen) * grade.tonemapper.y;
+    vec3 light = graded(seen);
+    if (grade.display.y > 0.5) {
+        light = tabled(light);
+    }
+    const vec3 kLight = light * grade.tonemapper.y;
     if (grade.tonemapper.x > 1.5) {
         outColor = shown(kLight);
         return;

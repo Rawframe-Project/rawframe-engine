@@ -1,5 +1,6 @@
 #include "picture.h"
 
+#include "rawframe/texture/texture.h"
 #include "tables.h"
 
 #include <array>
@@ -18,6 +19,24 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
 
 } // namespace
 
+std::shared_ptr<const texture::Texture> plainTable() {
+    texture::Texture made{.format = texture::Format::Rgba16Float, .depth = 2};
+    texture::Level level{.width = 2, .height = 2};
+    for (std::uint32_t blue = 0; blue < 2; ++blue) {
+        for (std::uint32_t green = 0; green < 2; ++green) {
+            for (std::uint32_t red = 0; red < 2; ++red) {
+                for (const std::uint32_t kChannel : {red, green, blue, 1U}) {
+                    const std::uint16_t kHalf = texture::halfOf(static_cast<float>(kChannel));
+                    level.bytes.push_back(static_cast<std::byte>(kHalf & 0xFFU));
+                    level.bytes.push_back(static_cast<std::byte>(kHalf >> 8U));
+                }
+            }
+        }
+    }
+    made.levels.push_back(std::move(level));
+    return std::make_shared<const texture::Texture>(std::move(made));
+}
+
 PicturePass::PicturePass(mrhiDevice* native) noexcept : native_(native) {
 }
 
@@ -26,8 +45,12 @@ result::Status PicturePass::declare(const render_scene::SceneFrame& frame,
                                     std::uint32_t width,
                                     std::uint32_t height,
                                     std::size_t bloomLevels,
+                                    mrhiResourceId table,
+                                    bool tabled,
                                     std::vector<mrhiAccess>& writes) {
     block_ = pictureOf(frame);
+    table_ = table;
+    block_.display[1] = tabled && frame.grading.enabled ? 1.0F : 0.0F;
     if (bloomLevels > 0) {
         block_.bloom = {frame.bloom.intensity, 1.0F / static_cast<float>(bloomLevels), 0, 0};
     }
@@ -72,7 +95,9 @@ PicturePass::addPasses(mrhiResourceId shown, mrhiResourceId spread, mrhiResource
         tonemapDef.colorTargets[0].resource = display_;
         tonemapDef.colorTargets[0].load = mrhi_loadDiscard;
     }
-    std::vector<mrhiAccess> reads = {wholeOf(shown_, mrhi_accessSampled), wholeOf(blockResource_, mrhi_accessUniform)};
+    std::vector<mrhiAccess> reads = {wholeOf(shown_, mrhi_accessSampled),
+                                     wholeOf(blockResource_, mrhi_accessUniform),
+                                     wholeOf(table_, mrhi_accessSampled)};
     if (spread_.index1 != 0) {
         reads.push_back(wholeOf(spread_, mrhi_accessSampled));
     }
@@ -103,10 +128,13 @@ result::Status PicturePass::write(mrhiPassId upload) {
 result::Status PicturePass::record(const Pipelines& pipelines) {
     // The bloom's spread light, or the light shown where there is none,
     // which the picture's shader does not read then (D328).
-    const std::array<mrhiBinding, 4> kSceneBinding = {textureAt(0, shown_),
-                                                      bufferAt(1, blockResource_, sizeof(PictureBlock)),
-                                                      textureAt(2, spread_.index1 != 0 ? spread_ : shown_),
-                                                      samplerAt(3, pipelines.filteredSampler)};
+    // The grading table, a volume (D344).
+    std::array<mrhiBinding, 5> kSceneBinding = {textureAt(0, shown_),
+                                                bufferAt(1, blockResource_, sizeof(PictureBlock)),
+                                                textureAt(2, spread_.index1 != 0 ? spread_ : shown_),
+                                                samplerAt(3, pipelines.filteredSampler),
+                                                textureAt(4, table_)};
+    kSceneBinding[4].viewKind = mrhi_texture3d;
     if (mrhiBeginPass(native_, tonemapPass_) != mrhi_success ||
         mrhiSetGraphicsPipeline(native_, tonemapPass_, pipelines.tonemap.pipeline) != mrhi_success ||
         mrhiSetBindings(native_, tonemapPass_, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
