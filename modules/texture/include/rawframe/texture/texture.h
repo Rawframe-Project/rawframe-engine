@@ -57,11 +57,14 @@ struct Level {
 /// Level nought is the image; each next one halves both sides, rounding
 /// down and never below one, and the last may be any of them. A cube
 /// (D320) has six square faces, +X, -X, +Y, -Y, +Z, -Z, as Vulkan's layers
-/// are; anything else has one.
+/// are; anything else has one. A volume (D344) has `depth` slices of its
+/// one level, front first, each a face's texels: one face, one level, and
+/// an uncompressed format; anything else has a depth of one.
 struct Texture {
     Format format = Format::Rgba8;
     std::vector<Level> levels;
     std::uint32_t faces = 1;
+    std::uint32_t depth = 1;
     friend bool operator==(const Texture&, const Texture&) noexcept = default;
 };
 
@@ -73,8 +76,9 @@ struct TextureLimits {
 
 /// Refuses (`BadTexture`) a texture without levels, with a side of nought,
 /// with levels that do not halve, with bytes that do not fill a level's
-/// faces exactly, or with faces neither one nor six of square sides; and
-/// (`OverLimit`) one past the limits.
+/// faces (or a volume's slices) exactly, with faces neither one nor six of
+/// square sides, or a volume not as above; and (`OverLimit`) one past the
+/// limits, its depth a side.
 [[nodiscard]] result::Status validate(const Texture& texture, const TextureLimits& limits = {});
 
 /// The cooked form is KTX 2.0 without supercompression: the Vulkan format,

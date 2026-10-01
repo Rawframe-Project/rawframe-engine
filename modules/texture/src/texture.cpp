@@ -251,8 +251,21 @@ result::Status validate(const Texture& texture, const TextureLimits& limits) {
     if ((texture.faces != 1 && texture.faces != 6) || (texture.faces == 6 && kWidth != kHeight)) {
         return bad("a texture has one face, or six square ones");
     }
-    if (kWidth > limits.maximumSide || kHeight > limits.maximumSide) {
+    if (texture.depth == 0 ||
+        (texture.depth > 1 && (texture.faces != 1 || texture.levels.size() != 1 || compressed(texture.format)))) {
+        return bad("a volume has one face, one level, and an uncompressed format");
+    }
+    if (kWidth > limits.maximumSide || kHeight > limits.maximumSide || texture.depth > limits.maximumSide) {
         return overLimit("a texture's side is past its limits");
+    }
+    if (texture.depth > 1) {
+        if (levelBytes(texture.format, kWidth, kHeight) * texture.depth > limits.maximumBytes) {
+            return overLimit("a texture holds more bytes than its limits allow");
+        }
+        if (texture.levels[0].bytes.size() != levelBytes(texture.format, kWidth, kHeight) * texture.depth) {
+            return bad("a volume's bytes do not fill its slices exactly");
+        }
+        return {};
     }
     if (texture.levels.size() > mostLevels(kWidth, kHeight)) {
         return bad("a texture has more levels than halving its sides makes");
@@ -292,13 +305,13 @@ result::Result<std::vector<std::byte>> encode(const Texture& texture, const Text
     for (const std::uint8_t kByte : kIdentifier) {
         out.push_back(static_cast<std::byte>(kByte));
     }
-    // The format, its type size, the sides, no depth, no layers, the
-    // faces, the levels, and no supercompression.
+    // The format, its type size, the sides, a volume's depth, no layers,
+    // the faces, the levels, and no supercompression.
     for (const std::uint32_t kField : {vulkanFormat(texture.format),
                                        typeSize(texture.format),
                                        texture.levels[0].width,
                                        texture.levels[0].height,
-                                       0U,
+                                       texture.depth > 1 ? texture.depth : 0U,
                                        0U,
                                        texture.faces,
                                        static_cast<std::uint32_t>(kLevels),
@@ -338,11 +351,19 @@ result::Result<Texture> decode(std::span<const std::byte> bytes, const TextureLi
     const std::uint32_t kHeight = getU32(bytes, 24);
     const std::uint32_t kLevels = getU32(bytes, 40);
     const std::uint32_t kFaces = getU32(bytes, 36);
-    // Its type size, no depth, no layers, one face or a cube's six, no
-    // supercompression.
-    if (!kFormat.has_value() || getU32(bytes, 16) != typeSize(*kFormat) || getU32(bytes, 28) != 0 ||
+    const std::uint32_t kDepth = std::max(getU32(bytes, 28), 1U);
+    // Its type size, a volume's depth or none, no layers, one face or a
+    // cube's six, no supercompression.
+    if (!kFormat.has_value() || getU32(bytes, 16) != typeSize(*kFormat) || getU32(bytes, 28) == 1 ||
         getU32(bytes, 32) != 0 || (kFaces != 1 && kFaces != 6) || getU32(bytes, 44) != 0) {
         return bad("a texture of a format or shape this reader does not take");
+    }
+    if (kDepth > 1 && (kFaces != 1 || kLevels != 1 || compressed(*kFormat))) {
+        return bad("a volume has one face, one level, and an uncompressed format");
+    }
+    if (kDepth > limits.maximumSide || (kDepth > 1 && kWidth <= limits.maximumSide && kHeight <= limits.maximumSide &&
+                                        levelBytes(*kFormat, kWidth, kHeight) * kDepth > limits.maximumBytes)) {
+        return overLimit("a texture holds more bytes than its limits allow");
     }
     if (kWidth == 0 || kHeight == 0 || kLevels == 0 || kLevels > mostLevels(kWidth, kHeight)) {
         return bad("a texture's sides or levels are not a texture's");
@@ -356,7 +377,7 @@ result::Result<Texture> decode(std::span<const std::byte> bytes, const TextureLi
     if (bytes.size() < kHeaderBytes + (std::size_t{kLevels} * kLevelIndexBytes)) {
         return bad("a texture shorter than its level index");
     }
-    Texture texture{.format = *kFormat, .levels = std::vector<Level>(kLevels), .faces = kFaces};
+    Texture texture{.format = *kFormat, .levels = std::vector<Level>(kLevels), .faces = kFaces, .depth = kDepth};
     for (std::size_t index = 0; index < kLevels; ++index) {
         const std::size_t kAt = kHeaderBytes + (index * kLevelIndexBytes);
         const std::uint64_t kOffset = getU64(bytes, kAt);
@@ -364,8 +385,8 @@ result::Result<Texture> decode(std::span<const std::byte> bytes, const TextureLi
         Level& level = texture.levels[index];
         level.width = std::max(kWidth >> index, 1U);
         level.height = std::max(kHeight >> index, 1U);
-        if (kLength != kFaces * levelBytes(*kFormat, level.width, level.height) || kOffset > bytes.size() ||
-            kLength > bytes.size() - kOffset) {
+        if (kLength != std::size_t{kFaces} * kDepth * levelBytes(*kFormat, level.width, level.height) ||
+            kOffset > bytes.size() || kLength > bytes.size() - kOffset) {
             return bad("a level that is not where its index says, or not its size");
         }
         const auto kLevelBytes = bytes.subspan(static_cast<std::size_t>(kOffset), static_cast<std::size_t>(kLength));

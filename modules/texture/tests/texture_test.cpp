@@ -1,7 +1,8 @@
 // The cooked texture (D253): each format round trips through KTX 2.0 with
-// its levels, the descriptor is Khronos's for the format, and a texture
-// that breaks a rule, or bytes that are not exactly what the writer makes,
-// are refused before anything past the limits is allocated.
+// its levels, a cube with its faces and a volume with its slices (D344),
+// the descriptor is Khronos's for the format, and a texture that breaks a
+// rule, or bytes that are not exactly what the writer makes, are refused
+// before anything past the limits is allocated.
 
 #include "rawframe/test/test.h"
 #include "rawframe/texture/errors.h"
@@ -194,6 +195,51 @@ RAWFRAME_TEST(AHalfFloatCubeRoundTripsWithItsSixFaces) {
     Texture shortFace = cube;
     shortFace.levels[0].bytes.resize(5 * 512);
     RAWFRAME_EXPECT(refusedWith(validate(shortFace), TextureError::BadTexture));
+}
+
+RAWFRAME_TEST(AVolumeRoundTripsWithItsSlices) {
+    // A grading table (D344): RGBA16F, four slices of four by four.
+    Texture volume = chain(Format::Rgba16Float, 4, 4, 1);
+    volume.depth = 4;
+    const std::vector<std::byte> kSlice = volume.levels[0].bytes;
+    for (std::uint32_t slice = 1; slice < 4; ++slice) {
+        for (const std::byte kByte : kSlice) {
+            volume.levels[0].bytes.push_back(kByte ^ static_cast<std::byte>(slice));
+        }
+    }
+    const auto kBytes = encode(volume);
+    RAWFRAME_EXPECT(kBytes.has_value());
+    if (!kBytes.has_value()) {
+        return;
+    }
+    // KTX 2.0's pixel depth holds the slices; a flat texture's is nought.
+    RAWFRAME_EXPECT(wordAt(*kBytes, 28) == 4 && wordAt(*kBytes, 36) == 1);
+    const auto kRead = decode(*kBytes);
+    RAWFRAME_EXPECT(kRead.has_value() && *kRead == volume);
+    const auto kFlat = encode(chain(Format::Rgba8, 4, 4));
+    RAWFRAME_EXPECT(kFlat.has_value() && wordAt(*kFlat, 28) == 0);
+    // A slice short, a volume of mips, faces, or blocks, and a depth past
+    // the limits are refused.
+    Texture shortSlice = volume;
+    shortSlice.levels[0].bytes.resize(3 * kSlice.size());
+    RAWFRAME_EXPECT(refusedWith(validate(shortSlice), TextureError::BadTexture));
+    Texture mipped = chain(Format::Rgba16Float, 4, 4, 2);
+    mipped.depth = 2;
+    RAWFRAME_EXPECT(refusedWith(validate(mipped), TextureError::BadTexture));
+    Texture blocks = chain(Format::Bc7, 4, 4, 1);
+    blocks.depth = 2;
+    blocks.levels[0].bytes.resize(32);
+    RAWFRAME_EXPECT(refusedWith(validate(blocks), TextureError::BadTexture));
+    Texture none = volume;
+    none.depth = 0;
+    RAWFRAME_EXPECT(refusedWith(validate(none), TextureError::BadTexture));
+    RAWFRAME_EXPECT(refusedWith(validate(volume, {.maximumSide = 3}), TextureError::OverLimit));
+    if (kBytes.has_value()) {
+        // A pixel depth of one is not how this format writes a flat one.
+        std::vector<std::byte> one = *encode(chain(Format::Rgba8, 4, 4));
+        one[28] = std::byte{1};
+        RAWFRAME_EXPECT(!decode(one).has_value());
+    }
 }
 
 RAWFRAME_TEST(HalvesRoundToNearestAndComeBackExactly) {
