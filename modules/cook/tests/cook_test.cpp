@@ -16,6 +16,7 @@
 #include "rawframe/cook/audio.h"
 #include "rawframe/cook/cook.h"
 #include "rawframe/cook/errors.h"
+#include "rawframe/cook/font.h"
 #include "rawframe/cook/game.h"
 #include "rawframe/cook/kest.h"
 #include "rawframe/cook/material.h"
@@ -407,9 +408,10 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     fs::copy(fs::path{RAWFRAME_SAMPLE_GAMES} / "runners", kGame, fs::copy_options::recursive);
     const std::string kSourcesId = "f9f0181057571ecd398d86d2c34a641f";
     writeText(kGame / "runners.game.rfmeta", sidecar("000000000000000000000000000000a5", "", "rawframe.game"));
-    static const std::array<Importer, 8> kImporters = {animationImporter(),
+    static const std::array<Importer, 9> kImporters = {animationImporter(),
                                                        audioImporter(),
                                                        canvasImporter(),
+                                                       fontImporter(),
                                                        gameImporter(),
                                                        kestImporter(),
                                                        sceneImporter(),
@@ -422,7 +424,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
         return report.has_value() ? std::move(*report) : CookReport{};
     };
     const CookReport kFirst = kCook();
-    RAWFRAME_EXPECT(kFirst.cooked == 20 && kFirst.failures.empty());
+    RAWFRAME_EXPECT(kFirst.cooked == 21 && kFirst.failures.empty());
     const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
         const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
         if (!kManifest.has_value()) {
@@ -458,6 +460,9 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     RAWFRAME_EXPECT(kGameRead->textures.size() == 3 && kGameRead->texture("runner.png") != nullptr &&
                     kGameRead->texture("runner.png")->texture ==
                         base::parseBits128Hex("2cf4e6afa86830492ee14a9e8067986a").value);
+    RAWFRAME_EXPECT(kGameRead->fonts.size() == 1 && kGameRead->font("Inter-Regular.ttf") != nullptr &&
+                    kGameRead->font("Inter-Regular.ttf")->font ==
+                        base::parseBits128Hex("2aa68df488db49b30610fed07ae6c28f").value);
     const base::Bits128 kSources = base::parseBits128Hex(kSourcesId).value;
     RAWFRAME_EXPECT(kGameRead->programs.size() == 2 && kGameRead->program("runners.kest") != nullptr &&
                     kGameRead->program("runners.kest")->sources == kSources &&

@@ -34,6 +34,7 @@ component 6293ab03-1010-42b8-bef6-f06379468d19 runners.landed rawframe.ui.Node
 component 1e5be856-5be3-47ab-84a3-433ac63f84c6 runners.taken rawframe.ui.Node
 component d06185a9-60a5-4e0a-9779-7ca0cb5699c9 runners.target rawframe.ui.Node
 component beb08a69-db84-40d4-bc0f-d7deafc09bc9 runners.meters rawframe.ui.Node
+component 14308cc4-eefa-459e-96da-a72867574b9d runners.points rawframe.ui.Node
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
@@ -103,6 +104,11 @@ sound 81012dde2ad3952f hurt.sound
 text hud.strings
 text hud.tr.translations
 locale en
+# The HUD's score, its words from hud.strings, in Inter 4.1 (Inter-Regular.ttf,
+# from its release archive, SIL Open Font License 1.1 in Inter-LICENSE.txt;
+# D386).
+font c3b22aa9db1c2239 Inter-Regular.ttf
+label ac39139dad885119 hud.strings hud.score points
 
 # What a client draws (D254): runners (runner.png) over the level's tiles
 # (tiles.png, the level's runners.tile), through its own runner's camera
@@ -125,14 +131,15 @@ presentation runners.dust runners.sparks on runners.stick
 present runners.glint glint read runners.emitter write runners.dust write runners.sparks
 # The player's HUD (D376): a panel along the bottom of its view, a target
 # (hud.png, D378) beside a green meter of the hits its runner landed and a
-# red one of those it took, each filling over ten and starting again; the
-# client's own, drawn over all.
-presentation runners.hud runners.target runners.meters runners.landed runners.taken on player
+# red one of those it took, each filling over ten and starting again, and
+# its score in words (D386); the client's own, drawn over all.
+presentation runners.hud runners.target runners.meters runners.landed runners.taken runners.points on player
 ui runners.target in runners.hud
 ui runners.meters in runners.hud
 ui runners.landed in runners.meters
 ui runners.taken in runners.meters
-present runners.gauge gauge read runners.score write runners.hud write runners.target write runners.meters write runners.landed write runners.taken
+ui runners.points in runners.hud
+present runners.gauge gauge read runners.score write runners.hud write runners.target write runners.meters write runners.landed write runners.taken write runners.points
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
 texture c067c4be8ce86d12 hud.png

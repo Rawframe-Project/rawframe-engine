@@ -29,6 +29,10 @@ const HURT: u64 = 0x81012dde2ad3952f
 const RUNNER_LOOK: u64 = 0xeddbc014cab63eb2
 // The HUD's target (runners.game's `texture` line, D378).
 const HUD_TARGET: u64 = 0xc067c4be8ce86d12
+// The HUD's font and its score's label (runners.game's `font` and `label`
+// lines, D386).
+const HUD_FONT: u64 = 0xc3b22aa9db1c2239
+const HUD_SCORE: u64 = 0xac39139dad885119
 // The runners' look's material (D356).
 const RUNNER_GLOW: u64 = 0xea61c563796c6e4b
 const CELL: f32 = 0.16666667
@@ -137,9 +141,10 @@ fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
 // the bottom of its view, casting a soft shadow (D381), a pale target
 // (D378) beside a green meter of the hits its runner landed over a red one
 // of those it took, each brightening along its length (D382) and a tenth
-// of the meters' width for each hit, starting again at ten.
+// of the meters' width for each hit, starting again at ten; after them, its
+// score in words, "3 points", 14 pixels to the em (D386).
 fn gauge(count: i32, scores: [Score], huds: [ui.Node], targets: [ui.Node], meters: [ui.Node], landed: [ui.Node],
-         taken: [ui.Node]) {
+         taken: [ui.Node], points: [ui.Node]) {
     let i = 0
     while i < count {
         huds[i].widthOffset = 240.0
@@ -183,6 +188,13 @@ fn gauge(count: i32, scores: [Score], huds: [ui.Node], targets: [ui.Node], meter
         taken[i].gradientTo = u32(0xFF8C7AFF)
         taken[i].radius = 4.0
         taken[i].order = 1
+        points[i].text = HUD_SCORE
+        points[i].textValue = i64(scores[i].hits)
+        points[i].font = HUD_FONT
+        points[i].textSize = 14.0
+        points[i].textColor = u32(0xE8EEF8FF)
+        points[i].textWrap = ui.NO_WRAP
+        points[i].order = 2
         i = i + 1
     }
 }
