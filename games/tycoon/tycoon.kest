@@ -8,7 +8,9 @@ module tycoon
 // every build.
 
 import controls
+import rawframe.model
 import rawframe.physics3d
+import rawframe.ui
 import rawframe.world
 
 // The stalls' collision class (tycoon.game), the one a build asks about.
@@ -28,6 +30,11 @@ const SECOND: u32 = 60
 
 // The cursor's speed at a full tilt, meters a tick: twelve a second.
 const GLIDE: f64 = 0.2
+
+// The HUD's font and its coins' label (tycoon.game's `font` and `label`
+// lines).
+const HUD_FONT: u64 = 0x8e12f827f47f7d51
+const HUD_COINS: u64 = 0xf1182d0420cc09a0
 
 // An owner: whether it has joined, its cursor on the ground, its coins and
 // stalls, whether the build it asked for is still held (one build each time
@@ -106,7 +113,9 @@ fn raise(owner: world.Entity, x: i32, z: i32) {
 // stick; a press builds on the plot under it, once, when the owner has the
 // cost and the plot is free: no stall standing there as of this tick's step,
 // and none raised there earlier in this run, which the step has not seen.
-fn tend(count: i32, hands: [controls.Hand], owners: [Owner], entities: [world.Entity]) {
+// The owner's pose is the middle of the plot under its cursor, where its
+// client marks it.
+fn tend(count: i32, hands: [controls.Hand], owners: [Owner], poses: [physics3d.Pose3D], entities: [world.Entity]) {
     let raised = array(PLOTS * PLOTS, false)
     let i = 0
     while i < count {
@@ -118,6 +127,8 @@ fn tend(count: i32, hands: [controls.Hand], owners: [Owner], entities: [world.En
                 owners[i].cursorX = kept(owners[i].cursorX + f64(hands[i].moveX) * GLIDE)
                 owners[i].cursorZ = kept(owners[i].cursorZ + f64(hands[i].moveZ) * GLIDE)
             }
+            poses[i] = physics3d.Pose3D(middleOf(plotOf(owners[i].cursorX)), 0.0, middleOf(plotOf(owners[i].cursorZ)),
+                                        0.0, 0.0, 0.0, 1.0)
             if hands[i].build > 0.5 {
                 if owners[i].held == u32(0) && owners[i].coins >= COST {
                     let x = plotOf(owners[i].cursorX)
@@ -148,6 +159,68 @@ fn earn(count: i32, owners: [Owner]) {
             owners[i].clock = u32(0)
             owners[i].coins = owners[i].coins + i64(owners[i].stalls) * INCOME
         }
+        i = i + 1
+    }
+}
+
+// What a client shows (D389): every body it mirrors as a box, the lot's
+// ground grass green and each stall a warm awning red; no server carries a
+// look.
+fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
+    let i = 0
+    while i < count {
+        let b = bodies[i]
+        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0x5E8C3AFF, u64(0))
+        if b.collisionClass == STALLS {
+            look.color = 0xC8553DFF
+        }
+        looks[i] = look
+        i = i + 1
+    }
+}
+
+// The client's own cursor: a pale slab on the plot under it, a little
+// above the ground.
+fn mark(count: i32, owners: [Owner], marks: [model.Model]) {
+    let i = 0
+    while i < count {
+        marks[i] = model.Model(model.BOX, 1.9, 0.05, 1.9, 0xF2E8C8FF, u64(0))
+        i = i + 1
+    }
+}
+
+// The client's view: from a fixed point forty-two meters up and thirty-six
+// south of the lot's middle, looking down at it, the whole lot in sight, wherever the
+// owner's cursor is (the eye is placed from the player's pose, which is
+// the cursor's plot, so it is placed back).
+fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
+    let i = 0
+    while i < count {
+        views[i].offsetX = f32(0.0 - poses[i].x)
+        views[i].offsetY = f32(42.0 - poses[i].y)
+        views[i].offsetZ = f32(36.0 - poses[i].z)
+        views[i].pitch = -0.92
+        views[i].fovY = 1.0
+        views[i].near = 0.5
+        views[i].exposure = 14.0
+        i = i + 1
+    }
+}
+
+// The owner's coins in its HUD: words along the top left of its view.
+fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
+    let i = 0
+    while i < count {
+        huds[i].padding = 10.0
+        huds[i].margin = 12.0
+        huds[i].fill = u32(0x101820C0)
+        huds[i].radius = 6.0
+        huds[i].text = HUD_COINS
+        huds[i].textValue = owners[i].coins
+        huds[i].font = HUD_FONT
+        huds[i].textSize = 18.0
+        huds[i].textColor = u32(0xF4E9C8FF)
+        huds[i].textWrap = ui.NO_WRAP
         i = i + 1
     }
 }

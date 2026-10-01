@@ -11,16 +11,20 @@ collision class stall b0eb8fc52cd9d4ac
 component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
 component 4143f760-31c1-469d-bda7-7946878bcaba tycoon.owner Owner
 component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
+component 63d9aa3b-30b0-49df-9371-b682ff281ec0 tycoon.look rawframe.model.Model
+component 2e380a54-69cf-4905-86f2-68f895d954fe tycoon.mark rawframe.model.Model
+component 991e8dec-fbd5-4790-954b-283eea27fe90 tycoon.view rawframe.model.Camera
+component 043c72ce-e948-490a-80d6-e3a22fbdb695 tycoon.purse rawframe.ui.Node
 system tycoon.join simulation join write tycoon.owner
-system tycoon.tend simulation tend read tycoon.hand write tycoon.owner entities after tycoon.join after rawframe.physics3d.step
+system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities after tycoon.join after rawframe.physics3d.step
 system tycoon.earn simulation earn write tycoon.owner after tycoon.tend
 # The lot's ground, its top at nought.
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity
 
 # Networked play: every owner and stall is sent to every client; each
-# player's hand is its input.
+# player's hand is its input, and its pose the plot under its cursor.
 replicate tycoon.owner tycoon.stall rawframe.physics3d.body rawframe.physics3d.pose
-player tycoon.hand tycoon.owner
+player tycoon.hand tycoon.owner rawframe.physics3d.pose
 input tycoon.hand
 # A client makes its hand from its player's actions (tycoon.actions) with
 # sample.kest, from keys, a mouse, a gamepad, or a touch screen (the left
@@ -28,3 +32,19 @@ input tycoon.hand
 # same controls.
 actions tycoon.actions
 sample sample.kest sample
+
+# What a client shows (D389): every body as a box, the ground green and the
+# stalls red; its own cursor's plot marked; the lot seen from a fixed point
+# above its south edge; and its coins in words (tycoon.strings) in Inter 4.1
+# (Inter-Regular.ttf from its release archive, SIL Open Font License 1.1 in
+# Inter-LICENSE.txt), along the top of its view. No server carries any of it.
+text tycoon.strings
+locale en
+font 8e12f827f47f7d51 Inter-Regular.ttf
+label f1182d0420cc09a0 tycoon.strings hud.coins coins
+presentation tycoon.look on rawframe.physics3d.body
+present tycoon.dress dress read rawframe.physics3d.body write tycoon.look
+presentation tycoon.mark tycoon.view tycoon.purse on player
+present tycoon.mark mark read tycoon.owner write tycoon.mark
+present tycoon.frame frame read rawframe.physics3d.pose write tycoon.view
+present tycoon.purse purse read tycoon.owner write tycoon.purse

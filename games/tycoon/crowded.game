@@ -9,8 +9,8 @@ component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
 component 4143f760-31c1-469d-bda7-7946878bcaba tycoon.owner Owner
 component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
 system tycoon.join simulation join write tycoon.owner
-system tycoon.tend simulation tend read tycoon.hand write tycoon.owner entities after tycoon.join after rawframe.physics3d.step
+system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities after tycoon.join after rawframe.physics3d.step
 system tycoon.earn simulation earn write tycoon.owner after tycoon.tend
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity
-spawn 3 tycoon.hand pointed=1 pointX=1 pointZ=1 build=1 tycoon.owner
-spawn 1 tycoon.hand pointed=1 pointX=9 pointZ=9 build=1 tycoon.owner joined=1
+spawn 3 tycoon.hand pointed=1 pointX=1 pointZ=1 build=1 tycoon.owner rawframe.physics3d.pose
+spawn 1 tycoon.hand pointed=1 pointX=9 pointZ=9 build=1 tycoon.owner joined=1 rawframe.physics3d.pose

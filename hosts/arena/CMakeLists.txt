@@ -59,6 +59,15 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(tycoon_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8.*\"bodiesMade\":([3-9]|[1-9][0-9]+),\"bodiesRemoved\":0,\"bodiesRefused\":0")
+    # Stalls' sources cooked into the build tree: its font and text, read by
+    # the drawn run (D389).
+    set(TYCOON_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/tycoon_content)
+    add_test(NAME tycoon_cooked
+             COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/tycoon ${TYCOON_CONTENT}
+                     ${CMAKE_CURRENT_BINARY_DIR}/tycoon_cook_cache)
+    set_tests_properties(tycoon_cooked PROPERTIES
+                         FIXTURES_SETUP tycoon_content
+                         PASS_REGULAR_EXPRESSION "failed 0")
     # The prediction runs count ticks confirmed in wall time, so each holds
     # six of ctest's processors: a machine running every preset at once
     # starved them into too few confirmations (D83).
@@ -301,6 +310,24 @@ if(RAWFRAME_BUILD_TESTS)
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(plaza_drawn PROPERTIES ENVIRONMENT
+                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
+        endif()
+        # Two bots play Stalls while the first one's view is drawn (D389): the
+        # lot, the stalls, and its cursor as models seen from above, its
+        # coins' words given in the game's font, and a picture read back.
+        set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/tycoon_drawn.tga)
+        configure_file(tests/tycoon_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/tycoon_drawn.conf @ONLY)
+        add_test(NAME tycoon_drawn
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
+                         $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/tycoon_drawn.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(tycoon_drawn PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*.*\"code\":\"scene_drawing_summary\"[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9]+,\"captured\":true")
+        if(RAWFRAME_SANITIZE STREQUAL "thread")
+            set_tests_properties(tycoon_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
         endif()
         # Both bots' scenes drawn split-screen (D362): each local player's

@@ -1,0 +1,21 @@
+# Two bots play Stalls for ten seconds while the first one's view is drawn
+# offscreen on the one device (D389): the lot and the stalls as boxes from
+# above, its cursor's plot marked, and its coins in its HUD in the game's
+# font, read from Stalls' content cooked into the build tree. One frame in
+# eight is read back; the last is written to a TGA image in the build tree.
+host.maximum_iterations = 1200
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/tycoon/tycoon.game
+content.root = @TYCOON_CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 2
+bots.endpoint = arena
+render.device = any
+render.offscreen = true
+render.width = 640
+render.height = 360
+render.capture = @CAPTURE@
+scene.shadow_side = 256
+render.read_every = 8
