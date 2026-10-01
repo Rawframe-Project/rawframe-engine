@@ -3,7 +3,9 @@
 // nothing past its rounded corner, its edges smoothed; a box half clear
 // blends over what is behind it; a clipping parent keeps its child
 // inside it; a child is kept inside every clip above it (D377); and an
-// image is drawn stretched, or in nine slices, over its node's fill (D378).
+// image is drawn stretched, or in nine slices, over its node's fill (D378);
+// a run of glyphs, waiting for glyph images, is counted and left out between
+// boxes it does not join (D384).
 // Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "rawframe/render/device.h"
@@ -76,8 +78,10 @@ bool near(const std::array<int, 4>& color, std::array<int, 3> expected, int with
 
 /// The list drawn over a cleared picture, read back once the box pipeline
 /// is made.
-std::optional<std::vector<std::byte>>
-drawn(render::Device& device, const ui::DrawList& list, render_canvas_gpu::ImageSource images = {}) {
+std::optional<std::vector<std::byte>> drawn(render::Device& device,
+                                            const ui::DrawList& list,
+                                            render_canvas_gpu::ImageSource images = {},
+                                            render_canvas_gpu::UiStatistics* statistics = nullptr) {
     auto framer = render::Framer::create(device);
     auto boxes = render_canvas_gpu::UiRenderer::create(device);
     RAWFRAME_EXPECT(framer.has_value() && boxes.has_value());
@@ -91,6 +95,9 @@ drawn(render::Device& device, const ui::DrawList& list, render_canvas_gpu::Image
             (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
         RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
         if ((**boxes).statistics().frames != 0) {
+            if (statistics != nullptr) {
+                *statistics = (**boxes).statistics();
+            }
             return (*framer)->pixels();
         }
         static_cast<void>((*framer)->pixels());
@@ -401,4 +408,29 @@ RAWFRAME_TEST(AGradientMovesThroughOklabOverItsFill) {
     RAWFRAME_EXPECT(near(at(*kPixels, 16, 32), {255, 255, 255}, 8));
     const std::array<int, 4> kCorner = at(*kPixels, 1, 17);
     RAWFRAME_EXPECT(kCorner[1] > 200 && kCorner[0] < 120);
+}
+
+RAWFRAME_TEST(AGlyphRunWaitsBetweenBoxesItDoesNotJoin) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    ui::DrawList list;
+    list.clips.push_back({});
+    list.gradients.push_back({});
+    list.boxes.push_back({.rect = {.x = 0, .y = 0, .width = 32, .height = 64}, .fill = {1, 0, 0, 1}});
+    list.boxes.push_back({.rect = {.x = 32, .y = 0, .width = 32, .height = 64}, .fill = {0, 0, 1, 1}});
+    list.glyphRuns.push_back({.size = 16, .color = {1, 1, 1, 1}, .x = 8, .y = 40, .first = 0, .count = 1});
+    list.glyphs.push_back({.id = 1});
+    list.commands = {{.kind = ui::DrawCommand::Kind::Box, .index = 0},
+                     {.kind = ui::DrawCommand::Kind::Glyphs, .index = 0},
+                     {.kind = ui::DrawCommand::Kind::Box, .index = 1}};
+    render_canvas_gpu::UiStatistics statistics;
+    const auto kPixels = drawn(*kDevice, list, {}, &statistics);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(near(at(*kPixels, 8, 36), {255, 0, 0}) && near(at(*kPixels, 48, 36), {0, 0, 255}));
+    RAWFRAME_EXPECT(statistics.boxes == 2 && statistics.shadows == 0 && statistics.glyphRunsWaiting == 1);
 }

@@ -36,6 +36,9 @@ struct UiStatistics {
     std::uint64_t imagesWaiting = 0;
     /// Shadows drawn in all (D381).
     std::uint64_t shadows = 0;
+    /// Runs of glyphs left out in all: they wait for Maul UI's glyph images
+    /// (D384).
+    std::uint64_t glyphRunsWaiting = 0;
 };
 
 class UiRenderer final : public render::FrameRecorder {

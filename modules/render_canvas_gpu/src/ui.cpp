@@ -487,11 +487,17 @@ struct UiRenderer::State {
             return failed("the UI could not be drawn", mrhi_errorState);
         }
         // In paint order: each run of boxes, and each of shadows, one
-        // instanced draw; each image drawn alone with its texture.
+        // instanced draw; each image drawn alone with its texture; glyphs
+        // not yet.
         const std::vector<ui::DrawCommand>& kCommands = list->commands;
         std::uint64_t boxes = 0;
         for (std::size_t at = 0; at < kCommands.size();) {
             const ui::DrawCommand& kCommand = kCommands[at];
+            if (kCommand.kind == ui::DrawCommand::Kind::Glyphs) {
+                ++statistics.glyphRunsWaiting;
+                ++at;
+                continue;
+            }
             if (kCommand.kind != ui::DrawCommand::Kind::Image) {
                 std::size_t end = at + 1;
                 while (end < kCommands.size() && kCommands[end].kind == kCommand.kind &&

@@ -234,7 +234,8 @@ public:
                       diagnostics::field("boxes", statistics.boxes),
                       diagnostics::field("images", statistics.images),
                       diagnostics::field("imagesWaiting", statistics.imagesWaiting),
-                      diagnostics::field("shadows", statistics.shadows)});
+                      diagnostics::field("shadows", statistics.shadows),
+                      diagnostics::field("glyphRunsWaiting", statistics.glyphRunsWaiting)});
     }
 
 private:
