@@ -7,7 +7,7 @@ rawframe_module(NAME cook
     DEPS localization animation material graph mesh_import mesh texture_import texture scene world_kest input kest_library kest audio_import audio content document result base
 )
 
-rawframe_module_tests(NAME cook SOURCES tests/cook_test.cpp)
+rawframe_module_tests(NAME cook SOURCES tests/cook_test.cpp tests/texture_test.cpp)
 if(TARGET rawframe_cook_tests)
     target_compile_definitions(rawframe_cook_tests PRIVATE
         RAWFRAME_COOK_DATA="${PROJECT_SOURCE_DIR}/modules/audio_import/tests/data/"

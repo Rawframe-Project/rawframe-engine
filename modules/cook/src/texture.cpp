@@ -18,7 +18,7 @@ namespace {
 using document::Record;
 using document::Value;
 
-constexpr std::array<std::string_view, 4> kSettingsFields = {"color", "exact", "levels", "environment"};
+constexpr std::array<std::string_view, 5> kSettingsFields = {"color", "exact", "levels", "environment", "grading"};
 constexpr std::array<std::string_view, 3> kEnvironmentFields = {"side", "levels", "samples"};
 
 std::unexpected<result::Error> refuse(std::string_view why) {
@@ -68,11 +68,23 @@ bool radiance(std::span<const std::byte> source) noexcept {
     return kStart.starts_with("#?");
 }
 
-/// `color=srgb|linear;exact=0|1;levels=0|1`, or an environment's.
+/// `color=srgb|linear;exact=0|1;levels=0|1`, an environment's, or
+/// `grading`: a grading table (D344), which takes no other setting.
 result::Result<std::string> normalize(const Value* settings) {
     texture_import::CookSettings chosen;
     if (settings != nullptr) {
         RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(*settings, kSettingsFields, "$.settings"));
+        RAWFRAME_TRY_ASSIGN(const Value* const kGrading, kRecord.optional("grading", Value::Kind::Bool));
+        if (kGrading != nullptr) {
+            RAWFRAME_TRY_ASSIGN(const bool kTable, kRecord.truth("grading", false));
+            if (!kTable) {
+                return document::notCanonical(kRecord.pathOf("grading"), "a field at its default is omitted");
+            }
+            if (settings->names().size() != 1) {
+                return refuse("a grading table is linear half floats as its file has them: no other setting");
+            }
+            return std::string{"grading"};
+        }
         RAWFRAME_TRY_ASSIGN(const Value* const kEnvironment, kRecord.optional("environment", Value::Kind::Object));
         if (kEnvironment != nullptr) {
             return normalizeEnvironment(kRecord);
@@ -94,7 +106,9 @@ result::Result<std::string> normalize(const Value* settings) {
 
 result::Result<Artifact> cookTexture(std::span<const std::byte> source, std::string_view settings, Reads& /*reads*/) {
     texture::Texture cooked;
-    if (settings.starts_with("environment")) {
+    if (settings == "grading") {
+        RAWFRAME_TRY_ASSIGN(cooked, texture_import::decodeGrading(source));
+    } else if (settings.starts_with("environment")) {
         if (!radiance(source)) {
             return refuse("an environment is a Radiance picture");
         }

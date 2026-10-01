@@ -3,6 +3,7 @@
 // included) that is verified before it is trusted, double cooks that catch
 // a nondeterministic importer, and nothing published unless nothing failed.
 
+#include "fixture.h"
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
 #include "rawframe/animation/mask.h"
@@ -28,7 +29,6 @@
 #include "rawframe/material/material.h"
 #include "rawframe/mesh/errors.h"
 #include "rawframe/mesh/mesh.h"
-#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 #include "rawframe/texture/texture.h"
 #include "rawframe/world_kest/cooked_game.h"
@@ -45,76 +45,7 @@
 using namespace rawframe;
 using namespace rawframe::cook;
 
-namespace {
-
-namespace fs = std::filesystem;
-
-const std::string kToneId = "000000000000000000000000000000a1";
-const std::string kMp3Id = "000000000000000000000000000000a2";
-
-std::string readText(const fs::path& path) {
-    std::ifstream file{path, std::ios::binary};
-    return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
-}
-
-void writeText(const fs::path& path, std::string_view text) {
-    fs::create_directories(path.parent_path());
-    std::ofstream{path, std::ios::binary} << text;
-}
-
-std::string sidecar(std::string_view id, std::string_view settings = "", std::string_view importer = "rawframe.audio") {
-    std::string text = "{\n  \"schema\": 1,\n  \"resourceId\": \"" + std::string{id} + "\",\n  \"importer\": \"" +
-                       std::string{importer} + "\"";
-    if (!settings.empty()) {
-        text += ",\n  \"settings\": {\n    " + std::string{settings} + "\n  }";
-    }
-    return text + "\n}\n";
-}
-
-/// A project of two sources: a Vorbis tone cooked to Opus, and an MP3 tone
-/// in the short-form tier.
-struct Project {
-    fs::path base = test::scratchDirectory("cook");
-    fs::path sources = base / "sources";
-    fs::path output = base / "output";
-    fs::path cache = base / "cache";
-
-    Project() {
-        fs::remove_all(base);
-        fs::create_directories(sources / "sounds");
-        fs::copy_file(fs::path{RAWFRAME_COOK_DATA} / "tone.ogg", sources / "sounds" / "tone.ogg");
-        fs::copy_file(fs::path{RAWFRAME_COOK_DATA} / "tone.mp3", sources / "sounds" / "tone.mp3");
-        writeText(sources / "sounds" / "tone.ogg.rfmeta", sidecar(kToneId, "\"tier\": \"opus\""));
-        writeText(sources / "sounds" / "tone.mp3.rfmeta", sidecar(kMp3Id));
-    }
-    ~Project() {
-        fs::remove_all(base);
-    }
-    Project(const Project&) = delete;
-    Project& operator=(const Project&) = delete;
-
-    CookReport cook(std::uint8_t tool = 1, std::optional<fs::path> into = std::nullopt) const {
-        static const std::array<Importer, 1> kImporters = {audioImporter()};
-        base::Sha256Digest toolchain{};
-        toolchain[0] = std::byte{tool};
-        auto report = cookSources(CookRequest{.sources = sources,
-                                              .output = into.value_or(output),
-                                              .cache = cache,
-                                              .importers = kImporters,
-                                              .toolchain = toolchain,
-                                              .target = "any"});
-        RAWFRAME_EXPECT(report.has_value());
-        return report.has_value() ? std::move(*report) : CookReport{};
-    }
-};
-
-bool failedWith(const CookReport& report, CookError error) {
-    return std::ranges::any_of(report.failures, [error](const result::Error& each) {
-        return each.domain() == kCookDomain && each.code() == code(error);
-    });
-}
-
-} // namespace
+using namespace rawframe::cook_fixture;
 
 RAWFRAME_TEST(SourcesCookIntoVerifiedArtifacts) {
     const Project kProject;
@@ -892,111 +823,6 @@ RAWFRAME_TEST(AGltfsMaterialsAndImagesCookIntoItsSubassets) {
     // Kept exact, as the sidecar says, and sRGB, since it is a color.
     const auto kTexture = texture::decode(kBytesOf(kTextureId));
     RAWFRAME_EXPECT(kTexture.has_value() && kTexture->format == texture::Format::Rgba8Srgb);
-}
-
-RAWFRAME_TEST(AnImageCooksIntoATextureAsItsSettingsSay) {
-    const Project kProject;
-    const fs::path kImages = kProject.sources / "images";
-    fs::create_directories(kImages);
-    fs::copy_file(fs::path{RAWFRAME_TEXTURE_DATA} / "pattern.png", kImages / "sprite.png");
-    fs::copy_file(fs::path{RAWFRAME_TEXTURE_DATA} / "pattern.tga", kImages / "mask.tga");
-    writeText(kImages / "sprite.png.rfmeta", sidecar("000000000000000000000000000000b1", "", "rawframe.texture"));
-    writeText(kImages / "mask.tga.rfmeta",
-              sidecar("000000000000000000000000000000b2",
-                      "\"color\": \"linear\",\n    \"exact\": true,\n    \"levels\": false",
-                      "rawframe.texture"));
-    static const std::array<Importer, 2> kImporters = {audioImporter(), textureImporter()};
-    const auto kCook = [&kProject] {
-        auto report = cookSources(CookRequest{
-            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
-        RAWFRAME_EXPECT(report.has_value());
-        return report.has_value() ? std::move(*report) : CookReport{};
-    };
-    const CookReport kReport = kCook();
-    RAWFRAME_EXPECT(kReport.cooked == 4 && kReport.failures.empty());
-    std::vector<texture::Texture> textures;
-    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
-    RAWFRAME_EXPECT(kManifest.has_value());
-    for (const content::ManifestEntry& each : kManifest.value_or(std::vector<content::ManifestEntry>{})) {
-        if (each.type.value == texture::kTextureType && each.representation.text() == texture::kTextureRepresentation) {
-            const std::string kBytes = readText(kProject.output / each.locator);
-            auto read = texture::decode(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
-            RAWFRAME_EXPECT(read.has_value());
-            if (read.has_value()) {
-                textures.push_back(std::move(*read));
-            }
-        }
-    }
-    // The sprite as BC7 in sRGB with every level; the mask exact, linear,
-    // and alone.
-    RAWFRAME_EXPECT(textures.size() == 2 &&
-                    std::ranges::any_of(textures,
-                                        [](const texture::Texture& each) {
-                                            return each.format == texture::Format::Bc7Srgb && each.levels.size() == 4;
-                                        }) &&
-                    std::ranges::any_of(textures, [](const texture::Texture& each) {
-                        return each.format == texture::Format::Rgba8 && each.levels.size() == 1;
-                    }));
-    // A default written out, or a color neither, fails its sidecar.
-    writeText(kImages / "mask.tga.rfmeta",
-              sidecar("000000000000000000000000000000b2", "\"color\": \"srgb\"", "rawframe.texture"));
-    RAWFRAME_EXPECT(kCook().failures.size() == 1);
-    writeText(kImages / "mask.tga.rfmeta",
-              sidecar("000000000000000000000000000000b2", "\"color\": \"rgb\"", "rawframe.texture"));
-    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadSidecar));
-}
-
-RAWFRAME_TEST(ARadiancePictureCooksIntoAnEnvironment) {
-    const Project kProject;
-    const fs::path kSkies = kProject.sources / "skies";
-    fs::create_directories(kSkies);
-    fs::copy_file(fs::path{RAWFRAME_TEXTURE_DATA} / "../seeds/radiance/runs.hdr", kSkies / "dusk.hdr");
-    const auto kSidecar = [&kSkies](std::string_view settings) {
-        writeText(kSkies / "dusk.hdr.rfmeta",
-                  sidecar("000000000000000000000000000000c1", settings, "rawframe.texture"));
-    };
-    kSidecar("\"environment\": {\n      \"side\": 8,\n      \"levels\": 3,\n      \"samples\": 16\n    }");
-    static const std::array<Importer, 2> kImporters = {audioImporter(), textureImporter()};
-    const auto kCook = [&kProject] {
-        auto report = cookSources(CookRequest{
-            .sources = kProject.sources, .output = kProject.output, .cache = kProject.cache, .importers = kImporters});
-        RAWFRAME_EXPECT(report.has_value());
-        return report.has_value() ? std::move(*report) : CookReport{};
-    };
-    const CookReport kReport = kCook();
-    RAWFRAME_EXPECT(kReport.cooked == 3 && kReport.failures.empty());
-    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
-    RAWFRAME_EXPECT(kManifest.has_value());
-    std::size_t cubes = 0;
-    for (const content::ManifestEntry& each : kManifest.value_or(std::vector<content::ManifestEntry>{})) {
-        if (each.type.value == texture::kTextureType) {
-            const std::string kBytes = readText(kProject.output / each.locator);
-            const auto kCube = texture::decode(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
-            // A cube of half floats, its three levels three roughnesses.
-            cubes += kCube.has_value() && kCube->format == texture::Format::Rgba16Float && kCube->faces == 6 &&
-                     kCube->levels.size() == 3 && kCube->levels[0].width == 8;
-        }
-    }
-    RAWFRAME_EXPECT(cubes == 1);
-    // A Radiance picture is only an environment, and an environment only a
-    // Radiance picture.
-    kSidecar("");
-    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadSidecar));
-    fs::copy_file(fs::path{RAWFRAME_TEXTURE_DATA} / "pattern.png", kSkies / "flat.png");
-    writeText(kSkies / "flat.png.rfmeta",
-              sidecar("000000000000000000000000000000c2", R"("environment": {})", "rawframe.texture"));
-    kSidecar("\"environment\": {\n      \"side\": 8,\n      \"levels\": 3,\n      \"samples\": 16\n    }");
-    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadSidecar));
-    fs::remove(kSkies / "flat.png.rfmeta");
-    fs::remove(kSkies / "flat.png");
-    // An environment takes no color; its defaults are omitted; its side is
-    // a power of two.
-    kSidecar("\"color\": \"linear\",\n    \"environment\": {}");
-    RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadSidecar));
-    kSidecar("\"environment\": {\n      \"side\": 128\n    }");
-    RAWFRAME_EXPECT(kCook().failures.size() == 1);
-    kSidecar("\"environment\": {\n      \"side\": 12\n    }");
-    RAWFRAME_EXPECT(kCook().failures.size() == 1);
 }
 
 RAWFRAME_TEST(AnimationDocumentsCookIntoResourcesOfTheirKind) {
