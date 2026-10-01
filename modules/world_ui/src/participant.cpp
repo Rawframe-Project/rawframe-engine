@@ -1,10 +1,13 @@
+#include "rawframe/assets/assets.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/game_content/game_content.h"
 #include "rawframe/game_textures/asked.h"
 #include "rawframe/graph/graph.h"
+#include "rawframe/ui/font.h"
 #include "rawframe/view/players.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/layouts.h"
+#include "rawframe/world_localization/text.h"
 #include "rawframe/world_replication/client_worlds.h"
 #include "rawframe/world_ui/errors.h"
 #include "rawframe/world_ui/frames.h"
@@ -12,6 +15,7 @@
 #include "rawframe/world_ui/world_ui.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -26,19 +30,38 @@ constexpr diagnostics::EventIdentity kUiSummary{"ui", "ui_summary"};
 constexpr diagnostics::EventIdentity kFailed{"ui", "ui_failed"};
 constexpr diagnostics::EventIdentity kImageUnknown{"ui", "image_unknown"};
 constexpr diagnostics::EventIdentity kImageUnread{"ui", "image_unavailable"};
+constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
 /// The decoded levels each image may hold.
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
+/// The fonts' bytes, all together (D386).
+constexpr std::uint64_t kFontBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 constexpr std::string_view kProvided[] = {kUiFrames.name};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        view::kPlayerViews.name,
-                                       game_content::kGameContent.name};
+                                       game_content::kGameContent.name,
+                                       world_localization::kGameText.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 std::unexpected<result::Error> refuse(std::string_view why) {
     return std::unexpected<result::Error>{
         result::fail(result::ErrorClass::InvalidArgument, kWorldUiDomain, code(WorldUiError::BadNodes), why).error()};
 }
+
+/// A cooked font's bytes, as the set holds them: the sanitized font the
+/// cook wrote, which the tree checks again as it reads it.
+result::Result<assets::DecodedForm> decodeFont(const content::VerifiedContent& content) {
+    const std::span<const std::byte> kBytes = content.bytes();
+    return assets::DecodedForm{.value = std::make_shared<const std::vector<std::byte>>(kBytes.begin(), kBytes.end()),
+                               .bytes = kBytes.size()};
+}
+
+/// A font a `font` line names, asked of the set.
+struct WantedFont {
+    std::uint64_t id = 0;
+    assets::RequesterId requester;
+    bool done = false;
+};
 
 /// The game's node components and their parents; none for a game without
 /// any.
@@ -95,7 +118,14 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
                                 {"gradientKind", offsetof(Node, gradientKind)},
                                 {"gradientAngle", offsetof(Node, gradientAngle)},
                                 {"gradientFrom", offsetof(Node, gradientFrom)},
-                                {"gradientTo", offsetof(Node, gradientTo)}})) {
+                                {"gradientTo", offsetof(Node, gradientTo)},
+                                {"text", offsetof(Node, text)},
+                                {"textValue", offsetof(Node, textValue)},
+                                {"font", offsetof(Node, font)},
+                                {"textSize", offsetof(Node, textSize)},
+                                {"textColor", offsetof(Node, textColor)},
+                                {"textAlign", offsetof(Node, textAlign)},
+                                {"textWrap", offsetof(Node, textWrap)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -107,6 +137,9 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
         }
         settings.parents[static_cast<std::size_t>(kNode - names.begin())] =
             static_cast<std::size_t>(kParent - names.begin());
+    }
+    for (const world_kest::GameFont& kFont : kGame.fonts) {
+        settings.fonts.push_back(kFont.id);
     }
     return std::optional<UiSettings>{std::move(settings)};
 }
@@ -142,6 +175,24 @@ public:
         if (!settings.has_value()) {
             return {};
         }
+        // A label's words from the game's text in the player's locale; none
+        // without it.
+        if (context.has(world_localization::kGameText.name)) {
+            RAWFRAME_TRY_ASSIGN(const world_localization::GameText* text,
+                                context.capability(world_localization::kGameText));
+            settings->words = [text, labels = files->description().labels](
+                                  std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
+                const auto kLabel = std::ranges::find(labels, label, &world_kest::GameLabel::id);
+                if (kLabel == labels.end()) {
+                    return std::nullopt;
+                }
+                const std::array<localization::Argument, 1> kArguments{
+                    localization::Argument{.name = kLabel->argument, .value = value}};
+                auto words = text->format(
+                    kLabel->table, kLabel->key, std::span{kArguments}.first(kLabel->argument.empty() ? 0 : 1));
+                return words.has_value() ? std::optional{std::move(*words)} : std::nullopt;
+            };
+        }
         RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
         if (context.has(view::kPlayerViews.name)) {
             RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
@@ -170,6 +221,28 @@ public:
                                                         .owner = context.owner(),
                                                         .scope = &context.scope(),
                                                         .clock = &context.clock()};
+                // The fonts, every one now: text waits for them (D386).
+                if (!files->fonts().empty()) {
+                    const content::ResourceTypeId kFontType{ui::kFontType};
+                    RAWFRAME_TRY(content->admit(std::vector<content::AdmittedRepresentation>{
+                        {.type = kFontType,
+                         .representation = *content::RepresentationId::parse(ui::kFontRepresentation)}}));
+                    RAWFRAME_TRY_ASSIGN(
+                        fontSet_,
+                        assets::AssetSet::create(
+                            content->store(),
+                            *context.cpuExecutor(),
+                            context.owner(),
+                            context.scope(),
+                            context.clock(),
+                            {.type = kFontType, .decode = &decodeFont, .budgetBytes = kFontBudgetBytes}));
+                    for (const world_kest::GameFontResource& kFont : files->fonts()) {
+                        RAWFRAME_TRY_ASSIGN(const assets::RequesterId kRequester,
+                                            fontSet_->request(content::ResourceRef{
+                                                .id = content::ResourceId{kFont.font}, .type = kFontType}));
+                        fonts_.push_back(WantedFont{.id = kFont.id, .requester = kRequester});
+                    }
+                }
             }
         }
         images_ = game_textures::AskedTextures{reading, files->textures(), kImageBudgetBytes};
@@ -194,6 +267,7 @@ public:
         if (views_ != nullptr && views_->window().width > 0) {
             scale = kWidth / views_->window().width;
         }
+        takeFonts();
         laidOut_.clear();
         for (std::size_t at = 0; at < regions_.size(); ++at) {
             const world_kest::RegionPixels kWhole = world_kest::pixelsOf(regions_[at], width_, height_);
@@ -219,6 +293,7 @@ public:
         }
         drawn_ = &ui_->drawn();
         boxes_ += drawn_->boxes.size();
+        glyphRuns_ += drawn_->glyphRuns.size();
         shadows_ += drawn_->shadows.size();
         imagesDrawn_ += drawn_->images.size();
         ++tick_;
@@ -259,7 +334,11 @@ public:
                       diagnostics::field("images", imagesDrawn_),
                       diagnostics::field("imagesRead", images_.read()),
                       diagnostics::field("imagesReady", images_.ready()),
-                      diagnostics::field("shadows", shadows_)});
+                      diagnostics::field("shadows", shadows_),
+                      diagnostics::field("fontsRead", fontsRead_),
+                      diagnostics::field("texts", kStatistics.texts),
+                      diagnostics::field("textsUnknown", kStatistics.textsUnknown),
+                      diagnostics::field("glyphRuns", glyphRuns_)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -285,6 +364,51 @@ public:
     }
 
 private:
+    /// Fonts read since the last frame given to the UI; one that failed said
+    /// once.
+    void takeFonts() {
+        if (fontSet_ == nullptr) {
+            return;
+        }
+        fontSet_->update(tick_);
+        for (WantedFont& wanted : fonts_) {
+            if (wanted.done) {
+                continue;
+            }
+            const assets::Readiness kReadiness = fontSet_->readiness(wanted.requester);
+            std::optional<std::string> failure;
+            if (kReadiness == assets::Readiness::Failed) {
+                failure = std::string{fontSet_->failure(wanted.requester)->description()};
+            } else if (kReadiness == assets::Readiness::Ready) {
+                const std::optional<assets::AssetHandle> kHandle = fontSet_->handle(wanted.requester);
+                auto bytes = kHandle.has_value()
+                                 ? assets::Assets<std::vector<std::byte>>{*fontSet_}.share(*kHandle, tick_)
+                                 : std::unexpected<result::Error>{result::fail(result::ErrorClass::NotFound,
+                                                                               kWorldUiDomain,
+                                                                               code(WorldUiError::BadNodes),
+                                                                               "a font read has no handle")
+                                                                      .error()};
+                if (!bytes.has_value()) {
+                    failure = std::string{bytes.error().description()};
+                } else if (const result::Status kAdded = ui_->addFont(wanted.id, **bytes); !kAdded.has_value()) {
+                    failure = std::string{kAdded.error().description()};
+                } else {
+                    ++fontsRead_;
+                }
+            } else {
+                continue;
+            }
+            wanted.done = true;
+            if (failure.has_value()) {
+                emitter_.log(diagnostics::Severity::Warning,
+                             kFontUnread,
+                             "a font the game names could not be read: its text shows in another",
+                             {diagnostics::field("font", graph::nodeIdText(wanted.id)),
+                              diagnostics::field("reason", std::move(*failure))});
+            }
+        }
+    }
+
     world_replication::ClientWorlds* clients_ = nullptr;
     view::PlayerViews* views_ = nullptr;
     std::unique_ptr<WorldUi> ui_;
@@ -298,6 +422,10 @@ private:
     std::uint64_t imagesDrawn_ = 0;
     std::uint64_t shadows_ = 0;
     game_textures::AskedTextures images_{std::nullopt, {}, 0};
+    std::unique_ptr<assets::AssetSet> fontSet_;
+    std::vector<WantedFont> fonts_;
+    std::uint64_t fontsRead_ = 0;
+    std::uint64_t glyphRuns_ = 0;
     std::uint64_t tick_ = 0;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
@@ -319,8 +447,8 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
-        // Images are decoded on the CPU executor; stopping only says what
-        // was drawn.
+        // Images are decoded, and fonts copied, on the CPU executor;
+        // stopping only says what was drawn.
         .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
         .observabilityIdentity = "world_ui.ui",

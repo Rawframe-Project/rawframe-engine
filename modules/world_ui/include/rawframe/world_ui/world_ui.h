@@ -13,10 +13,13 @@
 #include "rawframe/world/entity.h"
 #include "rawframe/world/world.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace rawframe::world_ui {
@@ -60,13 +63,30 @@ struct Node {
     float gradientAngle = 0;
     std::uint32_t gradientFrom = 0;
     std::uint32_t gradientTo = 0;
+    std::uint64_t text = 0;
+    std::int64_t textValue = 0;
+    std::uint64_t font = 0;
+    float textSize = 0;
+    std::uint32_t textColor = 0;
+    std::uint32_t textAlign = 0;
+    std::uint32_t textWrap = 0;
 };
+
+/// The words of label `label` with `value` as its argument, in the player's
+/// locale; none for a label the game does not have, or whose words cannot be
+/// made (D386).
+using Words = std::function<std::optional<std::string>(std::uint64_t label, std::int64_t value)>;
 
 /// The game's node components, in declaration order, and the one each is
 /// inside by its `ui` line, an index of them; none for a root of its view.
+/// The game's fonts by the identities its `font` lines give, in their order,
+/// the first the one a node's nought names, and where its labels' words come
+/// from (D386).
 struct UiSettings {
     std::vector<schema::ComponentTypeId> nodes;
     std::vector<std::optional<std::size_t>> parents;
+    std::vector<std::uint64_t> fonts;
+    Words words;
     /// The most nodes held at once, every view's together; a node past them
     /// is left out and counted.
     std::uint32_t maximumNodes = 4096;
@@ -96,6 +116,9 @@ struct UiStatistics {
     std::uint64_t leftOut = 0;
     /// The most nodes a frame held.
     std::uint64_t mostNodes = 0;
+    /// Words given to nodes, and labels that had none (D386).
+    std::uint64_t texts = 0;
+    std::uint64_t textsUnknown = 0;
 };
 
 class WorldUi {
@@ -115,6 +138,12 @@ public:
     /// `order` and then by entity, each its own size, an absolute one where
     /// it says; children likewise in their parent.
     [[nodiscard]] result::Status update(std::span<const UiView> views, float width, float height, float scale);
+
+    /// Font `id`, one of the settings' fonts, read from a cooked font's
+    /// bytes; the nodes that show words are given them again in it. Refused
+    /// for a font not declared, one already read, or bytes the tree does not
+    /// take.
+    [[nodiscard]] result::Status addFont(std::uint64_t id, std::span<const std::byte> bytes);
 
     /// What the last update drew.
     [[nodiscard]] const ui::DrawList& drawn() const noexcept;

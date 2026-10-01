@@ -121,6 +121,8 @@ struct Placed {
 struct WorldUi::State {
     UiSettings settings;
     std::unique_ptr<ui::Tree> tree;
+    /// The fonts read, by their game identities.
+    std::unordered_map<std::uint64_t, ui::Font> fonts;
     ui::Node window;
     std::vector<ViewState> views;
     /// Each parent's children as last attached, by the parent's node.
@@ -167,11 +169,37 @@ struct WorldUi::State {
             ++statistics.changed;
         }
         if (!kLayout.has_value() || !tree->setLayout(*entry.node, *kLayout).has_value() ||
-            !tree->setLook(*entry.node, lookOf(value)).has_value()) {
+            !tree->setLook(*entry.node, lookOf(value)).has_value() || !giveWords(*entry.node, value)) {
             drop(entry);
             return false;
         }
         return true;
+    }
+
+    /// `value`'s words given to `node`, or none; whether the tree took them.
+    bool giveWords(ui::Node node, const Node& value) {
+        if (value.textAlign > 2 || value.textWrap > 1) {
+            return false;
+        }
+        std::optional<std::string> words;
+        if (value.text != 0) {
+            words = settings.words ? settings.words(value.text, value.textValue) : std::nullopt;
+            ++(words.has_value() ? statistics.texts : statistics.textsUnknown);
+        }
+        if (!words.has_value()) {
+            return tree->clearText(node).has_value();
+        }
+        // A font not read yet is shown in the default until it is.
+        const auto kFont = fonts.find(value.font);
+        return tree
+            ->setText(node,
+                      *words,
+                      {.font = kFont != fonts.end() ? kFont->second : ui::Font{},
+                       .size = value.textSize > 0 ? value.textSize : 16,
+                       .color = value.textColor,
+                       .align = static_cast<ui::TextAlign>(value.textAlign),
+                       .wrap = value.textWrap == 0})
+            .has_value();
     }
 
     /// `view` bound to `world`: every node of the World before gone.
@@ -391,6 +419,35 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
     RAWFRAME_TRY(state.tree->draw(state.window, scale, state.drawn));
     ++state.statistics.frames;
     state.statistics.mostNodes = std::max<std::uint64_t>(state.statistics.mostNodes, state.held);
+    return {};
+}
+
+result::Status WorldUi::addFont(std::uint64_t id, std::span<const std::byte> bytes) {
+    State& state = *state_;
+    const auto kDeclared = std::ranges::find(state.settings.fonts, id);
+    if (kDeclared == state.settings.fonts.end() || state.fonts.contains(id)) {
+        return refuse("a font is one of the game's, read once");
+    }
+    RAWFRAME_TRY_ASSIGN(const ui::Font kFont, state.tree->addFont(bytes));
+    state.fonts.emplace(id, kFont);
+    // The default is the earliest declared font read so far; nought names
+    // it too.
+    for (const std::uint64_t kId : state.settings.fonts) {
+        if (const auto kRead = state.fonts.find(kId); kRead != state.fonts.end()) {
+            RAWFRAME_TRY(state.tree->setDefaultFont(kRead->second));
+            break;
+        }
+    }
+    for (ViewState& view : state.views) {
+        for (auto& [kKey, entry] : view.entries) {
+            if (entry.node.has_value() && entry.value.text != 0 &&
+                (entry.value.font == id || !state.fonts.contains(entry.value.font))) {
+                if (!state.giveWords(*entry.node, entry.value)) {
+                    state.drop(entry);
+                }
+            }
+        }
+    }
     return {};
 }
 

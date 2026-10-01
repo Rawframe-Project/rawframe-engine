@@ -34,8 +34,18 @@ module rawframe.ui
 // its fill it may paint a gradient (D382) from `gradientFrom` to
 // `gradientTo` (0xRRGGBBAA): LINEAR along `gradientAngle` degrees clockwise
 // from toward the top, as CSS's linear-gradient, or RADIAL out from its
-// center to its farthest corner. A zeroed node, as presentation attaches
-// it, is empty and draws nothing.
+// center to its farthest corner.
+//
+// It may show words (D386): `text` names a label by the identity the game's
+// `label` line gives it, a key of one of its string tables in the player's
+// locale, whose one argument, if its message reads one, is `textValue`. The
+// words are in `font`, a font by the identity a `font` line gives it (nought
+// for the game's first), `textSize` pixels to the em (nought for 16), of
+// `textColor` (0xRRGGBBAA), their lines at the start, center, or end
+// (`textAlign`), wrapped to the node's width unless NO_WRAP. A node with
+// words is sized by them unless its size says otherwise; its children
+// inherit their look. A zeroed node, as presentation attaches it, is empty
+// and draws nothing.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -74,6 +84,13 @@ struct Node {
     gradientAngle: f32
     gradientFrom: u32
     gradientTo: u32
+    text: u64
+    textValue: i64
+    font: u64
+    textSize: f32
+    textColor: u32
+    textAlign: u32
+    textWrap: u32
 }
 
 // A node's `direction`.
@@ -102,3 +119,9 @@ const ALIGN_CENTER: u32 = 4
 const NO_GRADIENT: u32 = 0
 const LINEAR: u32 = 1
 const RADIAL: u32 = 2
+// A node's `textAlign`, and its `textWrap`.
+const TEXT_START: u32 = 0
+const TEXT_CENTER: u32 = 1
+const TEXT_END: u32 = 2
+const WRAP: u32 = 0
+const NO_WRAP: u32 = 1

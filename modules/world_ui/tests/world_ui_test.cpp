@@ -2,9 +2,11 @@
 // view, nested by their components' parents on the same entity or on the
 // player, siblings in order; a node changes, goes, and is left out as its
 // component does; nothing unchanged is laid out again; a new World starts
-// afresh; and values the tree cannot take, a gradient of no kind among
-// them, are left out and counted.
+// afresh; values the tree cannot take, a gradient of no kind among them,
+// are left out and counted; and a node shows its label's words in the
+// game's font once it is read, sized by them (D386).
 
+#include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_ui/errors.h"
 #include "rawframe/world_ui/world_ui.h"
@@ -12,6 +14,7 @@
 #include <array>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <utility>
 
 using namespace rawframe;
@@ -195,4 +198,54 @@ RAWFRAME_TEST(WhatTheTreeCannotTakeIsLeftOut) {
     // A parent past the components is refused.
     const auto kRefused = WorldUi::create({.nodes = {kHudId}, .parents = {std::size_t{1}}});
     RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().domain() == kWorldUiDomain);
+}
+
+RAWFRAME_TEST(ANodeShowsItsLabelsWordsInTheGamesFont) {
+    Rig rig;
+    std::uint64_t asked = 0;
+    rig.ui =
+        *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId},
+                          .parents = {std::nullopt, 0, 0},
+                          .fonts = {0xF2, 0xF1},
+                          .words = [&asked](std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
+                              ++asked;
+                              if (label != 0xA1) {
+                                  return std::nullopt;
+                              }
+                              return std::string(static_cast<std::size_t>(value), 'X');
+                          }});
+    // Words in Ahem, whose glyphs are em boxes: three of them, 10 pixels.
+    rig.put(
+        rig.player, kHudId, Node{.text = 0xA1, .textValue = 3, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF});
+    RAWFRAME_EXPECT(rig.frame());
+    RAWFRAME_EXPECT(asked == 1 && rig.ui->statistics().texts == 1);
+    // No font read yet: nothing is drawn.
+    RAWFRAME_EXPECT(rig.ui->drawn().glyphRuns.empty());
+
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    const auto kBytes = std::as_bytes(std::span{kAhem.data(), kAhem.size()});
+    RAWFRAME_EXPECT(rig.ui->addFont(0xF1, kBytes).has_value());
+    // Read once, and only fonts the game declares.
+    RAWFRAME_EXPECT(!rig.ui->addFont(0xF1, kBytes).has_value() && !rig.ui->addFont(0xF3, kBytes).has_value());
+    RAWFRAME_EXPECT(rig.frame());
+    const ui::DrawList& kDrawn = rig.ui->drawn();
+    RAWFRAME_EXPECT(kDrawn.glyphRuns.size() == 1 && kDrawn.glyphs.size() == 3);
+    if (kDrawn.glyphRuns.size() == 1) {
+        // At the view's top left, on a baseline 8 pixels down.
+        RAWFRAME_EXPECT(kDrawn.glyphRuns[0].size == 10 && kDrawn.glyphRuns[0].x + kDrawn.glyphs[0].x == 100 &&
+                        kDrawn.glyphRuns[0].y + kDrawn.glyphs[0].y == 58);
+    }
+    // Its words change with its value; a label the game does not have, or a
+    // text look past the constants, shows nothing.
+    rig.put(
+        rig.player, kHudId, Node{.text = 0xA1, .textValue = 5, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF});
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 5);
+    rig.put(rig.player, kHudId, Node{.text = 0xA9, .textSize = 10, .textColor = 0xFFFFFFFF});
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.empty() && rig.ui->statistics().textsUnknown == 1);
+    rig.put(rig.player, kHudId, Node{.text = 0xA1, .textValue = 2, .textAlign = 3});
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.empty());
+    RAWFRAME_EXPECT(rig.ui->statistics().leftOut == 1);
+    // Font nought is the first declared font read so far: here the one.
+    rig.put(rig.player, kHudId, Node{.text = 0xA1, .textValue = 2, .textSize = 10, .textColor = 0xFFFFFFFF});
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 2);
 }
