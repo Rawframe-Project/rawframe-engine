@@ -1,9 +1,10 @@
 // Particle emitters in the view stage (D352): an emitter spawns at its rate
 // on the particle clock, its particles born evenly across the frame, and a
-// burst each time its count moves; its ring keeps going around; emitters
-// out of view are left alone, the nearest are kept up to the limit and
-// drawn farthest first, and values past a limit point are held and
-// counted; an emitter gone keeps nothing.
+// burst each time its count moves; its ring keeps going around, and
+// starts anew at another size (D353); emitters out of view are left
+// alone, the nearest are kept up to the limit and drawn farthest first,
+// and values past a limit point are held and counted; an emitter gone
+// keeps nothing.
 
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/scene.h"
@@ -106,6 +107,13 @@ RAWFRAME_TEST(AnEmitterSpawnsAtItsRateAndBursts) {
     }
     const SceneFrame& kAround = rig.frame(0.1F);
     RAWFRAME_EXPECT(kAround.emitters.size() == 1 && kAround.emitters[0].first == (30 + (70 * 1)) % 105);
+    // Its ring the same one all along; another size starts another, which
+    // a device's ring follows (D353).
+    RAWFRAME_EXPECT(kAround.emitters.size() == 1 && kAround.emitters[0].ring == 1);
+    emitter.rate = 50;
+    rig.change(kFountain, emitter);
+    const SceneFrame& kSmaller = rig.frame(0.1F);
+    RAWFRAME_EXPECT(kSmaller.emitters.size() == 1 && kSmaller.emitters[0].ring == 2 && kSmaller.emitters[0].first == 0);
 }
 
 RAWFRAME_TEST(EmittersAreKeptByTheViewAndTheLimits) {

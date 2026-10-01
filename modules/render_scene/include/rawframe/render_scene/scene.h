@@ -440,7 +440,8 @@ inline constexpr float kParticleClockPeriod = 4096;
 /// vary (nought to one); its ring of particles: its size, where this
 /// frame's spawn starts in it, how many it spawns, the first `steady` born
 /// one `step` apart from `born` on the particle clock and the rest (its
-/// bursts) at its now; and its seed.
+/// bursts) at its now; its seed; and how many times its ring has started
+/// anew, which a device's ring follows (D353).
 struct SceneEmitter {
     std::uint64_t key = 0;
     std::uint32_t material = 0;
@@ -465,6 +466,7 @@ struct SceneEmitter {
     float born = 0;
     float step = 0;
     std::uint32_t seed = 0;
+    std::uint32_t ring = 0;
 };
 
 /// A decal as the extract stage copies it out of the World, where its

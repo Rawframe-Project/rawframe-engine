@@ -150,7 +150,8 @@ void spawnParticles(SceneFrame& frame,
             remembered = EmitterHistory{.anchor = kInstance.position,
                                         .bursts = kEmitter.bursts,
                                         .capacity = kKept.capacity,
-                                        .drawn = remembered.drawn};
+                                        .drawn = remembered.drawn,
+                                        .ring = remembered.ring + 1};
         }
         if (remembered.drawn + 1 != frameIndex) {
             remembered.owed = 0;
@@ -199,7 +200,8 @@ void spawnParticles(SceneFrame& frame,
                           .steady = static_cast<std::uint32_t>(steady),
                           .born = wrapped(clock - kElapsed),
                           .step = steady > 0 ? kElapsed / static_cast<float>(steady) : 0.0F,
-                          .seed = kEmitter.seed != 0 ? kEmitter.seed : seedOf(kKey)};
+                          .seed = kEmitter.seed != 0 ? kEmitter.seed : seedOf(kKey),
+                          .ring = remembered.ring};
         remembered.next = static_cast<std::uint32_t>((remembered.next + kSpawned) % kKept.capacity);
         remembered.drawn = frameIndex;
         frame.emitters.push_back(made);

@@ -17,8 +17,8 @@ namespace rawframe::render_scene {
 
 /// What an emitter keeps from frame to frame on a client: its anchor in
 /// the World, the bursts it has seen, the particles it owes (a fraction),
-/// its ring's size and where its next spawn starts in it, and the frame it
-/// was last drawn in.
+/// its ring's size and where its next spawn starts in it, the frame it was
+/// last drawn in, and how many times its ring has started anew (D353).
 struct EmitterHistory {
     std::array<double, 3> anchor{};
     std::uint32_t bursts = 0;
@@ -26,6 +26,7 @@ struct EmitterHistory {
     std::uint32_t capacity = 0;
     std::uint32_t next = 0;
     std::uint64_t drawn = 0;
+    std::uint32_t ring = 0;
 };
 
 /// An emitter's identity across frames: its entity and which of the
