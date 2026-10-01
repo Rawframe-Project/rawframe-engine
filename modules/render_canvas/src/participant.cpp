@@ -9,6 +9,7 @@
 #include "rawframe/render_canvas/errors.h"
 #include "rawframe/render_canvas/frames.h"
 #include "rawframe/render_canvas/registrar.h"
+#include "rawframe/view/players.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/client_worlds.h"
 
@@ -32,8 +33,10 @@ constexpr diagnostics::EventIdentity kTextureNotReloaded{"canvas", "texture_relo
 constexpr diagnostics::EventIdentity kTexturesRead{"canvas", "textures_read"};
 constexpr diagnostics::EventIdentity kUnreadMaterial{"canvas", "material_unavailable"};
 constexpr std::string_view kProvided[] = {kCanvasFrames.name};
-constexpr std::string_view kMaybe[] = {
-    world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
+constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
+                                       world_kest::kGameFiles.name,
+                                       game_content::kGameContent.name,
+                                       view::kPlayerViews.name};
 /// The decoded levels the canvas holds at most.
 /// A client's view without a camera of its own: 10 meters tall.
 constexpr float kDefaultViewHeight = 10;
@@ -110,6 +113,11 @@ public:
         if (configuration.text("canvas.client").has_value()) {
             RAWFRAME_TRY_ASSIGN(const std::uint64_t kClient, configuration.unsignedInteger("canvas.client", 0));
             client_ = static_cast<std::size_t>(kClient);
+        } else if (context.has(view::kPlayerViews.name)) {
+            // The local players' views, told where the host lends them
+            // (D367); a canvas of a client named by configuration is no
+            // player's.
+            RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kWidth, configuration.unsignedInteger("canvas.width", 1280));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeight, configuration.unsignedInteger("canvas.height", 720));
@@ -280,6 +288,7 @@ public:
             if (!regionFrames_.empty() && regionFrames_[0].width != 0) {
                 regionFrames_[0].frame = &kFrame;
             }
+            tellViews();
             // What a device would draw this frame: the draws whose texture
             // and whose material's texture are decoded and held.
             const auto kWaits = [this](std::uint64_t id) {
@@ -475,8 +484,38 @@ private:
         }
     }
 
+    /// Each local player's view as this frame derived it (D367), as the
+    /// scene tells its own.
+    void tellViews() {
+        if (views_ == nullptr) {
+            return;
+        }
+        const auto kRegionOf = [&](std::size_t at) {
+            if (regionFrames_.empty()) {
+                return view::Region{};
+            }
+            const CanvasRegion& kRegion = regionFrames_[at];
+            const auto kWidth = static_cast<float>(width_);
+            const auto kHeight = static_cast<float>(height_);
+            return view::Region{.left = static_cast<float>(kRegion.x) / kWidth,
+                                .top = static_cast<float>(kRegion.y) / kHeight,
+                                .width = static_cast<float>(kRegion.width) / kWidth,
+                                .height = static_cast<float>(kRegion.height) / kHeight};
+        };
+        views_->tell(0, kRegionOf(0), orthographicOf(camera_));
+        for (std::size_t at = 0; at < localPlayers_.size(); ++at) {
+            if (localPlayers_[at].presented.has_value()) {
+                views_->tell(at + 1, kRegionOf(at + 1), orthographicOf(localPlayers_[at].camera));
+            } else {
+                views_->forgetOrthographic(at + 1);
+            }
+        }
+    }
+
     world_replication::ClientWorlds* clients_ = nullptr;
     std::optional<std::size_t> client_;
+    /// The local players' views, told each frame (D367).
+    view::PlayerViews* views_ = nullptr;
     CanvasSettings settings_;
     CanvasCamera camera_;
     std::optional<execution::MonotonicInstant> presented_;

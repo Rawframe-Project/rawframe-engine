@@ -29,6 +29,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     : request_(request), settings_(std::move(settings)) {
     lent_.push_back(composition::LentCapability{input_kest::kFeed.name, composition::provideAs(feed_)});
     lent_.push_back(composition::LentCapability{window::kSurfaces.name, composition::provideAs(surfaces_)});
+    lent_.push_back(composition::LentCapability{view::kPlayerViews.name, composition::provideAs(views_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
 }
@@ -37,6 +38,7 @@ result::Status WindowHost::start(window::Windows& windows) {
     RAWFRAME_TRY_ASSIGN(const window::WindowId kWindow,
                         windows.create(window::WindowSettings{.title = settings_.title}));
     surfaces_.watch(kWindow);
+    window_ = kWindow;
     bridge_.emplace(feed_);
     host_ = std::make_unique<host::Host>(request_);
     return {};
@@ -52,6 +54,9 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         return end();
     }
     surfaces_.update(windows);
+    if (const auto kState = windows.state(window_); kState.has_value()) {
+        views_.window({.width = kState->size.width, .height = kState->size.height});
+    }
     for (int ran = 0; ran < kMostIterationsPerFrame && clock_.now() >= host_->due(); ++ran) {
         if (!host_->iterate()) {
             return end();

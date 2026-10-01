@@ -9,6 +9,7 @@
 #include "rawframe/render_scene/frames.h"
 #include "rawframe/render_scene/registrar.h"
 #include "rawframe/render_scene/scene.h"
+#include "rawframe/view/players.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/client_worlds.h"
@@ -44,8 +45,10 @@ constexpr diagnostics::EventIdentity kViewRefused{"scene", "view_refused"};
 constexpr diagnostics::EventIdentity kViewsSummary{"scene", "scene_views_summary"};
 /// The decoded levels the materials' textures may hold.
 constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
-constexpr std::string_view kMaybe[] = {
-    world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
+constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
+                                       world_kest::kGameFiles.name,
+                                       game_content::kGameContent.name,
+                                       view::kPlayerViews.name};
 
 /// A material's texture as the scene binds it.
 SceneTexture sceneTextureOf(const material::SampledTexture& texture) {
@@ -227,6 +230,11 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
         client_ = client;
+        // The local players' views, told where the host lends them (D367);
+        // a scene of a client named by configuration is no player's.
+        if (!client.has_value() && context.has(view::kPlayerViews.name)) {
+            RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
+        }
         // Split-screen (D362): the process's local players, each in its
         // region by the game's layout for their count, the first in the
         // first.
@@ -410,6 +418,7 @@ public:
             if (!regionFrames_.empty() && regionFrames_[0].width != 0) {
                 regionFrames_[0].frame = &kFrame;
             }
+            tellViews();
             ++frames_;
             drawn_ += kFrame.drawn;
             culled_ += kFrame.culled;
@@ -807,6 +816,35 @@ private:
         }
     }
 
+    /// Each local player's view as this frame derived it (D367): the
+    /// first's region and camera, then the others', a player not presented
+    /// having none.
+    void tellViews() {
+        if (views_ == nullptr) {
+            return;
+        }
+        const auto kRegionOf = [&](std::size_t at) {
+            if (regionFrames_.empty()) {
+                return view::Region{};
+            }
+            const RegionFrame& kRegion = regionFrames_[at];
+            const auto kWidth = static_cast<float>(width_);
+            const auto kHeight = static_cast<float>(height_);
+            return view::Region{.left = static_cast<float>(kRegion.x) / kWidth,
+                                .top = static_cast<float>(kRegion.y) / kHeight,
+                                .width = static_cast<float>(kRegion.width) / kWidth,
+                                .height = static_cast<float>(kRegion.height) / kHeight};
+        };
+        views_->tell(0, kRegionOf(0), perspectiveOf(camera_));
+        for (std::size_t at = 0; at < localPlayers_.size(); ++at) {
+            if (localPlayers_[at].presented.has_value()) {
+                views_->tell(at + 1, kRegionOf(at + 1), perspectiveOf(localPlayers_[at].camera));
+            } else {
+                views_->forgetPerspective(at + 1);
+            }
+        }
+    }
+
     /// The camera on `entity` and its effects read into `camera`, the eye
     /// placed by the entity's pose; whether it has a camera (else it looks
     /// as the default does).
@@ -1063,6 +1101,8 @@ private:
     const SceneFrame* queued_ = nullptr;
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
+    /// The local players' views, told each frame (D367).
+    view::PlayerViews* views_ = nullptr;
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
     std::uint64_t culled_ = 0;

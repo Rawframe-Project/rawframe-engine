@@ -6,4 +6,4 @@ if(NOT TARGET rawframe_input_window)
 endif()
 
 rawframe_module(NAME window_host SOURCES src/window_host.cpp
-    DEPS host input_kest input_window input window composition execution result base)
+    DEPS host view input_kest input_window input window composition execution result base)
