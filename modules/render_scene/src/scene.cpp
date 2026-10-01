@@ -1056,7 +1056,9 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"halfY", offsetof(Decal, halfY)},
                            {"halfZ", offsetof(Decal, halfZ)},
                            {"color", offsetof(Decal, color)},
-                           {"texture", offsetof(Decal, texture)}}));
+                           {"texture", offsetof(Decal, texture)},
+                           {"normal", offsetof(Decal, normal)},
+                           {"roughness", offsetof(Decal, roughness)}}));
     for (const physics3d::BodyMesh& kMesh : game.meshes()) {
         loaded.meshes.push_back(SceneMesh{.id = kMesh.id, .mesh = kMesh.mesh});
     }

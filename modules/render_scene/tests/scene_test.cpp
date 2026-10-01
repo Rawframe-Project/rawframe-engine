@@ -1006,20 +1006,35 @@ RAWFRAME_TEST(DecalsInViewArePlacedIntoTheirBoxesAndClustered) {
     };
     const float kHalfTurn = std::sqrt(0.5F);
     const auto kYard = [&](Rig& rig) {
-        // Ahead, square to the World; ahead, turned a quarter about up; and
-        // three that are no decal in view: behind the eye, with no texture,
-        // and with no depth.
-        kPlace(
-            rig, {.halfX = 1, .halfY = 1, .halfZ = 0.5F, .color = 0xFF000080, .texture = 0xd1}, 0, -10, {0, 0, 0, 1});
+        // Ahead, square to the World, with normals and a roughness past
+        // one; ahead, turned a quarter about up; and four that are no decal
+        // in view: behind the eye, with no texture, with no depth, and with
+        // a roughness not a number.
+        kPlace(rig,
+               {.halfX = 1,
+                .halfY = 1,
+                .halfZ = 0.5F,
+                .color = 0xFF000080,
+                .texture = 0xd1,
+                .normal = 0xb1,
+                .roughness = 2},
+               0,
+               -10,
+               {0, 0, 0, 1});
         kPlace(rig, {.halfX = 2, .halfY = 1, .halfZ = 1, .texture = 0xd2}, 5, -10, {0, kHalfTurn, 0, kHalfTurn});
         kPlace(rig, {.halfX = 1, .halfY = 1, .halfZ = 1, .texture = 0xd3}, 0, 30, {0, 0, 0, 1});
         kPlace(rig, {.halfX = 1, .halfY = 1, .halfZ = 1}, 0, -10, {0, 0, 0, 1});
         kPlace(rig, {.halfX = 1, .halfY = 1, .halfZ = 0, .texture = 0xd4}, 0, -10, {0, 0, 0, 1});
+        kPlace(rig,
+               {.halfX = 1, .halfY = 1, .halfZ = 1, .texture = 0xd5, .roughness = std::nanf("")},
+               0,
+               -10,
+               {0, 0, 0, 1});
     };
     Rig rig;
     kYard(rig);
     const SceneFrame& kFrame = rig.frame({.eye = {kX, 0, 0}, .fovY = 1.5F});
-    RAWFRAME_EXPECT(kFrame.decals.size() == 2 && kFrame.decalsCulled == 3 && kFrame.decalsOverLimit == 0);
+    RAWFRAME_EXPECT(kFrame.decals.size() == 2 && kFrame.decalsCulled == 4 && kFrame.decalsOverLimit == 0);
     if (kFrame.decals.size() != 2) {
         return;
     }
@@ -1045,6 +1060,9 @@ RAWFRAME_TEST(DecalsInViewArePlacedIntoTheirBoxesAndClustered) {
     RAWFRAME_EXPECT(near(kTurnedSide[0], 1, 1e-3F) && near(kTurnedSide[1], 0, 1e-3F) && near(kTurnedSide[2], 0, 1e-3F));
     RAWFRAME_EXPECT(near(kSquare.color[0], 1) && near(kSquare.color[1], 0) && near(kSquare.color[3], 128.0F / 255) &&
                     kSquare.texture == 0xd1 && kTurned.texture == 0xd2);
+    // Its normals' texture, and its roughness at most one; the other's
+    // none, leaving the surface's.
+    RAWFRAME_EXPECT(kSquare.normal == 0xb1 && kSquare.roughness == 1 && kTurned.normal == 0 && kTurned.roughness == 0);
     // Each is named by clusters, after the lights there.
     std::size_t named = 0;
     for (std::size_t at = 0; at + 3 < kFrame.clusters.ranges.size(); at += 4) {

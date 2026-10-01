@@ -229,15 +229,20 @@ struct ReflectionProbe {
 // within it, seen along its -Z as a projector would throw it: the
 // texture's left to right along +X, bottom to top along +Y. Its color
 // tints the texture (0xRRGGBBAA, sRGB), its alpha times the texture's
-// covering what is under it, lit as that surface is. Where decals
-// overlap, a later entity's lies over an earlier's. Sides of nought, or
-// no texture, are no decal.
+// covering what is under it, lit as that surface is. Where it covers, a
+// `normal` texture (glTF's tangent space, green up the texture) bends the
+// surface's normal, and a `roughness` above nought (at most one) is the
+// surface's (D342); a normal of nought, or a roughness of nought, leaves
+// the surface's. Where decals overlap, a later entity's lies over an
+// earlier's. Sides of nought, or no texture, are no decal.
 struct Decal {
     halfX: f32
     halfY: f32
     halfZ: f32
     color: u32
     texture: u64
+    normal: u64
+    roughness: f32
 }
 
 // A point light (ADR-0051), on any entity, at its pose: `lumens` of

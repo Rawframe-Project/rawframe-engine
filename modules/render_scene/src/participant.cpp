@@ -298,6 +298,7 @@ public:
             }
             for (const render_scene::SceneDecal& kDecal : kFrame.decals) {
                 askPicture(kDecal.texture);
+                askPicture(kDecal.normal);
             }
             queued_ = &kFrame;
             ++frames_;
@@ -474,7 +475,8 @@ private:
     }
 
     /// Asks for a picture the World names, the sky's, a reflection
-    /// probe's, or a decal's, on its first naming (D322, D325, D339): a
+    /// probe's, or a decal's or its normals' (D342), on its first naming
+    /// (D322, D325, D339): a
     /// texture the game declares, read alone and held, so a game's other
     /// textures are never read for it. One it does not declare, or that
     /// cannot be asked for, is none, and is said so once.

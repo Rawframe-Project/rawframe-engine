@@ -146,6 +146,10 @@ struct Decal {
     float halfZ = 0;
     std::uint32_t color = 0xFFFFFFFF;
     std::uint64_t texture = 0;
+    /// The texture bending the normals it covers, nought for none; the
+    /// roughness it lays, nought for the surface's (D342).
+    std::uint64_t normal = 0;
+    float roughness = 0;
 };
 
 /// `rawframe.model.ReflectionProbe` as C++ reads it (D325).
@@ -359,11 +363,14 @@ struct DecalInstance {
 /// A decal as a device reads it (D339): the eye-relative World into its
 /// box, which spans -1 to 1 along each axis and is seen along -Z, x to the
 /// texture's right and y to its top; its tint in linear light, with how
-/// much it covers; and its texture.
+/// much it covers; its texture; and its normal texture and the roughness
+/// it lays, nought for none (D342).
 struct SceneDecal {
     Matrix toBox{};
     std::array<float, 4> color{};
     std::uint64_t texture = 0;
+    std::uint64_t normal = 0;
+    float roughness = 0;
 };
 
 /// A reflection probe as a device reads it (D325): its box's middle

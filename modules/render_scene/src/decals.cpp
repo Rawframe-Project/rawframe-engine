@@ -23,7 +23,7 @@ void clusterDecals(SceneFrame& frame,
     for (const DecalInstance* instance : ordered) {
         const Decal& kDecal = instance->decal;
         const std::array<float, 3> kHalf = {kDecal.halfX, kDecal.halfY, kDecal.halfZ};
-        const bool kSound = kDecal.texture != 0 &&
+        const bool kSound = kDecal.texture != 0 && std::isfinite(kDecal.roughness) &&
                             std::ranges::all_of(kHalf,
                                                 [](float half) {
                                                     return std::isfinite(half) && half > 0;
@@ -53,7 +53,10 @@ void clusterDecals(SceneFrame& frame,
             return value != 0;
         });
         const std::array<Vector, 3> kTurn = turnOf(kTurned ? instance->rotation : std::array<float, 4>{0, 0, 0, 1});
-        SceneDecal made{.color = {}, .texture = kDecal.texture};
+        SceneDecal made{.color = {},
+                        .texture = kDecal.texture,
+                        .normal = kDecal.normal,
+                        .roughness = std::clamp(kDecal.roughness, 0.0F, 1.0F)};
         for (std::size_t row = 0; row < 3; ++row) {
             float moved = 0;
             for (std::size_t column = 0; column < 3; ++column) {
