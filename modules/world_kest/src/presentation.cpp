@@ -250,7 +250,7 @@ constexpr std::string_view kPresentedMaybe[] = {kPresentationPlan.name, world_re
 constexpr std::uint64_t kMostTicksPerFrame = 4;
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
-/// Presents the World of the client that plays, once a frame.
+/// Presents the Worlds of the process's local players (D362), each a frame.
 class PresentedParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
@@ -258,14 +258,20 @@ public:
             return {};
         }
         RAWFRAME_TRY_ASSIGN(const PresentationPlan* plan, context.capability(kPresentationPlan));
-        RAWFRAME_TRY_ASSIGN(presentation_, plan->presentation());
-        if (presentation_ == nullptr) {
-            return {};
+        RAWFRAME_TRY_ASSIGN(world_replication::ClientWorlds * clients,
+                            context.capability(world_replication::kClientWorlds));
+        for (std::size_t player = 0; player < std::max<std::size_t>(clients->localPlayers(), 1); ++player) {
+            Presented presented;
+            RAWFRAME_TRY_ASSIGN(presented.presentation, plan->presentation());
+            if (presented.presentation == nullptr) {
+                return {};
+            }
+            presented_.push_back(std::move(presented));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kRate, context.configuration().unsignedInteger("world.tick_rate", 60));
         RAWFRAME_TRY_ASSIGN(rate_,
                             world::TickRate::of(static_cast<std::uint32_t>(std::clamp<std::uint64_t>(kRate, 1, 1000))));
-        RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
+        clients_ = clients;
         return {};
     }
 
@@ -278,9 +284,10 @@ public:
         if (phase != composition::HostPhase::RunWorlds || clients_ == nullptr) {
             return;
         }
-        const std::size_t kClient = clients_->playerClient().value_or(0);
-        const world_replication::ClientView kView = clients_->client(kClient);
-        if (kView.world == nullptr) {
+        // The frames are counted on the first player's World; the others
+        // are presented as many ticks.
+        const world_replication::ClientView kFirst = clients_->client(clients_->playerClient().value_or(0));
+        if (kFirst.world == nullptr) {
             last_.reset();
             return;
         }
@@ -292,34 +299,43 @@ public:
         const std::uint64_t kTicks = rate_.ticksIn(owed_);
         owed_.nanoseconds -=
             static_cast<std::int64_t>(kTicks * std::uint64_t{rate_.seconds} * 1'000'000'000U / rate_.ticks);
-        // What arrived since the last frame is read by its first tick; a
-        // frame with no tick leaves it for the next.
-        if (kTicks != 0) {
-            seenMessages_ = clients_->readMessages(kClient, seenMessages_, arrived_);
-        }
-        for (std::uint64_t tick = 0; tick < std::min(kTicks, kMostTicksPerFrame); ++tick) {
-            const std::span<const world_replication::ReceivedMessage> kArrived =
-                tick == 0 ? std::span{arrived_} : std::span<const world_replication::ReceivedMessage>{};
-            const result::Status kPresented =
-                presentation_->present(*kView.world, kView.owned, kArrived, rate_, emitter_);
-            if (!kPresented.has_value()) {
-                emitter_.log(diagnostics::Severity::Warning,
-                             kUnpresented,
-                             "a client's World cannot be presented: it is drawn as it arrives",
-                             {diagnostics::field("reason", std::string{kPresented.error().description()})});
-                clients_ = nullptr;
-                return;
+        for (std::size_t player = 0; player < presented_.size(); ++player) {
+            Presented& each = presented_[player];
+            const std::size_t kClient = player == 0 ? clients_->playerClient().value_or(0) : player;
+            const world_replication::ClientView kView = clients_->client(kClient);
+            if (kView.world == nullptr) {
+                continue;
+            }
+            // What arrived since the last frame is read by its first tick; a
+            // frame with no tick leaves it for the next.
+            if (kTicks != 0) {
+                each.seenMessages = clients_->readMessages(kClient, each.seenMessages, each.arrived);
+            }
+            for (std::uint64_t tick = 0; tick < std::min(kTicks, kMostTicksPerFrame); ++tick) {
+                const std::span<const world_replication::ReceivedMessage> kArrived =
+                    tick == 0 ? std::span{each.arrived} : std::span<const world_replication::ReceivedMessage>{};
+                const result::Status kPresented =
+                    each.presentation->present(*kView.world, kView.owned, kArrived, rate_, emitter_);
+                if (!kPresented.has_value()) {
+                    emitter_.log(diagnostics::Severity::Warning,
+                                 kUnpresented,
+                                 "a client's World cannot be presented: it is drawn as it arrives",
+                                 {diagnostics::field("reason", std::string{kPresented.error().description()})});
+                    clients_ = nullptr;
+                    return;
+                }
             }
         }
         dropped_ += kTicks - std::min(kTicks, kMostTicksPerFrame);
     }
 
     void stop() noexcept override {
-        if (presentation_ == nullptr || presentation_->statistics().ticks == 0) {
+        if (presented_.empty() || presented_.front().presentation->statistics().ticks == 0) {
             return;
         }
-        const PresentationStatistics kPresented = presentation_->statistics();
-        const world_animation::AnimationStatistics kAnimated = presentation_->animationStatistics();
+        // The first player's; the others' are presented alike.
+        const PresentationStatistics kPresented = presented_.front().presentation->statistics();
+        const world_animation::AnimationStatistics kAnimated = presented_.front().presentation->animationStatistics();
         emitter_.log(diagnostics::Severity::Info,
                      kPresentedSummary,
                      "what one client's World was presented",
@@ -330,18 +346,23 @@ public:
                       diagnostics::field("systemsFailed", kPresented.systemsFailed),
                       diagnostics::field("animationSteps", kAnimated.steps),
                       diagnostics::field("instancesMade", kAnimated.instancesMade),
-                      diagnostics::field("animatorsRefused", kAnimated.animatorsRefused)});
+                      diagnostics::field("animatorsRefused", kAnimated.animatorsRefused),
+                      diagnostics::field("players", static_cast<std::uint64_t>(presented_.size()))});
     }
 
 private:
     world_replication::ClientWorlds* clients_ = nullptr;
-    std::unique_ptr<ClientPresentation> presentation_;
+    /// Each local player's presentation, and the game messages it has read.
+    struct Presented {
+        std::unique_ptr<ClientPresentation> presentation;
+        std::uint64_t seenMessages = 0;
+        std::vector<world_replication::ReceivedMessage> arrived;
+    };
+    std::vector<Presented> presented_;
     world::TickRate rate_;
     std::optional<execution::MonotonicInstant> last_;
     execution::MonotonicDuration owed_;
     std::uint64_t dropped_ = 0;
-    std::uint64_t seenMessages_ = 0;
-    std::vector<world_replication::ReceivedMessage> arrived_;
     diagnostics::Emitter emitter_;
 };
 

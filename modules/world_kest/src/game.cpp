@@ -6,6 +6,7 @@
 #include "rawframe/world_animation/components.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/layouts.h"
+#include "rawframe/world_replication/client_worlds.h"
 #include "rawframe/world_replication/perception.h"
 
 #include <algorithm>
@@ -275,6 +276,38 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 .width = static_cast<std::uint32_t>(*kWidth),
                 .height = static_cast<std::uint32_t>(*kHeight),
                 .update = kUpdate == "on_demand" ? RenderTextureUpdate::OnDemand : RenderTextureUpdate::EveryFrame});
+        } else if (kKeyword == "layout") {
+            // layout <players> then <x> <y> <width> <height> for each player
+            const auto kPlayers =
+                kWords.size() >= 2 ? parseReal(kWords[1], 2, world_replication::kMaximumLocalPlayers) : std::nullopt;
+            GameLayout layout;
+            bool shaped = kPlayers.has_value() && std::floor(*kPlayers) == *kPlayers &&
+                          kWords.size() == 2 + (4 * static_cast<std::size_t>(*kPlayers));
+            for (std::size_t at = 2; shaped && at + 3 < kWords.size(); at += 4) {
+                const auto kX = parseReal(kWords[at], 0, 1);
+                const auto kY = parseReal(kWords[at + 1], 0, 1);
+                const auto kWidth = parseReal(kWords[at + 2], 0, 1);
+                const auto kHeight = parseReal(kWords[at + 3], 0, 1);
+                shaped = kX && kY && kWidth && kHeight && *kWidth > 0 && *kHeight > 0 && *kX + *kWidth <= 1 &&
+                         *kY + *kHeight <= 1;
+                if (shaped) {
+                    layout.regions.push_back(GameRegion{.x = static_cast<float>(*kX),
+                                                        .y = static_cast<float>(*kY),
+                                                        .width = static_cast<float>(*kWidth),
+                                                        .height = static_cast<float>(*kHeight)});
+                }
+            }
+            if (!shaped) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a layout line is `layout <players>` then `<x> <y> <width> <height>` for each, 2 to 4 "
+                               "players, each region inside the window");
+            }
+            layout.players = static_cast<std::uint32_t>(*kPlayers);
+            if (std::ranges::contains(game.layouts, layout.players, &GameLayout::players)) {
+                return badLine(number, WorldKestError::BadGameLine, "a game lays out a count of players once");
+            }
+            game.layouts.push_back(std::move(layout));
         } else if (kKeyword == "material") {
             const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {

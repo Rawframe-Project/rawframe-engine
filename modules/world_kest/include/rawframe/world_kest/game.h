@@ -356,6 +356,24 @@ struct GameRenderTexture {
 inline constexpr std::size_t kMaximumRenderTextures = 8;
 inline constexpr std::uint32_t kMaximumRenderTextureSide = 4096;
 
+/// A local player's region of the window (ADR-0052's normalized rect,
+/// D362): its left and top edges and its width and height, each a fraction
+/// of the window's from nought to one, inside it.
+struct GameRegion {
+    float x = 0;
+    float y = 0;
+    float width = 1;
+    float height = 1;
+};
+
+/// A split-screen layout (ADR-0052, D362): the regions `players` local
+/// players see the game in, in the players' order, each composed over
+/// those before it.
+struct GameLayout {
+    std::uint32_t players = 0;
+    std::vector<GameRegion> regions;
+};
+
 /// A surface material a `rawframe.model.Model` names (D303), by the
 /// identity the model names it by. Its source beside the description is a
 /// material document the cook compiles (`rawframe.material`).
@@ -477,6 +495,9 @@ struct GameDescription {
     std::vector<GameRenderTexture> renderTextures;
     /// From `material <16 hex digits> <file>` lines.
     std::vector<GameMaterial> materials;
+    /// From `layout <players> (<x> <y> <width> <height>)...` lines (D362),
+    /// one a count of players from two.
+    std::vector<GameLayout> layouts;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
     /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;

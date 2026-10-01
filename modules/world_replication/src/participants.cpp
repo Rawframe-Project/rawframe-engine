@@ -501,6 +501,15 @@ public:
         return player_ && !bots_.empty() ? std::optional<std::size_t>{0} : std::nullopt;
     }
 
+    [[nodiscard]] std::size_t localPlayers() const noexcept override {
+        return localPlayers_;
+    }
+
+    /// The first `count` clients the process's local players (D362).
+    void showLocally(std::size_t count) noexcept {
+        localPlayers_ = count;
+    }
+
     /// `count` clients; with `player`, the first is the process's own
     /// player, played from the devices its host lends.
     result::Status load(composition::ParticipantContext& context, std::uint64_t count, bool player) {
@@ -842,6 +851,7 @@ private:
     std::uint64_t unpredicted_ = 0;
     bool allAdmitted_ = false;
     std::uint64_t sourceFailures_ = 0;
+    std::size_t localPlayers_ = 1;
     diagnostics::Emitter emitter_;
 };
 
@@ -856,6 +866,14 @@ result::Result<composition::ParticipantOwner> makeBots(composition::ParticipantC
         return missing("bots.player is true or false");
     }
     const bool kPlaying = kPlayer == "true";
+    // Split-screen (D362): how many of the first clients are local players,
+    // shown and presented; one unless told.
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kLocal, context.configuration().unsignedInteger("bots.local_players", 1));
+    if (kLocal < 1 || kLocal > kMaximumLocalPlayers ||
+        kLocal > std::max<std::uint64_t>(kCount + (kPlaying ? 1 : 0), 1)) {
+        return missing("bots.local_players is 1 to 4, and no more than the clients");
+    }
+    participant->showLocally(static_cast<std::size_t>(kLocal));
     if (kCount != 0 || kPlaying) {
         RAWFRAME_TRY(participant->load(context, kCount + (kPlaying ? 1 : 0), kPlaying));
     }

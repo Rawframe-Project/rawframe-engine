@@ -252,6 +252,30 @@ RAWFRAME_TEST(RenderTexturesAreDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(SplitScreenLayoutsAreDeclaredByLine) {
+    const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
+    const auto kGame =
+        parseGame(kHead + "layout 2 0 0 0.5 1 0.5 0 0.5 1\nlayout 3 0 0 1 0.5 0 0.5 0.5 0.5 0.5 0.5 0.5 0.5\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->layouts.size() == 2 && kGame->layouts[0].players == 2 &&
+                    kGame->layouts[0].regions.size() == 2 && kGame->layouts[0].regions[1].x == 0.5F &&
+                    kGame->layouts[0].regions[1].width == 0.5F && kGame->layouts[1].players == 3 &&
+                    kGame->layouts[1].regions[2].y == 0.5F);
+    // Two to four players (D362), a region each, inside the window, a
+    // count laid out once.
+    for (const std::string_view kLines : {"layout 1 0 0 1 1\n",
+                                          "layout 5 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1\n",
+                                          "layout 2 0 0 0.5 1\n",
+                                          "layout 2 0 0 0.5 1 0.5 0 0.5 1 0\n",
+                                          "layout 2 0 0 0.5 1 0.6 0 0.5 1\n",
+                                          "layout 2 0 0 0 1 0.5 0 0.5 1\n",
+                                          "layout 2.5 0 0 0.5 1 0.5 0 0.5 1\n",
+                                          "layout 2 0 0 0.5 1 0.5 0 0.5 1\nlayout 2 0 0 1 0.5 0 0.5 1 0.5\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "4"));
+    }
+}
+
 RAWFRAME_TEST(MaterialsAreDeclaredByLine) {
     const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
     const auto kGame =

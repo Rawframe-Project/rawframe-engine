@@ -64,8 +64,18 @@ public:
     [[nodiscard]] virtual std::optional<std::size_t> playerClient() const noexcept {
         return std::nullopt;
     }
+    /// How many of the first clients are the process's local players
+    /// (ADR-0052, D362), presented and shown, split-screen past one, in the
+    /// clients' order; the first is `playerClient` when there is one.
+    [[nodiscard]] virtual std::size_t localPlayers() const noexcept {
+        return 1;
+    }
 };
 
 inline constexpr composition::Capability<ClientWorlds> kClientWorlds{"rawframe.replication.client_worlds"};
+
+/// ADR-0052's limit point on the local players a process shows, a profile
+/// value (D362).
+inline constexpr std::size_t kMaximumLocalPlayers = 4;
 
 } // namespace rawframe::world_replication
