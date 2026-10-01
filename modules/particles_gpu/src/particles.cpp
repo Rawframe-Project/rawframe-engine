@@ -104,8 +104,9 @@ constexpr std::uint64_t kParticleBytes = 48;
 /// when on the particle clock the frame began; their size at birth and
 /// death, the step between births, and the clock now; their color at birth
 /// and death; its ring's first slot in the pool, its size, where this
-/// spawn starts in it, and how many it spawns; and how many of them are
-/// steady, its seed, and its material's place.
+/// spawn starts in it, and how many it spawns; how many of them are
+/// steady, its seed, its material's place, and its flipbook's columns and
+/// rows (sixteen bits each, D359); and the velocity its particles inherit.
 struct EmitterBlock {
     std::array<float, 4> anchor{};
     std::array<float, 4> origin{};
@@ -117,8 +118,9 @@ struct EmitterBlock {
     std::array<float, 4> colorEnd{};
     std::array<std::uint32_t, 4> ring{};
     std::array<std::uint32_t, 4> more{};
+    std::array<float, 4> inherited{};
 };
-static_assert(sizeof(EmitterBlock) == 160, "the particles' shaders read an emitter as 160 bytes");
+static_assert(sizeof(EmitterBlock) == 176, "the particles' shaders read an emitter as 176 bytes");
 
 /// A ribbon's point as the ribbons' shader reads it (std430, D354): where
 /// it is relative to the eye and its width; its color; and its texture's
@@ -137,7 +139,8 @@ EmitterBlock blockOf(const particles::EmitterDraw& emitter, std::uint32_t offset
         .colorStart = emitter.colorStart,
         .colorEnd = emitter.colorEnd,
         .ring = {offset, emitter.capacity, emitter.first, emitter.spawned},
-        .more = {emitter.steady, emitter.seed, emitter.material, 0}};
+        .more = {emitter.steady, emitter.seed, emitter.material, emitter.columns | (emitter.rows << 16U)},
+        .inherited = {emitter.inherited[0], emitter.inherited[1], emitter.inherited[2], 0}};
 }
 
 /// A resource or sampler of the open frame from the key the host names it

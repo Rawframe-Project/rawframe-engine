@@ -142,7 +142,8 @@ fn wince(count: i32, emitters: [sound.Emitter]) {
 
 // A runner's trail and its sparks (D357): a pale streak a third of a second
 // long behind it as it runs, and ten warm sparks up and about each time its
-// shot sounds, falling as they fade.
+// shot sounds, falling as they fade, carried along by most of the runner's
+// own speed (D359).
 fn glint(count: i32, shots: [sound.Emitter], dusts: [model.Trail], sparks: [model.ParticleEmitter]) {
     let i = 0
     while i < count {
@@ -150,7 +151,7 @@ fn glint(count: i32, shots: [sound.Emitter], dusts: [model.Trail], sparks: [mode
             dusts[i] = model.Trail(u64(0), 0.35, 0.15, 0.3, 0.0, u32(0xD8E4FF70), u32(0xD8E4FF00))
             sparks[i] = model.ParticleEmitter(u64(0), 0.0, 0.3, 4.0, 1.0, 0.05, 0.14, 0.03, u32(0xFFD27AFF),
                                               u32(0xFF6A2000), 0.0, -12.0, 0.0, 2.0, 0.5, shots[i].cue, u32(10),
-                                              u32(0))
+                                              u32(0), 0.6, u32(0), u32(0))
         }
         sparks[i].bursts = shots[i].cue
         i = i + 1

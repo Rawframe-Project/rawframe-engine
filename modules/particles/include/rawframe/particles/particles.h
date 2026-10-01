@@ -45,6 +45,9 @@ struct ParticleEmitter {
     std::uint32_t bursts = 0;
     std::uint32_t burstCount = 0;
     std::uint32_t seed = 0;
+    float inherit = 0;
+    std::uint32_t columns = 0;
+    std::uint32_t rows = 0;
 };
 
 /// `rawframe.model.Trail` as C++ reads it (D354).
@@ -124,9 +127,10 @@ inline constexpr float kClockPeriod = 4096;
 /// and how much each one's life, speed, and size vary (nought to one); its
 /// ring of particles: its size, where this frame's spawn starts in it, how
 /// many it spawns, the first `steady` born one `step` apart from `born` on
-/// the particle clock and the rest (its bursts) at its now; its seed; and
-/// how many times its ring has started anew, which a device's ring follows
-/// (D353).
+/// the particle clock and the rest (its bursts) at its now; its seed; how
+/// many times its ring has started anew, which a device's ring follows
+/// (D353); the velocity its particles inherit from it (meters a second);
+/// and its flipbook's columns and rows, one each for none (D359).
 struct EmitterDraw {
     std::uint64_t key = 0;
     std::uint32_t material = 0;
@@ -152,6 +156,9 @@ struct EmitterDraw {
     float step = 0;
     std::uint32_t seed = 0;
     std::uint32_t ring = 0;
+    std::array<float, 3> inherited{};
+    std::uint32_t columns = 1;
+    std::uint32_t rows = 1;
 };
 
 /// A point of a ribbon a frame draws (D354): where it is relative to the
@@ -177,7 +184,9 @@ struct Ribbon {
 /// view draws, the particles an emitter holds alive, the particles it
 /// spawns a second, and the seconds one lives (a trail's points' too); the
 /// trails and beams a view draws, the points a trail keeps, and the
-/// segments a beam is cut into.
+/// segments a beam is cut into; and the speed a particle inherits of its
+/// emitter's, meters a second (D359), past which a teleport would fling
+/// them.
 struct Limits {
     std::size_t maximumEmitters = 64;
     std::uint32_t maximumParticlesPerEmitter = 4096;
@@ -186,13 +195,15 @@ struct Limits {
     std::size_t maximumRibbons = 64;
     std::uint32_t maximumTrailPoints = 256;
     std::uint32_t maximumBeamSegments = 64;
+    float maximumInheritedSpeed = 100;
 };
 
 /// What a view's frame draws of them: the emitters that reach the view,
 /// farthest first, at most the limit; the particle clock now, seconds,
 /// wrapping at `kClockPeriod`; and the emitters left out (not sound, or
-/// past the limit), those held to a limit point (their rate, life, or
-/// ring), and particles a spawn could not hold (a burst past the ring).
+/// past the limit), those held to a limit point (their rate, life, ring,
+/// or inherited speed), and particles a spawn could not hold (a burst past
+/// the ring).
 /// Then the trails and beams that reach the view as ribbons, farthest
 /// first, at most the limit, and their points; those left out (not sound,
 /// or past the limit); and those held to a limit point (a trail's points,
@@ -242,10 +253,12 @@ public:
 private:
     /// What an emitter keeps: its anchor in the World, the bursts it has
     /// seen, the particles it owes (a fraction), its ring's size and where
-    /// its next spawn starts in it, the frame it was last drawn in, and how
-    /// many times its ring has started anew (D353).
+    /// its next spawn starts in it, the frame it was last drawn in, how
+    /// many times its ring has started anew (D353), and where it was when
+    /// last drawn (D359).
     struct EmitterHistory {
         std::array<double, 3> anchor{};
+        std::array<double, 3> position{};
         std::uint32_t bursts = 0;
         double owed = 0;
         std::uint32_t capacity = 0;

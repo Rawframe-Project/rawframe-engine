@@ -4,7 +4,8 @@
 // around, and starts anew at another size (D353); emitters out of view are
 // left alone, the nearest are kept up to the limit and drawn farthest
 // first, and values past a limit point are held and counted; an emitter
-// gone keeps nothing.
+// gone keeps nothing; and its particles inherit its velocity, up to the
+// limit (D359).
 
 #include "rawframe/particles/particles.h"
 #include "rawframe/test/test.h"
@@ -139,4 +140,33 @@ RAWFRAME_TEST(AnEmitterGoneKeepsNothing) {
     rig.place(emitter, -5);
     const Frame& kBack = rig.update(0.1F);
     RAWFRAME_EXPECT(kBack.emitters.size() == 1 && kBack.emitters[0].first == 0 && kBack.emitters[0].spawned == 10);
+}
+
+RAWFRAME_TEST(AnEmittersParticlesInheritItsVelocity) {
+    Rig rig;
+    ParticleEmitter emitter = fountain();
+    emitter.inherit = 0.5F;
+    emitter.columns = 4;
+    emitter.rows = 0;
+    const std::size_t kFountain = rig.place(emitter, -5);
+    // Where it was not drawn the frame before, it gives nothing.
+    const Frame& kFirst = rig.update(0.1F);
+    RAWFRAME_EXPECT(kFirst.emitters.size() == 1 && kFirst.emitters[0].inherited == (Vector{0, 0, 0}));
+    // A meter to the right in a tenth of a second: half of ten meters a
+    // second; its flipbook four cells across, one down.
+    rig.emitters[kFountain].position[0] = 1;
+    const Frame& kMoved = rig.update(0.1F);
+    RAWFRAME_EXPECT(kMoved.emitters.size() == 1 && kMoved.emittersHeld == 0);
+    if (kMoved.emitters.size() == 1) {
+        RAWFRAME_EXPECT(std::abs(kMoved.emitters[0].inherited[0] - 5) < 1e-3F && kMoved.emitters[0].inherited[1] == 0);
+        RAWFRAME_EXPECT(kMoved.emitters[0].columns == 4 && kMoved.emitters[0].rows == 1);
+    }
+    // A teleport inherits no more than the limit, and is held.
+    rig.emitters[kFountain].emitter.inherit = 1;
+    rig.emitters[kFountain].position[0] = 101;
+    const Frame& kFlung = rig.update(0.1F);
+    RAWFRAME_EXPECT(kFlung.emitters.size() == 1 && kFlung.emittersHeld == 1);
+    if (kFlung.emitters.size() == 1) {
+        RAWFRAME_EXPECT(std::abs(kFlung.emitters[0].inherited[0] - 100) < 1e-3F);
+    }
 }

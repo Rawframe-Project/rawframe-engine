@@ -20,7 +20,9 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 // began; their size at birth and death, the step between births, and the
 // clock now; their color at birth and death; its ring's first slot in the
 // pool, its size, where this spawn starts in it, and how many it spawns;
-// and how many of them are steady, its seed, and its material's place.
+// how many of them are steady, its seed, its material's place, and its
+// flipbook's columns and rows, sixteen bits each; and the velocity its
+// particles inherit (D359).
 layout(set = 0, binding = 0, std140) uniform Emitter
 {
     vec4 anchor;
@@ -33,6 +35,7 @@ layout(set = 0, binding = 0, std140) uniform Emitter
     vec4 colorEnd;
     uvec4 ring;
     uvec4 more;
+    vec4 inherited;
 }
 emitter;
 
@@ -103,7 +106,7 @@ void main()
     const float kFlat = sqrt(max(1.0 - kHeight * kHeight, 0.0));
     const vec3 kOffset = kRadius * vec3(kFlat * cos(kAround), kHeight, kFlat * sin(kAround));
     pool.particles[kSlot].start = vec4(emitter.origin.xyz + kOffset, kBorn);
-    pool.particles[kSlot].velocity = vec4(kHeading * kSpeed, max(kLife, 0.0));
+    pool.particles[kSlot].velocity = vec4(kHeading * kSpeed + emitter.inherited.xyz, max(kLife, 0.0));
     pool.particles[kSlot].extra = vec4(max(kScale, 0.0), 0.0, 0.0, 0.0);
 #endif
 }

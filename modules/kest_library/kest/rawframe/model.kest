@@ -313,8 +313,13 @@ struct PostProcess {
 // and slowed by `drag` (a second); each one's life, speed, and size varied
 // by up to `variation` of them (nought to one). Each time `bursts` moves,
 // `burstCount` more leave at once. A nought `seed` takes one from the
-// entity. Cosmetic: each client draws its own particles, and nothing in
-// the World sees them. On an entity with a 2D pose, the canvas draws the
+// entity. A particle takes `inherit` (nought to one) of the emitter's own
+// velocity at its birth, so a moving emitter's particles keep up with it.
+// With `columns` and `rows` above one, its material's texture is a
+// flipbook of that many cells, left to right and top to bottom, a
+// particle stepping through them over its life (D359). Cosmetic: each
+// client draws its own particles, and nothing in the World sees them. On
+// an entity with a 2D pose, the canvas draws the
 // emitter, its trails, and its beams in its plane, over its sprites, each
 // of the game's canvas material of that identity and blending as it says
 // (D357); the pose's up is the way it emits.
@@ -337,6 +342,9 @@ struct ParticleEmitter {
     bursts: u32
     burstCount: u32
     seed: u32
+    inherit: f32
+    columns: u32
+    rows: u32
 }
 
 // A trail (ADR-0053, D354), on any entity: a ribbon left behind its pose

@@ -20,7 +20,7 @@
   ],
   "bindings": [
     {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex", "fragment"], "min_size": 112},
-    {"table": 0, "slot": 1, "kind": "uniform_buffer", "stages": ["vertex"], "min_size": 160},
+    {"table": 0, "slot": 1, "kind": "uniform_buffer", "stages": ["vertex"], "min_size": 176},
     {"table": 0, "slot": 2, "kind": "read_only_storage_buffer", "stages": ["vertex"], "min_size": 48},
     {"table": 0, "slot": 3, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 16},
     {"table": 0, "slot": 4, "kind": "uniform_buffer", "stages": ["fragment"], "min_size": 112},

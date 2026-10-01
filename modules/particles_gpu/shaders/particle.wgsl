@@ -30,6 +30,7 @@ struct Emitter {
     colorEnd: vec4f,
     ring: vec4u,
     more: vec4u,
+    inherited: vec4f,
 }
 
 struct Particle {
@@ -100,7 +101,12 @@ fn vs(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32)
     let at = vec2f(f32(corner & 1u), f32(corner >> 1u));
     let placed = emitter.anchor.xyz + particle.start.xyz + moved +
                  (view.right.xyz * (at.x - 0.5) + view.up.xyz * (at.y - 0.5)) * size;
-    made.uv = vec2f(at.x, 1.0 - at.y);
+    let cells = vec2u(emitter.more.w & 0xFFFFu, emitter.more.w >> 16u);
+    let frames = max(cells.x * cells.y, 1u);
+    let frame = min(u32(through * f32(frames)), frames - 1u);
+    let columns = max(cells.x, 1u);
+    let cell = vec2f(f32(frame % columns), f32(frame / columns));
+    made.uv = (cell + vec2f(at.x, 1.0 - at.y)) / vec2f(max(cells, vec2u(1u)));
     made.color = mix(emitter.colorStart, emitter.colorEnd, through);
     made.soft = max(0.5 * size, 1e-4);
     made.shape = at * 2.0 - 1.0;

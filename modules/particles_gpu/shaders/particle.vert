@@ -2,8 +2,8 @@
 // the eye for each slot of an emitter's ring, drawn as its instance, where
 // its age puts it: from where it started, its velocity slowed by its drag
 // and turned by its acceleration in closed form, its size and color
-// between its birth's and its death's; none for a slot whose particle is
-// dead or was never born.
+// between its birth's and its death's, and its flipbook's cell by its age
+// (D359); none for a slot whose particle is dead or was never born.
 
 #version 450
 
@@ -33,6 +33,7 @@ layout(set = 0, binding = 1, std140) uniform Emitter
     vec4 colorEnd;
     uvec4 ring;
     uvec4 more;
+    vec4 inherited;
 }
 emitter;
 
@@ -86,7 +87,13 @@ void main()
     const vec2 kAt = vec2(float(kCorner & 1u), float(kCorner >> 1u));
     const vec3 kPlaced = emitter.anchor.xyz + kParticle.start.xyz + moved +
                          (view.right.xyz * (kAt.x - 0.5) + view.up.xyz * (kAt.y - 0.5)) * kSize;
-    outUv = vec2(kAt.x, 1.0 - kAt.y);
+    // Its flipbook's cell, stepped over its life (D359), left to right and
+    // top to bottom; the whole texture where it has none.
+    const uvec2 kCells = uvec2(emitter.more.w & 0xFFFFu, emitter.more.w >> 16u);
+    const uint kFrames = max(kCells.x * kCells.y, 1u);
+    const uint kFrame = min(uint(kThrough * float(kFrames)), kFrames - 1u);
+    const vec2 kCell = vec2(float(kFrame % max(kCells.x, 1u)), float(kFrame / max(kCells.x, 1u)));
+    outUv = (kCell + vec2(kAt.x, 1.0 - kAt.y)) / vec2(max(kCells, uvec2(1u)));
     outColor = mix(emitter.colorStart, emitter.colorEnd, kThrough);
     outSoft = max(0.5 * kSize, 1e-4);
     outShape = kAt * 2.0 - 1.0;

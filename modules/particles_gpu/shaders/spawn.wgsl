@@ -11,6 +11,7 @@ struct Emitter {
     colorEnd: vec4f,
     ring: vec4u,
     more: vec4u,
+    inherited: vec4f,
 }
 
 struct Particle {
@@ -69,7 +70,7 @@ fn spawn(@builtin(global_invocation_id) invocation: vec3u) {
     let breadth = sqrt(max(1.0 - height * height, 0.0));
     let offset = radius * vec3f(breadth * cos(around), height, breadth * sin(around));
     particles[slot].start = vec4f(emitter.origin.xyz + offset, born);
-    particles[slot].velocity = vec4f(heading * speed, max(life, 0.0));
+    particles[slot].velocity = vec4f(heading * speed + emitter.inherited.xyz, max(life, 0.0));
     particles[slot].extra = vec4f(max(scale, 0.0), 0.0, 0.0, 0.0);
 }
 

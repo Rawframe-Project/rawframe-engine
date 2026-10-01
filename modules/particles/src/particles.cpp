@@ -34,6 +34,10 @@ std::uint32_t seedOf(std::uint64_t key) noexcept {
     return static_cast<std::uint32_t>(mixed ^ (mixed >> 31U)) | 1U;
 }
 
+/// The most columns or rows a flipbook has: a device reads both in one
+/// word.
+constexpr std::uint32_t kMostCells = 0xFFFF;
+
 /// An emitter kept for the view: what it is, how far it is, and its values
 /// held to the limit points.
 struct Kept {
@@ -42,6 +46,7 @@ struct Kept {
     float rate = 0;
     float lifetime = 0;
     std::uint32_t capacity = 0;
+    Vector inherited{};
 };
 
 } // namespace
@@ -73,7 +78,8 @@ void Particles::spawn(Frame& frame,
                                                             kEmitter.accelerationY,
                                                             kEmitter.accelerationZ,
                                                             kEmitter.drag,
-                                                            kEmitter.variation},
+                                                            kEmitter.variation,
+                                                            kEmitter.inherit},
                                                  [](float value) {
                                                      return std::isfinite(value);
                                                  }) &&
@@ -102,14 +108,35 @@ void Particles::spawn(Frame& frame,
         held = held || kWanted > limits.maximumParticlesPerEmitter;
         const auto kCapacity =
             static_cast<std::uint32_t>(std::min(kWanted, static_cast<double>(limits.maximumParticlesPerEmitter)));
+        // What its particles inherit of its velocity (D359): where it was
+        // drawn the frame before to where it is, held to the limit point;
+        // nothing where it was not drawn then.
+        Vector inherited{};
+        if (const auto kBefore = emitters_.find(Key{kInstance.entity, kInstance.component});
+            kBefore != emitters_.end() && kBefore->second.drawn + 1 == frames_ && elapsed > 0) {
+            const float kShare = std::clamp(kEmitter.inherit, 0.0F, 1.0F);
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                inherited.at(axis) = static_cast<float>(
+                    (kInstance.position.at(axis) - kBefore->second.position.at(axis)) / elapsed * kShare);
+            }
+            const float kSpeed = std::hypot(inherited[0], inherited[1], inherited[2]);
+            if (kSpeed > limits.maximumInheritedSpeed) {
+                held = true;
+                for (float& axis : inherited) {
+                    axis *= limits.maximumInheritedSpeed / kSpeed;
+                }
+            }
+        }
         // How far its particles may reach from where it is: its sphere,
         // the farthest they travel, and their size.
         const float kAcceleration = std::hypot(kEmitter.accelerationX, kEmitter.accelerationY, kEmitter.accelerationZ);
         const float kLongest = kLifetime * (1 + kVariation);
-        const float kReach = std::max(kEmitter.radius, 0.0F) +
-                             (std::abs(kEmitter.speed) * (1 + kVariation) * kLongest) +
-                             (0.5F * kAcceleration * kLongest * kLongest) +
-                             (std::max(kEmitter.sizeStart, kEmitter.sizeEnd) * (1 + kVariation));
+        const float kReach =
+            std::max(kEmitter.radius, 0.0F) +
+            (((std::abs(kEmitter.speed) * (1 + kVariation)) + std::hypot(inherited[0], inherited[1], inherited[2])) *
+             kLongest) +
+            (0.5F * kAcceleration * kLongest * kLongest) +
+            (std::max(kEmitter.sizeStart, kEmitter.sizeEnd) * (1 + kVariation));
         const Vector kCenter = {static_cast<float>(kInstance.position[0] - viewer.eye[0]),
                                 static_cast<float>(kInstance.position[1] - viewer.eye[1]),
                                 static_cast<float>(kInstance.position[2] - viewer.eye[2])};
@@ -121,7 +148,8 @@ void Particles::spawn(Frame& frame,
                             .distance = std::hypot(kCenter[0], kCenter[1], kCenter[2]),
                             .rate = kRate,
                             .lifetime = kLifetime,
-                            .capacity = kCapacity});
+                            .capacity = kCapacity,
+                            .inherited = inherited});
     }
     // An emitter gone keeps nothing.
     std::erase_if(emitters_, [&present](const auto& each) {
@@ -199,15 +227,19 @@ void Particles::spawn(Frame& frame,
                          .born = wrapped(clock_ - kElapsed),
                          .step = steady > 0 ? kElapsed / static_cast<float>(steady) : 0.0F,
                          .seed = kEmitter.seed != 0 ? kEmitter.seed : seedOf(kKey),
-                         .ring = remembered.ring};
+                         .ring = remembered.ring,
+                         .inherited = kKept.inherited,
+                         .columns = std::clamp(kEmitter.columns, 1U, kMostCells),
+                         .rows = std::clamp(kEmitter.rows, 1U, kMostCells)};
         remembered.next = static_cast<std::uint32_t>((remembered.next + kSpawned) % kKept.capacity);
         remembered.drawn = frames_;
+        remembered.position = kInstance.position;
         frame.emitters.push_back(made);
     }
 }
 
 std::span<const Field> emitterFields() noexcept {
-    static constexpr std::array<Field, 18> kFields = {{{"material", offsetof(ParticleEmitter, material)},
+    static constexpr std::array<Field, 21> kFields = {{{"material", offsetof(ParticleEmitter, material)},
                                                        {"rate", offsetof(ParticleEmitter, rate)},
                                                        {"lifetime", offsetof(ParticleEmitter, lifetime)},
                                                        {"speed", offsetof(ParticleEmitter, speed)},
@@ -224,7 +256,10 @@ std::span<const Field> emitterFields() noexcept {
                                                        {"variation", offsetof(ParticleEmitter, variation)},
                                                        {"bursts", offsetof(ParticleEmitter, bursts)},
                                                        {"burstCount", offsetof(ParticleEmitter, burstCount)},
-                                                       {"seed", offsetof(ParticleEmitter, seed)}}};
+                                                       {"seed", offsetof(ParticleEmitter, seed)},
+                                                       {"inherit", offsetof(ParticleEmitter, inherit)},
+                                                       {"columns", offsetof(ParticleEmitter, columns)},
+                                                       {"rows", offsetof(ParticleEmitter, rows)}}};
     return kFields;
 }
 

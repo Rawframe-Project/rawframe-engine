@@ -291,3 +291,60 @@ RAWFRAME_TEST(TheCanvasDrawsParticlesAndRibbons) {
         RAWFRAME_EXPECT(near(*kPixels, 48, 16, {0, 0, 0, 255}) && near(*kPixels, 32, 32, {0, 0, 0, 255}));
     }
 }
+
+RAWFRAME_TEST(AParticleShowsItsFlipbooksCell) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    // Two cells, red then green, sampled exactly; the material its texture
+    // alone, shaped by its alpha.
+    constexpr std::uint64_t kCells = 0xc5;
+    const auto kSheet = image(2, {255, 0, 0, 255, 0, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255});
+    const render_canvas_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == kCells ? kSheet : nullptr;
+    };
+    const std::array<material::CanvasMaterial, 2> kMaterials = {
+        material::CanvasMaterial{.shading = material::Shading::Unlit},
+        material::CanvasMaterial{
+            .shading = material::Shading::Unlit,
+            .color = {0, 0, 0, 0},
+            .colorTexture = {1, 1, 1, 1},
+            .sampled = {.id = kCells, .filter = material::Filter::Nearest, .address = material::Address::Clamp}}};
+    CanvasFrame frame;
+    frame.materials = kMaterials;
+    frame.extent = {8, 8};
+    frame.particles.clock = 1;
+    // Newly born: its first cell, the red, where the whole sheet would show
+    // green at its middle (D359).
+    frame.particles.emitters.push_back(particles::EmitterDraw{.key = 1,
+                                                              .material = 1,
+                                                              .lifetime = 10,
+                                                              .sizeStart = 4,
+                                                              .sizeEnd = 4,
+                                                              .capacity = 1,
+                                                              .spawned = 1,
+                                                              .seed = 7,
+                                                              .ring = 1,
+                                                              .columns = 2,
+                                                              .rows = 1});
+    const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
+    for (int attempt = 0; attempt < 1000 && (*made)->statistics().emittersDrawn == 0; ++attempt) {
+        (*made)->prepare(&frame, kTextures);
+        RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+        RAWFRAME_EXPECT((*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
+    }
+    RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+    const auto kPixels = (*framer)->pixels();
+    RAWFRAME_EXPECT(kPixels.has_value() && (*made)->statistics().emittersDrawn >= 1);
+    if (kPixels.has_value()) {
+        RAWFRAME_EXPECT(near(*kPixels, 32, 32, {255, 0, 0, 255}) && near(*kPixels, 26, 32, {255, 0, 0, 255}) &&
+                        near(*kPixels, 38, 32, {255, 0, 0, 255}));
+    }
+}
