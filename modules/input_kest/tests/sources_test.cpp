@@ -122,7 +122,7 @@ RAWFRAME_TEST(ThePlayerPlaysFromTheLentDevices) {
     // the sample the tick after they were fed, and whose release when focus
     // goes lets go of what was held.
     const auto kDeviceless = makeInputSources(runners());
-    RAWFRAME_EXPECT(kDeviceless.has_value() && !(*kDeviceless)->playerSource().has_value());
+    RAWFRAME_EXPECT(kDeviceless.has_value() && !(*kDeviceless)->playerSource(0).has_value());
     input::Feed feed;
     SourceSettings settings = runners();
     settings.feed = &feed;
@@ -131,9 +131,9 @@ RAWFRAME_TEST(ThePlayerPlaysFromTheLentDevices) {
     if (!sources.has_value()) {
         return;
     }
-    auto source = (*sources)->playerSource();
+    auto source = (*sources)->playerSource(0);
     RAWFRAME_EXPECT(source.has_value());
-    const auto kSecond = (*sources)->playerSource();
+    const auto kSecond = (*sources)->playerSource(0);
     RAWFRAME_EXPECT(!kSecond.has_value() && kSecond.error().errorClass() == result::ErrorClass::AlreadyExists);
     if (!source.has_value()) {
         return;
@@ -153,6 +153,38 @@ RAWFRAME_TEST(ThePlayerPlaysFromTheLentDevices) {
     RAWFRAME_EXPECT(play(**source, 1)[0] == Stick{});
 }
 
+RAWFRAME_TEST(LocalPlayersPlayFromTheDevicesPairedToThem) {
+    // Two local players (D363), keyboard first: the keyboard's jump reaches
+    // the first's sample only, the gamepad's the second's only.
+    input::Feed feed;
+    SourceSettings settings = runners();
+    settings.feed = &feed;
+    auto sources = makeInputSources(settings);
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto first = (*sources)->playerSource(0);
+    auto second = (*sources)->playerSource(1);
+    const auto kPast = (*sources)->playerSource(4);
+    RAWFRAME_EXPECT(first.has_value() && second.has_value() && !kPast.has_value() &&
+                    kPast.error().errorClass() == result::ErrorClass::InvalidArgument);
+    if (!first.has_value() || !second.has_value()) {
+        return;
+    }
+    constexpr input::DeviceId kKeyboard{1};
+    constexpr input::DeviceId kPad{2};
+    feed.connect(kKeyboard, input::DeviceClass::Keyboard);
+    feed.connect(kPad, input::DeviceClass::Gamepad);
+    feed.submit({.device = kKeyboard, .control = *input::controlNamed(input::DeviceClass::Keyboard, "space"), .x = 1});
+    // The first to tick routes what the devices sent to both.
+    RAWFRAME_EXPECT(play(**first, 1)[0][1] == 1.0F && play(**second, 1)[0][1] == 0.0F);
+    feed.submit({.device = kPad, .control = *input::controlNamed(input::DeviceClass::Gamepad, "face_south"), .x = 1});
+    RAWFRAME_EXPECT(play(**second, 1)[0][1] == 1.0F);
+    feed.submit({.device = kKeyboard, .control = *input::controlNamed(input::DeviceClass::Keyboard, "space"), .x = 0});
+    RAWFRAME_EXPECT(play(**first, 1)[0][1] == 0.0F && play(**second, 1)[0][1] == 1.0F);
+}
+
 RAWFRAME_TEST(ThePlayerFeelsAnEffectOnItsGamepads) {
     input::Feed feed;
     SourceSettings settings = runners();
@@ -168,7 +200,7 @@ RAWFRAME_TEST(ThePlayerFeelsAnEffectOnItsGamepads) {
     RAWFRAME_EXPECT(!(*sources)->feelEffect(0).has_value());
     feed.takeFelt(felt);
     RAWFRAME_EXPECT(felt.empty());
-    auto source = (*sources)->playerSource();
+    auto source = (*sources)->playerSource(0);
     RAWFRAME_EXPECT(source.has_value());
     if (!source.has_value()) {
         return;

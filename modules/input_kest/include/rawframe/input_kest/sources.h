@@ -69,6 +69,9 @@ struct SourceSettings {
     /// The player's devices, or null where the host lends none; outlives
     /// the sources.
     input::Feed* feed = nullptr;
+    /// How they are paired to the local players as they connect (D363):
+    /// merged for one, keyboard first for more, unless named.
+    std::optional<input::PairingPolicy> pairing;
 };
 
 /// The input sources of a game, and its player's haptics.

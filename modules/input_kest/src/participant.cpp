@@ -34,7 +34,7 @@ public:
     result::Result<std::unique_ptr<world_replication::InputSource>> botSource(std::uint64_t) override {
         return refuse();
     }
-    result::Result<std::unique_ptr<world_replication::InputSource>> playerSource() override {
+    result::Result<std::unique_ptr<world_replication::InputSource>> playerSource(std::size_t) override {
         return refuse();
     }
 
@@ -61,6 +61,16 @@ public:
         SourceSettings settings{.game = game, .inputSize = plan->input()->size};
         if (context.has(kFeed.name)) {
             RAWFRAME_TRY_ASSIGN(settings.feed, context.capability(kFeed));
+        }
+        // How the lent devices pair to the local players (D363).
+        if (const auto kPairing = configuration.text("input.pairing")) {
+            settings.pairing = input::pairingPolicyNamed(*kPairing);
+            if (!settings.pairing.has_value()) {
+                return result::fail(result::ErrorClass::InvalidArgument,
+                                    composition::kCompositionDomain,
+                                    code(composition::CompositionError::BadConfiguration),
+                                    "input.pairing is merged, keyboard_first, or gamepads");
+            }
         }
         RAWFRAME_TRY_ASSIGN(settings.limits.heapBytes,
                             configuration.unsignedInteger("kest.sample_heap_bytes", settings.limits.heapBytes));

@@ -1,14 +1,17 @@
 #include "rawframe/input_kest/sources.h"
 
 #include "rawframe/input/actions.h"
+#include "rawframe/input/pairing.h"
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/world/random.h"
 #include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_replication/client_worlds.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -169,8 +172,32 @@ struct Shared {
     kest::MachineLimits limits;
     std::size_t inputSize = 0;
     input::Feed* feed = nullptr;
+    std::optional<input::PairingPolicy> pairing;
     /// Each effect kind's haptic output and how it is felt, by kind.
     std::vector<std::optional<std::pair<std::size_t, input::Haptic>>> felt;
+};
+
+/// The lent devices shared out among the local players (D363): the
+/// client's feed routed, as any player's source next ticks, into each
+/// player's own by the pairing table, made with as many players as have
+/// sources then.
+struct Routing {
+    input::Feed* client = nullptr;
+    std::optional<input::PairingPolicy> policy;
+    std::optional<input::Pairing> pairing;
+    std::vector<std::unique_ptr<input::Feed>> feeds;
+    std::vector<input::Feed*> players;
+
+    void route() {
+        if (!pairing.has_value()) {
+            // A single player's devices merged, local players' keyboard
+            // first, unless the client names its policy.
+            pairing.emplace(
+                policy.value_or(feeds.size() > 1 ? input::PairingPolicy::KeyboardFirst : input::PairingPolicy::Merged),
+                feeds.size());
+        }
+        client->route(*pairing, players);
+    }
 };
 
 /// A player's controls through the game's mapping and sample function: a
@@ -178,8 +205,12 @@ struct Shared {
 /// player, which pair themselves as they connect.
 class Source final : public world_replication::InputSource {
 public:
-    /// A bot's source with a seed; the player's without.
-    result::Status build(const Shared& shared, std::optional<std::uint64_t> seed) {
+    /// A bot's source with a seed; a local player's without, its devices
+    /// those `routing` gives it in `feed`.
+    result::Status build(const Shared& shared,
+                         std::optional<std::uint64_t> seed,
+                         std::shared_ptr<Routing> routing = nullptr,
+                         input::Feed* feed = nullptr) {
         RAWFRAME_TRY_ASSIGN(mapper_, input::Mapper::create(shared.actions, {.players = 1}));
         if (seed.has_value()) {
             RAWFRAME_TRY(mapper_->pair(kKeyboard, input::DeviceClass::Keyboard, {}));
@@ -187,7 +218,8 @@ public:
             RAWFRAME_TRY(mapper_->pair(kGamepad, input::DeviceClass::Gamepad, {}));
             hand_.emplace(shared.actions, *seed);
         } else {
-            feed_ = shared.feed;
+            routing_ = std::move(routing);
+            feed_ = feed;
         }
         // A player is in every context the set declares, in the order
         // declared, until a game can switch them.
@@ -215,6 +247,7 @@ public:
         if (hand_.has_value()) {
             hand_->act(*mapper_);
         } else {
+            routing_->route();
             feed_->deliver(*mapper_, {});
         }
         mapper_->commit(tick);
@@ -240,6 +273,7 @@ public:
 private:
     std::shared_ptr<input::Mapper> mapper_;
     std::optional<Hand> hand_;
+    std::shared_ptr<Routing> routing_;
     input::Feed* feed_ = nullptr;
     InputDoorContext doors_;
     std::unique_ptr<kest::Machine> machine_;
@@ -259,18 +293,36 @@ public:
         return std::unique_ptr<world_replication::InputSource>{std::move(source)};
     }
 
-    result::Result<std::unique_ptr<world_replication::InputSource>> playerSource() override {
+    result::Result<std::unique_ptr<world_replication::InputSource>> playerSource(std::size_t player) override {
         if (shared_.feed == nullptr) {
             return refuse(result::ErrorClass::NotFound, InputKestError::NoDevices, "the host lends no devices");
         }
-        if (playerGiven_) {
+        if (player >= world_replication::kMaximumLocalPlayers) {
+            return refuse(
+                result::ErrorClass::InvalidArgument, InputKestError::NoDevices, "past the local players there may be");
+        }
+        if (routing_ == nullptr) {
+            routing_ = std::make_shared<Routing>();
+            routing_->client = shared_.feed;
+            routing_->policy = shared_.pairing;
+        }
+        if (player < routing_->feeds.size() && routing_->feeds[player] != nullptr) {
             return refuse(
                 result::ErrorClass::AlreadyExists, InputKestError::NoDevices, "the player's devices have a source");
         }
+        while (routing_->feeds.size() <= player) {
+            routing_->feeds.push_back(nullptr);
+        }
+        routing_->feeds[player] = std::make_unique<input::Feed>();
+        routing_->players.clear();
+        for (const std::unique_ptr<input::Feed>& feed : routing_->feeds) {
+            routing_->players.push_back(feed.get());
+        }
         auto source = std::make_unique<Source>();
-        RAWFRAME_TRY(source->build(shared_, std::nullopt));
-        playerGiven_ = true;
-        player_ = source->mapper();
+        RAWFRAME_TRY(source->build(shared_, std::nullopt, routing_, routing_->feeds[player].get()));
+        if (player == 0) {
+            player_ = source->mapper();
+        }
         return std::unique_ptr<world_replication::InputSource>{std::move(source)};
     }
 
@@ -295,8 +347,10 @@ public:
 
 private:
     Shared shared_;
-    bool playerGiven_ = false;
-    /// The player's mapper, shared with its source: which devices it has.
+    /// The lent devices' routing among the local players' sources.
+    std::shared_ptr<Routing> routing_;
+    /// The first player's mapper, shared with its source: which devices it
+    /// has. Effects are felt on its devices.
     std::shared_ptr<input::Mapper> player_;
     std::vector<input::HapticCommand> commands_;
 };
@@ -395,6 +449,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.limits = settings.limits;
     shared.inputSize = settings.inputSize;
     shared.feed = settings.feed;
+    shared.pairing = settings.pairing;
     return std::unique_ptr<InputSources>{new Sources{std::move(shared)}};
 }
 

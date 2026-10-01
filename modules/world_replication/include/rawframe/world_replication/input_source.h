@@ -38,11 +38,13 @@ public:
     /// A source for a bot, whose hand is seeded by `seed`. Refuses
     /// (`NotFound`) for a game that declares no input mapping.
     [[nodiscard]] virtual result::Result<std::unique_ptr<InputSource>> botSource(std::uint64_t seed) = 0;
-    /// The source of the process's own player: the devices its host lends.
-    /// Refuses (`NotFound`) for a game that declares no input mapping or a
-    /// host that lends no devices, and (`AlreadyExists`) a second time,
-    /// since one set of devices is one player's.
-    [[nodiscard]] virtual result::Result<std::unique_ptr<InputSource>> playerSource() = 0;
+    /// The source of the process's local player `player` (D363): the
+    /// devices its host lends that are paired to it. Refuses (`NotFound`)
+    /// for a game that declares no input mapping or a host that lends no
+    /// devices, (`InvalidArgument`) a player past `kMaximumLocalPlayers`,
+    /// and (`AlreadyExists`) a player's a second time, since a device plays
+    /// one player.
+    [[nodiscard]] virtual result::Result<std::unique_ptr<InputSource>> playerSource(std::size_t player) = 0;
 };
 
 inline constexpr composition::Capability<InputSourcePlan> kInputSourcePlan{"rawframe.replication.input_sources"};

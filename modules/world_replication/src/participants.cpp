@@ -612,12 +612,14 @@ public:
                     ++unpredicted_;
                 }
             }
-            if (player && index == 0) {
+            // The process's local players play from the lent devices, each
+            // from those paired to it (D363).
+            if (player && index < localPlayers_) {
                 player_ = true;
                 if (sources == nullptr) {
                     return missing("bots.player needs the game's input sources");
                 }
-                RAWFRAME_TRY_ASSIGN(bot.source, sources->playerSource());
+                RAWFRAME_TRY_ASSIGN(bot.source, sources->playerSource(index));
             } else if (sources != nullptr) {
                 auto source = sources->botSource(kSeed + index);
                 if (source.has_value()) {
@@ -867,15 +869,17 @@ result::Result<composition::ParticipantOwner> makeBots(composition::ParticipantC
     }
     const bool kPlaying = kPlayer == "true";
     // Split-screen (D362): how many of the first clients are local players,
-    // shown and presented; one unless told.
+    // shown and presented; one unless told. With the process's player, they
+    // are all played from its devices (D363), and the bots come after them;
+    // without, they are the first bots.
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kLocal, context.configuration().unsignedInteger("bots.local_players", 1));
-    if (kLocal < 1 || kLocal > kMaximumLocalPlayers ||
-        kLocal > std::max<std::uint64_t>(kCount + (kPlaying ? 1 : 0), 1)) {
+    const std::uint64_t kClients = kCount + (kPlaying ? kLocal : 0);
+    if (kLocal < 1 || kLocal > kMaximumLocalPlayers || (kClients != 0 && kLocal > kClients)) {
         return missing("bots.local_players is 1 to 4, and no more than the clients");
     }
     participant->showLocally(static_cast<std::size_t>(kLocal));
-    if (kCount != 0 || kPlaying) {
-        RAWFRAME_TRY(participant->load(context, kCount + (kPlaying ? 1 : 0), kPlaying));
+    if (kClients != 0) {
+        RAWFRAME_TRY(participant->load(context, kClients, kPlaying));
     }
     return composition::ParticipantOwner{participant.release()};
 }
