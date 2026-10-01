@@ -3,15 +3,15 @@
 // A game description cooked (D88, D95): its text, the documents it names
 // beside it (actions, mixer, sounds), each Kest program it names as a file
 // of the game's Kest sources resource (D87), and each scene, mesh,
-// animator's graph, text document (D147), texture (D254), and material
-// (D303) it names as a resource, all in one record. A process
+// animator's graph, text document (D147), texture (D254), material (D303),
+// and font (D386) it names as a resource, all in one record. A process
 // reads the game from it and opens no path: every name the text uses is
 // answered from the record.
 //
 // The record is canonical:
 //
-//   {"animators": [{"graph", "path"}], "files": [{"path", "text"}],
-//    "formatVersion": 7, "kind": "game.description", "materials": [{"material", "path"}],
+//   {"animators": [{"graph", "path"}], "files": [{"path", "text"}], "fonts": [{"font", "path"}],
+//    "formatVersion": 8, "kind": "game.description", "materials": [{"material", "path"}],
 //    "meshes": [{"mesh", "path"}],
 //    "programs": [{"entry", "path", "sources"}], "scenes": [{"path", "scene"}], "text",
 //    "texts": [{"document", "path"}], "textures": [{"path", "texture"}]}
@@ -20,9 +20,10 @@
 // resource, `scene` the scene resource, `mesh` the mesh resource, and
 // `graph` the animation graph resource, `document` the string table or
 // translation resource, `texture` the texture resource, `material` the
-// material resource, as 32 hex digits, and `entry` the program's path among
-// its files. Animators, files, materials, meshes, programs, scenes, texts,
-// and textures are each in path order, each path once.
+// material resource, `font` the font resource, as 32 hex digits, and `entry`
+// the program's path among its files. Animators, files, fonts, materials,
+// meshes, programs, scenes, texts, and textures are each in path order, each
+// path once.
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
@@ -92,6 +93,12 @@ struct CookedGameTexture {
     base::Bits128 texture{};
 };
 
+/// A font the description names (D386), by the resource it is.
+struct CookedGameFont {
+    std::string path;
+    base::Bits128 font{};
+};
+
 struct CookedGame {
     std::string text;
     std::vector<CookedGameFile> files;
@@ -102,6 +109,7 @@ struct CookedGame {
     std::vector<CookedGameText> texts;
     std::vector<CookedGameTexture> textures;
     std::vector<CookedGameMaterial> materials;
+    std::vector<CookedGameFont> fonts;
 
     /// The document the description names `path`, or none.
     [[nodiscard]] const CookedGameFile* file(std::string_view path) const noexcept;
@@ -117,6 +125,8 @@ struct CookedGame {
     [[nodiscard]] const CookedGameMaterial* material(std::string_view path) const noexcept;
     /// The texture it names `path`, or none.
     [[nodiscard]] const CookedGameTexture* texture(std::string_view path) const noexcept;
+    /// The font it names `path`, or none.
+    [[nodiscard]] const CookedGameFont* font(std::string_view path) const noexcept;
     /// The animator graph it names `path`, or none.
     [[nodiscard]] const CookedGameAnimator* animator(std::string_view path) const noexcept;
 };

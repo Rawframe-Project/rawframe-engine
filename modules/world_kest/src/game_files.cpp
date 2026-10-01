@@ -644,6 +644,16 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
         game.textures_.push_back(
             GameTextureResource{.id = texture.id, .path = texture.path, .texture = (*kSidecarRead)->id.value});
     }
+    // Each font, by the resource its sidecar names.
+    for (const GameFont& font : game.description_.fonts) {
+        const auto kSidecarText = reader.read(font.path + std::string{content::kSidecarSuffix});
+        const auto kSidecarRead =
+            kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
+        if (!kSidecarRead.has_value() || !kSidecarRead->has_value() || (*kSidecarRead)->importer != "rawframe.font") {
+            return unreadable("a font the game names has a sidecar naming rawframe.font", font.path);
+        }
+        game.fonts_.push_back(GameFontResource{.id = font.id, .path = font.path, .font = (*kSidecarRead)->id.value});
+    }
     // Each material, by the resource its sidecar names: a surface, a post
     // process (D348), or a canvas material (D355).
     for (const GameMaterial& material : game.description_.materials) {
@@ -805,6 +815,13 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
         }
         game.textures_.push_back(
             GameTextureResource{.id = texture.id, .path = texture.path, .texture = kTexture->texture});
+    }
+    for (const GameFont& font : game.description_.fonts) {
+        const CookedGameFont* const kFont = kCooked.font(font.path);
+        if (kFont == nullptr) {
+            return invalid("the cooked description does not name the resource of a font it names", font.path);
+        }
+        game.fonts_.push_back(GameFontResource{.id = font.id, .path = font.path, .font = kFont->font});
     }
     for (const GameMaterial& material : game.description_.materials) {
         const CookedGameMaterial* const kMaterial = kCooked.material(material.path);

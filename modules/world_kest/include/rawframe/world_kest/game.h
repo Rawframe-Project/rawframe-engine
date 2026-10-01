@@ -349,6 +349,24 @@ struct GameTexture {
     std::string path;
 };
 
+/// A font UI text is shown in (D386), by the identity a `rawframe.ui.Node`'s
+/// `font` names it by. Its source beside the description is a TrueType or
+/// OpenType font the cook rebuilds through its sanitizer (`rawframe.font`).
+struct GameFont {
+    std::uint64_t id = 0;
+    std::string path;
+};
+
+/// Words a `rawframe.ui.Node` shows (D386), by the identity its `text` names
+/// them by: a key of a string table a `text` line names, and the name of the
+/// one argument its message may read, which the node's `textValue` gives.
+struct GameLabel {
+    std::uint64_t id = 0;
+    std::string table;
+    std::string key;
+    std::string argument;
+};
+
 /// When a render texture's view is drawn (ADR-0052's closed set): every
 /// frame, or when its view asks, by a new `request`.
 enum class RenderTextureUpdate : std::uint8_t {
@@ -582,6 +600,11 @@ struct GameDescription {
     /// resource of (`rawframe.text`); a process reads the resources by
     /// identity, and a dedicated server not at all (D147).
     std::vector<std::string> texts;
+    /// From `font <16 hex digits> <file>` lines.
+    std::vector<GameFont> fonts;
+    /// From `label <16 hex digits> <table> <key> [<argument>]` lines, each
+    /// table one a `text` line names.
+    std::vector<GameLabel> labels;
     /// The project's default locale, from a `locale <tag>` line; empty for
     /// each table's source locale. A client checks the tag.
     std::string locale;

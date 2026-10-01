@@ -109,6 +109,19 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
             }
         }
     }
+    // Each font: the resource its sidecar names, cooked by rawframe.font
+    // (D386).
+    for (const world_kest::GameFont& font : kDescription.fonts) {
+        auto sidecarBytes = reads.file(font.path + std::string{content::kSidecarSuffix});
+        if (!sidecarBytes.has_value()) {
+            return refuse("a font the description names has a sidecar", font.path);
+        }
+        RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
+        if (kSidecar.importer != "rawframe.font") {
+            return refuse("a font the description names is cooked by rawframe.font", font.path);
+        }
+        game.fonts.push_back(world_kest::CookedGameFont{.path = font.path, .font = kSidecar.id.value});
+    }
     // Each texture: the resource its sidecar names, cooked by
     // rawframe.texture.
     for (const world_kest::GameTexture& texture : kDescription.textures) {

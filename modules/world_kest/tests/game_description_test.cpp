@@ -222,6 +222,33 @@ RAWFRAME_TEST(TexturesAreDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(FontsAndLabelsAreDeclaredByLine) {
+    const std::string kHead = "program p.kest\ntext hud.strings\n";
+    const auto kGame = parseGame(kHead + "font 00000000000000f1 sans.ttf\nlabel 00000000000000a1 hud.strings hud.hit\n"
+                                         "label 00000000000000a2 hud.strings hud.score points\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->fonts.size() == 1 && kGame->fonts[0].id == 0xF1 &&
+                    kGame->fonts[0].path == "sans.ttf" && kGame->labels.size() == 2 &&
+                    kGame->labels[0].argument.empty() && kGame->labels[1].id == 0xA2 &&
+                    kGame->labels[1].table == "hud.strings" && kGame->labels[1].key == "hud.score" &&
+                    kGame->labels[1].argument == "points");
+    for (const std::string_view kLines :
+         {"font 00000000000000f1\n",
+          "font 0000000000000000 sans.ttf\n",
+          "font 00000000000000f1 a.ttf\nfont 00000000000000f1 b.ttf\n",
+          "font 00000000000000f1 a.ttf\nfont 00000000000000f2 a.ttf\n",
+          "label 00000000000000a1 hud.strings\n",
+          "label 0000000000000000 hud.strings hud.hit\n",
+          "label 00000000000000a1 hud.strings hud.hit points more\n",
+          "label 00000000000000a1 hud.strings a\nlabel 00000000000000a1 hud.strings b\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "4"));
+    }
+    // A label's table is one a text line names, wherever that line is.
+    RAWFRAME_EXPECT(refusedAt(kHead + "label 00000000000000a1 menu.strings play\n", WorldKestError::UnknownName, "3"));
+    RAWFRAME_EXPECT(parseGame("label 00000000000000a1 hud.strings hud.hit\n" + kHead).has_value());
+}
+
 RAWFRAME_TEST(RenderTexturesAreDeclaredByLine) {
     const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
     const auto kGame = parseGame(kHead + "rendertexture 00000000000000d1 256 128\n");
@@ -515,6 +542,25 @@ RAWFRAME_TEST(TexturesAreNamedByTheirSidecars) {
                     kFiles->textures()[0].path == "tiles.png" &&
                     kFiles->textures()[0].texture == base::parseBits128Hex("a6478ea1aa844c683e293a9754feeb95").value);
     RAWFRAME_EXPECT(!kHeld("rawframe.mesh").has_value());
+    RAWFRAME_EXPECT(!kHeld("").has_value());
+}
+
+RAWFRAME_TEST(FontsAreNamedByTheirSidecars) {
+    const auto kHeld = [](std::string_view importer) {
+        std::vector<std::pair<std::string, std::string>> held = {
+            {"look.game", "program p.kest\nfont 00000000000000f1 sans.ttf\n"}, {"p.kest", "module p\n"}};
+        if (!importer.empty()) {
+            held.emplace_back("sans.ttf.rfmeta",
+                              "{\n  \"schema\": 1,\n  \"resourceId\": \"51efbae405c153ba13e8af579ad96b5b\",\n  "
+                              "\"importer\": \"" +
+                                  std::string{importer} + "\"\n}\n");
+        }
+        return world_kest::GameFiles::fromHeld("look.game", std::move(held));
+    };
+    const auto kFiles = kHeld("rawframe.font");
+    RAWFRAME_EXPECT(kFiles.has_value() && kFiles->fonts().size() == 1 && kFiles->fonts()[0].id == 0xF1 &&
+                    kFiles->fonts()[0].font == base::parseBits128Hex("51efbae405c153ba13e8af579ad96b5b").value);
+    RAWFRAME_EXPECT(!kHeld("rawframe.texture").has_value());
     RAWFRAME_EXPECT(!kHeld("").has_value());
 }
 

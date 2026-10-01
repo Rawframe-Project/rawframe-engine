@@ -1,6 +1,6 @@
 // A cooked game description: its text, the documents it names, its
 // programs as files of Kest sources, and its scenes, meshes, animators'
-// graphs, text documents, and textures as resources, written in one form
+// graphs, text documents, textures, and fonts as resources, written in one form
 // and read back exactly; anything else, mutated text included, refused.
 
 #include "rawframe/test/mutations.h"
@@ -36,8 +36,8 @@ CookedGame sample() {
         .texts = {{.path = "hud.strings", .document = base::parseBits128Hex("749e2ba7d0067a4db2348b183fc4d55f").value},
                   {.path = "hud.tr.translations",
                    .document = base::parseBits128Hex("0123456789abcdef0123456789abcdef").value}},
-        .textures = {
-            {.path = "tiles.png", .texture = base::parseBits128Hex("a6478ea1aa844c683e293a9754feeb95").value}}};
+        .textures = {{.path = "tiles.png", .texture = base::parseBits128Hex("a6478ea1aa844c683e293a9754feeb95").value}},
+        .fonts = {{.path = "boxes.ttf", .font = base::parseBits128Hex("51efbae405c153ba13e8af579ad96b5b").value}}};
 }
 
 } // namespace
@@ -67,6 +67,8 @@ RAWFRAME_TEST(ACookedGameRoundTripsInOneForm) {
     RAWFRAME_EXPECT(kRead->texture("tiles.png") != nullptr &&
                     kRead->texture("tiles.png")->texture == sample().textures[0].texture &&
                     kRead->texture("hud.strings") == nullptr);
+    RAWFRAME_EXPECT(kRead->font("boxes.ttf") != nullptr && kRead->font("boxes.ttf")->font == sample().fonts[0].font &&
+                    kRead->font("tiles.png") == nullptr);
     // Names answered from the record, in path order.
     RAWFRAME_EXPECT(kRead->files[0].path == "runners.mixer" && kRead->file("shot.sound") != nullptr &&
                     kRead->file("shot.sound")->text == sample().files[0].text && kRead->file("other") == nullptr);
@@ -106,19 +108,23 @@ RAWFRAME_TEST(ACookedGameIsRefusedInAnyOtherForm) {
     CookedGame noTexture = sample();
     noTexture.textures[0].texture = {};
     RAWFRAME_EXPECT(refused(writeCookedGame(noTexture)));
+    CookedGame noFont = sample();
+    noFont.fonts[0].font = {};
+    RAWFRAME_EXPECT(refused(writeCookedGame(noFont)));
 
     const std::string kGood = *writeCookedGame(sample());
-    const std::string kTail = ",\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],\"meshes\":[],"
-                              "\"programs\":[],"
-                              "\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}";
-    const std::string kProgramsHead =
-        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],"
-        "\"meshes\":[],\"programs\":[";
+    const std::string kTail =
+        ",\"fonts\":[],\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[],\"meshes\":[],"
+        "\"programs\":[],"
+        "\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}";
+    const std::string kProgramsHead = "{\"animators\":[],\"files\":[],\"fonts\":[],\"formatVersion\":8,\"kind\":\"game."
+                                      "description\",\"materials\":[],"
+                                      "\"meshes\":[],\"programs\":[";
     const std::string kProgramsTail = "],\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}";
-    const std::string kScenesHead =
-        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],"
-        "\"meshes\":[],\"programs\":[],"
-        "\"scenes\":[";
+    const std::string kScenesHead = "{\"animators\":[],\"files\":[],\"fonts\":[],\"formatVersion\":8,\"kind\":\"game."
+                                    "description\",\"materials\":[],"
+                                    "\"meshes\":[],\"programs\":[],"
+                                    "\"scenes\":[";
     const std::string kScenesTail = "],\"text\":\"\",\"texts\":[],\"textures\":[]}";
     const std::vector<std::string> kBad = {
         kGood.substr(0, kGood.size() - 1),
@@ -126,7 +132,8 @@ RAWFRAME_TEST(ACookedGameIsRefusedInAnyOtherForm) {
         "{\"animators\":[],\"files\":[]" +
             std::string{",\"formatVersion\":3,\"kind\":\"game.description\",\"meshes\":[],\"programs\":[]"
                         ",\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}"},
-        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],\"meshes\":["
+        "{\"animators\":[],\"files\":[],\"fonts\":[],\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[]"
+        ",\"meshes\":["
         "],\"programs\":[]"
         ",\"text\":\"\",\"texts\":[],\"textures\":[]}",
         "{\"animators\":[],\"extra\":0,\"files\":[]" + kTail,
@@ -145,40 +152,50 @@ RAWFRAME_TEST(ACookedGameIsRefusedInAnyOtherForm) {
             "\"52771075251e7361deaecf4939c72e56\"}" +
             kScenesTail,
         kScenesHead + "{\"path\":\"a\"}" + kScenesTail,
-        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],"
+        "{\"animators\":[],\"files\":[],\"fonts\":[],\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[]"
+        ","
         "\"programs\":[],\"scenes\":[]"
         ",\"text\":\"\",\"texts\":[],\"textures\":[]}",
-        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],\"meshes\":["
+        "{\"animators\":[],\"files\":[],\"fonts\":[],\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[]"
+        ",\"meshes\":["
         "{\"mesh\":"
         "\"00000000000000000000000000000000\",\"path\":\"a\"}],\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[]"
         ","
         "\"textures\":[]}",
         // Format 3 had no animators.
-        "{\"files\":[]" +
-            std::string{
-                ",\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],\"meshes\":[],\"programs\":[]"
-                ",\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}"},
+        "{\"files\":[]" + std::string{",\"fonts\":[],\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[]"
+                                      ",\"meshes\":[],\"programs\":[]"
+                                      ",\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}"},
         "{\"animators\":[{\"graph\":\"00000000000000000000000000000000\",\"path\":\"a\"}]" +
             std::string{",\"files\":[]"} + kTail,
         // Format 4 had no texts.
         "{\"animators\":[],\"files\":[],\"formatVersion\":4,\"kind\":\"game.description\",\"meshes\":[],"
         "\"programs\":[],\"scenes\":[],\"text\":\"\"}",
-        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],\"meshes\":["
+        "{\"animators\":[],\"files\":[],\"fonts\":[],\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[]"
+        ",\"meshes\":["
         "],"
         "\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[{\"document\":\"00000000000000000000000000000000\","
         "\"path\":\"a\"}],\"textures\":[]}",
         // Format 5 had no textures.
         "{\"animators\":[],\"files\":[],\"formatVersion\":5,\"kind\":\"game.description\",\"meshes\":[],"
         "\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[]}",
-        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],\"meshes\":["
+        "{\"animators\":[],\"files\":[],\"fonts\":[],\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[]"
+        ",\"meshes\":["
         "],"
         "\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[{\"path\":\"a\","
         "\"texture\":\"00000000000000000000000000000000\"}]}",
         // Format 6 had no materials.
         "{\"animators\":[],\"files\":[],\"formatVersion\":6,\"kind\":\"game.description\",\"meshes\":[],"
         "\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}",
+        // Format 7 had no fonts.
+        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[],"
+        "\"meshes\":[],\"programs\":[],\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}",
+        // A font's resource is never nought.
+        "{\"animators\":[],\"files\":[],\"fonts\":[{\"font\":\"00000000000000000000000000000000\",\"path\":\"a\"}],"
+        "\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[],\"meshes\":[],\"programs\":[],"
+        "\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}",
         // A material's resource is never nought.
-        "{\"animators\":[],\"files\":[],\"formatVersion\":7,\"kind\":\"game.description\",\"materials\":[{"
+        "{\"animators\":[],\"files\":[],\"fonts\":[],\"formatVersion\":8,\"kind\":\"game.description\",\"materials\":[{"
         "\"material\":\"00000000000000000000000000000000\",\"path\":\"a\"}],\"meshes\":[],\"programs\":[],"
         "\"scenes\":[],\"text\":\"\",\"texts\":[],\"textures\":[]}",
     };

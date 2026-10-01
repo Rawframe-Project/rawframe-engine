@@ -155,6 +155,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     GameControls controls;
     std::size_t number = 0;
     ModLines modLines;
+    std::vector<std::size_t> labelLines;
     // Names are checked once every component line has been read, so a
     // description may list components after the systems that use them.
     std::vector<std::pair<std::size_t, std::string>> uses;
@@ -393,6 +394,31 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a text document is named once");
             }
             game.texts.emplace_back(kWords[1]);
+        } else if (kKeyword == "font") {
+            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(number, WorldKestError::BadGameLine, "a font line is `font <16 hex digits> <file>`");
+            }
+            if (std::ranges::contains(game.fonts, *kId, &GameFont::id) ||
+                std::ranges::contains(game.fonts, kWords[2], &GameFont::path)) {
+                return badLine(number, WorldKestError::BadGameLine, "a font's identity and file are used once");
+            }
+            game.fonts.push_back(GameFont{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "label") {
+            const auto kId = kWords.size() == 4 || kWords.size() == 5 ? parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a label line is `label <16 hex digits> <table> <key> [<argument>]`");
+            }
+            if (std::ranges::contains(game.labels, *kId, &GameLabel::id)) {
+                return badLine(number, WorldKestError::BadGameLine, "a label's identity is used once");
+            }
+            labelLines.push_back(number);
+            game.labels.push_back(GameLabel{.id = *kId,
+                                            .table = std::string{kWords[2]},
+                                            .key = std::string{kWords[3]},
+                                            .argument = kWords.size() == 5 ? std::string{kWords[4]} : std::string{}});
         } else if (kKeyword == "locale") {
             if (!game.locale.empty() || kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names one default locale, `locale <tag>`");
@@ -861,6 +887,12 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             if (column.access == world::Access::Write && !std::ranges::contains(presentational, column.component)) {
                 return badLine(number, WorldKestError::BadGameLine, "a present system writes only presentation state");
             }
+        }
+    }
+    // A label's table is one the game's text comes from (D386).
+    for (std::size_t at = 0; at < game.labels.size(); ++at) {
+        if (!std::ranges::contains(game.texts, game.labels[at].table)) {
+            return badLine(labelLines[at], WorldKestError::UnknownName, "a label's table is one a text line names");
         }
     }
     RAWFRAME_TRY(checkModApi(game, modLines));

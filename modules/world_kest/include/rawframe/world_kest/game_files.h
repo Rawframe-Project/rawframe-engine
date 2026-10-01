@@ -52,6 +52,14 @@ struct GameTextureResource {
     base::Bits128 texture{};
 };
 
+/// A font a `font` line names, by the identity the line gives it and the
+/// resource it is (D386).
+struct GameFontResource {
+    std::uint64_t id = 0;
+    std::string path;
+    base::Bits128 font{};
+};
+
 /// A material a `material` line names, by the identity the line gives it
 /// and the resource it is (D303); or one a mesh's source holds (D314).
 struct GameMaterialResource {
@@ -173,6 +181,14 @@ public:
     [[nodiscard]] const std::vector<GameTextureResource>& textures() const noexcept {
         return textures_;
     }
+    /// Every font the description names, by its resource, in the order of
+    /// its lines: in development the identity its sidecar gives, which must
+    /// name `rawframe.font`, and from content the one the record names. Only
+    /// the identities are read here; a client reads the resources, and a
+    /// dedicated server never does.
+    [[nodiscard]] const std::vector<GameFontResource>& fonts() const noexcept {
+        return fonts_;
+    }
     /// Every material the description names, by its resource, in the order
     /// of its lines: in development the identity its sidecar gives, which
     /// must name `rawframe.material`, and from content the one the record
@@ -287,6 +303,7 @@ private:
     std::vector<physics3d::BodyMesh> meshes_;
     std::vector<GameText> texts_;
     std::vector<GameTextureResource> textures_;
+    std::vector<GameFontResource> fonts_;
     std::vector<content::BuildReference> modBuilds_;
     std::vector<SetAsideClaim> setAside_;
     std::vector<GameModScene> modScenes_;
