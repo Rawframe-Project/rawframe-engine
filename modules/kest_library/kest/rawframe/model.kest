@@ -336,6 +336,52 @@ struct ParticleEmitter {
     seed: u32
 }
 
+// A trail (ADR-0053, D354), on any entity: a ribbon left behind its pose
+// as it moves, facing the eye, drawn as an emitter's particles are, of the
+// game's surface material of the identity `material` gives it (nought:
+// white). A point is left each time the pose has gone `spacing` meters
+// from the last (nought: every frame it moves), each lasting `lifetime`
+// seconds; the ribbon runs from the pose through them, `widthStart` meters
+// across at the pose and `widthEnd` at a point's death, `colorStart` to
+// `colorEnd` (0xRRGGBBAA, sRGB, the alpha their opacity) likewise, its
+// material's texture stretched over its life. Cosmetic, as an emitter's
+// particles are.
+struct Trail {
+    material: u64
+    lifetime: f32
+    spacing: f32
+    widthStart: f32
+    widthEnd: f32
+    colorStart: u32
+    colorEnd: u32
+}
+
+// A beam (ADR-0053, D354), on any entity: a ribbon from its pose to its
+// far end `to` meters away (World axes), facing the eye, its middle bent
+// `bend` meters (World axes) on a quadratic curve cut into `segments`
+// pieces (nought: one), drawn as an emitter's particles are, of the game's
+// surface material of the identity `material` gives it (nought: white);
+// `widthStart` meters across at its pose and `widthEnd` at its far end,
+// `colorStart` to `colorEnd` (0xRRGGBBAA, sRGB) likewise; its texture
+// repeated every `textureLength` meters along it (nought: stretched over
+// it once), scrolling `textureSpeed` repeats a second toward its far end.
+struct Beam {
+    material: u64
+    toX: f32
+    toY: f32
+    toZ: f32
+    bendX: f32
+    bendY: f32
+    bendZ: f32
+    segments: u32
+    widthStart: f32
+    widthEnd: f32
+    colorStart: u32
+    colorEnd: u32
+    textureLength: f32
+    textureSpeed: f32
+}
+
 // White: a surface, a sun, or a sky as it is.
 const WHITE: u32 = 0xFFFFFFFF
 

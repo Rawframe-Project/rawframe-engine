@@ -10,12 +10,6 @@ namespace rawframe::render_scene {
 
 namespace {
 
-/// An sRGB color and its linear alpha.
-std::array<float, 4> colorAndAlpha(std::uint32_t color) noexcept {
-    const Vector kColor = colorOf(color);
-    return {kColor[0], kColor[1], kColor[2], static_cast<float>(color & 0xFFU) / 255.0F};
-}
-
 /// A time on the particle clock, wrapped into its period.
 float wrapped(double seconds) noexcept {
     const double kWrapped = std::fmod(seconds, double{kParticleClockPeriod});
@@ -189,8 +183,8 @@ void spawnParticles(SceneFrame& frame,
                           .radius = std::max(kEmitter.radius, 0.0F),
                           .sizeStart = std::max(kEmitter.sizeStart, 0.0F),
                           .sizeEnd = std::max(kEmitter.sizeEnd, 0.0F),
-                          .colorStart = colorAndAlpha(kEmitter.colorStart),
-                          .colorEnd = colorAndAlpha(kEmitter.colorEnd),
+                          .colorStart = colorAndAlphaOf(kEmitter.colorStart),
+                          .colorEnd = colorAndAlphaOf(kEmitter.colorEnd),
                           .acceleration = {kEmitter.accelerationX, kEmitter.accelerationY, kEmitter.accelerationZ},
                           .drag = std::max(kEmitter.drag, 0.0F),
                           .variation = kVariation,

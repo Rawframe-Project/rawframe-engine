@@ -332,7 +332,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion],\n"
         "        blooms: [model.Bloom], mirrors: [model.ScreenSpaceReflections], blurs: [model.MotionBlur],\n"
         "        focuses: [model.DepthOfField], contacts: [model.ContactShadows], marks: [model.Decal],\n"
-        "        processes: [model.PostProcess], fountains: [model.ParticleEmitter]) {\n}\n";
+        "        processes: [model.PostProcess], fountains: [model.ParticleEmitter], trails: [model.Trail],\n"
+        "        beams: [model.Beam]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
@@ -355,7 +356,9 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "component 4d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.mark rawframe.model.Decal\n"
         "component 5d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.warm rawframe.model.PostProcess\n"
         "component 6d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.fade rawframe.model.PostProcess\n"
-        "component 7d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.fountain rawframe.model.ParticleEmitter\n";
+        "component 7d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.fountain rawframe.model.ParticleEmitter\n"
+        "component 8d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.trail rawframe.model.Trail\n"
+        "component 9d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.beam rawframe.model.Beam\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(
         kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
@@ -377,7 +380,11 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                                       schema::ComponentTypeId::fromText("5d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"),
                                       schema::ComponentTypeId::fromText("6d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18")}) &&
         kLoaded->emitters == (std::vector<schema::ComponentTypeId>{
-                                 schema::ComponentTypeId::fromText("7d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18")}));
+                                 schema::ComponentTypeId::fromText("7d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18")}) &&
+        kLoaded->trails == (std::vector<schema::ComponentTypeId>{
+                               schema::ComponentTypeId::fromText("8d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18")}) &&
+        kLoaded->beams == (std::vector<schema::ComponentTypeId>{
+                              schema::ComponentTypeId::fromText("9d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18")}));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.

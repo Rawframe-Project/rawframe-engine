@@ -187,6 +187,35 @@ struct ParticleEmitter {
     std::uint32_t seed = 0;
 };
 
+/// `rawframe.model.Trail` as C++ reads it (D354).
+struct Trail {
+    std::uint64_t material = 0;
+    float lifetime = 0;
+    float spacing = 0;
+    float widthStart = 0;
+    float widthEnd = 0;
+    std::uint32_t colorStart = 0xFFFFFFFF;
+    std::uint32_t colorEnd = 0xFFFFFFFF;
+};
+
+/// `rawframe.model.Beam` as C++ reads it (D354).
+struct Beam {
+    std::uint64_t material = 0;
+    float toX = 0;
+    float toY = 0;
+    float toZ = 0;
+    float bendX = 0;
+    float bendY = 0;
+    float bendZ = 0;
+    std::uint32_t segments = 0;
+    float widthStart = 0;
+    float widthEnd = 0;
+    std::uint32_t colorStart = 0xFFFFFFFF;
+    std::uint32_t colorEnd = 0xFFFFFFFF;
+    float textureLength = 0;
+    float textureSpeed = 0;
+};
+
 /// `rawframe.model.ReflectionProbe` as C++ reads it (D325).
 struct ReflectionProbe {
     float halfX = 0;
@@ -467,6 +496,37 @@ struct SceneEmitter {
     float step = 0;
     std::uint32_t seed = 0;
     std::uint32_t ring = 0;
+};
+
+/// A trail or a beam as the extract stage copies it out of the World,
+/// where its entity's pose puts it (D354): its entity and which of the
+/// game's trail or beam components it is.
+template <typename Ribbon> struct RibbonInstance {
+    world::EntityHandle entity;
+    std::uint32_t component = 0;
+    Ribbon ribbon;
+    std::array<double, 3> position{};
+};
+using TrailInstance = RibbonInstance<Trail>;
+using BeamInstance = RibbonInstance<Beam>;
+
+/// A point of a ribbon a frame draws (D354): where it is relative to the
+/// eye, how wide it is there (meters), its color and alpha there (linear),
+/// and its texture's coordinate along the ribbon.
+struct SceneRibbonPoint {
+    std::array<float, 3> place{};
+    float width = 0;
+    std::array<float, 4> color{1, 1, 1, 1};
+    float along = 0;
+};
+
+/// A ribbon a frame draws, a trail's or a beam's (D354): its material's
+/// place among the frame's materials, and its points among the frame's,
+/// at least two.
+struct SceneRibbon {
+    std::uint32_t material = 0;
+    std::uint32_t first = 0;
+    std::uint32_t count = 0;
 };
 
 /// A decal as the extract stage copies it out of the World, where its
@@ -822,6 +882,14 @@ struct SceneFrame {
     std::size_t emittersLeftOut = 0;
     std::size_t emittersHeld = 0;
     std::size_t particlesLeftOut = 0;
+    /// The trails and beams that reach the view as ribbons, farthest first,
+    /// at most the limit, and their points (D354); and those left out:
+    /// not sound, or past the limit; and those held to a limit point (a
+    /// trail's points, or a beam's segments).
+    std::vector<SceneRibbon> ribbons;
+    std::vector<SceneRibbonPoint> ribbonPoints;
+    std::size_t ribbonsLeftOut = 0;
+    std::size_t ribbonsHeld = 0;
     /// EV100.
     float exposure = 15;
     SceneLights lights;
@@ -880,6 +948,12 @@ struct SceneLimits {
     std::uint32_t maximumParticlesPerEmitter = 4096;
     float maximumParticleRate = 1000;
     float maximumParticleLifetime = 20;
+    /// ADR-0053's trail and beam limit points (D354): the trails and beams
+    /// a view draws, the points a trail keeps, and the segments a beam
+    /// is cut into.
+    std::size_t maximumRibbons = 64;
+    std::uint32_t maximumTrailPoints = 256;
+    std::uint32_t maximumBeamSegments = 64;
 };
 
 /// ADR-0051's one typed atlas for the punctual lights' shadows (D292), a
@@ -941,6 +1015,9 @@ struct SceneSettings {
     std::vector<schema::ComponentTypeId> decals;
     /// The game's particle emitter components (D352).
     std::vector<schema::ComponentTypeId> emitters;
+    /// The game's trail and beam components (D354).
+    std::vector<schema::ComponentTypeId> trails;
+    std::vector<schema::ComponentTypeId> beams;
     /// The game's meshes, by their identities.
     std::vector<SceneMesh> meshes;
     /// The game's materials, by their identities (D303).
@@ -980,6 +1057,8 @@ public:
     [[nodiscard]] std::span<const ProbeInstance> extractedProbes() const noexcept;
     [[nodiscard]] std::span<const DecalInstance> extractedDecals() const noexcept;
     [[nodiscard]] std::span<const EmitterInstance> extractedEmitters() const noexcept;
+    [[nodiscard]] std::span<const TrailInstance> extractedTrails() const noexcept;
+    [[nodiscard]] std::span<const BeamInstance> extractedBeams() const noexcept;
 
     /// The mesh a Model names by `id`: the game's or the engine's; none for
     /// another.
@@ -1013,8 +1092,10 @@ struct GameScene {
     std::vector<schema::ComponentTypeId> decals;
     /// A camera's post processes (D349), in the game's order.
     std::vector<schema::ComponentTypeId> postProcesses;
-    /// The particle emitters (D352).
+    /// The particle emitters (D352), trails, and beams (D354).
     std::vector<schema::ComponentTypeId> emitters;
+    std::vector<schema::ComponentTypeId> trails;
+    std::vector<schema::ComponentTypeId> beams;
     std::vector<SceneMesh> meshes;
 };
 

@@ -10,6 +10,7 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/layouts.h"
+#include "ribbons.h"
 
 #include <algorithm>
 #include <cmath>
@@ -182,6 +183,13 @@ struct Scene::State {
     std::vector<world::ColumnQuery> emitterQueries;
     std::vector<EmitterInstance> emitters;
     std::map<EmitterKey, EmitterHistory> emitterHistories;
+    /// The trails' and beams' queries, what the frame extracted, and what
+    /// each trail keeps from frame to frame (D354).
+    std::vector<world::ColumnQuery> trailQueries;
+    std::vector<world::ColumnQuery> beamQueries;
+    std::vector<TrailInstance> trails;
+    std::vector<BeamInstance> beams;
+    std::map<TrailKey, TrailHistory> trailHistories;
     double particleClock = 0;
     std::uint64_t particleFrames = 0;
     std::vector<LightInstance> punctual;
@@ -650,6 +658,16 @@ struct Scene::State {
                        kElapsed,
                        particleFrames,
                        emitterHistories);
+        makeRibbons(frame,
+                    trails,
+                    beams,
+                    camera,
+                    {kRight, kUp, kForward},
+                    {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
+                    materials,
+                    settings.limits,
+                    particleClock,
+                    trailHistories);
         return frame;
     }
 
@@ -774,6 +792,14 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(ParticleEmitter)));
         state->emitterQueries.push_back(std::move(query));
     }
+    for (const schema::ComponentTypeId kId : settings.trails) {
+        RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(Trail)));
+        state->trailQueries.push_back(std::move(query));
+    }
+    for (const schema::ComponentTypeId kId : settings.beams) {
+        RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(Beam)));
+        state->beamQueries.push_back(std::move(query));
+    }
     for (const std::uint64_t kId : {kBox, kSphere, kCylinder, kCapsule}) {
         state->meshes.emplace(kId, bounded(engineMesh(kId)));
     }
@@ -810,6 +836,36 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
     }
     return std::unique_ptr<Scene>{new Scene{std::move(state)}};
 }
+
+namespace {
+
+/// Each of the game's trail or beam components copied out of `world`,
+/// where its entity's pose puts it (D354).
+template <typename Ribbon>
+void extractRibbons(world::World& world,
+                    std::vector<world::ColumnQuery>& queries,
+                    const std::optional<schema::ComponentRuntimeId>& pose,
+                    std::vector<RibbonInstance<Ribbon>>& made) {
+    made.clear();
+    for (std::size_t component = 0; component < queries.size(); ++component) {
+        queries[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                RibbonInstance<Ribbon> instance{.entity = chunk.entities[row],
+                                                .component = static_cast<std::uint32_t>(component)};
+                std::memcpy(&instance.ribbon, chunk.columns[0] + (row * sizeof(Ribbon)), sizeof(Ribbon));
+                if (pose) {
+                    if (const auto* placed =
+                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *pose))) {
+                        instance.position = {placed->x, placed->y, placed->z};
+                    }
+                }
+                made.push_back(instance);
+            }
+        });
+    }
+}
+
+} // namespace
 
 void Scene::extract(world::World& world) {
     State& state = *state_;
@@ -908,6 +964,8 @@ void Scene::extract(world::World& world) {
             }
         });
     }
+    extractRibbons(world, state.trailQueries, state.pose, state.trails);
+    extractRibbons(world, state.beamQueries, state.pose, state.beams);
     state.decals.clear();
     for (world::ColumnQuery& query : state.decalQueries) {
         query.forEachChunk(world, [&](const world::ColumnChunk& chunk) {
@@ -960,6 +1018,14 @@ std::span<const ProbeInstance> Scene::extractedProbes() const noexcept {
 
 std::span<const EmitterInstance> Scene::extractedEmitters() const noexcept {
     return state_->emitters;
+}
+
+std::span<const TrailInstance> Scene::extractedTrails() const noexcept {
+    return state_->trails;
+}
+
+std::span<const BeamInstance> Scene::extractedBeams() const noexcept {
+    return state_->beams;
 }
 
 std::span<const DecalInstance> Scene::extractedDecals() const noexcept {
@@ -1021,6 +1087,10 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             loaded.postProcesses.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.ParticleEmitter")) {
             loaded.emitters.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.model.Trail")) {
+            loaded.trails.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.model.Beam")) {
+            loaded.beams.push_back(component.id);
         }
     }
     if (loaded.models.empty()) {
@@ -1187,6 +1257,33 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"bursts", offsetof(ParticleEmitter, bursts)},
                            {"burstCount", offsetof(ParticleEmitter, burstCount)},
                            {"seed", offsetof(ParticleEmitter, seed)}}));
+    RAWFRAME_TRY(kLaidOut(!loaded.trails.empty(),
+                          "rawframe.model.Trail",
+                          sizeof(Trail),
+                          {{"material", offsetof(Trail, material)},
+                           {"lifetime", offsetof(Trail, lifetime)},
+                           {"spacing", offsetof(Trail, spacing)},
+                           {"widthStart", offsetof(Trail, widthStart)},
+                           {"widthEnd", offsetof(Trail, widthEnd)},
+                           {"colorStart", offsetof(Trail, colorStart)},
+                           {"colorEnd", offsetof(Trail, colorEnd)}}));
+    RAWFRAME_TRY(kLaidOut(!loaded.beams.empty(),
+                          "rawframe.model.Beam",
+                          sizeof(Beam),
+                          {{"material", offsetof(Beam, material)},
+                           {"toX", offsetof(Beam, toX)},
+                           {"toY", offsetof(Beam, toY)},
+                           {"toZ", offsetof(Beam, toZ)},
+                           {"bendX", offsetof(Beam, bendX)},
+                           {"bendY", offsetof(Beam, bendY)},
+                           {"bendZ", offsetof(Beam, bendZ)},
+                           {"segments", offsetof(Beam, segments)},
+                           {"widthStart", offsetof(Beam, widthStart)},
+                           {"widthEnd", offsetof(Beam, widthEnd)},
+                           {"colorStart", offsetof(Beam, colorStart)},
+                           {"colorEnd", offsetof(Beam, colorEnd)},
+                           {"textureLength", offsetof(Beam, textureLength)},
+                           {"textureSpeed", offsetof(Beam, textureSpeed)}}));
     for (const physics3d::BodyMesh& kMesh : game.meshes()) {
         loaded.meshes.push_back(SceneMesh{.id = kMesh.id, .mesh = kMesh.mesh});
     }

@@ -32,6 +32,12 @@ inline Vector colorOf(std::uint32_t color) noexcept {
     return {linearOf(color, 24), linearOf(color, 16), linearOf(color, 8)};
 }
 
+/// 0xRRGGBBAA's red, green, and blue in linear light, and its alpha.
+inline std::array<float, 4> colorAndAlphaOf(std::uint32_t color) noexcept {
+    const Vector kColor = colorOf(color);
+    return {kColor[0], kColor[1], kColor[2], static_cast<float>(color & 0xFFU) / 255.0F};
+}
+
 /// The columns of a unit quaternion's turn.
 inline std::array<Vector, 3> turnOf(const std::array<float, 4>& q) noexcept {
     const float kX = q[0];
