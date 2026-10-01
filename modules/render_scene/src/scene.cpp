@@ -2,6 +2,7 @@
 
 #include "decals.h"
 #include "lights.h"
+#include "particles.h"
 #include "probes.h"
 #include "rawframe/material/material.h"
 #include "rawframe/physics3d/components.h"
@@ -175,6 +176,14 @@ struct Scene::State {
     /// The decals' queries, and what the frame extracted (D339).
     std::vector<world::ColumnQuery> decalQueries;
     std::vector<DecalInstance> decals;
+    /// The particle emitters' queries, what the frame extracted, what each
+    /// keeps from frame to frame, the particle clock (seconds, before
+    /// wrapping), and the frames queued with it (D352).
+    std::vector<world::ColumnQuery> emitterQueries;
+    std::vector<EmitterInstance> emitters;
+    std::map<EmitterKey, EmitterHistory> emitterHistories;
+    double particleClock = 0;
+    std::uint64_t particleFrames = 0;
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
     std::map<std::uint64_t, Bounded> meshes;
@@ -626,6 +635,21 @@ struct Scene::State {
                       named);
         packClusters(frame, named, settings.limits);
         shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
+        // The particles, on a clock the Host's timeline moves (D352).
+        const float kElapsed = std::isfinite(camera.elapsed) ? std::clamp(camera.elapsed, 0.0F, 0.25F) : 0.0F;
+        particleClock += kElapsed;
+        ++particleFrames;
+        spawnParticles(frame,
+                       emitters,
+                       camera,
+                       {kRight, kUp, kForward},
+                       {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
+                       materials,
+                       settings.limits,
+                       particleClock,
+                       kElapsed,
+                       particleFrames,
+                       emitterHistories);
         return frame;
     }
 
@@ -746,6 +770,10 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(Decal)));
         state->decalQueries.push_back(std::move(query));
     }
+    for (const schema::ComponentTypeId kId : settings.emitters) {
+        RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(ParticleEmitter)));
+        state->emitterQueries.push_back(std::move(query));
+    }
     for (const std::uint64_t kId : {kBox, kSphere, kCylinder, kCapsule}) {
         state->meshes.emplace(kId, bounded(engineMesh(kId)));
     }
@@ -861,6 +889,25 @@ void Scene::extract(world::World& world) {
             }
         });
     }
+    state.emitters.clear();
+    for (std::size_t component = 0; component < state.emitterQueries.size(); ++component) {
+        state.emitterQueries[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                EmitterInstance instance{.entity = chunk.entities[row],
+                                         .component = static_cast<std::uint32_t>(component)};
+                std::memcpy(
+                    &instance.emitter, chunk.columns[0] + (row * sizeof(ParticleEmitter)), sizeof(ParticleEmitter));
+                if (state.pose) {
+                    if (const auto* pose =
+                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
+                        instance.position = {pose->x, pose->y, pose->z};
+                        instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
+                    }
+                }
+                state.emitters.push_back(instance);
+            }
+        });
+    }
     state.decals.clear();
     for (world::ColumnQuery& query : state.decalQueries) {
         query.forEachChunk(world, [&](const world::ColumnChunk& chunk) {
@@ -909,6 +956,10 @@ std::span<const LightInstance> Scene::extractedLights() const noexcept {
 
 std::span<const ProbeInstance> Scene::extractedProbes() const noexcept {
     return state_->probes;
+}
+
+std::span<const EmitterInstance> Scene::extractedEmitters() const noexcept {
+    return state_->emitters;
 }
 
 std::span<const DecalInstance> Scene::extractedDecals() const noexcept {
@@ -968,6 +1019,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             loaded.decals.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.PostProcess")) {
             loaded.postProcesses.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.model.ParticleEmitter")) {
+            loaded.emitters.push_back(component.id);
         }
     }
     if (loaded.models.empty()) {
@@ -1113,6 +1166,27 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                           "rawframe.model.PostProcess",
                           sizeof(PostProcess),
                           {{"material", offsetof(PostProcess, material)}, {"weight", offsetof(PostProcess, weight)}}));
+    RAWFRAME_TRY(kLaidOut(!loaded.emitters.empty(),
+                          "rawframe.model.ParticleEmitter",
+                          sizeof(ParticleEmitter),
+                          {{"material", offsetof(ParticleEmitter, material)},
+                           {"rate", offsetof(ParticleEmitter, rate)},
+                           {"lifetime", offsetof(ParticleEmitter, lifetime)},
+                           {"speed", offsetof(ParticleEmitter, speed)},
+                           {"spread", offsetof(ParticleEmitter, spread)},
+                           {"radius", offsetof(ParticleEmitter, radius)},
+                           {"sizeStart", offsetof(ParticleEmitter, sizeStart)},
+                           {"sizeEnd", offsetof(ParticleEmitter, sizeEnd)},
+                           {"colorStart", offsetof(ParticleEmitter, colorStart)},
+                           {"colorEnd", offsetof(ParticleEmitter, colorEnd)},
+                           {"accelerationX", offsetof(ParticleEmitter, accelerationX)},
+                           {"accelerationY", offsetof(ParticleEmitter, accelerationY)},
+                           {"accelerationZ", offsetof(ParticleEmitter, accelerationZ)},
+                           {"drag", offsetof(ParticleEmitter, drag)},
+                           {"variation", offsetof(ParticleEmitter, variation)},
+                           {"bursts", offsetof(ParticleEmitter, bursts)},
+                           {"burstCount", offsetof(ParticleEmitter, burstCount)},
+                           {"seed", offsetof(ParticleEmitter, seed)}}));
     for (const physics3d::BodyMesh& kMesh : game.meshes()) {
         loaded.meshes.push_back(SceneMesh{.id = kMesh.id, .mesh = kMesh.mesh});
     }

@@ -288,6 +288,7 @@ public:
                                   .spots = std::move(game->spots),
                                   .probes = std::move(game->probes),
                                   .decals = std::move(game->decals),
+                                  .emitters = std::move(game->emitters),
                                   .meshes = std::move(game->meshes),
                                   .materials = std::move(materials),
                                   .postProcesses = std::move(postProcesses),

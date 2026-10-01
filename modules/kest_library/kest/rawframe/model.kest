@@ -298,6 +298,42 @@ struct PostProcess {
     weight: f32
 }
 
+// A particle emitter (ADR-0053, D352), on any entity, at its pose:
+// particles drawn as quads facing the eye, of the game's surface material
+// of the identity its `material` line gives it (nought for none: white),
+// its base color and texture times their color, its emission added,
+// unlit, laid over what is behind by their alpha. `rate` a second, each
+// living `lifetime` seconds, leaving at `speed` meters a second along the
+// pose's +Y, within `spread` radians of it (pi: every way), from within
+// `radius` meters of the pose; `sizeStart` meters across at birth and
+// `sizeEnd` at death; `colorStart` and `colorEnd` (0xRRGGBBAA, sRGB, the
+// alpha their opacity) between; pushed by the acceleration (meters a
+// second squared: gravity is (0, -9.8, 0)) and slowed by `drag` (a
+// second); each one's life, speed, and size varied by up to `variation` of
+// them (nought to one). Each time `bursts` moves, `burstCount` more leave
+// at once. A nought `seed` takes one from the entity. Cosmetic: each
+// client draws its own particles, and nothing in the World sees them.
+struct ParticleEmitter {
+    material: u64
+    rate: f32
+    lifetime: f32
+    speed: f32
+    spread: f32
+    radius: f32
+    sizeStart: f32
+    sizeEnd: f32
+    colorStart: u32
+    colorEnd: u32
+    accelerationX: f32
+    accelerationY: f32
+    accelerationZ: f32
+    drag: f32
+    variation: f32
+    bursts: u32
+    burstCount: u32
+    seed: u32
+}
+
 // White: a surface, a sun, or a sky as it is.
 const WHITE: u32 = 0xFFFFFFFF
 
