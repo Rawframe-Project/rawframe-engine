@@ -134,9 +134,10 @@ fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
 }
 
 // The player's HUD (D376): a dark panel 240 pixels wide centered 12 above
-// the bottom of its view, casting a soft shadow (D381), a pale target (D378) beside a green meter of the
-// hits its runner landed over a red one of those it took, each a tenth of
-// the meters' width for each hit, starting again at ten.
+// the bottom of its view, casting a soft shadow (D381), a pale target
+// (D378) beside a green meter of the hits its runner landed over a red one
+// of those it took, each brightening along its length (D382) and a tenth
+// of the meters' width for each hit, starting again at ten.
 fn gauge(count: i32, scores: [Score], huds: [ui.Node], targets: [ui.Node], meters: [ui.Node], landed: [ui.Node],
          taken: [ui.Node]) {
     let i = 0
@@ -168,10 +169,18 @@ fn gauge(count: i32, scores: [Score], huds: [ui.Node], targets: [ui.Node], meter
         landed[i].widthOffset = 20.4 * f32(scores[i].hits % 10)
         landed[i].heightOffset = 8.0
         landed[i].fill = u32(0x58D068FF)
+        landed[i].gradientKind = ui.LINEAR
+        landed[i].gradientAngle = 90.0
+        landed[i].gradientFrom = u32(0x2E8A3CFF)
+        landed[i].gradientTo = u32(0x9CF0A8FF)
         landed[i].radius = 4.0
         taken[i].widthOffset = 20.4 * f32(scores[i].taken % 10)
         taken[i].heightOffset = 8.0
         taken[i].fill = u32(0xE05050FF)
+        taken[i].gradientKind = ui.LINEAR
+        taken[i].gradientAngle = 90.0
+        taken[i].gradientFrom = u32(0x9A2828FF)
+        taken[i].gradientTo = u32(0xFF8C7AFF)
         taken[i].radius = 4.0
         taken[i].order = 1
         i = i + 1
