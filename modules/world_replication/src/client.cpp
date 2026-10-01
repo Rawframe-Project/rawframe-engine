@@ -592,6 +592,8 @@ ReplicationClient::create(network::Sessions& sessions, world::World& world, Clie
 result::Status ReplicationClient::connect(const network::Endpoint& endpoint, const network::Hello& hello) {
     RAWFRAME_TRY_ASSIGN(const network::ConnectionId kConnection, state_->sessions->connect(endpoint, hello));
     state_->connection = kConnection;
+    // Asked again, a refusal before is no longer the answer.
+    state_->rejection.reset();
     return {};
 }
 

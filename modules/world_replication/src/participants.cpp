@@ -452,6 +452,12 @@ struct Bot {
     std::unique_ptr<InputSource> source;
     std::vector<std::byte> input;
     bool connecting = false;
+    /// Asked again after a refusal as unavailable (D379): how often so far,
+    /// and not before when.
+    std::uint64_t retries = 0;
+    std::optional<execution::MonotonicInstant> retryAt;
+    /// The last refusal heard, kept while it asks again; none once admitted.
+    std::optional<network::RejectReason> refusal;
     /// A client ticks at the server's rate: input goes out once per tick due
     /// since admission, not once per Host iteration.
     std::optional<execution::MonotonicInstant> admittedAt;
@@ -561,6 +567,12 @@ public:
             return missing("bots.rollback_alarm is at most a million rollbacks a second");
         }
         rollbackAlarm_ = static_cast<std::uint32_t>(kAlarmLimit);
+        RAWFRAME_TRY_ASSIGN(retries_, configuration.unsignedInteger("bots.retries", 10));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kRetryMs, configuration.unsignedInteger("bots.retry_ms", 1000));
+        if (retries_ > 1000 || kRetryMs == 0 || kRetryMs > 60'000) {
+            return missing("bots.retries is at most 1000, and bots.retry_ms 1 to 60000");
+        }
+        retryAfter_ = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kRetryMs));
         const auto kInterpolate = configuration.text("bots.interpolate");
         if (kInterpolate.has_value() && *kInterpolate != "true" && *kInterpolate != "false") {
             return missing("bots.interpolate is true or false");
@@ -655,6 +667,24 @@ public:
         std::size_t admitted = 0;
         for (Bot& bot : bots_) {
             if (phase == composition::HostPhase::Ingress) {
+                // A server refuses as unavailable while it is not active or
+                // not healthy (D212) and admits again once it is: a bot
+                // refused so asks again a while later, a bounded number of
+                // times (D379).
+                if (const auto kRefusal = bot.client->rejection()) {
+                    bot.refusal = kRefusal;
+                }
+                if (bot.connecting && bot.client->rejection() == network::RejectReason::Unavailable &&
+                    bot.retries < retries_) {
+                    if (!bot.retryAt) {
+                        bot.retryAt = frame.now + retryAfter_;
+                    } else if (frame.now >= *bot.retryAt) {
+                        bot.retryAt.reset();
+                        ++bot.retries;
+                        ++retried_;
+                        bot.connecting = false;
+                    }
+                }
                 // The server may start listening after the bots start, so a
                 // bot keeps trying until its connection is under way.
                 if (!bot.connecting) {
@@ -747,10 +777,15 @@ public:
             interpolated.blended += bot.client->interpolationStatistics().blended;
             interpolated.newest += bot.client->interpolationStatistics().newest;
             admitted += bot.client->admitted() ? 1 : 0;
-            unavailable += bot.client->rejection() == network::RejectReason::Unavailable ? 1 : 0;
+            // A bot asking again counts by the refusal it last heard.
+            const std::optional<network::RejectReason> kRefusal = bot.client->admitted() ? std::nullopt
+                                                                  : bot.client->rejection().has_value()
+                                                                      ? bot.client->rejection()
+                                                                      : bot.refusal;
+            unavailable += kRefusal == network::RejectReason::Unavailable ? 1 : 0;
             noticed += bot.client->serverStopping() ? 1 : 0;
-            full += bot.client->rejection() == network::RejectReason::Capacity ? 1 : 0;
-            ticketInvalid += bot.client->rejection() == network::RejectReason::TicketInvalid ? 1 : 0;
+            full += kRefusal == network::RejectReason::Capacity ? 1 : 0;
+            ticketInvalid += kRefusal == network::RejectReason::TicketInvalid ? 1 : 0;
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
             messagesReceived += bot.client->statistics().messagesReceived;
@@ -798,7 +833,8 @@ public:
                       diagnostics::field("messagesReceived", messagesReceived),
                       diagnostics::field("terminated", terminated),
                       diagnostics::field("blended", interpolated.blended),
-                      diagnostics::field("shownNewest", interpolated.newest)});
+                      diagnostics::field("shownNewest", interpolated.newest),
+                      diagnostics::field("retried", retried_)});
     }
 
 private:
@@ -847,6 +883,11 @@ private:
     bool player_ = false;
     std::uint32_t checksumInterval_ = 60;
     std::uint32_t rollbackAlarm_ = 30;
+    /// Refusals as unavailable each bot asks again after, how long after,
+    /// and the askings again of all (D379).
+    std::uint64_t retries_ = 10;
+    execution::MonotonicDuration retryAfter_ = execution::MonotonicDuration::fromSeconds(1);
+    std::uint64_t retried_ = 0;
     bool divergenceDrill_ = false;
     bool captureChecksums_ = false;
     /// Bots that would predict but could not have a predictor.

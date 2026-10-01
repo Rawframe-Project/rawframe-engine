@@ -1,7 +1,8 @@
 """A dedicated server drains (SPEC-0012): asked to stop while bots play, it
 tells them it is stopping, closes admission, refuses a second bots process
-as unavailable, keeps serving the first until those bots leave, and only
-then stops, well within its drain time. Run from the repository root.
+as unavailable each time its bots ask again (D379), keeps serving the
+first until those bots leave, and only then stops, well within its drain
+time. Run from the repository root.
 
 A stop is asked the way each system asks: SIGTERM on POSIX, Ctrl+Break to
 the process's own group on Windows (D237), which is why this is Python and
@@ -11,6 +12,7 @@ usage: drain.py <rawframe-server> <rawframe-bots>
 """
 import os
 import pathlib
+import re
 import signal
 import socket
 import subprocess
@@ -112,11 +114,19 @@ def main(server, bots):
         text = {name: path.read_text(errors="replace") for name, path in logs.items()}
         for name in ("server", "playing", "late"):
             sys.stdout.write(text[name])
+        def counted(name, field):
+            found = re.search(f'"{field}":(\\d+)', text[name])
+            return int(found.group(1)) if found else -1
+
+        refused = counted("server", "admissionsRefused")
+        retried = counted("late", "retried")
         checks = [
             ("the server served on while draining", still_serving),
             ("the server exited 0", server_exit == 0),
             ("the server drained", '"reason":"drained"' in text["server"]),
-            ("two admissions refused", '"admissionsRefused":2' in text["server"]),
+            ("the late bots to ask again", retried >= 2),
+            # An asking in flight as the late bots end may go unanswered.
+            ("each asking refused", retried <= refused <= 2 + retried),
             ("the late bots were unavailable", '"bots":2,"admitted":0,"unavailable":2' in text["late"]),
             ("the playing bots were told",
              '"bots":2,"admitted":2,"unavailable":0,"serverStopping":2' in text["playing"]),

@@ -73,6 +73,8 @@ public:
     create(network::Sessions& sessions, world::World& world, ClientReplicationSettings settings);
     ~ReplicationClient();
 
+    /// Asks `endpoint` to admit this client; asked again after a refusal,
+    /// the refusal is forgotten (D379).
     [[nodiscard]] result::Status connect(const network::Endpoint& endpoint, const network::Hello& hello);
 
     /// Between local ticks: drains the session and applies what arrived.

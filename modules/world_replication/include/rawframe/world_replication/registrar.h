@@ -33,6 +33,9 @@ namespace rawframe::world_replication {
 ///                     prediction (true)
 ///   bots.interpolate  show remote entities between states when the game
 ///                     declares interpolation (true)
+///   bots.retries      how often a bot refused as unavailable asks again,
+///                     at most 1000 (10, D379)
+///   bots.retry_ms     how long after such a refusal it asks (1000)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);
