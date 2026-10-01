@@ -10,9 +10,11 @@
 
 #include "rawframe/input/controls.h"
 #include "rawframe/input/mapper.h"
+#include "rawframe/input/pairing.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace rawframe::input {
@@ -36,6 +38,13 @@ public:
     /// feed. A device the mapper refuses (past its limit) is left unpaired,
     /// and its events count as unpaired there.
     void deliver(Mapper& mapper, PlayerSlot player);
+    /// Moves every record, in order, into the feed of the local player it
+    /// is for (D363): a device connecting to the one `pairing` gives it,
+    /// its events and its going to that one, and a release of everything
+    /// to all. A device left unpaired goes nowhere, its events counted.
+    /// Empties the feed; `players` has one feed a player, null for a player
+    /// nothing reads.
+    void route(Pairing& pairing, std::span<Feed* const> players);
 
     /// Asks a device to feel a haptic. One still waiting for the same
     /// device is replaced, as the device would replace it; past
@@ -53,6 +62,10 @@ public:
     }
     [[nodiscard]] std::size_t waiting() const noexcept {
         return records_.size();
+    }
+    /// Control events routed from devices paired to no player.
+    [[nodiscard]] std::uint64_t unrouted() const noexcept {
+        return unrouted_;
     }
     /// Haptic commands dropped for want of room.
     [[nodiscard]] std::uint64_t feltDropped() const noexcept {
@@ -77,6 +90,7 @@ private:
     std::size_t capacity_;
     std::vector<Record> records_;
     std::uint64_t dropped_ = 0;
+    std::uint64_t unrouted_ = 0;
     std::vector<HapticCommand> felt_;
     std::uint64_t feltDropped_ = 0;
 };

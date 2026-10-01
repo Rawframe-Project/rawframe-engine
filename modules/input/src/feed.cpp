@@ -65,6 +65,44 @@ void Feed::deliver(Mapper& mapper, PlayerSlot player) {
     records_.clear();
 }
 
+void Feed::route(Pairing& pairing, std::span<Feed* const> players) {
+    const auto kFeedOf = [&](DeviceId device) -> Feed* {
+        const auto kPlayer = pairing.playerOf(device);
+        return kPlayer.has_value() && kPlayer->value < players.size() ? players[kPlayer->value] : nullptr;
+    };
+    for (const Record& record : records_) {
+        switch (record.kind) {
+        case Kind::Connect:
+            if (const auto kPlayer = pairing.connect(record.event.device, record.deviceClass);
+                kPlayer.has_value() && kPlayer->value < players.size() && players[kPlayer->value] != nullptr) {
+                players[kPlayer->value]->add(record);
+            }
+            break;
+        case Kind::Disconnect:
+            if (Feed* feed = kFeedOf(record.event.device); feed != nullptr) {
+                feed->add(record);
+            }
+            pairing.disconnect(record.event.device);
+            break;
+        case Kind::Control:
+            if (Feed* feed = kFeedOf(record.event.device); feed != nullptr) {
+                feed->add(record);
+            } else {
+                ++unrouted_;
+            }
+            break;
+        case Kind::ReleaseAll:
+            for (Feed* feed : players) {
+                if (feed != nullptr) {
+                    feed->add(record);
+                }
+            }
+            break;
+        }
+    }
+    records_.clear();
+}
+
 void Feed::feel(const HapticCommand& command) {
     const auto kWaiting = std::ranges::find(felt_, command.device, &HapticCommand::device);
     if (kWaiting != felt_.end()) {

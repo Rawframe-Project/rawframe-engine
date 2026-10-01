@@ -2,11 +2,11 @@
 # device controls to per-player action state. Client only: the dedicated
 # server links none of it.
 rawframe_module(NAME input
-    SOURCES src/controls.cpp src/actions.cpp src/mapper.cpp src/overrides.cpp src/conflicts.cpp src/feed.cpp
+    SOURCES src/controls.cpp src/actions.cpp src/mapper.cpp src/overrides.cpp src/conflicts.cpp src/feed.cpp src/pairing.cpp
     DEPS document result base
 )
 
-rawframe_module_tests(NAME input SOURCES tests/actions_test.cpp tests/mapper_test.cpp tests/overrides_test.cpp)
+rawframe_module_tests(NAME input SOURCES tests/actions_test.cpp tests/mapper_test.cpp tests/overrides_test.cpp tests/pairing_test.cpp)
 rawframe_module_fuzz(NAME input TARGET actions RUNS 20000 SEEDS tests/seeds SOURCES tests/fuzz_actions.cpp)
 if(TARGET rawframe_input_fuzz_actions)
     # Overrides are read over the runners game's action set.
