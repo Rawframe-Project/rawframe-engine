@@ -67,12 +67,13 @@ result::Status ScenePictures::read(composition::ParticipantContext& context,
     }
     RAWFRAME_TRY(content->admit(game_textures::textureRepresentations()));
     // What reading the sky's picture needs, when the World names one.
-    reading_ = Reading{.store = &content->store(),
-                       .cpu = context.cpuExecutor(),
-                       .owner = context.owner(),
-                       .scope = &context.scope(),
-                       .clock = &context.clock()};
-    declaredTextures_ = files.textures();
+    pictures_ = game_textures::AskedTextures{game_textures::TextureReading{.store = &content->store(),
+                                                                           .cpu = context.cpuExecutor(),
+                                                                           .owner = context.owner(),
+                                                                           .scope = &context.scope(),
+                                                                           .clock = &context.clock()},
+                                             files.textures(),
+                                             kTextureBudgetBytes};
     if (sampled.empty()) {
         return {};
     }
@@ -114,38 +115,22 @@ void ScenePictures::start(const diagnostics::Emitter& emitter) {
 }
 
 void ScenePictures::ask(std::uint64_t id) noexcept {
-    if (id == 0 || pictures_.contains(id)) {
+    const std::optional<result::Error> kNone = pictures_.ask(id);
+    if (!kNone.has_value()) {
         return;
     }
-    std::unique_ptr<game_textures::GameTextures>& reader = pictures_[id];
-    const auto kDeclared = std::ranges::find(declaredTextures_, id, &world_kest::GameTextureResource::id);
-    if (kDeclared == declaredTextures_.end()) {
+    if (kNone->errorClass() == result::ErrorClass::NotFound) {
         emitter_.log(diagnostics::Severity::Warning,
                      kPictureUnknown,
                      "the World names a picture the game does not declare: it has none",
                      {diagnostics::field("texture", graph::nodeIdText(id))});
         return;
     }
-    if (!reading_.has_value()) {
-        return;
-    }
-    ++picturesRead_;
-    auto made = game_textures::GameTextures::create(*reading_->store,
-                                                    *reading_->cpu,
-                                                    reading_->owner,
-                                                    *reading_->scope,
-                                                    *reading_->clock,
-                                                    {*kDeclared},
-                                                    kTextureBudgetBytes);
-    if (!made.has_value()) {
-        emitter_.log(diagnostics::Severity::Warning,
-                     kPictureUnread,
-                     "a picture the World names could not be asked for: it has none",
-                     {diagnostics::field("texture", graph::nodeIdText(id)),
-                      diagnostics::field("reason", std::string{made.error().description()})});
-        return;
-    }
-    reader = std::move(*made);
+    emitter_.log(diagnostics::Severity::Warning,
+                 kPictureUnread,
+                 "a picture the World names could not be asked for: it has none",
+                 {diagnostics::field("texture", graph::nodeIdText(id)),
+                  diagnostics::field("reason", std::string{kNone->description()})});
 }
 
 void ScenePictures::askAll(const SceneFrame& frame) noexcept {
@@ -161,17 +146,12 @@ void ScenePictures::askAll(const SceneFrame& frame) noexcept {
 }
 
 void ScenePictures::update(std::uint64_t tick) noexcept {
-    for (const auto& [kPicture, kReader] : pictures_) {
-        if (kReader == nullptr) {
-            continue;
-        }
-        for (const auto& [kId, kError] : kReader->update(tick).failed) {
-            emitter_.log(diagnostics::Severity::Warning,
-                         kPictureUnread,
-                         "a picture the World names could not be read: it has none",
-                         {diagnostics::field("texture", graph::nodeIdText(kId)),
-                          diagnostics::field("reason", std::string{kError.description()})});
-        }
+    for (const auto& [kId, kError] : pictures_.update(tick)) {
+        emitter_.log(diagnostics::Severity::Warning,
+                     kPictureUnread,
+                     "a picture the World names could not be read: it has none",
+                     {diagnostics::field("texture", graph::nodeIdText(kId)),
+                      diagnostics::field("reason", std::string{kError.description()})});
     }
     if (textures_ == nullptr) {
         return;
@@ -199,22 +179,14 @@ void ScenePictures::update(std::uint64_t tick) noexcept {
 }
 
 std::shared_ptr<const texture::Texture> ScenePictures::texture(std::uint64_t id, std::uint64_t tick) const {
-    if (const auto kPicture = pictures_.find(id); kPicture != pictures_.end()) {
-        return kPicture->second != nullptr ? kPicture->second->texture(id, tick) : nullptr;
+    if (auto picture = pictures_.texture(id, tick)) {
+        return picture;
     }
     return textures_ != nullptr ? textures_->texture(id, tick) : nullptr;
 }
 
 std::uint64_t ScenePictures::texturesReady() const noexcept {
     return textures_ != nullptr ? static_cast<std::uint64_t>(textures_->counts().ready) : 0;
-}
-
-std::uint64_t ScenePictures::picturesReady() const noexcept {
-    std::uint64_t ready = 0;
-    for (const auto& [kId, kReader] : pictures_) {
-        ready += kReader != nullptr ? kReader->counts().ready : 0;
-    }
-    return ready;
 }
 
 } // namespace rawframe::render_scene

@@ -8,6 +8,7 @@
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/diagnostics/emitter.h"
+#include "rawframe/game_textures/asked.h"
 #include "rawframe/game_textures/game_textures.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/world_kest/game_files.h"
@@ -56,20 +57,13 @@ public:
     }
     [[nodiscard]] std::uint64_t texturesReady() const noexcept;
     [[nodiscard]] std::uint64_t picturesRead() const noexcept {
-        return picturesRead_;
+        return pictures_.read();
     }
-    [[nodiscard]] std::uint64_t picturesReady() const noexcept;
+    [[nodiscard]] std::uint64_t picturesReady() const noexcept {
+        return pictures_.ready();
+    }
 
 private:
-    /// What reading a picture needs, kept from load.
-    struct Reading {
-        content::ContentStore* store = nullptr;
-        execution::Executor* cpu = nullptr;
-        execution::OwnerId owner;
-        execution::CancellationScope* scope = nullptr;
-        const execution::MonotonicSource* clock = nullptr;
-    };
-
     diagnostics::Emitter emitter_;
     std::unique_ptr<game_textures::GameTextures> textures_;
     std::uint64_t sampled_ = 0;
@@ -77,11 +71,8 @@ private:
     /// the textures could not be asked for.
     std::vector<std::pair<std::string, std::string>> unknownTextures_;
     std::optional<std::string> unreadTextures_;
-    std::optional<Reading> reading_;
-    std::vector<world_kest::GameTextureResource> declaredTextures_;
-    /// The pictures asked for, by texture; none for one that has none.
-    std::map<std::uint64_t, std::unique_ptr<game_textures::GameTextures>> pictures_;
-    std::uint64_t picturesRead_ = 0;
+    /// The pictures asked for.
+    game_textures::AskedTextures pictures_{std::nullopt, {}, 0};
 };
 
 } // namespace rawframe::render_scene

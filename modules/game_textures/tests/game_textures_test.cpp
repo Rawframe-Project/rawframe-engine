@@ -1,8 +1,11 @@
 // A game's textures read decoded by identity from cooked content: a texture
 // that decodes is ready and held, one that does not fails and is reported
 // once, one the content does not hold is refused, and a recooked texture is
-// seen at its new revision, or its old one kept when the new one is broken.
+// seen at its new revision, or its old one kept when the new one is broken;
+// and textures asked for one by one are read on their first asking, one the
+// game does not declare said once (D378).
 
+#include "rawframe/game_textures/asked.h"
 #include "rawframe/game_textures/game_textures.h"
 #include "rawframe/test/test.h"
 
@@ -175,4 +178,46 @@ RAWFRAME_TEST(ARecookedTextureIsDrawnAtItsNewRevision) {
     RAWFRAME_EXPECT(kBroken.reloaded.empty() && kBroken.notReloaded.size() == 1 &&
                     kBroken.notReloaded[0].first == kRunner && (*textures)->texture(kRunner, 3) != nullptr &&
                     (*textures)->texture(kRunner, 3)->levels[0].width == 4 && (*textures)->counts().ready == 1);
+}
+
+RAWFRAME_TEST(ATextureAskedForIsReadOnItsFirstAsking) {
+    Content content;
+    AskedTextures asked{TextureReading{.store = content.store.get(),
+                                       .cpu = &content.cpu,
+                                       .owner = execution::OwnerId{1},
+                                       .scope = &content.root,
+                                       .clock = &content.clock},
+                        {declared(kRunner, 1), declared(kTiles, 2)},
+                        1U << 20U};
+    // Nought is none; an undeclared one is said once; a declared one is read.
+    RAWFRAME_EXPECT(!asked.ask(0).has_value() && asked.read() == 0);
+    const std::optional<result::Error> kUnknown = asked.ask(0xdead);
+    RAWFRAME_EXPECT(kUnknown.has_value() && kUnknown->errorClass() == result::ErrorClass::NotFound &&
+                    !asked.ask(0xdead).has_value());
+    RAWFRAME_EXPECT(!asked.ask(kRunner).has_value() && !asked.ask(kRunner).has_value() && asked.read() == 1);
+    RAWFRAME_EXPECT(asked.texture(kTiles, 1) == nullptr);
+    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (asked.texture(kRunner, 1) == nullptr && std::chrono::steady_clock::now() < kDeadline) {
+        RAWFRAME_EXPECT(asked.update(1).empty());
+#if RAWFRAME_THREADS
+        std::this_thread::yield();
+#else
+        while (content.io.runOne() || content.cpu.runOne()) {
+        }
+#endif
+    }
+    RAWFRAME_EXPECT(asked.texture(kRunner, 1) != nullptr && asked.ready() == 1);
+    // The broken one, asked for, fails once.
+    RAWFRAME_EXPECT(!asked.ask(kTiles).has_value());
+    std::vector<std::pair<std::uint64_t, result::Error>> failed;
+    while (failed.empty() && std::chrono::steady_clock::now() < kDeadline + std::chrono::seconds(10)) {
+        failed = asked.update(1);
+#if RAWFRAME_THREADS
+        std::this_thread::yield();
+#else
+        while (content.io.runOne() || content.cpu.runOne()) {
+        }
+#endif
+    }
+    RAWFRAME_EXPECT(failed.size() == 1 && failed[0].first == kTiles && asked.update(1).empty());
 }
