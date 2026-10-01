@@ -223,6 +223,23 @@ struct ReflectionProbe {
     environment: u64
 }
 
+// A decal (ADR-0051, D339), on any entity, at its pose: a box `halfX`,
+// `halfY`, and `halfZ` meters from its middle to its sides along the
+// entity's axes, which lays `texture`, a game texture, over the surfaces
+// within it, seen along its -Z as a projector would throw it: the
+// texture's left to right along +X, bottom to top along +Y. Its color
+// tints the texture (0xRRGGBBAA, sRGB), its alpha times the texture's
+// covering what is under it, lit as that surface is. Where decals
+// overlap, a later entity's lies over an earlier's. Sides of nought, or
+// no texture, are no decal.
+struct Decal {
+    halfX: f32
+    halfY: f32
+    halfZ: f32
+    color: u32
+    texture: u64
+}
+
 // A point light (ADR-0051), on any entity, at its pose: `lumens` of
 // luminous power spread evenly (a lumen over 4π is a candela), reaching
 // `range` meters, where it has faded to nought, in `color` (0xRRGGBBAA,

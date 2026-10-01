@@ -102,10 +102,7 @@ void clusterLights(SceneFrame& frame,
                    std::vector<bool>& shadowed,
                    std::vector<ClusterName>& named) {
     const bool sees = view.sees;
-    const float half = view.half;
-    const float aspect = view.aspect;
-    const float near = view.near;
-    frame.clusters.near = near;
+    frame.clusters.near = view.near;
     shadowed.clear();
     std::vector<const LightInstance*> ordered;
     for (const LightInstance& light : punctual) {
@@ -114,9 +111,6 @@ void clusterLights(SceneFrame& frame,
     std::ranges::sort(ordered, [](const LightInstance* left, const LightInstance* right) {
         return std::tuple{left->entity, left->spot} < std::tuple{right->entity, right->spot};
     });
-    const auto& [kRight, kUp, kForward] = axes;
-    const float kTanY = std::tan(half);
-    const float kTanX = kTanY * aspect;
     for (const LightInstance* instance : ordered) {
         const SpotLight& kLight = instance->light;
         const bool kFinite = std::isfinite(kLight.lumens) && std::isfinite(kLight.range) &&
@@ -135,21 +129,8 @@ void clusterLights(SceneFrame& frame,
         const Vector kPlace = {static_cast<float>(instance->position[0] - camera.eye[0]),
                                static_cast<float>(instance->position[1] - camera.eye[1]),
                                static_cast<float>(instance->position[2] - camera.eye[2])};
-        const auto kDot = [&kPlace](const Vector& axis) {
-            return (axis[0] * kPlace[0]) + (axis[1] * kPlace[1]) + (axis[2] * kPlace[2]);
-        };
-        const float kAcross = kDot(kRight);
-        const float kUpward = kDot(kUp);
-        const float kAhead = kDot(kForward);
         const float kRange = kLight.range;
-        // Behind the near plane, or past a side of the view, wholly.
-        const float kWide = std::atan(kTanX);
-        const bool kBehind = kAhead + kRange < near;
-        const bool kPast = (kUpward * std::cos(half)) - (kAhead * std::sin(half)) > kRange ||
-                           (-kUpward * std::cos(half)) - (kAhead * std::sin(half)) > kRange ||
-                           (kAcross * std::cos(kWide)) - (kAhead * std::sin(kWide)) > kRange ||
-                           (-kAcross * std::cos(kWide)) - (kAhead * std::sin(kWide)) > kRange;
-        if (kBehind || kPast) {
+        if (outsideView(axes, view, kPlace, kRange)) {
             ++frame.lightsCulled;
             continue;
         }

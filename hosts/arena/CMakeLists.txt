@@ -239,7 +239,7 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_seen PROPERTIES
                          FIXTURES_REQUIRED plaza_content
-                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":2,\"gameMaterials\":6,\"unknownMaterials\":0,\"materialTextures\":2,\"texturesReady\":2,\"environments\":2,\"environmentsReady\":2,\"lightsLit\":[1-9][0-9]*,\"lightsCulled\":[0-9]+,\"lightsOverLimit\":0,\"clusterOverflow\":0")
+                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":2,\"gameMaterials\":6,\"unknownMaterials\":0,\"materialTextures\":2,\"texturesReady\":2,\"pictures\":2,\"picturesReady\":2,\"lightsLit\":[1-9][0-9]*,\"lightsCulled\":[0-9]+,\"lightsOverLimit\":0,\"clusterOverflow\":0")
     # At the low quality (D318), the paving samples no texture: the planks
     # are the one texture read.
     configure_file(tests/plaza_seen_low.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen_low.conf @ONLY)
@@ -248,7 +248,7 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_seen_low PROPERTIES
                          FIXTURES_REQUIRED plaza_content
-                         PASS_REGULAR_EXPRESSION "\"gameMaterials\":6,\"unknownMaterials\":0,\"materialTextures\":1,\"texturesReady\":1,\"environments\":2,")
+                         PASS_REGULAR_EXPRESSION "\"gameMaterials\":6,\"unknownMaterials\":0,\"materialTextures\":1,\"texturesReady\":1,\"pictures\":2,")
     if(RAWFRAME_ARENA_DRAWS)
         # The plaza drawn on the one device offscreen (D284): frames drawn,
         # its models in instanced calls, its meshes uploaded once each, its

@@ -139,6 +139,15 @@ struct Sky {
     std::uint64_t environment = 0;
 };
 
+/// `rawframe.model.Decal` as C++ reads it (D339).
+struct Decal {
+    float halfX = 0;
+    float halfY = 0;
+    float halfZ = 0;
+    std::uint32_t color = 0xFFFFFFFF;
+    std::uint64_t texture = 0;
+};
+
 /// `rawframe.model.ReflectionProbe` as C++ reads it (D325).
 struct ReflectionProbe {
     float halfX = 0;
@@ -339,6 +348,25 @@ struct ProbeInstance {
     world::EntityHandle entity;
     ReflectionProbe probe;
     std::array<double, 3> position{};
+};
+
+/// A decal as the extract stage copies it out of the World, where its
+/// entity's pose puts it (D339).
+struct DecalInstance {
+    world::EntityHandle entity;
+    Decal decal;
+    std::array<double, 3> position{};
+    std::array<float, 4> rotation{0, 0, 0, 1};
+};
+
+/// A decal as a device reads it (D339): the eye-relative World into its
+/// box, which spans -1 to 1 along each axis and is seen along -Z, x to the
+/// texture's right and y to its top; its tint in linear light, with how
+/// much it covers; and its texture.
+struct SceneDecal {
+    Matrix toBox{};
+    std::array<float, 4> color{};
+    std::uint64_t texture = 0;
 };
 
 /// A reflection probe as a device reads it (D325): its box's middle
@@ -636,6 +664,12 @@ struct SceneFrame {
     /// first, at most the limit; and those past it.
     std::vector<SceneProbe> probes;
     std::size_t probesOverLimit = 0;
+    /// The decals that reach the view, in their entities' order, at most
+    /// the limit; those out of view or not sound, and those past the limit
+    /// (D339).
+    std::vector<SceneDecal> decals;
+    std::size_t decalsCulled = 0;
+    std::size_t decalsOverLimit = 0;
     /// EV100.
     float exposure = 15;
     SceneLights lights;
@@ -730,6 +764,8 @@ struct SceneSettings {
     std::vector<schema::ComponentTypeId> spots;
     /// The game's reflection probe components (D325).
     std::vector<schema::ComponentTypeId> probes;
+    /// The game's decal components (D339).
+    std::vector<schema::ComponentTypeId> decals;
     /// The game's meshes, by their identities.
     std::vector<SceneMesh> meshes;
     /// The game's materials, by their identities (D303).
@@ -763,6 +799,7 @@ public:
     [[nodiscard]] std::span<const ModelInstance> extracted() const noexcept;
     [[nodiscard]] std::span<const LightInstance> extractedLights() const noexcept;
     [[nodiscard]] std::span<const ProbeInstance> extractedProbes() const noexcept;
+    [[nodiscard]] std::span<const DecalInstance> extractedDecals() const noexcept;
 
     /// The mesh a Model names by `id`: the game's or the engine's; none for
     /// another.
@@ -793,6 +830,7 @@ struct GameScene {
     std::vector<schema::ComponentTypeId> points;
     std::vector<schema::ComponentTypeId> spots;
     std::vector<schema::ComponentTypeId> probes;
+    std::vector<schema::ComponentTypeId> decals;
     std::vector<SceneMesh> meshes;
 };
 

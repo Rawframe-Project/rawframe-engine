@@ -33,6 +33,11 @@ struct ClusterName {
     std::uint32_t index = 0;
 };
 
+/// Whether a sphere `radius` meters about `center` (relative to the eye)
+/// lies wholly behind the near plane or past a side of the view.
+[[nodiscard]] bool
+outsideView(const std::array<Vector, 3>& axes, const ViewShape& view, const Vector& center, float radius) noexcept;
+
 /// Names `index` of class `item` in every cluster a sphere `radius` meters
 /// about `center` (relative to the eye) may reach: the slices its depth
 /// spans, and the tiles between the lines from the eye that touch it; one

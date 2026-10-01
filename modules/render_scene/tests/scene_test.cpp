@@ -37,6 +37,7 @@ constexpr auto kSkyId = schema::ComponentTypeId::fromText("6c8e1f52-7d04-4a2b-9e
 constexpr auto kPointId = schema::ComponentTypeId::fromText("9c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr auto kSpotId = schema::ComponentTypeId::fromText("ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr auto kProbeId = schema::ComponentTypeId::fromText("dc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
+constexpr auto kDecalId = schema::ComponentTypeId::fromText("4d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr std::uint64_t kRock = 0xc1;
 
 /// The registry holds a name as a view: each is a literal.
@@ -54,6 +55,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(plain<PointLight>(kPointId, "test.lamp"));
     builder.add(plain<SpotLight>(kSpotId, "test.torch"));
     builder.add(plain<ReflectionProbe>(kProbeId, "test.probe"));
+    builder.add(plain<Decal>(kDecalId, "test.decal"));
     builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }
@@ -79,6 +81,7 @@ struct Rig {
                                 .points = {kPointId},
                                 .spots = {kSpotId},
                                 .probes = {kProbeId},
+                                .decals = {kDecalId},
                                 .meshes = {{.id = kRock, .mesh = rock()}},
                                 .limits = limits});
     }
@@ -315,7 +318,7 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
         "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion],\n"
         "        blooms: [model.Bloom], mirrors: [model.ScreenSpaceReflections], blurs: [model.MotionBlur],\n"
-        "        focuses: [model.DepthOfField], contacts: [model.ContactShadows]) {\n}\n";
+        "        focuses: [model.DepthOfField], contacts: [model.ContactShadows], marks: [model.Decal]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
@@ -334,7 +337,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "rawframe.model.ScreenSpaceReflections\n"
         "component 1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.blur rawframe.model.MotionBlur\n"
         "component 2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.focus rawframe.model.DepthOfField\n"
-        "component 3d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.contact rawframe.model.ContactShadows\n";
+        "component 3d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.contact rawframe.model.ContactShadows\n"
+        "component 4d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.mark rawframe.model.Decal\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(
         kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
@@ -350,7 +354,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         kLoaded->reflections == schema::ComponentTypeId::fromText("0d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
         kLoaded->motionBlur == schema::ComponentTypeId::fromText("1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
         kLoaded->depthOfField == schema::ComponentTypeId::fromText("2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-        kLoaded->contactShadows == schema::ComponentTypeId::fromText("3d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"));
+        kLoaded->contactShadows == schema::ComponentTypeId::fromText("3d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->decals == (std::vector<schema::ComponentTypeId>{kDecalId}));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -970,6 +975,70 @@ RAWFRAME_TEST(ADrawReflectsTheProbeThatHoldsIt) {
     const SceneFrame& kFew = few.frame({.eye = {kX, 0, 0}});
     RAWFRAME_EXPECT(kFew.probes.size() == 2 && kFew.probesOverLimit == 1 && kFew.probes[0].environment != 0xe3 &&
                     kFew.probes[1].environment != 0xe3);
+}
+
+RAWFRAME_TEST(DecalsInViewArePlacedIntoTheirBoxesAndClustered) {
+    // Far from the origin, so the boxes are placed relative to the eye.
+    constexpr double kX = 100000;
+    const auto kPlace = [](Rig& rig, Decal decal, double x, double z, std::array<float, 4> turn) {
+        const world::EntityHandle kEntity = *rig.world.create();
+        RAWFRAME_EXPECT(rig.world.insertErased(kEntity, *rig.schema->find(kDecalId), &decal).has_value());
+        const physics3d::Pose3D kPose{
+            .x = kX + x, .y = 0, .z = z, .qx = turn[0], .qy = turn[1], .qz = turn[2], .qw = turn[3]};
+        RAWFRAME_EXPECT(rig.world.insert(kEntity, *rig.schema->key<physics3d::Pose3D>(), kPose).has_value());
+    };
+    const float kHalfTurn = std::sqrt(0.5F);
+    const auto kYard = [&](Rig& rig) {
+        // Ahead, square to the World; ahead, turned a quarter about up; and
+        // three that are no decal in view: behind the eye, with no texture,
+        // and with no depth.
+        kPlace(
+            rig, {.halfX = 1, .halfY = 1, .halfZ = 0.5F, .color = 0xFF000080, .texture = 0xd1}, 0, -10, {0, 0, 0, 1});
+        kPlace(rig, {.halfX = 2, .halfY = 1, .halfZ = 1, .texture = 0xd2}, 5, -10, {0, kHalfTurn, 0, kHalfTurn});
+        kPlace(rig, {.halfX = 1, .halfY = 1, .halfZ = 1, .texture = 0xd3}, 0, 30, {0, 0, 0, 1});
+        kPlace(rig, {.halfX = 1, .halfY = 1, .halfZ = 1}, 0, -10, {0, 0, 0, 1});
+        kPlace(rig, {.halfX = 1, .halfY = 1, .halfZ = 0, .texture = 0xd4}, 0, -10, {0, 0, 0, 1});
+    };
+    Rig rig;
+    kYard(rig);
+    const SceneFrame& kFrame = rig.frame({.eye = {kX, 0, 0}, .fovY = 1.5F});
+    RAWFRAME_EXPECT(kFrame.decals.size() == 2 && kFrame.decalsCulled == 3 && kFrame.decalsOverLimit == 0);
+    if (kFrame.decals.size() != 2) {
+        return;
+    }
+    const auto kInto = [](const SceneDecal& decal, std::array<float, 3> place) {
+        std::array<float, 3> into{};
+        for (std::size_t row = 0; row < 3; ++row) {
+            into[row] = decal.toBox[12 + row];
+            for (std::size_t column = 0; column < 3; ++column) {
+                into[row] += decal.toBox[(column * 4) + row] * place[column];
+            }
+        }
+        return into;
+    };
+    const SceneDecal& kSquare = kFrame.decals[0];
+    const SceneDecal& kTurned = kFrame.decals[1];
+    const auto kMiddle = kInto(kSquare, {0, 0, -10});
+    const auto kSide = kInto(kSquare, {1, 0, -10});
+    const auto kBack = kInto(kSquare, {0, 0, -10.5F});
+    RAWFRAME_EXPECT(near(kMiddle[0], 0) && near(kMiddle[1], 0) && near(kMiddle[2], 0) && near(kSide[0], 1) &&
+                    near(kBack[2], -1));
+    // A quarter turn about up takes its +X to the World's -Z.
+    const auto kTurnedSide = kInto(kTurned, {5, 0, -12});
+    RAWFRAME_EXPECT(near(kTurnedSide[0], 1, 1e-3F) && near(kTurnedSide[1], 0, 1e-3F) && near(kTurnedSide[2], 0, 1e-3F));
+    RAWFRAME_EXPECT(near(kSquare.color[0], 1) && near(kSquare.color[1], 0) && near(kSquare.color[3], 128.0F / 255) &&
+                    kSquare.texture == 0xd1 && kTurned.texture == 0xd2);
+    // Each is named by clusters, after the lights there.
+    std::size_t named = 0;
+    for (std::size_t at = 0; at + 3 < kFrame.clusters.ranges.size(); at += 4) {
+        named += kFrame.clusters.ranges[at + 2];
+    }
+    RAWFRAME_EXPECT(named > 0);
+    // Past the limit, the later are left out and counted.
+    Rig few{{.maximumDecals = 1}};
+    kYard(few);
+    const SceneFrame& kFew = few.frame({.eye = {kX, 0, 0}, .fovY = 1.5F});
+    RAWFRAME_EXPECT(kFew.decals.size() == 1 && kFew.decalsOverLimit == 1 && kFew.decals[0].texture == 0xd1);
 }
 
 RAWFRAME_TEST(ACamerasScreenSpaceReflectionsAreMadeSound) {

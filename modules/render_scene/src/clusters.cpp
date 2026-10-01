@@ -21,6 +21,24 @@ std::uint32_t sliceOf(const SceneClusters& clusters, float ahead) noexcept {
 
 } // namespace
 
+bool outsideView(const std::array<Vector, 3>& axes,
+                 const ViewShape& view,
+                 const Vector& center,
+                 float radius) noexcept {
+    const auto& [kRight, kUp, kForward] = axes;
+    const auto kDot = [&center](const Vector& axis) {
+        return (axis[0] * center[0]) + (axis[1] * center[1]) + (axis[2] * center[2]);
+    };
+    const float kAcross = kDot(kRight);
+    const float kUpward = kDot(kUp);
+    const float kAhead = kDot(kForward);
+    const float kWide = std::atan(std::tan(view.half) * view.aspect);
+    return kAhead + radius < view.near || (kUpward * std::cos(view.half)) - (kAhead * std::sin(view.half)) > radius ||
+           (-kUpward * std::cos(view.half)) - (kAhead * std::sin(view.half)) > radius ||
+           (kAcross * std::cos(kWide)) - (kAhead * std::sin(kWide)) > radius ||
+           (-kAcross * std::cos(kWide)) - (kAhead * std::sin(kWide)) > radius;
+}
+
 void nameSphere(const SceneClusters& clusters,
                 const std::array<Vector, 3>& axes,
                 const ViewShape& view,

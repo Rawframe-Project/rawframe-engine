@@ -1,5 +1,6 @@
 #include "rawframe/render_scene/scene.h"
 
+#include "decals.h"
 #include "lights.h"
 #include "probes.h"
 #include "rawframe/material/material.h"
@@ -160,6 +161,9 @@ struct Scene::State {
     /// The reflection probes' queries, and what the frame extracted (D325).
     std::vector<world::ColumnQuery> probeQueries;
     std::vector<ProbeInstance> probes;
+    /// The decals' queries, and what the frame extracted (D339).
+    std::vector<world::ColumnQuery> decalQueries;
+    std::vector<DecalInstance> decals;
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
     std::map<std::uint64_t, Bounded> meshes;
@@ -566,6 +570,13 @@ struct Scene::State {
                       settings.limits,
                       shadowed,
                       named);
+        clusterDecals(frame,
+                      decals,
+                      camera,
+                      {kRight, kUp, kForward},
+                      {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
+                      settings.limits,
+                      named);
         packClusters(frame, named, settings.limits);
         shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
         return frame;
@@ -683,6 +694,10 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(ReflectionProbe)));
         state->probeQueries.push_back(std::move(query));
     }
+    for (const schema::ComponentTypeId kId : settings.decals) {
+        RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(Decal)));
+        state->decalQueries.push_back(std::move(query));
+    }
     for (const std::uint64_t kId : {kBox, kSphere, kCylinder, kCapsule}) {
         state->meshes.emplace(kId, bounded(engineMesh(kId)));
     }
@@ -798,6 +813,23 @@ void Scene::extract(world::World& world) {
             }
         });
     }
+    state.decals.clear();
+    for (world::ColumnQuery& query : state.decalQueries) {
+        query.forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                DecalInstance instance{.entity = chunk.entities[row]};
+                std::memcpy(&instance.decal, chunk.columns[0] + (row * sizeof(Decal)), sizeof(Decal));
+                if (state.pose) {
+                    if (const auto* pose =
+                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
+                        instance.position = {pose->x, pose->y, pose->z};
+                        instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
+                    }
+                }
+                state.decals.push_back(instance);
+            }
+        });
+    }
 }
 
 const SceneFrame& Scene::queue(const SceneCamera& camera) {
@@ -829,6 +861,10 @@ std::span<const LightInstance> Scene::extractedLights() const noexcept {
 
 std::span<const ProbeInstance> Scene::extractedProbes() const noexcept {
     return state_->probes;
+}
+
+std::span<const DecalInstance> Scene::extractedDecals() const noexcept {
+    return state_->decals;
 }
 
 std::shared_ptr<const mesh::Mesh> Scene::mesh(std::uint64_t id) const {
@@ -880,6 +916,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             loaded.spots.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.ReflectionProbe")) {
             loaded.probes.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.model.Decal")) {
+            loaded.decals.push_back(component.id);
         }
     }
     if (loaded.models.empty()) {
@@ -1008,6 +1046,14 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"intensity", offsetof(ReflectionProbe, intensity)},
                            {"priority", offsetof(ReflectionProbe, priority)},
                            {"environment", offsetof(ReflectionProbe, environment)}}));
+    RAWFRAME_TRY(kLaidOut(!loaded.decals.empty(),
+                          "rawframe.model.Decal",
+                          sizeof(Decal),
+                          {{"halfX", offsetof(Decal, halfX)},
+                           {"halfY", offsetof(Decal, halfY)},
+                           {"halfZ", offsetof(Decal, halfZ)},
+                           {"color", offsetof(Decal, color)},
+                           {"texture", offsetof(Decal, texture)}}));
     for (const physics3d::BodyMesh& kMesh : game.meshes()) {
         loaded.meshes.push_back(SceneMesh{.id = kMesh.id, .mesh = kMesh.mesh});
     }
