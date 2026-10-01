@@ -276,6 +276,30 @@ RAWFRAME_TEST(SplitScreenLayoutsAreDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(AConstrainedAspectIsDeclaredByLine) {
+    const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
+    const auto kGame = parseGame(kHead + "aspect 4 3\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->aspect.has_value() && kGame->aspect->width == 4 &&
+                    kGame->aspect->height == 3 && kGame->aspect->bars == (std::array<std::uint8_t, 3>{}));
+    const auto kColored = parseGame(kHead + "aspect 16 9 32 0 255\n");
+    RAWFRAME_EXPECT(kColored.has_value() && kColored->aspect.has_value() &&
+                    kColored->aspect->bars == (std::array<std::uint8_t, 3>{32, 0, 255}));
+    const auto kFilled = parseGame(kHead);
+    RAWFRAME_EXPECT(kFilled.has_value() && !kFilled->aspect.has_value());
+    // Two whole numbers from one, once (D369).
+    for (const std::string_view kLines : {"aspect 16\n",
+                                          "aspect 16 0\n",
+                                          "aspect 16.5 9\n",
+                                          "aspect 16 9 1\n",
+                                          "aspect 16 9 0 0 256\n",
+                                          "aspect 16 9 0 0.5 0\n",
+                                          "aspect 16 9\naspect 4 3\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "4"));
+    }
+}
+
 RAWFRAME_TEST(MaterialsAreDeclaredByLine) {
     const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
     const auto kGame =

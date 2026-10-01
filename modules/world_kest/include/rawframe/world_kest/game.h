@@ -126,6 +126,7 @@
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_replication/prediction.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -379,6 +380,22 @@ struct RegionPixels {
 /// edge tile the window exactly; a region too small for a pixel has none.
 [[nodiscard]] RegionPixels pixelsOf(const GameRegion& region, std::uint32_t width, std::uint32_t height) noexcept;
 
+/// ADR-0052's `constrained` aspect policy (D369): each local player's view
+/// is the largest rectangle of `width` by `height`'s shape centered in its
+/// region, the rest of the region bars (letterbox or pillarbox) of the
+/// declared color, 8-bit sRGB. Without one a view fills its region
+/// (`fill`).
+struct GameAspect {
+    std::uint32_t width = 16;
+    std::uint32_t height = 9;
+    std::array<std::uint8_t, 3> bars{};
+};
+
+/// `region` constrained to `aspect`'s shape: the largest rectangle of it
+/// centered inside, its edges on whole pixels (the left and top bars the
+/// smaller by a pixel where they cannot be equal).
+[[nodiscard]] RegionPixels constrainedTo(const RegionPixels& region, const GameAspect& aspect) noexcept;
+
 /// A split-screen layout (ADR-0052, D362): the regions `players` local
 /// players see the game in, in the players' order, each composed over
 /// those before it.
@@ -511,6 +528,10 @@ struct GameDescription {
     /// From `layout <players> (<x> <y> <width> <height>)...` lines (D362),
     /// one a count of players from two.
     std::vector<GameLayout> layouts;
+    /// From an `aspect <width> <height> [<red> <green> <blue>]` line
+    /// (D369): every local player's view constrained to the shape, between
+    /// bars of the color (black unless named); none fills.
+    std::optional<GameAspect> aspect;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
     /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;

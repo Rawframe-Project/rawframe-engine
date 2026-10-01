@@ -308,6 +308,31 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a game lays out a count of players once");
             }
             game.layouts.push_back(std::move(layout));
+        } else if (kKeyword == "aspect") {
+            // aspect <width> <height> [<red> <green> <blue>]
+            const bool kShaped = (kWords.size() == 3 || kWords.size() == 6) && !game.aspect.has_value();
+            const auto kWhole = [&](std::size_t at, double least, double most) {
+                const auto kValue = kShaped ? parseReal(kWords[at], least, most) : std::nullopt;
+                return kValue.has_value() && std::floor(*kValue) == *kValue ? kValue : std::nullopt;
+            };
+            const auto kWidth = kWhole(1, 1, 10000);
+            const auto kHeight = kWhole(2, 1, 10000);
+            GameAspect aspect;
+            bool colored = true;
+            for (std::size_t at = 0; kWords.size() == 6 && at < 3; ++at) {
+                const auto kChannel = kWhole(3 + at, 0, 255);
+                colored = colored && kChannel.has_value();
+                aspect.bars[at] = kChannel.has_value() ? static_cast<std::uint8_t>(*kChannel) : 0;
+            }
+            if (!kWidth || !kHeight || !colored) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "an aspect line is `aspect <width> <height> [<red> <green> <blue>]`, whole numbers "
+                               "from 1 to 10000 and the bars' color from 0 to 255, once");
+            }
+            aspect.width = static_cast<std::uint32_t>(*kWidth);
+            aspect.height = static_cast<std::uint32_t>(*kHeight);
+            game.aspect = aspect;
         } else if (kKeyword == "material") {
             const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
@@ -879,6 +904,27 @@ RegionPixels pixelsOf(const GameRegion& region, std::uint32_t width, std::uint32
     const std::uint32_t kRight = std::max(kLeft, kEdge(region.x + region.width, width));
     const std::uint32_t kBottom = std::max(kTop, kEdge(region.y + region.height, height));
     return RegionPixels{.x = kLeft, .y = kTop, .width = kRight - kLeft, .height = kBottom - kTop};
+}
+
+RegionPixels constrainedTo(const RegionPixels& region, const GameAspect& aspect) noexcept {
+    if (aspect.width == 0 || aspect.height == 0) {
+        return region;
+    }
+    const std::uint64_t kWide = std::uint64_t{region.width} * aspect.height;
+    const std::uint64_t kTall = std::uint64_t{region.height} * aspect.width;
+    RegionPixels inner = region;
+    if (kWide > kTall) {
+        // Wider than the shape: bars at the sides.
+        inner.width = static_cast<std::uint32_t>(
+            std::min<std::uint64_t>(region.width, (kTall + (aspect.height / 2)) / aspect.height));
+        inner.x += (region.width - inner.width) / 2;
+    } else if (kTall > kWide) {
+        // Taller: bars above and below.
+        inner.height = static_cast<std::uint32_t>(
+            std::min<std::uint64_t>(region.height, (kWide + (aspect.width / 2)) / aspect.width));
+        inner.y += (region.height - inner.height) / 2;
+    }
+    return inner;
 }
 
 } // namespace rawframe::world_kest
