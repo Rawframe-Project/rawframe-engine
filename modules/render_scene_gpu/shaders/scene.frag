@@ -102,7 +102,7 @@ layout(set = 0, binding = 3, std430) readonly buffer Lights
 };
 layout(set = 0, binding = 4, std430) readonly buffer Ranges
 {
-    uvec2 ranges[];
+    uvec4 ranges[];
 };
 layout(set = 0, binding = 5, std430) readonly buffer Indices
 {
@@ -384,7 +384,7 @@ vec3 punctual(vec3 placed, vec3 normal, Surface surface, vec3 toEye)
     const uint kSlice = kAhead <= frame.clusterDepth.x
                             ? 0u
                             : min(uint(log(kAhead / frame.clusterDepth.x) * frame.clusterDepth.y), kGrid.z - 1u);
-    const uvec2 kRange = ranges[(kSlice * kGrid.y + kY) * kGrid.x + kX];
+    const uvec4 kRange = ranges[(kSlice * kGrid.y + kY) * kGrid.x + kX];
     vec3 sum = vec3(0.0);
     for (uint at = kRange.x; at < kRange.x + kRange.y; ++at) {
         const Light kLight = lights[indices[at]];

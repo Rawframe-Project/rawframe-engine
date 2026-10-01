@@ -71,7 +71,7 @@ SceneFrame lamplit(bool spot) {
     }
     light.shadowSlots = spot ? 1 : 6;
     frame.lights3d = {light};
-    frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1, .ranges = {0, 1}, .indices = {0}};
+    frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1, .ranges = {0, 1, 0, 0}, .indices = {0}};
     frame.lightShadows.side = 512;
     frame.lightShadows.casters = {floor, cube};
     for (std::uint32_t face = 0; face < light.shadowSlots; ++face) {
@@ -292,7 +292,7 @@ RAWFRAME_TEST(PointAndSpotLightsLightWhatTheyReach) {
     };
     const auto kDark = drawn(**framer, **made, frame, kMeshes);
     frame.lights3d = {{.position = {0, -1, -8}, .range = 10, .intensity = {10, 10, 10}}};
-    frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1, .ranges = {0, 1}, .indices = {0}};
+    frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1, .ranges = {0, 1, 0, 0}, .indices = {0}};
     const auto kLamp = drawn(**framer, **made, frame, kMeshes);
     // A spot there shining down lights the floor below it; shining up, not.
     frame.lights3d[0].spot = true;

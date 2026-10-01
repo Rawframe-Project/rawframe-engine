@@ -419,10 +419,12 @@ struct SceneClusters {
     /// the first slice, farther than `far` the last.
     float near = 0.1F;
     float far = 500;
-    /// Each cluster's first index and count in `indices`, x fastest, then
-    /// y from the top, then slices from the eye.
+    /// Each cluster's first index in `indices`, how many lights follow it,
+    /// how many decals follow those, and nought (D339); x fastest, then y
+    /// from the top, then slices from the eye.
     std::vector<std::uint32_t> ranges;
-    /// Lights by their place in the frame's lights.
+    /// Lights by their place in the frame's lights, and decals by theirs
+    /// in the frame's decals.
     std::vector<std::uint32_t> indices;
 };
 
@@ -670,6 +672,9 @@ struct SceneLimits {
     /// lights (D290).
     std::size_t maximumLights = 256;
     std::size_t maximumLightsPerCluster = 64;
+    /// ADR-0051's decals a view draws, and a cluster holds (D339).
+    std::size_t maximumDecals = 64;
+    std::size_t maximumDecalsPerCluster = 16;
     /// ADR-0051's maximum shadow-casting punctual lights per view (D292).
     std::size_t maximumShadowedLights = 8;
     /// ADR-0051's reflection probes a view resolves at once (D325).

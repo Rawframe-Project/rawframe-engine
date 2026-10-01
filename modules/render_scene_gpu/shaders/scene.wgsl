@@ -45,7 +45,7 @@ struct ShadowSlot {
 @group(0) @binding(1) var shadowMap: texture_depth_2d;
 @group(0) @binding(2) var shadowSampler: sampler_comparison;
 @group(0) @binding(3) var<storage, read> lights: array<Light>;
-@group(0) @binding(4) var<storage, read> ranges: array<vec2u>;
+@group(0) @binding(4) var<storage, read> ranges: array<vec4u>;
 @group(0) @binding(5) var<storage, read> indices: array<u32>;
 @group(0) @binding(6) var lightShadowMap: texture_depth_2d;
 @group(0) @binding(7) var<storage, read> slots: array<ShadowSlot>;

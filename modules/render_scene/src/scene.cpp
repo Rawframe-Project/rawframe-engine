@@ -188,6 +188,8 @@ struct Scene::State {
     /// kept for the view asks for shadows (D292).
     std::vector<ShadowCandidate> candidates;
     std::vector<bool> shadowed;
+    /// What the clusters name this frame (D339).
+    std::vector<ClusterName> named;
     /// The models near enough to cast into the sun's cascades (D298).
     std::vector<ShadowCandidate> sunCandidates;
     std::optional<std::array<double, 3>> previousEye;
@@ -554,13 +556,17 @@ struct Scene::State {
         temporal(camera, kSees);
         frame.metering.snap = frame.metering.enabled && (!meteredBefore || !continuous);
         meteredBefore = frame.metering.enabled;
+        // The lights and the decals in one clustered structure (D339).
+        named.clear();
         clusterLights(frame,
                       punctual,
                       camera,
                       {kRight, kUp, kForward},
                       {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
                       settings.limits,
-                      shadowed);
+                      shadowed,
+                      named);
+        packClusters(frame, named, settings.limits);
         shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
         return frame;
     }

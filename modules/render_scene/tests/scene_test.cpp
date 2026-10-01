@@ -494,11 +494,11 @@ RAWFRAME_TEST(PointAndSpotLightsLightInCandelaAndNameTheirClusters) {
     // The lamp, ten ahead in the middle of the view, names the middle
     // tiles of the slice ten ahead, and no cluster far from it.
     const SceneClusters& kClusters = kFrame.clusters;
-    RAWFRAME_EXPECT(kClusters.ranges.size() == std::size_t{kClusters.tilesX} * kClusters.tilesY * kClusters.slices * 2);
+    RAWFRAME_EXPECT(kClusters.ranges.size() == std::size_t{kClusters.tilesX} * kClusters.tilesY * kClusters.slices * 4);
     const auto kNames = [&kClusters](std::uint32_t x, std::uint32_t y, std::uint32_t slice, std::uint32_t light) {
         const std::size_t kCluster = (((std::size_t{slice} * kClusters.tilesY) + y) * kClusters.tilesX) + x;
-        const std::uint32_t kFirst = kClusters.ranges[kCluster * 2];
-        const std::uint32_t kCount = kClusters.ranges[(kCluster * 2) + 1];
+        const std::uint32_t kFirst = kClusters.ranges[kCluster * 4];
+        const std::uint32_t kCount = kClusters.ranges[(kCluster * 4) + 1];
         for (std::uint32_t at = kFirst; at < kFirst + kCount; ++at) {
             if (kClusters.indices[at] == light) {
                 return true;
@@ -529,7 +529,7 @@ RAWFRAME_TEST(PointAndSpotLightsLightInCandelaAndNameTheirClusters) {
     }
     const SceneFrame& kCrowded = crowded.frame({.fovY = 1, .near = 0.1F, .aspect = 1});
     RAWFRAME_EXPECT(kCrowded.lights3d.size() == 5 && kCrowded.clusterOverflow > 0);
-    for (std::size_t at = 1; at < kCrowded.clusters.ranges.size(); at += 2) {
+    for (std::size_t at = 1; at < kCrowded.clusters.ranges.size(); at += 4) {
         RAWFRAME_EXPECT(kCrowded.clusters.ranges[at] <= 3);
     }
 }

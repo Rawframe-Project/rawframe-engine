@@ -10,18 +10,6 @@ namespace rawframe::render_scene {
 
 namespace {
 
-/// The slice a depth ahead falls in: nearer than the clusters' near is
-/// the first, farther than their far the last, exponential between.
-std::uint32_t sliceOf(const SceneClusters& clusters, float ahead) noexcept {
-    const SceneClusters& kClusters = clusters;
-    if (ahead <= kClusters.near) {
-        return 0;
-    }
-    const float kSlice = std::log(ahead / kClusters.near) * static_cast<float>(kClusters.slices) /
-                         std::log(kClusters.far / kClusters.near);
-    return std::min(static_cast<std::uint32_t>(kSlice), kClusters.slices - 1);
-}
-
 /// A Morton index's column and row.
 std::pair<std::uint32_t, std::uint32_t> mortonOf(std::uint64_t index) noexcept {
     std::uint32_t x = 0;
@@ -111,16 +99,13 @@ void clusterLights(SceneFrame& frame,
                    const std::array<Vector, 3>& axes,
                    const ViewShape& view,
                    const SceneLimits& limits,
-                   std::vector<bool>& shadowed) {
+                   std::vector<bool>& shadowed,
+                   std::vector<ClusterName>& named) {
     const bool sees = view.sees;
     const float half = view.half;
     const float aspect = view.aspect;
     const float near = view.near;
-    SceneClusters& clusters = frame.clusters;
-    clusters.near = near;
-    const std::uint32_t kCount = clusters.tilesX * clusters.tilesY * clusters.slices;
-    clusters.ranges.assign(std::size_t{kCount} * 2, 0);
-    clusters.indices.clear();
+    frame.clusters.near = near;
     shadowed.clear();
     std::vector<const LightInstance*> ordered;
     for (const LightInstance& light : punctual) {
@@ -132,8 +117,6 @@ void clusterLights(SceneFrame& frame,
     const auto& [kRight, kUp, kForward] = axes;
     const float kTanY = std::tan(half);
     const float kTanX = kTanY * aspect;
-    // Cluster, light: sorted by cluster, then named in order.
-    std::vector<std::pair<std::uint32_t, std::uint32_t>> named;
     for (const LightInstance* instance : ordered) {
         const SpotLight& kLight = instance->light;
         const bool kFinite = std::isfinite(kLight.lumens) && std::isfinite(kLight.range) &&
@@ -198,51 +181,8 @@ void clusterLights(SceneFrame& frame,
         frame.lights3d.push_back(made);
         shadowed.push_back(kLight.shadows);
         // Its slices, and the tiles between the lines from the eye that
-        // touch its sphere across and up; one about the eye covers all.
-        const float kNearest = std::max(kAhead - kRange, near);
-        const float kFarthest = std::max(kAhead + kRange, kNearest);
-        const auto kTouching = [kAhead, kRange](float along, float tangent) {
-            if (kAhead <= kRange) {
-                return std::pair{-1.0F, 1.0F};
-            }
-            const float kSquare = (kAhead * kAhead) - (kRange * kRange);
-            const float kSpread = kRange * std::sqrt((along * along) + kSquare);
-            return std::pair{((along * kAhead) - kSpread) / kSquare / tangent,
-                             ((along * kAhead) + kSpread) / kSquare / tangent};
-        };
-        const auto [left, right] = kTouching(kAcross, kTanX);
-        const auto [bottom, top] = kTouching(kUpward, kTanY);
-        const auto kTile = [](float ndc, bool downward, std::uint32_t tiles) {
-            const float kAt = (downward ? 0.5F - (ndc * 0.5F) : (ndc * 0.5F) + 0.5F) * static_cast<float>(tiles);
-            return static_cast<std::uint32_t>(std::clamp(kAt, 0.0F, static_cast<float>(tiles - 1)));
-        };
-        const std::uint32_t kX0 = kTile(left, false, clusters.tilesX);
-        const std::uint32_t kX1 = kTile(right, false, clusters.tilesX);
-        const std::uint32_t kY0 = kTile(top, true, clusters.tilesY);
-        const std::uint32_t kY1 = kTile(bottom, true, clusters.tilesY);
-        for (std::uint32_t slice = sliceOf(clusters, kNearest); slice <= sliceOf(clusters, kFarthest); ++slice) {
-            for (std::uint32_t y = kY0; y <= kY1; ++y) {
-                for (std::uint32_t x = kX0; x <= kX1; ++x) {
-                    named.emplace_back((((slice * clusters.tilesY) + y) * clusters.tilesX) + x, kIndex);
-                }
-            }
-        }
-    }
-    std::ranges::stable_sort(named, {}, &std::pair<std::uint32_t, std::uint32_t>::first);
-    for (std::size_t at = 0; at < named.size();) {
-        const std::uint32_t kCluster = named[at].first;
-        const auto kFirst = static_cast<std::uint32_t>(clusters.indices.size());
-        std::uint32_t count = 0;
-        for (; at < named.size() && named[at].first == kCluster; ++at) {
-            if (count == limits.maximumLightsPerCluster) {
-                ++frame.clusterOverflow;
-                continue;
-            }
-            clusters.indices.push_back(named[at].second);
-            ++count;
-        }
-        clusters.ranges[std::size_t{kCluster} * 2] = kFirst;
-        clusters.ranges[(std::size_t{kCluster} * 2) + 1] = count;
+        // touch its sphere.
+        nameSphere(frame.clusters, axes, view, kPlace, kRange, ClusterItem::Light, kIndex, named);
     }
 }
 

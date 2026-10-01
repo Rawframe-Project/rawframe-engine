@@ -297,7 +297,7 @@ struct SceneRenderer::State {
         now.placed = placeDraws(*frame, kUsable, statistics.modelsLeftOut);
         now.block = blockOf(*frame, open.width, open.height);
         now.lights = lightsOf(*frame);
-        now.ranges = now.block.clusterGrid[3] > 0 ? frame->clusters.ranges : std::vector<std::uint32_t>{0, 0};
+        now.ranges = now.block.clusterGrid[3] > 0 ? frame->clusters.ranges : std::vector<std::uint32_t>{0, 0, 0, 0};
         now.indices = now.block.clusterGrid[3] > 0 && !frame->clusters.indices.empty() ? frame->clusters.indices
                                                                                        : std::vector<std::uint32_t>{0};
         // Everything this frame uses: the meshes it draws, imported; its
