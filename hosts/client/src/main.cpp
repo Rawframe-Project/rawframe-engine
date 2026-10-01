@@ -33,6 +33,7 @@
 #include "rawframe/render/registrar.h"
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/registrar.h"
+#include "rawframe/world_ui/registrar.h"
 #endif
 
 #include <array>
@@ -48,11 +49,12 @@ constexpr std::size_t kDrawing = 3;
 constexpr std::size_t kDrawing = 0;
 #endif
 
-constexpr std::array<composition::RegistrarEntry, 11 + kDrawing> kRegistrars = {
+constexpr std::array<composition::RegistrarEntry, 12 + kDrawing> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"network_quic", &network_quic::registerParticipants, network_quic::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
     composition::RegistrarEntry{"render_canvas", &render_canvas::registerParticipants, render_canvas::kScopes},
+    composition::RegistrarEntry{"world_ui", &world_ui::registerParticipants, world_ui::kScopes},
     composition::RegistrarEntry{"render_scene", &render_scene::registerParticipants, render_scene::kScopes},
     composition::RegistrarEntry{"world_animation", &world_animation::registerParticipants, world_animation::kScopes},
     composition::RegistrarEntry{"world_audio", &world_audio::registerParticipants, world_audio::kScopes},

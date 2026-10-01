@@ -50,6 +50,7 @@
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
+#include "rawframe/world_ui/registrar.h"
 
 #include <array>
 #include <atomic>
@@ -71,7 +72,7 @@ using namespace rawframe;
 // Kest game, 2D and 3D physics, the simulation's animation, replication
 // over the page's WebTransport with the game's input sources, and its sound,
 // which the page takes and plays (D259).
-constexpr std::array<composition::RegistrarEntry, 15> kRegistrars = {
+constexpr std::array<composition::RegistrarEntry, 16> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
     composition::RegistrarEntry{"network_web", &network_web::registerParticipants, network_web::kScopes},
@@ -79,6 +80,7 @@ constexpr std::array<composition::RegistrarEntry, 15> kRegistrars = {
     composition::RegistrarEntry{"physics3d", &physics3d::registerParticipants, physics3d::kScopes},
     composition::RegistrarEntry{"render", &render::registerParticipants, render::kScopes},
     composition::RegistrarEntry{"render_canvas", &render_canvas::registerParticipants, render_canvas::kScopes},
+    composition::RegistrarEntry{"world_ui", &world_ui::registerParticipants, world_ui::kScopes},
     composition::RegistrarEntry{
         "render_canvas_gpu", &render_canvas_gpu::registerParticipants, render_canvas_gpu::kScopes},
     composition::RegistrarEntry{"render_scene", &render_scene::registerParticipants, render_scene::kScopes},

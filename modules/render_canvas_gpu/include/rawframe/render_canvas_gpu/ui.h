@@ -32,8 +32,9 @@ public:
     UiRenderer& operator=(const UiRenderer&) = delete;
     ~UiRenderer() override;
 
-    /// What the next frame draws: `list`, in the picture's pixels from its
-    /// top left; nothing for none. It is read until the frame is made.
+    /// What the next frame draws: `list`, from the picture's top left, its
+    /// logical pixels `list.scale` of the picture's each; nothing for none.
+    /// It is read until the frame is made.
     void prepare(const ui::DrawList* list) noexcept;
 
     [[nodiscard]] result::Status declare(render::Frame& frame) override;

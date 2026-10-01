@@ -13,6 +13,11 @@ namespace rawframe::render_canvas_gpu {
 /// the canvas's view to the frame. It logs a summary when the World stops.
 /// Without frames or a canvas it is idle; the frames' configuration
 /// (offscreen or on a window, read back, captured) is `render`'s.
+///
+/// And `rawframe.render_canvas_gpu.ui` (D376), which records what the UI
+/// drew (`rawframe.world_ui.frames`) into each frame over everything else,
+/// sizing the UI to the frame, and logs `ui_drawing_summary`. Without frames
+/// or a game's UI it is idle.
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);

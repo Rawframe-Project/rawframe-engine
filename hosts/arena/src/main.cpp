@@ -27,6 +27,7 @@
 #include "rawframe/render/registrar.h"
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/registrar.h"
+#include "rawframe/world_ui/registrar.h"
 #endif
 
 #include <array>
@@ -39,7 +40,7 @@ constexpr std::size_t kDrawing = 3;
 constexpr std::size_t kDrawing = 0;
 #endif
 
-constexpr std::array<rawframe::composition::RegistrarEntry, 14 + kDrawing> kRegistrars = {
+constexpr std::array<rawframe::composition::RegistrarEntry, 15 + kDrawing> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -52,6 +53,8 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 14 + kDrawing> kRegi
         "input_kest", &rawframe::input_kest::registerParticipants, rawframe::input_kest::kScopes},
     rawframe::composition::RegistrarEntry{
         "render_canvas", &rawframe::render_canvas::registerParticipants, rawframe::render_canvas::kScopes},
+    rawframe::composition::RegistrarEntry{
+        "world_ui", &rawframe::world_ui::registerParticipants, rawframe::world_ui::kScopes},
     rawframe::composition::RegistrarEntry{
         "render_scene", &rawframe::render_scene::registerParticipants, rawframe::render_scene::kScopes},
     rawframe::composition::RegistrarEntry{

@@ -51,27 +51,29 @@ mrhiBinding bufferAt(std::uint32_t slot, mrhiResourceId resource, std::uint64_t 
 /// A box as the shader reads it (ui.vert): eleven vectors of four.
 constexpr std::size_t kBoxFloats = 44;
 
-/// `box`, in the shader's layout, its clip resolved from `list`.
+/// `box`, in the shader's layout and the picture's pixels, its clip
+/// resolved from `list`.
 std::array<float, kBoxFloats> blockOf(const ui::Box& box, const ui::DrawList& list) noexcept {
     std::array<float, kBoxFloats> block{};
     std::size_t at = 0;
-    const auto kPut = [&](const std::array<float, 4>& values) {
+    const auto kPut = [&](const std::array<float, 4>& values, float scale) {
         for (const float kValue : values) {
-            block[at++] = kValue;
+            block[at++] = kValue * scale;
         }
     };
-    kPut({box.rect.x, box.rect.y, box.rect.width, box.rect.height});
-    kPut(box.radii);
-    kPut(box.fill);
-    kPut(box.borderWidths);
+    const float kScale = list.scale;
+    kPut({box.rect.x, box.rect.y, box.rect.width, box.rect.height}, kScale);
+    kPut(box.radii, kScale);
+    kPut(box.fill, 1);
+    kPut(box.borderWidths, kScale);
     for (const std::array<float, 4>& kColor : box.borderColors) {
-        kPut(kColor);
+        kPut(kColor, 1);
     }
     if (box.clip != 0 && box.clip < list.clips.size()) {
         const ui::Clip& kClip = list.clips[box.clip];
-        kPut({kClip.rect.x, kClip.rect.y, kClip.rect.width, kClip.rect.height});
-        kPut(kClip.radii);
-        kPut({1, kClip.invert ? 1.0F : 0.0F, 0, 0});
+        kPut({kClip.rect.x, kClip.rect.y, kClip.rect.width, kClip.rect.height}, kScale);
+        kPut(kClip.radii, kScale);
+        kPut({1, kClip.invert ? 1.0F : 0.0F, 0, 0}, 1);
     }
     return block;
 }

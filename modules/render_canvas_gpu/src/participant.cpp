@@ -3,6 +3,8 @@
 #include "rawframe/render_canvas/frames.h"
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_canvas_gpu/renderer.h"
+#include "rawframe/render_canvas_gpu/ui.h"
+#include "rawframe/world_ui/frames.h"
 
 #include <array>
 #include <memory>
@@ -16,10 +18,16 @@ namespace {
 
 constexpr diagnostics::EventIdentity kDrawingSummary{"canvas", "drawing_summary"};
 constexpr diagnostics::EventIdentity kFailed{"canvas", "drawing_failed"};
+constexpr diagnostics::EventIdentity kUiDrawingSummary{"ui", "ui_drawing_summary"};
+constexpr diagnostics::EventIdentity kUiFailed{"ui", "ui_drawing_failed"};
 constexpr std::string_view kMaybe[] = {render::kFrames.name, render_canvas::kCanvasFrames.name};
+constexpr std::string_view kMaybeUi[] = {render::kFrames.name, world_ui::kUiFrames.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
-/// The canvas's place in a frame: after the scene (SPEC-0024).
+/// The canvas's place in a frame: after the scene (SPEC-0024); the UI's,
+/// over everything, the scene's post processes over the composed picture
+/// too (D376).
 constexpr std::uint32_t kOrder = 1;
+constexpr std::uint32_t kUiOrder = 3;
 
 /// Records the canvas's frames into the frames `render` makes (D285): in
 /// each `present` that plans a frame, the view takes the frame's size and
@@ -154,6 +162,88 @@ private:
     diagnostics::Emitter emitter_;
 };
 
+/// Records the UI's draw list into the frames `render` makes (D376), over
+/// everything else: in each `present` that plans a frame, the UI takes the
+/// frame's size and what it drew is prepared for it.
+class UiDrawingParticipant final : public composition::Participant {
+public:
+    result::Status load(composition::ParticipantContext& context) {
+        if (!context.has(render::kFrames.name) || !context.has(world_ui::kUiFrames.name)) {
+            return {};
+        }
+        RAWFRAME_TRY_ASSIGN(frames_, context.capability(render::kFrames));
+        RAWFRAME_TRY_ASSIGN(ui_, context.capability(world_ui::kUiFrames));
+        return {};
+    }
+
+    result::Status start(composition::ParticipantContext& context) noexcept override {
+        emitter_ = context.emitter();
+        return {};
+    }
+
+    void runHostPhase(composition::HostPhase /*phase*/, const composition::HostFrame& /*frame*/) noexcept override {
+        if (frames_ == nullptr || failed_) {
+            return;
+        }
+        // Joined once the device is ready and a game has a UI, drawing from
+        // the next frame planned.
+        if (renderer_ == nullptr) {
+            render::Device* device = frames_->device();
+            if (device == nullptr || ui_->drawn() == nullptr) {
+                return;
+            }
+            auto made = UiRenderer::create(*device);
+            if (!made.has_value()) {
+                failed_ = true;
+                emitter_.log(diagnostics::Severity::Error,
+                             kUiFailed,
+                             "the UI could not be drawn: nothing more of it is",
+                             {diagnostics::field("reason", std::string{made.error().description()})});
+                return;
+            }
+            renderer_ = std::move(*made);
+            frames_->join(*renderer_, kUiOrder);
+        }
+        const auto kPlanned = frames_->planned();
+        if (!kPlanned.has_value()) {
+            return;
+        }
+        ui_->resize(kPlanned->first, kPlanned->second);
+        const ui::DrawList* drawn = ui_->drawn();
+        renderer_->prepare(drawn != nullptr && !drawn->boxes.empty() ? drawn : nullptr);
+        frames_->ready(*renderer_);
+    }
+
+    void stop() noexcept override {
+        if (frames_ == nullptr) {
+            return;
+        }
+        UiStatistics statistics;
+        if (renderer_ != nullptr) {
+            statistics = renderer_->statistics();
+            frames_->leave(*renderer_);
+            renderer_.reset();
+        }
+        emitter_.log(diagnostics::Severity::Info,
+                     kUiDrawingSummary,
+                     "what the device drew of the local players' UI",
+                     {diagnostics::field("frames", statistics.frames), diagnostics::field("boxes", statistics.boxes)});
+    }
+
+private:
+    render::Frames* frames_ = nullptr;
+    world_ui::UiFrames* ui_ = nullptr;
+    std::unique_ptr<UiRenderer> renderer_;
+    bool failed_ = false;
+    diagnostics::Emitter emitter_;
+};
+
+result::Result<composition::ParticipantOwner> makeUi(composition::ParticipantContext& context) noexcept {
+    auto participant = std::make_unique<UiDrawingParticipant>();
+    RAWFRAME_TRY(participant->load(context));
+    return composition::ParticipantOwner{participant.release()};
+}
+
 result::Result<composition::ParticipantOwner> make(composition::ParticipantContext& context) noexcept {
     auto participant = std::make_unique<DrawingParticipant>();
     RAWFRAME_TRY(participant->load(context));
@@ -172,6 +262,17 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         // Stopping waits for nothing: the frames' owner waits for the last.
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
         .observabilityIdentity = "render_canvas_gpu.drawing",
+        .budgetOwner = "render",
+        .hostPhases = composition::hostPhaseBit(composition::HostPhase::Present),
+    });
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = "rawframe.render_canvas_gpu.ui",
+        .factory = &makeUi,
+        .scope = composition::LifetimeScope::World,
+        .optionalCapabilities = kMaybeUi,
+        .eligibility = {.roles = ~kServer},
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
+        .observabilityIdentity = "render_canvas_gpu.ui",
         .budgetOwner = "render",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::Present),
     });

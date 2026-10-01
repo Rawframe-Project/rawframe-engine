@@ -7,7 +7,7 @@ endif()
 
 rawframe_host(NAME bake OUTPUT rawframe-bake
     SOURCES src/main.cpp
-    DEPS scene_bake host game_content input_kest world_audio world_localization network_loopback render render_canvas render_canvas_gpu render_scene render_scene_gpu physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
+    DEPS scene_bake host game_content input_kest world_audio world_localization network_loopback render render_canvas world_ui render_canvas_gpu render_scene render_scene_gpu physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 )
 
 if(RAWFRAME_BUILD_TESTS)

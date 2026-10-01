@@ -2,7 +2,7 @@
 # networked Kest game (Tool role).
 rawframe_host(NAME arena OUTPUT rawframe-arena
     SOURCES src/main.cpp
-    DEPS host game_content input_kest world_audio world_localization network_loopback render_canvas render_scene physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
+    DEPS host game_content input_kest world_audio world_localization network_loopback render_canvas world_ui render_scene physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 )
 # Where Maul RHI is built, the arena can draw a client's canvas (D279) and
 # scene (D284) offscreen on the one device; elsewhere it counts draws

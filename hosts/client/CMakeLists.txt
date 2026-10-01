@@ -6,7 +6,7 @@ endif()
 
 rawframe_host(NAME client OUTPUT rawframe-client
     SOURCES src/main.cpp
-    DEPS window_host host game_content input_kest network_quic window world_animation world_audio render_canvas render_scene world_kest world_localization
+    DEPS window_host host game_content input_kest network_quic window world_animation world_audio render_canvas world_ui render_scene world_kest world_localization
          world_replication world_runtime composition diagnostics result base
 )
 # Where Maul RHI is built, the client draws its scene and canvas on the one
