@@ -4,7 +4,8 @@
 // undeclared texture is left out and counted; sprites draw in the order of
 // their layers, then entities, and batch only where the order allows, by
 // texture and material (D356); the limits leave out a suffix of the order;
-// and a game's canvas loads against its program.
+// particles, trails, and beams sit in the canvas's plane, seen through its
+// rectangle (D357); and a game's canvas loads against its program.
 
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
@@ -25,6 +26,8 @@ namespace {
 
 constexpr auto kSpriteId = schema::ComponentTypeId::fromText("5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
 constexpr auto kHatId = schema::ComponentTypeId::fromText("6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
+constexpr auto kSparksId = schema::ComponentTypeId::fromText("8b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
+constexpr auto kStreakId = schema::ComponentTypeId::fromText("9b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
 constexpr std::uint64_t kRunner = 0xb1;
 constexpr std::uint64_t kTiles = 0xb2;
 constexpr std::uint64_t kGlow = 0xc1;
@@ -37,6 +40,16 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
                                             .name = "test.sprite",
                                             .size = sizeof(Sprite),
                                             .alignment = alignof(Sprite),
+                                            .plainData = true});
+    builder.add(schema::ComponentDescriptor{.id = kSparksId,
+                                            .name = "test.sparks",
+                                            .size = sizeof(particles::ParticleEmitter),
+                                            .alignment = alignof(particles::ParticleEmitter),
+                                            .plainData = true});
+    builder.add(schema::ComponentDescriptor{.id = kStreakId,
+                                            .name = "test.streak",
+                                            .size = sizeof(particles::Trail),
+                                            .alignment = alignof(particles::Trail),
                                             .plainData = true});
     builder.add<physics2d::Pose2D>();
     return *builder.freeze();
@@ -53,6 +66,8 @@ struct Rig {
                             {.sprites = {kSpriteId, kHatId},
                              .textures = {kTiles, kRunner},
                              .materials = {{kGlow, material::CanvasMaterial{.blend = material::CanvasBlend::Additive}}},
+                             .emitters = {kSparksId},
+                             .trails = {kStreakId},
                              .limits = limits});
     }
 
@@ -62,6 +77,14 @@ struct Rig {
         if (pose) {
             RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<physics2d::Pose2D>(), *pose).has_value());
         }
+        return kEntity;
+    }
+
+    template <typename Component>
+    world::EntityHandle place(schema::ComponentTypeId id, Component component, physics2d::Pose2D pose) {
+        const world::EntityHandle kEntity = *world.create();
+        RAWFRAME_EXPECT(world.insertErased(kEntity, *schema->find(id), &component).has_value());
+        RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<physics2d::Pose2D>(), pose).has_value());
         return kEntity;
     }
 
@@ -265,6 +288,17 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
                             "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
                             "component 6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.other rawframe.canvas.Sprite\n");
     RAWFRAME_EXPECT(kTwo.has_value() && kTwo->sprites == (std::vector<schema::ComponentTypeId>{kSpriteId, kHatId}));
+    // The particle triad of rawframe.model, as the scene finds it (D357).
+    const auto kSparkling =
+        kLoad("import rawframe.model\n\nfn draw(sprites: [canvas.Sprite], sparks: [model.ParticleEmitter], streaks: "
+              "[model.Trail], rays: [model.Beam]) {\n}\n",
+              "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
+              "component 8b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.sparks rawframe.model.ParticleEmitter\n"
+              "component 9b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.streak rawframe.model.Trail\n"
+              "component ab1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.ray rawframe.model.Beam\n");
+    RAWFRAME_EXPECT(
+        kSparkling.has_value() && kSparkling->emitters == (std::vector<schema::ComponentTypeId>{kSparksId}) &&
+        kSparkling->trails == (std::vector<schema::ComponentTypeId>{kStreakId}) && kSparkling->beams.size() == 1);
 }
 
 RAWFRAME_TEST(SpritesDrawByTheirMaterials) {
@@ -282,5 +316,42 @@ RAWFRAME_TEST(SpritesDrawByTheirMaterials) {
         RAWFRAME_EXPECT(kFrame.draws[0].texture == kRunner && kFrame.draws[0].material == 0);
         RAWFRAME_EXPECT(kFrame.draws[1].texture == kRunner && kFrame.draws[1].material == 1);
         RAWFRAME_EXPECT(kFrame.draws[2].texture == 0 && kFrame.draws[2].material == 1);
+    }
+}
+
+RAWFRAME_TEST(ParticlesSitInTheCanvasPlane) {
+    // Far along the plane, so the anchors are placed relative to the eye.
+    constexpr double kX = 100000;
+    Rig rig;
+    // Glowing sparks above the view's middle, turned a quarter so their up
+    // is -X; and sparks past the view's right edge.
+    const particles::ParticleEmitter kSparks{
+        .material = kGlow, .rate = 10, .lifetime = 1, .speed = 1, .sizeStart = 0.2F, .sizeEnd = 0.2F};
+    rig.place(kSparksId, kSparks, {.x = kX, .y = 3, .c = 0, .s = 1});
+    rig.place(kSparksId, kSparks, {.x = kX + 12, .y = 0, .c = 1, .s = 0});
+    // A streak, moved a meter between frames.
+    const world::EntityHandle kStreak = rig.place(
+        kStreakId, particles::Trail{.lifetime = 1, .spacing = 0.5F, .widthStart = 0.2F}, {.x = kX, .y = -2, .c = 1});
+    const CanvasCamera kCamera{.x = kX, .y = 0, .height = 10, .aspect = 1, .elapsed = 0.1F};
+    static_cast<void>(rig.frame(kCamera));
+    auto* pose = rig.world.get(kStreak, *rig.schema->key<physics2d::Pose2D>());
+    RAWFRAME_EXPECT(pose != nullptr);
+    if (pose != nullptr) {
+        pose->x = kX + 1;
+    }
+    const CanvasFrame& kFrame = rig.frame(kCamera);
+    RAWFRAME_EXPECT(near(kFrame.extent[0], 5) && near(kFrame.extent[1], 5));
+    RAWFRAME_EXPECT(kFrame.particles.emitters.size() == 1 && kFrame.particles.emittersLeftOut == 0);
+    if (kFrame.particles.emitters.size() == 1) {
+        const particles::EmitterDraw& kDrawn = kFrame.particles.emitters[0];
+        RAWFRAME_EXPECT(near(kDrawn.anchor[0], 0) && near(kDrawn.anchor[1], 3) && near(kDrawn.anchor[2], 0));
+        RAWFRAME_EXPECT(near(kDrawn.direction[0], -1) && near(kDrawn.direction[1], 0));
+        // Its material by its place among the frame's: the glow's.
+        RAWFRAME_EXPECT(kDrawn.material == 1 && kDrawn.spawned == 1);
+    }
+    RAWFRAME_EXPECT(kFrame.particles.ribbons.size() == 1 && kFrame.particles.ribbonPoints.size() == 2);
+    if (kFrame.particles.ribbonPoints.size() == 2) {
+        const particles::RibbonPoint& kHead = kFrame.particles.ribbonPoints[0];
+        RAWFRAME_EXPECT(near(kHead.place[0], 1) && near(kHead.place[1], -2) && near(kHead.place[2], 0));
     }
 }

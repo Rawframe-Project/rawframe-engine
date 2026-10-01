@@ -14,8 +14,13 @@
 #include <map>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 
 namespace rawframe::render_canvas {
+
+using particles::BeamInstance;
+using particles::EmitterInstance;
+using particles::TrailInstance;
 
 namespace {
 
@@ -52,6 +57,16 @@ struct Canvas::State {
     std::vector<material::CanvasMaterial> materials;
     std::map<std::uint64_t, std::uint32_t> materialPlaces;
     std::vector<world::ColumnQuery> sprites;
+    /// The particle emitters', trails', and beams' queries, what the frame
+    /// extracted, and the view's accounting of them from frame to frame
+    /// (D357).
+    std::vector<world::ColumnQuery> emitterQueries;
+    std::vector<world::ColumnQuery> trailQueries;
+    std::vector<world::ColumnQuery> beamQueries;
+    std::vector<EmitterInstance> emitters;
+    std::vector<TrailInstance> trails;
+    std::vector<BeamInstance> beams;
+    rawframe::particles::Particles particles;
     std::optional<schema::ComponentRuntimeId> pose;
     std::vector<SpriteInstance> extracted;
     std::vector<const SpriteInstance*> order;
@@ -170,6 +185,25 @@ struct Canvas::State {
             ++frame.drawn;
             frame.animated += kSprite.frame != 0 ? 1 : 0;
         }
+        // The particles over every sprite, in the canvas's plane: what
+        // reaches the view's rectangle is seen (D357).
+        const float kHalfHeight = kSees ? camera.height / 2 : 0.0F;
+        const float kHalfWidth = kHalfHeight * (kSees ? camera.aspect : 0.0F);
+        frame.extent = {kHalfWidth, kHalfHeight};
+        particles.update(
+            frame.particles,
+            emitters,
+            trails,
+            beams,
+            {.eye = {kSees ? camera.x : 0, kSees ? camera.y : 0, 0},
+             .sees =
+                 [kSees, kHalfWidth, kHalfHeight](const rawframe::particles::Vector& center, float radius) {
+                     return kSees && std::abs(center[0]) - radius <= kHalfWidth &&
+                            std::abs(center[1]) - radius <= kHalfHeight;
+                 }},
+            materialPlaces,
+            settings.limits.particles,
+            camera.elapsed);
         return frame;
     }
 };
@@ -192,6 +226,23 @@ result::Result<std::unique_ptr<Canvas>> Canvas::create(const schema::SchemaRegis
         const std::array<world::ColumnTerm, 1> kSprites = {world::ColumnTerm{kSprite, world::Access::Read}};
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(kSprites, registry));
         state->sprites.push_back(std::move(query));
+    }
+    // The particle triad's components, each of its type's size (D357).
+    for (const auto& [kIds, kSize, kQueries] :
+         {std::tuple{&settings.emitters, sizeof(particles::ParticleEmitter), &state->emitterQueries},
+          std::tuple{&settings.trails, sizeof(particles::Trail), &state->trailQueries},
+          std::tuple{&settings.beams, sizeof(particles::Beam), &state->beamQueries}}) {
+        for (const schema::ComponentTypeId kId : *kIds) {
+            RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kComponent, registry.find(kId));
+            if (registry.descriptor(kComponent).size != kSize) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              RenderCanvasError::BadComponents,
+                              "a particle component is not rawframe.model's size");
+            }
+            const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{kComponent, world::Access::Read}};
+            RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(kTerms, registry));
+            kQueries->push_back(std::move(query));
+        }
     }
     std::ranges::sort(settings.textures);
     // Material nought is none: white, over what is behind.
@@ -232,6 +283,50 @@ void Canvas::extract(world::World& world) {
             }
         });
     }
+    // Where a pose puts each of the triad, in the canvas's plane; an
+    // emitter emitting along its pose's up (D357).
+    const auto kPoseOf = [&world, &state](world::EntityHandle entity) -> const physics2d::Pose2D* {
+        return state.pose ? static_cast<const physics2d::Pose2D*>(world.getErased(entity, *state.pose)) : nullptr;
+    };
+    state.emitters.clear();
+    for (std::size_t component = 0; component < state.emitterQueries.size(); ++component) {
+        state.emitterQueries[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                EmitterInstance instance{.entity = chunk.entities[row],
+                                         .component = static_cast<std::uint32_t>(component)};
+                std::memcpy(&instance.emitter,
+                            chunk.columns[0] + (row * sizeof(particles::ParticleEmitter)),
+                            sizeof(particles::ParticleEmitter));
+                if (const physics2d::Pose2D* pose = kPoseOf(instance.entity)) {
+                    instance.position = {pose->x, pose->y, 0};
+                    if (pose->c != 0 || pose->s != 0) {
+                        instance.way = {-pose->s, pose->c, 0};
+                    }
+                }
+                state.emitters.push_back(instance);
+            }
+        });
+    }
+    const auto kRibbons = [&world, &kPoseOf](std::vector<world::ColumnQuery>& queries, auto& made) {
+        using Instance = std::remove_cvref_t<decltype(made)>::value_type;
+        made.clear();
+        for (std::size_t component = 0; component < queries.size(); ++component) {
+            queries[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+                for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                    Instance instance{.entity = chunk.entities[row],
+                                      .component = static_cast<std::uint32_t>(component)};
+                    std::memcpy(
+                        &instance.ribbon, chunk.columns[0] + (row * sizeof(instance.ribbon)), sizeof(instance.ribbon));
+                    if (const physics2d::Pose2D* pose = kPoseOf(instance.entity)) {
+                        instance.position = {pose->x, pose->y, 0};
+                    }
+                    made.push_back(instance);
+                }
+            });
+        }
+    };
+    kRibbons(state.trailQueries, state.trails);
+    kRibbons(state.beamQueries, state.beams);
 }
 
 const CanvasFrame& Canvas::queue(const CanvasCamera& camera) {
@@ -248,6 +343,12 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
     for (const world_kest::GameComponent& component : kDescription.components) {
         if (world_kest::ofEngineType(component, "rawframe.canvas.Sprite")) {
             loaded.sprites.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, particles::kEmitterType)) {
+            loaded.emitters.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, particles::kTrailType)) {
+            loaded.trails.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, particles::kBeamType)) {
+            loaded.beams.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.canvas.Camera")) {
             if (loaded.camera.has_value()) {
                 return refuse(result::ErrorClass::InvalidArgument,
@@ -291,6 +392,20 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
         return refuse(result::ErrorClass::InvalidArgument,
                       RenderCanvasError::BadComponents,
                       "the program lays out rawframe.canvas's Camera otherwise than this engine reads it");
+    }
+    // The particle triad as its own module reads it (D357).
+    for (const auto& [kDeclared, kType, kSize, kFields] :
+         {std::tuple{!loaded.emitters.empty(),
+                     particles::kEmitterType,
+                     sizeof(particles::ParticleEmitter),
+                     particles::emitterFields()},
+          std::tuple{!loaded.trails.empty(), particles::kTrailType, sizeof(particles::Trail), particles::trailFields()},
+          std::tuple{!loaded.beams.empty(), particles::kBeamType, sizeof(particles::Beam), particles::beamFields()}}) {
+        if (kDeclared && !world_kest::laidOutAs(program, kType, kSize, kFields)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          RenderCanvasError::BadComponents,
+                          "the program lays out a rawframe.model type otherwise than this engine reads it");
+        }
     }
     for (const world_kest::GameTexture& texture : kDescription.textures) {
         loaded.textures.push_back(texture.id);

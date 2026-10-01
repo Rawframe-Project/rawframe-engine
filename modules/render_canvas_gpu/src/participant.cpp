@@ -93,7 +93,11 @@ public:
                       diagnostics::field("texturesUploaded", statistics.texturesUploaded),
                       diagnostics::field("uploadBytes", statistics.uploadBytes),
                       diagnostics::field("uploadsDeferred", statistics.uploadsDeferred),
-                      diagnostics::field("texturesReplaced", statistics.texturesReplaced)});
+                      diagnostics::field("texturesReplaced", statistics.texturesReplaced),
+                      diagnostics::field("emittersDrawn", statistics.emittersDrawn),
+                      diagnostics::field("emittersLeftOut", statistics.emittersLeftOut),
+                      diagnostics::field("particlesSpawned", statistics.particlesSpawned),
+                      diagnostics::field("ribbonsDrawn", statistics.ribbonsDrawn)});
     }
 
 private:

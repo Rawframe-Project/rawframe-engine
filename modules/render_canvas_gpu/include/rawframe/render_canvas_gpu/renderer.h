@@ -5,7 +5,9 @@
 // texture they name is uploaded once as it was decoded, and again when a
 // reload replaces it; the quads' vertices and indices are written each
 // frame; and the draws are made in their order, each blending over what is
-// behind it, into the frame's picture, after the scene's.
+// behind it, into the frame's picture, after the scene's; then the
+// particles, trails, and beams, over every sprite, through the device half
+// the scene's share (D357).
 //
 // Its own module, apart from the CPU half, because the device is not on
 // every client yet: the bots count draws without a device, so the CPU half
@@ -41,6 +43,9 @@ struct RendererLimits {
     /// Three quarters of what the device uploads in a frame, the rest kept
     /// for the frame's corners; a texture larger than it is never drawn.
     std::uint64_t uploadBytesPerFrame = render::kFrameUploadBytes / 4 * 3;
+    /// The particles alive at once across every emitter (D357): an
+    /// emitter whose ring would pass it is left out.
+    std::uint32_t maximumParticles = 65536;
 };
 
 struct RendererStatistics {
@@ -57,6 +62,12 @@ struct RendererStatistics {
     std::uint64_t uploadsDeferred = 0;
     /// Textures replaced by a reload's new revision.
     std::uint64_t texturesReplaced = 0;
+    /// Emitters drawn (D357), those the pool could not hold, the particles
+    /// they spawned, and the trails and beams drawn, over every frame.
+    std::uint64_t emittersDrawn = 0;
+    std::uint64_t emittersLeftOut = 0;
+    std::uint64_t particlesSpawned = 0;
+    std::uint64_t ribbonsDrawn = 0;
 };
 
 class CanvasRenderer final : public render::FrameRecorder {

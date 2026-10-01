@@ -3,16 +3,21 @@
 // The 2D canvas's CPU half (SPEC-0024's canvas contract): entities with
 // `rawframe.canvas` sprites, copied out of a World where their poses put
 // them, then culled against a camera, put in draw order, and batched by
-// texture into quads a device draws. Client only; a server carries the same
-// components as plain values and links none of this.
+// texture into quads a device draws; and the particle emitters, trails,
+// and beams of `rawframe.model` where their 2D poses put them, accounted
+// for the view as the scene's are (ADR-0053's one grammar for 2D and 3D,
+// D357). Client only; a server carries the same components as plain values
+// and links none of this.
 
 #include "rawframe/kest/program.h"
 #include "rawframe/material/canvas.h"
+#include "rawframe/particles/particles.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/game_files.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -70,12 +75,14 @@ struct SpriteInstance {
 };
 
 /// Generation 1's view: orthographic, `height` meters tall around (`x`,
-/// `y`), `aspect` times as wide.
+/// `y`), `aspect` times as wide; and the seconds since the frame before,
+/// which move the particle clock (D357).
 struct CanvasCamera {
     double x = 0;
     double y = 0;
     float height = 10;
     float aspect = 16.0F / 9.0F;
+    float elapsed = 0;
 };
 
 /// A quad's corner in clip space, x right and y up, each from minus one to
@@ -121,6 +128,13 @@ struct CanvasFrame {
     std::size_t unknownTextures = 0;
     std::size_t unknownMaterials = 0;
     std::size_t overLimit = 0;
+    /// The particle emitters, trails, and beams that reach the view, and
+    /// what they spawn and leave out (D357), a material named by its place
+    /// among the frame's materials and drawn over every sprite; and the
+    /// view's half width and half height, meters, nought where it sees
+    /// nothing.
+    rawframe::particles::Frame particles;
+    std::array<float, 2> extent{};
 };
 
 /// SPEC-0024's limit points for the canvas: the sprites one frame queues,
@@ -129,6 +143,8 @@ struct CanvasFrame {
 struct CanvasLimits {
     std::size_t maximumSprites = 16384;
     std::size_t maximumDraws = 1024;
+    /// ADR-0053's particle, trail, and beam limit points (D357).
+    rawframe::particles::Limits particles;
 };
 
 struct CanvasSettings {
@@ -141,6 +157,10 @@ struct CanvasSettings {
     /// give them (D356); one it declares but a client could not read is
     /// given as none.
     std::vector<std::pair<std::uint64_t, material::CanvasMaterial>> materials;
+    /// The game's particle emitter, trail, and beam components (D357).
+    std::vector<schema::ComponentTypeId> emitters;
+    std::vector<schema::ComponentTypeId> trails;
+    std::vector<schema::ComponentTypeId> beams;
     CanvasLimits limits;
 };
 
@@ -153,14 +173,15 @@ public:
     Canvas& operator=(const Canvas&) = delete;
     ~Canvas();
 
-    /// The extract stage, in `presentation_extract`: every sprite of the
-    /// World, copied with its pose; read only (the World is not const
-    /// because its queries cache what they matched). Nothing of it is kept.
+    /// The extract stage, in `presentation_extract`: every sprite, emitter,
+    /// trail, and beam of the World, copied with its pose; read only (the
+    /// World is not const because its queries cache what they matched).
+    /// Nothing of it is kept.
     void extract(world::World& world);
 
     /// The queue stage, in `present`: the extracted sprites seen through
     /// `camera`, drawn in the order of their layers, then of their entities,
-    /// then of their components.
+    /// then of their components; and the particles' frame (D357).
     const CanvasFrame& queue(const CanvasCamera& camera);
 
     [[nodiscard]] std::span<const SpriteInstance> extracted() const noexcept;
@@ -171,17 +192,22 @@ private:
     std::unique_ptr<State> state_;
 };
 
-/// A game's canvas, declared: its sprite components, its textures, and its
-/// camera component, if it has one.
+/// A game's canvas, declared: its sprite components, its textures, its
+/// camera component, if it has one, and its particle emitter, trail, and
+/// beam components (D357).
 struct GameCanvas {
     std::vector<schema::ComponentTypeId> sprites;
     std::vector<std::uint64_t> textures;
     std::optional<schema::ComponentTypeId> camera;
+    std::vector<schema::ComponentTypeId> emitters;
+    std::vector<schema::ComponentTypeId> trails;
+    std::vector<schema::ComponentTypeId> beams;
 };
 
-/// Finds the game's components of `rawframe.canvas.Sprite`'s type and its
-/// one of `rawframe.canvas.Camera`'s, whose layouts in `program` must be
-/// what this module reads, and its `texture` lines. Refuses (`NotFound`) a
+/// Finds the game's components of `rawframe.canvas.Sprite`'s type, its one
+/// of `rawframe.canvas.Camera`'s, and those of the particle triad's types,
+/// whose layouts in `program` must be what this engine reads, and its
+/// `texture` lines. Refuses (`NotFound`) a
 /// game with no sprite component, and (`BadComponents`) one with two
 /// cameras.
 [[nodiscard]] result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game,

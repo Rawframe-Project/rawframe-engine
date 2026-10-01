@@ -6,6 +6,6 @@ if(NOT TARGET rawframe_render)
     return()
 endif()
 
-rawframe_module(NAME render_canvas_gpu SOURCES src/participant.cpp src/renderer.cpp DEPS render render_canvas texture composition diagnostics result base)
+rawframe_module(NAME render_canvas_gpu SOURCES src/participant.cpp src/renderer.cpp DEPS render render_canvas particles_gpu particles texture composition diagnostics result base)
 
 rawframe_module_tests(NAME render_canvas_gpu SOURCES tests/renderer_test.cpp)

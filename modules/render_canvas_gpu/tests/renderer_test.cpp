@@ -5,10 +5,13 @@
 // light; a draw whose texture is not ready is left out; and a texture is
 // uploaded once, and again only when a reload replaces it; and draws blend
 // by their materials (D356): added, multiplied, a sprite with no texture
-// drawn white, and an emission added where nothing covers. Skips where no
+// drawn white, and an emission added where nothing covers; and particles
+// and ribbons drawn over the sprites through the scene's device half, each
+// by its material's blend (D357). Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
 // `render`'s framer (D285), as the frame participant makes them.
 
+#include "rawframe/particles/particles.h"
 #include "rawframe/render/device.h"
 #include "rawframe/render/errors.h"
 #include "rawframe/render/frame.h"
@@ -232,5 +235,59 @@ RAWFRAME_TEST(TheCanvasDrawsByItsMaterials) {
         // Grey is 0.216 in linear light: 0.716 with the glow is 218.
         RAWFRAME_EXPECT(near(*kPixels, 16, 16, {128, 128, 255, 255}) && near(*kPixels, 48, 16, {128, 0, 0, 255}) &&
                         near(*kPixels, 16, 48, {0, 255, 0, 255}) && near(*kPixels, 48, 48, {218, 128, 128, 255}));
+    }
+}
+
+RAWFRAME_TEST(TheCanvasDrawsParticlesAndRibbons) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    // None; and blue, added.
+    const std::array<material::CanvasMaterial, 2> kMaterials = {
+        material::CanvasMaterial{.shading = material::Shading::Unlit},
+        material::CanvasMaterial{.blend = material::CanvasBlend::Additive, .color = {0, 0, 1, 1}}};
+    CanvasFrame frame;
+    frame.materials = kMaterials;
+    // Sixteen meters across: four pixels a meter.
+    frame.extent = {8, 8};
+    // White particles four meters wide, standing still at the top left
+    // quarter's middle; and a blue ribbon two meters wide along the bottom.
+    frame.particles.clock = 1;
+    frame.particles.emitters.push_back(particles::EmitterDraw{.key = 1,
+                                                              .anchor = {-4, 4, 0},
+                                                              .lifetime = 10,
+                                                              .sizeStart = 4,
+                                                              .sizeEnd = 4,
+                                                              .capacity = 4,
+                                                              .spawned = 4,
+                                                              .seed = 7,
+                                                              .ring = 1});
+    frame.particles.ribbonPoints = {particles::RibbonPoint{.place = {-4, -4, 0}, .width = 2},
+                                    particles::RibbonPoint{.place = {4, -4, 0}, .width = 2, .along = 1}};
+    frame.particles.ribbons = {particles::Ribbon{.material = 1, .first = 0, .count = 2}};
+    const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
+    // The particles' pipelines are asked for by the first frame with any.
+    for (int attempt = 0; attempt < 1000 && (*made)->statistics().ribbonsDrawn == 0; ++attempt) {
+        (*made)->prepare(&frame, {});
+        RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+        RAWFRAME_EXPECT((*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
+    }
+    RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+    const auto kPixels = (*framer)->pixels();
+    const render_canvas_gpu::RendererStatistics& kCounted = (*made)->statistics();
+    RAWFRAME_EXPECT(kPixels.has_value() && kCounted.emittersDrawn >= 1 && kCounted.ribbonsDrawn >= 1 &&
+                    kCounted.particlesSpawned >= 4 && kCounted.emittersLeftOut == 0);
+    if (kPixels.has_value()) {
+        // White at the particles' middle, soft toward their edge; blue
+        // along the ribbon; the clear color elsewhere.
+        RAWFRAME_EXPECT(near(*kPixels, 16, 16, {255, 255, 255, 255}) && near(*kPixels, 32, 48, {0, 0, 255, 255}));
+        RAWFRAME_EXPECT(near(*kPixels, 48, 16, {0, 0, 0, 255}) && near(*kPixels, 32, 32, {0, 0, 0, 255}));
     }
 }

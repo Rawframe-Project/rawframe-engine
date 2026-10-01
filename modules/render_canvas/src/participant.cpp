@@ -124,7 +124,11 @@ public:
         camera_.aspect = static_cast<float>(kWidth) / static_cast<float>(kHeight);
         width_ = static_cast<std::uint32_t>(kWidth);
         height_ = static_cast<std::uint32_t>(kHeight);
-        settings_ = CanvasSettings{.sprites = std::move(game->sprites), .textures = std::move(game->textures)};
+        settings_ = CanvasSettings{.sprites = std::move(game->sprites),
+                                   .textures = std::move(game->textures),
+                                   .emitters = std::move(game->emitters),
+                                   .trails = std::move(game->trails),
+                                   .beams = std::move(game->beams)};
         // The game's canvas materials from its cooked content (D356): one
         // of another domain is another renderer's; one that cannot be read,
         // or with no cooked content to read it from, is drawn as none, and
@@ -197,7 +201,7 @@ public:
         return {};
     }
 
-    void runHostPhase(composition::HostPhase phase, const composition::HostFrame& /*frame*/) noexcept override {
+    void runHostPhase(composition::HostPhase phase, const composition::HostFrame& frame) noexcept override {
         if (clients_ == nullptr) {
             return;
         }
@@ -238,6 +242,11 @@ public:
             extract();
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
+            // The seconds since the frame before, on the Host's timeline,
+            // for the particle clock (D357): nought for the first.
+            camera_.elapsed =
+                presented_.has_value() ? static_cast<float>((frame.now - *presented_).nanoseconds) / 1e9F : 0.0F;
+            presented_ = frame.now;
             const CanvasFrame& kFrame = canvas_->queue(camera_);
             queued_ = &kFrame;
             // What a device would draw this frame: the draws whose texture
@@ -370,6 +379,7 @@ private:
     std::optional<std::size_t> client_;
     CanvasSettings settings_;
     CanvasCamera camera_;
+    std::optional<execution::MonotonicInstant> presented_;
     std::optional<schema::ComponentTypeId> cameraComponent_;
     /// Frames seen through the player's own camera.
     std::uint64_t viewed_ = 0;

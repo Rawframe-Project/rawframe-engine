@@ -1,6 +1,7 @@
 #include "rawframe/render_canvas_gpu/renderer.h"
 
 #include "generated/sprite_container.h"
+#include "rawframe/particles_gpu/particles.h"
 #include "rawframe/render/textures.h"
 #include "rawframe/render_canvas_gpu/errors.h"
 
@@ -78,6 +79,43 @@ MaterialBlock blockOf(const material::CanvasMaterial& made) noexcept {
         .map = {made.sampled.scale[0], made.sampled.scale[1], made.sampled.offset[0], made.sampled.offset[1]}};
 }
 
+/// A canvas material as the particles draw it (D357): its color and
+/// emission in the same terms, its one texture for both, its texture's
+/// alpha shaping it where that adds to its alpha, and its blend.
+particles_gpu::Material particleMaterialOf(const material::CanvasMaterial& made) noexcept {
+    const bool kMultiplies = made.blend == material::CanvasBlend::Multiply;
+    const std::array<float, 4> kMap = {
+        made.sampled.scale[0], made.sampled.scale[1], made.sampled.offset[0], made.sampled.offset[1]};
+    return particles_gpu::Material{
+        .block = {.color = made.color,
+                  .colorTexture = made.colorTexture,
+                  .emission = {made.emission[0], made.emission[1], made.emission[2], 0},
+                  .emissionTexture = {made.emissionTexture[0], made.emissionTexture[1], made.emissionTexture[2], 0},
+                  .baseMap = kMap,
+                  .emissionMap = kMap,
+                  .flags = {(made.colorTexture[3] != 0 ? particles_gpu::kShapedByTexture : 0U) |
+                                (kMultiplies ? particles_gpu::kMultiplies : 0U),
+                            0,
+                            0,
+                            0}},
+        .blend = made.blend == material::CanvasBlend::Additive ? particles_gpu::Blend::Add
+                 : kMultiplies                                 ? particles_gpu::Blend::Multiply
+                                                               : particles_gpu::Blend::Over};
+}
+
+/// The canvas as the particles see it (D357): flat, `extent` meters each
+/// way from its middle, its depth a constant the clip keeps; the particle
+/// clock `clock`.
+particles_gpu::ViewBlock particleViewOf(const std::array<float, 2>& extent, float clock) noexcept {
+    particles_gpu::ViewBlock view{
+        .right = {1, 0, 0, clock}, .up = {0, 1, 0, particles::kClockPeriod}, .lens = {0, 1, 0, 0}};
+    view.viewProjection[0] = extent[0] > 0 ? 1 / extent[0] : 0;
+    view.viewProjection[5] = extent[1] > 0 ? 1 / extent[1] : 0;
+    view.viewProjection[14] = 0.5F;
+    view.viewProjection[15] = 1;
+    return view;
+}
+
 /// A texture's binding, its every level.
 mrhiBinding textureAt(std::uint32_t slot, mrhiResourceId resource) noexcept {
     return mrhiBinding{
@@ -130,6 +168,9 @@ struct CanvasRenderer::State {
     std::array<mrhiSamplerId, 4> materialSamplers{};
     /// What a sprite with no texture, or a material with none, samples.
     std::shared_ptr<const texture::Texture> white;
+    /// The particles, trails, and beams (D357): the device half the scene's
+    /// share.
+    std::unique_ptr<particles_gpu::Particles> particles;
     /// The open frame's materials' blocks.
     std::vector<std::uint8_t> blocks;
     mrhiResourceId blocksResource{};
@@ -266,6 +307,43 @@ struct CanvasRenderer::State {
                 }
             }
         }
+        // The particles' and ribbons' materials' textures (D357).
+        std::vector<std::uint32_t> shown;
+        for (const particles::EmitterDraw& kEmitter : canvas.particles.emitters) {
+            shown.push_back(kEmitter.material);
+        }
+        for (const particles::Ribbon& kRibbon : canvas.particles.ribbons) {
+            shown.push_back(kRibbon.material);
+        }
+        for (const std::uint32_t kMaterial : shown) {
+            const std::uint64_t kId = kMaterial < canvas.materials.size() ? canvas.materials[kMaterial].sampled.id : 0;
+            if (kId != 0) {
+                static_cast<void>(held->choose(kId, source ? source(kId) : nullptr));
+            }
+        }
+    }
+
+    /// The frame's materials as the particles draw them (D357), none where
+    /// it holds none: each one's texture as held this frame, white for none
+    /// and for one not held.
+    [[nodiscard]] std::vector<particles_gpu::Material> particleMaterials() const {
+        std::vector<particles_gpu::Material> made;
+        const std::span<const material::CanvasMaterial> kMaterials =
+            frame->materials.empty() ? std::span<const material::CanvasMaterial>{&kPlain, 1} : frame->materials;
+        made.reserve(kMaterials.size());
+        for (const material::CanvasMaterial& kMaterial : kMaterials) {
+            const std::uint64_t kHeld = held->resource(kMaterial.sampled.id);
+            const mrhiSamplerId kSampler =
+                materialSamplers.at(samplerOf(kMaterial.sampled.filter, kMaterial.sampled.address));
+            const particles_gpu::BoundTexture kBound{.texture = kHeld != 0 ? kHeld : held->resource(0),
+                                                     .sampler =
+                                                         render::requestKey(kSampler.index1, kSampler.generation)};
+            particles_gpu::Material each = particleMaterialOf(kMaterial);
+            each.color = kBound;
+            each.emission = kBound;
+            made.push_back(each);
+        }
+        return made;
     }
 
     result::Status declare(render::Frame& open) {
@@ -366,6 +444,11 @@ struct CanvasRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &drawDef, &drawing); kAdded != mrhi_success) {
             return failed("the drawing pass could not be added", kAdded);
         }
+        // The particles, trails, and beams over every sprite (D357).
+        RAWFRAME_TRY(particles->declare(frame->particles,
+                                        particleMaterials(),
+                                        particleViewOf(frame->extent, frame->particles.clock),
+                                        {.picture = open.picture, .exposure = std::nullopt, .depth = std::nullopt}));
         declared = true;
         return {};
     }
@@ -443,6 +526,7 @@ struct CanvasRenderer::State {
         if (mrhiEndPass(native, drawing) != mrhi_success) {
             return failed("the drawing pass could not end", mrhi_errorState);
         }
+        RAWFRAME_TRY(particles->record());
         leftOutNow = leftOut;
         return {};
     }
@@ -452,6 +536,7 @@ struct CanvasRenderer::State {
             return;
         }
         held->ended(submitted);
+        particles->ended(submitted);
         const render::TextureStatistics& kHeld = held->statistics();
         statistics.texturesUploaded = kHeld.texturesUploaded;
         statistics.uploadBytes = kHeld.uploadBytes;
@@ -463,6 +548,10 @@ struct CanvasRenderer::State {
         ++statistics.frames;
         statistics.draws += drawn;
         statistics.drawsLeftOut += leftOutNow;
+        statistics.emittersDrawn += particles->emittersDrawn();
+        statistics.emittersLeftOut += particles->emittersLeftOut();
+        statistics.particlesSpawned += particles->spawned();
+        statistics.ribbonsDrawn += particles->ribbonsDrawn();
     }
 
     std::uint64_t leftOutNow = 0;
@@ -488,6 +577,9 @@ result::Result<std::unique_ptr<CanvasRenderer>> CanvasRenderer::create(render::D
     white.levels.push_back({.width = 1, .height = 1, .bytes = std::vector<std::byte>(4, std::byte{0xFF})});
     state->white = std::make_shared<const texture::Texture>(std::move(white));
     RAWFRAME_TRY(state->makePipeline());
+    RAWFRAME_TRY_ASSIGN(
+        state->particles,
+        particles_gpu::Particles::create(device, particles_gpu::Target::Picture, limits.maximumParticles));
     return std::unique_ptr<CanvasRenderer>{new CanvasRenderer{std::move(state)}};
 }
 
