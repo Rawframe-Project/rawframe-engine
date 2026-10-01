@@ -1,0 +1,30 @@
+# Stalls (D388), the second reference game's beginning (ROADMAP Phase 5): a
+# simple 3D tycoon. Each player owns coins and a cursor over a lot of twelve
+# plots by twelve; a build puts a stall on the plot under the cursor when it
+# is free and the owner has its cost, and each stall earns its owner every
+# second (tycoon.kest). The server decides every build; the lot's ground and
+# the stalls are static bodies, so a build asks the physics which plots are
+# taken.
+program tycoon.kest
+physics3d gravity 0 -10 0
+collision class stall b0eb8fc52cd9d4ac
+component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
+component 4143f760-31c1-469d-bda7-7946878bcaba tycoon.owner Owner
+component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
+system tycoon.join simulation join write tycoon.owner
+system tycoon.tend simulation tend read tycoon.hand write tycoon.owner entities after tycoon.join after rawframe.physics3d.step
+system tycoon.earn simulation earn write tycoon.owner after tycoon.tend
+# The lot's ground, its top at nought.
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity
+
+# Networked play: every owner and stall is sent to every client; each
+# player's hand is its input.
+replicate tycoon.owner tycoon.stall rawframe.physics3d.body rawframe.physics3d.pose
+player tycoon.hand tycoon.owner
+input tycoon.hand
+# A client makes its hand from its player's actions (tycoon.actions) with
+# sample.kest, from keys, a mouse, a gamepad, or a touch screen (the left
+# half's stick to move the cursor, the right half to build); bots press the
+# same controls.
+actions tycoon.actions
+sample sample.kest sample

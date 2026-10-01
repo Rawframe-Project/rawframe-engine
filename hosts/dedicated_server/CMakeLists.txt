@@ -17,6 +17,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(dedicated_server_kest_game PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"code\":\"game_loaded\".*\"code\":\"stopped\"")
+    # Stalls (D388): three owners build on one plot in one tick and one stall
+    # stands, besides the lot's ground; a fourth, without coins, builds none.
+    add_test(NAME tycoon_crowded
+             COMMAND rawframe_host_dedicated_server --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/tycoon_crowded.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(tycoon_crowded PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":2,\"bodiesRemoved\":0,\"bodiesRefused\":0,.*\"code\":\"tick_summary\"[^\n]*\"entities\":6}")
     # The same, started from elsewhere: the configuration's paths are under
     # its own directory, not where the process starts (D188).
     add_test(NAME dedicated_server_elsewhere

@@ -1,0 +1,153 @@
+module tycoon
+
+// Stalls (D388): the second reference game, a simple 3D tycoon, begun. Each
+// player owns coins and a cursor over the lot, twelve plots by twelve, four
+// meters each, centered on the origin. Building puts a stall on the plot
+// under the cursor when no stall stands there and the owner has its cost;
+// each stall earns its owner a little every second. The server decides
+// every build.
+
+import controls
+import rawframe.physics3d
+import rawframe.world
+
+// The stalls' collision class (tycoon.game), the one a build asks about.
+const STALLS: u64 = 0xb0eb8fc52cd9d4ac
+
+// The lot: PLOTS plots a side, PLOT meters each, HALF meters from the
+// origin to each edge.
+const PLOTS: i32 = 12
+const PLOT: f64 = 4.0
+const HALF: f64 = 24.0
+
+// Coins an owner starts with, a stall costs, and a stall earns a second.
+const START: i64 = 100
+const COST: i64 = 50
+const INCOME: i64 = 5
+const SECOND: u32 = 60
+
+// The cursor's speed at a full tilt, meters a tick: twelve a second.
+const GLIDE: f64 = 0.2
+
+// An owner: whether it has joined, its cursor on the ground, its coins and
+// stalls, whether the build it asked for is still held (one build each time
+// it is pressed), and the ticks toward its next income.
+struct Owner {
+    joined: u32
+    cursorX: f64
+    cursorZ: f64
+    coins: i64
+    stalls: u32
+    held: u32
+    clock: u32
+}
+
+// A stall, by its owner and its plot.
+struct Stall {
+    owner: world.Entity
+    plotX: i32
+    plotZ: i32
+}
+
+extern fn Stall.insert(entity: world.Entity, value: Stall)
+extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
+extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
+extern fn Velocity3D.insert(entity: world.Entity, value: physics3d.Velocity3D)
+
+// A player's entity arrives with its components zeroed: here it becomes an
+// owner with its first coins, its cursor at the lot's middle.
+fn join(count: i32, owners: [Owner]) {
+    let i = 0
+    while i < count {
+        if owners[i].joined == u32(0) {
+            owners[i] = Owner(u32(1), 0.0, 0.0, START, u32(0), u32(0), u32(0))
+        }
+        i = i + 1
+    }
+}
+
+// A place on the ground kept on the lot.
+fn kept(at: f64) -> f64 {
+    if at < 0.0 - HALF {
+        return 0.0 - HALF
+    }
+    if at > HALF {
+        return HALF
+    }
+    return at
+}
+
+// The plot a place on the lot is on, nought to PLOTS less one.
+fn plotOf(at: f64) -> i32 {
+    let plot = i32((kept(at) + HALF) / PLOT)
+    if plot >= PLOTS {
+        return PLOTS - 1
+    }
+    return plot
+}
+
+// A plot's middle.
+fn middleOf(plot: i32) -> f64 {
+    return (f64(plot) + 0.5) * PLOT - HALF
+}
+
+// A stall on plot (x, z) for `owner`: a box three meters wide and two tall,
+// standing on the ground, of the stalls' class.
+fn raise(owner: world.Entity, x: i32, z: i32) {
+    let stall = world.create()
+    Stall.insert(stall, Stall(owner, x, z))
+    Body3D.insert(stall, physics3d.Body3D(physics3d.STATIC, physics3d.BOX, true, false, false, STALLS, 1.5, 1.0,
+                                          1.5, 0.0, 0.0, 0.0, 0.0, 0.0))
+    Pose3D.insert(stall, physics3d.Pose3D(middleOf(x), 1.0, middleOf(z), 0.0, 0.0, 0.0, 1.0))
+    Velocity3D.insert(stall, physics3d.Velocity3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+}
+
+// The cursor follows the hand, put where the player points or moved by its
+// stick; a press builds on the plot under it, once, when the owner has the
+// cost and the plot is free: no stall standing there as of this tick's step,
+// and none raised there earlier in this run, which the step has not seen.
+fn tend(count: i32, hands: [controls.Hand], owners: [Owner], entities: [world.Entity]) {
+    let raised = array(PLOTS * PLOTS, false)
+    let i = 0
+    while i < count {
+        if owners[i].joined == u32(1) {
+            if hands[i].pointed > 0.5 {
+                owners[i].cursorX = kept(f64(hands[i].pointX))
+                owners[i].cursorZ = kept(f64(hands[i].pointZ))
+            } else {
+                owners[i].cursorX = kept(owners[i].cursorX + f64(hands[i].moveX) * GLIDE)
+                owners[i].cursorZ = kept(owners[i].cursorZ + f64(hands[i].moveZ) * GLIDE)
+            }
+            if hands[i].build > 0.5 {
+                if owners[i].held == u32(0) && owners[i].coins >= COST {
+                    let x = plotOf(owners[i].cursorX)
+                    let z = plotOf(owners[i].cursorZ)
+                    let standing = physics3d.overlapSphere(STALLS, middleOf(x), 1.0, middleOf(z), 0.5, u32(0))
+                    if standing.count == u32(0) && !raised[z * PLOTS + x] {
+                        raised[z * PLOTS + x] = true
+                        raise(entities[i], x, z)
+                        owners[i].coins = owners[i].coins - COST
+                        owners[i].stalls = owners[i].stalls + u32(1)
+                    }
+                }
+                owners[i].held = u32(1)
+            } else {
+                owners[i].held = u32(0)
+            }
+        }
+        i = i + 1
+    }
+}
+
+// Each second, every owner's stalls earn it their income.
+fn earn(count: i32, owners: [Owner]) {
+    let i = 0
+    while i < count {
+        owners[i].clock = owners[i].clock + u32(1)
+        if owners[i].clock >= SECOND {
+            owners[i].clock = u32(0)
+            owners[i].coins = owners[i].coins + i64(owners[i].stalls) * INCOME
+        }
+        i = i + 1
+    }
+}

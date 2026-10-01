@@ -52,6 +52,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(crates_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":27,\"bodiesRemoved\":0,\"bodiesRefused\":0")
+    # Eight bots play Stalls (D388): each joins as an owner and builds stalls,
+    # each a static body of the lot beside its ground.
+    add_test(NAME tycoon_bots
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/tycoon.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(tycoon_bots PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8.*\"bodiesMade\":([3-9]|[1-9][0-9]+),\"bodiesRemoved\":0,\"bodiesRefused\":0")
     # The prediction runs count ticks confirmed in wall time, so each holds
     # six of ctest's processors: a machine running every preset at once
     # starved them into too few confirmations (D83).
