@@ -70,7 +70,13 @@ jobs:
   fuzz:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
     runs-on: ubuntu-24.04
-    # Five minutes a target, and the build.
+    # The targets in three shards, each running every third: five minutes
+    # a target, the tools, and the build (26 targets in one job passed its
+    # limit and were cancelled, D380).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
@@ -93,9 +99,11 @@ jobs:
           # a fixed number of inputs.
           ctest --test-dir out/clang-sanitize --show-only=json-v1 -R '_fuzz_' | python3 -c '
           import json, sys
-          for test in json.load(sys.stdin)["tests"]:
-              print("\t".join(a for a in test["command"] if not a.startswith(("-runs=", "-seed="))))
-          ' > fuzz.commands
+          shard = int(sys.argv[1])
+          for at, test in enumerate(json.load(sys.stdin)["tests"]):
+              if at % 3 == shard:
+                  print("\t".join(a for a in test["command"] if not a.startswith(("-runs=", "-seed="))))
+          ' ${{ matrix.shard }} > fuzz.commands
           while IFS=$'\t' read -r -a command; do
             name="$(basename "${command[0]}")"
             mkdir -p "corpus/$name"
