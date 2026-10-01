@@ -30,8 +30,12 @@ module rawframe.ui
 // `imageSlice` of the texture's pixels each way at a pixel each, tinted by
 // `imageTint` (nought draws it as it is). Under it the box may cast a
 // shadow (D381), as CSS's box-shadow: `shadowColor` (nought casts none),
-// `shadowX` and `shadowY` pixels off, blurred over `shadowBlur` pixels. A
-// zeroed node, as presentation attaches it, is empty and draws nothing.
+// `shadowX` and `shadowY` pixels off, blurred over `shadowBlur` pixels. Over
+// its fill it may paint a gradient (D382) from `gradientFrom` to
+// `gradientTo` (0xRRGGBBAA): LINEAR along `gradientAngle` degrees clockwise
+// from toward the top, as CSS's linear-gradient, or RADIAL out from its
+// center to its farthest corner. A zeroed node, as presentation attaches
+// it, is empty and draws nothing.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -66,6 +70,10 @@ struct Node {
     shadowX: f32
     shadowY: f32
     shadowBlur: f32
+    gradientKind: u32
+    gradientAngle: f32
+    gradientFrom: u32
+    gradientTo: u32
 }
 
 // A node's `direction`.
@@ -89,3 +97,8 @@ const STRETCH: u32 = 1
 const ALIGN_START: u32 = 2
 const ALIGN_END: u32 = 3
 const ALIGN_CENTER: u32 = 4
+
+// A node's `gradientKind`: none, along a line, or outward from its center.
+const NO_GRADIENT: u32 = 0
+const LINEAR: u32 = 1
+const RADIAL: u32 = 2

@@ -59,6 +59,15 @@ std::optional<ui::Layout> layoutOf(const Node& node) noexcept {
 
 ui::Look lookOf(const Node& node) noexcept {
     const float kSlice = node.imageSlice;
+    // A kind past the set is passed on, for the tree to refuse.
+    const ui::GradientLook kGradient = node.gradientKind == 0
+                                           ? ui::GradientLook{}
+                                           : ui::GradientLook{.kind = static_cast<ui::GradientLook::Kind>(
+                                                                  std::min<std::uint32_t>(node.gradientKind, 255)),
+                                                              .angle = node.gradientAngle,
+                                                              .colors = {node.gradientFrom, node.gradientTo},
+                                                              .positions = {0, 1},
+                                                              .stops = 2};
     return ui::Look{
         .fill = node.fill,
         .borderColor = node.borderColor,
@@ -68,7 +77,8 @@ ui::Look lookOf(const Node& node) noexcept {
         .imageSlice = {kSlice, kSlice, kSlice, kSlice},
         // Nought draws it as it is.
         .imageTint = node.imageTint != 0 ? node.imageTint : 0xFFFFFFFF,
-        .outerShadow = {.color = node.shadowColor, .x = node.shadowX, .y = node.shadowY, .blur = node.shadowBlur}};
+        .outerShadow = {.color = node.shadowColor, .x = node.shadowX, .y = node.shadowY, .blur = node.shadowBlur},
+        .gradient = kGradient};
 }
 
 std::uint64_t keyOf(ui::Node node) noexcept {

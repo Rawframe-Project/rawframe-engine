@@ -56,6 +56,10 @@ struct Node {
     float shadowX = 0;
     float shadowY = 0;
     float shadowBlur = 0;
+    std::uint32_t gradientKind = 0;
+    float gradientAngle = 0;
+    std::uint32_t gradientFrom = 0;
+    std::uint32_t gradientTo = 0;
 };
 
 /// The game's node components, in declaration order, and the one each is

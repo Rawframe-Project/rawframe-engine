@@ -91,7 +91,11 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
                                 {"shadowColor", offsetof(Node, shadowColor)},
                                 {"shadowX", offsetof(Node, shadowX)},
                                 {"shadowY", offsetof(Node, shadowY)},
-                                {"shadowBlur", offsetof(Node, shadowBlur)}})) {
+                                {"shadowBlur", offsetof(Node, shadowBlur)},
+                                {"gradientKind", offsetof(Node, gradientKind)},
+                                {"gradientAngle", offsetof(Node, gradientAngle)},
+                                {"gradientFrom", offsetof(Node, gradientFrom)},
+                                {"gradientTo", offsetof(Node, gradientTo)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());

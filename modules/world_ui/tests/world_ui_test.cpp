@@ -2,7 +2,8 @@
 // view, nested by their components' parents on the same entity or on the
 // player, siblings in order; a node changes, goes, and is left out as its
 // component does; nothing unchanged is laid out again; a new World starts
-// afresh; and values the tree cannot take are left out and counted.
+// afresh; and values the tree cannot take, a gradient of no kind among
+// them, are left out and counted.
 
 #include "rawframe/test/test.h"
 #include "rawframe/world_ui/errors.h"
@@ -171,6 +172,17 @@ RAWFRAME_TEST(WhatTheTreeCannotTakeIsLeftOut) {
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().boxes.empty());
     rig.put(rig.player, kHudId, panel());
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().boxes.size() == 1);
+    // A gradient of a kind past the set is refused; a linear one drawn.
+    Node ramped = panel();
+    ramped.gradientKind = 9;
+    ramped.gradientFrom = 0xFF0000FF;
+    ramped.gradientTo = 0x0000FFFF;
+    rig.put(rig.player, kHudId, ramped);
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().boxes.empty());
+    ramped.gradientKind = 1;
+    rig.put(rig.player, kHudId, ramped);
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().boxes.size() == 1 && rig.ui->drawn().gradients.size() == 2 &&
+                    rig.ui->drawn().boxes[0].gradient == 1);
     // At most so many nodes.
     auto small = WorldUi::create({.nodes = {kHudId}, .parents = {std::nullopt}, .maximumNodes = 1});
     RAWFRAME_EXPECT(small.has_value());
