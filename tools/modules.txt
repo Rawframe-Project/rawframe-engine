@@ -54,10 +54,11 @@ world_replication: game_content world_runtime network world composition schema e
 input_kest: input document world_kest world_replication kest world composition execution diagnostics result base
 world_audio: game_content assets content audio physics2d physics3d world_replication world_kest kest world composition schema execution diagnostics document result base
 particles: world base
-render_canvas: game_textures game_content assets content material texture physics2d world_replication world_kest kest world composition schema execution diagnostics result base
+particles_gpu: render particles result base
+render_canvas: particles game_textures game_content assets content material texture physics2d world_replication world_kest kest world composition schema execution diagnostics result base
 render_scene: particles game_textures texture material graph game_content content physics3d mesh world_replication world_kest kest world composition schema execution diagnostics result base
-render_scene_gpu: render render_scene particles material texture mesh composition diagnostics result base
-render_canvas_gpu: render render_canvas material texture composition diagnostics result base
+render_scene_gpu: render render_scene particles_gpu particles material texture mesh composition diagnostics result base
+render_canvas_gpu: render render_canvas particles_gpu particles material texture composition diagnostics result base
 scene_bake: render_scene_gpu render_scene texture_import texture world_kest graph composition diagnostics result base
 game_textures: world_kest assets content texture execution result base
 world_localization: localization world_kest game_content content composition execution diagnostics result base

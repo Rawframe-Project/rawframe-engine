@@ -1076,11 +1076,11 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             loaded.decals.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.PostProcess")) {
             loaded.postProcesses.push_back(component.id);
-        } else if (world_kest::ofEngineType(component, "rawframe.model.ParticleEmitter")) {
+        } else if (world_kest::ofEngineType(component, particles::kEmitterType)) {
             loaded.emitters.push_back(component.id);
-        } else if (world_kest::ofEngineType(component, "rawframe.model.Trail")) {
+        } else if (world_kest::ofEngineType(component, particles::kTrailType)) {
             loaded.trails.push_back(component.id);
-        } else if (world_kest::ofEngineType(component, "rawframe.model.Beam")) {
+        } else if (world_kest::ofEngineType(component, particles::kBeamType)) {
             loaded.beams.push_back(component.id);
         }
     }
@@ -1227,54 +1227,18 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                           "rawframe.model.PostProcess",
                           sizeof(PostProcess),
                           {{"material", offsetof(PostProcess, material)}, {"weight", offsetof(PostProcess, weight)}}));
-    RAWFRAME_TRY(kLaidOut(!loaded.emitters.empty(),
-                          "rawframe.model.ParticleEmitter",
-                          sizeof(ParticleEmitter),
-                          {{"material", offsetof(ParticleEmitter, material)},
-                           {"rate", offsetof(ParticleEmitter, rate)},
-                           {"lifetime", offsetof(ParticleEmitter, lifetime)},
-                           {"speed", offsetof(ParticleEmitter, speed)},
-                           {"spread", offsetof(ParticleEmitter, spread)},
-                           {"radius", offsetof(ParticleEmitter, radius)},
-                           {"sizeStart", offsetof(ParticleEmitter, sizeStart)},
-                           {"sizeEnd", offsetof(ParticleEmitter, sizeEnd)},
-                           {"colorStart", offsetof(ParticleEmitter, colorStart)},
-                           {"colorEnd", offsetof(ParticleEmitter, colorEnd)},
-                           {"accelerationX", offsetof(ParticleEmitter, accelerationX)},
-                           {"accelerationY", offsetof(ParticleEmitter, accelerationY)},
-                           {"accelerationZ", offsetof(ParticleEmitter, accelerationZ)},
-                           {"drag", offsetof(ParticleEmitter, drag)},
-                           {"variation", offsetof(ParticleEmitter, variation)},
-                           {"bursts", offsetof(ParticleEmitter, bursts)},
-                           {"burstCount", offsetof(ParticleEmitter, burstCount)},
-                           {"seed", offsetof(ParticleEmitter, seed)}}));
-    RAWFRAME_TRY(kLaidOut(!loaded.trails.empty(),
-                          "rawframe.model.Trail",
-                          sizeof(Trail),
-                          {{"material", offsetof(Trail, material)},
-                           {"lifetime", offsetof(Trail, lifetime)},
-                           {"spacing", offsetof(Trail, spacing)},
-                           {"widthStart", offsetof(Trail, widthStart)},
-                           {"widthEnd", offsetof(Trail, widthEnd)},
-                           {"colorStart", offsetof(Trail, colorStart)},
-                           {"colorEnd", offsetof(Trail, colorEnd)}}));
-    RAWFRAME_TRY(kLaidOut(!loaded.beams.empty(),
-                          "rawframe.model.Beam",
-                          sizeof(Beam),
-                          {{"material", offsetof(Beam, material)},
-                           {"toX", offsetof(Beam, toX)},
-                           {"toY", offsetof(Beam, toY)},
-                           {"toZ", offsetof(Beam, toZ)},
-                           {"bendX", offsetof(Beam, bendX)},
-                           {"bendY", offsetof(Beam, bendY)},
-                           {"bendZ", offsetof(Beam, bendZ)},
-                           {"segments", offsetof(Beam, segments)},
-                           {"widthStart", offsetof(Beam, widthStart)},
-                           {"widthEnd", offsetof(Beam, widthEnd)},
-                           {"colorStart", offsetof(Beam, colorStart)},
-                           {"colorEnd", offsetof(Beam, colorEnd)},
-                           {"textureLength", offsetof(Beam, textureLength)},
-                           {"textureSpeed", offsetof(Beam, textureSpeed)}}));
+    // The particle triad as its own module reads it (D357).
+    for (const auto& [kDeclared, kType, kSize, kFields] :
+         {std::tuple{
+              !loaded.emitters.empty(), particles::kEmitterType, sizeof(ParticleEmitter), particles::emitterFields()},
+          std::tuple{!loaded.trails.empty(), particles::kTrailType, sizeof(Trail), particles::trailFields()},
+          std::tuple{!loaded.beams.empty(), particles::kBeamType, sizeof(Beam), particles::beamFields()}}) {
+        if (kDeclared && !world_kest::laidOutAs(program, kType, kSize, kFields)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          RenderSceneError::BadComponents,
+                          "the program lays out a rawframe.model type otherwise than this engine reads it");
+        }
+    }
     for (const physics3d::BodyMesh& kMesh : game.meshes()) {
         loaded.meshes.push_back(SceneMesh{.id = kMesh.id, .mesh = kMesh.mesh});
     }

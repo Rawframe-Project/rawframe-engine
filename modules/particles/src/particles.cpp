@@ -3,7 +3,9 @@
 #include "rawframe/base/color.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <numbers>
 #include <set>
 #include <vector>
@@ -202,6 +204,57 @@ void Particles::spawn(Frame& frame,
         remembered.drawn = frames_;
         frame.emitters.push_back(made);
     }
+}
+
+std::span<const Field> emitterFields() noexcept {
+    static constexpr std::array<Field, 18> kFields = {{{"material", offsetof(ParticleEmitter, material)},
+                                                       {"rate", offsetof(ParticleEmitter, rate)},
+                                                       {"lifetime", offsetof(ParticleEmitter, lifetime)},
+                                                       {"speed", offsetof(ParticleEmitter, speed)},
+                                                       {"spread", offsetof(ParticleEmitter, spread)},
+                                                       {"radius", offsetof(ParticleEmitter, radius)},
+                                                       {"sizeStart", offsetof(ParticleEmitter, sizeStart)},
+                                                       {"sizeEnd", offsetof(ParticleEmitter, sizeEnd)},
+                                                       {"colorStart", offsetof(ParticleEmitter, colorStart)},
+                                                       {"colorEnd", offsetof(ParticleEmitter, colorEnd)},
+                                                       {"accelerationX", offsetof(ParticleEmitter, accelerationX)},
+                                                       {"accelerationY", offsetof(ParticleEmitter, accelerationY)},
+                                                       {"accelerationZ", offsetof(ParticleEmitter, accelerationZ)},
+                                                       {"drag", offsetof(ParticleEmitter, drag)},
+                                                       {"variation", offsetof(ParticleEmitter, variation)},
+                                                       {"bursts", offsetof(ParticleEmitter, bursts)},
+                                                       {"burstCount", offsetof(ParticleEmitter, burstCount)},
+                                                       {"seed", offsetof(ParticleEmitter, seed)}}};
+    return kFields;
+}
+
+std::span<const Field> trailFields() noexcept {
+    static constexpr std::array<Field, 7> kFields = {{{"material", offsetof(Trail, material)},
+                                                      {"lifetime", offsetof(Trail, lifetime)},
+                                                      {"spacing", offsetof(Trail, spacing)},
+                                                      {"widthStart", offsetof(Trail, widthStart)},
+                                                      {"widthEnd", offsetof(Trail, widthEnd)},
+                                                      {"colorStart", offsetof(Trail, colorStart)},
+                                                      {"colorEnd", offsetof(Trail, colorEnd)}}};
+    return kFields;
+}
+
+std::span<const Field> beamFields() noexcept {
+    static constexpr std::array<Field, 14> kFields = {{{"material", offsetof(Beam, material)},
+                                                       {"toX", offsetof(Beam, toX)},
+                                                       {"toY", offsetof(Beam, toY)},
+                                                       {"toZ", offsetof(Beam, toZ)},
+                                                       {"bendX", offsetof(Beam, bendX)},
+                                                       {"bendY", offsetof(Beam, bendY)},
+                                                       {"bendZ", offsetof(Beam, bendZ)},
+                                                       {"segments", offsetof(Beam, segments)},
+                                                       {"widthStart", offsetof(Beam, widthStart)},
+                                                       {"widthEnd", offsetof(Beam, widthEnd)},
+                                                       {"colorStart", offsetof(Beam, colorStart)},
+                                                       {"colorEnd", offsetof(Beam, colorEnd)},
+                                                       {"textureLength", offsetof(Beam, textureLength)},
+                                                       {"textureSpeed", offsetof(Beam, textureSpeed)}}};
+    return kFields;
 }
 
 void Particles::update(Frame& frame,

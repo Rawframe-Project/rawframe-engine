@@ -9,7 +9,6 @@
 #include "generated/meter_container.h"
 #include "generated/motion_container.h"
 #include "generated/occlusion_container.h"
-#include "generated/particle_container.h"
 #include "generated/post_container.h"
 #include "generated/probe_container.h"
 #include "generated/reflect_container.h"
@@ -17,7 +16,6 @@
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
 #include "generated/sky_container.h"
-#include "generated/spawn_container.h"
 #include "generated/temporal_container.h"
 #include "generated/tonemap_container.h"
 #include "rawframe/render_scene_gpu/errors.h"
@@ -74,8 +72,6 @@ Pipelines::~Pipelines() {
                          &postLinear,
                          &postDisplay,
                          &grade,
-                         &particles,
-                         &ribbons,
                          &bloomFirst,
                          &bloomDown,
                          &bloomUp,
@@ -93,7 +89,7 @@ Pipelines::~Pipelines() {
                          &multisampled.resolveDepth}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
-    for (Asked* asked : {&histogram, &adapt, &clearParticles, &spawn}) {
+    for (Asked* asked : {&histogram, &adapt}) {
         static_cast<void>(mrhiDestroyComputePipeline(native, asked->compute));
     }
     static_cast<void>(mrhiDestroySampler(native, shadowSampler));
@@ -117,9 +113,7 @@ Pipelines::~Pipelines() {
                                        decalShader,
                                        probeShader,
                                        resolveShader,
-                                       postShader,
-                                       spawnShader,
-                                       particleShader}) {
+                                       postShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -670,47 +664,6 @@ result::Status Pipelines::askFor(Effect effect) {
         graded.colorTargets[0].format = kSceneFormat;
         return ask(graded, grade);
     }
-    case Effect::Particles: {
-        // A ring cleared and the births (D353).
-        RAWFRAME_TRY(makeShader(kSpawnContainer, spawnShader));
-        for (const auto& [kEntry, kAsked] :
-             {std::pair{std::string_view{"clear"}, &clearParticles}, std::pair{std::string_view{"spawn"}, &spawn}}) {
-            mrhiComputePipelineDef def = mrhiDefaultComputePipelineDef();
-            def.shader = spawnShader;
-            def.entry = kEntry.data();
-            def.entryLength = kEntry.size();
-            RAWFRAME_TRY(ask(def, *kAsked));
-        }
-        // The particles over the models' light, premultiplied: what they
-        // cover hidden by their opacity, their light and emission added.
-        RAWFRAME_TRY(makeShader(kParticleContainer, particleShader));
-        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
-        constexpr std::string_view kLabel = "rawframe.scene.particles";
-        def.label = kLabel.data();
-        def.labelLength = kLabel.size();
-        def.shader = particleShader;
-        def.vertexEntry = "vs";
-        def.vertexEntryLength = 2;
-        def.fragmentEntry = "fs";
-        def.fragmentEntryLength = 2;
-        def.cullMode = mrhi_cullNone;
-        def.colorTargetCount = 1;
-        def.colorTargets[0].format = kSceneFormat;
-        def.colorTargets[0].blend = true;
-        def.colorTargets[0].color = {
-            .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendOneMinusSrcAlpha, .operation = mrhi_blendAdd};
-        def.colorTargets[0].alpha = {
-            .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendOneMinusSrcAlpha, .operation = mrhi_blendAdd};
-        RAWFRAME_TRY(ask(def, particles));
-        // The trails and beams (D354): their own vertices, the particles'
-        // fragments.
-        constexpr std::string_view kRibbonLabel = "rawframe.scene.ribbons";
-        def.label = kRibbonLabel.data();
-        def.labelLength = kRibbonLabel.size();
-        def.vertexEntry = "ribbon";
-        def.vertexEntryLength = 6;
-        return ask(def, ribbons);
-    }
     case Effect::Fxaa: {
         RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
         // FXAA: the tonemapped picture into the frame's (D296).
@@ -779,8 +732,6 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
         return answered({&fxaa});
     case Effect::PostProcess:
         return answered({&postLinear, &postDisplay, &grade});
-    case Effect::Particles:
-        return answered({&clearParticles, &spawn, &particles, &ribbons});
     case Effect::ContactShadows:
         return answered({&contactShade});
     case Effect::Decals:

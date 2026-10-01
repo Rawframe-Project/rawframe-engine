@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <span>
 #include <string_view>
 #include <utility>
 
@@ -41,6 +42,10 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
 /// exactly `fields`, by name and offset, in order. An engine module that
 /// reads a component of a type of the engine's Kest library (a sound's
 /// emitter, a sprite) checks it so first.
+[[nodiscard]] bool laidOutAs(const kest::Program& program,
+                             std::string_view type,
+                             std::size_t size,
+                             std::span<const std::pair<std::string_view, std::size_t>> fields);
 [[nodiscard]] bool laidOutAs(const kest::Program& program,
                              std::string_view type,
                              std::size_t size,

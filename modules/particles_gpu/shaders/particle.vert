@@ -7,51 +7,13 @@
 
 #version 450
 
-layout(set = 0, binding = 0, std140) uniform Frame
+// The view (D353, D357): its projection of the World relative to the eye;
+// the eye's right and up in the World's axes, and the particle clock now
+// and its period; and the near plane, and one where the view is flat (a
+// canvas's), facing straight down its forward.
+layout(set = 0, binding = 0, std140) uniform View
 {
     mat4 viewProjection;
-    vec4 toSun;
-    vec4 sun;
-    vec4 sky;
-    vec4 exposure;
-    // The eye's forward; each cascade's far end and texel; the cascades,
-    // the shadows' distance, a cascade's side in texels (D289), and one
-    // where the shadows are filtered soft (D330).
-    vec4 forward;
-    vec4 cascadeFar;
-    vec4 cascadeTexel;
-    vec4 shadow;
-    mat4 cascades[4];
-    // The clusters' tiles across and down, their slices, and the lights;
-    // their near end, and the slices over the log of their far over near
-    // (D290).
-    vec4 clusterGrid;
-    vec4 clusterDepth;
-    // The view and projection without the jitter, and the frame before's
-    // taking this frame's places (D291).
-    mat4 unjittered;
-    mat4 previous;
-    // The ground's luminance below the horizon (D304).
-    vec4 ground;
-    // The sky's picture (D322): its levels, nought for none; and the
-    // irradiance over π it gives, per unit of the sky's light, as nine
-    // spherical harmonics' coefficients.
-    vec4 environment;
-    vec4 irradiance[9];
-    // Whether the view's ambient occlusion is on (D327), its screen-space
-    // reflections (D331), its contact shadows (D338), and whether it has
-    // decals (D339).
-    vec4 occlusion;
-    vec4 reflections;
-    vec4 contact;
-    vec4 decals;
-}
-frame;
-
-// The eye's right and up in the World's axes, and the particle clock now;
-// and the near plane (D353).
-layout(set = 0, binding = 1, std140) uniform View
-{
     vec4 right;
     vec4 up;
     vec4 lens;
@@ -59,7 +21,7 @@ layout(set = 0, binding = 1, std140) uniform View
 view;
 
 // The emitter, as the spawn reads it (D352, D353).
-layout(set = 0, binding = 2, std140) uniform Emitter
+layout(set = 0, binding = 1, std140) uniform Emitter
 {
     vec4 anchor;
     vec4 origin;
@@ -81,7 +43,7 @@ struct Particle
     vec4 extra;
 };
 
-layout(set = 0, binding = 3, std430) readonly buffer Pool
+layout(set = 0, binding = 2, std430) readonly buffer Pool
 {
     Particle particles[];
 }
@@ -91,9 +53,7 @@ layout(location = 0) out vec2 outUv;
 layout(location = 1) out vec4 outColor;
 // How deep the particle fades into what is behind it: half its size.
 layout(location = 2) out float outSoft;
-// Its material's place among the frame's materials.
-layout(location = 3) flat out uint outMaterial;
-layout(location = 4) out vec2 outShape;
+layout(location = 3) out vec2 outShape;
 
 const float kPeriod = 4096.0;
 
@@ -106,7 +66,6 @@ void main()
         outUv = vec2(0.0);
         outColor = vec4(0.0);
         outSoft = 1.0;
-        outMaterial = 0u;
         outShape = vec2(0.0);
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         return;
@@ -130,7 +89,6 @@ void main()
     outUv = vec2(kAt.x, 1.0 - kAt.y);
     outColor = mix(emitter.colorStart, emitter.colorEnd, kThrough);
     outSoft = max(0.5 * kSize, 1e-4);
-    outMaterial = emitter.more.z;
     outShape = kAt * 2.0 - 1.0;
-    gl_Position = frame.viewProjection * vec4(kPlaced, 1.0);
+    gl_Position = view.viewProjection * vec4(kPlaced, 1.0);
 }

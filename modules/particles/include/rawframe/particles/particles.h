@@ -17,6 +17,7 @@
 #include <functional>
 #include <map>
 #include <span>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -74,6 +75,17 @@ struct Beam {
     float textureLength = 0;
     float textureSpeed = 0;
 };
+
+/// The triad's types in the engine's Kest library, and their fields as
+/// C++ reads them, by name and offset, in order: what a host checks a
+/// game's program lays them out as before it reads one.
+inline constexpr std::string_view kEmitterType = "rawframe.model.ParticleEmitter";
+inline constexpr std::string_view kTrailType = "rawframe.model.Trail";
+inline constexpr std::string_view kBeamType = "rawframe.model.Beam";
+using Field = std::pair<std::string_view, std::size_t>;
+[[nodiscard]] std::span<const Field> emitterFields() noexcept;
+[[nodiscard]] std::span<const Field> trailFields() noexcept;
+[[nodiscard]] std::span<const Field> beamFields() noexcept;
 
 /// An emitter, trail, or beam as an extract stage copies it out of the
 /// World: its entity and which of the game's components of its kind it

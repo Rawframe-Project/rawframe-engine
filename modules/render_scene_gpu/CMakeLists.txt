@@ -6,6 +6,6 @@ if(NOT TARGET rawframe_render)
     return()
 endif()
 
-rawframe_module(NAME render_scene_gpu SOURCES src/blocks.cpp src/bloom.cpp src/capture.cpp src/casting.cpp src/contact.cpp src/decals.cpp src/probes.cpp src/environment.cpp src/focus.cpp src/meshes.cpp src/metering.cpp src/models.cpp src/motion.cpp src/occlusion.cpp src/participant.cpp src/particles.cpp src/picture.cpp src/post.cpp src/pipelines.cpp src/reflection.cpp src/ribbons.cpp src/renderer.cpp src/runs.cpp src/tables.cpp src/temporal.cpp DEPS render render_scene particles material texture mesh composition diagnostics result base)
+rawframe_module(NAME render_scene_gpu SOURCES src/blocks.cpp src/bloom.cpp src/capture.cpp src/casting.cpp src/contact.cpp src/decals.cpp src/probes.cpp src/environment.cpp src/focus.cpp src/meshes.cpp src/metering.cpp src/models.cpp src/motion.cpp src/occlusion.cpp src/participant.cpp src/particles.cpp src/picture.cpp src/post.cpp src/pipelines.cpp src/reflection.cpp src/renderer.cpp src/runs.cpp src/tables.cpp src/temporal.cpp DEPS render render_scene particles_gpu particles material texture mesh composition diagnostics result base)
 
 rawframe_module_tests(NAME render_scene_gpu SOURCES tests/bloom_test.cpp tests/capture_test.cpp tests/contact_test.cpp tests/decal_test.cpp tests/environment_test.cpp tests/focus_test.cpp tests/grading_test.cpp tests/metering_test.cpp tests/motion_test.cpp tests/multisample_test.cpp tests/occlusion_test.cpp tests/particle_test.cpp tests/post_process_test.cpp tests/reflection_test.cpp tests/renderer_test.cpp tests/shadow_test.cpp)

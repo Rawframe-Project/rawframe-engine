@@ -112,6 +112,13 @@ bool laidOutAs(const kest::Program& program,
                std::string_view type,
                std::size_t size,
                std::initializer_list<std::pair<std::string_view, std::size_t>> fields) {
+    return laidOutAs(program, type, size, std::span{fields.begin(), fields.size()});
+}
+
+bool laidOutAs(const kest::Program& program,
+               std::string_view type,
+               std::size_t size,
+               std::span<const std::pair<std::string_view, std::size_t>> fields) {
     const auto kLayout = program.layout(type);
     if (!kLayout.has_value() || kLayout->size != size || kLayout->fields.size() != fields.size()) {
         return false;
