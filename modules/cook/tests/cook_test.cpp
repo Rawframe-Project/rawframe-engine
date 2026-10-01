@@ -407,8 +407,9 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     fs::copy(fs::path{RAWFRAME_SAMPLE_GAMES} / "runners", kGame, fs::copy_options::recursive);
     const std::string kSourcesId = "f9f0181057571ecd398d86d2c34a641f";
     writeText(kGame / "runners.game.rfmeta", sidecar("000000000000000000000000000000a5", "", "rawframe.game"));
-    static const std::array<Importer, 7> kImporters = {animationImporter(),
+    static const std::array<Importer, 8> kImporters = {animationImporter(),
                                                        audioImporter(),
+                                                       canvasImporter(),
                                                        gameImporter(),
                                                        kestImporter(),
                                                        sceneImporter(),
@@ -421,7 +422,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
         return report.has_value() ? std::move(*report) : CookReport{};
     };
     const CookReport kFirst = kCook();
-    RAWFRAME_EXPECT(kFirst.cooked == 18 && kFirst.failures.empty());
+    RAWFRAME_EXPECT(kFirst.cooked == 19 && kFirst.failures.empty());
     const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
         const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
         if (!kManifest.has_value()) {

@@ -62,7 +62,7 @@ grep -o '"code":"recording_summary".*' "$work/log.ndjson"
 # The player's client drew the level's tiles and the runners over them: two
 # draws, every texture one the game declares (D254), both read from the
 # Build and decoded (D255).
-grep -q '"code":"canvas_summary".*"spritesDrawn":[1-9][0-9]*,.*"unknownTextures":0,"overLimit":0,"mostDraws":2,' \
+grep -q '"code":"canvas_summary".*"spritesDrawn":[1-9][0-9]*,.*"unknownTextures":0,"unknownMaterials":0,"overLimit":0,"mostDraws":2,' \
     "$work/log.ndjson"
 grep -q '"code":"canvas_summary".*"texturesReady":2,"texturesFailed":0,' "$work/log.ndjson"
 # Its runners ran through their sheets' frames (D258).

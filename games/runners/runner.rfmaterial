@@ -1,0 +1,21 @@
+{
+  "formatVersion": 1,
+  "kind": "canvas",
+  "interface": {},
+  "graph": {
+    "2f00000000000001": {
+      "type": "rawframe/canvas@1",
+      "params": {},
+      "inputs": {
+        "emission": [
+          0.04,
+          0.03,
+          0.01
+        ]
+      }
+    }
+  },
+  "states": {
+    "shading": "unlit"
+  }
+}

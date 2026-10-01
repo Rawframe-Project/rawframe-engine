@@ -105,3 +105,6 @@ presentation runners.wince on player
 present runners.wince wince write runners.wince
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
+# The runners' look lit a little warm from within: a canvas material
+# (D356).
+material ea61c563796c6e4b runner.rfmaterial

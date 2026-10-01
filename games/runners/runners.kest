@@ -24,6 +24,8 @@ const HURT: u64 = 0x81012dde2ad3952f
 // What a runner looks like (runners.game's `texture` line): a sheet of six
 // cells in a row, standing, four strides, and in the air.
 const RUNNER_LOOK: u64 = 0xeddbc014cab63eb2
+// The runners' look's material (D356).
+const RUNNER_GLOW: u64 = 0xea61c563796c6e4b
 const CELL: f32 = 0.16666667
 
 // The runner's animator (runners.game's `animator` line): where the runner
@@ -91,7 +93,8 @@ fn dress(count: i32, sticks: [controls.Stick], looks: [canvas.Sprite], animators
     let i = 0
     while i < count {
         if looks[i].texture == u64(0) {
-            looks[i] = canvas.Sprite(RUNNER_LOOK, 0.0, 0.0, CELL, 1.0, 0.6, 1.4, 0.5, 0.5, canvas.WHITE, 1, u32(0), u32(6))
+            looks[i] = canvas.Sprite(RUNNER_LOOK, 0.0, 0.0, CELL, 1.0, 0.6, 1.4, 0.5, 0.5, canvas.WHITE, 1, u32(0), u32(6),
+                                     RUNNER_GLOW)
             animators[i].graph = RUNNER_ANIMATOR
         }
         if sticks[i].run < -0.1 {
