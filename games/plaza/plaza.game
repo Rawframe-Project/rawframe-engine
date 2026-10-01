@@ -144,7 +144,9 @@ replicate plaza.stroller plaza.hall plaza.spring plaza.monitor rawframe.physics3
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
 input plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
-# sample.kest; bots press the same keys and buttons.
+# sample.kest, from keys, a gamepad, or a touch screen (the left half's
+# stick to move, the right half to jump; D387); bots press the same
+# controls.
 actions plaza.actions
 sample sample.kest sample
 interest rawframe.physics3d.pose x z within 30
