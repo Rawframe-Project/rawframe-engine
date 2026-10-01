@@ -322,6 +322,26 @@ fn lantern(count: i32, strollers: [Stroller], lanterns: [model.PointLight]) {
     }
 }
 
+// A spring in the plaza (D353): how fast its jet leaves, meters a second.
+struct Spring {
+    speed: f32
+}
+
+// What a client sees of a spring (D353): a jet of three hundred drops a
+// second, a pale blue white fading out as they fall, leaving within 0.12
+// radians of straight up from within a tenth of a meter and falling back
+// under gravity, slowed a little by the air, each living a second and a
+// half, give or take a quarter.
+fn fountain(count: i32, springs: [Spring], fountains: [model.ParticleEmitter]) {
+    let i = 0
+    while i < count {
+        fountains[i] = model.ParticleEmitter(u64(0), 300.0, 1.5, springs[i].speed, 0.12, 0.1, 0.15, 0.08,
+                                             0xD8E8FFFF, 0xD8E8FF00, 0.0, -9.8, 0.0, 0.2, 0.25, u32(0), u32(0),
+                                             u32(0))
+        i = i + 1
+    }
+}
+
 // Where the plaza's reflection probe's box reaches from its middle, in
 // meters (D325).
 struct Hall {

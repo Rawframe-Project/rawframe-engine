@@ -48,6 +48,8 @@ component 0d4f7a2e-58c1-4b93-a6e0-3c9b2d7f1e84 plaza.sky rawframe.model.Sky
 component 9c6fbc0e-7e12-4a6e-814f-b893a583b4d9 plaza.hall Hall
 component a05f1e72-8622-4587-a629-f9a65dc4431a plaza.probe rawframe.model.ReflectionProbe
 component 19968421-e479-4d0d-84b5-3f15409045fa plaza.warmth rawframe.model.PostProcess
+component 8e5894e9-5540-470d-9ad5-9de0e9c44c1a plaza.spring Spring
+component 23c49c96-4115-4e9b-93bf-ad66da086d57 plaza.fountain rawframe.model.ParticleEmitter
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -101,6 +103,10 @@ spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-21.4
 # terrace, its picture taken three meters above the middle.
 spawn 1 plaza.hall halfX=40 halfY=7.5 halfZ=40 rawframe.physics3d.pose y=3 qw=1
 
+# A spring eight meters before the plaza's middle, its jet leaving at
+# seven meters a second (D353).
+spawn 1 plaza.spring speed=7 rawframe.physics3d.pose x=0 y=0.5 z=-8 qw=1
+
 # Eight strollers about the plaza, each starting its round at another time.
 spawn 1 plaza.stroller left=240 rawframe.physics3d.pose x=-12 y=1.4 z=-4 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=210 rawframe.physics3d.pose x=-6 y=1.4 z=12 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
@@ -111,7 +117,7 @@ spawn 1 plaza.stroller left=90 rawframe.physics3d.pose x=18 y=1.4 z=-8 qw=1 rawf
 spawn 1 plaza.stroller left=60 rawframe.physics3d.pose x=0 y=1.4 z=18 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 
-replicate plaza.stroller plaza.hall rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
+replicate plaza.stroller plaza.hall plaza.spring rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
 input plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
@@ -128,9 +134,9 @@ predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.veloc
 # walker's camera, and the strollers as figures where their poses stand
 # (D288), each with a lantern (D290), the view's exposure metered (D293),
 # under the sky's picture (D322), reflecting the plaza's probe (D325),
-# darkened where things meet (D327), warmed (D350); no server carries a
-# look, a figure, a lantern, a view, a meter, an occlusion, a sky, a probe,
-# or a warmth.
+# darkened where things meet (D327), warmed (D350), and the spring's
+# fountain (D353); no server carries a look, a figure, a lantern, a view,
+# a meter, an occlusion, a sky, a probe, a warmth, or a fountain.
 presentation plaza.look on rawframe.physics3d.body
 present plaza.dress dress read rawframe.physics3d.body write plaza.look
 present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
@@ -150,3 +156,5 @@ presentation plaza.probe on plaza.hall
 present plaza.probe probe read plaza.hall write plaza.probe
 presentation plaza.warmth on player
 present plaza.warm warm read plaza.stick write plaza.warmth
+presentation plaza.fountain on plaza.spring
+present plaza.fountain fountain read plaza.spring write plaza.fountain
