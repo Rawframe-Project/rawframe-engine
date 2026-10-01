@@ -16,6 +16,7 @@ apply to vendored files; the code is upstream's, not ours.
 | Maul UI, unreleased main at `efc67a3` (its core: node tree, flex layout, style, draw-command list; its text component on, over FreeType, HarfBuzz, and Maul Unicode below, D383) | `Rawframe-Project/maul-ui` | `efc67a3628b098d5b18850dd5a5b554e04882348` | MIT | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE`, `THIRD_PARTY.md` |
 | FreeType 2.14.3, Maul UI's text component's (D383) | `freetype/freetype` release archive, SHA-256 `36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f` | 2.14.3 | FreeType License (FTL; dual with GPLv2, the FTL is the one taken) | `include/`, `src/` of the modules Maul UI builds (`base`, `cff`, `psaux`, `pshinter`, `psnames`, `sfnt`, `smooth`, `truetype`), `LICENSE.TXT`, `docs/FTL.TXT` |
 | HarfBuzz 14.5.1, Maul UI's text component's (D383) | `harfbuzz/harfbuzz` release archive, SHA-256 `7e2fa4e8c7c98e8d8140671f5772542afaaa6acccfbd746506886b6d85f7f8d6` | 14.5.1 | MIT ("Old MIT") | `src/` without its build files, scripts, and generator sources, `COPYING` |
+| OpenType Sanitizer 9.3.0, the cook's font sanitizer (ADR-0078, D385); import tooling only | `khaledhosny/ots` release archive, SHA-256 `23814f8e90ee77379f54e86a012c09bba2d133940e5257546b29cf087a73beec` | 9.3.0 | BSD-3-Clause | `include/`, `src/` without Graphite's tables, `LICENSE`, `README.md`; ours: `CMakeLists.txt`, `rawframe/` (its configuration, and refusing stand-ins for zlib and the WOFF 2.0 decoder) |
 | miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 (stb_vorbis v1.22: public domain or MIT) | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |
 | MsQuic 2.6.1 | `microsoft/msquic` | `a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83` | MIT | build files, `src/` without tests, tools, or Windows PGO data, notices |
 | XDP for Windows, MsQuic's submodule | `microsoft/xdp-for-windows` | `d372b52577a724e04fa4c06acb90bbfa4719fc25`, the revision MsQuic's pin names | MIT | `published/external` (headers MsQuic's Windows datapath includes), `LICENSE`, at `msquic/submodules/xdp-for-windows` |
@@ -32,6 +33,10 @@ web build, its libcrypto alone for wasm32-wasi (tools/build_openssl_wasm.sh,
 with cmake/openssl_wasi_shim.h forced in for the chmod wasi-libc lacks). Moving
 its pin moves both: the revision in third_party/quic.cmake and
 third_party/openssl_wasm.cmake.
+
+OTS is vendored by tools/update_ots.sh from its release archive, checked by
+SHA-256; WOFF and WOFF 2.0 are refused before it, and the stand-ins make its
+paths for them fail too.
 
 FreeType and HarfBuzz are vendored by tools/update_text_deps.sh from their
 release archives, checked by the SHA-256 Maul UI's
