@@ -173,6 +173,7 @@ struct Shared {
     std::size_t inputSize = 0;
     input::Feed* feed = nullptr;
     std::optional<input::PairingPolicy> pairing;
+    const view::PlayerViews* views = nullptr;
     /// Each effect kind's haptic output and how it is felt, by kind.
     std::vector<std::optional<std::pair<std::size_t, input::Haptic>>> felt;
 };
@@ -205,12 +206,13 @@ struct Routing {
 /// player, which pair themselves as they connect.
 class Source final : public world_replication::InputSource {
 public:
-    /// A bot's source with a seed; a local player's without, its devices
-    /// those `routing` gives it in `feed`.
+    /// A bot's source with a seed, which sees no view; local player
+    /// `player`'s without, its devices those `routing` gives it in `feed`.
     result::Status build(const Shared& shared,
                          std::optional<std::uint64_t> seed,
                          std::shared_ptr<Routing> routing = nullptr,
-                         input::Feed* feed = nullptr) {
+                         input::Feed* feed = nullptr,
+                         std::size_t player = 0) {
         RAWFRAME_TRY_ASSIGN(mapper_, input::Mapper::create(shared.actions, {.players = 1}));
         if (seed.has_value()) {
             RAWFRAME_TRY(mapper_->pair(kKeyboard, input::DeviceClass::Keyboard, {}));
@@ -230,6 +232,8 @@ public:
         kest::DoorTable table;
         RAWFRAME_TRY(kest::addStandardMath(table));
         RAWFRAME_TRY(addInputDoors(table, &doors_));
+        view_ = ViewDoorContext{.views = seed.has_value() ? nullptr : shared.views, .player = player};
+        RAWFRAME_TRY(addViewDoors(table, &view_));
         RAWFRAME_TRY_ASSIGN(machine_, kest::Machine::start(shared.program, table, kest::Trust::Trusted, shared.limits));
         auto entry = machine_->entry(shared.entry);
         if (!entry.has_value()) {
@@ -276,6 +280,7 @@ private:
     std::shared_ptr<Routing> routing_;
     input::Feed* feed_ = nullptr;
     InputDoorContext doors_;
+    ViewDoorContext view_;
     std::unique_ptr<kest::Machine> machine_;
     kest::Entry entry_;
     std::vector<kest::Value> frame_;
@@ -319,7 +324,7 @@ public:
             routing_->players.push_back(feed.get());
         }
         auto source = std::make_unique<Source>();
-        RAWFRAME_TRY(source->build(shared_, std::nullopt, routing_, routing_->feeds[player].get()));
+        RAWFRAME_TRY(source->build(shared_, std::nullopt, routing_, routing_->feeds[player].get(), player));
         if (player == 0) {
             player_ = source->mapper();
         }
@@ -450,6 +455,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.inputSize = settings.inputSize;
     shared.feed = settings.feed;
     shared.pairing = settings.pairing;
+    shared.views = settings.views;
     return std::unique_ptr<InputSources>{new Sources{std::move(shared)}};
 }
 

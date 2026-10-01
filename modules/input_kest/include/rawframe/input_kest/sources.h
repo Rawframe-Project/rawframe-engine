@@ -10,6 +10,7 @@
 #include "rawframe/kest/machine.h"
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
+#include "rawframe/view/players.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/input_source.h"
 
@@ -32,6 +33,22 @@ struct InputDoorContext {
 /// not have. They read and change nothing else, so each is safe for
 /// untrusted code. `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* context);
+
+/// What the `View.*` doors read: the local players' views, and whose.
+struct ViewDoorContext {
+    const view::PlayerViews* views = nullptr;
+    std::size_t player = 0;
+};
+
+/// Adds the doors `rawframe.view` asks for (ADR-0052, D367):
+/// `View.scenePlace` and `View.canvasPlace`, where the player's view is in
+/// its window; `View.pointToRay` and `View.worldToPoint` through its scene
+/// camera; `View.pointToWorld2D` and `View.world2DToPoint` through its
+/// canvas camera. Each answers a failure number, never a NaN: no view
+/// (none lent, or none of the kind told), or the view's own closed set.
+/// They read and change nothing else, so each is safe for untrusted code.
+/// `context` outlives every machine started with the table.
+[[nodiscard]] result::Status addViewDoors(kest::DoorTable& doors, const ViewDoorContext* context);
 
 /// The devices of the process's own player, lent by a client host: what
 /// its window reported between two ticks.
@@ -72,6 +89,9 @@ struct SourceSettings {
     /// How they are paired to the local players as they connect (D363):
     /// merged for one, keyboard first for more, unless named.
     std::optional<input::PairingPolicy> pairing;
+    /// The local players' views (D367), or null where the host lends
+    /// none; outlives the sources.
+    const view::PlayerViews* views = nullptr;
 };
 
 /// The input sources of a game, and its player's haptics.

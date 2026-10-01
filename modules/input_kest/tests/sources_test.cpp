@@ -1,7 +1,8 @@
 // Bot input made as a player's is: a hand on the controls the sample game
 // binds, its action set, and its Kest sample function, deterministic by
 // seed; games without controls, or whose sample does not fit, refused; the
-// player's effects felt on its gamepads (D251).
+// player's effects felt on its gamepads (D251); the player's view read by
+// its sample through `rawframe.view` (D367).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -11,6 +12,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <set>
 #include <string>
@@ -27,8 +29,11 @@ using Stick = std::array<float, 5>;
 
 /// The sample game `path` names, its directory's files held in memory as a
 /// web client holds them (D166), with `from` replaced by `to` in its
-/// description.
-const world_kest::GameFiles& gameAt(std::string_view path, std::string_view from = {}, std::string_view to = {}) {
+/// description, and `extra` held beside them.
+const world_kest::GameFiles& gameAt(std::string_view path,
+                                    std::string_view from = {},
+                                    std::string_view to = {},
+                                    std::vector<std::pair<std::string, std::string>> extra = {}) {
     static std::vector<std::unique_ptr<world_kest::GameFiles>> read;
     const std::size_t kSlash = path.rfind('/');
     const std::string kDirectory = std::string{RAWFRAME_SAMPLE_GAMES} + std::string{path.substr(0, kSlash + 1)};
@@ -41,6 +46,7 @@ const world_kest::GameFiles& gameAt(std::string_view path, std::string_view from
         }
         held.emplace_back(std::move(name), std::move(text));
     }
+    std::ranges::move(extra, std::back_inserter(held));
     auto files = world_kest::GameFiles::fromHeld(kName, std::move(held));
     RAWFRAME_EXPECT(files.has_value());
     read.push_back(
@@ -220,4 +226,79 @@ RAWFRAME_TEST(AnEffectFeltByAnUndeclaredHapticIsRefused) {
     const auto kSources = makeInputSources(SourceSettings{
         .game = &gameAt("runners/runners.game", "felt thump", "felt rumble"), .inputSize = sizeof(Stick)});
     RAWFRAME_EXPECT(!kSources.has_value() && kSources.error().code() == code(InputKestError::UnknownHaptic));
+}
+
+namespace {
+
+/// A sample that asks the player's view everything (D367) and writes the
+/// answers into runners' stick: the canvas view's left (a thousand per
+/// failure), the scene ray's failure, the World point under view point
+/// (320, 180), and that point shown back (a thousand per failure).
+constexpr std::string_view kPointed = R"(module pointed
+
+import controls
+import rawframe.view
+
+fn sample(into: [controls.Stick]) {
+    let place = view.canvasPlace()
+    let world = view.pointToWorld2D(320.0, 180.0)
+    let back = view.world2DToPoint(world.x, world.y)
+    let ray = view.pointToRay(1.0, 1.0)
+    let shown = view.worldToPoint(f64(0.0), f64(0.0), f64(-10.0))
+    into[0].run = place.left + f32(place.failure) * 1000.0
+    into[0].jump = f32(ray.failure) + f32(shown.failure) * 10.0 + f32(view.scenePlace().failure) * 100.0
+    into[0].aimX = f32(world.x)
+    into[0].aimY = f32(world.y)
+    into[0].fire = back.x + f32(back.failure) * 1000.0
+}
+)";
+
+} // namespace
+
+RAWFRAME_TEST(TheSampleReadsThePlayersView) {
+    input::Feed feed;
+    view::PlayerViews views;
+    SourceSettings settings{.game = &gameAt("runners/runners.game",
+                                            "sample sample.kest sample",
+                                            "sample pointed.kest sample",
+                                            {{"pointed.kest", std::string{kPointed}}}),
+                            .inputSize = sizeof(Stick),
+                            .feed = &feed,
+                            .views = &views};
+    auto sources = makeInputSources(settings);
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto player = (*sources)->playerSource(0);
+    auto bot = (*sources)->botSource(3);
+    RAWFRAME_EXPECT(player.has_value() && bot.has_value());
+    if (!player.has_value() || !bot.has_value()) {
+        return;
+    }
+    // Before the presentation tells a view, and for a bot always: no view.
+    const Stick kNone{1000, 111, 0, 0, 1000};
+    RAWFRAME_EXPECT(play(**player, 1)[0] == kNone);
+    // The canvas's view, the window's right half: its place, and view
+    // point (320, 180) a quarter of its height above its middle, which is
+    // ten meters tall; shown back where it was picked. The scene draws
+    // nothing, so its verbs have no view.
+    views.window({.width = 1280, .height = 720});
+    views.tell(0, {.left = 0.5F, .width = 0.5F}, view::Orthographic{.middle = {10, 5}, .height = 10});
+    const Stick kCanvas = play(**player, 1)[0];
+    RAWFRAME_EXPECT(kCanvas[0] == 640 && kCanvas[1] == 111 && std::abs(kCanvas[2] - 10) < 1e-4F &&
+                    std::abs(kCanvas[3] - 7.5F) < 1e-4F && std::abs(kCanvas[4] - 320) < 1e-3F);
+    RAWFRAME_EXPECT(play(**bot, 1)[0] == kNone);
+    // A scene view looking along -Z from the origin: its ray found, the
+    // point ahead shown, and one behind the near plane named so.
+    views.tell(0, {}, view::Perspective{.eye = {0, 0, 0}});
+    RAWFRAME_EXPECT(play(**player, 1)[0][1] == 0);
+    views.tell(0, {}, view::Perspective{.eye = {0, 0, -20}});
+    RAWFRAME_EXPECT(play(**player, 1)[0][1] == 50);
+    // A camera that sees nothing is named, never a NaN.
+    views.tell(0, {}, view::Perspective{.eye = {0, 0, 0}, .fovY = 0});
+    RAWFRAME_EXPECT(play(**player, 1)[0][1] == 44);
+    // A window without size gives a view without size.
+    views.window({});
+    RAWFRAME_EXPECT(play(**player, 1)[0][4] == 2000);
 }

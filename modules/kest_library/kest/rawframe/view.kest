@@ -1,0 +1,100 @@
+module rawframe.view
+
+// The player's view (ADR-0052): where a game's sample program turns a point
+// of the view, such as the mouse's pointer, into a ray into the World or a
+// point on the canvas's plane, and a World point into where it shows. View
+// points are logical pixels from the view's top left, y down (ADR-0046);
+// the pointer is the window's, so the view's `place` says where the view
+// is in the window: the pointer less its left and top is the view's point.
+// The view is the one the player's client last showed, through the
+// player's camera: the scene's perspective view, or the canvas's
+// orthographic one. A bot, and a client before its first frame, has none.
+// Each verb reads and changes nothing else, so each is safe for untrusted
+// code.
+
+// Why a verb has no answer, in its `failure`; nought when it has one.
+// The player has no view of the kind asked.
+const NO_VIEW: u32 = 1
+// The view has no size.
+const NO_VIEW_SIZE: u32 = 2
+// A number given is not finite.
+const NOT_FINITE: u32 = 3
+// The camera sees nothing: no field of view, height, or near plane.
+const SEES_NOTHING: u32 = 4
+// The World point is not past the camera's near plane.
+const BEHIND_NEAR: u32 = 5
+
+// Where the player's view is in the window, logical pixels from the
+// window's top left.
+struct Place {
+    failure: u32
+    left: f32
+    top: f32
+    width: f32
+    height: f32
+}
+
+// A ray into the World: where it starts, on the near plane, and its unit
+// direction.
+struct Ray {
+    failure: u32
+    originX: f64
+    originY: f64
+    originZ: f64
+    directionX: f32
+    directionY: f32
+    directionZ: f32
+}
+
+// A point of the view, and how far ahead of the eye the World point lies
+// (nought for the canvas). A point outside the view is still placed.
+struct Point {
+    failure: u32
+    x: f32
+    y: f32
+    depth: f32
+}
+
+// A point on the canvas's plane, in the World.
+struct Point2D {
+    failure: u32
+    x: f64
+    y: f64
+}
+
+extern fn View.scenePlace() -> Place
+extern fn View.canvasPlace() -> Place
+extern fn View.pointToRay(x: f32, y: f32) -> Ray
+extern fn View.worldToPoint(x: f64, y: f64, z: f64) -> Point
+extern fn View.pointToWorld2D(x: f32, y: f32) -> Point2D
+extern fn View.world2DToPoint(x: f64, y: f64) -> Point
+
+// Where the player's scene view is in the window.
+fn scenePlace() -> Place {
+    return View.scenePlace()
+}
+
+// Where the player's canvas view is in the window.
+fn canvasPlace() -> Place {
+    return View.canvasPlace()
+}
+
+// The ray from the scene's near plane through view point (x, y).
+fn pointToRay(x: f32, y: f32) -> Ray {
+    return View.pointToRay(x, y)
+}
+
+// Where a World point shows in the scene's view, and its depth.
+fn worldToPoint(x: f64, y: f64, z: f64) -> Point {
+    return View.worldToPoint(x, y, z)
+}
+
+// The point on the canvas's plane under view point (x, y).
+fn pointToWorld2D(x: f32, y: f32) -> Point2D {
+    return View.pointToWorld2D(x, y)
+}
+
+// Where a point of the canvas's plane shows in its view.
+fn world2DToPoint(x: f64, y: f64) -> Point {
+    return View.world2DToPoint(x, y)
+}
