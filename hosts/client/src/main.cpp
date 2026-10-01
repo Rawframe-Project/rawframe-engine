@@ -28,12 +28,12 @@
 #include "rawframe/world_localization/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
+#include "rawframe/world_ui/registrar.h"
 
 #if RAWFRAME_CLIENT_DRAWS
 #include "rawframe/render/registrar.h"
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/registrar.h"
-#include "rawframe/world_ui/registrar.h"
 #endif
 
 #include <array>
