@@ -31,6 +31,7 @@ CONTAINERS = (
     ("render_scene_gpu", "contact", (("vert", "vs"), ("frag", "shade"))),
     ("render_scene_gpu", "decal", (("vert", "vs"), ("frag", "fill"))),
     ("render_scene_gpu", "probe", (("vert", "vs"), ("frag", "fill"))),
+    ("render_scene_gpu", "resolve", (("vert", "vs"), ("frag", "depth"))),
     ("render_scene_gpu", "fxaa", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "bloom", (("vert", "vs"), ("first.frag", "first"), ("down.frag", "down"), ("up.frag", "up"))),
     ("render_scene_gpu", "meter", (("histogram.comp", "histogram"), ("adapt.comp", "adapt"))),

@@ -1,0 +1,12 @@
+{
+  "root_block_bytes": 0,
+  "entries": [
+    {"name": "vs", "stage": "vertex"},
+    {"name": "depth", "stage": "fragment"}
+  ],
+  "bindings": [
+    {"table": 0, "slot": 0, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "depth", "view_dimension": "2d", "multisampled": true}
+  ],
+  "constants": []
+}

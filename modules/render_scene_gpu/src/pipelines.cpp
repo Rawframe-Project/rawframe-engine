@@ -11,6 +11,7 @@
 #include "generated/occlusion_container.h"
 #include "generated/probe_container.h"
 #include "generated/reflect_container.h"
+#include "generated/resolve_container.h"
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
 #include "generated/sky_container.h"
@@ -69,7 +70,19 @@ Pipelines::~Pipelines() {
                          &fxaa,
                          &bloomFirst,
                          &bloomDown,
-                         &bloomUp}) {
+                         &bloomUp,
+                         &multisampled.depth,
+                         &multisampled.cutout,
+                         &multisampled.surfaces,
+                         &multisampled.cutSurfaces,
+                         &multisampled.lit,
+                         &multisampled.maskedLit,
+                         &multisampled.glass,
+                         &multisampled.litDecaled,
+                         &multisampled.maskedLitDecaled,
+                         &multisampled.glassDecaled,
+                         &multisampled.sky,
+                         &multisampled.resolveDepth}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -94,7 +107,8 @@ Pipelines::~Pipelines() {
                                        focusShader,
                                        contactShader,
                                        decalShader,
-                                       probeShader}) {
+                                       probeShader,
+                                       resolveShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -349,32 +363,92 @@ result::Status Pipelines::make() {
     // them (D337).
     prepass_ = prepass;
     shading_ = {models, maskedDef, glassDef};
+    cut_ = cutDef;
+    sky_ = behind;
     picture_ = picture;
     return {};
 }
+
+namespace {
+
+/// The prepass also leaving each point's surface (D327, D331), whole and
+/// masked, from the prepass's pipeline.
+std::array<mrhiGraphicsPipelineDef, 2> surfacing(const mrhiGraphicsPipelineDef& prepass) {
+    mrhiGraphicsPipelineDef surfacesDef = prepass;
+    constexpr std::string_view kSurfacesLabel = "rawframe.scene.depth.surfaces";
+    surfacesDef.label = kSurfacesLabel.data();
+    surfacesDef.labelLength = kSurfacesLabel.size();
+    surfacesDef.fragmentEntry = "normal";
+    surfacesDef.fragmentEntryLength = 6;
+    surfacesDef.colorTargetCount = 1;
+    surfacesDef.colorTargets[0].format = kSurfaceFormat;
+    mrhiGraphicsPipelineDef cutSurfacesDef = surfacesDef;
+    constexpr std::string_view kCutSurfacesLabel = "rawframe.scene.depth.surfaces.masked";
+    cutSurfacesDef.label = kCutSurfacesLabel.data();
+    cutSurfacesDef.labelLength = kCutSurfacesLabel.size();
+    cutSurfacesDef.fragmentEntry = "cutNormal";
+    cutSurfacesDef.fragmentEntryLength = 9;
+    return {surfacesDef, cutSurfacesDef};
+}
+
+/// A lit pipeline's twin under the decals (D339).
+mrhiGraphicsPipelineDef decaledOf(mrhiGraphicsPipelineDef def, std::string_view label) {
+    def.label = label.data();
+    def.labelLength = label.size();
+    def.fragmentEntry = "fsDecaled";
+    def.fragmentEntryLength = 9;
+    return def;
+}
+
+} // namespace
 
 result::Status Pipelines::askFor(Effect effect) {
     switch (effect) {
     case Effect::Surfaces: {
         // The prepass also leaving each point's surface, for the ambient
         // occlusion and the reflections (D327, D331): whole, and masked.
-        mrhiGraphicsPipelineDef surfacesDef = prepass_;
-        constexpr std::string_view kSurfacesLabel = "rawframe.scene.depth.surfaces";
-        surfacesDef.label = kSurfacesLabel.data();
-        surfacesDef.labelLength = kSurfacesLabel.size();
-        surfacesDef.fragmentEntry = "normal";
-        surfacesDef.fragmentEntryLength = 6;
-        surfacesDef.colorTargetCount = 1;
-        surfacesDef.colorTargets[0].format = kSurfaceFormat;
-        RAWFRAME_TRY(ask(surfacesDef, surfaces));
-        mrhiGraphicsPipelineDef cutSurfacesDef = surfacesDef;
-        constexpr std::string_view kCutSurfacesLabel = "rawframe.scene.depth.surfaces.masked";
-        cutSurfacesDef.label = kCutSurfacesLabel.data();
-        cutSurfacesDef.labelLength = kCutSurfacesLabel.size();
-        cutSurfacesDef.fragmentEntry = "cutNormal";
-        cutSurfacesDef.fragmentEntryLength = 9;
-        RAWFRAME_TRY(ask(cutSurfacesDef, cutSurfaces));
-        return {};
+        const auto [kSurfacesDef, kCutSurfacesDef] = surfacing(prepass_);
+        RAWFRAME_TRY(ask(kSurfacesDef, surfaces));
+        return ask(kCutSurfacesDef, cutSurfaces);
+    }
+    case Effect::Multisampled: {
+        // The models' passes taking `samples` a pixel (D343): every
+        // pipeline drawing into their targets, the same but for that.
+        const auto [kSurfacesDef, kCutSurfacesDef] = surfacing(prepass_);
+        const std::array<std::pair<mrhiGraphicsPipelineDef, Asked*>, 11> kSampled = {
+            std::pair{prepass_, &multisampled.depth},
+            std::pair{cut_, &multisampled.cutout},
+            std::pair{kSurfacesDef, &multisampled.surfaces},
+            std::pair{kCutSurfacesDef, &multisampled.cutSurfaces},
+            std::pair{shading_[0], &multisampled.lit},
+            std::pair{shading_[1], &multisampled.maskedLit},
+            std::pair{shading_[2], &multisampled.glass},
+            std::pair{decaledOf(shading_[0], "rawframe.scene.lit.decaled"), &multisampled.litDecaled},
+            std::pair{decaledOf(shading_[1], "rawframe.scene.lit.masked.decaled"), &multisampled.maskedLitDecaled},
+            std::pair{decaledOf(shading_[2], "rawframe.scene.glass.decaled"), &multisampled.glassDecaled},
+            std::pair{sky_, &multisampled.sky}};
+        for (const auto& [kDef, kAsked] : kSampled) {
+            mrhiGraphicsPipelineDef sampled = kDef;
+            sampled.sampleCount = samples;
+            RAWFRAME_TRY(ask(sampled, *kAsked));
+        }
+        // The prepass's depth, its first sample, to one sample.
+        RAWFRAME_TRY(makeShader(kResolveContainer, resolveShader));
+        mrhiGraphicsPipelineDef resolve = mrhiDefaultGraphicsPipelineDef();
+        constexpr std::string_view kLabel = "rawframe.scene.depth.resolve";
+        resolve.label = kLabel.data();
+        resolve.labelLength = kLabel.size();
+        resolve.shader = resolveShader;
+        resolve.vertexEntry = "vs";
+        resolve.vertexEntryLength = 2;
+        resolve.fragmentEntry = "depth";
+        resolve.fragmentEntryLength = 5;
+        resolve.cullMode = mrhi_cullNone;
+        resolve.depthStencilFormat = kDepthFormat;
+        resolve.depthWrite = true;
+        resolve.depthCompare = mrhi_compareAlways;
+        resolve.colorTargetCount = 0;
+        return ask(resolve, multisampled.resolveDepth);
     }
     case Effect::Occlusion: {
         RAWFRAME_TRY(makeShader(kOcclusionContainer, occlusionShader));
@@ -543,12 +617,7 @@ result::Status Pipelines::askFor(Effect effect) {
             "rawframe.scene.lit.decaled", "rawframe.scene.lit.masked.decaled", "rawframe.scene.glass.decaled"};
         const std::array<Asked*, 3> kDecaled = {&litDecaled, &maskedLitDecaled, &glassDecaled};
         for (std::size_t at = 0; at < kDecaled.size(); ++at) {
-            mrhiGraphicsPipelineDef decaled = shading_[at];
-            decaled.label = kLabels[at].data();
-            decaled.labelLength = kLabels[at].size();
-            decaled.fragmentEntry = "fsDecaled";
-            decaled.fragmentEntryLength = 9;
-            RAWFRAME_TRY(ask(decaled, *kDecaled[at]));
+            RAWFRAME_TRY(ask(decaledOf(shading_[at], kLabels[at]), *kDecaled[at]));
         }
         return {};
     }
@@ -641,6 +710,21 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
         return answered({&decalFill, &decalNormalFill, &litDecaled, &maskedLitDecaled, &glassDecaled});
     case Effect::Probes:
         return answered({&probeFill});
+    case Effect::Multisampled: {
+        Multisampled& sampled = multisampled;
+        return answered({&sampled.depth,
+                         &sampled.cutout,
+                         &sampled.surfaces,
+                         &sampled.cutSurfaces,
+                         &sampled.lit,
+                         &sampled.maskedLit,
+                         &sampled.glass,
+                         &sampled.litDecaled,
+                         &sampled.maskedLitDecaled,
+                         &sampled.glassDecaled,
+                         &sampled.sky,
+                         &sampled.resolveDepth});
+    }
     }
     return false;
 }

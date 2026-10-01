@@ -46,6 +46,25 @@ struct Asked {
     bool ready = false;
 };
 
+/// The models' passes' pipelines multisampled (D343): the prepass's, whole
+/// and masked, with and without the surfaces; the lit, masked, and
+/// translucent models', plain and under decals; the sky's; and the resolve
+/// of the prepass's depth to one sample.
+struct Multisampled {
+    Asked depth;
+    Asked cutout;
+    Asked surfaces;
+    Asked cutSurfaces;
+    Asked lit;
+    Asked maskedLit;
+    Asked glass;
+    Asked litDecaled;
+    Asked maskedLitDecaled;
+    Asked glassDecaled;
+    Asked sky;
+    Asked resolveDepth;
+};
+
 /// The optional effects whose pipelines are asked for only when a view
 /// first wants them (D337): the prepass's surfaces target, which the
 /// ambient occlusion and the reflections read, and each effect.
@@ -59,9 +78,10 @@ enum class Effect : std::uint8_t {
     Fxaa,
     ContactShadows,
     Decals,
-    Probes
+    Probes,
+    Multisampled
 };
-inline constexpr std::size_t kEffects = 10;
+inline constexpr std::size_t kEffects = 11;
 
 /// The scene's shaders, samplers, and pipelines (D284 to D292): what every
 /// frame draws with asked of the device at once, each effect's when a view
@@ -85,6 +105,7 @@ struct Pipelines {
     mrhiShaderId contactShader{};
     mrhiShaderId decalShader{};
     mrhiShaderId probeShader{};
+    mrhiShaderId resolveShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -150,6 +171,10 @@ struct Pipelines {
     Asked bloomFirst;
     Asked bloomDown;
     Asked bloomUp;
+    /// The multisampled models' passes (D343), and the samples a pixel they
+    /// take: set once, before they are first asked for; nought until then.
+    Multisampled multisampled;
+    std::uint32_t samples = 0;
 
     Pipelines() = default;
     Pipelines(const Pipelines&) = delete;
@@ -182,8 +207,11 @@ private:
     mrhiGraphicsPipelineDef prepass_{};
     mrhiGraphicsPipelineDef picture_{};
     /// The lit, masked, and translucent models' pipelines, which their
-    /// decaled twins are made from.
+    /// decaled twins are made from; the masked prepass's and the sky's,
+    /// which the multisampled ones are made from too.
     std::array<mrhiGraphicsPipelineDef, 3> shading_{};
+    mrhiGraphicsPipelineDef cut_{};
+    mrhiGraphicsPipelineDef sky_{};
 };
 
 /// Where a material's filter and address put its sampler among

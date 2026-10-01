@@ -92,6 +92,8 @@ struct RendererStatistics {
     std::uint64_t decalsDrawn = 0;
     /// Reflection probes drawn, summed over the frames (D340).
     std::uint64_t probesDrawn = 0;
+    /// Frames whose models' passes were multisampled (D343).
+    std::uint64_t framesMultisampled = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the
