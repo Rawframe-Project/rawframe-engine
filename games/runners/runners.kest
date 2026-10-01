@@ -134,7 +134,7 @@ fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
 }
 
 // The player's HUD (D376): a dark panel 240 pixels wide centered 12 above
-// the bottom of its view, a pale target (D378) beside a green meter of the
+// the bottom of its view, casting a soft shadow (D381), a pale target (D378) beside a green meter of the
 // hits its runner landed over a red one of those it took, each a tenth of
 // the meters' width for each hit, starting again at ten.
 fn gauge(count: i32, scores: [Score], huds: [ui.Node], targets: [ui.Node], meters: [ui.Node], landed: [ui.Node],
@@ -153,6 +153,9 @@ fn gauge(count: i32, scores: [Score], huds: [ui.Node], targets: [ui.Node], meter
         huds[i].anchorY = 1.0
         huds[i].fill = u32(0x101820C0)
         huds[i].radius = 6.0
+        huds[i].shadowColor = u32(0x00000080)
+        huds[i].shadowY = 2.0
+        huds[i].shadowBlur = 8.0
         targets[i].widthOffset = 16.0
         targets[i].heightOffset = 16.0
         targets[i].image = HUD_TARGET
