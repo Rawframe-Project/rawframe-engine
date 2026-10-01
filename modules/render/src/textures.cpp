@@ -145,6 +145,11 @@ bool DeviceTextures::choose(std::uint64_t id, const std::shared_ptr<const textur
             def.kind = mrhi_textureCube;
             def.depthOrLayers = 6;
         }
+        // A volume's slices its depth (D344).
+        if (image->depth > 1) {
+            def.kind = mrhi_texture3d;
+            def.depthOrLayers = image->depth;
+        }
         def.usage = mrhi_textureSampled | mrhi_textureCopyDestination;
         mrhiTextureId made{};
         if (mrhiCreateTexture(state.native, &def, &made) != mrhi_success) {
@@ -206,6 +211,11 @@ bool DeviceTextures::cube(std::uint64_t id) const noexcept {
     return kFound != state_->chosen.end() && kFound->second->source->faces == 6;
 }
 
+bool DeviceTextures::volume(std::uint64_t id) const noexcept {
+    const auto kFound = state_->chosen.find(id);
+    return kFound != state_->chosen.end() && kFound->second->source->depth > 1;
+}
+
 bool DeviceTextures::compressed(std::uint64_t id) const noexcept {
     const auto kFound = state_->chosen.find(id);
     return kFound != state_->chosen.end() && blocks(kFound->second->source->format);
@@ -225,10 +235,11 @@ result::Status DeviceTextures::write(std::uint64_t pass) {
             const std::uint32_t kRows = kBlocks ? (level.height + 3) / 4 : level.height;
             const std::size_t kFaceBytes = level.bytes.size() / texture.source->faces;
             const mrhiTexelLayout kLayout{.offset = 0, .bytesPerRow = kRowBytes, .rowsPerImage = kRows};
-            // A compressed level's copy covers whole blocks.
+            // A compressed level's copy covers whole blocks; a volume's, its
+            // slices (D344).
             const mrhiExtent3d kExtent{.width = kBlocks ? ((level.width + 3) / 4) * 4 : level.width,
                                        .height = kBlocks ? kRows * 4 : level.height,
-                                       .depthOrLayers = 1};
+                                       .depthOrLayers = texture.source->depth};
             // A cube's faces a layer each (D320).
             for (std::uint32_t face = 0; face < texture.source->faces; ++face) {
                 const mrhiTextureCopy kPlace{.resource = resourceOf(resource(kId)), .mip = mip, .z = face};

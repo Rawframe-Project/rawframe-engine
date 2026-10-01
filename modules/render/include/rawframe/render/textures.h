@@ -68,6 +68,8 @@ public:
     [[nodiscard]] bool compressed(std::uint64_t id) const noexcept;
     /// Whether the chosen texture `id` is a cube, bound as one (D320).
     [[nodiscard]] bool cube(std::uint64_t id) const noexcept;
+    /// Whether the chosen texture `id` is a volume, bound as one (D344).
+    [[nodiscard]] bool volume(std::uint64_t id) const noexcept;
 
     /// Writes the levels of those uploading, in the open pass `pass`.
     [[nodiscard]] result::Status write(std::uint64_t pass);
