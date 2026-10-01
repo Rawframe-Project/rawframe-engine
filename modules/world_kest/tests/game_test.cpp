@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -533,14 +534,34 @@ RAWFRAME_TEST(AKestProgramHangsABarOnAHingeInTwoDimensions) {
     simulation = nullptr;
 }
 
-RAWFRAME_TEST(ARunnerHitIsToldSo) {
+namespace {
+
+/// Shots, hits, cooldown, taken: the shooter's, then its mark's.
+using Score = std::array<std::int32_t, 4>;
+
+/// Plays runners' duel (duel.game) 90 ticks from a copy of its directory,
+/// with `from` replaced by `to` in its description, and reads the two
+/// runners' scores.
+std::optional<std::pair<Score, Score>> duel(std::string_view from = {}, std::string_view to = {}) {
+    std::error_code error;
+    const std::filesystem::path kDirectory = test::scratchDirectory("duel");
+    std::filesystem::remove_all(kDirectory, error);
+    std::filesystem::copy(std::filesystem::path{RAWFRAME_SAMPLE_GAMES} / "runners",
+                          kDirectory,
+                          std::filesystem::copy_options::recursive,
+                          error);
+    std::string description = readText(kDirectory / "duel.game");
+    if (const std::size_t kAt = description.find(from); !from.empty() && kAt != std::string::npos) {
+        description.replace(kAt, from.size(), to);
+    }
+    writeText(kDirectory / "duel.game", description);
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(
         composition::CompositionRequest{.registrars = kWithPhysics,
                                         .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
         problems);
-    const std::string kText = std::string{"kest.game = "} + RAWFRAME_SAMPLE_GAMES + "runners/duel.game\n" +
-                              "world.tick_rate = 60\n" + "world.maximum_ticks_per_iteration = 1\n";
+    const std::string kText = "kest.game = " + (kDirectory / "duel.game").string() + "\n" + "world.tick_rate = 60\n" +
+                              "world.maximum_ticks_per_iteration = 1\n";
     const auto kConfiguration = composition::Configuration::parse(kText);
     execution::ManualClock clock;
     execution::CancellationScope root{clock};
@@ -553,40 +574,62 @@ RAWFRAME_TEST(ARunnerHitIsToldSo) {
     auto started = composition.start();
     RAWFRAME_EXPECT(started.has_value());
     if (!started.has_value()) {
-        return;
+        return std::nullopt;
     }
     for (std::uint64_t tick = 0; tick < 90; ++tick) {
         clock.advance(execution::MonotonicDuration{16'666'667});
         composition.runHostPhase(composition::HostPhase::RunWorlds,
                                  composition::HostFrame{.iteration = tick, .now = clock.now()});
     }
-    // A shot every 21 ticks from the first: five in 90 ticks. The first is
-    // fired before physics has made a body, and meets nothing; the other
-    // four meet the mark, which is told of each (a tick later, once its Hit
-    // is in).
     world::World& world = *simulation->world();
     const auto kScore =
         world.registry().find(schema::ComponentTypeId::fromText("f6453556-fcdd-46e8-9208-866fade389cf"));
     const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kScore, world::Access::Read}};
     auto query = world::ColumnQuery::resolve(kTerms, world.registry());
-    std::vector<std::array<std::int32_t, 4>> scores;
+    std::vector<Score> scores;
     query->forEachChunk(world, [&scores](const world::ColumnChunk& chunk) {
         for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-            std::array<std::int32_t, 4>& score = scores.emplace_back();
+            Score& score = scores.emplace_back();
             std::memcpy(score.data(), chunk.columns[0] + (row * sizeof score), sizeof score);
         }
     });
-    // Shots, hits, cooldown, taken.
-    const bool kShooterFirst = scores.size() == 2 && scores[0][0] != 0;
+    composition.stop();
+    simulation = nullptr;
+    std::filesystem::remove_all(kDirectory, error);
     RAWFRAME_EXPECT(scores.size() == 2);
-    if (scores.size() == 2) {
-        const auto& kShooter = scores[kShooterFirst ? 0 : 1];
-        const auto& kMark = scores[kShooterFirst ? 1 : 0];
+    if (scores.size() != 2) {
+        return std::nullopt;
+    }
+    const bool kShooterFirst = scores[0][0] != 0;
+    return std::pair{scores[kShooterFirst ? 0 : 1], scores[kShooterFirst ? 1 : 0]};
+}
+
+} // namespace
+
+RAWFRAME_TEST(ARunnerHitIsToldSo) {
+    // A shot every 21 ticks from the first: five in 90 ticks. The first is
+    // fired before physics has made a body, and meets nothing; the other
+    // four meet the mark, which is told of each (a tick later, once its Hit
+    // is in).
+    const auto kScores = duel();
+    RAWFRAME_EXPECT(kScores.has_value());
+    if (kScores.has_value()) {
+        const auto& [kShooter, kMark] = *kScores;
         RAWFRAME_EXPECT(kShooter[0] == 5 && kShooter[1] == 4 && kShooter[3] == 0);
         RAWFRAME_EXPECT(kMark[0] == 0 && kMark[1] == 0 && kMark[3] == 4);
     }
-    composition.stop();
-    simulation = nullptr;
+}
+
+RAWFRAME_TEST(ARunnerShootsAtThePointItsPlayerPointsAt) {
+    // A pointed World point wins over the stick (D368): aimed left but
+    // pointing at the mark, every shot after the first meets it; aimed
+    // right but pointing high above it, none does.
+    const auto kAtMark =
+        duel("runners.stick fire=1 aimX=1", "runners.stick fire=1 aimX=-1 pointed=1 targetX=5 targetY=1.4");
+    RAWFRAME_EXPECT(kAtMark.has_value() && kAtMark->first[0] == 5 && kAtMark->first[1] == 4);
+    const auto kAbove =
+        duel("runners.stick fire=1 aimX=1", "runners.stick fire=1 aimX=1 pointed=1 targetX=5 targetY=20");
+    RAWFRAME_EXPECT(kAbove.has_value() && kAbove->first[0] == 5 && kAbove->first[1] == 0);
 }
 
 namespace {
