@@ -52,6 +52,10 @@ struct Node {
     std::uint64_t image = 0;
     std::uint32_t imageTint = 0;
     float imageSlice = 0;
+    std::uint32_t shadowColor = 0;
+    float shadowX = 0;
+    float shadowY = 0;
+    float shadowBlur = 0;
 };
 
 /// The game's node components, in declaration order, and the one each is

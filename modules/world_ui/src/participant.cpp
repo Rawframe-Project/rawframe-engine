@@ -87,7 +87,11 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
                                 {"order", offsetof(Node, order)},
                                 {"image", offsetof(Node, image)},
                                 {"imageTint", offsetof(Node, imageTint)},
-                                {"imageSlice", offsetof(Node, imageSlice)}})) {
+                                {"imageSlice", offsetof(Node, imageSlice)},
+                                {"shadowColor", offsetof(Node, shadowColor)},
+                                {"shadowX", offsetof(Node, shadowX)},
+                                {"shadowY", offsetof(Node, shadowY)},
+                                {"shadowBlur", offsetof(Node, shadowBlur)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -211,6 +215,7 @@ public:
         }
         drawn_ = &ui_->drawn();
         boxes_ += drawn_->boxes.size();
+        shadows_ += drawn_->shadows.size();
         imagesDrawn_ += drawn_->images.size();
         ++tick_;
         for (const ui::Image& kImage : drawn_->images) {
@@ -249,7 +254,8 @@ public:
                       diagnostics::field("boxes", boxes_),
                       diagnostics::field("images", imagesDrawn_),
                       diagnostics::field("imagesRead", images_.read()),
-                      diagnostics::field("imagesReady", images_.ready())});
+                      diagnostics::field("imagesReady", images_.ready()),
+                      diagnostics::field("shadows", shadows_)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -286,6 +292,7 @@ private:
     std::uint32_t height_ = 720;
     std::uint64_t boxes_ = 0;
     std::uint64_t imagesDrawn_ = 0;
+    std::uint64_t shadows_ = 0;
     game_textures::AskedTextures images_{std::nullopt, {}, 0};
     std::uint64_t tick_ = 0;
     bool failed_ = false;

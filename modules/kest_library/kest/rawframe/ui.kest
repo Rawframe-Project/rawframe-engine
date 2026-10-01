@@ -28,8 +28,10 @@ module rawframe.ui
 // (D378), a texture by the identity the game's `texture` line gives it,
 // stretched over the box, or in nine slices whose corners keep
 // `imageSlice` of the texture's pixels each way at a pixel each, tinted by
-// `imageTint` (nought draws it as it is). A zeroed node, as presentation
-// attaches it, is empty and draws nothing.
+// `imageTint` (nought draws it as it is). Under it the box may cast a
+// shadow (D381), as CSS's box-shadow: `shadowColor` (nought casts none),
+// `shadowX` and `shadowY` pixels off, blurred over `shadowBlur` pixels. A
+// zeroed node, as presentation attaches it, is empty and draws nothing.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -60,6 +62,10 @@ struct Node {
     image: u64
     imageTint: u32
     imageSlice: f32
+    shadowColor: u32
+    shadowX: f32
+    shadowY: f32
+    shadowBlur: f32
 }
 
 // A node's `direction`.
