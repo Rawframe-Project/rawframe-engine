@@ -3,8 +3,10 @@
 // taken back to candela per square meter by the exposure it was drawn
 // with, counted into 128 bins: the first for no light, the rest spanning
 // log2 luminance from -8 to 24, the last also taking light the target
-// could not hold. Each workgroup counts its texels in shared bins, then
-// adds them to the frame's.
+// could not hold. A texel counts more nearer the middle as the camera's
+// metering is centered (D345): up to sixteen times a corner's. Each
+// workgroup counts its texels in shared bins, then adds them to the
+// frame's.
 
 #version 450
 #extension GL_EXT_samplerless_texture_functions : require
@@ -25,6 +27,15 @@ layout(set = 0, binding = 2, std430) buffer Histogram
     uint bins[128];
 }
 counts;
+
+// The metering's settings; the middle's weight is `snap.y`.
+layout(set = 0, binding = 3, std140) uniform Meter
+{
+    vec4 bounds;
+    vec4 fractions;
+    vec4 snap;
+}
+meter;
 
 shared uint counted[128];
 
@@ -51,7 +62,8 @@ void main()
         } else if (kLuminance <= 3.0e38) {
             bin = uint(clamp((log2(kLuminance) - kLowest) / kSpan * 127.0 + 1.0, 1.0, 127.0));
         }
-        atomicAdd(counted[bin], 1u);
+        const float kOut = length((vec2(kTexel) + 0.5) / vec2(kSize) * 2.0 - 1.0) * 0.70710678;
+        atomicAdd(counted[bin], 1u + uint(15.0 * meter.snap.y * (1.0 - smoothstep(0.0, 1.0, kOut)) + 0.5));
     }
     barrier();
     if (kIndex < 128u && counted[kIndex] > 0u) {

@@ -93,7 +93,8 @@ ExposureBlock exposureOf(float ev100) noexcept;
 
 /// What the metering's steps read (D293): the bounds and rates (minimum,
 /// maximum, brighten, darken); the fractions left out, the compensation,
-/// and the seconds since the frame before; and whether to go at once.
+/// and the seconds since the frame before; and whether to go at once, and
+/// how much more the middle counts (D345).
 struct MeterBlock {
     std::array<float, 4> bounds{};
     std::array<float, 4> fractions{};

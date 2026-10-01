@@ -34,7 +34,8 @@ fn histogram(@builtin(local_invocation_index) index: u32, @builtin(global_invoca
         } else if (luminance <= 3.0e38) {
             bin = u32(clamp((log2(luminance) - lowest) / span * 127.0 + 1.0, 1.0, 127.0));
         }
-        atomicAdd(&counted[bin], 1u);
+        let away = length((vec2f(texel) + 0.5) / vec2f(size) * 2.0 - 1.0) * 0.70710678;
+        atomicAdd(&counted[bin], 1u + u32(15.0 * meter.snap.y * (1.0 - smoothstep(0.0, 1.0, away)) + 0.5));
     }
     workgroupBarrier();
     if (index < 128u) {

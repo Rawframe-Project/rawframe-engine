@@ -52,7 +52,7 @@ MeterBlock meterOf(const render_scene::SceneFrame& frame) noexcept {
     const render_scene::AutoExposure& kAsked = kMetering.settings;
     return {.bounds = {kAsked.minimum, kAsked.maximum, kAsked.brighten, kAsked.darken},
             .fractions = {kAsked.low, kAsked.high, kAsked.compensation, kMetering.elapsed},
-            .snap = {kMetering.snap ? 1.0F : 0.0F, 0, 0, 0}};
+            .snap = {kMetering.snap ? 1.0F : 0.0F, kAsked.centered, 0, 0}};
 }
 
 FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, std::uint32_t height) noexcept {
