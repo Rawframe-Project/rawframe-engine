@@ -121,6 +121,10 @@ result::Status Tree::attach(Node parent, Node child) {
                    "a UI node could not be attached");
 }
 
+result::Status Tree::detach(Node node) {
+    return checked(muiNode_Detach(state_->context, idOf(node)), "a UI node could not be detached");
+}
+
 result::Status Tree::remove(Node node) {
     return checked(muiDestroyNode(state_->context, idOf(node)), "a UI node could not be removed");
 }
@@ -148,6 +152,13 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
     style.padding = edgesOf(layout.padding);
     style.margin = edgesOf(layout.margin);
     style.border = edgesOf(layout.border);
+    if (layout.placement.absolute) {
+        style.placement.position = mui_positionAbsolute;
+        style.placement.inset.start = dimensionOf(layout.placement.x);
+        style.placement.inset.top = dimensionOf(layout.placement.y);
+        style.placement.anchorX = layout.placement.anchorX;
+        style.placement.anchorY = layout.placement.anchorY;
+    }
     return checked(muiNode_SetLayoutStyle(state_->context, idOf(node), &style), "a UI node's layout was refused");
 }
 
@@ -181,6 +192,7 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
     into.boxes.clear();
     into.clips.clear();
     into.skipped = 0;
+    into.scale = scale;
     for (std::uint32_t at = 0; at < list.clipCount; ++at) {
         const muiDrawClip& kClip = list.clips[at];
         into.clips.push_back(Clip{.rect = ui::rectOf(kClip.rect),

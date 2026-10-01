@@ -60,10 +60,23 @@ enum class Align : std::uint8_t {
     Center
 };
 
+/// Where an absolute node goes (SPEC-0030's anchor point): out of its
+/// parent's flex layout, its start and top edges at `x` and `y` from the
+/// start and top of its parent's padding box (automatic for where it would
+/// sit as its parent's only child), then moved back by `anchorX` and
+/// `anchorY` of its own size, 0 to 1, so 0.5, 0.5 centers it there.
+struct Placement {
+    bool absolute = false;
+    Dimension x;
+    Dimension y;
+    float anchorX = 0;
+    float anchorY = 0;
+};
+
 /// A node's authored layout: its size, how it lays out its children (a
-/// flex container), and how it takes part in its parent's (a flex item).
-/// Sides are start, end, top, bottom: start and end follow the inline
-/// direction.
+/// flex container), and how it takes part in its parent's (a flex item, or
+/// placed apart from them). Sides are start, end, top, bottom: start and
+/// end follow the inline direction.
 struct Layout {
     Dimension width;
     Dimension height;
@@ -78,6 +91,7 @@ struct Layout {
     std::array<float, 4> margin{};
     /// The border's widths, inside the border box.
     std::array<float, 4> border{};
+    Placement placement;
 };
 
 /// A node's look (SPEC-0032's box): its fill and its border's color, each
@@ -124,13 +138,14 @@ struct Clip {
 };
 
 /// What a tree draws, in paint order: its boxes, and its clips, the first
-/// a placeholder for none. Commands generation 1 does not draw yet
+/// a placeholder for none, in logical pixels, `scale` device pixels each. Commands generation 1 does not draw yet
 /// (shadows, images, gradients over a fill, glyph runs, transformed ones)
 /// are counted, not kept.
 struct DrawList {
     std::vector<Box> boxes;
     std::vector<Clip> clips;
     std::uint32_t skipped = 0;
+    float scale = 1;
 };
 
 /// A node of a tree, by its slot and generation; a node removed leaves its
@@ -154,6 +169,8 @@ public:
     [[nodiscard]] result::Result<Node> add(std::uint64_t key);
     /// `child`, a root, becomes `parent`'s last child.
     [[nodiscard]] result::Status attach(Node parent, Node child);
+    /// `node` becomes a root with its subtree; a root stays as it is.
+    [[nodiscard]] result::Status detach(Node node);
     /// `node` and its subtree are gone.
     [[nodiscard]] result::Status remove(Node node);
     /// Whether `node` is still in the tree.

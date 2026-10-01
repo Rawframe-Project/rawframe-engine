@@ -1,7 +1,8 @@
 // A UI tree over Maul UI (D374): a row of two fixed boxes and a growing one
 // laid out in their parent's padding box, a column's share of its parent,
-// an automatic root fitting its content, keys kept, values out of range
-// refused, a removed subtree's nodes stale, and a tree's looks drawn as
+// an automatic root fitting its content, an absolute node placed by its
+// anchor point and a detached one a root again, keys kept, values out of
+// range refused, a removed subtree's nodes stale, and a tree's looks drawn as
 // SPEC-0032's boxes in paint order.
 
 #include "rawframe/test/test.h"
@@ -69,6 +70,41 @@ RAWFRAME_TEST(AShareIsOfTheParentsContent) {
             .has_value());
     RAWFRAME_EXPECT(ui.layOut(kPanel, 400, 200).has_value());
     RAWFRAME_EXPECT(placed(ui.rectOf(kHalf), 0, 0, 200, 58));
+}
+
+RAWFRAME_TEST(AnAbsoluteNodeIsPlacedByItsAnchorPoint) {
+    auto tree = Tree::create(16);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    const Node kView = *ui.add(1);
+    const Node kFirst = *ui.add(2);
+    const Node kBar = *ui.add(3);
+    RAWFRAME_EXPECT(ui.attach(kView, kFirst).has_value());
+    RAWFRAME_EXPECT(ui.attach(kView, kBar).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kView, {.width = share(1), .height = share(1)}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kFirst, {.width = pixels(40), .height = pixels(40)}).has_value());
+    // A bar centered along the bottom, 16 pixels above it: out of the row,
+    // so the first child keeps its place.
+    RAWFRAME_EXPECT(ui.setLayout(kBar,
+                                 {.width = pixels(200),
+                                  .height = pixels(20),
+                                  .placement = {.absolute = true,
+                                                .x = share(0.5F),
+                                                .y = {.automatic = false, .scale = 1, .offset = -16},
+                                                .anchorX = 0.5F,
+                                                .anchorY = 1}})
+                        .has_value());
+    RAWFRAME_EXPECT(ui.layOut(kView, 640, 360).has_value());
+    RAWFRAME_EXPECT(placed(ui.rectOf(kFirst), 0, 0, 40, 40));
+    RAWFRAME_EXPECT(placed(ui.rectOf(kBar), 220, 324, 200, 20));
+    // Detached, the bar is a root with its own layout; the view lays out
+    // without it.
+    RAWFRAME_EXPECT(ui.detach(kBar).has_value());
+    RAWFRAME_EXPECT(ui.attach(kFirst, kBar).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kView, 640, 360).has_value());
+    RAWFRAME_EXPECT(placed(ui.rectOf(kBar), -80, 4, 200, 20));
 }
 
 RAWFRAME_TEST(WhatATreeCannotTakeIsRefused) {
