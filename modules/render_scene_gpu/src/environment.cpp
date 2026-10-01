@@ -159,29 +159,4 @@ Matrix4 inverseOf(const Matrix4& matrix) noexcept {
     return made;
 }
 
-Reflections reflectionsOf(const render_scene::SceneFrame& frame,
-                          std::uint64_t skyCube,
-                          std::uint32_t skyLevels,
-                          const std::function<std::uint32_t(std::uint64_t)>& levelsOf) {
-    Reflections made;
-    const ProbeBlock kSky{.place = {0, 0, 0, static_cast<float>(skyLevels)},
-                          .light = {frame.lights.sky[0], frame.lights.sky[1], frame.lights.sky[2], 0}};
-    made.blocks.push_back(kSky);
-    made.cubes.push_back(skyCube);
-    for (const render_scene::SceneProbe& kProbe : frame.probes) {
-        const std::uint32_t kLevels = levelsOf(kProbe.environment);
-        if (kLevels == 0) {
-            made.blocks.push_back(kSky);
-            made.cubes.push_back(skyCube);
-            continue;
-        }
-        made.blocks.push_back(ProbeBlock{
-            .place = {kProbe.position[0], kProbe.position[1], kProbe.position[2], static_cast<float>(kLevels)},
-            .extent = {kProbe.half[0], kProbe.half[1], kProbe.half[2], 0},
-            .light = {kProbe.intensity, kProbe.intensity, kProbe.intensity, 0}});
-        made.cubes.push_back(kProbe.environment);
-    }
-    return made;
-}
-
 } // namespace rawframe::render_scene_gpu

@@ -8,8 +8,8 @@
 // of the punctual shadows' atlas say it reaches (D292); and by the sky
 // (brighter facing up, and seen in reflection), or by its picture, all
 // around and reflected by roughness (D322), its reflection the reflection
-// probe's that holds the model where one does, projected onto the probe's
-// box (D325); in physical units, times the exposure the device
+// probes' of its cluster that hold the point, projected onto each probe's
+// box (D325, D340); in physical units, times the exposure the device
 // holds (the camera's, or its metering's, D293), so the scene target holds
 // pre-exposed scene-linear light (ADR-0047). And how far the point moved
 // on the screen since the frame before, for the temporal pass (D291).
@@ -67,8 +67,6 @@ layout(location = 4) in vec3 inBefore;
 layout(location = 5) flat in uint inMaterial;
 layout(location = 6) in vec2 inUv;
 layout(location = 7) in vec4 inTangent;
-// The reflection probe it reflects, nought for the sky's picture (D325).
-layout(location = 8) flat in uint inProbe;
 
 layout(set = 0, binding = 1) uniform texture2D shadowMap;
 layout(set = 0, binding = 2) uniform samplerShadow shadowSampler;
@@ -156,11 +154,9 @@ layout(set = 0, binding = 17) uniform sampler normalSampler;
 layout(set = 0, binding = 18) uniform textureCube environmentTexture;
 layout(set = 0, binding = 19) uniform sampler environmentSampler;
 
-// What each model reflects (D325): the sky's picture first, then each
-// reflection probe, the one the draw's run binds at slot 18. Its box's
-// middle relative to the eye and its levels, nought for none; its half
-// sides, nought for the sky's, which is not projected; and its light's
-// scale.
+// The frame's reflection probes (D325, D340): each one's box's middle
+// relative to the eye and its cube of the atlas, below nought for none;
+// its half sides; and its light's scale.
 struct Probe {
     vec4 place;
     vec4 extent;
@@ -171,6 +167,10 @@ layout(set = 0, binding = 20, std430) readonly buffer Probes
 {
     Probe probes[];
 };
+
+// The probes' pictures (D340), each cube's eight mips the light as ever
+// rougher surfaces reflect it.
+layout(set = 0, binding = 26) uniform textureCubeArray probeAtlas;
 
 // Where a reflection from `placed` along `mirrored` meets the probe's box,
 // as seen from its middle, the way its picture was taken: a point outside
@@ -498,9 +498,9 @@ void main()
     const vec3 kAlong = dFdx(inPlaced);
     const vec3 kAside = dFdy(inPlaced);
 #endif
-    // The cluster's lights and decals, where either is clustered (D339).
-    const uvec4 kRange =
-        frame.clusterGrid.w > 0.0 || frame.decals.x > 0.5 ? clusterOf(inPlaced) : uvec4(0u);
+    // The cluster's lights, decals, and probes, where any is clustered
+    // (D339, D340).
+    const uvec4 kRange = frame.clusterDepth.y > 0.0 ? clusterOf(inPlaced) : uvec4(0u);
     vec4 sampled = vec4(1.0);
     if ((kFlags & 6u) != 0u) {
         sampled = textureGrad(sampler2D(baseTexture, baseSampler), inUv * kBaseMap.xy + kBaseMap.zw,
@@ -574,27 +574,51 @@ void main()
     if (frame.environment.w > 0.5) {
         around = frame.sky.rgb * irradianceAt(kNormal);
     }
-    // Along the reflection, the sky's picture's or the probe's level for
-    // the roughness, weighed by the split sum (D322, D325).
-    vec3 weight = kSheen;
-    vec3 incoming = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
-    const Probe kProbe = probes[min(inProbe, uint(probes.length()) - 1u)];
-    if (kProbe.place.w > 0.5) {
-        const vec3 kToward = kProbe.extent.x > 0.0 ? projected(kProbe, inPlaced, kMirrored) : kMirrored;
-        const vec3 kReflected = textureLod(samplerCube(environmentTexture, environmentSampler),
-                                           kToward,
-                                           kSurface.roughness * (kProbe.place.w - 1.0)).rgb;
-        const vec2 kScaleBias = environmentBrdf(kSurface.roughness, kNv);
-        weight = kSurface.headOn * kScaleBias.x + kScaleBias.y;
-        incoming = kProbe.light.rgb * kReflected;
+    // Along the reflection, the cluster's probes that hold the point
+    // (D340), the first a point takes first: each its picture's mip for
+    // the roughness (of eight), projected onto its box, weighed by the
+    // split sum (D322), over what the ones before left, fading out across
+    // a tenth of its size past its box.
+    const vec2 kScaleBias = environmentBrdf(kSurface.roughness, kNv);
+    const vec3 kSplit = kSurface.headOn * kScaleBias.x + kScaleBias.y;
+    vec3 probed = vec3(0.0);
+    float left = 1.0;
+    const uint kProbes = kRange.x + kRange.y + kRange.z;
+    for (uint at = kProbes; at < kProbes + kRange.w && left > 0.0; ++at) {
+        const Probe kProbe = probes[indices[at]];
+        const vec3 kPast = (abs(inPlaced - kProbe.place.xyz) - kProbe.extent.xyz) / (0.1 * kProbe.extent.xyz);
+        const float kHolds = clamp(1.0 - max(max(kPast.x, kPast.y), kPast.z), 0.0, 1.0);
+        if (kProbe.place.w < 0.0 || kHolds <= 0.0) {
+            continue;
+        }
+        const vec3 kToward = projected(kProbe, inPlaced, kMirrored);
+        probed += left * kHolds * kProbe.light.rgb *
+                  textureLod(samplerCubeArray(probeAtlas, environmentSampler),
+                             vec4(kToward, kProbe.place.w),
+                             kSurface.roughness * 7.0).rgb;
+        left *= 1.0 - kHolds;
+    }
+    // What they left, the sky's picture's level for the roughness, by the
+    // split sum; with none, the sky above and the ground below, by the
+    // sheen.
+    vec3 along = kSplit * probed;
+    if (left > 0.0) {
+        vec3 beyond = kSheen * mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * kMirrored.y);
+        if (frame.environment.w > 0.5) {
+            beyond = kSplit * frame.sky.rgb *
+                  textureLod(samplerCube(environmentTexture, environmentSampler),
+                             kMirrored,
+                             kSurface.roughness * (frame.environment.w - 1.0)).rgb;
+        }
+        along += left * beyond;
     }
     // Over it, what the screen-space reflection met, as much as it found
     // (D331), for an opaque model the prepass saw.
     if (frame.reflections.x > 0.5 && kOpacity >= 0.999) {
         const vec4 kMet = texelFetch(reflectionTexture, ivec2(gl_FragCoord.xy), 0);
-        incoming = mix(incoming, kMet.rgb / max(exposure.value.y, 1e-12), kMet.a);
+        const vec3 kWeight = left < 1.0 || frame.environment.w > 0.5 ? kSplit : kSheen;
+        along = mix(along, kWeight * kMet.rgb / max(exposure.value.y, 1e-12), kMet.a);
     }
-    const vec3 along = weight * incoming;
     // What of it reaches the point (D327): for an opaque model, what the
     // ambient occlusion found; a translucent one the prepass never saw
     // takes all of it. An opaque model's alpha, interpolated, can fall a

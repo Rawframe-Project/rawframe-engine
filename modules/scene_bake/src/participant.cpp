@@ -118,11 +118,7 @@ public:
             return;
         }
         render_scene::SceneFrame frame = *queued;
-        frame.probes.clear();
-        frame.probesOverLimit = 0;
-        for (render_scene::SceneDraw& draw : frame.draws) {
-            draw.probe = 0;
-        }
+        render_scene::withoutProbes(frame);
         frame.temporal.enabled = false;
         frame.temporal.history = false;
         frame.fxaa = false;

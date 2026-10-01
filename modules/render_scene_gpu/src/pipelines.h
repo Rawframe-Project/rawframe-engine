@@ -30,6 +30,8 @@ constexpr mrhiFormat kSurfaceFormat = mrhi_formatRgba16Float;
 constexpr mrhiFormat kAmbientFormat = mrhi_formatR8Unorm;
 /// What each point reflects of the picture before, and how much (D331).
 constexpr mrhiFormat kReflectionFormat = mrhi_formatRgba16Float;
+/// The reflection probes' atlas (D340), as the pictures it holds are.
+constexpr mrhiFormat kProbeFormat = mrhi_formatRgba16Float;
 /// The frame's picture, as `render` declares it.
 constexpr mrhiFormat kPictureFormat = mrhi_formatRgba8UnormSrgb;
 
@@ -54,9 +56,10 @@ enum class Effect : std::uint8_t {
     Bloom,
     Fxaa,
     ContactShadows,
-    Decals
+    Decals,
+    Probes
 };
-inline constexpr std::size_t kEffects = 9;
+inline constexpr std::size_t kEffects = 10;
 
 /// The scene's shaders, samplers, and pipelines (D284 to D292): what every
 /// frame draws with asked of the device at once, each effect's when a view
@@ -79,6 +82,7 @@ struct Pipelines {
     mrhiShaderId focusShader{};
     mrhiShaderId contactShader{};
     mrhiShaderId decalShader{};
+    mrhiShaderId probeShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -123,6 +127,8 @@ struct Pipelines {
     Asked litDecaled;
     Asked maskedLitDecaled;
     Asked glassDecaled;
+    /// A reflection probe's picture drawn into the atlas (D340).
+    Asked probeFill;
     Asked lit;
     /// The masked models lit only where their depth is the prepass's
     /// (D310).

@@ -9,6 +9,7 @@
 #include "generated/meter_container.h"
 #include "generated/motion_container.h"
 #include "generated/occlusion_container.h"
+#include "generated/probe_container.h"
 #include "generated/reflect_container.h"
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
@@ -37,12 +38,37 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked :
-         {&casting,          &cutCasting,    &depth,        &cutout,       &surfaces,        &cutSurfaces,
-          &occlude,          &blurOcclusion, &march,        &motionTiles,  &motionNeighbors, &motionGather,
-          &focusPrefilter,   &focusBokeh,    &focusCombine, &contactShade, &decalFill,       &litDecaled,
-          &maskedLitDecaled, &glassDecaled,  &lit,          &maskedLit,    &glass,           &sky,
-          &temporal,         &tonemap,       &fxaa,         &bloomFirst,   &bloomDown,       &bloomUp}) {
+    for (Asked* asked : {&casting,
+                         &cutCasting,
+                         &depth,
+                         &cutout,
+                         &surfaces,
+                         &cutSurfaces,
+                         &occlude,
+                         &blurOcclusion,
+                         &march,
+                         &motionTiles,
+                         &motionNeighbors,
+                         &motionGather,
+                         &focusPrefilter,
+                         &focusBokeh,
+                         &focusCombine,
+                         &contactShade,
+                         &decalFill,
+                         &litDecaled,
+                         &maskedLitDecaled,
+                         &glassDecaled,
+                         &probeFill,
+                         &lit,
+                         &maskedLit,
+                         &glass,
+                         &sky,
+                         &temporal,
+                         &tonemap,
+                         &fxaa,
+                         &bloomFirst,
+                         &bloomDown,
+                         &bloomUp}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -66,7 +92,8 @@ Pipelines::~Pipelines() {
                                        motionShader,
                                        focusShader,
                                        contactShader,
-                                       decalShader}) {
+                                       decalShader,
+                                       probeShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -112,7 +139,7 @@ result::Status Pipelines::make() {
     static constexpr std::array<mrhiVertexBufferLayout, 2> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
         mrhiVertexBufferLayout{.stride = kInstanceBytes, .stepMode = mrhi_stepInstance}};
-    static constexpr std::array<mrhiVertexAttribute, 16> kAttributes = {
+    static constexpr std::array<mrhiVertexAttribute, 15> kAttributes = {
         mrhiVertexAttribute{.buffer = 0, .location = 0, .format = mrhi_vertexFloat32x3, .offset = 0},
         mrhiVertexAttribute{.buffer = 0, .location = 1, .format = mrhi_vertexFloat32x3, .offset = 12},
         mrhiVertexAttribute{.buffer = 0, .location = 13, .format = mrhi_vertexFloat32x2, .offset = 24},
@@ -127,8 +154,7 @@ result::Status Pipelines::make() {
         mrhiVertexAttribute{.buffer = 1, .location = 10, .format = mrhi_vertexFloat32x4, .offset = 116},
         mrhiVertexAttribute{.buffer = 1, .location = 11, .format = mrhi_vertexFloat32x4, .offset = 132},
         mrhiVertexAttribute{.buffer = 1, .location = 12, .format = mrhi_vertexFloat32, .offset = 148},
-        mrhiVertexAttribute{.buffer = 0, .location = 14, .format = mrhi_vertexFloat32x4, .offset = 32},
-        mrhiVertexAttribute{.buffer = 1, .location = 15, .format = mrhi_vertexFloat32, .offset = 152}};
+        mrhiVertexAttribute{.buffer = 0, .location = 14, .format = mrhi_vertexFloat32x4, .offset = 32}};
     mrhiGraphicsPipelineDef models = mrhiDefaultGraphicsPipelineDef();
     models.shader = sceneShader;
     models.vertexEntry = "vs";
@@ -519,6 +545,23 @@ result::Status Pipelines::askFor(Effect effect) {
         }
         return {};
     }
+    case Effect::Probes: {
+        // A probe's picture into one face's mip of its cube of the atlas
+        // (D340).
+        RAWFRAME_TRY(makeShader(kProbeContainer, probeShader));
+        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+        constexpr std::string_view kLabel = "rawframe.scene.probes.fill";
+        def.label = kLabel.data();
+        def.labelLength = kLabel.size();
+        def.shader = probeShader;
+        def.vertexEntry = "vs";
+        def.vertexEntryLength = 2;
+        def.fragmentEntry = "fill";
+        def.fragmentEntryLength = 4;
+        def.colorTargetCount = 1;
+        def.colorTargets[0].format = kProbeFormat;
+        return ask(def, probeFill);
+    }
     case Effect::Fxaa: {
         RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
         // FXAA: the tonemapped picture into the frame's (D296).
@@ -589,6 +632,8 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
         return answered({&contactShade});
     case Effect::Decals:
         return answered({&decalFill, &litDecaled, &maskedLitDecaled, &glassDecaled});
+    case Effect::Probes:
+        return answered({&probeFill});
     }
     return false;
 }

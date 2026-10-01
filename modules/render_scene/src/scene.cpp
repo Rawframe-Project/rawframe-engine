@@ -530,8 +530,6 @@ struct Scene::State {
             frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
             ++frame.drawn;
         }
-        // Each draw's reflection probe (D325), before the draws are grouped.
-        resolveProbes(frame, probes, camera.eye, settings.limits.maximumProbes);
         // The translucent after the opaque, farthest first, so each blends
         // over what is behind it (D305); the opaque keep their order.
         const auto kTranslucent = std::ranges::stable_partition(frame.draws, [this](const SceneDraw& draw) {
@@ -545,12 +543,10 @@ struct Scene::State {
         std::ranges::stable_sort(kTranslucent, [&kAway](const SceneDraw& left, const SceneDraw& right) {
             return kAway(left) > kAway(right);
         });
-        // The opaque by their material's texture and their probe, so a
-        // device binds each once (D309, D325); within one, by mesh as they
-        // were.
+        // The opaque by their material's texture, so a device binds each
+        // once (D309); within one, by mesh as they were.
         const auto kTextureOf = [this](const SceneDraw& draw) {
-            return std::pair{draw.material < frame.textures.size() ? frame.textures[draw.material] : SceneTextures{},
-                             draw.probe};
+            return draw.material < frame.textures.size() ? frame.textures[draw.material] : SceneTextures{};
         };
         std::ranges::stable_sort(std::ranges::subrange(frame.draws.begin(), kTranslucent.begin()),
                                  [&kTextureOf](const SceneDraw& left, const SceneDraw& right) {
@@ -572,6 +568,13 @@ struct Scene::State {
                       named);
         clusterDecals(frame,
                       decals,
+                      camera,
+                      {kRight, kUp, kForward},
+                      {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
+                      settings.limits,
+                      named);
+        clusterProbes(frame,
+                      probes,
                       camera,
                       {kRight, kUp, kForward},
                       {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},

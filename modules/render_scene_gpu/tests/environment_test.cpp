@@ -2,9 +2,11 @@
 // each point of the target looks, a face of the cube a way; a texture that
 // is not an environment is none; a mirror reflects what is behind the eye;
 // a rough white ball under a uniform picture is as bright as the sky, and
-// under a picture bright above, its top outshines its underside; a model a
-// reflection probe holds reflects the probe's picture, projected onto its
-// box, and the sky's where the probe's is not held (D325).
+// under a picture bright above, its top outshines its underside; a point a
+// reflection probe of its cluster holds reflects the probe's picture,
+// projected onto its box, the first of those holding it that a point takes,
+// and the sky's where no probe holds it or the probe's picture is not held
+// (D325, D340).
 
 #include "fixture.h"
 #include "rawframe/render/frame.h"
@@ -192,7 +194,7 @@ RAWFRAME_TEST(SurfacesAreLitByThePictureAndReflectIt) {
     }
 }
 
-RAWFRAME_TEST(AModelReflectsTheProbeThatHoldsIt) {
+RAWFRAME_TEST(APointReflectsTheProbesThatHoldIt) {
     const auto kDevice = opened();
     if (kDevice == nullptr) {
         return;
@@ -211,19 +213,24 @@ RAWFRAME_TEST(AModelReflectsTheProbeThatHoldsIt) {
     // green room.
     constexpr std::uint64_t kRoom = 0x3a9e1c75d20b48f6ULL;
     constexpr std::uint64_t kGreen = 0x7c2d5e18a94b03f1ULL;
+    constexpr std::uint64_t kMissing = 0x0e6b93d4c1a7582fULL;
     const std::shared_ptr<const texture::Texture> kCube =
         cubeOf({{{0, 1, 0}, {0, 0, 1}, {1, 1, 1}, {0, 0, 0}, {1, 1, 0}, {1, 0, 0}}});
     const std::shared_ptr<const texture::Texture> kGreenCube =
         cubeOf({{{0, 1, 0}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}}});
-    bool held = true;
     const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) -> std::shared_ptr<const texture::Texture> {
-        if (id == kPicture || (id == kRoom && held)) {
+        if (id == kPicture || id == kRoom) {
             return kCube;
         }
-        return id == kGreen && held ? kGreenCube : nullptr;
+        return id == kGreen ? kGreenCube : nullptr;
     };
-    const auto kCenter = [&](const SceneFrame& frame) {
-        const auto kPixels = drawn(**framer, **made, frame, kMeshes, kTextures);
+    // A frame that draws a probe waits for the probes' pipeline (D337).
+    const auto kCenter = [&](const SceneFrame& frame, bool probed = true) {
+        const auto kPixels =
+            probed
+                ? drawnWith(
+                      **framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::probesDrawn, kTextures)
+                : drawn(**framer, **made, frame, kMeshes, kTextures);
         RAWFRAME_EXPECT(kPixels.has_value());
         return kPixels.has_value() ? at(*kPixels, kSide / 2, kSide / 2) : std::array<int, 3>{};
     };
@@ -235,23 +242,61 @@ RAWFRAME_TEST(AModelReflectsTheProbeThatHoldsIt) {
     SceneFrame frame = facing(0, 0);
     render_scene::SceneDraw ball = box(4, 0.5F, {1, 1, 1, 1}, render_scene::kSphere);
     ball.material = 1;
-    ball.probe = 1;
     frame.materials = {render_scene::noMaterial(), mirror};
     frame.draws = {ball};
-    frame.probes = {{.position = {0, 0, -4}, .half = {3, 3, 3}, .environment = kGreen, .intensity = 20000}};
+    // One cluster, naming the frame's probes in their order.
+    const auto kNamed = [&frame] {
+        frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1};
+        frame.clusters.ranges = {0, 0, 0, static_cast<std::uint32_t>(frame.probes.size())};
+        frame.clusters.indices.clear();
+        for (std::uint32_t at = 0; at < frame.probes.size(); ++at) {
+            frame.clusters.indices.push_back(at);
+        }
+    };
+    const render_scene::SceneProbe kGreenRoomProbe{
+        .position = {0, 0, -4}, .half = {3, 3, 3}, .environment = kGreen, .intensity = 20000};
+    frame.probes = {kGreenRoomProbe};
+    kNamed();
     const std::array<int, 3> kGreenRoom = kCenter(frame);
     print("green room", kGreenRoom);
     RAWFRAME_EXPECT(mostly(kGreenRoom, 1));
     // In a long low room whose middle is five meters to its right, what it
     // reflects behind the eye meets the room's back wall far to the left of
     // the room's middle, where its picture is blue: projected onto the box.
-    frame.probes = {{.position = {5, 0, -4}, .half = {6, 3, 1.5F}, .environment = kRoom, .intensity = 20000}};
+    const render_scene::SceneProbe kLowRoom{
+        .position = {5, 0, -4}, .half = {6, 3, 1.5F}, .environment = kRoom, .intensity = 20000};
+    frame.probes = {kLowRoom};
+    kNamed();
     const std::array<int, 3> kProjected = kCenter(frame);
     print("projected", kProjected);
     RAWFRAME_EXPECT(mostly(kProjected, 2));
-    // With the room's picture not held, the sky's: yellow behind the eye.
-    held = false;
-    const std::array<int, 3> kSky = kCenter(frame);
+    // Both holding it, the first a point takes: the green room, then the
+    // low room.
+    frame.probes = {kGreenRoomProbe, kLowRoom};
+    kNamed();
+    const std::array<int, 3> kGreenFirst = kCenter(frame);
+    frame.probes = {kLowRoom, kGreenRoomProbe};
+    kNamed();
+    const std::array<int, 3> kLowFirst = kCenter(frame);
+    print("green first", kGreenFirst);
+    print("low first", kLowFirst);
+    RAWFRAME_EXPECT(mostly(kGreenFirst, 1) && mostly(kLowFirst, 2));
+    // A probe whose box is well away, or whose picture is not held, is
+    // passed over for the sky's: yellow behind the eye.
+    const auto kYellow = [](const std::array<int, 3>& pixel) {
+        return pixel[0] > 100 && pixel[1] > 100 && pixel[2] + 60 < pixel[1];
+    };
+    render_scene::SceneProbe away = kGreenRoomProbe;
+    away.position = {20, 0, -4};
+    frame.probes = {away};
+    kNamed();
+    const std::array<int, 3> kAway = kCenter(frame);
+    render_scene::SceneProbe missing = kLowRoom;
+    missing.environment = kMissing;
+    frame.probes = {missing};
+    kNamed();
+    const std::array<int, 3> kSky = kCenter(frame, false);
+    print("away", kAway);
     print("sky in its place", kSky);
-    RAWFRAME_EXPECT(kSky[0] > 100 && kSky[1] > 100 && kSky[2] + 60 < kSky[1]);
+    RAWFRAME_EXPECT(kYellow(kAway) && kYellow(kSky));
 }

@@ -1,10 +1,9 @@
 #pragma once
 
 // A frame's draws placed for the device: each draw's instance data, in
-// order, and the runs of one mesh, one material's textures, and one
-// reflection probe each (D325), an instanced draw apiece from its first
-// instance; the opaque, masked, and translucent draws', and each shadow's
-// casters'.
+// order, and the runs of one mesh and one material's textures each, an
+// instanced draw apiece from its first instance; the opaque, masked, and
+// translucent draws', and each shadow's casters'.
 
 #include "meshes.h"
 #include "rawframe/render_scene/scene.h"
@@ -24,9 +23,6 @@ struct Run {
     std::uint32_t first = 0;
     std::uint32_t count = 0;
     render_scene::SceneTextures texture;
-    /// What it reflects: nought for the sky's picture, else one past its
-    /// probe's place among the frame's (D325).
-    std::uint32_t probe = 0;
 };
 using Runs = std::vector<Run>;
 

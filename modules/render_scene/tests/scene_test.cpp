@@ -925,7 +925,7 @@ RAWFRAME_TEST(OpaqueModelsAreGroupedByTheirMaterialsTexture) {
     RAWFRAME_EXPECT(kFrame.draws.size() == 12 && std::ranges::is_sorted(order));
 }
 
-RAWFRAME_TEST(ADrawReflectsTheProbeThatHoldsIt) {
+RAWFRAME_TEST(ProbesInViewAreOrderedAsAPointTakesThemAndClustered) {
     // Far from the origin, so the boxes are placed relative to the eye.
     constexpr double kX = 100000;
     const auto kAt = [](double x, double y, double z) {
@@ -938,43 +938,60 @@ RAWFRAME_TEST(ADrawReflectsTheProbeThatHoldsIt) {
     };
     const auto kRoom = [&kPlace](Rig& rig) {
         // A hall; a closet in it, smaller; a stage overlapping the hall's
-        // side, of a higher priority; and two that hold nothing: one with no
-        // picture, one with no size.
+        // side, of a higher priority; and three that are no probe in view:
+        // one with no picture, one with no size, and one behind the eye.
         kPlace(rig, {.halfX = 10, .halfY = 10, .halfZ = 10, .intensity = 1, .environment = 0xe1}, 0, -10);
         kPlace(rig, {.halfX = 2, .halfY = 2, .halfZ = 2, .intensity = 1, .environment = 0xe2}, 0, -10);
         kPlace(rig, {.halfX = 3, .halfY = 3, .halfZ = 3, .intensity = 2, .priority = 1, .environment = 0xe3}, 8, -10);
         kPlace(rig, {.halfX = 50, .halfY = 50, .halfZ = 50, .intensity = 1}, 0, 0);
         kPlace(rig, {.halfX = 50, .halfY = 0, .halfZ = 50, .intensity = 1, .environment = 0xe4}, 0, 0);
+        kPlace(rig, {.halfX = 2, .halfY = 2, .halfZ = 2, .intensity = 1, .environment = 0xe5}, 0, 60);
     };
     Rig rig;
     kRoom(rig);
-    // In the closet, on the stage, in the hall only, and outside all.
     rig.spawn(Model{.mesh = kBox, .color = 0xFF0000FF}, kAt(0, 0, -10));
-    rig.spawn(Model{.mesh = kBox, .color = 0x00FF00FF}, kAt(8, 0, -10));
-    rig.spawn(Model{.mesh = kBox, .color = 0x0000FFFF}, kAt(-7, 0, -10));
-    rig.spawn(Model{.mesh = kBox, .color = 0xFFFFFFFF}, kAt(0, 0, -40));
-    const SceneFrame& kFrame = rig.frame({.eye = {kX, 0, 0}, .fovY = 2});
-    RAWFRAME_EXPECT(kFrame.probes.size() == 3 && kFrame.probesOverLimit == 0 && kFrame.draws.size() == 4);
-    const auto kReflects = [&kFrame](float red, float green, float blue) -> std::uint64_t {
-        for (const SceneDraw& kDraw : kFrame.draws) {
-            if (near(kDraw.color[0], red) && near(kDraw.color[1], green) && near(kDraw.color[2], blue)) {
-                return kDraw.probe == 0 ? 0 : kFrame.probes[kDraw.probe - 1].environment;
-            }
-        }
-        return 0xdead;
-    };
-    RAWFRAME_EXPECT(kReflects(1, 0, 0) == 0xe2 && kReflects(0, 1, 0) == 0xe3 && kReflects(0, 0, 1) == 0xe1 &&
-                    kReflects(1, 1, 1) == 0);
+    SceneFrame frame = rig.frame({.eye = {kX, 0, 0}, .fovY = 1.5F});
+    RAWFRAME_EXPECT(frame.probes.size() == 3 && frame.probesOverLimit == 0);
+    if (frame.probes.size() != 3) {
+        return;
+    }
+    // The higher priority first, then the smaller box.
+    RAWFRAME_EXPECT(frame.probes[0].environment == 0xe3 && frame.probes[1].environment == 0xe2 &&
+                    frame.probes[2].environment == 0xe1 && near(frame.probes[0].intensity, 2));
     // Placed relative to the eye, as the draws are.
-    for (const SceneProbe& kProbe : kFrame.probes) {
+    for (const SceneProbe& kProbe : frame.probes) {
         RAWFRAME_EXPECT(near(kProbe.position[2], -10) && std::abs(kProbe.position[0]) <= 8);
     }
+    // Each is named by clusters, after the lights and the decals there, in
+    // the order a point takes them; the closet's clusters name the hall too.
+    std::array<std::size_t, 3> named{};
+    bool ordered = true;
+    bool shared = false;
+    for (std::size_t at = 0; at + 3 < frame.clusters.ranges.size(); at += 4) {
+        const std::size_t kFirst =
+            frame.clusters.ranges[at] + frame.clusters.ranges[at + 1] + frame.clusters.ranges[at + 2];
+        std::vector<std::uint32_t> held;
+        for (std::size_t each = 0; each < frame.clusters.ranges[at + 3]; ++each) {
+            held.push_back(frame.clusters.indices[kFirst + each]);
+            named[held.back()] += 1;
+        }
+        ordered = ordered && std::ranges::is_sorted(held);
+        shared = shared || (std::ranges::contains(held, 1U) && std::ranges::contains(held, 2U));
+    }
+    RAWFRAME_EXPECT(ordered && shared && named[0] > 0 && named[1] > 0 && named[2] > named[1]);
+    // As a probe's bake sees the scene: none, in the list or the clusters.
+    withoutProbes(frame);
+    std::size_t left = 0;
+    for (std::size_t at = 3; at < frame.clusters.ranges.size(); at += 4) {
+        left += frame.clusters.ranges[at];
+    }
+    RAWFRAME_EXPECT(frame.probes.empty() && left == 0);
     // Over the limit, the farthest from the eye are left out and counted.
     Rig few{{.maximumProbes = 2}};
     kRoom(few);
-    const SceneFrame& kFew = few.frame({.eye = {kX, 0, 0}});
-    RAWFRAME_EXPECT(kFew.probes.size() == 2 && kFew.probesOverLimit == 1 && kFew.probes[0].environment != 0xe3 &&
-                    kFew.probes[1].environment != 0xe3);
+    const SceneFrame& kFew = few.frame({.eye = {kX, 0, 0}, .fovY = 1.5F});
+    RAWFRAME_EXPECT(kFew.probes.size() == 2 && kFew.probesOverLimit == 1 && kFew.probes[0].environment == 0xe2 &&
+                    kFew.probes[1].environment == 0xe1);
 }
 
 RAWFRAME_TEST(DecalsInViewArePlacedIntoTheirBoxesAndClustered) {

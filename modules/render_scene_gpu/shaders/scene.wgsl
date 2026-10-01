@@ -84,8 +84,7 @@ struct Decal {
 @group(0) @binding(24) var<storage, read> decals: array<Decal>;
 @group(0) @binding(25) var decalAtlas: texture_2d_array<f32>;
 
-// What each model reflects (D325): the sky's picture first, then each
-// reflection probe; scene.frag's Probe.
+// The frame's reflection probes (D325, D340); scene.frag's Probe.
 struct Probe {
     place: vec4f,
     extent: vec4f,
@@ -93,6 +92,7 @@ struct Probe {
 }
 
 @group(0) @binding(20) var<storage, read> probes: array<Probe>;
+@group(0) @binding(26) var probeAtlas: texture_cube_array<f32>;
 
 // Where a reflection meets the probe's box, as seen from its middle:
 // scene.frag's projected.
@@ -121,7 +121,6 @@ struct Placed {
     @location(5) @interpolate(flat) material: u32,
     @location(6) uv: vec2f,
     @location(7) tangent: vec4f,
-    @location(8) @interpolate(flat) probe: u32,
 }
 
 struct Shaded {
@@ -134,8 +133,7 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
       @location(3) model1: vec4f, @location(4) model2: vec4f, @location(5) normal0: vec3f,
       @location(6) normal1: vec3f, @location(7) normal2: vec3f, @location(8) color: vec4f,
       @location(9) previous0: vec4f, @location(10) previous1: vec4f, @location(11) previous2: vec4f,
-      @location(12) material: f32, @location(13) uv: vec2f, @location(14) tangent: vec4f,
-      @location(15) probe: f32) -> Placed {
+      @location(12) material: f32, @location(13) uv: vec2f, @location(14) tangent: vec4f) -> Placed {
     let vertex = vec4f(position, 1.0);
     let placed = vec3f(dot(model0, vertex), dot(model1, vertex), dot(model2, vertex));
     var out: Placed;
@@ -148,7 +146,6 @@ fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) mod
     out.before = (frame.previous * vec4f(was, 1.0)).xyw;
     out.material = u32(material);
     out.uv = uv;
-    out.probe = u32(probe);
     let turned = vec3f(dot(model0.xyz, tangent.xyz), dot(model1.xyz, tangent.xyz), dot(model2.xyz, tangent.xyz));
     let mirror = select(1.0, -1.0, dot(model0.xyz, cross(model1.xyz, model2.xyz)) < 0.0);
     out.tangent = vec4f(turned, tangent.w * mirror);
@@ -346,7 +343,7 @@ fn punctual(range: vec4u, placed: vec3f, normal: vec3f, surface: Surface, toEye:
 
 // scene.frag's "fs" and, with `decaled`, "fsDecaled" (D339).
 fn shaded(position: vec4f, normal: vec3f, color: vec4f, placed: vec3f, now: vec3f, before: vec3f, material: u32,
-          uv: vec2f, tangent: vec4f, probe: u32, decaled: bool) -> Shaded {
+          uv: vec2f, tangent: vec4f, decaled: bool) -> Shaded {
     let toEye = normalize(-placed);
     let at = min(material, arrayLength(&materials) / 9u - 1u) * 9u;
     let base = materials[at];
@@ -363,9 +360,10 @@ fn shaded(position: vec4f, normal: vec3f, color: vec4f, placed: vec3f, now: vec3
     // texture is sampled only where its material has one.
     let dx = dpdx(uv);
     let dy = dpdy(uv);
-    // The cluster's lights and decals, where either is clustered (D339).
+    // The cluster's lights, decals, and probes, where any is clustered
+    // (D339, D340).
     var range = vec4u(0u);
-    if (frame.clusterGrid.w > 0.0 || frame.decals.x > 0.5) {
+    if (frame.clusterDepth.y > 0.0) {
         range = clusterOf(placed);
     }
     var sampled = vec4f(1.0);
@@ -423,22 +421,39 @@ fn shaded(position: vec4f, normal: vec3f, color: vec4f, placed: vec3f, now: vec3
     if (frame.environment.w > 0.5) {
         around = frame.sky.rgb * irradianceAt(n);
     }
-    var weight = sheen;
-    var incoming = mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
-    let chosen = probes[min(probe, arrayLength(&probes) - 1u)];
-    if (chosen.place.w > 0.5) {
-        let toward = select(mirrored, projected(chosen, placed, mirrored), chosen.extent.x > 0.0);
-        let picture = textureSampleLevel(environmentTexture, environmentSampler, toward,
-                                         surface.roughness * (chosen.place.w - 1.0)).rgb;
-        let scaleBias = environmentBrdf(surface.roughness, nv);
-        weight = surface.headOn * scaleBias.x + scaleBias.y;
-        incoming = chosen.light.rgb * picture;
+    let scaleBias = environmentBrdf(surface.roughness, nv);
+    let split = surface.headOn * scaleBias.x + scaleBias.y;
+    var probed = vec3f(0.0);
+    var left = 1.0;
+    let first = range.x + range.y + range.z;
+    for (var each = first; each < first + range.w && left > 0.0; each += 1u) {
+        let probe = probes[indices[each]];
+        let past = (abs(placed - probe.place.xyz) - probe.extent.xyz) / (0.1 * probe.extent.xyz);
+        let holds = clamp(1.0 - max(max(past.x, past.y), past.z), 0.0, 1.0);
+        if (probe.place.w < 0.0 || holds <= 0.0) {
+            continue;
+        }
+        let toward = projected(probe, placed, mirrored);
+        probed += left * holds * probe.light.rgb *
+                  textureSampleLevel(probeAtlas, environmentSampler, toward, i32(probe.place.w),
+                                     surface.roughness * 7.0).rgb;
+        left *= 1.0 - holds;
+    }
+    var along = split * probed;
+    if (left > 0.0) {
+        var beyond = sheen * mix(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * mirrored.y);
+        if (frame.environment.w > 0.5) {
+            beyond = split * frame.sky.rgb *
+                  textureSampleLevel(environmentTexture, environmentSampler, mirrored,
+                                     surface.roughness * (frame.environment.w - 1.0)).rgb;
+        }
+        along += left * beyond;
     }
     if (frame.reflections.x > 0.5 && opacity >= 0.999) {
         let met = textureLoad(reflectionTexture, vec2i(position.xy), 0);
-        incoming = mix(incoming, met.rgb / max(exposure.y, 1e-12), met.a);
+        let weight = select(sheen, split, left < 1.0 || frame.environment.w > 0.5);
+        along = mix(along, weight * met.rgb / max(exposure.y, 1e-12), met.a);
     }
-    let along = weight * incoming;
     var reaches = 1.0;
     if (frame.occlusion.x > 0.5 && opacity >= 0.999) {
         reaches = textureLoad(occlusionTexture, vec2i(position.xy) / 2, 0).r;
@@ -452,16 +467,15 @@ fn shaded(position: vec4f, normal: vec3f, color: vec4f, placed: vec3f, now: vec3
 @fragment
 fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(1) color: vec4f, @location(2) placed: vec3f,
       @location(3) now: vec3f, @location(4) before: vec3f, @location(5) @interpolate(flat) material: u32,
-      @location(6) uv: vec2f, @location(7) tangent: vec4f, @location(8) @interpolate(flat) probe: u32) -> Shaded {
-    return shaded(position, normal, color, placed, now, before, material, uv, tangent, probe, false);
+      @location(6) uv: vec2f, @location(7) tangent: vec4f) -> Shaded {
+    return shaded(position, normal, color, placed, now, before, material, uv, tangent, false);
 }
 
 @fragment
 fn fsDecaled(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(1) color: vec4f,
              @location(2) placed: vec3f, @location(3) now: vec3f, @location(4) before: vec3f,
-             @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f, @location(7) tangent: vec4f,
-             @location(8) @interpolate(flat) probe: u32) -> Shaded {
-    return shaded(position, normal, color, placed, now, before, material, uv, tangent, probe, true);
+             @location(5) @interpolate(flat) material: u32, @location(6) uv: vec2f, @location(7) tangent: vec4f) -> Shaded {
+    return shaded(position, normal, color, placed, now, before, material, uv, tangent, true);
 }
 
 @fragment

@@ -58,8 +58,6 @@ layout(location = 12) in float inMaterial;
 layout(location = 13) in vec2 inUv;
 // The vertex's tangent and the bitangent's sign (D313).
 layout(location = 14) in vec4 inTangent;
-// The reflection probe it reflects, nought for the sky's picture (D325).
-layout(location = 15) in float inProbe;
 
 layout(location = 0) out vec3 outNormal;
 layout(location = 1) out vec4 outColor;
@@ -69,7 +67,6 @@ layout(location = 4) out vec3 outBefore;
 layout(location = 5) flat out uint outMaterial;
 layout(location = 6) out vec2 outUv;
 layout(location = 7) out vec4 outTangent;
-layout(location = 8) flat out uint outProbe;
 
 invariant gl_Position;
 
@@ -86,7 +83,6 @@ void main()
     outBefore = (frame.previous * vec4(kWas, 1.0)).xyw;
     outMaterial = uint(inMaterial);
     outUv = inUv;
-    outProbe = uint(inProbe);
     // A tangent turns with the model; a mirrored model flips its sign.
     const vec3 kTurned = vec3(dot(inModel0.xyz, inTangent.xyz), dot(inModel1.xyz, inTangent.xyz),
                               dot(inModel2.xyz, inTangent.xyz));

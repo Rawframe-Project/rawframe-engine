@@ -311,9 +311,6 @@ struct SceneDraw {
     /// what its motion is measured from (D291); the model itself where it
     /// was not drawn then.
     Matrix previous{};
-    /// The reflection probe it reflects, one past its place in the frame's
-    /// probes; nought for the sky's picture (D325).
-    std::uint32_t probe = 0;
 };
 
 /// The light a frame is drawn in, linear Rec. 709 (ADR-0047) in physical
@@ -448,11 +445,12 @@ struct SceneClusters {
     float near = 0.1F;
     float far = 500;
     /// Each cluster's first index in `indices`, how many lights follow it,
-    /// how many decals follow those, and nought (D339); x fastest, then y
-    /// from the top, then slices from the eye.
+    /// how many decals follow those (D339), and how many reflection probes
+    /// follow those (D340); x fastest, then y from the top, then slices
+    /// from the eye.
     std::vector<std::uint32_t> ranges;
-    /// Lights by their place in the frame's lights, and decals by theirs
-    /// in the frame's decals.
+    /// Lights by their place in the frame's lights, decals by theirs in
+    /// the frame's decals, and probes by theirs in the frame's probes.
     std::vector<std::uint32_t> indices;
 };
 
@@ -660,8 +658,10 @@ struct SceneFrame {
     std::size_t lightsOverLimit = 0;
     /// Lights a full cluster could not name, counted once each time.
     std::size_t clusterOverflow = 0;
-    /// The reflection probes a draw names (D325), the nearest to the eye
-    /// first, at most the limit; and those past it.
+    /// The reflection probes that reach the view (D325), the nearest to the
+    /// eye kept up to the limit, then ordered as a point takes them: the
+    /// highest priority first, then the smaller box (D340); and those past
+    /// the limit.
     std::vector<SceneProbe> probes;
     std::size_t probesOverLimit = 0;
     /// The decals that reach the view, in their entities' order, at most
@@ -697,6 +697,10 @@ struct SceneFrame {
     std::size_t overLimit = 0;
 };
 
+/// `frame` without its reflection probes, in its list or its clusters: as
+/// a probe's own bake sees the scene (D326, D340).
+void withoutProbes(SceneFrame& frame) noexcept;
+
 /// SPEC-0024's limit points for the scene: the models one frame queues
 /// (SPEC-0024's `recorded_commands_per_frame`, one draw each). Models past
 /// it are left out, from the last in draw order, counted as over the limit.
@@ -711,8 +715,10 @@ struct SceneLimits {
     std::size_t maximumDecalsPerCluster = 16;
     /// ADR-0051's maximum shadow-casting punctual lights per view (D292).
     std::size_t maximumShadowedLights = 8;
-    /// ADR-0051's reflection probes a view resolves at once (D325).
+    /// ADR-0051's reflection probes a view resolves at once (D325), and a
+    /// cluster holds (D340).
     std::size_t maximumProbes = 32;
+    std::size_t maximumProbesPerCluster = 8;
 };
 
 /// ADR-0051's one typed atlas for the punctual lights' shadows (D292), a

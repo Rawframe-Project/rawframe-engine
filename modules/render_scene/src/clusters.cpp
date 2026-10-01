@@ -99,9 +99,11 @@ void packClusters(SceneFrame& frame, std::vector<ClusterName>& named, const Scen
         const std::uint32_t kCluster = named[at].cluster;
         clusters.ranges[std::size_t{kCluster} * 4] = static_cast<std::uint32_t>(clusters.indices.size());
         for (; at < named.size() && named[at].cluster == kCluster; ++at) {
-            const bool kLight = named[at].item == ClusterItem::Light;
-            std::uint32_t& count = clusters.ranges[(std::size_t{kCluster} * 4) + (kLight ? 1 : 2)];
-            if (count == (kLight ? limits.maximumLightsPerCluster : limits.maximumDecalsPerCluster)) {
+            const auto kClass = static_cast<std::size_t>(named[at].item);
+            const std::array<std::size_t, 3> kLimits = {
+                limits.maximumLightsPerCluster, limits.maximumDecalsPerCluster, limits.maximumProbesPerCluster};
+            std::uint32_t& count = clusters.ranges[(std::size_t{kCluster} * 4) + 1 + kClass];
+            if (count == kLimits[kClass]) {
                 ++frame.clusterOverflow;
                 continue;
             }

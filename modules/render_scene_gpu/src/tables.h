@@ -21,6 +21,8 @@ namespace rawframe::render_scene_gpu {
 [[nodiscard]] mrhiBinding cubeAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
 /// Every layer and mip of a 2D array (D339).
 [[nodiscard]] mrhiBinding arrayAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
+/// Every cube and mip of a cube array, or a cube's seen as one (D340).
+[[nodiscard]] mrhiBinding cubesAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
 [[nodiscard]] mrhiBinding samplerAt(std::uint32_t slot, mrhiSamplerId sampler) noexcept;
 
 /// A resource of the open frame from the key `render` names it by.

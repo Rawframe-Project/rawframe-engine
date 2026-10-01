@@ -42,20 +42,18 @@ void append(std::span<const render_scene::SceneDraw> draws,
             }
         }
         placed.instances.push_back(static_cast<float>(draw.material));
-        placed.instances.push_back(static_cast<float>(draw.probe));
         const render_scene::SceneTextures kTexture =
             draw.material < materialTextures.size() ? materialTextures[draw.material] : render_scene::SceneTextures{};
         const auto kIndices = static_cast<std::uint32_t>(kMesh->second->source->indices.size());
         const std::uint32_t kCount = draw.indexCount != 0 ? draw.indexCount : kIndices - draw.firstIndex;
         if (runs.empty() || runs.back().mesh != kMesh->second || runs.back().firstIndex != draw.firstIndex ||
-            runs.back().indexCount != kCount || runs.back().texture != kTexture || runs.back().probe != draw.probe) {
+            runs.back().indexCount != kCount || runs.back().texture != kTexture) {
             runs.push_back({.mesh = kMesh->second,
                             .firstIndex = draw.firstIndex,
                             .indexCount = kCount,
                             .first = count,
                             .count = 0,
-                            .texture = kTexture,
-                            .probe = draw.probe});
+                            .texture = kTexture});
         }
         ++runs.back().count;
         ++count;
