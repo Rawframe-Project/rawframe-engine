@@ -46,10 +46,11 @@ layout(set = 0, binding = 0, std140) uniform Frame
     // spherical harmonics' coefficients.
     vec4 environment;
     vec4 irradiance[9];
-    // Whether the view's ambient occlusion is on (D327), and its
-    // screen-space reflections (D331).
+    // Whether the view's ambient occlusion is on (D327), its screen-space
+    // reflections (D331), and its contact shadows (D338).
     vec4 occlusion;
     vec4 reflections;
+    vec4 contact;
 }
 frame;
 
@@ -185,6 +186,10 @@ layout(set = 0, binding = 21) uniform texture2D occlusionTexture;
 // and how much of it to take (D331), where the view's screen-space
 // reflections are on.
 layout(set = 0, binding = 22) uniform texture2D reflectionTexture;
+
+// How much of the sun's light the contact shadows let reach each texel
+// (D338), where the view's contact shadows are on.
+layout(set = 0, binding = 23) uniform texture2D contactTexture;
 
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
@@ -479,7 +484,12 @@ void main()
     const Surface kSurface = Surface(kColor * (1.0 - kMetalness),
                                      mix(kReflectance * kReflectance * kSpecular.rgb, kColor, kMetalness),
                                      kRoughness);
-    const vec3 kDirect = frame.sun.rgb * sunlit(inPlaced, kNormal) * reflected(kSurface, kNormal, kToEye, frame.toSun.xyz) +
+    // What of the sun's light the contact shadows let through (D338), for
+    // an opaque model the prepass saw.
+    const float kContact = frame.contact.x > 0.5 && kOpacity >= 0.999
+                               ? texelFetch(contactTexture, ivec2(gl_FragCoord.xy), 0).r
+                               : 1.0;
+    const vec3 kDirect = frame.sun.rgb * sunlit(inPlaced, kNormal) * kContact * reflected(kSurface, kNormal, kToEye, frame.toSun.xyz) +
                          punctual(inPlaced, kNormal, kSurface, kToEye);
     // The sky above and the ground below (D304): their light across the
     // normal's side, diffused, and along the reflection, the Fresnel of a

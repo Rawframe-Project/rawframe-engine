@@ -52,9 +52,10 @@ enum class Effect : std::uint8_t {
     MotionBlur,
     DepthOfField,
     Bloom,
-    Fxaa
+    Fxaa,
+    ContactShadows
 };
-inline constexpr std::size_t kEffects = 7;
+inline constexpr std::size_t kEffects = 8;
 
 /// The scene's shaders, samplers, and pipelines (D284 to D292): what every
 /// frame draws with asked of the device at once, each effect's when a view
@@ -75,6 +76,7 @@ struct Pipelines {
     mrhiShaderId reflectShader{};
     mrhiShaderId motionShader{};
     mrhiShaderId focusShader{};
+    mrhiShaderId contactShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -111,6 +113,8 @@ struct Pipelines {
     Asked focusPrefilter;
     Asked focusBokeh;
     Asked focusCombine;
+    /// The contact shadows (D338).
+    Asked contactShade;
     Asked lit;
     /// The masked models lit only where their depth is the prepass's
     /// (D310).

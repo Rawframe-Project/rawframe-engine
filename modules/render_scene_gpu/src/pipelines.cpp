@@ -2,6 +2,7 @@
 
 #include "blocks.h"
 #include "generated/bloom_container.h"
+#include "generated/contact_container.h"
 #include "generated/focus_container.h"
 #include "generated/fxaa_container.h"
 #include "generated/meter_container.h"
@@ -35,11 +36,12 @@ Pipelines::~Pipelines() {
         return;
     }
     // Maul RHI retires what a frame still uses once the frame is done.
-    for (Asked* asked :
-         {&casting,       &cutCasting, &depth,       &cutout,          &surfaces,     &cutSurfaces,    &occlude,
-          &blurOcclusion, &march,      &motionTiles, &motionNeighbors, &motionGather, &focusPrefilter, &focusBokeh,
-          &focusCombine,  &lit,        &maskedLit,   &glass,           &sky,          &temporal,       &tonemap,
-          &fxaa,          &bloomFirst, &bloomDown,   &bloomUp}) {
+    for (Asked* asked : {&casting,         &cutCasting,   &depth,          &cutout,     &surfaces,
+                         &cutSurfaces,     &occlude,      &blurOcclusion,  &march,      &motionTiles,
+                         &motionNeighbors, &motionGather, &focusPrefilter, &focusBokeh, &focusCombine,
+                         &contactShade,    &lit,          &maskedLit,      &glass,      &sky,
+                         &temporal,        &tonemap,      &fxaa,           &bloomFirst, &bloomDown,
+                         &bloomUp}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
     for (Asked* asked : {&histogram, &adapt}) {
@@ -61,7 +63,8 @@ Pipelines::~Pipelines() {
                                        bloomShader,
                                        reflectShader,
                                        motionShader,
-                                       focusShader}) {
+                                       focusShader,
+                                       contactShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -467,6 +470,23 @@ result::Status Pipelines::askFor(Effect effect) {
         }
         return {};
     }
+    case Effect::ContactShadows: {
+        // The contact shadows from the prepass's depth (D338), a triangle
+        // over the target.
+        RAWFRAME_TRY(makeShader(kContactContainer, contactShader));
+        mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
+        constexpr std::string_view kLabel = "rawframe.scene.contact";
+        def.label = kLabel.data();
+        def.labelLength = kLabel.size();
+        def.shader = contactShader;
+        def.vertexEntry = "vs";
+        def.vertexEntryLength = 2;
+        def.fragmentEntry = "shade";
+        def.fragmentEntryLength = 5;
+        def.colorTargetCount = 1;
+        def.colorTargets[0].format = kAmbientFormat;
+        return ask(def, contactShade);
+    }
     case Effect::Fxaa: {
         RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
         // FXAA: the tonemapped picture into the frame's (D296).
@@ -533,6 +553,8 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
         return answered({&bloomFirst, &bloomDown, &bloomUp});
     case Effect::Fxaa:
         return answered({&fxaa});
+    case Effect::ContactShadows:
+        return answered({&contactShade});
     }
     return false;
 }

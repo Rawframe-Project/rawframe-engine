@@ -22,6 +22,7 @@ struct Frame {
     irradiance: array<vec4f, 9>,
     occlusion: vec4f,
     reflections: vec4f,
+    contact: vec4f,
 }
 
 struct Light {
@@ -69,6 +70,8 @@ struct ShadowSlot {
 @group(0) @binding(21) var occlusionTexture: texture_2d<f32>;
 // What each texel's reflection met, and how much (D331).
 @group(0) @binding(22) var reflectionTexture: texture_2d<f32>;
+// How much of the sun's light the contact shadows let through (D338).
+@group(0) @binding(23) var contactTexture: texture_2d<f32>;
 
 // What each model reflects (D325): the sky's picture first, then each
 // reflection probe; scene.frag's Probe.
@@ -366,7 +369,11 @@ fn fs(@builtin(position) position: vec4f, @location(0) normal: vec3f, @location(
     let reflectance = (emission.w - 1.0) / (emission.w + 1.0);
     let surface = Surface(tinted * (1.0 - metalness), mix(reflectance * reflectance * specular.rgb, tinted, metalness),
                           roughness);
-    let direct = frame.sun.rgb * sunlit(placed, n) * reflected(surface, n, toEye, frame.toSun.xyz) +
+    var contacted = 1.0;
+    if (frame.contact.x > 0.5 && opacity >= 0.999) {
+        contacted = textureLoad(contactTexture, vec2i(position.xy), 0).r;
+    }
+    let direct = frame.sun.rgb * sunlit(placed, n) * contacted * reflected(surface, n, toEye, frame.toSun.xyz) +
                  punctual(placed, n, surface, toEye);
     let nv = max(dot(n, toEye), 0.0);
     let sheen = surface.headOn + (max(vec3f(1.0 - surface.roughness), surface.headOn) - surface.headOn) *

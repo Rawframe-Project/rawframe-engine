@@ -4,6 +4,7 @@
 #include "bloom.h"
 #include "capture.h"
 #include "casting.h"
+#include "contact.h"
 #include "environment.h"
 #include "focus.h"
 #include "meshes.h"
@@ -68,6 +69,8 @@ struct SceneRenderer::State {
     std::optional<OcclusionPass> occlusion;
     /// Its screen-space reflections, when a view asks (D331).
     std::optional<ReflectionPass> reflecting;
+    /// Its contact shadows, when a view asks (D338).
+    std::optional<ContactPass> contact;
     /// Its motion blur, when a view asks (D334).
     std::optional<MotionBlurPass> motionBlur;
     /// Its depth of field, when a view asks (D336).
@@ -459,6 +462,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY_ASSIGN(const bool kFocusing, made(frame->depthOfField.enabled, Effect::DepthOfField));
         RAWFRAME_TRY_ASSIGN(const bool kBlooming, made(frame->bloom.enabled, Effect::Bloom));
         RAWFRAME_TRY_ASSIGN(const bool kSmoothing, made(frame->fxaa, Effect::Fxaa));
+        RAWFRAME_TRY_ASSIGN(const bool kContacting, made(frame->contactShadows.enabled, Effect::ContactShadows));
         RAWFRAME_TRY(occlusion->declare(*frame, kSurfaces && kOccluding, now.block, open.width, open.height, writes));
         // The reflections read the picture before, so only where it is
         // reused (D331).
@@ -471,6 +475,8 @@ struct SceneRenderer::State {
                                 open.height,
                                 writes));
         now.block.reflections = {reflecting->enabled() ? 1.0F : 0.0F, 0, 0, 0};
+        RAWFRAME_TRY(contact->declare(*frame, kContacting, now.block, open.width, open.height, writes));
+        now.block.contact = {contact->enabled() ? 1.0F : 0.0F, 0, 0, 0};
         now.surfaced = occlusion->enabled() || reflecting->enabled();
         if (now.surfaced) {
             mrhiTextureDef def = mrhiDefaultTextureDef();
@@ -594,6 +600,7 @@ struct SceneRenderer::State {
         }
         RAWFRAME_TRY(occlusion->addPasses(now.depth, now.surfaces));
         RAWFRAME_TRY(reflecting->addPasses(now.depth, now.surfaces));
+        RAWFRAME_TRY(contact->addPasses(now.depth));
         // The models, then the sky where none lies, drawn with the exposure
         // the device holds (D293), reading what the occlusion found and
         // what the reflections met.
@@ -603,6 +610,9 @@ struct SceneRenderer::State {
         }
         if (reflecting->enabled()) {
             litReads.push_back(wholeOf(reflecting->reflected(), mrhi_accessSampled));
+        }
+        if (contact->enabled()) {
+            litReads.push_back(wholeOf(contact->lit(), mrhi_accessSampled));
         }
         mrhiPassDef litDef = depthDef;
         litDef.accesses = litReads.data();
@@ -692,6 +702,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(temporal->write(now.upload));
         RAWFRAME_TRY(occlusion->write(now.upload));
         RAWFRAME_TRY(reflecting->write(now.upload));
+        RAWFRAME_TRY(contact->write(now.upload));
         RAWFRAME_TRY(motionBlur->write(now.upload));
         RAWFRAME_TRY(focus->write(now.upload));
         for (std::size_t at = 0; at < now.cascadeCount; ++at) {
@@ -721,11 +732,11 @@ struct SceneRenderer::State {
         // 19 the sky's picture (D322), or the run's probe's; 20 what each
         // reflects (D325); 21 what the ambient occlusion found, or white
         // (D327); 22 what the screen-space reflections met, or white
-        // (D331).
+        // (D331); 23 what the contact shadows let through, or white (D338).
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
             samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
-        const std::array<mrhiBinding, 23> kFrameBinding = {
+        const std::array<mrhiBinding, 24> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, now.shadowMap),
             samplerAt(2, pipelines.shadowSampler),
@@ -748,7 +759,8 @@ struct SceneRenderer::State {
             kPictureSampler,
             bufferAt(20, now.probesResource, now.reflections.blocks.size() * sizeof(ProbeBlock)),
             textureAt(21, occlusion->enabled() ? occlusion->reaching() : resourceOf(textures->resource(0))),
-            textureAt(22, reflecting->enabled() ? reflecting->reflected() : resourceOf(textures->resource(0)))};
+            textureAt(22, reflecting->enabled() ? reflecting->reflected() : resourceOf(textures->resource(0))),
+            textureAt(23, contact->enabled() ? contact->lit() : resourceOf(textures->resource(0)))};
         std::array<mrhiBinding, 4> skyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
                                                  bufferAt(1, metering->exposure(), sizeof(ExposureBlock)),
                                                  kPicture,
@@ -769,12 +781,13 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 23> binding = kFrameBinding;
-            // The prepass, which the occlusion and the reflections come
-            // after, reads white.
+            std::array<mrhiBinding, 24> binding = kFrameBinding;
+            // The prepass, which the occlusion, the reflections, and the
+            // contact shadows come after, reads white.
             if (pass.index1 == now.depthPass.index1 && pass.generation == now.depthPass.generation) {
                 binding[21] = textureAt(21, resourceOf(textures->resource(0)));
                 binding[22] = textureAt(22, resourceOf(textures->resource(0)));
+                binding[23] = textureAt(23, resourceOf(textures->resource(0)));
             }
             std::optional<std::pair<render_scene::SceneTextures, std::uint32_t>> bound;
             for (const Run& run : runs) {
@@ -829,6 +842,7 @@ struct SceneRenderer::State {
             if (!kLit) {
                 RAWFRAME_TRY(occlusion->record(pipelines, now.depth));
                 RAWFRAME_TRY(reflecting->record(pipelines));
+                RAWFRAME_TRY(contact->record(pipelines));
             }
         }
         RAWFRAME_TRY(capturing->record(now.scene));
@@ -858,6 +872,7 @@ struct SceneRenderer::State {
             statistics.framesReflected += reflecting->enabled() ? 1 : 0;
             statistics.framesMotionBlurred += motionBlur->enabled() ? 1 : 0;
             statistics.framesFocused += focus->enabled() ? 1 : 0;
+            statistics.framesContactShadowed += contact->enabled() ? 1 : 0;
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;
@@ -907,6 +922,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->capturing.emplace(device);
     state->occlusion.emplace(device.native());
     state->reflecting.emplace(device.native());
+    state->contact.emplace(device.native());
     state->motionBlur.emplace(device.native());
     state->focus.emplace(device.native());
     state->bloom.emplace(device.native());
