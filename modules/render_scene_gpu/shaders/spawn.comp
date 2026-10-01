@@ -1,0 +1,109 @@
+// The particles' births (ADR-0053's GPU simulation, D353), compute entry
+// "spawn", and "clear", compiled with CLEAR, which leaves each slot of a
+// ring starting anew without a particle. In "spawn", each invocation one particle an emitter spawns this frame,
+// written into its slot of the emitter's ring in the pool. The steady ones
+// are born one step apart across the frame, the rest (its bursts) now; each
+// starts in the sphere about the spawn, heading within the cone about the
+// emitter's way, its life, speed, and size varied by the emitter's
+// variation, all drawn from a hash of the emitter's seed, the particle's
+// birth, and its place in the spawn. Nothing moves a particle after: its
+// place at any age is in closed form from what is written here.
+
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// The emitter (D352): its anchor relative to the eye; where it spawns
+// relative to its anchor, and the sphere's radius; its way, and the
+// cosine of the cone's half angle; its particles' speed, life, drag, and
+// variation; their acceleration, and when on the particle clock the frame
+// began; their size at birth and death, the step between births, and the
+// clock now; their color at birth and death; its ring's first slot in the
+// pool, its size, where this spawn starts in it, and how many it spawns;
+// and how many of them are steady, its seed, and its material's place.
+layout(set = 0, binding = 0, std140) uniform Emitter
+{
+    vec4 anchor;
+    vec4 origin;
+    vec4 direction;
+    vec4 motion;
+    vec4 acceleration;
+    vec4 sizes;
+    vec4 colorStart;
+    vec4 colorEnd;
+    uvec4 ring;
+    uvec4 more;
+}
+emitter;
+
+// A particle: where it started relative to its emitter's anchor, and when
+// it was born; its velocity at birth, and its life (nought for none); and
+// the scale on its size.
+struct Particle
+{
+    vec4 start;
+    vec4 velocity;
+    vec4 extra;
+};
+
+layout(set = 0, binding = 1, std430) buffer Pool
+{
+    Particle particles[];
+}
+pool;
+
+const float kPeriod = 4096.0;
+const float kTau = 6.28318531;
+
+// O'Neill's PCG hash of one word.
+uint hashed(uint value)
+{
+    const uint kState = value * 747796405u + 2891336453u;
+    const uint kWord = ((kState >> ((kState >> 28u) + 4u)) ^ kState) * 277803737u;
+    return (kWord >> 22u) ^ kWord;
+}
+
+// The `index`th number of a particle's `seed`, from nought to one.
+float drawn(uint seed, uint index)
+{
+    return float(hashed(seed + index * 1640531527u) >> 8u) * (1.0 / 16777216.0);
+}
+
+void main()
+{
+    const uint kAt = gl_GlobalInvocationID.x;
+#ifdef CLEAR
+    if (kAt < emitter.ring.y) {
+        pool.particles[emitter.ring.x + kAt].velocity = vec4(0.0);
+    }
+#else
+    if (kAt >= emitter.ring.w) {
+        return;
+    }
+    const uint kSlot = emitter.ring.x + (emitter.ring.z + kAt) % emitter.ring.y;
+    const float kBorn = kAt < emitter.more.x ? mod(emitter.acceleration.w + emitter.sizes.z * float(kAt + 1u), kPeriod)
+                                             : emitter.sizes.w;
+    const uint kSeed = hashed(emitter.more.y ^ hashed(floatBitsToUint(kBorn) + kAt * 2654435769u));
+    const float kVariation = emitter.motion.w;
+    const float kLife = emitter.motion.y * (1.0 + kVariation * (2.0 * drawn(kSeed, 0u) - 1.0));
+    const float kSpeed = emitter.motion.x * (1.0 + kVariation * (2.0 * drawn(kSeed, 1u) - 1.0));
+    const float kScale = 1.0 + kVariation * (2.0 * drawn(kSeed, 2u) - 1.0);
+    // Within the cone, evenly over its cap.
+    const vec3 kWay = emitter.direction.xyz;
+    const float kCos = 1.0 - drawn(kSeed, 3u) * (1.0 - emitter.direction.w);
+    const float kSin = sqrt(max(1.0 - kCos * kCos, 0.0));
+    const float kTurn = kTau * drawn(kSeed, 4u);
+    const vec3 kAcross = normalize(cross(abs(kWay.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0), kWay));
+    const vec3 kUp = cross(kWay, kAcross);
+    const vec3 kHeading = kWay * kCos + (kAcross * cos(kTurn) + kUp * sin(kTurn)) * kSin;
+    // Within the sphere, evenly through it.
+    const float kHeight = 2.0 * drawn(kSeed, 5u) - 1.0;
+    const float kAround = kTau * drawn(kSeed, 6u);
+    const float kRadius = emitter.origin.w * pow(drawn(kSeed, 7u), 1.0 / 3.0);
+    const float kFlat = sqrt(max(1.0 - kHeight * kHeight, 0.0));
+    const vec3 kOffset = kRadius * vec3(kFlat * cos(kAround), kHeight, kFlat * sin(kAround));
+    pool.particles[kSlot].start = vec4(emitter.origin.xyz + kOffset, kBorn);
+    pool.particles[kSlot].velocity = vec4(kHeading * kSpeed, max(kLife, 0.0));
+    pool.particles[kSlot].extra = vec4(max(kScale, 0.0), 0.0, 0.0, 0.0);
+#endif
+}

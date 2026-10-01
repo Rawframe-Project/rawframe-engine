@@ -13,6 +13,7 @@
 #include "models.h"
 #include "motion.h"
 #include "occlusion.h"
+#include "particles.h"
 #include "picture.h"
 #include "pipelines.h"
 #include "post.h"
@@ -95,6 +96,8 @@ struct SceneRenderer::State {
     std::optional<PicturePass> picture;
     /// Its post processes, where a view's camera has them (D350).
     std::optional<PostProcessPass> post;
+    /// Its particles, where a view draws emitters (D353).
+    std::optional<ParticlePass> particles;
     /// What it draws over the composed picture, after the canvas (D351),
     /// and whether the open frame has that.
     struct Composed final : render::FrameRecorder {
@@ -188,6 +191,18 @@ struct SceneRenderer::State {
             if (kPicture != nullptr && isEnvironment(*kPicture)) {
                 static_cast<void>(textures->choose(kProbe.environment, kPicture));
                 probePictures.insert(kProbe.environment);
+            }
+        }
+        // Each emitter's material's base and emission textures (D353).
+        for (const render_scene::SceneEmitter& kEmitter : scene.emitters) {
+            if (kEmitter.material >= scene.textures.size()) {
+                continue;
+            }
+            const render_scene::SceneTextures& kTextures = scene.textures[kEmitter.material];
+            for (const std::uint64_t kId : {kTextures.base.id, kTextures.emission.id}) {
+                if (kId != 0) {
+                    static_cast<void>(textures->choose(kId, sampled ? sampled(kId) : nullptr));
+                }
             }
         }
         // Each post process's texture (D350).
@@ -436,6 +451,8 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(bloom->declare(*frame, kBlooming, open.width, open.height));
         RAWFRAME_TRY_ASSIGN(const bool kPosting, made(!frame->postProcesses.empty(), Effect::PostProcess));
         RAWFRAME_TRY(post->declare(*frame, kPosting, *textures, writes));
+        RAWFRAME_TRY_ASSIGN(const bool kEmitting, made(!frame->emitters.empty(), Effect::Particles));
+        RAWFRAME_TRY(particles->declare(*frame, kEmitting, writes));
         const std::uint64_t kTable = frame->grading.table;
         const bool kTabled = kTable != 0 && textures->volume(kTable) && textures->resource(kTable) != 0;
         RAWFRAME_TRY(picture->declare(*frame,
@@ -511,6 +528,15 @@ struct SceneRenderer::State {
             litReads.push_back(wholeOf(contact->lit(), mrhi_accessSampled));
         }
         RAWFRAME_TRY(models->addLitPass(litReads));
+        // The particles over the models' light, before anything reads it
+        // (D353).
+        std::vector<mrhiAccess> particleReads = {wholeOf(now.blockResource, mrhi_accessUniform),
+                                                 wholeOf(metering->exposure(), mrhi_accessStorageRead),
+                                                 wholeOf(now.materialsResource, mrhi_accessStorageRead)};
+        for (const std::uint64_t kTexture : textures->chosen()) {
+            particleReads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
+        }
+        RAWFRAME_TRY(particles->addPasses(models->scene(), models->depth(), particleReads));
         RAWFRAME_TRY(capturing->declare(models->scene(), open.width, open.height, now.block.exposure[0]));
         RAWFRAME_TRY(metering->addPasses(models->scene()));
         RAWFRAME_TRY(temporal->addPass(models->scene(), models->motion()));
@@ -660,6 +686,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(motionBlur->write(now.upload));
         RAWFRAME_TRY(focus->write(now.upload));
         RAWFRAME_TRY(post->write(now.upload));
+        RAWFRAME_TRY(particles->write(now.upload));
         RAWFRAME_TRY(shadows->write(now.upload));
         RAWFRAME_TRY(held->write(now.upload));
         RAWFRAME_TRY(textures->write(render::requestKey(now.upload.index1, now.upload.generation)));
@@ -731,6 +758,14 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(reflecting->record(pipelines));
         RAWFRAME_TRY(contact->record(pipelines));
         RAWFRAME_TRY(models->recordLit(kDrawing, decalAtlas->drawn() > 0, skyBinding));
+        RAWFRAME_TRY(particles->record(
+            pipelines,
+            ParticleDrawing{.textures = textures.get(),
+                            .block = now.blockResource,
+                            .exposure = metering->exposure(),
+                            .materials = now.materialsResource,
+                            .materialsBytes = now.materials.size() * sizeof(render_scene::MaterialBlob),
+                            .depth = models->depth()}));
         RAWFRAME_TRY(capturing->record(models->scene()));
         RAWFRAME_TRY(metering->record(pipelines, models->scene(), now.width, now.height));
         RAWFRAME_TRY(temporal->record(pipelines, models->scene(), models->motion()));
@@ -770,6 +805,9 @@ struct SceneRenderer::State {
             statistics.probesDrawn += probeAtlas->drawn();
             statistics.postProcessesRun += post->run();
             statistics.postProcessesLeftOut += post->leftOut();
+            statistics.emittersDrawn += particles->drawn();
+            statistics.emittersLeftOut += particles->leftOut();
+            statistics.particlesSpawned += particles->spawned();
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;
@@ -779,6 +817,7 @@ struct SceneRenderer::State {
                                     declared->placed.translucentRuns.size();
         }
         temporal->ended(submitted);
+        particles->ended(submitted);
         decalAtlas->ended(submitted);
         probeAtlas->ended(submitted);
         if (submitted && metering->metered()) {
@@ -838,6 +877,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->bloom.emplace(device.native());
     state->picture.emplace(device.native());
     state->post.emplace(device.native());
+    state->particles.emplace(device.native(), limits.maximumParticles);
     state->composed.state = state.get();
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};

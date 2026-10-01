@@ -158,7 +158,10 @@ public:
                       diagnostics::field("probesDrawn", statistics.probesDrawn),
                       diagnostics::field("framesMultisampled", statistics.framesMultisampled),
                       diagnostics::field("postProcessesRun", statistics.postProcessesRun),
-                      diagnostics::field("postProcessesLeftOut", statistics.postProcessesLeftOut)});
+                      diagnostics::field("postProcessesLeftOut", statistics.postProcessesLeftOut),
+                      diagnostics::field("emittersDrawn", statistics.emittersDrawn),
+                      diagnostics::field("emittersLeftOut", statistics.emittersLeftOut),
+                      diagnostics::field("particlesSpawned", statistics.particlesSpawned)});
     }
 
 private:

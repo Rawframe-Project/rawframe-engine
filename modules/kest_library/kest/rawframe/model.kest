@@ -302,17 +302,19 @@ struct PostProcess {
 // particles drawn as quads facing the eye, of the game's surface material
 // of the identity its `material` line gives it (nought for none: white),
 // its base color and texture times their color, its emission added,
-// unlit, laid over what is behind by their alpha. `rate` a second, each
-// living `lifetime` seconds, leaving at `speed` meters a second along the
-// pose's +Y, within `spread` radians of it (pi: every way), from within
-// `radius` meters of the pose; `sizeStart` meters across at birth and
-// `sizeEnd` at death; `colorStart` and `colorEnd` (0xRRGGBBAA, sRGB, the
-// alpha their opacity) between; pushed by the acceleration (meters a
-// second squared: gravity is (0, -9.8, 0)) and slowed by `drag` (a
-// second); each one's life, speed, and size varied by up to `variation` of
-// them (nought to one). Each time `bursts` moves, `burstCount` more leave
-// at once. A nought `seed` takes one from the entity. Cosmetic: each
-// client draws its own particles, and nothing in the World sees them.
+// unlit, laid over what is behind by their alpha, each a soft disc unless
+// the texture's alpha shapes it, and faded where it meets what is behind
+// (D353). `rate` a second, each living `lifetime` seconds, leaving at
+// `speed` meters a second along the pose's +Y, within `spread` radians of
+// it (pi: every way), from within `radius` meters of the pose; `sizeStart`
+// meters across at birth and `sizeEnd` at death; `colorStart` and
+// `colorEnd` (0xRRGGBBAA, sRGB, the alpha their opacity) between; pushed
+// by the acceleration (meters a second squared: gravity is (0, -9.8, 0))
+// and slowed by `drag` (a second); each one's life, speed, and size varied
+// by up to `variation` of them (nought to one). Each time `bursts` moves,
+// `burstCount` more leave at once. A nought `seed` takes one from the
+// entity. Cosmetic: each client draws its own particles, and nothing in
+// the World sees them.
 struct ParticleEmitter {
     material: u64
     rate: f32

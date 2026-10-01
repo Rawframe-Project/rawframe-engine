@@ -51,6 +51,10 @@ struct RendererLimits {
     /// device uploads in a frame; a mesh or texture larger than what is left
     /// after the placements is never drawn.
     std::uint64_t uploadBytesPerFrame = render::kFrameUploadBytes / 4 * 3;
+    /// ADR-0053's live particles a view holds (D353): the pool every
+    /// emitter's ring is found in, 48 bytes a particle; an emitter whose
+    /// ring it has no room for is left out.
+    std::uint32_t maximumParticles = 65536;
 };
 
 struct RendererStatistics {
@@ -99,6 +103,11 @@ struct RendererStatistics {
     /// (`final_output`, D350, D351).
     std::uint64_t postProcessesRun = 0;
     std::uint64_t postProcessesLeftOut = 0;
+    /// Particle emitters drawn, summed over the frames; those left out for
+    /// want of room in the pool; and the particles they spawned (D353).
+    std::uint64_t emittersDrawn = 0;
+    std::uint64_t emittersLeftOut = 0;
+    std::uint64_t particlesSpawned = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the

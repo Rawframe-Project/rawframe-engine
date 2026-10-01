@@ -1,0 +1,12 @@
+{
+  "root_block_bytes": 0,
+  "entries": [
+    {"name": "spawn", "stage": "compute", "workgroup": [64, 1, 1]},
+    {"name": "clear", "stage": "compute", "workgroup": [64, 1, 1]}
+  ],
+  "bindings": [
+    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["compute"], "min_size": 160},
+    {"table": 0, "slot": 1, "kind": "storage_buffer", "stages": ["compute"], "min_size": 48}
+  ],
+  "constants": []
+}

@@ -80,9 +80,10 @@ enum class Effect : std::uint8_t {
     Decals,
     Probes,
     Multisampled,
-    PostProcess
+    PostProcess,
+    Particles
 };
-inline constexpr std::size_t kEffects = 12;
+inline constexpr std::size_t kEffects = 13;
 
 /// The scene's shaders, samplers, and pipelines (D284 to D292): what every
 /// frame draws with asked of the device at once, each effect's when a view
@@ -108,6 +109,8 @@ struct Pipelines {
     mrhiShaderId probeShader{};
     mrhiShaderId resolveShader{};
     mrhiShaderId postShader{};
+    mrhiShaderId spawnShader{};
+    mrhiShaderId particleShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -174,6 +177,11 @@ struct Pipelines {
     Asked postLinear;
     Asked postDisplay;
     Asked grade;
+    /// A particles' ring cleared, the particles' births, and the particles
+    /// drawn (D353).
+    Asked clearParticles;
+    Asked spawn;
+    Asked particles;
     /// The bloom's first halving, its others, and its doublings, added to
     /// the level above (D328).
     Asked bloomFirst;
