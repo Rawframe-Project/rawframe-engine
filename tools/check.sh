@@ -83,7 +83,7 @@ build_and_test() {
         awk 'function flush() { if (shown) { print head; for (i = (n > 40 ? n - 39 : 1); i <= n; i++) print kept[i] } }
              /Test +#[0-9]+: / { flush(); shown = /\*\*\*|Failed|Exception|Timeout/; head = $0; n = 0; next }
              /^(The following tests|[0-9]+% tests passed)/ { flush(); shown = 0 }
-             shown { kept[++n] = substr($0, 1, 400) }
+             shown { kept[++n] = substr($0, 1, 1200) }
              END { flush() }' "out/$preset.test.log"
         tail -30 "out/$preset.test.log"; fail "$preset tests"; return
     fi

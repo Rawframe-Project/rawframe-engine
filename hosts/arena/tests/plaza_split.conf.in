@@ -1,10 +1,12 @@
-# Two bots play the sample 3D game for six seconds while both their
+# Two bots play the sample 3D game for twelve seconds while both their
 # scenes are drawn split-screen on the one device into an offscreen
 # picture (D362), each into its half by the game's layout for two: one
 # frame in eight is read back and counted in colors; the last is written to
-# a TGA image in the build tree. Six seconds: a loaded machine has taken
-# three before a client saw its World, and more for the second (D364).
-host.maximum_iterations = 720
+# a TGA image in the build tree. Each view is drawn at half its region's
+# size each way and scaled to it (D373). Twelve seconds: a loaded machine
+# has taken three before a client saw its World, more for the second
+# (D364), and a full check more than six (D373).
+host.maximum_iterations = 1440
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = @PROJECT_SOURCE_DIR@/games/plaza/plaza.game
@@ -21,3 +23,4 @@ render.capture = @CAPTURE@
 bots.local_players = 2
 scene.shadow_side = 256
 render.read_every = 8
+scene.render_scale_percent = 50
