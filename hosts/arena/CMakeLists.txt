@@ -150,7 +150,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
+                             "\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(runners_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

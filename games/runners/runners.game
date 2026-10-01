@@ -8,6 +8,11 @@ physics2d gravity 0 -10 substeps 4
 
 collision class runner 2ebcd16c10c5f6a4
 
+# Split-screen (D364): two local players one over the other, four in
+# quarters.
+layout 2 0 0 1 0.5 0 0.5 1 0.5
+layout 4 0 0 0.5 0.5 0.5 0 0.5 0.5 0 0.5 0.5 0.5 0.5 0.5 0.5 0.5
+
 component 6b05cdb4-0683-437a-aaac-7ad990b2ddb4 runners.stick Stick
 component f6453556-fcdd-46e8-9208-866fade389cf runners.score Score
 component 4a1a3d29-28e9-46fe-aae0-6bb3576ca9b3 runners.hit Hit
