@@ -85,6 +85,7 @@ constexpr std::array<kest::Parameter, 1> kAxisGives = {kest::Slot::F32};
 constexpr input::DeviceId kKeyboard{1};
 constexpr input::DeviceId kMouse{2};
 constexpr input::DeviceId kGamepad{3};
+constexpr input::DeviceId kTouch{4};
 
 input::DeviceId deviceFor(input::DeviceClass device) noexcept {
     switch (device) {
@@ -94,6 +95,8 @@ input::DeviceId deviceFor(input::DeviceClass device) noexcept {
         return kMouse;
     case input::DeviceClass::Gamepad:
         return kGamepad;
+    case input::DeviceClass::Touch:
+        return kTouch;
     }
     return {};
 }
@@ -218,6 +221,7 @@ public:
             RAWFRAME_TRY(mapper_->pair(kKeyboard, input::DeviceClass::Keyboard, {}));
             RAWFRAME_TRY(mapper_->pair(kMouse, input::DeviceClass::Mouse, {}));
             RAWFRAME_TRY(mapper_->pair(kGamepad, input::DeviceClass::Gamepad, {}));
+            RAWFRAME_TRY(mapper_->pair(kTouch, input::DeviceClass::Touch, {}));
             hand_.emplace(shared.actions, *seed);
         } else {
             routing_ = std::move(routing);
