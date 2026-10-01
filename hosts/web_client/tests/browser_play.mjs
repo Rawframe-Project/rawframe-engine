@@ -327,7 +327,14 @@ try {
     // The plaza's page draws about eight frames a second on the software
     // rasterizer, and confirms fewer of its ticks for it: it plays a second
     // longer, so its confirmations clear the bar by more than chance (D333).
+    // Its first frames make the rasterizer compile what each new way of
+    // drawing needs (an effect's pipeline, a texture kind first sampled),
+    // and a player starting during them confirms a fifth fewer ticks: it
+    // starts once they are drawn (D341).
     const forward = plaza ? 'KeyW' : 'KeyD';
+    if (plaza) {
+        await sleep(1500);
+    }
     await tab.click('canvas');
     await tab.keyboard.down(forward);
     await sleep(plaza ? 2000 : 1000);
