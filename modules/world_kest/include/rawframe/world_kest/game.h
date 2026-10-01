@@ -333,14 +333,22 @@ struct GameTexture {
     std::string path;
 };
 
+/// When a render texture's view is drawn (ADR-0052's closed set): every
+/// frame, or when its view asks, by a new `request`.
+enum class RenderTextureUpdate : std::uint8_t {
+    EveryFrame,
+    OnDemand
+};
+
 /// A render texture (ADR-0052, D361), by the identity a material names it
 /// by as it would a texture: a picture `width` by `height` pixels that a
-/// `rawframe.model.View` draws a camera's view into each frame, nothing
-/// cooked.
+/// `rawframe.model.View` draws a camera's view into as `update` has it,
+/// nothing cooked.
 struct GameRenderTexture {
     std::uint64_t id = 0;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    RenderTextureUpdate update = RenderTextureUpdate::EveryFrame;
 };
 
 /// ADR-0052's limit points for render textures, profile values: the most
@@ -464,7 +472,8 @@ struct GameDescription {
     std::vector<GameMesh> meshes;
     /// From `texture <16 hex digits> <file>` lines.
     std::vector<GameTexture> textures;
-    /// From `rendertexture <16 hex digits> <width> <height>` lines (D361).
+    /// From `rendertexture <16 hex digits> <width> <height> [every_frame |
+    /// on_demand]` lines (D361).
     std::vector<GameRenderTexture> renderTextures;
     /// From `material <16 hex digits> <file>` lines.
     std::vector<GameMaterial> materials;

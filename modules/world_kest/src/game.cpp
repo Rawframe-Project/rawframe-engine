@@ -250,15 +250,17 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.textures.push_back(GameTexture{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "rendertexture") {
-            const auto kId = kWords.size() == 4 ? parseHex64(kWords[1]) : std::nullopt;
-            const auto kWidth = kWords.size() == 4 ? parseReal(kWords[2], 1, kMaximumRenderTextureSide) : std::nullopt;
-            const auto kHeight = kWords.size() == 4 ? parseReal(kWords[3], 1, kMaximumRenderTextureSide) : std::nullopt;
+            const bool kShaped = kWords.size() == 4 || kWords.size() == 5;
+            const auto kId = kShaped ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kWidth = kShaped ? parseReal(kWords[2], 1, kMaximumRenderTextureSide) : std::nullopt;
+            const auto kHeight = kShaped ? parseReal(kWords[3], 1, kMaximumRenderTextureSide) : std::nullopt;
+            const std::string_view kUpdate = kWords.size() == 5 ? kWords[4] : std::string_view{"every_frame"};
             if (!kId || *kId == 0 || !kWidth || !kHeight || std::floor(*kWidth) != *kWidth ||
-                std::floor(*kHeight) != *kHeight) {
+                std::floor(*kHeight) != *kHeight || (kUpdate != "every_frame" && kUpdate != "on_demand")) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
-                               "a render texture line is `rendertexture <16 hex digits> <width> <height>`, each side "
-                               "1 to 4096 pixels");
+                               "a render texture line is `rendertexture <16 hex digits> <width> <height> "
+                               "[every_frame | on_demand]`, each side 1 to 4096 pixels");
             }
             if (std::ranges::contains(game.renderTextures, *kId, &GameRenderTexture::id) ||
                 std::ranges::contains(game.textures, *kId, &GameTexture::id)) {
@@ -268,9 +270,11 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             if (game.renderTextures.size() == kMaximumRenderTextures) {
                 return badLine(number, WorldKestError::BadGameLine, "a game declares at most 8 render textures");
             }
-            game.renderTextures.push_back(GameRenderTexture{.id = *kId,
-                                                            .width = static_cast<std::uint32_t>(*kWidth),
-                                                            .height = static_cast<std::uint32_t>(*kHeight)});
+            game.renderTextures.push_back(GameRenderTexture{
+                .id = *kId,
+                .width = static_cast<std::uint32_t>(*kWidth),
+                .height = static_cast<std::uint32_t>(*kHeight),
+                .update = kUpdate == "on_demand" ? RenderTextureUpdate::OnDemand : RenderTextureUpdate::EveryFrame});
         } else if (kKeyword == "material") {
             const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {

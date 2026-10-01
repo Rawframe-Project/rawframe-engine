@@ -40,6 +40,7 @@ constexpr diagnostics::EventIdentity kTexturesRead{"scene", "textures_read"};
 constexpr diagnostics::EventIdentity kPictureUnknown{"scene", "picture_unknown"};
 constexpr diagnostics::EventIdentity kPictureUnread{"scene", "picture_unavailable"};
 constexpr diagnostics::EventIdentity kViewRefused{"scene", "view_refused"};
+constexpr diagnostics::EventIdentity kViewsSummary{"scene", "scene_views_summary"};
 /// The decoded levels the materials' textures may hold.
 constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
 constexpr std::string_view kMaybe[] = {
@@ -228,7 +229,11 @@ public:
         cameraComponents_ = game->cameras;
         viewComponent_ = game->view;
         for (const world_kest::GameRenderTexture& kTexture : files->description().renderTextures) {
-            textureViews_.push_back(TextureView{.id = kTexture.id, .width = kTexture.width, .height = kTexture.height});
+            textureViews_.push_back(
+                TextureView{.id = kTexture.id,
+                            .width = kTexture.width,
+                            .height = kTexture.height,
+                            .onDemand = kTexture.update == world_kest::RenderTextureUpdate::OnDemand});
         }
         textureFrames_.resize(textureViews_.size());
         autoExposureComponent_ = game->autoExposure;
@@ -425,11 +430,18 @@ public:
             diagnostics::field("shadowSquares", shadowSquares_),
             diagnostics::field("shadowsEvicted", shadowsEvicted_),
             diagnostics::field("decalsDrawn", decalsDrawn_),
-            diagnostics::field("decalsCulled", decalsCulled_),
-            diagnostics::field("viewsDrawn", viewsDrawn_),
-            diagnostics::field("viewsLeftOut", viewsLeftOut_),
-            diagnostics::field("viewsRefused", viewsRefused_)};
+            diagnostics::field("decalsCulled", decalsCulled_)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
+        if (!textureViews_.empty()) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kViewsSummary,
+                         "what one client's render textures were drawn with",
+                         {diagnostics::field("drawn", viewsDrawn_),
+                          diagnostics::field("kept", viewsKept_),
+                          diagnostics::field("missed", viewsMissed_),
+                          diagnostics::field("leftOut", viewsLeftOut_),
+                          diagnostics::field("refused", viewsRefused_)});
+        }
         const auto kParticles = particles_.fields();
         emitter_.log(
             diagnostics::Severity::Info, kParticlesSummary, "what one client's scene's emitters drew", kParticles);
@@ -448,6 +460,14 @@ public:
 
     std::span<const TextureFrame> textureFrames() const noexcept override {
         return textureFrames_;
+    }
+
+    void missed(std::uint64_t id) noexcept override {
+        const auto kView = std::ranges::find(textureViews_, id, &TextureView::id);
+        if (kView != textureViews_.end() && kView->offered != nullptr) {
+            kView->resend = true;
+            ++viewsMissed_;
+        }
     }
 
     std::uint32_t width() const noexcept override {
@@ -747,13 +767,16 @@ private:
 
     /// Each render texture's view (D361): of the entities whose view names
     /// it, the one of the lowest order, its World extracted by the render
-    /// texture's own scene and its camera read. Two of the lowest order
-    /// show none, and are told; the others are left out.
+    /// texture's own scene and its camera read when it is due: every frame,
+    /// or on demand when the texture shows another view or request. Two of
+    /// the lowest order show none, and are told; the others are left out.
     void extractViews(world::World& world) {
         for (TextureView& each : textureViews_) {
             each.entity.reset();
             each.order = 0;
+            each.request = 0;
             each.tied = false;
+            each.due = false;
         }
         if (!viewComponent_.has_value() || textureViews_.empty()) {
             return;
@@ -790,6 +813,7 @@ private:
                 }
                 kTarget->entity = chunk.entities[row];
                 kTarget->order = asked.order;
+                kTarget->request = asked.request;
                 kTarget->tied = false;
             }
         });
@@ -807,6 +831,13 @@ private:
                 each.entity.reset();
                 continue;
             }
+            each.due = !each.onDemand || !each.shown.has_value() || each.shown->entity != *each.entity ||
+                       each.shown->request != each.request;
+            if (!each.due) {
+                ++viewsKept_;
+                continue;
+            }
+            each.resend = false;
             if (each.scene == nullptr) {
                 auto made = Scene::create(world.registry(), settings_);
                 if (!made.has_value()) {
@@ -820,16 +851,29 @@ private:
         }
     }
 
-    /// Each render texture's view queued, at its own aspect and on its
-    /// own clock (D361).
+    /// Each render texture's view queued when due, at its own aspect and
+    /// on its own clock (D361); one drawn on demand taken as shown, and
+    /// its frame offered again as it was when the device missed it.
     void presentViews(execution::MonotonicInstant now) {
         for (std::size_t at = 0; at < textureViews_.size(); ++at) {
             TextureView& each = textureViews_[at];
             textureFrames_[at] = TextureFrame{.id = each.id, .width = each.width, .height = each.height};
             if (!each.entity.has_value() || each.scene == nullptr) {
                 each.presented.reset();
+                each.shown.reset();
+                each.offered = nullptr;
+                each.resend = false;
                 continue;
             }
+            if (!each.due) {
+                // A frame the device missed offered again as it was.
+                if (each.resend) {
+                    textureFrames_[at].frame = each.offered;
+                    each.resend = false;
+                }
+                continue;
+            }
+            each.shown = Shown{.entity = *each.entity, .request = each.request};
             each.camera.aspect = static_cast<float>(each.width) / static_cast<float>(each.height);
             each.camera.elapsed =
                 each.presented.has_value() ? static_cast<float>((now - *each.presented).nanoseconds) / 1e9F : 0.0F;
@@ -838,6 +882,7 @@ private:
             askPicture(kFrame.lights.environment);
             askPicture(kFrame.grading.table);
             textureFrames_[at].frame = &kFrame;
+            each.offered = &kFrame;
             ++viewsDrawn_;
         }
     }
@@ -850,14 +895,28 @@ private:
     std::vector<schema::ComponentTypeId> cameraComponents_;
     /// The views into render textures (D361): the game's view component,
     /// its query, each render texture's view and scene, the frames they
-    /// queued, and the views drawn, left out, and refused.
+    /// queued, and the views drawn, kept (on demand, nothing asked), missed
+    /// by the device, left out, and refused. A texture drawn on demand
+    /// holds the view and request it last showed.
+    struct Shown {
+        world::EntityHandle entity;
+        std::uint32_t request = 0;
+    };
     struct TextureView {
         std::uint64_t id = 0;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
+        bool onDemand = false;
         std::optional<world::EntityHandle> entity;
         std::int32_t order = 0;
+        std::uint32_t request = 0;
         bool tied = false;
+        bool due = false;
+        std::optional<Shown> shown;
+        /// The frame last queued, kept by its scene until it queues
+        /// another, and whether the device missed it.
+        const SceneFrame* offered = nullptr;
+        bool resend = false;
         std::unique_ptr<Scene> scene;
         SceneCamera camera;
         std::optional<execution::MonotonicInstant> presented;
@@ -867,6 +926,8 @@ private:
     std::vector<TextureView> textureViews_;
     std::vector<TextureFrame> textureFrames_;
     std::uint64_t viewsDrawn_ = 0;
+    std::uint64_t viewsKept_ = 0;
+    std::uint64_t viewsMissed_ = 0;
     std::uint64_t viewsLeftOut_ = 0;
     std::uint64_t viewsRefused_ = 0;
     std::optional<schema::ComponentTypeId> autoExposureComponent_;

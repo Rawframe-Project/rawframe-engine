@@ -57,11 +57,13 @@ struct Camera {
 };
 
 /// `rawframe.model.View` as C++ reads it (ADR-0052, D361): the render
-/// texture its entity's camera draws into, and its order among the views
-/// naming it.
+/// texture its entity's camera draws into, its order among the views
+/// naming it, and the update it asks for, where the texture is drawn on
+/// demand.
 struct View {
     std::uint64_t target = 0;
     std::int32_t order = 0;
+    std::uint32_t request = 0;
 };
 
 /// ADR-0047's closed tonemapper set, as a camera names it (D295): AgX, the

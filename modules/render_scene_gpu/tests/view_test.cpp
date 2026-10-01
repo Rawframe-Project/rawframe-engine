@@ -25,11 +25,16 @@ RAWFRAME_TEST(AViewsTextureIsSampledByTheSceneItShows) {
         return;
     }
     constexpr std::uint64_t kScreen = 0xd1;
-    auto view = render_scene_gpu::TextureView::create(*kDevice, kScreen, 32, 32);
     auto scene = render_scene_gpu::SceneRenderer::create(*kDevice);
     auto framer = render::Framer::create(*kDevice);
-    RAWFRAME_EXPECT(view.has_value() && scene.has_value() && framer.has_value());
-    if (!view.has_value() || !scene.has_value() || !framer.has_value()) {
+    RAWFRAME_EXPECT(scene.has_value() && framer.has_value());
+    if (!scene.has_value() || !framer.has_value()) {
+        return;
+    }
+    // Its renderer draws with the player's view's pipelines.
+    auto view = render_scene_gpu::TextureView::create(*kDevice, **scene, kScreen, 32, 32);
+    RAWFRAME_EXPECT(view.has_value());
+    if (!view.has_value()) {
         return;
     }
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
@@ -60,8 +65,10 @@ RAWFRAME_TEST(AViewsTextureIsSampledByTheSceneItShows) {
     shown.textures = {{}, {.base = {.id = kScreen}}};
     const std::array<render_scene_gpu::TextureView*, 1> kViews = {view->get()};
     const std::array<render::FrameRecorder*, 2> kRecorders = {view->get(), scene->get()};
+    bool missed = false;
     const auto kDraw = [&](const SceneFrame* drawnInto) {
         (**view).prepare(drawnInto, kMeshes);
+        missed = (**view).missed();
         (**scene).prepare(&shown, kMeshes, {}, kViews);
         RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
         RAWFRAME_EXPECT(
@@ -79,11 +86,19 @@ RAWFRAME_TEST(AViewsTextureIsSampledByTheSceneItShows) {
         const std::array<int, 3> kWhite = at(*pixels, 32, 32);
         RAWFRAME_EXPECT(kWhite[0] > 200 && kWhite[1] > 200 && kWhite[2] > 200);
     }
-    // Once it has, its red.
+    // A frame given it that no frame drew is told as missed by the next.
+    (**view).prepare(&seen, kMeshes);
+    const std::array<render::FrameRecorder*, 1> kWithout = {scene->get()};
+    RAWFRAME_EXPECT((*framer)->make(kWithout, {.width = kSide, .height = kSide}).value_or(false));
+    RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+    pixels = kDraw(&seen);
+    RAWFRAME_EXPECT(missed);
+    // Once it has drawn, its red, and nothing missed.
     for (int attempt = 0; attempt < 1000 && (**view).statistics().frames == 0; ++attempt) {
         pixels = kDraw(&seen);
     }
     pixels = kDraw(&seen);
+    RAWFRAME_EXPECT(!missed);
     RAWFRAME_EXPECT(pixels.has_value() && (**view).picture().has_value());
     if (pixels.has_value()) {
         const std::array<int, 3> kRed = at(*pixels, 32, 32);

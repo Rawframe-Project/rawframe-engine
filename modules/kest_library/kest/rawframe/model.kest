@@ -63,15 +63,19 @@ struct Camera {
 }
 
 // A view (ADR-0052, D361), on an entity with a camera: what the camera
-// sees from the entity's pose drawn each frame into the game's render
-// texture `target` (a `rendertexture` line's identity), which a material
-// samples as it would any texture, a frame behind at most. The camera's
+// sees from the entity's pose drawn into the game's render texture
+// `target` (a `rendertexture` line's identity), which a material samples
+// as it would any texture, a frame behind at most. A render texture drawn
+// every frame is drawn each frame; one drawn on demand when it first has
+// this view and whenever `request` changes, keeping its picture between,
+// a request the device misses drawn the frame after. The camera's
 // offsets, aim, lens, and effects are its own, as a player's are. A render
 // texture shows one view: of those naming it, the one of the lowest
 // `order`; two of the same lowest order show none, and are told.
 struct View {
     target: u64
     order: i32
+    request: u32
 }
 
 // The tonemappers a camera may map its light with (ADR-0047).

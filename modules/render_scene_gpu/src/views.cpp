@@ -21,6 +21,10 @@ struct TextureView::State {
     render::Frame inner;
     bool drawing = false;
     bool drawn = false;
+    /// Whether a submitted frame drew the frame it was given, and whether
+    /// the one before went undrawn.
+    bool shown = false;
+    bool missed = false;
 
     ~State() {
         if (native != nullptr && texture.index1 != 0) {
@@ -35,14 +39,18 @@ TextureView::TextureView(std::unique_ptr<State> state) noexcept : state_(std::mo
 
 TextureView::~TextureView() = default;
 
-result::Result<std::unique_ptr<TextureView>> TextureView::create(
-    render::Device& device, std::uint64_t id, std::uint32_t width, std::uint32_t height, RendererLimits limits) {
+result::Result<std::unique_ptr<TextureView>> TextureView::create(render::Device& device,
+                                                                 const SceneRenderer& sharing,
+                                                                 std::uint64_t id,
+                                                                 std::uint32_t width,
+                                                                 std::uint32_t height,
+                                                                 RendererLimits limits) {
     auto state = std::make_unique<State>();
     state->native = device.native();
     state->id = id;
     state->width = width;
     state->height = height;
-    RAWFRAME_TRY_ASSIGN(state->renderer, SceneRenderer::create(device, limits));
+    RAWFRAME_TRY_ASSIGN(state->renderer, SceneRenderer::create(device, sharing, limits));
     mrhiTextureDef def = mrhiDefaultTextureDef();
     def.format = mrhi_formatRgba8UnormSrgb;
     def.width = width;
@@ -56,6 +64,8 @@ result::Result<std::unique_ptr<TextureView>> TextureView::create(
 }
 
 void TextureView::prepare(const render_scene::SceneFrame* frame, MeshSource meshes, TextureSource textures) {
+    state_->missed = state_->frame != nullptr && !state_->shown;
+    state_->shown = false;
     state_->frame = frame;
     state_->renderer->prepare(frame, std::move(meshes), std::move(textures));
 }
@@ -102,8 +112,13 @@ void TextureView::ended(bool submitted) noexcept {
     State& state = *state_;
     state.renderer->ended(submitted);
     state.renderer->composed().ended(submitted);
-    state.drawn = state.drawn || (submitted && state.drawing);
+    state.shown = state.shown || (submitted && state.drawing);
+    state.drawn = state.drawn || state.shown;
     state.drawing = false;
+}
+
+bool TextureView::missed() const noexcept {
+    return state_->missed;
 }
 
 std::uint64_t TextureView::id() const noexcept {

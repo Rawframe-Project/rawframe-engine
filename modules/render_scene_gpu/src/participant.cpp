@@ -76,7 +76,7 @@ public:
             // The render textures' views first, so the scene samples what
             // they drew in the same frame (D361).
             for (const render_scene::TextureFrame& kTexture : scene_->textureFrames()) {
-                auto view = TextureView::create(*device, kTexture.id, kTexture.width, kTexture.height);
+                auto view = TextureView::create(*device, *renderer_, kTexture.id, kTexture.width, kTexture.height);
                 if (!view.has_value()) {
                     failed_ = true;
                     emitter_.log(diagnostics::Severity::Error,
@@ -88,12 +88,16 @@ public:
                 frames_->join(**view, kOrder);
                 views_.push_back(std::move(*view));
                 viewPointers_.push_back(views_.back().get());
+                // What the scene queued for it before the device could draw
+                // is drawn again.
+                scene_->missed(kTexture.id);
             }
             frames_->join(*renderer_, kOrder);
             frames_->join(renderer_->composed(), kComposedOrder);
         }
         const auto kPlanned = frames_->planned();
         if (!kPlanned.has_value()) {
+            dropViews();
             return;
         }
         // The view follows the frame from the next one.
@@ -110,10 +114,26 @@ public:
         const std::span<const render_scene::TextureFrame> kTextures = scene_->textureFrames();
         for (std::size_t at = 0; at < views_.size(); ++at) {
             views_[at]->prepare(at < kTextures.size() ? kTextures[at].frame : nullptr, meshes_, textures_);
+            if (views_[at]->missed()) {
+                scene_->missed(views_[at]->id());
+            }
             frames_->ready(*views_[at]);
         }
         frames_->ready(*renderer_);
         frames_->ready(renderer_->composed());
+    }
+
+    /// The render textures' frames queued in an iteration no frame draws,
+    /// once the device draws, told as missed (D361).
+    void dropViews() noexcept {
+        if (scene_ == nullptr) {
+            return;
+        }
+        for (const render_scene::TextureFrame& kTexture : scene_->textureFrames()) {
+            if (kTexture.frame != nullptr) {
+                scene_->missed(kTexture.id);
+            }
+        }
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {

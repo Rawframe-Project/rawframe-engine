@@ -1123,10 +1123,11 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"near", offsetof(Camera, near)},
                            {"exposure", offsetof(Camera, exposure)},
                            {"tonemapper", offsetof(Camera, tonemapper)}}));
-    RAWFRAME_TRY(kLaidOut(loaded.view.has_value(),
-                          "rawframe.model.View",
-                          sizeof(View),
-                          {{"target", offsetof(View, target)}, {"order", offsetof(View, order)}}));
+    RAWFRAME_TRY(kLaidOut(
+        loaded.view.has_value(),
+        "rawframe.model.View",
+        sizeof(View),
+        {{"target", offsetof(View, target)}, {"order", offsetof(View, order)}, {"request", offsetof(View, request)}}));
     RAWFRAME_TRY(kLaidOut(loaded.autoExposure.has_value(),
                           "rawframe.model.AutoExposure",
                           sizeof(AutoExposure),
