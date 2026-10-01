@@ -300,6 +300,29 @@ RAWFRAME_TEST(AConstrainedAspectIsDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(UiNodesAreNestedByLine) {
+    const std::string kHead = "program p.kest\n"
+                              "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.hud Node\n"
+                              "component 6c2e9a1f-3b55-4d20-8e1f-8b7d4c3f2a02 g.bar Node\n"
+                              "component 7d3fab20-4c66-4e31-9f20-9c8e5d4a3b13 g.fill Node\n";
+    const auto kGame = parseGame(kHead + "ui g.bar in g.hud\nui g.fill in g.bar\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->uiParents.size() == 2 && kGame->uiParents[0].node == "g.bar" &&
+                    kGame->uiParents[0].parent == "g.hud" && kGame->uiParents[1].node == "g.fill");
+    // One parent each, never itself however far up (D376).
+    for (const std::string_view kLines : {"ui g.bar\n",
+                                          "ui g.bar on g.hud\n",
+                                          "ui g.bar in g.bar\n",
+                                          "ui g.bar in g.hud\nui g.bar in g.fill\n",
+                                          "ui g.bar in g.hud\nui g.hud in g.bar\n",
+                                          "ui g.bar in g.hud\nui g.fill in g.bar\nui g.hud in g.fill\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "5") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "6") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "7"));
+    }
+    RAWFRAME_EXPECT(!parseGame(kHead + "ui g.bar in g.panel\n").has_value());
+}
+
 RAWFRAME_TEST(MaterialsAreDeclaredByLine) {
     const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
     const auto kGame =

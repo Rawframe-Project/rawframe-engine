@@ -117,6 +117,12 @@
 // than as numbers:
 //
 //   entity game.target who
+//
+// A `ui` line puts one UI node inside another (D376): components of
+// `rawframe.ui.Node`, the parent on the same entity or else on the client's
+// player; a node without one is a root of its player's view:
+//
+//   ui game.meter in game.hud
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/physics/collision.h"
@@ -184,6 +190,15 @@ struct GamePresentation {
     std::vector<std::string> components;
     /// Nothing for `on player`.
     std::optional<std::string> on;
+};
+
+/// A UI node inside another (ADR-0034, D376), from a `ui <node> in
+/// <parent>` line: both components of `rawframe.ui.Node`, the parent that
+/// component on the node's entity, or else on the client's player. A node
+/// is inside one parent at most, and no node is inside itself.
+struct GameUiParent {
+    std::string node;
+    std::string parent;
 };
 
 /// What the player feels of an effect (D251), from a trailing `felt
@@ -532,6 +547,8 @@ struct GameDescription {
     /// (D369): every local player's view constrained to the shape, between
     /// bars of the color (black unless named); none fills.
     std::optional<GameAspect> aspect;
+    /// From `ui <node> in <parent>` lines (D376).
+    std::vector<GameUiParent> uiParents;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
     /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;

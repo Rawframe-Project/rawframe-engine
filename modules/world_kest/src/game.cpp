@@ -509,6 +509,27 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a present system's identity is its own");
             }
             game.presented.push_back(std::move(system));
+        } else if (kKeyword == "ui") {
+            if (kWords.size() != 4 || kWords[2] != "in" || kWords[1] == kWords[3]) {
+                return badLine(number, WorldKestError::BadGameLine, "a ui line is `ui <node> in <another node>`");
+            }
+            if (std::ranges::contains(game.uiParents, kWords[1], &GameUiParent::node)) {
+                return badLine(number, WorldKestError::BadGameLine, "a UI node is inside one parent");
+            }
+            // No node inside itself, however far up.
+            for (std::string_view above = kWords[3];;) {
+                const auto kUp = std::ranges::find(game.uiParents, above, &GameUiParent::node);
+                if (kUp == game.uiParents.end()) {
+                    break;
+                }
+                if (kUp->parent == kWords[1]) {
+                    return badLine(number, WorldKestError::BadGameLine, "a UI node is not inside itself");
+                }
+                above = kUp->parent;
+            }
+            game.uiParents.push_back(GameUiParent{.node = std::string{kWords[1]}, .parent = std::string{kWords[3]}});
+            uses.emplace_back(number, std::string{kWords[1]});
+            uses.emplace_back(number, std::string{kWords[3]});
         } else if (kKeyword == "presentation") {
             const auto kOn = std::ranges::find(kWords, std::string_view{"on"});
             if (kWords.size() < 4 || kOn != kWords.end() - 2 || kOn == kWords.begin() + 1) {
