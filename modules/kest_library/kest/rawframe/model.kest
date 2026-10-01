@@ -314,7 +314,10 @@ struct PostProcess {
 // by up to `variation` of them (nought to one). Each time `bursts` moves,
 // `burstCount` more leave at once. A nought `seed` takes one from the
 // entity. Cosmetic: each client draws its own particles, and nothing in
-// the World sees them.
+// the World sees them. On an entity with a 2D pose, the canvas draws the
+// emitter, its trails, and its beams in its plane, over its sprites, each
+// of the game's canvas material of that identity and blending as it says
+// (D357); the pose's up is the way it emits.
 struct ParticleEmitter {
     material: u64
     rate: f32

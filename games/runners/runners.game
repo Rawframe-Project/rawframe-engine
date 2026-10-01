@@ -19,6 +19,8 @@ component 1e7c5a93-4f28-4b6d-8a01-c3d9e2f4b7a5 runners.look rawframe.canvas.Spri
 component 9d3e61b2-7a4c-4f05-b8e1-2c6a0f9d4b37 runners.tile rawframe.canvas.Sprite
 component 3149b7ac-718f-4686-a572-6241d54af2a3 runners.view rawframe.canvas.Camera
 component b668075a-c5b2-45fa-af7e-0aa7f62c8808 runners.wince rawframe.sound.Emitter
+component c68ee156-5575-4b58-9ed0-41395d2a7bdc runners.dust rawframe.model.Trail
+component fd2777e2-c81b-4588-9117-dd0e4acc564d runners.sparks rawframe.model.ParticleEmitter
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
@@ -103,6 +105,11 @@ message hurt Hurt
 present runners.frame frame read runners.stick write runners.view
 presentation runners.wince on player
 present runners.wince wince write runners.wince
+# Every runner a client mirrors leaves a pale trail as it runs, and throws
+# sparks with each shot it fires, counted by its shot's cue (D357): the
+# client's own particles, drawn over the canvas.
+presentation runners.dust runners.sparks on runners.stick
+present runners.glint glint read runners.emitter write runners.dust write runners.sparks
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
 # The runners' look lit a little warm from within: a canvas material
