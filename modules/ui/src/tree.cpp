@@ -2,6 +2,7 @@
 
 #include "rawframe/ui/errors.h"
 
+#include <algorithm>
 #include <maul-ui/context.h>
 #include <maul-ui/draw.h>
 #include <maul-ui/layout.h>
@@ -195,6 +196,15 @@ result::Status Tree::setLook(Node node, const Look& look) {
     };
     style.outerShadow = kShadow(look.outerShadow);
     style.innerShadow = kShadow(look.innerShadow);
+    if (look.gradient.kind != GradientLook::Kind::None) {
+        style.gradient.kind = static_cast<muiGradientKind>(look.gradient.kind);
+        style.gradient.angle = look.gradient.angle;
+        style.gradient.stopCount = static_cast<std::uint8_t>(std::min<std::uint32_t>(look.gradient.stops, 255));
+        for (std::size_t at = 0; at < look.gradient.colors.size(); ++at) {
+            style.gradient.stops[at] =
+                muiGradientStop{.color = colorOf(look.gradient.colors[at]), .position = look.gradient.positions[at]};
+        }
+    }
     return checked(muiNode_SetVisualValues(state_->context, idOf(node), &style, MUI_VISUAL_PROPERTIES),
                    "a UI node's look was refused");
 }
@@ -207,10 +217,22 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
     into.boxes.clear();
     into.images.clear();
     into.shadows.clear();
+    into.gradients.clear();
     into.commands.clear();
     into.clips.clear();
     into.skipped = 0;
     into.scale = scale;
+    for (std::uint32_t at = 0; at < list.gradientCount; ++at) {
+        const muiDrawGradient& kGradient = list.gradients[at];
+        Gradient made{.kind = static_cast<GradientLook::Kind>(kGradient.kind),
+                      .angle = kGradient.angle,
+                      .stops = std::min<std::uint32_t>(kGradient.stopCount, MUI_MAX_DRAW_STOPS)};
+        for (std::uint32_t stop = 0; stop < made.stops; ++stop) {
+            made.colors.at(stop) = linearOf(kGradient.colors[stop]);
+            made.positions.at(stop) = kGradient.positions[stop];
+        }
+        into.gradients.push_back(made);
+    }
     for (std::uint32_t at = 0; at < list.clipCount; ++at) {
         const muiDrawClip& kClip = list.clips[at];
         into.clips.push_back(Clip{.rect = ui::rectOf(kClip.rect),
@@ -248,7 +270,7 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
                                           .clip = kCommand.clip});
             continue;
         }
-        if (kCommand.kind != mui_drawBox || kCommand.transform != 0 || kCommand.box.gradient != 0) {
+        if (kCommand.kind != mui_drawBox || kCommand.transform != 0) {
             ++into.skipped;
             continue;
         }
@@ -266,7 +288,8 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
                                                   linearOf(kBox.borderColors[1]),
                                                   linearOf(kBox.borderColors[2]),
                                                   linearOf(kBox.borderColors[3])},
-                                 .clip = kCommand.clip});
+                                 .clip = kCommand.clip,
+                                 .gradient = kBox.gradient < list.gradientCount ? kBox.gradient : 0});
     }
     return {};
 }

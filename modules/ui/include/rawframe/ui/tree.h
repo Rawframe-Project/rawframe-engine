@@ -105,6 +105,24 @@ struct ShadowLook {
     float spread = 0;
 };
 
+/// A gradient painted over a node's fill (D382): linear along a line
+/// through its center at `angle` degrees clockwise from toward the top, as
+/// CSS's linear-gradient, or radial outward from its center to its
+/// farthest corner; two to four stops in order of position, nought to one,
+/// each a color 0xRRGGBBAA sRGB with straight alpha.
+struct GradientLook {
+    enum class Kind : std::uint8_t {
+        None,
+        Linear,
+        Radial
+    };
+    Kind kind = Kind::None;
+    float angle = 180;
+    std::array<std::uint32_t, 4> colors{};
+    std::array<float, 4> positions{};
+    std::uint32_t stops = 0;
+};
+
 /// A node's look (SPEC-0032's box): its fill and its border's color, each
 /// 0xRRGGBBAA, sRGB with straight alpha (nought draws nothing); its
 /// corners' radius in pixels, held to half its shorter side; whether it
@@ -123,6 +141,7 @@ struct Look {
     /// Cast outside its border box, and inside its padding box (D381).
     ShadowLook outerShadow;
     ShadowLook innerShadow;
+    GradientLook gradient;
 };
 
 /// A node's border box from the last layout that reached it, relative to
@@ -138,7 +157,9 @@ struct Rect {
 /// y down: its border box; its corners' radii (top left, then clockwise);
 /// its fill, linear light with premultiplied alpha; its borders' widths
 /// and colors (top, right, bottom, left), inside the box; and the clip it
-/// is drawn in, an index of its list's clips, nought for none.
+/// is drawn in, an index of its list's clips, nought for none; and the
+/// gradient over its fill, an index of the list's gradients, nought for
+/// none (D382).
 struct Box {
     Rect rect;
     std::array<float, 4> radii{};
@@ -146,6 +167,19 @@ struct Box {
     std::array<float, 4> borderWidths{};
     std::array<std::array<float, 4>, 4> borderColors{};
     std::uint32_t clip = 0;
+    std::uint32_t gradient = 0;
+};
+
+/// A gradient of a list (D382): its kind, linear or radial; for a linear
+/// one, its angle in degrees clockwise from toward the top; and its stops,
+/// colors linear with premultiplied alpha at positions nought to one, which
+/// it moves between through premultiplied Oklab.
+struct Gradient {
+    GradientLook::Kind kind = GradientLook::Kind::Linear;
+    float angle = 0;
+    std::uint32_t stops = 0;
+    std::array<std::array<float, 4>, 4> colors{};
+    std::array<float, 4> positions{};
 };
 
 /// An image to draw (SPEC-0032, D378): its owner's key, the part of it
@@ -202,14 +236,15 @@ struct Clip {
 /// What a tree draws: its boxes, images, and shadows, `commands` saying
 /// their paint order, and its clips, the first a placeholder for none, in
 /// logical pixels, `scale` device pixels each. Commands generation 1 does
-/// not draw yet (gradients over a fill, glyph runs, transformed ones) are
-/// counted, not kept.
+/// not draw yet (glyph runs, transformed ones) are counted, not kept.
 struct DrawList {
     std::vector<Box> boxes;
     std::vector<Image> images;
     std::vector<Shadow> shadows;
     std::vector<DrawCommand> commands;
     std::vector<Clip> clips;
+    /// The first a placeholder for none.
+    std::vector<Gradient> gradients;
     std::uint32_t skipped = 0;
     float scale = 1;
 };

@@ -265,3 +265,37 @@ RAWFRAME_TEST(AShadowIsDrawnOutsideOrInsideItsBox) {
                     near(kOuter.color[3], 128.0F / 255.0F));
     RAWFRAME_EXPECT(list.shadows[1].inset && list.shadows[1].color == (std::array<float, 4>{1, 0, 0, 1}));
 }
+
+RAWFRAME_TEST(AGradientIsPaintedOverItsBoxsFill) {
+    auto tree = Tree::create(4);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    const Node kBar = *ui.add(1);
+    RAWFRAME_EXPECT(ui.setLayout(kBar, {.width = pixels(100), .height = pixels(20)}).has_value());
+    RAWFRAME_EXPECT(ui.setLook(kBar,
+                               {.fill = 0x000000FF,
+                                .gradient = {.kind = GradientLook::Kind::Linear,
+                                             .angle = 90,
+                                             .colors = {0xFF0000FF, 0x0000FFFF},
+                                             .positions = {0, 1},
+                                             .stops = 2}})
+                        .has_value());
+    // One stop, or stops out of order, are no gradient.
+    RAWFRAME_EXPECT(
+        !ui.setLook(kBar, {.gradient = {.kind = GradientLook::Kind::Radial, .colors = {0xFF0000FF}, .stops = 1}})
+             .has_value());
+    RAWFRAME_EXPECT(ui.layOut(kBar, 640, 360).has_value());
+    DrawList list;
+    RAWFRAME_EXPECT(ui.draw(kBar, 1, list).has_value());
+    RAWFRAME_EXPECT(list.boxes.size() == 1 && list.gradients.size() == 2 && list.skipped == 0);
+    if (list.boxes.size() != 1 || list.gradients.size() != 2) {
+        return;
+    }
+    const Gradient& kGradient = list.gradients[list.boxes[0].gradient];
+    RAWFRAME_EXPECT(list.boxes[0].gradient == 1 && kGradient.kind == GradientLook::Kind::Linear &&
+                    kGradient.angle == 90 && kGradient.stops == 2 && kGradient.positions[1] == 1 &&
+                    kGradient.colors[0] == (std::array<float, 4>{1, 0, 0, 1}) &&
+                    kGradient.colors[1] == (std::array<float, 4>{0, 0, 1, 1}));
+}
