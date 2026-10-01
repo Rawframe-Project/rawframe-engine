@@ -6,8 +6,9 @@
 // meshes, then entities, and the limit leaves out a suffix of it; the sun
 // and sky light in linear physical units; point and spot lights light in
 // candela, are culled by their reach, and name the clusters they reach; a
-// draw reflects the reflection probe that holds it; and a game's scene
-// loads against its program.
+// draw reflects the reflection probe that holds it; a camera's post
+// processes run in its order; and a game's scene loads against its
+// program.
 
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
@@ -330,7 +331,8 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "        lamps: [model.PointLight], torches: [model.SpotLight], meters: [model.AutoExposure],\n"
         "        grades: [model.Grading], probes: [model.ReflectionProbe], occlusions: [model.AmbientOcclusion],\n"
         "        blooms: [model.Bloom], mirrors: [model.ScreenSpaceReflections], blurs: [model.MotionBlur],\n"
-        "        focuses: [model.DepthOfField], contacts: [model.ContactShadows], marks: [model.Decal]) {\n}\n";
+        "        focuses: [model.DepthOfField], contacts: [model.ContactShadows], marks: [model.Decal],\n"
+        "        processes: [model.PostProcess]) {\n}\n";
     const std::string kModel = "component 3c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.look rawframe.model.Model\n";
     const std::string kLights = "component 5c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sun rawframe.model.Sun\n"
                                 "component 6c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.sky rawframe.model.Sky\n";
@@ -350,7 +352,9 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         "component 1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.blur rawframe.model.MotionBlur\n"
         "component 2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.focus rawframe.model.DepthOfField\n"
         "component 3d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.contact rawframe.model.ContactShadows\n"
-        "component 4d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.mark rawframe.model.Decal\n";
+        "component 4d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.mark rawframe.model.Decal\n"
+        "component 5d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.warm rawframe.model.PostProcess\n"
+        "component 6d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.fade rawframe.model.PostProcess\n";
     const auto kLoaded = kLoad(kUses, kModel + kLights + kView + kLamps);
     RAWFRAME_EXPECT(
         kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
@@ -367,7 +371,10 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         kLoaded->motionBlur == schema::ComponentTypeId::fromText("1d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
         kLoaded->depthOfField == schema::ComponentTypeId::fromText("2d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
         kLoaded->contactShadows == schema::ComponentTypeId::fromText("3d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
-        kLoaded->decals == (std::vector<schema::ComponentTypeId>{kDecalId}));
+        kLoaded->decals == (std::vector<schema::ComponentTypeId>{kDecalId}) &&
+        kLoaded->postProcesses == (std::vector<schema::ComponentTypeId>{
+                                      schema::ComponentTypeId::fromText("5d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"),
+                                      schema::ComponentTypeId::fromText("6d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18")}));
     const auto kPlain = kLoad(kUses, kModel);
     RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
@@ -1178,4 +1185,42 @@ RAWFRAME_TEST(ACamerasAmbientOcclusionIsMadeSound) {
     Rig rig;
     RAWFRAME_EXPECT(rig.frame({.occlusion = AmbientOcclusion{.radius = 1, .intensity = 1}}).occlusion.enabled &&
                     !rig.frame({}).occlusion.enabled);
+}
+
+RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
+    // The game's two post processes, a warm one and a fade (D349).
+    material::PostProcess warm{.insertion = material::Insertion::BeforeTonemap, .scene = {1, 0.9F, 0.8F}};
+    warm.constant[3] = 1;
+    const material::PostProcess kFade{.constant = {0, 0, 0, 1}};
+    const auto kSchema = registry();
+    auto scene =
+        *Scene::create(*kSchema,
+                       {.models = {kModelId},
+                        .postProcesses = {{.id = 0xa1, .insertion = warm.insertion, .blob = material::blobOf(warm)},
+                                          {.id = 0xa2, .insertion = kFade.insertion, .blob = material::blobOf(kFade)}},
+                        .limits = {.maximumPostProcesses = 3}});
+    SceneCamera camera;
+    camera.postProcesses = {{.material = 0xa2, .weight = 0.25F},
+                            {.material = 0xbad, .weight = 1},
+                            {.material = 0xa1, .weight = 0},
+                            {.material = 0xa1, .weight = std::numeric_limits<float>::quiet_NaN()},
+                            {.material = 0xa1, .weight = 3},
+                            {.material = 0xa2, .weight = 1},
+                            {.material = 0xa2, .weight = 1}};
+    world::World world{kSchema};
+    scene->extract(world);
+    const SceneFrame& kFrame = scene->queue(camera);
+    // The fade at a quarter, the warmth at most whole, the fade again; the
+    // unknown, the NaN, and the one past the limit left out; the one at
+    // nought runs nothing.
+    RAWFRAME_EXPECT(kFrame.postProcesses.size() == 3 && kFrame.postProcessesLeftOut == 3);
+    if (kFrame.postProcesses.size() == 3) {
+        RAWFRAME_EXPECT(kFrame.postProcesses[0].weight == 0.25F &&
+                        kFrame.postProcesses[0].insertion == material::Insertion::AfterTonemap &&
+                        kFrame.postProcesses[0].blob[3] == 1);
+        RAWFRAME_EXPECT(kFrame.postProcesses[1].weight == 1 &&
+                        kFrame.postProcesses[1].insertion == material::Insertion::BeforeTonemap &&
+                        kFrame.postProcesses[1].blob[5] == 0.9F);
+        RAWFRAME_EXPECT(kFrame.postProcesses[2].blob == material::blobOf(kFade));
+    }
 }

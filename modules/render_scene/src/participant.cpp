@@ -43,21 +43,31 @@ SceneTexture sceneTextureOf(const material::SampledTexture& texture) {
     return {.id = texture.id, .filter = texture.filter, .address = texture.address};
 }
 
-/// A material's cooked bytes, read and waited for, decoded (D303).
+/// A material's cooked bytes of `type`, read and waited for (D303).
+result::Result<content::VerifiedContent>
+readCooked(content::ContentStore& store, base::Bits128 id, base::Bits128 type) {
+    RAWFRAME_TRY_ASSIGN(
+        execution::AsyncHandle<content::VerifiedContent> read,
+        store.read(content::ResourceRef{.id = content::ResourceId{id}, .type = content::ResourceTypeId{type}}));
+    return execution::toResult(read.wait(),
+                               execution::CancellationMapping{.errorClass = result::ErrorClass::Unavailable,
+                                                              .domain = kRenderSceneDomain,
+                                                              .code = code(RenderSceneError::MaterialUnreadable),
+                                                              .description = "a material's read was cancelled"});
+}
+
+/// A surface material, decoded at `quality` (D303).
 result::Result<material::Material>
 readMaterial(content::ContentStore& store, base::Bits128 id, material::Quality quality) {
-    RAWFRAME_TRY_ASSIGN(execution::AsyncHandle<content::VerifiedContent> read,
-                        store.read(content::ResourceRef{.id = content::ResourceId{id},
-                                                        .type = content::ResourceTypeId{material::kMaterialType}}));
-    RAWFRAME_TRY_ASSIGN(
-        const content::VerifiedContent kRead,
-        execution::toResult(read.wait(),
-                            execution::CancellationMapping{.errorClass = result::ErrorClass::Unavailable,
-                                                           .domain = kRenderSceneDomain,
-                                                           .code = code(RenderSceneError::MaterialUnreadable),
-                                                           .description = "a material's read was cancelled"}));
+    RAWFRAME_TRY_ASSIGN(const content::VerifiedContent kRead, readCooked(store, id, material::kMaterialType));
     RAWFRAME_TRY_ASSIGN(const material::Qualities kQualities, material::decode(kRead.bytes()));
     return kQualities.at(static_cast<std::size_t>(quality));
+}
+
+/// Whether a read found no resource of the type asked.
+bool notFound(const result::Error& error) {
+    return error.domain() == content::kContentDomain &&
+           error.code() == content::code(content::ContentError::ResourceNotFound);
 }
 
 /// A client's view without a camera of its own: behind its player and
@@ -217,19 +227,43 @@ public:
         motionBlurComponent_ = game->motionBlur;
         depthOfFieldComponent_ = game->depthOfField;
         contactShadowsComponent_ = game->contactShadows;
+        postProcessComponents_ = game->postProcesses;
         gameMeshes_ = game->meshes.size();
-        // The game's materials from its cooked content; one that cannot be
-        // read is drawn as none, and said so when the scene starts.
+        // The game's materials from its cooked content, surfaces and post
+        // processes (D349); one that cannot be read is drawn as none, and
+        // said so when the scene starts.
         std::vector<SceneMaterial> materials;
+        std::vector<ScenePostProcessMaterial> postProcesses;
         if (!files->materials().empty() && context.has(game_content::kGameContent.name)) {
             RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
             if (content->held()) {
-                const std::array<content::AdmittedRepresentation, 1> kAdmitted = {content::AdmittedRepresentation{
-                    .type = content::ResourceTypeId{material::kMaterialType},
-                    .representation = *content::RepresentationId::parse(material::kMaterialRepresentation)}};
+                const std::array<content::AdmittedRepresentation, 2> kAdmitted = {
+                    content::AdmittedRepresentation{
+                        .type = content::ResourceTypeId{material::kMaterialType},
+                        .representation = *content::RepresentationId::parse(material::kMaterialRepresentation)},
+                    content::AdmittedRepresentation{
+                        .type = content::ResourceTypeId{material::kPostProcessType},
+                        .representation = *content::RepresentationId::parse(material::kPostProcessRepresentation)}};
                 RAWFRAME_TRY(content->admit(kAdmitted));
                 for (const world_kest::GameMaterialResource& each : files->materials()) {
                     auto read = readMaterial(content->store(), each.material, quality_);
+                    if (!read.has_value() && notFound(read.error())) {
+                        auto cooked = readCooked(content->store(), each.material, material::kPostProcessType);
+                        auto process =
+                            cooked.has_value()
+                                ? material::decodePostProcess(cooked->bytes())
+                                : result::Result<material::PostProcess>{std::unexpected{std::move(cooked).error()}};
+                        if (process.has_value()) {
+                            postProcesses.push_back({.id = each.id,
+                                                     .insertion = process->insertion,
+                                                     .blob = material::blobOf(*process),
+                                                     .texture = sceneTextureOf(process->sampled)});
+                            continue;
+                        }
+                        if (!notFound(process.error())) {
+                            read = std::unexpected{std::move(process).error()};
+                        }
+                    }
                     if (read.has_value()) {
                         materials.push_back({.id = each.id,
                                              .blob = material::blobOf(*read),
@@ -238,8 +272,7 @@ public:
                                                           .packed = sceneTextureOf(read->textures.packed),
                                                           .emission = sceneTextureOf(read->textures.emission),
                                                           .normal = sceneTextureOf(read->textures.normal)}});
-                    } else if (!each.subasset || read.error().domain() != content::kContentDomain ||
-                               read.error().code() != content::code(content::ContentError::ResourceNotFound)) {
+                    } else if (!each.subasset || !notFound(read.error())) {
                         // A mesh's subasset its source no longer has names
                         // no resource and is no material (D314).
                         unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});
@@ -248,7 +281,7 @@ public:
             }
         }
         gameMaterials_ = materials.size();
-        RAWFRAME_TRY(readTextures(context, *files, materials));
+        RAWFRAME_TRY(readTextures(context, *files, materials, postProcesses));
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .sun = game->sun,
                                   .sky = game->sky,
@@ -258,6 +291,7 @@ public:
                                   .decals = std::move(game->decals),
                                   .meshes = std::move(game->meshes),
                                   .materials = std::move(materials),
+                                  .postProcesses = std::move(postProcesses),
                                   .shadows = shadows_,
                                   .lightShadows = lightShadows_,
                                   .antiAliasing = antiAliasing_,
@@ -424,30 +458,39 @@ public:
     }
 
 private:
-    /// Asks for the textures `materials` sample, of those the game
-    /// declares, decoded on a CPU worker (D309); a material sampling one it
-    /// does not declare samples white, and is said so at start.
+    /// Asks for the textures `materials` and `postProcesses` sample, of
+    /// those the game declares, decoded on a CPU worker (D309); a material
+    /// sampling one it does not declare samples white, and is said so at
+    /// start.
     result::Status readTextures(composition::ParticipantContext& context,
                                 const world_kest::GameFiles& files,
-                                std::vector<SceneMaterial>& materials) {
+                                std::vector<SceneMaterial>& materials,
+                                std::vector<ScenePostProcessMaterial>& postProcesses) {
         std::set<std::uint64_t> sampled;
+        std::vector<std::pair<std::uint64_t, SceneTexture*>> named;
         for (SceneMaterial& each : materials) {
             for (SceneTexture* texture :
                  {&each.textures.base, &each.textures.packed, &each.textures.emission, &each.textures.normal}) {
-                if (texture->id == 0) {
-                    continue;
-                }
-                if (std::ranges::find(files.textures(), texture->id, &world_kest::GameTextureResource::id) ==
-                    files.textures().end()) {
-                    const auto kPath =
-                        std::ranges::find(files.materials(), each.id, &world_kest::GameMaterialResource::id);
-                    unknownTextures_.emplace_back(kPath != files.materials().end() ? kPath->path : std::string{},
-                                                  graph::nodeIdText(texture->id));
-                    texture->id = 0;
-                    continue;
-                }
-                sampled.insert(texture->id);
+                named.emplace_back(each.id, texture);
             }
+        }
+        for (ScenePostProcessMaterial& each : postProcesses) {
+            named.emplace_back(each.id, &each.texture);
+        }
+        for (const auto& [kMaterial, texture] : named) {
+            if (texture->id == 0) {
+                continue;
+            }
+            if (std::ranges::find(files.textures(), texture->id, &world_kest::GameTextureResource::id) ==
+                files.textures().end()) {
+                const auto kPath =
+                    std::ranges::find(files.materials(), kMaterial, &world_kest::GameMaterialResource::id);
+                unknownTextures_.emplace_back(kPath != files.materials().end() ? kPath->path : std::string{},
+                                              graph::nodeIdText(texture->id));
+                texture->id = 0;
+                continue;
+            }
+            sampled.insert(texture->id);
         }
         sampled_ = sampled.size();
         if (!context.has(game_content::kGameContent.name) || context.cpuExecutor() == nullptr) {
@@ -668,6 +711,16 @@ private:
                 }
             }
         }
+        // Its post processes, in the game's order (D349).
+        camera_.postProcesses.clear();
+        for (const schema::ComponentTypeId kComponent : postProcessComponents_) {
+            if (const auto kProcess = kView.world->registry().find(kComponent)) {
+                if (const auto* asked =
+                        static_cast<const PostProcess*>(kView.world->getErased(kView.owned, *kProcess))) {
+                    camera_.postProcesses.push_back(*asked);
+                }
+            }
+        }
         camera_.occlusion.reset();
         if (occlusionComponent_.has_value()) {
             if (const auto kOcclusion = kView.world->registry().find(*occlusionComponent_)) {
@@ -706,6 +759,7 @@ private:
     std::optional<schema::ComponentTypeId> motionBlurComponent_;
     std::optional<schema::ComponentTypeId> depthOfFieldComponent_;
     std::optional<schema::ComponentTypeId> contactShadowsComponent_;
+    std::vector<schema::ComponentTypeId> postProcessComponents_;
     std::optional<execution::MonotonicInstant> presented_;
     std::size_t gameMeshes_ = 0;
     /// Frames seen through the player's own camera.

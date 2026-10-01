@@ -13,6 +13,7 @@
 
 #include "rawframe/kest/program.h"
 #include "rawframe/material/material.h"
+#include "rawframe/material/post_process.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
@@ -158,6 +159,12 @@ struct Decal {
     float roughness = 0;
 };
 
+/// `rawframe.model.PostProcess` as C++ reads it (D349).
+struct PostProcess {
+    std::uint64_t material = 0;
+    float weight = 0;
+};
+
 /// `rawframe.model.ReflectionProbe` as C++ reads it (D325).
 struct ReflectionProbe {
     float halfX = 0;
@@ -241,6 +248,25 @@ struct SceneMaterial {
     SceneTextures textures;
 };
 
+/// A game's post-process material (D348, D349): its identity, where it
+/// runs, what a device reads of it, and the texture it samples.
+struct ScenePostProcessMaterial {
+    std::uint64_t id = 0;
+    material::Insertion insertion = material::Insertion::AfterTonemap;
+    std::array<float, material::kPostProcessBlobFloats> blob{};
+    SceneTexture texture;
+};
+
+/// A post process a frame runs (D349): where, what the device reads of
+/// its material, its texture, and how much of it, above nought and at
+/// most one.
+struct ScenePostProcess {
+    material::Insertion insertion = material::Insertion::AfterTonemap;
+    std::array<float, material::kPostProcessBlobFloats> blob{};
+    SceneTexture texture;
+    float weight = 1;
+};
+
 struct SceneMesh {
     std::uint64_t id = 0;
     std::shared_ptr<const mesh::Mesh> mesh;
@@ -292,6 +318,8 @@ struct SceneCamera {
     /// The camera's tonemapper, as its component numbers it: another
     /// number is AgX (D295).
     std::uint32_t tonemapper = 0;
+    /// The camera's post processes, in the game's order (D349).
+    std::vector<PostProcess> postProcesses;
     float elapsed = 0;
 };
 
@@ -697,6 +725,12 @@ struct SceneFrame {
     std::vector<SceneDecal> decals;
     std::size_t decalsCulled = 0;
     std::size_t decalsOverLimit = 0;
+    /// The camera's post processes to run, in its order (D349); and those
+    /// left out: a material the game has not, a weight not finite, or past
+    /// the limit. A weight of nought or less runs nothing and is not
+    /// counted.
+    std::vector<ScenePostProcess> postProcesses;
+    std::size_t postProcessesLeftOut = 0;
     /// EV100.
     float exposure = 15;
     SceneLights lights;
@@ -746,6 +780,8 @@ struct SceneLimits {
     /// cluster holds (D340).
     std::size_t maximumProbes = 32;
     std::size_t maximumProbesPerCluster = 8;
+    /// The post processes a view runs (D349).
+    std::size_t maximumPostProcesses = 8;
 };
 
 /// ADR-0051's one typed atlas for the punctual lights' shadows (D292), a
@@ -809,6 +845,8 @@ struct SceneSettings {
     std::vector<SceneMesh> meshes;
     /// The game's materials, by their identities (D303).
     std::vector<SceneMaterial> materials;
+    /// The game's post-process materials, by their identities (D349).
+    std::vector<ScenePostProcessMaterial> postProcesses;
     SceneLimits limits;
     ShadowSettings shadows;
     LightShadowSettings lightShadows;
@@ -872,6 +910,8 @@ struct GameScene {
     std::vector<schema::ComponentTypeId> spots;
     std::vector<schema::ComponentTypeId> probes;
     std::vector<schema::ComponentTypeId> decals;
+    /// A camera's post processes (D349), in the game's order.
+    std::vector<schema::ComponentTypeId> postProcesses;
     std::vector<SceneMesh> meshes;
 };
 

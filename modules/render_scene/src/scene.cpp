@@ -215,6 +215,31 @@ struct Scene::State {
     bool continuous = false;
     bool meteredBefore = false;
 
+    /// The camera's post processes as the frame runs them (D349).
+    void postProcessesOf(const SceneCamera& camera) {
+        frame.postProcesses.clear();
+        frame.postProcessesLeftOut = 0;
+        for (const PostProcess& kAsked : camera.postProcesses) {
+            const auto kMaterial =
+                std::ranges::find(settings.postProcesses, kAsked.material, &ScenePostProcessMaterial::id);
+            if (!std::isfinite(kAsked.weight) || kMaterial == settings.postProcesses.end()) {
+                ++frame.postProcessesLeftOut;
+                continue;
+            }
+            if (kAsked.weight <= 0) {
+                continue;
+            }
+            if (frame.postProcesses.size() == settings.limits.maximumPostProcesses) {
+                ++frame.postProcessesLeftOut;
+                continue;
+            }
+            frame.postProcesses.push_back(ScenePostProcess{.insertion = kMaterial->insertion,
+                                                           .blob = kMaterial->blob,
+                                                           .texture = kMaterial->texture,
+                                                           .weight = std::min(kAsked.weight, 1.0F)});
+        }
+    }
+
     void lights() {
         const Sun kSun = sunNow.value_or(Sun{.directionX = -0.3F,
                                              .directionY = -1.0F,
@@ -396,6 +421,7 @@ struct Scene::State {
         frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;
         frame.metering = meteringOf(camera);
         frame.grading = gradingOf(camera.grading);
+        postProcessesOf(camera);
         frame.occlusion = occlusionOf(camera.occlusion);
         frame.bloom = bloomOf(camera.bloom);
         frame.reflections = reflectionsOf(camera.reflections);
@@ -939,6 +965,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             loaded.probes.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.Decal")) {
             loaded.decals.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.model.PostProcess")) {
+            loaded.postProcesses.push_back(component.id);
         }
     }
     if (loaded.models.empty()) {
@@ -1080,6 +1108,10 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"texture", offsetof(Decal, texture)},
                            {"normal", offsetof(Decal, normal)},
                            {"roughness", offsetof(Decal, roughness)}}));
+    RAWFRAME_TRY(kLaidOut(!loaded.postProcesses.empty(),
+                          "rawframe.model.PostProcess",
+                          sizeof(PostProcess),
+                          {{"material", offsetof(PostProcess, material)}, {"weight", offsetof(PostProcess, weight)}}));
     for (const physics3d::BodyMesh& kMesh : game.meshes()) {
         loaded.meshes.push_back(SceneMesh{.id = kMesh.id, .mesh = kMesh.mesh});
     }
