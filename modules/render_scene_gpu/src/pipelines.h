@@ -178,10 +178,11 @@ struct Pipelines {
     Asked postDisplay;
     Asked grade;
     /// A particles' ring cleared, the particles' births, and the particles
-    /// drawn (D353).
+    /// drawn (D353); and the trails and beams drawn (D354).
     Asked clearParticles;
     Asked spawn;
     Asked particles;
+    Asked ribbons;
     /// The bloom's first halving, its others, and its doublings, added to
     /// the level above (D328).
     Asked bloomFirst;

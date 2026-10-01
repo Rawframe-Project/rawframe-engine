@@ -75,6 +75,7 @@ Pipelines::~Pipelines() {
                          &postDisplay,
                          &grade,
                          &particles,
+                         &ribbons,
                          &bloomFirst,
                          &bloomDown,
                          &bloomUp,
@@ -700,7 +701,15 @@ result::Status Pipelines::askFor(Effect effect) {
             .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendOneMinusSrcAlpha, .operation = mrhi_blendAdd};
         def.colorTargets[0].alpha = {
             .srcFactor = mrhi_blendOne, .dstFactor = mrhi_blendOneMinusSrcAlpha, .operation = mrhi_blendAdd};
-        return ask(def, particles);
+        RAWFRAME_TRY(ask(def, particles));
+        // The trails and beams (D354): their own vertices, the particles'
+        // fragments.
+        constexpr std::string_view kRibbonLabel = "rawframe.scene.ribbons";
+        def.label = kRibbonLabel.data();
+        def.labelLength = kRibbonLabel.size();
+        def.vertexEntry = "ribbon";
+        def.vertexEntryLength = 6;
+        return ask(def, ribbons);
     }
     case Effect::Fxaa: {
         RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
@@ -771,7 +780,7 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
     case Effect::PostProcess:
         return answered({&postLinear, &postDisplay, &grade});
     case Effect::Particles:
-        return answered({&clearParticles, &spawn, &particles});
+        return answered({&clearParticles, &spawn, &particles, &ribbons});
     case Effect::ContactShadows:
         return answered({&contactShade});
     case Effect::Decals:

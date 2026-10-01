@@ -108,6 +108,8 @@ struct RendererStatistics {
     std::uint64_t emittersDrawn = 0;
     std::uint64_t emittersLeftOut = 0;
     std::uint64_t particlesSpawned = 0;
+    /// Trails and beams drawn, summed over the frames (D354).
+    std::uint64_t ribbonsDrawn = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the

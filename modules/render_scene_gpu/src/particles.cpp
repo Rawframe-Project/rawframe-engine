@@ -21,10 +21,6 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
         .range = {.baseMip = 0, .mipCount = MRHI_REMAINING, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
 }
 
-/// The stride between emitters' blocks: no device asks uniform offsets
-/// aligned past 256 bytes (Vulkan's and WebGPU's bound).
-constexpr std::uint64_t kBlockStride = 256;
-
 /// The spawn's workgroup, as spawn.comp declares it.
 constexpr std::uint32_t kSpawnGroup = 64;
 
@@ -44,6 +40,13 @@ EmitterBlock blockOf(const render_scene::SceneEmitter& emitter, std::uint32_t of
 }
 
 } // namespace
+
+ParticleViewBlock viewOf(const render_scene::SceneFrame& frame) noexcept {
+    // The eye's right and up: the view's first two rows.
+    return ParticleViewBlock{.right = {frame.view[0], frame.view[4], frame.view[8], frame.particleClock},
+                             .up = {frame.view[1], frame.view[5], frame.view[9], render_scene::kParticleClockPeriod},
+                             .lens = {frame.projection[14], 0, 0, 0}};
+}
 
 ParticlePass::ParticlePass(mrhiDevice* native, std::uint32_t capacity) noexcept : native_(native), capacity_(capacity) {
 }
@@ -146,10 +149,7 @@ ParticlePass::declare(const render_scene::SceneFrame& frame, bool made, std::vec
         return {};
     }
     enabled_ = true;
-    // The eye's right and up: the view's first two rows.
-    view_ = ParticleViewBlock{.right = {frame.view[0], frame.view[4], frame.view[8], frame.particleClock},
-                              .up = {frame.view[1], frame.view[5], frame.view[9], render_scene::kParticleClockPeriod},
-                              .lens = {frame.projection[14], 0, 0, 0}};
+    view_ = viewOf(frame);
     if (const mrhiResult kImported = mrhiImportBuffer(native_, buffer_, &pool_); kImported != mrhi_success) {
         return failed("the particles' pool could not join the frame", kImported);
     }
@@ -165,7 +165,7 @@ ParticlePass::declare(const render_scene::SceneFrame& frame, bool made, std::vec
     return {};
 }
 
-result::Status ParticlePass::addPasses(mrhiResourceId scene, mrhiResourceId depth, std::span<const mrhiAccess> reads) {
+result::Status ParticlePass::addPasses() {
     if (!enabled_) {
         return {};
     }
@@ -185,24 +185,16 @@ result::Status ParticlePass::addPasses(mrhiResourceId scene, mrhiResourceId dept
             return failed("the particles' births could not be added", kAdded);
         }
     }
-    std::vector<mrhiAccess> drawing(reads.begin(), reads.end());
-    drawing.push_back(wholeOf(blocksResource_, mrhi_accessUniform));
-    drawing.push_back(wholeOf(viewResource_, mrhi_accessUniform));
-    drawing.push_back(wholeOf(pool_, mrhi_accessStorageRead));
-    mrhiAccess seen = wholeOf(depth, mrhi_accessSampled);
-    seen.range.aspect = mrhi_aspectDepthOnly;
-    drawing.push_back(seen);
-    mrhiPassDef def = mrhiDefaultPassDef();
-    def.colorTargets[0].resource = scene;
-    def.colorTargets[0].load = mrhi_loadKeep;
-    def.colorTargets[0].store = mrhi_storeKeep;
-    def.colorTargetCount = 1;
-    def.accesses = drawing.data();
-    def.accessCount = static_cast<std::uint32_t>(drawing.size());
-    if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &drawPass_); kAdded != mrhi_success) {
-        return failed("the particles could not be added", kAdded);
-    }
     return {};
+}
+
+void ParticlePass::drawReads(std::vector<mrhiAccess>& reads) const {
+    if (!enabled_) {
+        return;
+    }
+    reads.push_back(wholeOf(blocksResource_, mrhi_accessUniform));
+    reads.push_back(wholeOf(viewResource_, mrhi_accessUniform));
+    reads.push_back(wholeOf(pool_, mrhi_accessStorageRead));
 }
 
 result::Status ParticlePass::write(mrhiPassId upload) {
@@ -216,7 +208,7 @@ result::Status ParticlePass::write(mrhiPassId upload) {
     return {};
 }
 
-result::Status ParticlePass::record(const Pipelines& pipelines, const ParticleDrawing& with) {
+result::Status ParticlePass::record(const Pipelines& pipelines) {
     if (!enabled_) {
         return {};
     }
@@ -251,6 +243,14 @@ result::Status ParticlePass::record(const Pipelines& pipelines, const ParticleDr
             return failed("the particles' births could not end", mrhi_errorState);
         }
     }
+    return {};
+}
+
+result::Status ParticlePass::recordDraws(mrhiPassId pass, const Pipelines& pipelines, const ParticleDrawing& with) {
+    if (!enabled_) {
+        return {};
+    }
+    const std::uint64_t kPoolBytes = std::uint64_t{capacity_} * kParticleBytes;
     std::array<mrhiBinding, 11> table = {bufferAt(0, with.block, sizeof(FrameBlock)),
                                          bufferAt(1, viewResource_, sizeof(ParticleViewBlock)),
                                          bufferAt(2, blocksResource_, sizeof(EmitterBlock)),
@@ -262,8 +262,7 @@ result::Status ParticlePass::record(const Pipelines& pipelines, const ParticleDr
                                          samplerAt(8, {}),
                                          textureAt(9, {}),
                                          samplerAt(10, {})};
-    if (mrhiBeginPass(native_, drawPass_) != mrhi_success ||
-        mrhiSetGraphicsPipeline(native_, drawPass_, pipelines.particles.pipeline) != mrhi_success) {
+    if (mrhiSetGraphicsPipeline(native_, pass, pipelines.particles.pipeline) != mrhi_success) {
         return failed("the particles could not begin", mrhi_errorState);
     }
     // Each emitter's ring, every slot an instance: the dead draw nothing.
@@ -272,15 +271,16 @@ result::Status ParticlePass::record(const Pipelines& pipelines, const ParticleDr
         table[2].offset = at * kBlockStride;
         bindTexture(*with.textures, pipelines, table[7], table[8], kDrawn.textures.base);
         bindTexture(*with.textures, pipelines, table[9], table[10], kDrawn.textures.emission);
-        if (mrhiSetBindings(native_, drawPass_, 0, table.data(), table.size()) != mrhi_success ||
-            mrhiDraw(native_, drawPass_, 6, kDrawn.capacity, 0, kDrawn.offset) != mrhi_success) {
+        if (mrhiSetBindings(native_, pass, 0, table.data(), table.size()) != mrhi_success ||
+            mrhiDraw(native_, pass, 6, kDrawn.capacity, 0, kDrawn.offset) != mrhi_success) {
             return failed("an emitter's particles could not be drawn", mrhi_errorState);
         }
     }
-    if (mrhiEndPass(native_, drawPass_) != mrhi_success) {
-        return failed("the particles could not end", mrhi_errorState);
-    }
     return {};
+}
+
+bool ParticlePass::enabled() const noexcept {
+    return enabled_;
 }
 
 void ParticlePass::ended(bool submitted) noexcept {

@@ -3,7 +3,8 @@
 // spawned, and is gone past its life; a particle moving with drag is
 // drawn where the closed form puts it; one behind a model is hidden; an
 // emitting material with no opacity adds its light over what is behind;
-// and an emitter whose ring the pool cannot hold is left out and counted.
+// an emitter whose ring the pool cannot hold is left out and counted; and
+// a ribbon is drawn across its points, its width about them (D354).
 
 #include "fixture.h"
 #include "rawframe/material/material.h"
@@ -195,4 +196,45 @@ RAWFRAME_TEST(AnEmitterThePoolCannotHoldIsLeftOut) {
     const render_scene_gpu::RendererStatistics& kCounted = (*made)->statistics();
     RAWFRAME_EXPECT(kCounted.emittersLeftOut >= 1 && kCounted.emittersDrawn >= 1);
     RAWFRAME_EXPECT(kCounted.emittersDrawn == kCounted.emittersLeftOut);
+}
+
+RAWFRAME_TEST(ARibbonIsDrawnAcrossItsPoints) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    const auto kSky = drawn(**framer, **made, seen({}, red(), 0), kMeshes);
+    // Across the view five meters ahead, bending down at its right, red
+    // and a meter wide: three pixels either side of its line, joined where
+    // it bends.
+    SceneFrame crossing = seen({}, red(), 0);
+    crossing.emitters.clear();
+    crossing.ribbonPoints = {
+        {.place = {-3, 0, -5}, .width = 1}, {.place = {0, 0, -5}, .width = 1}, {.place = {3, -1, -5}, .width = 1}};
+    crossing.ribbons = {{.material = 0, .first = 0, .count = 3}};
+    const auto kCrossed =
+        drawnWith(**framer, **made, crossing, kMeshes, &render_scene_gpu::RendererStatistics::ribbonsDrawn);
+    RAWFRAME_EXPECT(kSky.has_value() && kCrossed.has_value());
+    if (kSky.has_value() && kCrossed.has_value()) {
+        const auto kMiddle = at(*kCrossed, 32, 31);
+        std::printf("ribbon: middle %d %d %d, left %d, above %d, right below %d\n",
+                    kMiddle[0],
+                    kMiddle[1],
+                    kMiddle[2],
+                    at(*kCrossed, 16, 31)[0],
+                    at(*kCrossed, 32, 20)[0],
+                    at(*kCrossed, 40, 34)[0]);
+        RAWFRAME_EXPECT(kMiddle[0] == 255 && kMiddle[1] == 0 && kMiddle[2] == 0);
+        RAWFRAME_EXPECT(at(*kCrossed, 16, 31)[0] == 255 && at(*kCrossed, 40, 34)[0] == 255);
+        RAWFRAME_EXPECT(at(*kCrossed, 32, 20) == at(*kSky, 32, 20));
+    }
 }

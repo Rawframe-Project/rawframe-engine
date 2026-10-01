@@ -161,7 +161,8 @@ public:
                       diagnostics::field("postProcessesLeftOut", statistics.postProcessesLeftOut),
                       diagnostics::field("emittersDrawn", statistics.emittersDrawn),
                       diagnostics::field("emittersLeftOut", statistics.emittersLeftOut),
-                      diagnostics::field("particlesSpawned", statistics.particlesSpawned)});
+                      diagnostics::field("particlesSpawned", statistics.particlesSpawned),
+                      diagnostics::field("ribbonsDrawn", statistics.ribbonsDrawn)});
     }
 
 private:

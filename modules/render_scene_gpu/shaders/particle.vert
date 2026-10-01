@@ -91,6 +91,9 @@ layout(location = 0) out vec2 outUv;
 layout(location = 1) out vec4 outColor;
 // How deep the particle fades into what is behind it: half its size.
 layout(location = 2) out float outSoft;
+// Its material's place among the frame's materials.
+layout(location = 3) flat out uint outMaterial;
+layout(location = 4) out vec2 outShape;
 
 const float kPeriod = 4096.0;
 
@@ -103,6 +106,8 @@ void main()
         outUv = vec2(0.0);
         outColor = vec4(0.0);
         outSoft = 1.0;
+        outMaterial = 0u;
+        outShape = vec2(0.0);
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         return;
     }
@@ -125,5 +130,7 @@ void main()
     outUv = vec2(kAt.x, 1.0 - kAt.y);
     outColor = mix(emitter.colorStart, emitter.colorEnd, kThrough);
     outSoft = max(0.5 * kSize, 1e-4);
+    outMaterial = emitter.more.z;
+    outShape = kAt * 2.0 - 1.0;
     gl_Position = frame.viewProjection * vec4(kPlaced, 1.0);
 }

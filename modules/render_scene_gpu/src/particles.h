@@ -46,6 +46,14 @@ struct ParticleViewBlock {
     std::array<float, 4> lens{};
 };
 
+/// The view as `frame` sees it, as the particles' and the ribbons'
+/// shaders read it.
+[[nodiscard]] ParticleViewBlock viewOf(const render_scene::SceneFrame& frame) noexcept;
+
+/// The stride between emitters' or ribbons' blocks: no device asks uniform
+/// offsets aligned past 256 bytes (Vulkan's and WebGPU's bound).
+inline constexpr std::uint64_t kBlockStride = 256;
+
 /// The bytes one particle takes in the pool (D353): where it started and
 /// when it was born, its velocity and life, and the scale on its size.
 inline constexpr std::uint64_t kParticleBytes = 48;
@@ -66,10 +74,10 @@ struct ParticleDrawing {
 /// kept from frame to frame, made the first time a view draws an emitter,
 /// in which each emitter a frame draws holds a ring of its own, found
 /// where the pool has room and cleared by a compute pass when it starts;
-/// a compute pass writing the frame's births into the rings; and a pass
-/// drawing every slot of each ring over the models' light, farthest
-/// emitter first, each particle where its age puts it, faded where it
-/// meets what is behind it.
+/// a compute pass writing the frame's births into the rings; and every
+/// slot of each ring drawn over the models' light, farthest emitter first,
+/// each particle where its age puts it, faded where it meets what is
+/// behind it, in the pass the unlit draws share.
 /// An emitter whose ring the pool cannot hold is left out and counted; a
 /// ring is let go once its emitter is not drawn.
 class ParticlePass {
@@ -84,16 +92,24 @@ public:
     /// what the upload pass writes added to `writes`.
     result::Status declare(const render_scene::SceneFrame& frame, bool made, std::vector<mrhiAccess>& writes);
 
-    /// The births, then the particles drawn over `scene`, reading the
-    /// prepass's `depth` and `reads` (the frame's view, the exposure, the
-    /// materials, and their textures).
-    result::Status addPasses(mrhiResourceId scene, mrhiResourceId depth, std::span<const mrhiAccess> reads);
+    /// The new rings cleared and the births, passes of their own.
+    result::Status addPasses();
+
+    /// What drawing the particles reads, added to `reads`.
+    void drawReads(std::vector<mrhiAccess>& reads) const;
 
     /// Its writes, in the upload pass: its emitters and its view.
     result::Status write(mrhiPassId upload);
 
     /// Its passes recorded.
-    result::Status record(const Pipelines& pipelines, const ParticleDrawing& with);
+    result::Status record(const Pipelines& pipelines);
+
+    /// The particles drawn in `pass`, the pass the unlit draws share
+    /// (D354).
+    result::Status recordDraws(mrhiPassId pass, const Pipelines& pipelines, const ParticleDrawing& with);
+
+    /// Whether the open frame draws particles.
+    [[nodiscard]] bool enabled() const noexcept;
 
     /// The frame ended: a ring a frame that was not submitted would have
     /// cleared is found again.
@@ -147,7 +163,6 @@ private:
     mrhiResourceId viewResource_{};
     mrhiPassId clearPass_{};
     mrhiPassId spawnPass_{};
-    mrhiPassId drawPass_{};
 };
 
 } // namespace rawframe::render_scene_gpu

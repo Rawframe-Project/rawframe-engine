@@ -41,7 +41,7 @@ CONTAINERS = (
     ("render_scene_gpu", "tonemap", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "post", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "spawn", (("comp", "spawn"), ("comp", "clear", "CLEAR"))),
-    ("render_scene_gpu", "particle", (("vert", "vs"), ("frag", "fs"))),
+    ("render_scene_gpu", "particle", (("vert", "vs"), ("ribbon.vert", "ribbon"), ("frag", "fs"))),
 )
 
 
