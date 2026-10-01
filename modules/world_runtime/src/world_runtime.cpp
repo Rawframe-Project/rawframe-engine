@@ -260,7 +260,8 @@ private:
         ++recorded_;
     }
 
-    /// How long ticks took, for SPEC-0013's tick budget: once, at stop.
+    /// How long ticks took, for SPEC-0013's tick budget, and the entities
+    /// the World holds then (D388): once, at stop.
     void summarize() {
         if (durations_.empty()) {
             return;
@@ -274,12 +275,14 @@ private:
         };
         emitter_.log(diagnostics::Severity::Info,
                      kTickSummary,
-                     "World tick durations, in microseconds",
+                     "World tick durations, in microseconds, and the entities at the end",
                      {diagnostics::field("ticks", recorded_),
                       diagnostics::field("p50", kAt(0.50)),
                       diagnostics::field("p95", kAt(0.95)),
                       diagnostics::field("p99", kAt(0.99)),
-                      diagnostics::field("max", kAt(1.0))});
+                      diagnostics::field("max", kAt(1.0)),
+                      diagnostics::field("entities",
+                                         static_cast<std::uint64_t>(world_ != nullptr ? world_->entityCount() : 0))});
     }
 
     Settings settings_;
