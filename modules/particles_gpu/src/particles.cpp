@@ -14,6 +14,7 @@
 #include <maul-rhi/pipeline.h>
 #include <maul-rhi/resources.h>
 #include <maul-rhi/shader.h>
+#include <memory>
 #include <set>
 #include <string>
 #include <tuple>
@@ -187,13 +188,13 @@ struct Drawn {
 /// A streak's corners: eight quads, as the shaders cut it.
 constexpr std::uint32_t kStreakCorners = 8 * 6;
 
-} // namespace
-
-struct Particles::State {
+/// The births' and the drawing's shaders and pipelines on one device, for
+/// one picture's format: made once and shared by every pool drawing into
+/// a picture of it (D361), so the device compiles them once.
+struct Programs {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
     Target target = Target::Light;
-    std::uint32_t capacity = 0;
     /// The births' and the drawing's shaders, and their pipelines: the
     /// clearing, the births, and the particles' and the ribbons' by blend.
     mrhiShaderId spawnShader{};
@@ -206,50 +207,16 @@ struct Particles::State {
     Asked spawnAsked;
     std::array<Asked, kBlends> particlesAsked{};
     std::array<Asked, kBlends> ribbonsAsked{};
-    mrhiBufferId buffer{};
-    /// Each drawn emitter's ring, by its key.
-    std::map<std::uint64_t, Ring> rings;
-    /// The open frame's: whether it draws particles, and ribbons; its
-    /// emitters' blocks, at a stride every device's uniform offsets allow;
-    /// the rings it clears, by key; its ribbons' points and blocks; its
-    /// materials; its view; and what it declared.
-    bool emitting = false;
-    bool ribboned = false;
-    std::vector<std::uint8_t> blocks;
-    std::vector<Drawn> drawing;
-    std::vector<std::uint64_t> cleared;
-    std::vector<std::array<float, 12>> points;
-    std::vector<std::uint8_t> ribbonBlocks;
-    std::vector<std::uint32_t> ribbonCounts;
-    std::vector<std::uint32_t> ribbonMaterials;
-    std::vector<Material> materials;
-    std::vector<std::uint8_t> materialBlocks;
-    ViewBlock view;
-    std::size_t leftOut = 0;
-    std::uint64_t spawned = 0;
-    Drawing with;
-    mrhiResourceId pool{};
-    mrhiResourceId blocksResource{};
-    mrhiResourceId pointsResource{};
-    mrhiResourceId ribbonsResource{};
-    mrhiResourceId materialsResource{};
-    mrhiResourceId viewResource{};
-    mrhiResourceId depth{};
-    mrhiResourceId exposure{};
-    std::optional<mrhiPassId> uploadPass;
-    std::optional<mrhiPassId> clearPass;
-    std::optional<mrhiPassId> spawnPass;
-    std::optional<mrhiPassId> depthPass;
-    std::optional<mrhiPassId> drawPass;
 
-    ~State() {
+    Programs() = default;
+    Programs(const Programs&) = delete;
+    Programs& operator=(const Programs&) = delete;
+
+    ~Programs() {
         if (native == nullptr) {
             return;
         }
         // Maul RHI retires what a frame still uses once the frame is done.
-        if (buffer.index1 != 0) {
-            static_cast<void>(mrhiDestroyBuffer(native, buffer));
-        }
         for (const auto& kPipelines : {particles, ribbons}) {
             for (const mrhiGraphicsPipelineId kPipeline : kPipelines) {
                 static_cast<void>(mrhiDestroyGraphicsPipeline(native, kPipeline));
@@ -394,6 +361,58 @@ struct Particles::State {
             all = all && kMade;
         }
         return all;
+    }
+};
+
+} // namespace
+
+struct Particles::State {
+    render::Device* device = nullptr;
+    mrhiDevice* native = nullptr;
+    std::uint32_t capacity = 0;
+    /// Its shaders and pipelines, perhaps shared (D361).
+    std::shared_ptr<Programs> programs;
+    mrhiBufferId buffer{};
+    /// Each drawn emitter's ring, by its key.
+    std::map<std::uint64_t, Ring> rings;
+    /// The open frame's: whether it draws particles, and ribbons; its
+    /// emitters' blocks, at a stride every device's uniform offsets allow;
+    /// the rings it clears, by key; its ribbons' points and blocks; its
+    /// materials; its view; and what it declared.
+    bool emitting = false;
+    bool ribboned = false;
+    std::vector<std::uint8_t> blocks;
+    std::vector<Drawn> drawing;
+    std::vector<std::uint64_t> cleared;
+    std::vector<std::array<float, 12>> points;
+    std::vector<std::uint8_t> ribbonBlocks;
+    std::vector<std::uint32_t> ribbonCounts;
+    std::vector<std::uint32_t> ribbonMaterials;
+    std::vector<Material> materials;
+    std::vector<std::uint8_t> materialBlocks;
+    ViewBlock view;
+    std::size_t leftOut = 0;
+    std::uint64_t spawned = 0;
+    Drawing with;
+    mrhiResourceId pool{};
+    mrhiResourceId blocksResource{};
+    mrhiResourceId pointsResource{};
+    mrhiResourceId ribbonsResource{};
+    mrhiResourceId materialsResource{};
+    mrhiResourceId viewResource{};
+    mrhiResourceId depth{};
+    mrhiResourceId exposure{};
+    std::optional<mrhiPassId> uploadPass;
+    std::optional<mrhiPassId> clearPass;
+    std::optional<mrhiPassId> spawnPass;
+    std::optional<mrhiPassId> depthPass;
+    std::optional<mrhiPassId> drawPass;
+
+    ~State() {
+        if (native != nullptr && buffer.index1 != 0) {
+            // Maul RHI retires what a frame still uses once the frame is done.
+            static_cast<void>(mrhiDestroyBuffer(native, buffer));
+        }
     }
 
     /// Where the pool has room for `slots`, the first that does.
@@ -576,7 +595,7 @@ struct Particles::State {
         for (const particles::Ribbon& kRibbon : frame.ribbons) {
             wanted.at(static_cast<std::size_t>(materials[placeOf(kRibbon.material)].blend)) = true;
         }
-        RAWFRAME_TRY_ASSIGN(const bool kReady, ready(wanted));
+        RAWFRAME_TRY_ASSIGN(const bool kReady, programs->ready(wanted));
         if (!kReady) {
             return {};
         }
@@ -725,7 +744,7 @@ struct Particles::State {
         std::array<mrhiBinding, 2> spawning = {bufferAt(0, blocksResource, sizeof(EmitterBlock)),
                                                bufferAt(1, pool, kPoolBytes)};
         for (const auto& [kPass, kPipeline, kClearing] :
-             {std::tuple{clearPass, clear, true}, std::tuple{spawnPass, spawn, false}}) {
+             {std::tuple{clearPass, programs->clear, true}, std::tuple{spawnPass, programs->spawn, false}}) {
             if (!kPass.has_value()) {
                 continue;
             }
@@ -785,8 +804,8 @@ struct Particles::State {
                 const Material& kMaterial = materials[ribbonMaterials[at]];
                 if (blending != kMaterial.blend) {
                     blending = kMaterial.blend;
-                    if (mrhiSetGraphicsPipeline(native, kPass, ribbons.at(static_cast<std::size_t>(*blending))) !=
-                        mrhi_success) {
+                    if (mrhiSetGraphicsPipeline(
+                            native, kPass, programs->ribbons.at(static_cast<std::size_t>(*blending))) != mrhi_success) {
                         return failed("the ribbons could not begin", mrhi_errorState);
                     }
                 }
@@ -809,7 +828,8 @@ struct Particles::State {
                 const Material& kMaterial = materials[kDrawn.material];
                 if (blending != kMaterial.blend) {
                     blending = kMaterial.blend;
-                    if (mrhiSetGraphicsPipeline(native, kPass, particles.at(static_cast<std::size_t>(*blending))) !=
+                    if (mrhiSetGraphicsPipeline(
+                            native, kPass, programs->particles.at(static_cast<std::size_t>(*blending))) !=
                         mrhi_success) {
                         return failed("the particles could not begin", mrhi_errorState);
                     }
@@ -852,8 +872,21 @@ Particles::create(render::Device& device, Target target, std::uint32_t capacity)
     auto state = std::make_unique<State>();
     state->device = &device;
     state->native = device.native();
-    state->target = target;
     state->capacity = capacity;
+    state->programs = std::make_shared<Programs>();
+    state->programs->device = &device;
+    state->programs->native = device.native();
+    state->programs->target = target;
+    return std::unique_ptr<Particles>{new Particles{std::move(state)}};
+}
+
+result::Result<std::unique_ptr<Particles>>
+Particles::create(render::Device& device, const Particles& sharing, std::uint32_t capacity) {
+    auto state = std::make_unique<State>();
+    state->device = &device;
+    state->native = device.native();
+    state->capacity = capacity;
+    state->programs = sharing.state_->programs;
     return std::unique_ptr<Particles>{new Particles{std::move(state)}};
 }
 

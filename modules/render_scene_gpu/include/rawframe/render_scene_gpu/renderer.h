@@ -137,6 +137,11 @@ public:
     /// then draw no scene.
     [[nodiscard]] static result::Result<std::unique_ptr<SceneRenderer>> create(render::Device& device,
                                                                                RendererLimits limits = {});
+    /// Drawing with `sharing`'s shaders, samplers, and pipelines, on its
+    /// device (D361): a second view's renderer makes none of its own, so
+    /// the device compiles each once.
+    [[nodiscard]] static result::Result<std::unique_ptr<SceneRenderer>>
+    create(render::Device& device, const SceneRenderer& sharing, RendererLimits limits = {});
 
     ~SceneRenderer() override;
 
@@ -174,6 +179,8 @@ public:
     struct State;
 
 private:
+    [[nodiscard]] static result::Result<std::unique_ptr<SceneRenderer>>
+    made(render::Device& device, RendererLimits limits, const SceneRenderer* sharing);
     explicit SceneRenderer(std::unique_ptr<State> state) noexcept;
     std::unique_ptr<State> state_;
 };
@@ -187,8 +194,10 @@ private:
 /// none is lent, and the materials sample white.
 class TextureView final : public render::FrameRecorder {
 public:
-    /// On `device`, which must be ready and must outlive this.
+    /// On `device`, which must be ready and must outlive this, its renderer
+    /// drawing with `sharing`'s pipelines (the player's view's).
     [[nodiscard]] static result::Result<std::unique_ptr<TextureView>> create(render::Device& device,
+                                                                             const SceneRenderer& sharing,
                                                                              std::uint64_t id,
                                                                              std::uint32_t width,
                                                                              std::uint32_t height,
@@ -199,6 +208,9 @@ public:
     /// What the next frame draws into it: `frame`, with the meshes and
     /// textures it names; nothing for none.
     void prepare(const render_scene::SceneFrame* frame, MeshSource meshes, TextureSource textures = {});
+    /// Whether the frame it was given before this one went undrawn: no
+    /// submitted frame drew it.
+    [[nodiscard]] bool missed() const noexcept;
 
     [[nodiscard]] result::Status declare(render::Frame& frame) override;
     [[nodiscard]] result::Status record(render::Frame& frame) override;

@@ -117,6 +117,11 @@ public:
     /// made the first time a frame draws an emitter.
     [[nodiscard]] static result::Result<std::unique_ptr<Particles>>
     create(render::Device& device, Target target, std::uint32_t capacity);
+    /// On `device`, which must be `sharing`'s, drawing into a picture of
+    /// its format with its shaders and pipelines (D361), so the device
+    /// compiles them once, with a pool of its own.
+    [[nodiscard]] static result::Result<std::unique_ptr<Particles>>
+    create(render::Device& device, const Particles& sharing, std::uint32_t capacity);
 
     Particles(const Particles&) = delete;
     Particles& operator=(const Particles&) = delete;

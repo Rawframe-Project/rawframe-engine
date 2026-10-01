@@ -64,8 +64,9 @@ struct SceneRenderer::State {
     mrhiDevice* native = nullptr;
     RendererLimits limits;
     RendererStatistics statistics;
-    /// Its shaders, samplers, and pipelines.
-    Pipelines pipelines;
+    /// Its shaders, samplers, and pipelines, shared with the renderers made
+    /// to share them (D361).
+    std::shared_ptr<Pipelines> pipelines;
     /// The temporal pass and its pictures (D291).
     std::optional<TemporalPass> temporal;
     /// The exposure the device holds, and its metering (D293).
@@ -253,7 +254,7 @@ struct SceneRenderer::State {
     /// What the shadow passes draw with this frame.
     [[nodiscard]] Casting castingOf(const Declared& now) const noexcept {
         return Casting{.native = native,
-                       .pipelines = &pipelines,
+                       .pipelines = pipelines.get(),
                        .held = &*held,
                        .textures = textures.get(),
                        .instances = now.instances,
@@ -298,7 +299,7 @@ struct SceneRenderer::State {
         if (!wants) {
             return false;
         }
-        return pipelines.wanted(effect);
+        return pipelines->wanted(effect);
     }
 
     result::Status declare(render::Frame& open) {
@@ -307,7 +308,7 @@ struct SceneRenderer::State {
             return {};
         }
         device->pump();
-        RAWFRAME_TRY_ASSIGN(const bool kReady, pipelines.ready());
+        RAWFRAME_TRY_ASSIGN(const bool kReady, pipelines->ready());
         if (!kReady) {
             ++statistics.framesWaiting;
             return {};
@@ -456,11 +457,11 @@ struct SceneRenderer::State {
         // Multisampled where the view asks it, the device renders every
         // target so, and the pipelines, asked for the first count a view
         // asks, are made (D343).
-        if (pipelines.samples == 0 && frame->samples > 1 && (sampleCounts & frame->samples) != 0) {
-            pipelines.samples = frame->samples;
+        if (pipelines->samples == 0 && frame->samples > 1 && (sampleCounts & frame->samples) != 0) {
+            pipelines->samples = frame->samples;
         }
         RAWFRAME_TRY_ASSIGN(const bool kSampling,
-                            made(frame->samples > 1 && frame->samples == pipelines.samples, Effect::Multisampled));
+                            made(frame->samples > 1 && frame->samples == pipelines->samples, Effect::Multisampled));
         // With the ambient occlusion or the reflections, each point's
         // surface beside its depth (D327, D331).
         RAWFRAME_TRY(models->declare(
@@ -552,7 +553,7 @@ struct SceneRenderer::State {
             return render::requestKey(resource.index1, resource.generation);
         };
         RAWFRAME_TRY(particles->declare(frame->particles,
-                                        particleMaterialsOf(now.materials, frame->textures, *textures, pipelines),
+                                        particleMaterialsOf(now.materials, frame->textures, *textures, *pipelines),
                                         particleViewOf(*frame, now.block),
                                         {.picture = kKey(models->scene()),
                                          .exposure = kKey(metering->exposure()),
@@ -650,7 +651,7 @@ struct SceneRenderer::State {
         if (!composing) {
             return {};
         }
-        return post->record(pipelines, material::Insertion::FinalOutput);
+        return post->record(*pipelines, material::Insertion::FinalOutput);
     }
 
     result::Status record() {
@@ -712,8 +713,8 @@ struct SceneRenderer::State {
         if (mrhiEndPass(native, now.upload) != mrhi_success) {
             return failed("the upload pass could not end", mrhi_errorState);
         }
-        RAWFRAME_TRY(decalAtlas->record(pipelines));
-        RAWFRAME_TRY(probeAtlas->record(pipelines));
+        RAWFRAME_TRY(decalAtlas->record(*pipelines));
+        RAWFRAME_TRY(probeAtlas->record(*pipelines));
         RAWFRAME_TRY(shadows->record(castingOf(now), now.placed));
         // The scene's table: slots 10 to 17 are each run's textures; 18 and
         // 19 the sky's picture (D322); 20 the reflection probes (D325); 21
@@ -726,11 +727,11 @@ struct SceneRenderer::State {
         // white seen as an array where none bends the normals (D342).
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
-            samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
+            samplerAt(19, pipelines->materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
         const std::array<mrhiBinding, kTableSlots> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, shadows->sunMap()),
-            samplerAt(2, pipelines.shadowSampler),
+            samplerAt(2, pipelines->shadowSampler),
             bufferAt(3, now.lightsResource, now.lights.size() * sizeof(LightBlock)),
             bufferAt(4, now.rangesResource, now.ranges.size() * 4),
             bufferAt(5, now.indicesResource, now.indices.size() * 4),
@@ -766,31 +767,31 @@ struct SceneRenderer::State {
         // (D310); then, lit, the sky where none lies; then the translucent
         // over both (D305). The occlusion, the reflections, and the contact
         // shadows are found between the two (D327, D331, D338).
-        const Drawing kDrawing{.pipelines = &pipelines,
+        const Drawing kDrawing{.pipelines = pipelines.get(),
                                .held = &*held,
                                .textures = textures.get(),
                                .instances = now.instances,
                                .placed = &now.placed,
                                .table = kFrameBinding};
         RAWFRAME_TRY(models->recordPrepass(kDrawing));
-        RAWFRAME_TRY(occlusion->record(pipelines, models->depth()));
-        RAWFRAME_TRY(reflecting->record(pipelines));
-        RAWFRAME_TRY(contact->record(pipelines));
+        RAWFRAME_TRY(occlusion->record(*pipelines, models->depth()));
+        RAWFRAME_TRY(reflecting->record(*pipelines));
+        RAWFRAME_TRY(contact->record(*pipelines));
         RAWFRAME_TRY(models->recordLit(kDrawing, decalAtlas->drawn() > 0, skyBinding));
         RAWFRAME_TRY(particles->record());
         RAWFRAME_TRY(capturing->record(models->scene()));
-        RAWFRAME_TRY(metering->record(pipelines, models->scene(), now.width, now.height));
-        RAWFRAME_TRY(temporal->record(pipelines, models->scene(), models->motion()));
-        RAWFRAME_TRY(post->record(pipelines, material::Insertion::AfterTemporal));
-        RAWFRAME_TRY(motionBlur->record(pipelines));
-        RAWFRAME_TRY(focus->record(pipelines));
-        RAWFRAME_TRY(bloom->record(pipelines, now.shown));
-        RAWFRAME_TRY(picture->recordGrade(pipelines));
-        RAWFRAME_TRY(post->record(pipelines, material::Insertion::BeforeTonemap));
-        RAWFRAME_TRY(picture->recordTonemap(pipelines));
-        RAWFRAME_TRY(post->record(pipelines, material::Insertion::AfterTonemap));
-        RAWFRAME_TRY(picture->recordFxaa(pipelines));
-        return post->record(pipelines, material::Insertion::SceneOutput);
+        RAWFRAME_TRY(metering->record(*pipelines, models->scene(), now.width, now.height));
+        RAWFRAME_TRY(temporal->record(*pipelines, models->scene(), models->motion()));
+        RAWFRAME_TRY(post->record(*pipelines, material::Insertion::AfterTemporal));
+        RAWFRAME_TRY(motionBlur->record(*pipelines));
+        RAWFRAME_TRY(focus->record(*pipelines));
+        RAWFRAME_TRY(bloom->record(*pipelines, now.shown));
+        RAWFRAME_TRY(picture->recordGrade(*pipelines));
+        RAWFRAME_TRY(post->record(*pipelines, material::Insertion::BeforeTonemap));
+        RAWFRAME_TRY(picture->recordTonemap(*pipelines));
+        RAWFRAME_TRY(post->record(*pipelines, material::Insertion::AfterTonemap));
+        RAWFRAME_TRY(picture->recordFxaa(*pipelines));
+        return post->record(*pipelines, material::Insertion::SceneOutput);
     }
 
     void ended(bool submitted) noexcept {
@@ -850,6 +851,16 @@ SceneRenderer::SceneRenderer(std::unique_ptr<State> state) noexcept : state_(std
 SceneRenderer::~SceneRenderer() = default;
 
 result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Device& device, RendererLimits limits) {
+    return made(device, limits, nullptr);
+}
+
+result::Result<std::unique_ptr<SceneRenderer>>
+SceneRenderer::create(render::Device& device, const SceneRenderer& sharing, RendererLimits limits) {
+    return made(device, limits, &sharing);
+}
+
+result::Result<std::unique_ptr<SceneRenderer>>
+SceneRenderer::made(render::Device& device, RendererLimits limits, const SceneRenderer* sharing) {
     if (device.native() == nullptr) {
         return refuse(
             result::ErrorClass::FailedPrecondition, SceneGpuError::State, "a scene renderer needs a ready device");
@@ -866,9 +877,14 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->white = std::make_shared<const texture::Texture>(std::move(white));
     state->dark = darkCube();
     state->plain = plainTable();
-    state->pipelines.device = &device;
-    state->pipelines.native = device.native();
-    RAWFRAME_TRY(state->pipelines.make());
+    if (sharing != nullptr) {
+        state->pipelines = sharing->state_->pipelines;
+    } else {
+        state->pipelines = std::make_shared<Pipelines>();
+        state->pipelines->device = &device;
+        state->pipelines->native = device.native();
+        RAWFRAME_TRY(state->pipelines->make());
+    }
     state->metering.emplace(device.native());
     state->temporal.emplace(device.native());
     state->capturing.emplace(device);
@@ -890,9 +906,15 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->bloom.emplace(device.native());
     state->picture.emplace(device.native());
     state->post.emplace(device.native());
-    RAWFRAME_TRY_ASSIGN(
-        state->particles,
-        particles_gpu::Particles::create(device, particles_gpu::Target::Light, limits.maximumParticles));
+    if (sharing != nullptr) {
+        RAWFRAME_TRY_ASSIGN(
+            state->particles,
+            particles_gpu::Particles::create(device, *sharing->state_->particles, limits.maximumParticles));
+    } else {
+        RAWFRAME_TRY_ASSIGN(
+            state->particles,
+            particles_gpu::Particles::create(device, particles_gpu::Target::Light, limits.maximumParticles));
+    }
     state->composed.state = state.get();
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
