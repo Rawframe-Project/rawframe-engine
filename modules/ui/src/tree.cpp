@@ -3,8 +3,11 @@
 #include "rawframe/ui/errors.h"
 
 #include <maul-ui/context.h>
+#include <maul-ui/draw.h>
 #include <maul-ui/layout.h>
 #include <maul-ui/node.h>
+#include <maul-ui/style.h>
+#include <maul-ui/visual.h>
 #include <string_view>
 
 namespace rawframe::ui {
@@ -44,6 +47,26 @@ muiDimension dimensionOf(Dimension dimension) noexcept {
 
 muiEdges edgesOf(const std::array<float, 4>& sides) noexcept {
     return muiEdges{.start = sides[0], .end = sides[1], .top = sides[2], .bottom = sides[3]};
+}
+
+/// 0xRRGGBBAA as Maul UI's color: sRGB with straight alpha, 0 to 1.
+muiColor colorOf(std::uint32_t color) noexcept {
+    const auto kChannel = [color](unsigned shift) {
+        return static_cast<float>((color >> shift) & 0xFFU) / 255.0F;
+    };
+    return muiColor{.r = kChannel(24), .g = kChannel(16), .b = kChannel(8), .a = kChannel(0)};
+}
+
+std::array<float, 4> linearOf(const muiLinearColor& color) noexcept {
+    return {color.r, color.g, color.b, color.a};
+}
+
+Rect rectOf(const muiRect& rect) noexcept {
+    return Rect{.x = rect.x, .y = rect.y, .width = rect.width, .height = rect.height};
+}
+
+std::array<float, 4> cornersOf(const muiCorners& corners) noexcept {
+    return {corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft};
 }
 
 muiAlign alignOf(Align align) noexcept {
@@ -124,6 +147,7 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
     style.item.alignSelf = alignOf(layout.alignSelf);
     style.padding = edgesOf(layout.padding);
     style.margin = edgesOf(layout.margin);
+    style.border = edgesOf(layout.border);
     return checked(muiNode_SetLayoutStyle(state_->context, idOf(node), &style), "a UI node's layout was refused");
 }
 
@@ -134,8 +158,57 @@ result::Status Tree::layOut(Node root, float width, float height) {
 }
 
 Rect Tree::rectOf(Node node) const noexcept {
-    const muiRect kRect = muiNode_GetRect(state_->context, idOf(node));
-    return Rect{.x = kRect.x, .y = kRect.y, .width = kRect.width, .height = kRect.height};
+    return ui::rectOf(muiNode_GetRect(state_->context, idOf(node)));
+}
+
+result::Status Tree::setLook(Node node, const Look& look) {
+    muiVisualStyle style = muiDefaultVisualStyle();
+    style.background = colorOf(look.fill);
+    const muiColor kBorder = colorOf(look.borderColor);
+    style.borderColor = muiEdgeColors{.start = kBorder, .end = kBorder, .top = kBorder, .bottom = kBorder};
+    const muiDimension kRadius{.scale = 0, .offset = look.radius, .kind = mui_dimensionValue};
+    style.radius = muiCornerRadii{.topStart = kRadius, .topEnd = kRadius, .bottomEnd = kRadius, .bottomStart = kRadius};
+    style.clip = look.clip;
+    return checked(muiNode_SetVisualValues(state_->context, idOf(node), &style, MUI_VISUAL_PROPERTIES),
+                   "a UI node's look was refused");
+}
+
+result::Status Tree::draw(Node root, float scale, DrawList& into) {
+    const muiDrawInput kInput{.surface = 0, .scale = scale, .paint = nullptr, .paintUser = nullptr};
+    RAWFRAME_TRY(checked(muiBuildDrawList(state_->context, idOf(root), &kInput), "a UI tree could not be drawn"));
+    muiDrawList list{};
+    RAWFRAME_TRY(checked(muiGetDrawList(state_->context, &list), "a UI tree's drawing could not be read"));
+    into.boxes.clear();
+    into.clips.clear();
+    into.skipped = 0;
+    for (std::uint32_t at = 0; at < list.clipCount; ++at) {
+        const muiDrawClip& kClip = list.clips[at];
+        into.clips.push_back(Clip{.rect = ui::rectOf(kClip.rect),
+                                  .radii = cornersOf(kClip.radii),
+                                  .parent = kClip.parent,
+                                  .invert = kClip.invert != 0});
+    }
+    for (std::uint32_t at = 0; at < list.commandCount; ++at) {
+        const muiDrawCommand& kCommand = list.commands[at];
+        if (kCommand.kind != mui_drawBox || kCommand.transform != 0 || kCommand.box.gradient != 0) {
+            ++into.skipped;
+            continue;
+        }
+        const muiDrawBox& kBox = kCommand.box;
+        into.boxes.push_back(Box{.rect = ui::rectOf(kBox.rect),
+                                 .radii = cornersOf(kBox.radii),
+                                 .fill = linearOf(kBox.fill),
+                                 .borderWidths = {kBox.borderWidths.top,
+                                                  kBox.borderWidths.right,
+                                                  kBox.borderWidths.bottom,
+                                                  kBox.borderWidths.left},
+                                 .borderColors = {linearOf(kBox.borderColors[0]),
+                                                  linearOf(kBox.borderColors[1]),
+                                                  linearOf(kBox.borderColors[2]),
+                                                  linearOf(kBox.borderColors[3])},
+                                 .clip = kCommand.clip});
+    }
+    return {};
 }
 
 } // namespace rawframe::ui

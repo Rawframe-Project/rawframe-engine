@@ -3,14 +3,16 @@
 // A UI tree (ADR-0034, SPEC-0030, D374): Maul UI's retained core owned for
 // the engine, its nodes found by a key the owner chooses (an entity's), laid
 // out by SPEC-0030's Scale+Offset sizing and flexbox algebra into
-// rectangles relative to their parents. A node and a subtree that did not
-// change are not laid out again. Maul UI's types stay inside this module.
+// rectangles relative to their parents, and drawn as SPEC-0032's
+// draw-command list. A node and a subtree that did not change are not laid
+// out or painted again. Maul UI's types stay inside this module.
 
 #include "rawframe/result/result.h"
 
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace rawframe::ui {
 
@@ -74,6 +76,19 @@ struct Layout {
     Align alignSelf = Align::Auto;
     std::array<float, 4> padding{};
     std::array<float, 4> margin{};
+    /// The border's widths, inside the border box.
+    std::array<float, 4> border{};
+};
+
+/// A node's look (SPEC-0032's box): its fill and its border's color, each
+/// 0xRRGGBBAA, sRGB with straight alpha (nought draws nothing); its
+/// corners' radius in pixels, held to half its shorter side; and whether
+/// it clips its children to its rounded border box.
+struct Look {
+    std::uint32_t fill = 0;
+    std::uint32_t borderColor = 0;
+    float radius = 0;
+    bool clip = false;
 };
 
 /// A node's border box from the last layout that reached it, relative to
@@ -83,6 +98,39 @@ struct Rect {
     float y = 0;
     float width = 0;
     float height = 0;
+};
+
+/// A rounded box to draw (SPEC-0032), in pixels from the root's top left,
+/// y down: its border box; its corners' radii (top left, then clockwise);
+/// its fill, linear light with premultiplied alpha; its borders' widths
+/// and colors (top, right, bottom, left), inside the box; and the clip it
+/// is drawn in, an index of its list's clips, nought for none.
+struct Box {
+    Rect rect;
+    std::array<float, 4> radii{};
+    std::array<float, 4> fill{};
+    std::array<float, 4> borderWidths{};
+    std::array<std::array<float, 4>, 4> borderColors{};
+    std::uint32_t clip = 0;
+};
+
+/// A clip: drawing kept inside the rounded rectangle (outside it, when
+/// inverted) and inside its parent, an index of the list's clips.
+struct Clip {
+    Rect rect;
+    std::array<float, 4> radii{};
+    std::uint32_t parent = 0;
+    bool invert = false;
+};
+
+/// What a tree draws, in paint order: its boxes, and its clips, the first
+/// a placeholder for none. Commands generation 1 does not draw yet
+/// (shadows, images, gradients over a fill, glyph runs, transformed ones)
+/// are counted, not kept.
+struct DrawList {
+    std::vector<Box> boxes;
+    std::vector<Clip> clips;
+    std::uint32_t skipped = 0;
 };
 
 /// A node of a tree, by its slot and generation; a node removed leaves its
@@ -121,6 +169,12 @@ public:
     [[nodiscard]] result::Status layOut(Node root, float width, float height);
     /// `node`'s rectangle from the last layout that reached it.
     [[nodiscard]] Rect rectOf(Node node) const noexcept;
+
+    /// `node`'s look; refused for a negative radius.
+    [[nodiscard]] result::Status setLook(Node node, const Look& look);
+    /// What `root`'s subtree, laid out, draws, into `into`, its last
+    /// contents replaced; `scale` device pixels a pixel, which edges snap to.
+    [[nodiscard]] result::Status draw(Node root, float scale, DrawList& into);
 
     struct State;
 

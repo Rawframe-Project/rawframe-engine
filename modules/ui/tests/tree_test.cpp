@@ -1,7 +1,8 @@
 // A UI tree over Maul UI (D374): a row of two fixed boxes and a growing one
 // laid out in their parent's padding box, a column's share of its parent,
 // an automatic root fitting its content, keys kept, values out of range
-// refused, and a removed subtree's nodes stale.
+// refused, a removed subtree's nodes stale, and a tree's looks drawn as
+// SPEC-0032's boxes in paint order.
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/errors.h"
@@ -106,4 +107,55 @@ RAWFRAME_TEST(AnAutomaticRootFitsItsContent) {
     RAWFRAME_EXPECT(ui.setLayout(kBox, {.width = pixels(30), .height = pixels(20)}).has_value());
     RAWFRAME_EXPECT(ui.layOut(kRoot, 640, 360).has_value());
     RAWFRAME_EXPECT(placed(ui.rectOf(kRoot), 0, 0, 30, 20));
+}
+
+namespace {
+
+bool near(float value, float expected) {
+    return value > expected - 1e-3F && value < expected + 1e-3F;
+}
+
+} // namespace
+
+RAWFRAME_TEST(ALaidOutTreeDrawsItsBoxesInPaintOrder) {
+    auto tree = Tree::create(8);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    const Node kPanel = *ui.add(1);
+    const Node kBare = *ui.add(2);
+    const Node kChip = *ui.add(3);
+    RAWFRAME_EXPECT(ui.attach(kPanel, kBare).has_value() && ui.attach(kPanel, kChip).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kPanel,
+                                 {.width = pixels(200),
+                                  .height = pixels(100),
+                                  .alignItems = Align::Start,
+                                  .padding = {10, 10, 10, 10},
+                                  .border = {2, 2, 2, 2}})
+                        .has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kBare, {.width = pixels(30), .height = pixels(30)}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kChip, {.width = pixels(40), .height = pixels(20)}).has_value());
+    RAWFRAME_EXPECT(ui.setLook(kPanel, {.fill = 0xFF0000FF, .borderColor = 0xFFFFFFFF, .radius = 8}).has_value());
+    RAWFRAME_EXPECT(ui.setLook(kChip, {.fill = 0x80808080}).has_value());
+    RAWFRAME_EXPECT(ui.setLook(kChip, {.radius = -1}).error().code() == code(UiError::Invalid));
+    RAWFRAME_EXPECT(ui.layOut(kPanel, 640, 360).has_value());
+    DrawList list;
+    RAWFRAME_EXPECT(ui.draw(kPanel, 1, list).has_value());
+    // The panel, then its one child with a look; the bare one draws
+    // nothing. Rects are the root's, the chip past the panel's border,
+    // padding, and the bare box.
+    RAWFRAME_EXPECT(list.boxes.size() == 2 && list.skipped == 0);
+    if (list.boxes.size() == 2) {
+        const Box& kPanelBox = list.boxes[0];
+        RAWFRAME_EXPECT(placed(kPanelBox.rect, 0, 0, 200, 100) && kPanelBox.radii[0] == 8 && kPanelBox.radii[2] == 8);
+        RAWFRAME_EXPECT(kPanelBox.fill == (std::array<float, 4>{1, 0, 0, 1}));
+        RAWFRAME_EXPECT(kPanelBox.borderWidths == (std::array<float, 4>{2, 2, 2, 2}) &&
+                        kPanelBox.borderColors[3] == (std::array<float, 4>{1, 1, 1, 1}));
+        const Box& kChipBox = list.boxes[1];
+        RAWFRAME_EXPECT(placed(kChipBox.rect, 42, 12, 40, 20));
+        // Grey 128 in linear light, at half alpha, premultiplied.
+        const float kAlpha = 128.0F / 255.0F;
+        RAWFRAME_EXPECT(near(kChipBox.fill[3], kAlpha) && near(kChipBox.fill[0], 0.2158605F * kAlpha));
+    }
 }
