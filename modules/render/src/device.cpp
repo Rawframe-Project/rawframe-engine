@@ -283,6 +283,15 @@ mrhiDevice* Device::native() const noexcept {
     return state_->phase == Phase::Ready ? state_->device : nullptr;
 }
 
+std::uint8_t Device::sampleCounts(std::uint32_t format) const noexcept {
+    mrhiFormatCaps caps{};
+    if (state_->phase != Phase::Ready ||
+        mrhiGetFormatCaps(state_->instance, state_->chosen, static_cast<mrhiFormat>(format), &caps) != mrhi_success) {
+        return 0;
+    }
+    return caps.sampleCounts;
+}
+
 void Device::pump() {
     if (state_->phase != Phase::Ready) {
         return;

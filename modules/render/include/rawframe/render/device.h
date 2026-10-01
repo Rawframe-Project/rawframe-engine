@@ -106,6 +106,12 @@ public:
     /// The device, once ready; for the rendering cluster only.
     [[nodiscard]] mrhiDevice* native() const noexcept;
 
+    /// The samples a pixel the adapter renders `format`, a Maul RHI format,
+    /// with, as Maul RHI's mask: the bit worth n set when n samples are
+    /// (D343); nought before the device is ready. For the rendering cluster
+    /// only.
+    [[nodiscard]] std::uint8_t sampleCounts(std::uint32_t format) const noexcept;
+
     /// Takes every answer the device has for its requests (a frame done, a
     /// pipeline made, a readback ready) and keeps each until its asker takes
     /// it: one queue, several clients. Once a frame, and before looking for
