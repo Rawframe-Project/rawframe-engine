@@ -11,14 +11,19 @@ module rawframe.canvas
 // the pose, and turned as the pose turns. The region is in the texture's
 // own terms, nought to one from its top left; past one the texture repeats,
 // so a region four wide tiles it four times. `color` multiplies it, as
-// 0xRRGGBBAA; an alpha of nought draws nothing, as does texture nought.
-// Higher `layer`s draw over lower ones.
+// 0xRRGGBBAA; an alpha of nought draws nothing, as does texture nought
+// without a material. Higher `layer`s draw over lower ones.
 //
 // A sprite sheet is a grid of equal cells, the region its first: `frame`
 // counts cells along a row of `columns` (nought is one), then down the
 // next, so frame 5 of a sheet four wide is the second row's second cell. A
 // region mirrored (`u0` past `u1`) moves along the sheet as it is.
 // An animator's discrete track (D139) steps it, a flipbook.
+//
+// A `material` (D356) names a game's canvas material by the identity its
+// `material` line gives it (nought for none): its color multiplies the
+// sprite's, its texture sampled across the region; its emission is added;
+// and it blends as it says. With one, texture nought draws white.
 struct Sprite {
     texture: u64
     u0: f32
@@ -33,6 +38,7 @@ struct Sprite {
     layer: i32
     frame: u32
     columns: u32
+    material: u64
 }
 
 // A client's view of the World (ADR-0052's camera, D261), on the client's

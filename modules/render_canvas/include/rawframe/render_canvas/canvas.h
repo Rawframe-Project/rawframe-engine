@@ -7,6 +7,7 @@
 // components as plain values and links none of this.
 
 #include "rawframe/kest/program.h"
+#include "rawframe/material/canvas.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
 #include "rawframe/world/world.h"
@@ -17,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace rawframe::render_canvas {
@@ -39,6 +41,8 @@ struct Sprite {
     /// is one), the region the first.
     std::uint32_t frame = 0;
     std::uint32_t columns = 0;
+    /// A game's canvas material, nought for none (D356).
+    std::uint64_t material = 0;
 };
 
 /// `rawframe.canvas.Camera` as C++ reads it (D261): a client's view,
@@ -84,9 +88,12 @@ struct CanvasVertex {
     std::uint32_t color = 0;
 };
 
-/// Consecutive quads of one texture, drawn by one command.
+/// Consecutive quads of one texture and one material, drawn by one
+/// command: the texture nought for white (a sprite with a material and no
+/// texture), the material its place among the frame's, nought for none.
 struct CanvasDraw {
     std::uint64_t texture = 0;
+    std::uint32_t material = 0;
     std::uint32_t firstIndex = 0;
     std::uint32_t indexCount = 0;
 };
@@ -98,10 +105,13 @@ struct CanvasFrame {
     std::vector<CanvasVertex> vertices;
     std::vector<std::uint32_t> indices;
     std::vector<CanvasDraw> draws;
+    /// The game's canvas materials the draws name by place, the first none:
+    /// white, over what is behind (D356).
+    std::span<const material::CanvasMaterial> materials;
     /// This frame's sprites drawn, and those not: outside the view, drawing
-    /// nothing (texture or alpha nought), malformed (a side not above
-    /// nought, a value not finite), naming a texture the game does not
-    /// declare, or past a limit.
+    /// nothing (alpha nought, or texture nought without a material),
+    /// malformed (a side not above nought, a value not finite), naming a
+    /// texture or a material the game does not declare, or past a limit.
     std::size_t drawn = 0;
     /// Of those drawn, the ones showing a sheet's cell past its first.
     std::size_t animated = 0;
@@ -109,6 +119,7 @@ struct CanvasFrame {
     std::size_t hidden = 0;
     std::size_t malformed = 0;
     std::size_t unknownTextures = 0;
+    std::size_t unknownMaterials = 0;
     std::size_t overLimit = 0;
 };
 
@@ -126,6 +137,10 @@ struct CanvasSettings {
     std::vector<schema::ComponentTypeId> sprites;
     /// The textures the game declares, by identity.
     std::vector<std::uint64_t> textures;
+    /// The game's canvas materials, by the identities its `material` lines
+    /// give them (D356); one it declares but a client could not read is
+    /// given as none.
+    std::vector<std::pair<std::uint64_t, material::CanvasMaterial>> materials;
     CanvasLimits limits;
 };
 

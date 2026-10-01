@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <map>
 #include <optional>
 #include <tuple>
 
@@ -46,6 +47,10 @@ bool wellFormed(const SpriteInstance& instance) noexcept {
 
 struct Canvas::State {
     CanvasSettings settings;
+    /// The game's canvas materials by place, none first, and their places
+    /// by identity (D356).
+    std::vector<material::CanvasMaterial> materials;
+    std::map<std::uint64_t, std::uint32_t> materialPlaces;
     std::vector<world::ColumnQuery> sprites;
     std::optional<schema::ComponentRuntimeId> pose;
     std::vector<SpriteInstance> extracted;
@@ -99,7 +104,9 @@ struct Canvas::State {
         frame.hidden = 0;
         frame.malformed = 0;
         frame.unknownTextures = 0;
+        frame.unknownMaterials = 0;
         frame.overLimit = 0;
+        frame.materials = materials;
         order.clear();
         for (const SpriteInstance& instance : extracted) {
             order.push_back(&instance);
@@ -118,12 +125,17 @@ struct Canvas::State {
                 ++frame.malformed;
                 continue;
             }
-            if (kSprite.texture == 0 || (kSprite.color & 0xFFU) == 0) {
+            if ((kSprite.texture == 0 && kSprite.material == 0) || (kSprite.color & 0xFFU) == 0) {
                 ++frame.hidden;
                 continue;
             }
-            if (!std::ranges::binary_search(settings.textures, kSprite.texture)) {
+            if (kSprite.texture != 0 && !std::ranges::binary_search(settings.textures, kSprite.texture)) {
                 ++frame.unknownTextures;
+                continue;
+            }
+            const auto kPlace = materialPlaces.find(kSprite.material);
+            if (kPlace == materialPlaces.end()) {
+                ++frame.unknownMaterials;
                 continue;
             }
             const std::array<CanvasVertex, 4> kCorners =
@@ -136,7 +148,8 @@ struct Canvas::State {
             }
             // Past a limit, this sprite and every one after it are left out,
             // so what is drawn is a prefix of the order.
-            const bool kNewDraw = frame.draws.empty() || frame.draws.back().texture != kSprite.texture;
+            const bool kNewDraw = frame.draws.empty() || frame.draws.back().texture != kSprite.texture ||
+                                  frame.draws.back().material != kPlace->second;
             full = full || frame.drawn == settings.limits.maximumSprites ||
                    (kNewDraw && frame.draws.size() == settings.limits.maximumDraws);
             if (full) {
@@ -145,6 +158,7 @@ struct Canvas::State {
             }
             if (kNewDraw) {
                 frame.draws.push_back(CanvasDraw{.texture = kSprite.texture,
+                                                 .material = kPlace->second,
                                                  .firstIndex = static_cast<std::uint32_t>(frame.indices.size())});
             }
             const auto kFirst = static_cast<std::uint32_t>(frame.vertices.size());
@@ -180,6 +194,15 @@ result::Result<std::unique_ptr<Canvas>> Canvas::create(const schema::SchemaRegis
         state->sprites.push_back(std::move(query));
     }
     std::ranges::sort(settings.textures);
+    // Material nought is none: white, over what is behind.
+    state->materials.emplace_back(material::CanvasMaterial{.shading = material::Shading::Unlit});
+    state->materialPlaces.emplace(0, 0);
+    for (const auto& [kId, kMaterial] : settings.materials) {
+        if (kId != 0 &&
+            state->materialPlaces.emplace(kId, static_cast<std::uint32_t>(state->materials.size())).second) {
+            state->materials.push_back(kMaterial);
+        }
+    }
     state->settings = std::move(settings);
     if (const auto kPose = registry.find(physics2d::Pose2D::kComponentTypeId)) {
         state->pose = *kPose;
@@ -253,7 +276,8 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
                                 {"color", offsetof(Sprite, color)},
                                 {"layer", offsetof(Sprite, layer)},
                                 {"frame", offsetof(Sprite, frame)},
-                                {"columns", offsetof(Sprite, columns)}})) {
+                                {"columns", offsetof(Sprite, columns)},
+                                {"material", offsetof(Sprite, material)}})) {
         return refuse(result::ErrorClass::InvalidArgument,
                       RenderCanvasError::BadComponents,
                       "the program lays out rawframe.canvas's Sprite otherwise than this engine reads it");

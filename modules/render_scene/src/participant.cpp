@@ -261,6 +261,11 @@ public:
                                                      .texture = sceneTextureOf(process->sampled)});
                             continue;
                         }
+                        // One of a third type is a canvas material (D356),
+                        // the canvas's to draw.
+                        if (missing(process.error(), content::ContentError::ResourceTypeMismatch)) {
+                            continue;
+                        }
                         read = std::unexpected{std::move(process).error()};
                     }
                     if (read.has_value()) {

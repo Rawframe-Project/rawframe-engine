@@ -93,6 +93,7 @@ struct Sprite {
     std::int32_t layer = 0;
     std::uint32_t frame = 0;
     std::uint32_t columns = 0;
+    std::uint64_t material = 0;
 };
 
 struct Camera {

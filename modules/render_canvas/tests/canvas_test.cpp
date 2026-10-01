@@ -2,9 +2,9 @@
 // turned as the pose turns, seen through the camera; a sheet's frame is its
 // cell; what is off the view, draws nothing, is malformed, or names an
 // undeclared texture is left out and counted; sprites draw in the order of
-// their layers, then entities, and batch only where the order allows; the
-// limits leave out a suffix of the order; and a game's canvas loads against
-// its program.
+// their layers, then entities, and batch only where the order allows, by
+// texture and material (D356); the limits leave out a suffix of the order;
+// and a game's canvas loads against its program.
 
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
@@ -27,6 +27,7 @@ constexpr auto kSpriteId = schema::ComponentTypeId::fromText("5b1d8f0e-2a44-4c1f
 constexpr auto kHatId = schema::ComponentTypeId::fromText("6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
 constexpr std::uint64_t kRunner = 0xb1;
 constexpr std::uint64_t kTiles = 0xb2;
+constexpr std::uint64_t kGlow = 0xc1;
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
@@ -48,7 +49,11 @@ struct Rig {
 
     explicit Rig(CanvasLimits limits = {}) {
         canvas =
-            *Canvas::create(*schema, {.sprites = {kSpriteId, kHatId}, .textures = {kTiles, kRunner}, .limits = limits});
+            *Canvas::create(*schema,
+                            {.sprites = {kSpriteId, kHatId},
+                             .textures = {kTiles, kRunner},
+                             .materials = {{kGlow, material::CanvasMaterial{.blend = material::CanvasBlend::Additive}}},
+                             .limits = limits});
     }
 
     world::EntityHandle spawn(Sprite sprite, std::optional<physics2d::Pose2D> pose) {
@@ -260,4 +265,22 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
                             "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
                             "component 6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.other rawframe.canvas.Sprite\n");
     RAWFRAME_EXPECT(kTwo.has_value() && kTwo->sprites == (std::vector<schema::ComponentTypeId>{kSpriteId, kHatId}));
+}
+
+RAWFRAME_TEST(SpritesDrawByTheirMaterials) {
+    // A runner, then the same runner glowing, then a glow with no texture,
+    // then one naming a material the game has not (D356).
+    Rig rig;
+    rig.spawn(Sprite{.texture = kRunner}, physics2d::Pose2D{});
+    rig.spawn(Sprite{.texture = kRunner, .layer = 1, .material = kGlow}, physics2d::Pose2D{});
+    rig.spawn(Sprite{.texture = 0, .layer = 2, .material = kGlow}, physics2d::Pose2D{});
+    rig.spawn(Sprite{.texture = kRunner, .layer = 3, .material = 0xdead}, physics2d::Pose2D{});
+    const CanvasFrame& kFrame = rig.frame({.height = 10});
+    RAWFRAME_EXPECT(kFrame.drawn == 3 && kFrame.unknownMaterials == 1 && kFrame.draws.size() == 3);
+    RAWFRAME_EXPECT(kFrame.materials.size() == 2 && kFrame.materials[1].blend == material::CanvasBlend::Additive);
+    if (kFrame.draws.size() == 3) {
+        RAWFRAME_EXPECT(kFrame.draws[0].texture == kRunner && kFrame.draws[0].material == 0);
+        RAWFRAME_EXPECT(kFrame.draws[1].texture == kRunner && kFrame.draws[1].material == 1);
+        RAWFRAME_EXPECT(kFrame.draws[2].texture == 0 && kFrame.draws[2].material == 1);
+    }
 }

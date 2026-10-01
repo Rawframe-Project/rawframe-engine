@@ -1,7 +1,9 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
+#include "rawframe/content/errors.h"
 #include "rawframe/game_content/game_content.h"
 #include "rawframe/game_textures/game_textures.h"
+#include "rawframe/material/canvas.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
 #include "rawframe/render_canvas/errors.h"
@@ -13,7 +15,10 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace rawframe::render_canvas {
 
@@ -25,6 +30,7 @@ constexpr diagnostics::EventIdentity kUnreadTexture{"canvas", "texture_unavailab
 constexpr diagnostics::EventIdentity kTextureReloaded{"canvas", "texture_reloaded"};
 constexpr diagnostics::EventIdentity kTextureNotReloaded{"canvas", "texture_reload_failed"};
 constexpr diagnostics::EventIdentity kTexturesRead{"canvas", "textures_read"};
+constexpr diagnostics::EventIdentity kUnreadMaterial{"canvas", "material_unavailable"};
 constexpr std::string_view kProvided[] = {kCanvasFrames.name};
 constexpr std::string_view kMaybe[] = {
     world_replication::kClientWorlds.name, world_kest::kGameFiles.name, game_content::kGameContent.name};
@@ -40,6 +46,29 @@ std::string identityText(std::uint64_t id) {
         text[15 - at] = "0123456789abcdef"[(id >> (4 * at)) & 0xFU];
     }
     return text;
+}
+
+/// Whether a read found a resource of another type.
+bool otherType(const result::Error& error) {
+    return error.domain() == content::kContentDomain &&
+           error.code() == content::code(content::ContentError::ResourceTypeMismatch);
+}
+
+/// A canvas material's cooked bytes, read and waited for, and decoded
+/// (D356).
+result::Result<material::CanvasMaterial> readCanvasMaterial(content::ContentStore& store, base::Bits128 id) {
+    RAWFRAME_TRY_ASSIGN(
+        execution::AsyncHandle<content::VerifiedContent> read,
+        store.read(content::ResourceRef{.id = content::ResourceId{id},
+                                        .type = content::ResourceTypeId{material::kCanvasMaterialType}}));
+    RAWFRAME_TRY_ASSIGN(
+        const content::VerifiedContent kRead,
+        execution::toResult(read.wait(),
+                            execution::CancellationMapping{.errorClass = result::ErrorClass::Unavailable,
+                                                           .domain = kRenderCanvasDomain,
+                                                           .code = code(RenderCanvasError::MaterialUnreadable),
+                                                           .description = "a canvas material's read was cancelled"}));
+    return material::decodeCanvas(kRead.bytes());
 }
 
 /// Draws one client's mirrored World each frame through a camera following
@@ -96,6 +125,38 @@ public:
         width_ = static_cast<std::uint32_t>(kWidth);
         height_ = static_cast<std::uint32_t>(kHeight);
         settings_ = CanvasSettings{.sprites = std::move(game->sprites), .textures = std::move(game->textures)};
+        // The game's canvas materials from its cooked content (D356): one
+        // of another domain is another renderer's; one that cannot be read,
+        // or with no cooked content to read it from, is drawn as none, and
+        // one that cannot be read is said so when the canvas starts.
+        std::set<std::uint64_t> others;
+        if (context.has(game_content::kGameContent.name) && !files->materials().empty()) {
+            RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
+            if (content->held()) {
+                const std::array<content::AdmittedRepresentation, 1> kAdmitted = {content::AdmittedRepresentation{
+                    .type = content::ResourceTypeId{material::kCanvasMaterialType},
+                    .representation = *content::RepresentationId::parse(material::kCanvasMaterialRepresentation)}};
+                RAWFRAME_TRY(content->admit(kAdmitted));
+                for (const world_kest::GameMaterialResource& each : files->materials()) {
+                    auto read = readCanvasMaterial(content->store(), each.material);
+                    if (read.has_value()) {
+                        settings_.materials.emplace_back(each.id, *read);
+                    } else if (otherType(read.error())) {
+                        others.insert(each.id);
+                    } else if (!each.subasset) {
+                        unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});
+                    }
+                }
+            }
+        }
+        for (const world_kest::GameMaterialResource& each : files->materials()) {
+            if (!others.contains(each.id) && std::ranges::find(settings_.materials, each.id, [](const auto& entry) {
+                                                 return entry.first;
+                                             }) == settings_.materials.end()) {
+                settings_.materials.emplace_back(each.id,
+                                                 material::CanvasMaterial{.shading = material::Shading::Unlit});
+            }
+        }
         if (context.has(game_content::kGameContent.name) && context.cpuExecutor() != nullptr &&
             !files->textures().empty()) {
             RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
@@ -126,6 +187,12 @@ public:
                          kUnread,
                          "the game's textures could not be asked for: every draw waits for its texture",
                          {diagnostics::field("reason", *unread_)});
+        }
+        for (const auto& [kPath, kReason] : unreadMaterials_) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kUnreadMaterial,
+                         "a canvas material could not be read: its sprites are drawn without it",
+                         {diagnostics::field("material", kPath), diagnostics::field("reason", kReason)});
         }
         return {};
     }
@@ -174,9 +241,12 @@ public:
             const CanvasFrame& kFrame = canvas_->queue(camera_);
             queued_ = &kFrame;
             // What a device would draw this frame: the draws whose texture
-            // is decoded and held.
+            // and whose material's texture are decoded and held.
+            const auto kWaits = [this](std::uint64_t id) {
+                return id != 0 && (textures_ == nullptr || textures_->texture(id, tick_) == nullptr);
+            };
             for (const CanvasDraw& draw : kFrame.draws) {
-                if (textures_ == nullptr || textures_->texture(draw.texture, tick_) == nullptr) {
+                if (kWaits(draw.texture) || kWaits(kFrame.materials[draw.material].sampled.id)) {
                     ++drawsWaiting_;
                 }
             }
@@ -187,6 +257,7 @@ public:
             hidden_ += kFrame.hidden;
             malformed_ += kFrame.malformed;
             unknownTextures_ += kFrame.unknownTextures;
+            unknownMaterials_ += kFrame.unknownMaterials;
             overLimit_ += kFrame.overLimit;
             mostDraws_ = std::max(mostDraws_, kFrame.draws.size());
             mostVertices_ = std::max(mostVertices_, kFrame.vertices.size());
@@ -212,6 +283,7 @@ public:
                       diagnostics::field("hidden", hidden_),
                       diagnostics::field("malformed", malformed_),
                       diagnostics::field("unknownTextures", unknownTextures_),
+                      diagnostics::field("unknownMaterials", unknownMaterials_),
                       diagnostics::field("overLimit", overLimit_),
                       diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
                       diagnostics::field("mostVertices", static_cast<std::uint64_t>(mostVertices_)),
@@ -318,6 +390,8 @@ private:
     std::uint64_t hidden_ = 0;
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownTextures_ = 0;
+    std::uint64_t unknownMaterials_ = 0;
+    std::vector<std::pair<std::string, std::string>> unreadMaterials_;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
     std::size_t mostVertices_ = 0;
