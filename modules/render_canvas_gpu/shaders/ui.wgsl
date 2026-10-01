@@ -1,5 +1,5 @@
-// The UI's boxes, images, and shadows (SPEC-0032, D375, D377, D378,
-// D381), for WebGPU: the entries of ui.vert, ui.frag, ui.image.vert,
+// The UI's boxes, images, shadows, and gradients (SPEC-0032, D375, D377,
+// D378, D381, D382), for WebGPU: the entries of ui.vert, ui.frag, ui.image.vert,
 // ui.image.frag, ui.shadow.vert, and ui.shadow.frag.
 
 struct View {
@@ -46,6 +46,70 @@ struct Shadow {
 }
 
 @group(0) @binding(6) var<storage, read> shadows: array<Shadow>;
+
+struct Gradient {
+    head: vec4f,
+    colors: array<vec4f, 4>,
+    positions: vec4f,
+}
+
+@group(0) @binding(7) var<storage, read> gradients: array<Gradient>;
+
+fn toOklab(color: vec3f) -> vec3f {
+    let lms = mat3x3f(0.4122214708, 0.2119034982, 0.0883024619,
+                      0.5363325363, 0.6806995451, 0.2817188376,
+                      0.0514459929, 0.1073969566, 0.6299787005) * color;
+    let root = sign(lms) * pow(abs(lms), vec3f(1.0 / 3.0));
+    return mat3x3f(0.2104542553, 1.9779984951, 0.0259040371,
+                   0.7936177850, -2.4285922050, 0.7827717662,
+                   -0.0040720468, 0.4505937099, -0.8086757660) * root;
+}
+
+fn fromOklab(lab: vec3f) -> vec3f {
+    let lms = mat3x3f(1.0, 1.0, 1.0,
+                      0.3963377774, -0.1055613458, -0.0894841775,
+                      0.2158037573, -0.0638541728, -1.2914855480) * lab;
+    return mat3x3f(4.0767416621, -1.2684380046, -0.0041960863,
+                   -3.3077115913, 2.6097574011, -0.7034186147,
+                   0.2309699292, -0.3413193965, 1.7076147010) * (lms * lms * lms);
+}
+
+fn premultipliedOklab(color: vec4f) -> vec4f {
+    if (color.a <= 0.0) {
+        return vec4f(0.0);
+    }
+    return vec4f(toOklab(color.rgb / color.a) * color.a, color.a);
+}
+
+fn ramp(index: u32, pixel: vec2f, rect: vec4f) -> vec4f {
+    let head = gradients[index].head;
+    let halfSize = rect.zw * 0.5;
+    let at = pixel - (rect.xy + halfSize);
+    var along = 0.0;
+    if (head.x < 1.5) {
+        let angle = radians(head.z);
+        let toward = vec2f(sin(angle), -cos(angle));
+        let span = abs(rect.z * toward.x) + abs(rect.w * toward.y);
+        along = dot(at, toward) / max(span, 1e-4) + 0.5;
+    } else {
+        along = length(at / max(halfSize * 1.41421356, vec2f(1e-4)));
+    }
+    let stops = i32(head.y);
+    let positions = gradients[index].positions;
+    var lab = premultipliedOklab(gradients[index].colors[0]);
+    for (var stop = 1; stop < stops; stop++) {
+        if (along > positions[stop - 1]) {
+            let span = max(positions[stop] - positions[stop - 1], 1e-6);
+            let share = clamp((along - positions[stop - 1]) / span, 0.0, 1.0);
+            lab = mix(premultipliedOklab(gradients[index].colors[stop - 1]),
+                      premultipliedOklab(gradients[index].colors[stop]), share);
+        }
+    }
+    if (lab.a <= 0.0) {
+        return vec4f(0.0);
+    }
+    return vec4f(max(fromOklab(lab.rgb / lab.a), vec3f(0.0)) * lab.a, lab.a);
+}
 
 const kDeepestClip = 64;
 
@@ -106,7 +170,13 @@ fn fs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32) -> 
             side = at;
         }
     }
-    var color = mix(box.borders[side], box.fill, filled) * outer;
+    var fill = box.fill;
+    let gradient = u32(box.clip.y);
+    if (gradient > 0u) {
+        let over = ramp(gradient, pixel, box.rect);
+        fill = over + fill * (1.0 - over.a);
+    }
+    var color = mix(box.borders[side], fill, filled) * outer;
     var clip = i32(box.clip.x);
     for (var depth = 0; depth < kDeepestClip && clip > 0; depth++) {
         let kept = coverage(distanceTo(pixel, clips[clip].rect, clips[clip].radii));

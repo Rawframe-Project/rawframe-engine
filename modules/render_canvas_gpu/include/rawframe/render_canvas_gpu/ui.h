@@ -7,7 +7,9 @@
 // blended over what is behind it in linear light, inside its clip and
 // every clip that one is inside (D377); and its images in their place in
 // the order, each its texture's part stretched or in nine slices (D378);
-// and its shadows, as CSS's box-shadow, blurred by a Gaussian (D381).
+// its shadows, as CSS's box-shadow, blurred by a Gaussian (D381); and its
+// boxes' gradients over their fills, moving through premultiplied Oklab
+// (D382).
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"

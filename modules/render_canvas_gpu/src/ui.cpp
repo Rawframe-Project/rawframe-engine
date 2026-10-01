@@ -54,11 +54,12 @@ mrhiBinding bufferAt(std::uint32_t slot, mrhiResourceId resource, std::uint64_t 
 
 /// A box as the shader reads it (ui.vert): nine vectors of four; a clip
 /// (ui.frag): three; an image (ui.image.vert): five; a shadow
-/// (ui.shadow.vert): five.
+/// (ui.shadow.vert): five; a gradient (ui.frag): six.
 constexpr std::size_t kBoxFloats = 36;
 constexpr std::size_t kClipFloats = 12;
 constexpr std::size_t kImageFloats = 20;
 constexpr std::size_t kShadowFloats = 20;
+constexpr std::size_t kGradientFloats = 24;
 /// The UI's share of a frame's uploads, for its images.
 constexpr std::uint64_t kImageUploadBytes = render::kFrameUploadBytes / 8;
 
@@ -102,8 +103,26 @@ std::array<float, kBoxFloats> blockOf(const ui::Box& box, float scale) noexcept 
     for (const std::array<float, 4>& kColor : box.borderColors) {
         kPut(kColor, 1);
     }
-    kPut({static_cast<float>(box.clip), 0, 0, 0}, 1);
+    kPut({static_cast<float>(box.clip), static_cast<float>(box.gradient), 0, 0}, 1);
     return block;
+}
+
+/// `list`'s gradients in the shader's layout, the first the placeholder
+/// for none.
+std::vector<float> gradientsOf(const ui::DrawList& list) {
+    std::vector<float> gradients(kGradientFloats, 0);
+    for (std::size_t at = 1; at < list.gradients.size(); ++at) {
+        const ui::Gradient& kGradient = list.gradients[at];
+        gradients.push_back(kGradient.kind == ui::GradientLook::Kind::Radial ? 2.0F : 1.0F);
+        gradients.push_back(static_cast<float>(kGradient.stops));
+        gradients.push_back(kGradient.angle);
+        gradients.push_back(0);
+        for (const std::array<float, 4>& kColor : kGradient.colors) {
+            gradients.insert(gradients.end(), kColor.begin(), kColor.end());
+        }
+        gradients.insert(gradients.end(), kGradient.positions.begin(), kGradient.positions.end());
+    }
+    return gradients;
 }
 
 /// `image`, in the shader's layout and the picture's pixels, its texture
@@ -207,6 +226,7 @@ struct UiRenderer::State {
     std::vector<float> clips;
     std::vector<float> imageBlocks;
     std::vector<float> shadowBlocks;
+    std::vector<float> gradients;
     /// Each image's held texture this frame, none for one not drawn.
     std::vector<std::uint64_t> imageTextures;
     std::array<float, 4> view{};
@@ -215,6 +235,7 @@ struct UiRenderer::State {
     mrhiResourceId clipsResource{};
     mrhiResourceId imagesResource{};
     mrhiResourceId shadowsResource{};
+    mrhiResourceId gradientsResource{};
     mrhiPassId upload{};
     mrhiPassId drawing{};
 
@@ -338,10 +359,12 @@ struct UiRenderer::State {
         for (const ui::Box& kBox : list->boxes) {
             ui::Box box = kBox;
             box.clip = kBox.clip < list->clips.size() ? kBox.clip : 0;
+            box.gradient = kBox.gradient < list->gradients.size() ? kBox.gradient : 0;
             const std::array<float, kBoxFloats> kBlock = blockOf(box, list->scale);
             blocks.insert(blocks.end(), kBlock.begin(), kBlock.end());
         }
         clips = clipsOf(*list);
+        gradients = gradientsOf(*list);
         shadowBlocks.clear();
         for (const ui::Shadow& kShadow : list->shadows) {
             ui::Shadow shadow = kShadow;
@@ -372,18 +395,22 @@ struct UiRenderer::State {
         imagesDef.size = imageBlocks.size() * sizeof(float);
         mrhiBufferDef shadowsDef = mrhiDefaultBufferDef();
         shadowsDef.size = shadowBlocks.size() * sizeof(float);
+        mrhiBufferDef gradientsDef = mrhiDefaultBufferDef();
+        gradientsDef.size = gradients.size() * sizeof(float);
         if (mrhiDeclareBuffer(native, &viewDef, &viewResource) != mrhi_success ||
             mrhiDeclareBuffer(native, &boxesDef, &boxesResource) != mrhi_success ||
             mrhiDeclareBuffer(native, &clipsDef, &clipsResource) != mrhi_success ||
             mrhiDeclareBuffer(native, &imagesDef, &imagesResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &shadowsDef, &shadowsResource) != mrhi_success) {
+            mrhiDeclareBuffer(native, &shadowsDef, &shadowsResource) != mrhi_success ||
+            mrhiDeclareBuffer(native, &gradientsDef, &gradientsResource) != mrhi_success) {
             return failed("the UI's boxes could not be declared", mrhi_errorCapacity);
         }
         std::vector<mrhiAccess> writes = {wholeOf(viewResource, mrhi_accessCopyDestination),
                                           wholeOf(boxesResource, mrhi_accessCopyDestination),
                                           wholeOf(clipsResource, mrhi_accessCopyDestination),
                                           wholeOf(imagesResource, mrhi_accessCopyDestination),
-                                          wholeOf(shadowsResource, mrhi_accessCopyDestination)};
+                                          wholeOf(shadowsResource, mrhi_accessCopyDestination),
+                                          wholeOf(gradientsResource, mrhi_accessCopyDestination)};
         for (const std::uint64_t kTexture : held->uploading()) {
             writes.push_back(wholeOf(resourceOf(kTexture), mrhi_accessCopyDestination));
         }
@@ -398,7 +425,8 @@ struct UiRenderer::State {
                                          wholeOf(boxesResource, mrhi_accessStorageRead),
                                          wholeOf(clipsResource, mrhi_accessStorageRead),
                                          wholeOf(imagesResource, mrhi_accessStorageRead),
-                                         wholeOf(shadowsResource, mrhi_accessStorageRead)};
+                                         wholeOf(shadowsResource, mrhi_accessStorageRead),
+                                         wholeOf(gradientsResource, mrhi_accessStorageRead)};
         for (const std::uint64_t kTexture : held->chosen()) {
             reads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
         }
@@ -419,7 +447,7 @@ struct UiRenderer::State {
     }
 
     /// The bindings of a draw sampling `texture` (the clear one for none).
-    [[nodiscard]] std::array<mrhiBinding, 7> bindings(std::uint64_t texture) const noexcept {
+    [[nodiscard]] std::array<mrhiBinding, 8> bindings(std::uint64_t texture) const noexcept {
         const std::uint64_t kHeld = held->resource(texture);
         return {bufferAt(0, viewResource, sizeof(view)),
                 bufferAt(1, boxesResource, blocks.size() * sizeof(float)),
@@ -427,7 +455,8 @@ struct UiRenderer::State {
                 bufferAt(3, imagesResource, imageBlocks.size() * sizeof(float)),
                 textureAt(4, resourceOf(kHeld != 0 ? kHeld : held->resource(0))),
                 samplerAt(5, texture != 0 && held->compressed(texture) ? linear : nearest),
-                bufferAt(6, shadowsResource, shadowBlocks.size() * sizeof(float))};
+                bufferAt(6, shadowsResource, shadowBlocks.size() * sizeof(float)),
+                bufferAt(7, gradientsResource, gradients.size() * sizeof(float))};
     }
 
     result::Status record() {
@@ -445,6 +474,8 @@ struct UiRenderer::State {
                 mrhi_success ||
             mrhiWriteBuffer(
                 native, upload, shadowsResource, 0, shadowBlocks.data(), shadowBlocks.size() * sizeof(float)) !=
+                mrhi_success ||
+            mrhiWriteBuffer(native, upload, gradientsResource, 0, gradients.data(), gradients.size() * sizeof(float)) !=
                 mrhi_success) {
             return failed("the UI's boxes could not be written", mrhi_errorCapacity);
         }
@@ -468,7 +499,7 @@ struct UiRenderer::State {
                     ++end;
                 }
                 const auto kCount = static_cast<std::uint32_t>(end - at);
-                const std::array<mrhiBinding, 7> kBindings = bindings(0);
+                const std::array<mrhiBinding, 8> kBindings = bindings(0);
                 const bool kBoxes = kCommand.kind == ui::DrawCommand::Kind::Box;
                 if (mrhiSetGraphicsPipeline(native, drawing, pipelines[kBoxes ? 0 : 2]) != mrhi_success ||
                     mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
@@ -481,7 +512,7 @@ struct UiRenderer::State {
             }
             const std::uint64_t kTexture = imageTextures.at(kCommand.index);
             if (kTexture != 0) {
-                const std::array<mrhiBinding, 7> kBindings = bindings(kTexture);
+                const std::array<mrhiBinding, 8> kBindings = bindings(kTexture);
                 if (mrhiSetGraphicsPipeline(native, drawing, pipelines[1]) != mrhi_success ||
                     mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
                     mrhiDraw(native, drawing, 6, 1, 0, kCommand.index) != mrhi_success) {

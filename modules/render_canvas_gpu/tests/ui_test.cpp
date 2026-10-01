@@ -344,3 +344,61 @@ RAWFRAME_TEST(AShadowFadesOutsideItsBoxAndInsideAnInsetOne) {
     RAWFRAME_EXPECT(kEdge[1] > 120 && kEdge[2] < 230);
     RAWFRAME_EXPECT(near(at(*kPixels, 32, 46), {0, 0, 255}, 12));
 }
+
+RAWFRAME_TEST(AGradientMovesThroughOklabOverItsFill) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto tree = ui::Tree::create(4);
+    if (!tree.has_value()) {
+        return;
+    }
+    ui::Tree& made = **tree;
+    const ui::Node kWindow = *made.add(1);
+    const ui::Node kBar = *made.add(2);
+    const ui::Node kSpot = *made.add(3);
+    RAWFRAME_EXPECT(made.attach(kWindow, kBar).has_value() && made.attach(kWindow, kSpot).has_value());
+    RAWFRAME_EXPECT(made.setLayout(kWindow,
+                                   {.width = ui::pixels(64),
+                                    .height = ui::pixels(64),
+                                    .direction = ui::Direction::Column,
+                                    .alignItems = ui::Align::Start})
+                        .has_value());
+    RAWFRAME_EXPECT(made.setLayout(kBar, {.width = ui::pixels(64), .height = ui::pixels(16)}).has_value());
+    RAWFRAME_EXPECT(made.setLayout(kSpot, {.width = ui::pixels(32), .height = ui::pixels(32)}).has_value());
+    // Red to blue left to right; a radial white to clear over green.
+    RAWFRAME_EXPECT(made.setLook(kBar,
+                                 {.fill = 0x000000FF,
+                                  .gradient = {.kind = ui::GradientLook::Kind::Linear,
+                                               .angle = 90,
+                                               .colors = {0xFF0000FF, 0x0000FFFF},
+                                               .positions = {0, 1},
+                                               .stops = 2}})
+                        .has_value());
+    RAWFRAME_EXPECT(made.setLook(kSpot,
+                                 {.fill = 0x00FF00FF,
+                                  .gradient = {.kind = ui::GradientLook::Kind::Radial,
+                                               .colors = {0xFFFFFFFF, 0xFFFFFF00},
+                                               .positions = {0, 1},
+                                               .stops = 2}})
+                        .has_value());
+    RAWFRAME_EXPECT(made.layOut(kWindow, kSide, kSide).has_value());
+    ui::DrawList list;
+    RAWFRAME_EXPECT(made.draw(kWindow, 1, list).has_value() && list.gradients.size() == 3);
+    const auto kPixels = drawn(*kDevice, list);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    // At each end, a pixel's center is a little way toward the other stop.
+    RAWFRAME_EXPECT(near(at(*kPixels, 0, 8), {255, 0, 0}, 16));
+    RAWFRAME_EXPECT(near(at(*kPixels, 63, 8), {0, 0, 255}, 16));
+    // Halfway, Oklab's purple: green in it, as a mix in linear light has
+    // none (that would be 188, 0, 186).
+    RAWFRAME_EXPECT(near(at(*kPixels, 32, 8), {140, 83, 162}, 8));
+    // The spot white at its center, its fill's green at its corner.
+    RAWFRAME_EXPECT(near(at(*kPixels, 16, 32), {255, 255, 255}, 8));
+    const std::array<int, 4> kCorner = at(*kPixels, 1, 17);
+    RAWFRAME_EXPECT(kCorner[1] > 200 && kCorner[0] < 120);
+}

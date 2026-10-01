@@ -1,8 +1,8 @@
 // The UI's boxes (SPEC-0032, D375), fragment entry "fs": a rounded box by
 // its signed distance, its edge smoothed over a pixel, its border inside
-// it in the color of the side nearest, over its fill, inside its clip and
-// each clip that clip is inside (or outside one, inverted, D377);
-// premultiplied, in linear light.
+// it in the color of the side nearest, over its fill and the gradient over
+// that (D382), inside its clip and each clip that clip is inside (or
+// outside one, inverted, D377); premultiplied, in linear light.
 
 #version 450
 
@@ -13,8 +13,18 @@ struct Box
     vec4 fill;
     vec4 widths;
     vec4 borders[4];
-    // Its clip's index in the clips, nought for none.
+    // Its clip's index in the clips, and its gradient's in the gradients,
+    // nought for none.
     vec4 clip;
+};
+
+// A gradient: its kind (1 linear, 2 radial), its stops, and its angle; the
+// stops' colors, linear and premultiplied; and their positions.
+struct Gradient
+{
+    vec4 head;
+    vec4 colors[4];
+    vec4 positions;
 };
 
 // A clip: its rounded rectangle, its radii, and its parent's index and
@@ -37,6 +47,12 @@ layout(set = 0, binding = 2, std430) readonly buffer Clips
     Clip clips[];
 }
 table;
+
+layout(set = 0, binding = 7, std430) readonly buffer Gradients
+{
+    Gradient gradients[];
+}
+ramps;
 
 // The deepest chain of clips followed; the list's builder keeps parents
 // before their children, so a chain ends.
@@ -61,6 +77,81 @@ float distanceTo(vec2 pixel, vec4 rect, vec4 radii)
 float coverage(float distance)
 {
     return clamp(0.5 - distance, 0.0, 1.0);
+}
+
+vec3 cubeRoot(vec3 value)
+{
+    return sign(value) * pow(abs(value), vec3(1.0 / 3.0));
+}
+
+// Linear sRGB to Oklab and back (Björn Ottosson's matrices).
+vec3 toOklab(vec3 color)
+{
+    vec3 lms = cubeRoot(mat3(0.4122214708, 0.2119034982, 0.0883024619,
+                             0.5363325363, 0.6806995451, 0.2817188376,
+                             0.0514459929, 0.1073969566, 0.6299787005) * color);
+    return mat3(0.2104542553, 1.9779984951, 0.0259040371,
+                0.7936177850, -2.4285922050, 0.7827717662,
+                -0.0040720468, 0.4505937099, -0.8086757660) * lms;
+}
+
+vec3 fromOklab(vec3 lab)
+{
+    vec3 lms = mat3(1.0, 1.0, 1.0,
+                    0.3963377774, -0.1055613458, -0.0894841775,
+                    0.2158037573, -0.0638541728, -1.2914855480) * lab;
+    return mat3(4.0767416621, -1.2684380046, -0.0041960863,
+                -3.3077115913, 2.6097574011, -0.7034186147,
+                0.2309699292, -0.3413193965, 1.7076147010) * (lms * lms * lms);
+}
+
+// A premultiplied linear color as premultiplied Oklab.
+vec4 premultipliedOklab(vec4 color)
+{
+    if (color.a <= 0.0)
+    {
+        return vec4(0.0);
+    }
+    return vec4(toOklab(color.rgb / color.a) * color.a, color.a);
+}
+
+// Gradient `index` at `pixel` of the box `rect`: premultiplied, linear.
+vec4 ramp(uint index, vec2 pixel, vec4 rect)
+{
+    vec4 head = ramps.gradients[index].head;
+    vec2 halfSize = rect.zw * 0.5;
+    vec2 at = pixel - (rect.xy + halfSize);
+    float along;
+    if (head.x < 1.5)
+    {
+        float angle = radians(head.z);
+        vec2 toward = vec2(sin(angle), -cos(angle));
+        float length = abs(rect.z * toward.x) + abs(rect.w * toward.y);
+        along = dot(at, toward) / max(length, 1e-4) + 0.5;
+    }
+    else
+    {
+        along = length(at / max(halfSize * 1.41421356, vec2(1e-4)));
+    }
+    int stops = int(head.y);
+    vec4 positions = ramps.gradients[index].positions;
+    vec4 lab = premultipliedOklab(ramps.gradients[index].colors[0]);
+    for (int stop = 1; stop < stops; ++stop)
+    {
+        if (along > positions[stop - 1])
+        {
+            float span = max(positions[stop] - positions[stop - 1], 1e-6);
+            float share = clamp((along - positions[stop - 1]) / span, 0.0, 1.0);
+            lab = mix(premultipliedOklab(ramps.gradients[index].colors[stop - 1]),
+                      premultipliedOklab(ramps.gradients[index].colors[stop]),
+                      share);
+        }
+    }
+    if (lab.a <= 0.0)
+    {
+        return vec4(0.0);
+    }
+    return vec4(max(fromOklab(lab.rgb / lab.a), vec3(0.0)) * lab.a, lab.a);
 }
 
 void main()
@@ -95,7 +186,14 @@ void main()
             side = at;
         }
     }
-    vec4 color = mix(list.boxes[inBox].borders[side], list.boxes[inBox].fill, filled) * outer;
+    vec4 fill = list.boxes[inBox].fill;
+    uint gradient = uint(list.boxes[inBox].clip.y);
+    if (gradient > 0u)
+    {
+        vec4 over = ramp(gradient, inPixel, rect);
+        fill = over + fill * (1.0 - over.a);
+    }
+    vec4 color = mix(list.boxes[inBox].borders[side], fill, filled) * outer;
     int clip = int(list.boxes[inBox].clip.x);
     for (int depth = 0; depth < kDeepestClip && clip > 0; ++depth)
     {

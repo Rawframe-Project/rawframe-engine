@@ -19,7 +19,8 @@ struct Box
     vec4 fill;
     vec4 widths;
     vec4 borders[4];
-    // Its clip's index in the clips, nought for none.
+    // Its clip's index in the clips, and its gradient's in the gradients,
+    // nought for none.
     vec4 clip;
 };
 
