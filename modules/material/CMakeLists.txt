@@ -4,7 +4,7 @@
 # folded to their forms (D348, D355). No renderer in it, so a cook reads
 # materials without a device.
 rawframe_module(NAME material
-    SOURCES src/canvas.cpp src/common.cpp src/fold.cpp src/material.cpp src/post_process.cpp
+    SOURCES src/canvas.cpp src/common.cpp src/encoding.cpp src/fold.cpp src/material.cpp src/parameters.cpp src/post_process.cpp
     DEPS graph document result base
 )
 
