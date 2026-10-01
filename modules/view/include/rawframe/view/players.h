@@ -48,6 +48,10 @@ public:
     void window(ViewSize size) noexcept {
         window_ = size;
     }
+    /// The window's size in logical pixels as last told; nought before.
+    [[nodiscard]] ViewSize window() const noexcept {
+        return window_;
+    }
 
     /// The presentation's side: `player`'s view through a camera of the
     /// kind as it is now, or none (its World or its entity is gone).

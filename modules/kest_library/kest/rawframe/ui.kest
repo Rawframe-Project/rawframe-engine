@@ -1,0 +1,78 @@
+module rawframe.ui
+
+// The UI as World data (ADR-0034, SPEC-0030, D376): a UI element is an
+// entity's component of this type, a node of its client's UI tree. A game
+// declares components of it, usually presentation components its present
+// systems write (`presentation <node>... on player` for a player's HUD),
+// and a `ui <node> in <parent>` line for each node inside another: the
+// parent is that component on the same entity, or else on the client's
+// player. A node with no such line is a root of its player's view, laid
+// out in the view's rectangle, those of one view drawn in `order` (then by
+// entity) over the scene and the canvas. Logical pixels, y down.
+//
+// Sizes are SPEC-0030's Scale+Offset: a share of the parent's content box
+// plus pixels; a size of nought and nought is automatic, fitting what the
+// node holds. A node lays its children out in a row or a column (`direction`)
+// with `gap` pixels between them, along the row by `justify`, across it by
+// `alignItems`; as a child, it grows into room left by `grow` and gives way
+// when there is too little by `shrink` (nought keeps its size), and may
+// align itself across. `padding`, `margin`, and `border` are pixels on every
+// side. An `absolute` node is out of its parent's row: its start and top
+// edges at `x` and `y` (Scale+Offset) from its parent's padding box's, then
+// moved back by `anchorX` and `anchorY` of its own size, so 0.5, 0.5 centers
+// it there.
+//
+// It shows a rounded box: `fill` and `borderColor`, 0xRRGGBBAA, sRGB (an
+// alpha of nought draws nothing), corners of `radius` pixels, and with
+// `clip` its children are cut to it. A zeroed node, as presentation attaches
+// it, is empty and draws nothing.
+struct Node {
+    widthScale: f32
+    widthOffset: f32
+    heightScale: f32
+    heightOffset: f32
+    direction: u32
+    justify: u32
+    alignItems: u32
+    alignSelf: u32
+    gap: f32
+    grow: f32
+    shrink: f32
+    padding: f32
+    margin: f32
+    border: f32
+    absolute: u32
+    xScale: f32
+    xOffset: f32
+    yScale: f32
+    yOffset: f32
+    anchorX: f32
+    anchorY: f32
+    fill: u32
+    borderColor: u32
+    radius: f32
+    clip: u32
+    order: i32
+}
+
+// A node's `direction`.
+const ROW: u32 = 0
+const ROW_REVERSE: u32 = 1
+const COLUMN: u32 = 2
+const COLUMN_REVERSE: u32 = 3
+
+// A node's `justify`: where its children sit along its row.
+const START: u32 = 0
+const END: u32 = 1
+const CENTER: u32 = 2
+const SPACE_BETWEEN: u32 = 3
+const SPACE_AROUND: u32 = 4
+const SPACE_EVENLY: u32 = 5
+
+// A node's `alignItems` and `alignSelf`: where children sit across its row.
+// AUTO is a child's parent's choice; as a parent's, it stretches.
+const AUTO: u32 = 0
+const STRETCH: u32 = 1
+const ALIGN_START: u32 = 2
+const ALIGN_END: u32 = 3
+const ALIGN_CENTER: u32 = 4
