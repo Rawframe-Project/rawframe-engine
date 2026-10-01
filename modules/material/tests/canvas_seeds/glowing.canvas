@@ -1,0 +1,86 @@
+{
+  "formatVersion": 1,
+  "kind": "canvas",
+  "interface": {},
+  "graph": {
+    "1f00000000000001": {
+      "type": "rawframe/sample_texture_2d@1",
+      "params": {
+        "texture": "9f822820a44af4fc"
+      },
+      "inputs": {
+        "uv": {
+          "node": "1f00000000000005",
+          "output": "out"
+        }
+      }
+    },
+    "1f00000000000002": {
+      "type": "rawframe/combine4@1",
+      "params": {},
+      "inputs": {
+        "in1": {
+          "node": "1f00000000000001",
+          "output": "color"
+        },
+        "in2": {
+          "node": "1f00000000000001",
+          "output": "alpha"
+        }
+      }
+    },
+    "1f00000000000003": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "1f00000000000002",
+          "output": "out"
+        },
+        "b": [
+          1,
+          0.5,
+          0.5,
+          1
+        ]
+      }
+    },
+    "1f00000000000004": {
+      "type": "rawframe/uv@1",
+      "params": {},
+      "inputs": {}
+    },
+    "1f00000000000005": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "1f00000000000004",
+          "output": "uv"
+        },
+        "b": [
+          2,
+          2
+        ]
+      }
+    },
+    "2f00000000000001": {
+      "type": "rawframe/canvas@1",
+      "params": {},
+      "inputs": {
+        "color": {
+          "node": "1f00000000000003",
+          "output": "out"
+        },
+        "emission": [
+          0.2,
+          0.1,
+          0
+        ]
+      }
+    }
+  },
+  "states": {
+    "blend": "additive"
+  }
+}
