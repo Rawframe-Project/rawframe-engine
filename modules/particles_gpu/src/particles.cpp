@@ -106,7 +106,8 @@ constexpr std::uint64_t kParticleBytes = 48;
 /// and death; its ring's first slot in the pool, its size, where this
 /// spawn starts in it, and how many it spawns; how many of them are
 /// steady, its seed, its material's place, and its flipbook's columns and
-/// rows (sixteen bits each, D359); and the velocity its particles inherit.
+/// rows (sixteen bits each, D359); and the velocity its particles inherit,
+/// and their streak's seconds (D360).
 struct EmitterBlock {
     std::array<float, 4> anchor{};
     std::array<float, 4> origin{};
@@ -140,7 +141,7 @@ EmitterBlock blockOf(const particles::EmitterDraw& emitter, std::uint32_t offset
         .colorEnd = emitter.colorEnd,
         .ring = {offset, emitter.capacity, emitter.first, emitter.spawned},
         .more = {emitter.steady, emitter.seed, emitter.material, emitter.columns | (emitter.rows << 16U)},
-        .inherited = {emitter.inherited[0], emitter.inherited[1], emitter.inherited[2], 0}};
+        .inherited = {emitter.inherited[0], emitter.inherited[1], emitter.inherited[2], emitter.streak}};
 }
 
 /// A resource or sampler of the open frame from the key the host names it
@@ -171,15 +172,20 @@ struct Ring {
     std::uint32_t generation = 0;
 };
 
-/// An emitter the open frame draws: its ring, what it spawns, and its
-/// material's place.
+/// An emitter the open frame draws: its ring, what it spawns, its
+/// material's place, and the corners each particle takes: a quad's, or a
+/// streak's (D360).
 struct Drawn {
     std::uint32_t offset = 0;
     std::uint32_t capacity = 0;
     std::uint32_t spawned = 0;
     bool fresh = false;
     std::uint32_t material = 0;
+    std::uint32_t corners = 6;
 };
+
+/// A streak's corners: eight quads, as the shaders cut it.
+constexpr std::uint32_t kStreakCorners = 8 * 6;
 
 } // namespace
 
@@ -465,7 +471,8 @@ struct Particles::State {
                                     .capacity = kEmitter.capacity,
                                     .spawned = kEmitter.spawned,
                                     .fresh = kFresh,
-                                    .material = placeOf(kEmitter.material)});
+                                    .material = placeOf(kEmitter.material),
+                                    .corners = kEmitter.streak > 0 ? kStreakCorners : 6});
             spawned += kEmitter.spawned;
         }
         emitting = !drawing.empty();
@@ -810,7 +817,7 @@ struct Particles::State {
                 table[1].offset = at * kBlockStride;
                 bindMaterial(table, kMaterial, kDrawn.material);
                 if (mrhiSetBindings(native, kPass, 0, table.data(), table.size()) != mrhi_success ||
-                    mrhiDraw(native, kPass, 6, kDrawn.capacity, 0, kDrawn.offset) != mrhi_success) {
+                    mrhiDraw(native, kPass, kDrawn.corners, kDrawn.capacity, 0, kDrawn.offset) != mrhi_success) {
                     return failed("an emitter's particles could not be drawn", mrhi_errorState);
                 }
             }

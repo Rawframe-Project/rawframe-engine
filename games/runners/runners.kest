@@ -151,7 +151,7 @@ fn glint(count: i32, shots: [sound.Emitter], dusts: [model.Trail], sparks: [mode
             dusts[i] = model.Trail(u64(0), 0.35, 0.15, 0.3, 0.0, u32(0xD8E4FF70), u32(0xD8E4FF00))
             sparks[i] = model.ParticleEmitter(u64(0), 0.0, 0.3, 4.0, 1.0, 0.05, 0.14, 0.03, u32(0xFFD27AFF),
                                               u32(0xFF6A2000), 0.0, -12.0, 0.0, 2.0, 0.5, shots[i].cue, u32(10),
-                                              u32(0), 0.6, u32(0), u32(0))
+                                              u32(0), 0.6, u32(0), u32(0), 0.05)
         }
         sparks[i].bursts = shots[i].cue
         i = i + 1

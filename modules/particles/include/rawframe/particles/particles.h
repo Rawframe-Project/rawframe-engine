@@ -48,6 +48,7 @@ struct ParticleEmitter {
     float inherit = 0;
     std::uint32_t columns = 0;
     std::uint32_t rows = 0;
+    float streak = 0;
 };
 
 /// `rawframe.model.Trail` as C++ reads it (D354).
@@ -130,7 +131,9 @@ inline constexpr float kClockPeriod = 4096;
 /// the particle clock and the rest (its bursts) at its now; its seed; how
 /// many times its ring has started anew, which a device's ring follows
 /// (D353); the velocity its particles inherit from it (meters a second);
-/// and its flipbook's columns and rows, one each for none (D359).
+/// its flipbook's columns and rows, one each for none (D359); and the
+/// seconds of each particle's past drawn as its streak, nought for none
+/// (D360).
 struct EmitterDraw {
     std::uint64_t key = 0;
     std::uint32_t material = 0;
@@ -159,6 +162,7 @@ struct EmitterDraw {
     std::array<float, 3> inherited{};
     std::uint32_t columns = 1;
     std::uint32_t rows = 1;
+    float streak = 0;
 };
 
 /// A point of a ribbon a frame draws (D354): where it is relative to the

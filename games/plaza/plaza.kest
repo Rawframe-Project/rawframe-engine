@@ -337,7 +337,7 @@ fn fountain(count: i32, springs: [Spring], fountains: [model.ParticleEmitter]) {
     while i < count {
         fountains[i] = model.ParticleEmitter(u64(0), 300.0, 1.5, springs[i].speed, 0.12, 0.1, 0.15, 0.08,
                                              0xD8E8FFFF, 0xD8E8FF00, 0.0, -9.8, 0.0, 0.2, 0.25, u32(0), u32(0),
-                                             u32(0), 0.0, u32(0), u32(0))
+                                             u32(0), 0.0, u32(0), u32(0), 0.0)
         i = i + 1
     }
 }

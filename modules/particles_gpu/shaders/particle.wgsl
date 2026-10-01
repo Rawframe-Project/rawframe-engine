@@ -72,6 +72,18 @@ struct Corner {
     @location(3) shape: vec2f,
 }
 
+const streakSegments = 8u;
+
+fn movedAt(particle: Particle, age: f32) -> vec3f {
+    let drag = emitter.motion.z;
+    let acceleration = emitter.acceleration.xyz;
+    if (drag > 1e-4) {
+        let slowed = (1.0 - exp(-drag * age)) / drag;
+        return particle.velocity.xyz * slowed + acceleration * (age - slowed) / drag;
+    }
+    return particle.velocity.xyz * age + 0.5 * acceleration * age * age;
+}
+
 @vertex
 fn vs(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32) -> Corner {
     let particle = particles[instance];
@@ -87,28 +99,45 @@ fn vs(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32)
         made.position = vec4f(2.0, 2.0, 2.0, 1.0);
         return made;
     }
-    let drag = emitter.motion.z;
-    let acceleration = emitter.acceleration.xyz;
-    var moved = particle.velocity.xyz * age + 0.5 * acceleration * age * age;
-    if (drag > 1e-4) {
-        let slowed = (1.0 - exp(-drag * age)) / drag;
-        moved = particle.velocity.xyz * slowed + acceleration * (age - slowed) / drag;
-    }
     let through = age / life;
     let size = mix(emitter.sizes.x, emitter.sizes.y, through) * particle.extra.x;
+    let start = emitter.anchor.xyz + particle.start.xyz;
     var corners = array<u32, 6>(0u, 1u, 2u, 2u, 1u, 3u);
     let corner = corners[index % 6u];
+    made.color = mix(emitter.colorStart, emitter.colorEnd, through);
+    made.soft = max(0.5 * size, 1e-4);
+    let streak = emitter.inherited.w;
+    if (streak > 0.0) {
+        let point = index / 6u + (corner >> 1u);
+        let step = streak / f32(streakSegments);
+        let back = step * f32(point);
+        let here = start + movedAt(particle, max(age - back, 0.0));
+        let runs = movedAt(particle, max(age - back + step, 0.0)) - movedAt(particle, max(age - back - step, 0.0));
+        var toEye = -here;
+        if (view.lens.y > 0.5) {
+            toEye = cross(view.right.xyz, view.up.xyz);
+        }
+        var across = cross(runs, toEye);
+        if (dot(across, across) > 1e-12) {
+            across = normalize(across);
+        } else {
+            across = view.up.xyz;
+        }
+        let side = f32(corner & 1u) - 0.5;
+        let width = size * (1.0 - f32(point) / f32(streakSegments));
+        made.uv = vec2f(f32(point) / f32(streakSegments), f32(corner & 1u));
+        made.shape = vec2f(0.0, side * 2.0);
+        made.position = view.viewProjection * vec4f(here + across * (side * width), 1.0);
+        return made;
+    }
     let at = vec2f(f32(corner & 1u), f32(corner >> 1u));
-    let placed = emitter.anchor.xyz + particle.start.xyz + moved +
-                 (view.right.xyz * (at.x - 0.5) + view.up.xyz * (at.y - 0.5)) * size;
+    let placed = start + movedAt(particle, age) + (view.right.xyz * (at.x - 0.5) + view.up.xyz * (at.y - 0.5)) * size;
     let cells = vec2u(emitter.more.w & 0xFFFFu, emitter.more.w >> 16u);
     let frames = max(cells.x * cells.y, 1u);
     let frame = min(u32(through * f32(frames)), frames - 1u);
     let columns = max(cells.x, 1u);
     let cell = vec2f(f32(frame % columns), f32(frame / columns));
     made.uv = (cell + vec2f(at.x, 1.0 - at.y)) / vec2f(max(cells, vec2u(1u)));
-    made.color = mix(emitter.colorStart, emitter.colorEnd, through);
-    made.soft = max(0.5 * size, 1e-4);
     made.shape = at * 2.0 - 1.0;
     made.position = view.viewProjection * vec4f(placed, 1.0);
     return made;

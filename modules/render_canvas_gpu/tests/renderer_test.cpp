@@ -348,3 +348,61 @@ RAWFRAME_TEST(AParticleShowsItsFlipbooksCell) {
                         near(*kPixels, 38, 32, {255, 0, 0, 255}));
     }
 }
+
+RAWFRAME_TEST(AStreakedParticleTrailsWhereItWas) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    CanvasFrame frame;
+    frame.extent = {8, 8};
+    frame.particles.clock = 1;
+    // One white particle a meter across, leaving six meters left of the
+    // middle at four meters a second, straight right, streaked over its
+    // last half second (D360).
+    frame.particles.emitters.push_back(particles::EmitterDraw{.key = 1,
+                                                              .anchor = {-6, 0, 0},
+                                                              .direction = {1, 0, 0},
+                                                              .lifetime = 10,
+                                                              .speed = 4,
+                                                              .sizeStart = 1,
+                                                              .sizeEnd = 1,
+                                                              .capacity = 1,
+                                                              .spawned = 1,
+                                                              .seed = 7,
+                                                              .ring = 1,
+                                                              .streak = 0.5F});
+    const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
+    const auto kDraw = [&] {
+        RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+        RAWFRAME_EXPECT((*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
+    };
+    for (int attempt = 0; attempt < 1000 && (*made)->statistics().emittersDrawn == 0; ++attempt) {
+        (*made)->prepare(&frame, {});
+        kDraw();
+    }
+    // A second later, born no more: its head two meters left of the
+    // middle, its streak back to four.
+    frame.particles.clock = 2;
+    frame.particles.emitters[0].spawned = 0;
+    (*made)->prepare(&frame, {});
+    kDraw();
+    RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+    const auto kPixels = (*framer)->pixels();
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (kPixels.has_value()) {
+        const auto kRed = [&](std::uint32_t x, std::uint32_t y) {
+            return std::to_integer<int>((*kPixels)[((std::size_t{y} * kSide + x) * 4)]);
+        };
+        // Lit along the streak, where a quad would not be; dark behind its
+        // tail and ahead of its head.
+        RAWFRAME_EXPECT(kRed(19, 31) > 100 && kRed(23, 31) > 100);
+        RAWFRAME_EXPECT(kRed(12, 31) == 0 && kRed(30, 31) == 0);
+    }
+}

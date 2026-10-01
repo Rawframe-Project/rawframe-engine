@@ -79,7 +79,8 @@ void Particles::spawn(Frame& frame,
                                                             kEmitter.accelerationZ,
                                                             kEmitter.drag,
                                                             kEmitter.variation,
-                                                            kEmitter.inherit},
+                                                            kEmitter.inherit,
+                                                            kEmitter.streak},
                                                  [](float value) {
                                                      return std::isfinite(value);
                                                  }) &&
@@ -230,7 +231,8 @@ void Particles::spawn(Frame& frame,
                          .ring = remembered.ring,
                          .inherited = kKept.inherited,
                          .columns = std::clamp(kEmitter.columns, 1U, kMostCells),
-                         .rows = std::clamp(kEmitter.rows, 1U, kMostCells)};
+                         .rows = std::clamp(kEmitter.rows, 1U, kMostCells),
+                         .streak = std::clamp(kEmitter.streak, 0.0F, kKept.lifetime)};
         remembered.next = static_cast<std::uint32_t>((remembered.next + kSpawned) % kKept.capacity);
         remembered.drawn = frames_;
         remembered.position = kInstance.position;
@@ -239,7 +241,7 @@ void Particles::spawn(Frame& frame,
 }
 
 std::span<const Field> emitterFields() noexcept {
-    static constexpr std::array<Field, 21> kFields = {{{"material", offsetof(ParticleEmitter, material)},
+    static constexpr std::array<Field, 22> kFields = {{{"material", offsetof(ParticleEmitter, material)},
                                                        {"rate", offsetof(ParticleEmitter, rate)},
                                                        {"lifetime", offsetof(ParticleEmitter, lifetime)},
                                                        {"speed", offsetof(ParticleEmitter, speed)},
@@ -259,7 +261,8 @@ std::span<const Field> emitterFields() noexcept {
                                                        {"seed", offsetof(ParticleEmitter, seed)},
                                                        {"inherit", offsetof(ParticleEmitter, inherit)},
                                                        {"columns", offsetof(ParticleEmitter, columns)},
-                                                       {"rows", offsetof(ParticleEmitter, rows)}}};
+                                                       {"rows", offsetof(ParticleEmitter, rows)},
+                                                       {"streak", offsetof(ParticleEmitter, streak)}}};
     return kFields;
 }
 

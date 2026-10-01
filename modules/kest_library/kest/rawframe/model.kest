@@ -317,7 +317,10 @@ struct PostProcess {
 // velocity at its birth, so a moving emitter's particles keep up with it.
 // With `columns` and `rows` above one, its material's texture is a
 // flipbook of that many cells, left to right and top to bottom, a
-// particle stepping through them over its life (D359). Cosmetic: each
+// particle stepping through them over its life (D359). With `streak`
+// above nought, each particle is drawn instead as a streak through where it
+// was over its last `streak` seconds, its size across at its head
+// narrowing to nothing behind (D360). Cosmetic: each
 // client draws its own particles, and nothing in the World sees them. On
 // an entity with a 2D pose, the canvas draws the
 // emitter, its trails, and its beams in its plane, over its sprites, each
@@ -345,6 +348,7 @@ struct ParticleEmitter {
     inherit: f32
     columns: u32
     rows: u32
+    streak: f32
 }
 
 // A trail (ADR-0053, D354), on any entity: a ribbon left behind its pose
