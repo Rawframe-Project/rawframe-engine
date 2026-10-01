@@ -79,9 +79,10 @@ enum class Effect : std::uint8_t {
     ContactShadows,
     Decals,
     Probes,
-    Multisampled
+    Multisampled,
+    PostProcess
 };
-inline constexpr std::size_t kEffects = 11;
+inline constexpr std::size_t kEffects = 12;
 
 /// The scene's shaders, samplers, and pipelines (D284 to D292): what every
 /// frame draws with asked of the device at once, each effect's when a view
@@ -106,6 +107,7 @@ struct Pipelines {
     mrhiShaderId decalShader{};
     mrhiShaderId probeShader{};
     mrhiShaderId resolveShader{};
+    mrhiShaderId postShader{};
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
@@ -166,6 +168,12 @@ struct Pipelines {
     Asked temporal;
     Asked tonemap;
     Asked fxaa;
+    /// The post processes (D350): in scene-linear light, in the picture's
+    /// display-referred light, and the picture graded only, the light the
+    /// post processes before the tonemapper take.
+    Asked postLinear;
+    Asked postDisplay;
+    Asked grade;
     /// The bloom's first halving, its others, and its doublings, added to
     /// the level above (D328).
     Asked bloomFirst;

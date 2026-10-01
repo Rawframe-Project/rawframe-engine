@@ -1200,7 +1200,8 @@ RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
                                           {.id = 0xa2, .insertion = kFade.insertion, .blob = material::blobOf(kFade)}},
                         .limits = {.maximumPostProcesses = 3}});
     SceneCamera camera;
-    camera.postProcesses = {{.material = 0xa2, .weight = 0.25F},
+    camera.postProcesses = {{.material = 0, .weight = 1},
+                            {.material = 0xa2, .weight = 0.25F},
                             {.material = 0xbad, .weight = 1},
                             {.material = 0xa1, .weight = 0},
                             {.material = 0xa1, .weight = std::numeric_limits<float>::quiet_NaN()},
@@ -1211,8 +1212,8 @@ RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
     scene->extract(world);
     const SceneFrame& kFrame = scene->queue(camera);
     // The fade at a quarter, the warmth at most whole, the fade again; the
-    // unknown, the NaN, and the one past the limit left out; the one at
-    // nought runs nothing.
+    // unknown, the NaN, and the one past the limit left out; material
+    // nought and the one at nought run nothing.
     RAWFRAME_EXPECT(kFrame.postProcesses.size() == 3 && kFrame.postProcessesLeftOut == 3);
     if (kFrame.postProcesses.size() == 3) {
         RAWFRAME_EXPECT(kFrame.postProcesses[0].weight == 0.25F &&

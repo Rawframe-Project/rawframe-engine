@@ -94,6 +94,11 @@ struct RendererStatistics {
     std::uint64_t probesDrawn = 0;
     /// Frames whose models' passes were multisampled (D343).
     std::uint64_t framesMultisampled = 0;
+    /// Post processes run, summed over the frames, and those left out: by
+    /// the scene's stage, or waiting for a hook after the canvas
+    /// (`final_output`, D350).
+    std::uint64_t postProcessesRun = 0;
+    std::uint64_t postProcessesLeftOut = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the

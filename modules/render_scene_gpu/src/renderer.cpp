@@ -15,6 +15,7 @@
 #include "occlusion.h"
 #include "picture.h"
 #include "pipelines.h"
+#include "post.h"
 #include "probes.h"
 #include "rawframe/render/textures.h"
 #include "rawframe/render_scene_gpu/errors.h"
@@ -92,6 +93,8 @@ struct SceneRenderer::State {
     /// Its picture, graded and tonemapped, and antialiased by FXAA when a
     /// view asks (D294 to D296).
     std::optional<PicturePass> picture;
+    /// Its post processes, where a view's camera has them (D350).
+    std::optional<PostProcessPass> post;
     std::optional<DeviceMeshes> held;
     /// The materials' textures (D309), and the white one a material
     /// sampling none samples, held as texture nought.
@@ -172,6 +175,13 @@ struct SceneRenderer::State {
                 probePictures.insert(kProbe.environment);
             }
         }
+        // Each post process's texture (D350).
+        for (const render_scene::ScenePostProcess& kProcess : scene.postProcesses) {
+            if (kProcess.texture.id != 0) {
+                static_cast<void>(
+                    textures->choose(kProcess.texture.id, sampled ? sampled(kProcess.texture.id) : nullptr));
+            }
+        }
         // Each decal's texture (D339), and its normals' (D342).
         for (const render_scene::SceneDecal& kDecal : scene.decals) {
             static_cast<void>(textures->choose(kDecal.texture, sampled ? sampled(kDecal.texture) : nullptr));
@@ -216,6 +226,8 @@ struct SceneRenderer::State {
         mrhiResourceId instances{};
         mrhiResourceId blockResource{};
         mrhiPassId upload{};
+        /// The light the bloom and the picture take (D328, D350).
+        mrhiResourceId shown{};
         /// The frame's lights, each cluster's first index and count, and
         /// the indices (D290), as written and as declared.
         std::vector<LightBlock> lights;
@@ -407,6 +419,8 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(motionBlur->declare(*frame, kBlurring, open.width, open.height, writes));
         RAWFRAME_TRY(focus->declare(*frame, kFocusing, open.width, open.height, writes));
         RAWFRAME_TRY(bloom->declare(*frame, kBlooming, open.width, open.height));
+        RAWFRAME_TRY_ASSIGN(const bool kPosting, made(!frame->postProcesses.empty(), Effect::PostProcess));
+        RAWFRAME_TRY(post->declare(*frame, kPosting, *textures, writes));
         const std::uint64_t kTable = frame->grading.table;
         const bool kTabled = kTable != 0 && textures->volume(kTable) && textures->resource(kTable) != 0;
         RAWFRAME_TRY(picture->declare(*frame,
@@ -416,6 +430,7 @@ struct SceneRenderer::State {
                                       bloom->enabled() ? bloom->levels() : 0,
                                       resourceOf(textures->resource(kTabled ? kTable : kNoTable)),
                                       kTabled,
+                                      post->at(material::Insertion::BeforeTonemap) > 0,
                                       writes));
         writes.push_back(wholeOf(now.skyResource, mrhi_accessCopyDestination));
         RAWFRAME_TRY(metering->declare(*frame, writes));
@@ -484,17 +499,72 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(capturing->declare(models->scene(), open.width, open.height, now.block.exposure[0]));
         RAWFRAME_TRY(metering->addPasses(models->scene()));
         RAWFRAME_TRY(temporal->addPass(models->scene(), models->motion()));
-        // The post chain in ADR-0051's order: the temporal slot, the motion
-        // blur, the depth of field, the bloom, then the picture.
-        RAWFRAME_TRY(motionBlur->addPasses(temporal->shown(models->scene()), models->motion(), models->depth()));
-        RAWFRAME_TRY(focus->addPasses(motionBlur->shown(temporal->shown(models->scene())), models->depth()));
-        const mrhiResourceId kShown = focus->shown(motionBlur->shown(temporal->shown(models->scene())));
-        RAWFRAME_TRY(bloom->addPasses(kShown));
-        RAWFRAME_TRY(picture->addPasses(kShown,
-                                        bloom->enabled() ? bloom->spread() : mrhiResourceId{},
-                                        resourceOf(open.picture),
-                                        open.clearsPicture()));
+        // The post chain in ADR-0051's order: the temporal slot, the post
+        // processes after it, the motion blur, the depth of field, the
+        // bloom, then the picture (D350).
+        RAWFRAME_TRY_ASSIGN(const mrhiResourceId kSteady,
+                            post->addStage(material::Insertion::AfterTemporal,
+                                           temporal->shown(models->scene()),
+                                           open.width,
+                                           open.height,
+                                           {},
+                                           false));
+        RAWFRAME_TRY(motionBlur->addPasses(kSteady, models->motion(), models->depth()));
+        RAWFRAME_TRY(focus->addPasses(motionBlur->shown(kSteady), models->depth()));
+        now.shown = focus->shown(motionBlur->shown(kSteady));
+        RAWFRAME_TRY(bloom->addPasses(now.shown));
+        RAWFRAME_TRY(addPicture(open, now.shown));
         declared = std::move(now);
+        return {};
+    }
+
+    /// The picture from the light `shown` (D350): graded, the post
+    /// processes before the tonemapper, tonemapped, those after it, FXAA,
+    /// and those over the scene's output, each into a picture between
+    /// steps but the last, which writes the frame's.
+    result::Status addPicture(render::Frame& open, mrhiResourceId shown) {
+        const mrhiResourceId kSpread = bloom->enabled() ? bloom->spread() : mrhiResourceId{};
+        RAWFRAME_TRY_ASSIGN(const mrhiResourceId kGraded, picture->addGrade(shown, kSpread));
+        RAWFRAME_TRY_ASSIGN(
+            const mrhiResourceId kLight,
+            post->addStage(material::Insertion::BeforeTonemap, kGraded, open.width, open.height, {}, false));
+        const mrhiResourceId kPicture = resourceOf(open.picture);
+        const bool kClears = open.clearsPicture();
+        const std::size_t kAfter = post->at(material::Insertion::AfterTonemap);
+        const std::size_t kOutput = post->at(material::Insertion::SceneOutput);
+        const bool kSmoothed = picture->smoothed();
+        // The frame's picture for the last step, a picture of its own for
+        // another.
+        const auto kInto = [&](bool last) -> result::Result<mrhiResourceId> {
+            if (last) {
+                return kPicture;
+            }
+            mrhiTextureDef def = mrhiDefaultTextureDef();
+            def.format = kPictureFormat;
+            def.width = open.width;
+            def.height = open.height;
+            mrhiResourceId made{};
+            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &def, &made); kDeclared != mrhi_success) {
+                return failed("a picture between steps could not be declared", kDeclared);
+            }
+            return made;
+        };
+        RAWFRAME_TRY_ASSIGN(const mrhiResourceId kToned, kInto(kAfter == 0 && !kSmoothed && kOutput == 0));
+        RAWFRAME_TRY(picture->addTonemap(kLight, kSpread, kToned, kClears));
+        RAWFRAME_TRY_ASSIGN(mrhiResourceId done,
+                            post->addStage(material::Insertion::AfterTonemap,
+                                           kToned,
+                                           open.width,
+                                           open.height,
+                                           kSmoothed || kOutput > 0 ? mrhiResourceId{} : kPicture,
+                                           kClears));
+        if (kSmoothed) {
+            RAWFRAME_TRY_ASSIGN(const mrhiResourceId kSmooth, kInto(kOutput == 0));
+            RAWFRAME_TRY(picture->addFxaa(done, kSmooth, kClears));
+            done = kSmooth;
+        }
+        RAWFRAME_TRY(
+            post->addStage(material::Insertion::SceneOutput, done, open.width, open.height, kPicture, kClears));
         return {};
     }
 
@@ -550,6 +620,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(probeAtlas->write(now.upload));
         RAWFRAME_TRY(motionBlur->write(now.upload));
         RAWFRAME_TRY(focus->write(now.upload));
+        RAWFRAME_TRY(post->write(now.upload));
         RAWFRAME_TRY(shadows->write(now.upload));
         RAWFRAME_TRY(held->write(now.upload));
         RAWFRAME_TRY(textures->write(render::requestKey(now.upload.index1, now.upload.generation)));
@@ -624,10 +695,16 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(capturing->record(models->scene()));
         RAWFRAME_TRY(metering->record(pipelines, models->scene(), now.width, now.height));
         RAWFRAME_TRY(temporal->record(pipelines, models->scene(), models->motion()));
+        RAWFRAME_TRY(post->record(pipelines, material::Insertion::AfterTemporal));
         RAWFRAME_TRY(motionBlur->record(pipelines));
         RAWFRAME_TRY(focus->record(pipelines));
-        RAWFRAME_TRY(bloom->record(pipelines, focus->shown(motionBlur->shown(temporal->shown(models->scene())))));
-        return picture->record(pipelines);
+        RAWFRAME_TRY(bloom->record(pipelines, now.shown));
+        RAWFRAME_TRY(picture->recordGrade(pipelines));
+        RAWFRAME_TRY(post->record(pipelines, material::Insertion::BeforeTonemap));
+        RAWFRAME_TRY(picture->recordTonemap(pipelines));
+        RAWFRAME_TRY(post->record(pipelines, material::Insertion::AfterTonemap));
+        RAWFRAME_TRY(picture->recordFxaa(pipelines));
+        return post->record(pipelines, material::Insertion::SceneOutput);
     }
 
     void ended(bool submitted) noexcept {
@@ -652,6 +729,8 @@ struct SceneRenderer::State {
             statistics.decalsDrawn += decalAtlas->drawn();
             statistics.framesMultisampled += models->samples() > 1 ? 1 : 0;
             statistics.probesDrawn += probeAtlas->drawn();
+            statistics.postProcessesRun += post->run();
+            statistics.postProcessesLeftOut += post->leftOut();
             if (temporal->enabled()) {
                 ++statistics.framesResolved;
                 statistics.historyReused += temporal->reused() ? 1 : 0;
@@ -719,6 +798,7 @@ result::Result<std::unique_ptr<SceneRenderer>> SceneRenderer::create(render::Dev
     state->focus.emplace(device.native());
     state->bloom.emplace(device.native());
     state->picture.emplace(device.native());
+    state->post.emplace(device.native());
     RAWFRAME_TRY(state->metering->make());
     return std::unique_ptr<SceneRenderer>{new SceneRenderer{std::move(state)}};
 }

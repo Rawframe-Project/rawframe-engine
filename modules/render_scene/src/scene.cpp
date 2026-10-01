@@ -220,13 +220,14 @@ struct Scene::State {
         frame.postProcesses.clear();
         frame.postProcessesLeftOut = 0;
         for (const PostProcess& kAsked : camera.postProcesses) {
+            // Material nought, or a weight of nought or less, runs nothing.
+            if (std::isfinite(kAsked.weight) && (kAsked.material == 0 || kAsked.weight <= 0)) {
+                continue;
+            }
             const auto kMaterial =
                 std::ranges::find(settings.postProcesses, kAsked.material, &ScenePostProcessMaterial::id);
             if (!std::isfinite(kAsked.weight) || kMaterial == settings.postProcesses.end()) {
                 ++frame.postProcessesLeftOut;
-                continue;
-            }
-            if (kAsked.weight <= 0) {
                 continue;
             }
             if (frame.postProcesses.size() == settings.limits.maximumPostProcesses) {

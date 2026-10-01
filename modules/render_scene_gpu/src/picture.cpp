@@ -47,29 +47,47 @@ result::Status PicturePass::declare(const render_scene::SceneFrame& frame,
                                     std::size_t bloomLevels,
                                     mrhiResourceId table,
                                     bool tabled,
+                                    bool gradedFirst,
                                     std::vector<mrhiAccess>& writes) {
     block_ = pictureOf(frame);
     table_ = table;
+    width_ = width;
+    height_ = height;
+    gradedFirst_ = gradedFirst;
     block_.display[1] = tabled && frame.grading.enabled ? 1.0F : 0.0F;
     if (bloomLevels > 0) {
         block_.bloom = {frame.bloom.intensity, 1.0F / static_cast<float>(bloomLevels), 0, 0};
     }
-    mrhiBufferDef blockDef = mrhiDefaultBufferDef();
-    blockDef.size = sizeof(PictureBlock);
-    if (mrhiDeclareBuffer(native_, &blockDef, &blockResource_) != mrhi_success) {
-        return failed("the picture's grade could not be declared", mrhi_errorCapacity);
-    }
-    writes.push_back(wholeOf(blockResource_, mrhi_accessCopyDestination));
-    smoothed_ = frame.fxaa && made;
-    if (smoothed_) {
+    graded_ = {};
+    if (gradedFirst_) {
+        // The grade's pass does the bloom, the grade, and the table, and
+        // the tonemapper's none of them.
+        gradeBlock_ = block_;
+        gradeBlock_.display[2] = 1;
+        block_.power[3] = 0;
+        block_.bloom = {};
+        block_.display[1] = 0;
         mrhiTextureDef def = mrhiDefaultTextureDef();
-        def.format = kPictureFormat;
+        def.format = kSceneFormat;
         def.width = width;
         def.height = height;
-        if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &def, &display_); kDeclared != mrhi_success) {
-            return failed("a target could not be declared", kDeclared);
+        if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &def, &graded_); kDeclared != mrhi_success) {
+            return failed("the graded light could not be declared", kDeclared);
         }
     }
+    for (const auto& [kMade, kWanted] : {std::pair{&blockResource_, true}, std::pair{&gradeResource_, gradedFirst_}}) {
+        *kMade = {};
+        if (!kWanted) {
+            continue;
+        }
+        mrhiBufferDef blockDef = mrhiDefaultBufferDef();
+        blockDef.size = sizeof(PictureBlock);
+        if (mrhiDeclareBuffer(native_, &blockDef, kMade) != mrhi_success) {
+            return failed("the picture's grade could not be declared", mrhi_errorCapacity);
+        }
+        writes.push_back(wholeOf(*kMade, mrhi_accessCopyDestination));
+    }
+    smoothed_ = frame.fxaa && made;
     return {};
 }
 
@@ -77,71 +95,124 @@ bool PicturePass::smoothed() const noexcept {
     return smoothed_;
 }
 
-result::Status
-PicturePass::addPasses(mrhiResourceId shown, mrhiResourceId spread, mrhiResourceId picture, bool clears) {
+namespace {
+
+/// A pass drawing every pixel of `into`, over whatever was there, reading
+/// `reads`.
+mrhiPassDef drawingInto(mrhiResourceId into, bool clears, const std::vector<mrhiAccess>& reads) {
+    mrhiPassDef def = mrhiDefaultPassDef();
+    def.colorTargets[0].resource = into;
+    def.colorTargets[0].load = clears ? mrhi_loadClear : mrhi_loadKeep;
+    def.colorTargets[0].store = mrhi_storeKeep;
+    def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+    def.colorTargetCount = 1;
+    def.neverCull = true;
+    def.accesses = reads.data();
+    def.accessCount = static_cast<std::uint32_t>(reads.size());
+    return def;
+}
+
+} // namespace
+
+result::Result<mrhiResourceId> PicturePass::addGrade(mrhiResourceId shown, mrhiResourceId spread) {
     shown_ = shown;
-    spread_ = spread;
-    // Every pixel of the picture written, over whatever was there; with
-    // FXAA, the tonemapped picture first, then FXAA over it.
-    mrhiPassDef pictureDef = mrhiDefaultPassDef();
-    pictureDef.colorTargets[0].resource = picture;
-    pictureDef.colorTargets[0].load = clears ? mrhi_loadClear : mrhi_loadKeep;
-    pictureDef.colorTargets[0].store = mrhi_storeKeep;
-    pictureDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
-    pictureDef.colorTargetCount = 1;
-    pictureDef.neverCull = true;
-    mrhiPassDef tonemapDef = pictureDef;
-    if (smoothed_) {
-        tonemapDef.colorTargets[0].resource = display_;
-        tonemapDef.colorTargets[0].load = mrhi_loadDiscard;
+    gradeSpread_ = spread;
+    if (!gradedFirst_) {
+        return shown;
     }
-    std::vector<mrhiAccess> reads = {wholeOf(shown_, mrhi_accessSampled),
+    std::vector<mrhiAccess> reads = {wholeOf(shown, mrhi_accessSampled),
+                                     wholeOf(gradeResource_, mrhi_accessUniform),
+                                     wholeOf(table_, mrhi_accessSampled)};
+    if (spread.index1 != 0) {
+        reads.push_back(wholeOf(spread, mrhi_accessSampled));
+    }
+    mrhiPassDef def = drawingInto(graded_, false, reads);
+    def.colorTargets[0].load = mrhi_loadDiscard;
+    def.neverCull = false;
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &gradePass_); kAdded != mrhi_success) {
+        return failed("the grade's pass could not be added", kAdded);
+    }
+    return graded_;
+}
+
+result::Status PicturePass::addTonemap(mrhiResourceId light, mrhiResourceId spread, mrhiResourceId into, bool clears) {
+    light_ = light;
+    spread_ = gradedFirst_ ? mrhiResourceId{} : spread;
+    std::vector<mrhiAccess> reads = {wholeOf(light_, mrhi_accessSampled),
                                      wholeOf(blockResource_, mrhi_accessUniform),
                                      wholeOf(table_, mrhi_accessSampled)};
     if (spread_.index1 != 0) {
         reads.push_back(wholeOf(spread_, mrhi_accessSampled));
     }
-    tonemapDef.accesses = reads.data();
-    tonemapDef.accessCount = static_cast<std::uint32_t>(reads.size());
-    if (const mrhiResult kAdded = mrhiAddPass(native_, &tonemapDef, &tonemapPass_); kAdded != mrhi_success) {
+    const mrhiPassDef kDef = drawingInto(into, clears, reads);
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &kDef, &tonemapPass_); kAdded != mrhi_success) {
         return failed("the picture's pass could not be added", kAdded);
     }
-    if (!smoothed_) {
-        return {};
-    }
-    const mrhiAccess kDisplay = wholeOf(display_, mrhi_accessSampled);
-    pictureDef.accesses = &kDisplay;
-    pictureDef.accessCount = 1;
-    if (const mrhiResult kAdded = mrhiAddPass(native_, &pictureDef, &fxaaPass_); kAdded != mrhi_success) {
+    return {};
+}
+
+result::Status PicturePass::addFxaa(mrhiResourceId display, mrhiResourceId into, bool clears) {
+    display_ = display;
+    const std::vector<mrhiAccess> kReads = {wholeOf(display_, mrhi_accessSampled)};
+    const mrhiPassDef kDef = drawingInto(into, clears, kReads);
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &kDef, &fxaaPass_); kAdded != mrhi_success) {
         return failed("the FXAA pass could not be added", kAdded);
     }
     return {};
 }
 
 result::Status PicturePass::write(mrhiPassId upload) {
-    if (mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(PictureBlock)) != mrhi_success) {
+    if (mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(PictureBlock)) != mrhi_success ||
+        (gradedFirst_ &&
+         mrhiWriteBuffer(native_, upload, gradeResource_, 0, &gradeBlock_, sizeof(PictureBlock)) != mrhi_success)) {
         return failed("the picture's grade could not be written", mrhi_errorCapacity);
     }
     return {};
 }
 
-result::Status PicturePass::record(const Pipelines& pipelines) {
-    // The bloom's spread light, or the light shown where there is none,
-    // which the picture's shader does not read then (D328).
-    // The grading table, a volume (D344).
-    std::array<mrhiBinding, 5> kSceneBinding = {textureAt(0, shown_),
-                                                bufferAt(1, blockResource_, sizeof(PictureBlock)),
-                                                textureAt(2, spread_.index1 != 0 ? spread_ : shown_),
-                                                samplerAt(3, pipelines.filteredSampler),
-                                                textureAt(4, table_)};
-    kSceneBinding[4].viewKind = mrhi_texture3d;
-    if (mrhiBeginPass(native_, tonemapPass_) != mrhi_success ||
-        mrhiSetGraphicsPipeline(native_, tonemapPass_, pipelines.tonemap.pipeline) != mrhi_success ||
-        mrhiSetBindings(native_, tonemapPass_, 0, kSceneBinding.data(), kSceneBinding.size()) != mrhi_success ||
-        mrhiDraw(native_, tonemapPass_, 3, 1, 0, 0) != mrhi_success ||
-        mrhiEndPass(native_, tonemapPass_) != mrhi_success) {
+namespace {
+
+/// The picture's shader drawn in `pass` with `pipeline`: the light
+/// `light`, the grade `block`, the bloom's `spread` (the light where there
+/// is none, which the shader does not read then, D328), and the grading
+/// table, a volume (D344).
+result::Status drawPicture(mrhiDevice* native,
+                           mrhiPassId pass,
+                           mrhiGraphicsPipelineId pipeline,
+                           const Pipelines& pipelines,
+                           std::array<mrhiResourceId, 4> bound) {
+    const auto& [kLight, kBlock, kSpread, kTable] = bound;
+    std::array<mrhiBinding, 5> binding = {textureAt(0, kLight),
+                                          bufferAt(1, kBlock, sizeof(PictureBlock)),
+                                          textureAt(2, kSpread.index1 != 0 ? kSpread : kLight),
+                                          samplerAt(3, pipelines.filteredSampler),
+                                          textureAt(4, kTable)};
+    binding[4].viewKind = mrhi_texture3d;
+    if (mrhiBeginPass(native, pass) != mrhi_success ||
+        mrhiSetGraphicsPipeline(native, pass, pipeline) != mrhi_success ||
+        mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success ||
+        mrhiDraw(native, pass, 3, 1, 0, 0) != mrhi_success || mrhiEndPass(native, pass) != mrhi_success) {
         return failed("the picture could not be drawn", mrhi_errorState);
     }
+    return {};
+}
+
+} // namespace
+
+result::Status PicturePass::recordGrade(const Pipelines& pipelines) {
+    if (!gradedFirst_) {
+        return {};
+    }
+    return drawPicture(
+        native_, gradePass_, pipelines.grade.pipeline, pipelines, {shown_, gradeResource_, gradeSpread_, table_});
+}
+
+result::Status PicturePass::recordTonemap(const Pipelines& pipelines) {
+    return drawPicture(
+        native_, tonemapPass_, pipelines.tonemap.pipeline, pipelines, {light_, blockResource_, spread_, table_});
+}
+
+result::Status PicturePass::recordFxaa(const Pipelines& pipelines) {
     if (!smoothed_) {
         return {};
     }

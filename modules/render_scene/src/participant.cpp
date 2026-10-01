@@ -64,10 +64,10 @@ readMaterial(content::ContentStore& store, base::Bits128 id, material::Quality q
     return kQualities.at(static_cast<std::size_t>(quality));
 }
 
-/// Whether a read found no resource of the type asked.
-bool notFound(const result::Error& error) {
-    return error.domain() == content::kContentDomain &&
-           error.code() == content::code(content::ContentError::ResourceNotFound);
+/// Whether a read found no resource of that identity, or (`other`) one of
+/// another type.
+bool missing(const result::Error& error, content::ContentError why) {
+    return error.domain() == content::kContentDomain && error.code() == content::code(why);
 }
 
 /// A client's view without a camera of its own: behind its player and
@@ -247,7 +247,8 @@ public:
                 RAWFRAME_TRY(content->admit(kAdmitted));
                 for (const world_kest::GameMaterialResource& each : files->materials()) {
                     auto read = readMaterial(content->store(), each.material, quality_);
-                    if (!read.has_value() && notFound(read.error())) {
+                    // One of another type may be a post process.
+                    if (!read.has_value() && missing(read.error(), content::ContentError::ResourceTypeMismatch)) {
                         auto cooked = readCooked(content->store(), each.material, material::kPostProcessType);
                         auto process =
                             cooked.has_value()
@@ -260,9 +261,7 @@ public:
                                                      .texture = sceneTextureOf(process->sampled)});
                             continue;
                         }
-                        if (!notFound(process.error())) {
-                            read = std::unexpected{std::move(process).error()};
-                        }
+                        read = std::unexpected{std::move(process).error()};
                     }
                     if (read.has_value()) {
                         materials.push_back({.id = each.id,
@@ -272,7 +271,7 @@ public:
                                                           .packed = sceneTextureOf(read->textures.packed),
                                                           .emission = sceneTextureOf(read->textures.emission),
                                                           .normal = sceneTextureOf(read->textures.normal)}});
-                    } else if (!each.subasset || !notFound(read.error())) {
+                    } else if (!each.subasset || !missing(read.error(), content::ContentError::ResourceNotFound)) {
                         // A mesh's subasset its source no longer has names
                         // no resource and is no material (D314).
                         unreadMaterials_.emplace_back(each.path, std::string{read.error().description()});

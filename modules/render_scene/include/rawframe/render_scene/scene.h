@@ -727,8 +727,8 @@ struct SceneFrame {
     std::size_t decalsOverLimit = 0;
     /// The camera's post processes to run, in its order (D349); and those
     /// left out: a material the game has not, a weight not finite, or past
-    /// the limit. A weight of nought or less runs nothing and is not
-    /// counted.
+    /// the limit. Material nought, or a weight of nought or less, runs
+    /// nothing and is not counted.
     std::vector<ScenePostProcess> postProcesses;
     std::size_t postProcessesLeftOut = 0;
     /// EV100.

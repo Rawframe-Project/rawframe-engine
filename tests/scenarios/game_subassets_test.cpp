@@ -95,17 +95,18 @@ RAWFRAME_TEST(AGameKnowsItsMeshesSubassetsCookedOrNot) {
                 // The crate's planks and iron, the mound's grass, and the
                 // planks' texture, beside the materials and textures the
                 // game's lines name, the sky's picture and the hall's among
-                // them (D322, D326).
+                // them (D322, D326), and the warmth, a post process (D350).
                 for (const std::string_view kSubasset : {"4fa8f5945fc4b1ae crate.gltf#material/Iron subasset",
                                                          "ea67406491ff8d5d crate.gltf#material/Planks subasset",
                                                          "3aa889e544dcfceb mound.gltf#material/Grass subasset",
                                                          "71cc8dbcf82d6cfa crate.gltf#texture/Planks",
                                                          "9f822820a44af4fc paving.png",
                                                          "a97797a3a58f6d7a sky.hdr",
-                                                         "ac452b5e41f745bf hall.hdr"}) {
+                                                         "ac452b5e41f745bf hall.hdr",
+                                                         "8d099ac296f9483e warmth.rfmaterial"}) {
                     RAWFRAME_EXPECT(std::ranges::contains(kKnown, kSubasset));
                 }
-                RAWFRAME_EXPECT(kKnown.size() == 10);
+                RAWFRAME_EXPECT(kKnown.size() == 11);
             }
         }
     }

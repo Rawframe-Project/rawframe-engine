@@ -32,6 +32,8 @@ texture ac452b5e41f745bf hall.hdr
 material 6d2c9bd611d50fdf brass.rfmaterial
 material e4443f63fe935232 marble.rfmaterial
 material b6b2fb38f649a30b paving.rfmaterial
+# A warmth over the picture before the tonemapper (D350): a post process.
+material 8d099ac296f9483e warmth.rfmaterial
 
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
 component 9b8e1f52-3c47-4d0a-a6e2-5f1d7c93b204 plaza.blade Blade
@@ -45,6 +47,7 @@ component b043a21b-26c9-4a2f-a09f-7026ca4cf0f7 plaza.hidden rawframe.model.Ambie
 component 0d4f7a2e-58c1-4b93-a6e0-3c9b2d7f1e84 plaza.sky rawframe.model.Sky
 component 9c6fbc0e-7e12-4a6e-814f-b893a583b4d9 plaza.hall Hall
 component a05f1e72-8622-4587-a629-f9a65dc4431a plaza.probe rawframe.model.ReflectionProbe
+component 19968421-e479-4d0d-84b5-3f15409045fa plaza.warmth rawframe.model.PostProcess
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -125,8 +128,9 @@ predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.veloc
 # walker's camera, and the strollers as figures where their poses stand
 # (D288), each with a lantern (D290), the view's exposure metered (D293),
 # under the sky's picture (D322), reflecting the plaza's probe (D325),
-# darkened where things meet (D327); no server carries a look, a figure, a
-# lantern, a view, a meter, an occlusion, a sky, or a probe.
+# darkened where things meet (D327), warmed (D350); no server carries a
+# look, a figure, a lantern, a view, a meter, an occlusion, a sky, a probe,
+# or a warmth.
 presentation plaza.look on rawframe.physics3d.body
 present plaza.dress dress read rawframe.physics3d.body write plaza.look
 present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
@@ -144,3 +148,5 @@ presentation plaza.sky on player
 present plaza.sky sky read plaza.stick write plaza.sky
 presentation plaza.probe on plaza.hall
 present plaza.probe probe read plaza.hall write plaza.probe
+presentation plaza.warmth on player
+present plaza.warm warm read plaza.stick write plaza.warmth

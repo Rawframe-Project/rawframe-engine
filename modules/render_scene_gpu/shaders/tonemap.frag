@@ -27,7 +27,10 @@ layout(set = 0, binding = 1, std140) uniform Grade
     vec4 tonemapper;
     // The bloom's share, and one over its chain's levels (D328).
     vec4 bloom;
-    // One where the picture is dithered (D332).
+    // One where the picture is dithered (D332); one where its colors are
+    // looked up in the grading table (D344); one where it is graded only,
+    // its light written for the post processes before the tonemapper
+    // (D350).
     vec4 display;
 }
 grade;
@@ -151,6 +154,11 @@ void main()
     vec3 light = graded(seen);
     if (grade.display.y > 0.5) {
         light = tabled(light);
+    }
+    // Graded only, for the post processes before the tonemapper (D350).
+    if (grade.display.z > 0.5) {
+        outColor = vec4(light, 1.0);
+        return;
     }
     const vec3 kLight = light * grade.tonemapper.y;
     if (grade.tonemapper.x > 1.5) {

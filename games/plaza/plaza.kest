@@ -17,6 +17,8 @@ const WALKER: u64 = 0x5f23859a6c00ebba
 const BRASS: u64 = 0x6d2c9bd611d50fdf
 const MARBLE: u64 = 0xe4443f63fe935232
 const PAVING: u64 = 0xb6b2fb38f649a30b
+// A post process's (D350).
+const WARMTH: u64 = 0x8d099ac296f9483e
 
 // The sky's picture plaza.game's `texture` line names (D322).
 const SKY: u64 = 0xa97797a3a58f6d7a
@@ -263,6 +265,16 @@ fn meter(count: i32, sticks: [controls.Stick], meters: [model.AutoExposure]) {
     let i = 0
     while i < count {
         meters[i] = model.AutoExposure(5.0, 17.0, 3.0, 1.0, 1.0, 0.1, 0.9, 0.0)
+        i = i + 1
+    }
+}
+
+// A walker's view a little warmer than the day (D350): the picture times
+// a faint amber before the tonemapper, wholly.
+fn warm(count: i32, sticks: [controls.Stick], warmths: [model.PostProcess]) {
+    let i = 0
+    while i < count {
+        warmths[i] = model.PostProcess(WARMTH, 1.0)
         i = i + 1
     }
 }

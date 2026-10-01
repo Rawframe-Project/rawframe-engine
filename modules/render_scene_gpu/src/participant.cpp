@@ -149,7 +149,11 @@ public:
                       diagnostics::field("framesMotionBlurred", statistics.framesMotionBlurred),
                       diagnostics::field("framesFocused", statistics.framesFocused),
                       diagnostics::field("framesContactShadowed", statistics.framesContactShadowed),
-                      diagnostics::field("decalsDrawn", statistics.decalsDrawn)});
+                      diagnostics::field("decalsDrawn", statistics.decalsDrawn),
+                      diagnostics::field("probesDrawn", statistics.probesDrawn),
+                      diagnostics::field("framesMultisampled", statistics.framesMultisampled),
+                      diagnostics::field("postProcessesRun", statistics.postProcessesRun),
+                      diagnostics::field("postProcessesLeftOut", statistics.postProcessesLeftOut)});
     }
 
 private:

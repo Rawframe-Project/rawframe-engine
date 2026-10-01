@@ -288,11 +288,11 @@ struct SpotLight {
 // A post process (ADR-0051's typed component in a camera's stack, D349),
 // on the client's own player, as its camera is: the game's post-process
 // material (SPEC-0026's `post_process` domain, D348) of the identity its
-// `material` line gives it, run at its material's insertion point,
-// `weight` of the way (nought to one: nought runs nothing, so a fade is a
-// weight that moves). A game may declare several, each a component of
-// this type; at one insertion point they run in the order the game
-// declares them.
+// `material` line gives it (nought for none), run at its material's
+// insertion point, `weight` of the way (nought to one: nought runs
+// nothing, so a fade is a weight that moves). A game may declare several,
+// each a component of this type; at one insertion point they run in the
+// order the game declares them.
 struct PostProcess {
     material: u64
     weight: f32

@@ -39,6 +39,7 @@ CONTAINERS = (
     ("render_scene_gpu", "sky", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "temporal", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "tonemap", (("vert", "vs"), ("frag", "fs"))),
+    ("render_scene_gpu", "post", (("vert", "vs"), ("frag", "fs"))),
 )
 
 

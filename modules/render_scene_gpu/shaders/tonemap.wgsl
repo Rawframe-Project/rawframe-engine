@@ -127,6 +127,10 @@ fn fs(@builtin(position) position: vec4f, @location(0) uv: vec2f) -> @location(0
     if (grade.display.y > 0.5) {
         looked = tabled(looked);
     }
+    // Graded only, for the post processes before the tonemapper (D350).
+    if (grade.display.z > 0.5) {
+        return vec4f(looked, 1.0);
+    }
     let light = looked * grade.tonemapper.y;
     if (grade.tonemapper.x > 1.5) {
         return shown(light, position.xy);

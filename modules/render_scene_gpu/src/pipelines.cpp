@@ -9,6 +9,7 @@
 #include "generated/meter_container.h"
 #include "generated/motion_container.h"
 #include "generated/occlusion_container.h"
+#include "generated/post_container.h"
 #include "generated/probe_container.h"
 #include "generated/reflect_container.h"
 #include "generated/resolve_container.h"
@@ -68,6 +69,9 @@ Pipelines::~Pipelines() {
                          &temporal,
                          &tonemap,
                          &fxaa,
+                         &postLinear,
+                         &postDisplay,
+                         &grade,
                          &bloomFirst,
                          &bloomDown,
                          &bloomUp,
@@ -108,7 +112,8 @@ Pipelines::~Pipelines() {
                                        contactShader,
                                        decalShader,
                                        probeShader,
-                                       resolveShader}) {
+                                       resolveShader,
+                                       postShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
 }
@@ -638,6 +643,27 @@ result::Status Pipelines::askFor(Effect effect) {
         def.colorTargets[0].format = kProbeFormat;
         return ask(def, probeFill);
     }
+    case Effect::PostProcess: {
+        RAWFRAME_TRY(makeShader(kPostContainer, postShader));
+        // A post process over the chain's light, or over the picture
+        // (D350); and the picture graded only, from the picture's shader.
+        mrhiGraphicsPipelineDef def = picture_;
+        def.shader = postShader;
+        for (const auto& [kLabel, kFormat, kAsked] :
+             {std::tuple{std::string_view{"rawframe.scene.post.linear"}, kSceneFormat, &postLinear},
+              std::tuple{std::string_view{"rawframe.scene.post.display"}, kPictureFormat, &postDisplay}}) {
+            def.label = kLabel.data();
+            def.labelLength = kLabel.size();
+            def.colorTargets[0].format = kFormat;
+            RAWFRAME_TRY(ask(def, *kAsked));
+        }
+        mrhiGraphicsPipelineDef graded = picture_;
+        constexpr std::string_view kGradeLabel = "rawframe.scene.grade";
+        graded.label = kGradeLabel.data();
+        graded.labelLength = kGradeLabel.size();
+        graded.colorTargets[0].format = kSceneFormat;
+        return ask(graded, grade);
+    }
     case Effect::Fxaa: {
         RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
         // FXAA: the tonemapped picture into the frame's (D296).
@@ -704,6 +730,8 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
         return answered({&bloomFirst, &bloomDown, &bloomUp});
     case Effect::Fxaa:
         return answered({&fxaa});
+    case Effect::PostProcess:
+        return answered({&postLinear, &postDisplay, &grade});
     case Effect::ContactShadows:
         return answered({&contactShade});
     case Effect::Decals:
