@@ -2,8 +2,9 @@
 # while its scene is drawn offscreen on the one device, and once sixty
 # frames were presented the probe's picture is drawn six ways from its
 # middle and written, as Radiance, into the build tree. The plaza's content
-# is read cooked. A software rasterizer may serve.
-host.maximum_iterations = 240
+# is read cooked. A software rasterizer may serve. Four seconds, since a
+# loaded machine has taken two before the client saw its World (D343).
+host.maximum_iterations = 480
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = @PROJECT_SOURCE_DIR@/games/plaza/plaza.game
