@@ -158,17 +158,58 @@ Matrix times(const Matrix& left, const Matrix& right) noexcept {
     return out;
 }
 
-/// The eye's axes: right, up, and forward, from its yaw and pitch, pitch
-/// kept short of straight up or down.
+/// The eye's axes, by the view's geometry (D366): right, up, forward.
 std::array<Vector, 3> axesOf(float yaw, float pitch) noexcept {
-    constexpr float kSteepest = (std::numbers::pi_v<float> / 2) - 0.001F;
-    const float kPitch = std::clamp(pitch, -kSteepest, kSteepest);
-    const Vector kForward = {-std::sin(yaw) * std::cos(kPitch), std::sin(kPitch), -std::cos(yaw) * std::cos(kPitch)};
-    const Vector kRight = normalized(cross(kForward, {0, 1, 0}));
-    return {kRight, cross(kRight, kForward), kForward};
+    const view::Axes kAxes = view::axesOf(yaw, pitch);
+    return {kAxes.right, kAxes.up, kAxes.forward};
 }
 
 } // namespace
+
+CameraMatrices matricesOf(const SceneCamera& camera) noexcept {
+    const auto [kRight, kUp, kForward] = axesOf(camera.yaw, camera.pitch);
+    const float kFocal = 1 / std::tan(camera.fovY / 2);
+    // Reversed-Z with the far plane at infinity (ADR-0051): clip z is the
+    // near distance and w the distance ahead, so depth is one at the near
+    // plane and falls toward nought.
+    return CameraMatrices{.view = Matrix{kRight[0],
+                                         kUp[0],
+                                         -kForward[0],
+                                         0,
+                                         kRight[1],
+                                         kUp[1],
+                                         -kForward[1],
+                                         0,
+                                         kRight[2],
+                                         kUp[2],
+                                         -kForward[2],
+                                         0,
+                                         0,
+                                         0,
+                                         0,
+                                         1},
+                          .projection = Matrix{camera.aspect == 0 ? 0 : kFocal / camera.aspect,
+                                               0,
+                                               0,
+                                               0,
+                                               0,
+                                               kFocal,
+                                               0,
+                                               0,
+                                               0,
+                                               0,
+                                               0,
+                                               -1,
+                                               0,
+                                               0,
+                                               camera.near,
+                                               0}};
+}
+
+view::Perspective perspectiveOf(const SceneCamera& camera) noexcept {
+    return view::Perspective{
+        .eye = camera.eye, .yaw = camera.yaw, .pitch = camera.pitch, .fovY = camera.fovY, .near = camera.near};
+}
 
 struct Scene::State {
     SceneSettings settings;
@@ -413,30 +454,16 @@ struct Scene::State {
                            std::isfinite(camera.near) && std::isfinite(camera.aspect) && camera.fovY > 0 &&
                            camera.fovY < std::numbers::pi_v<float> && camera.near > 0 && camera.aspect > 0;
         const auto [kRight, kUp, kForward] = axesOf(kSees ? camera.yaw : 0, kSees ? camera.pitch : 0);
-        frame.view = Matrix{kRight[0],
-                            kUp[0],
-                            -kForward[0],
-                            0,
-                            kRight[1],
-                            kUp[1],
-                            -kForward[1],
-                            0,
-                            kRight[2],
-                            kUp[2],
-                            -kForward[2],
-                            0,
-                            0,
-                            0,
-                            0,
-                            1};
         const float kHalf = kSees ? camera.fovY / 2 : 0.5F;
-        const float kFocal = 1 / std::tan(kHalf);
         const float kAspect = kSees ? camera.aspect : 1.0F;
         const float kNear = kSees ? camera.near : 0.1F;
-        // Reversed-Z with the far plane at infinity (ADR-0051): clip z is
-        // the near distance and w the distance ahead, so depth is one at the
-        // near plane and falls toward nought.
-        frame.projection = Matrix{kFocal / kAspect, 0, 0, 0, 0, kFocal, 0, 0, 0, 0, 0, -1, 0, 0, kNear, 0};
+        const CameraMatrices kMatrices = matricesOf(SceneCamera{.yaw = kSees ? camera.yaw : 0,
+                                                                .pitch = kSees ? camera.pitch : 0,
+                                                                .fovY = kHalf * 2,
+                                                                .near = kNear,
+                                                                .aspect = kAspect});
+        frame.view = kMatrices.view;
+        frame.projection = kMatrices.projection;
         frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;
         frame.metering = meteringOf(camera);
         frame.grading = gradingOf(camera.grading);

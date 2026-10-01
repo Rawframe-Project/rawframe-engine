@@ -123,6 +123,25 @@ RAWFRAME_TEST(ASpritesQuadIsWhereItsPoseAndPivotPutIt) {
     RAWFRAME_EXPECT(kFrame.indices == (std::vector<std::uint32_t>{0, 1, 2, 2, 3, 0}));
 }
 
+RAWFRAME_TEST(PickingAgreesWithTheCanvasCorners) {
+    // Where the view's geometry says a World point shows is where the
+    // canvas puts a sprite's corner there (D366): clip space mapped to a
+    // view of 800 by 400.
+    Rig rig;
+    rig.spawn(Sprite{.texture = kRunner, .width = 2, .height = 1, .pivotX = 0, .pivotY = 0},
+              physics2d::Pose2D{.x = 1003, .y = -2});
+    const CanvasCamera kCamera{.x = 1000, .y = -2, .height = 10, .aspect = 2};
+    const CanvasFrame& kFrame = rig.frame(kCamera);
+    RAWFRAME_EXPECT(kFrame.vertices.size() == 4);
+    if (kFrame.vertices.size() == 4) {
+        const view::ViewSize kSize{.width = 800, .height = 400};
+        const auto kPoint = view::worldToPoint(orthographicOf(kCamera), kSize, std::array<double, 2>{1003, -2});
+        const CanvasVertex& kCorner = kFrame.vertices[0];
+        RAWFRAME_EXPECT(kPoint.has_value() && std::abs(kPoint->x - ((kCorner.x + 1) / 2 * 800)) < 1e-3F &&
+                        std::abs(kPoint->y - ((1 - kCorner.y) / 2 * 400)) < 1e-3F);
+    }
+}
+
 RAWFRAME_TEST(ASpriteTurnsAsItsPoseTurns) {
     Rig rig;
     // A quarter turn about its center: its bottom left goes to the right.

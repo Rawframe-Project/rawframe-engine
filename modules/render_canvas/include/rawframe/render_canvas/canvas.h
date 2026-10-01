@@ -14,6 +14,7 @@
 #include "rawframe/particles/particles.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
+#include "rawframe/view/view.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/game_files.h"
 
@@ -84,6 +85,11 @@ struct CanvasCamera {
     float aspect = 16.0F / 9.0F;
     float elapsed = 0;
 };
+
+/// A camera's view geometry for picking (ADR-0052, D366): the World point
+/// at the view's middle and how many meters it sees from top to bottom;
+/// the view's size is the caller's.
+[[nodiscard]] view::Orthographic orthographicOf(const CanvasCamera& camera) noexcept;
 
 /// A quad's corner in clip space, x right and y up, each from minus one to
 /// one across the view; its place in the texture; and its color, 0xRRGGBBAA.

@@ -413,4 +413,8 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
     return loaded;
 }
 
+view::Orthographic orthographicOf(const CanvasCamera& camera) noexcept {
+    return view::Orthographic{.middle = {camera.x, camera.y}, .height = camera.height};
+}
+
 } // namespace rawframe::render_canvas

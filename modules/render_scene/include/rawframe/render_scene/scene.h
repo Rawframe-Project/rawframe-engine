@@ -18,6 +18,7 @@
 #include "rawframe/particles/particles.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
+#include "rawframe/view/view.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/game_files.h"
 
@@ -336,6 +337,20 @@ struct SceneCamera {
 
 /// Column-major, as shaders read them.
 using Matrix = std::array<float, 16>;
+
+/// A camera's view (World axes to the eye's, about the eye) and its
+/// projection (reversed-Z, the far plane at infinity), column-major, from
+/// its aim, lens, and aspect: what the scene draws by, and what picking
+/// agrees with (D366).
+struct CameraMatrices {
+    Matrix view{};
+    Matrix projection{};
+};
+[[nodiscard]] CameraMatrices matricesOf(const SceneCamera& camera) noexcept;
+
+/// A camera's view geometry for picking (ADR-0052, D366): its eye, aim,
+/// and lens; the view's size is the caller's.
+[[nodiscard]] view::Perspective perspectiveOf(const SceneCamera& camera) noexcept;
 
 /// One model to draw, or a run of its mesh's parts that draw with one
 /// material (D314): its mesh and the run's indices, where it is relative to
