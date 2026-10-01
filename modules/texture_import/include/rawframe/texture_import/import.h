@@ -5,8 +5,9 @@
 // runtime's texture: its levels made by halving in linear light, and
 // block-compressed to BC7 unless kept exact. An environment (D321) is a
 // Radiance picture, cooked into a cube whose levels are its light as ever
-// rougher surfaces reflect it. Import tooling only; no client or server
-// closure may depend on it.
+// rougher surfaces reflect it, and a grading table (D344) a `.cube` file,
+// cooked into a volume. Import tooling only; no client or server closure
+// may depend on it.
 
 #include "rawframe/result/result.h"
 #include "rawframe/texture/texture.h"
@@ -100,6 +101,22 @@ struct EnvironmentSettings {
 /// than its halvings to one texel, samples from 1 to 4096.
 [[nodiscard]] result::Result<texture::Texture> cookEnvironment(const LightImage& image,
                                                                const EnvironmentSettings& settings = {});
+
+/// How large a grading table may be.
+struct GradingLimits {
+    std::uint32_t maximumSide = 65;
+};
+
+/// A grading table (D344): a `.cube` file, Adobe's and Resolve's 3D table
+/// of colors, as a volume of RGBA16F (alpha one) whose texel at x, y, and
+/// slice z is the entry for red x, green y, and blue z of its side. Lines
+/// are a title, the size (`LUT_3D_SIZE`), a domain of nought to one, an
+/// entry of three numbers, a comment, or blank. Refuses (`BadSource`) a
+/// one-dimensional table, another domain, a size under two, a missing or
+/// surplus entry, or one not three finite numbers; and (`OverLimit`) a
+/// size past the limit, before its entries are allocated.
+[[nodiscard]] result::Result<texture::Texture> decodeGrading(std::span<const std::byte> source,
+                                                             const GradingLimits& limits = {});
 
 /// A cooked texture's level as RGBA again, for tests and tools: BC7 blocks
 /// decoded, uncompressed levels copied.
