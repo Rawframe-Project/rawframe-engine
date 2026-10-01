@@ -82,20 +82,21 @@ public:
     }
 
     void runHostPhase(composition::HostPhase /*phase*/, const composition::HostFrame& /*frame*/) noexcept override {
-        if (scene_ == nullptr || done_) {
+        if (scene_ == nullptr) {
             return;
         }
         if (presented_ < after_) {
             ++presented_;
             return;
         }
-        if (!listed_) {
+        // The probes the scene has extracted by now, each listed once: one
+        // the World gives the client late, as a loaded machine's may, is
+        // baked when it comes.
+        if (at_ == wanted_.size()) {
             list();
-            listed_ = true;
-        }
-        if (at_ >= wanted_.size()) {
-            done_ = true;
-            return;
+            if (at_ == wanted_.size()) {
+                return;
+            }
         }
         if (pending_) {
             std::optional<render_scene_gpu::LightCapture> light = captures_->captured();
@@ -140,14 +141,15 @@ public:
     }
 
 private:
-    /// The probes the scene extracted, one for each picture, those whose
-    /// picture the game declares.
+    /// The probes the scene extracted, one for each picture not listed
+    /// before, those whose picture the game declares.
     void list() {
         for (const render_scene::ProbeInstance& kProbe : scene_->probes()) {
             const std::uint64_t kId = kProbe.probe.environment;
-            if (kId == 0 || std::ranges::contains(wanted_, kId, &Wanted::environment)) {
+            if (kId == 0 || std::ranges::contains(listed_, kId)) {
                 continue;
             }
+            listed_.push_back(kId);
             const auto kDeclared = std::ranges::find(textures_, kId, &world_kest::GameTextureResource::id);
             if (kDeclared == textures_.end()) {
                 ++notBaked_;
@@ -201,8 +203,8 @@ private:
     std::uint32_t width_ = 512;
     std::uint64_t after_ = 120;
     std::uint64_t presented_ = 0;
-    bool listed_ = false;
-    bool done_ = false;
+    /// The pictures listed, and the probes to bake.
+    std::vector<std::uint64_t> listed_;
     std::vector<Wanted> wanted_;
     /// The probe being baked, its face, and whether that face's capture
     /// is awaited.
