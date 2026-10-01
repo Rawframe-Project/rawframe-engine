@@ -233,14 +233,17 @@ if(RAWFRAME_BUILD_TESTS)
     # is seen in 3D (D283): its client dresses every body it mirrors by its
     # shape, the mound as the game's own mesh, and sees them through its
     # walker's camera; every model is drawn or culled, none malformed or of
-    # a mesh unknown; and the strollers' lanterns light the frames (D290).
+    # a mesh unknown; the strollers' lanterns light the frames (D290);
+    # the monitor's lens is seen into its render texture (D361); and no record
+    # loses fields past the 32 a record carries.
     configure_file(tests/plaza_seen.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen.conf @ONLY)
     add_test(NAME plaza_seen
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_seen PROPERTIES
                          FIXTURES_REQUIRED plaza_content
-                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":2,\"gameMaterials\":6,\"unknownMaterials\":0,\"materialTextures\":2,\"texturesReady\":2,\"pictures\":2,\"picturesReady\":2,\"lightsLit\":[1-9][0-9]*,\"lightsCulled\":[0-9]+,\"lightsOverLimit\":0,\"clusterOverflow\":0")
+                         FAIL_REGULAR_EXPRESSION "\"truncated\""
+                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":2,\"gameMaterials\":7,\"unknownMaterials\":0,\"materialTextures\":2,\"texturesReady\":2,\"pictures\":2,\"picturesReady\":2,\"lightsLit\":[1-9][0-9]*,\"lightsCulled\":[0-9]+,\"lightsOverLimit\":0,\"clusterOverflow\":0,[^\n]*\"viewsDrawn\":[1-9][0-9]+,\"viewsLeftOut\":0,\"viewsRefused\":0")
     # At the low quality (D318), the paving samples no texture: the planks
     # are the one texture read.
     configure_file(tests/plaza_seen_low.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen_low.conf @ONLY)
@@ -249,12 +252,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_seen_low PROPERTIES
                          FIXTURES_REQUIRED plaza_content
-                         PASS_REGULAR_EXPRESSION "\"gameMaterials\":6,\"unknownMaterials\":0,\"materialTextures\":1,\"texturesReady\":1,\"pictures\":2,")
+                         PASS_REGULAR_EXPRESSION "\"gameMaterials\":7,\"unknownMaterials\":0,\"materialTextures\":1,\"texturesReady\":1,\"pictures\":2,")
     if(RAWFRAME_ARENA_DRAWS)
         # The plaza drawn on the one device offscreen (D284): frames drawn,
         # its models in instanced calls, its meshes uploaded once each, its
-        # ambient occlusion found (D327), and the pictures read back lit in
-        # many shades.
+        # ambient occlusion found (D327), the monitor's lens drawn into its
+        # render texture (D361), and the pictures read back lit in many
+        # shades.
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.tga)
         configure_file(tests/plaza_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf @ONLY)
         add_test(NAME plaza_drawn
@@ -265,7 +269,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(plaza_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

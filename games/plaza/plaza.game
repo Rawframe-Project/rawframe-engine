@@ -34,6 +34,11 @@ material e4443f63fe935232 marble.rfmaterial
 material b6b2fb38f649a30b paving.rfmaterial
 # A warmth over the picture before the tonemapper (D350): a post process.
 material 8d099ac296f9483e warmth.rfmaterial
+# A monitor showing what a lens high over it sees (D361): the lens's view
+# drawn each frame into a render texture of 320 by 180, which the
+# monitor's material shines with.
+rendertexture f18de9a0974d265b 320 180
+material a09d6b8277396fcd monitor.rfmaterial
 
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
 component 9b8e1f52-3c47-4d0a-a6e2-5f1d7c93b204 plaza.blade Blade
@@ -51,6 +56,10 @@ component 19968421-e479-4d0d-84b5-3f15409045fa plaza.warmth rawframe.model.PostP
 component 8e5894e9-5540-470d-9ad5-9de0e9c44c1a plaza.spring Spring
 component 23c49c96-4115-4e9b-93bf-ad66da086d57 plaza.fountain rawframe.model.ParticleEmitter
 component e11486aa-d0b3-421d-aaf7-76d14abb942d plaza.trace rawframe.model.Trail
+component ad3b9917-5f69-4d91-830b-b1aeab52a92e plaza.monitor Monitor
+component 9c9c4ade-0b73-4b76-ab31-90b52b98ff23 plaza.screen rawframe.model.Model
+component 05158b5b-4886-4c43-9384-9b9a9c0a3f4a plaza.lens rawframe.model.Camera
+component 9ef4a751-96de-4694-b07d-b3fccbd00a18 plaza.watch rawframe.model.View
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -108,6 +117,11 @@ spawn 1 plaza.hall halfX=40 halfY=7.5 halfZ=40 rawframe.physics3d.pose y=3 qw=1
 # seven meters a second (D353).
 spawn 1 plaza.spring speed=7 rawframe.physics3d.pose x=0 y=0.5 z=-8 qw=1
 
+# A monitor behind the spring, its screen 3.2 meters by 1.8 facing the
+# middle, two and a half meters up (D361): within 30 meters of anywhere a
+# walker starts, so every client is sent it.
+spawn 1 plaza.monitor width=1.6 height=0.9 rawframe.physics3d.pose x=0 y=2.5 z=-10 qw=1
+
 # Eight strollers about the plaza, each starting its round at another time.
 spawn 1 plaza.stroller left=240 rawframe.physics3d.pose x=-12 y=1.4 z=-4 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=210 rawframe.physics3d.pose x=-6 y=1.4 z=12 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
@@ -118,7 +132,7 @@ spawn 1 plaza.stroller left=90 rawframe.physics3d.pose x=18 y=1.4 z=-8 qw=1 rawf
 spawn 1 plaza.stroller left=60 rawframe.physics3d.pose x=0 y=1.4 z=18 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 
-replicate plaza.stroller plaza.hall plaza.spring rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
+replicate plaza.stroller plaza.hall plaza.spring plaza.monitor rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
 input plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
@@ -136,9 +150,10 @@ predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.veloc
 # (D288), each with a lantern (D290), the view's exposure metered (D293),
 # under the sky's picture (D322), reflecting the plaza's probe (D325),
 # darkened where things meet (D327), warmed (D350), the spring's fountain
-# (D353), and the strollers' traces (D354); no server carries a look, a
-# figure, a lantern, a view, a meter, an occlusion, a sky, a probe, a
-# warmth, a fountain, or a trace.
+# (D353), the strollers' traces (D354), and the monitor's screen showing
+# its lens's view (D361); no server carries a look, a figure, a lantern, a
+# view, a meter, an occlusion, a sky, a probe, a warmth, a fountain, a
+# trace, a screen, a lens, or a watch.
 presentation plaza.look on rawframe.physics3d.body
 present plaza.dress dress read rawframe.physics3d.body write plaza.look
 present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
@@ -162,3 +177,7 @@ presentation plaza.warmth on player
 present plaza.warm warm read plaza.stick write plaza.warmth
 presentation plaza.fountain on plaza.spring
 present plaza.fountain fountain read plaza.spring write plaza.fountain
+presentation plaza.screen plaza.lens plaza.watch on plaza.monitor
+present plaza.screen screen read plaza.monitor write plaza.screen
+present plaza.aim aim read plaza.monitor write plaza.lens
+present plaza.watch watch read plaza.monitor write plaza.watch

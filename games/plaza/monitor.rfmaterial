@@ -1,0 +1,41 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "4b1e9c07d2a35f68": {
+      "type": "rawframe/uv@1",
+      "params": {},
+      "inputs": {}
+    },
+    "7d20e5a13c94b8f1": {
+      "type": "rawframe/sample_texture_2d@1",
+      "params": {
+        "texture": "f18de9a0974d265b"
+      },
+      "inputs": {
+        "uv": {
+          "node": "4b1e9c07d2a35f68",
+          "output": "uv"
+        }
+      }
+    },
+    "c3f6a8015e72d94b": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": [
+          0.02,
+          0.02,
+          0.02
+        ],
+        "emission_color": {
+          "node": "7d20e5a13c94b8f1",
+          "output": "color"
+        },
+        "emission_luminance": 4000,
+        "specular_roughness": 0.2
+      }
+    }
+  }
+}
