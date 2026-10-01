@@ -185,13 +185,22 @@ private:
     std::unique_ptr<State> state_;
 };
 
-/// A render texture's view on the device (ADR-0052, D361): its picture, a
+/// Where a view's picture is composed into the frame's (D362): its top
+/// left, in pixels.
+struct Placement {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+};
+
+/// A view drawn apart on the device (ADR-0052, D361, D362): its picture, a
 /// texture kept from frame to frame, `width` by `height`, 8-bit sRGB, that
 /// a scene renderer of its own draws its view's frame into as it would a
-/// frame's picture, display-referred, its post processes over it; then
-/// lent to the player's view, whose materials name it by `id`. A frame in
-/// which no view names it keeps what it last drew; until one is drawn,
-/// none is lent, and the materials sample white.
+/// frame's picture, display-referred, its post processes over it. A render
+/// texture's is then lent to the player's view, whose materials name it by
+/// `id`; a frame in which no view names it keeps what it last drew; until
+/// one is drawn, none is lent, and the materials sample white. A local
+/// player's in split-screen is copied into its region of the frame's
+/// picture instead.
 class TextureView final : public render::FrameRecorder {
 public:
     /// On `device`, which must be ready and must outlive this, its renderer
@@ -206,8 +215,18 @@ public:
     ~TextureView() override;
 
     /// What the next frame draws into it: `frame`, with the meshes and
-    /// textures it names; nothing for none.
-    void prepare(const render_scene::SceneFrame* frame, MeshSource meshes, TextureSource textures = {});
+    /// textures it names and `lent`'s pictures (other views', never its
+    /// own); nothing for none. Placed, its picture is then copied into the
+    /// frame's there, as far as the frame reaches, the frame's picture
+    /// cleared first if nothing drew into it before.
+    void prepare(const render_scene::SceneFrame* frame,
+                 MeshSource meshes,
+                 TextureSource textures = {},
+                 std::span<TextureView* const> lent = {},
+                 std::optional<Placement> placed = std::nullopt);
+    /// Its picture made `width` by `height` from the next frame, nothing
+    /// drawn in it yet, when it is not that already.
+    [[nodiscard]] result::Status resize(std::uint32_t width, std::uint32_t height);
     /// Whether the frame it was given before this one went undrawn: no
     /// submitted frame drew it.
     [[nodiscard]] bool missed() const noexcept;
@@ -218,6 +237,8 @@ public:
 
     /// Its render texture's identity.
     [[nodiscard]] std::uint64_t id() const noexcept;
+    [[nodiscard]] std::uint32_t width() const noexcept;
+    [[nodiscard]] std::uint32_t height() const noexcept;
     /// Its picture in the open frame, named as `render::requestKey` names
     /// ids, once a submitted frame drew into it; none before.
     [[nodiscard]] std::optional<std::uint64_t> picture() const noexcept;

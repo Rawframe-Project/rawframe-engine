@@ -92,6 +92,22 @@ public:
                 // is drawn again.
                 scene_->missed(kTexture.id);
             }
+            // In split-screen, each local player's view, in the players'
+            // order, after the render textures (D362).
+            for (const render_scene::RegionFrame& kRegion : scene_->regionFrames()) {
+                auto view = TextureView::create(
+                    *device, *renderer_, 0, std::max(kRegion.width, 1U), std::max(kRegion.height, 1U));
+                if (!view.has_value()) {
+                    failed_ = true;
+                    emitter_.log(diagnostics::Severity::Error,
+                                 kFailed,
+                                 "a local player's view could not be drawn: nothing more is",
+                                 {diagnostics::field("reason", std::string{view.error().description()})});
+                    return;
+                }
+                frames_->join(**view, kOrder);
+                regions_.push_back(std::move(*view));
+            }
             frames_->join(*renderer_, kOrder);
             frames_->join(renderer_->composed(), kComposedOrder);
         }
@@ -109,7 +125,8 @@ public:
                 asked_ = true;
             }
         } else {
-            renderer_->prepare(scene_->queued(), meshes_, textures_, viewPointers_);
+            // In split-screen the players' views draw the scene.
+            renderer_->prepare(regions_.empty() ? scene_->queued() : nullptr, meshes_, textures_, viewPointers_);
         }
         const std::span<const render_scene::TextureFrame> kTextures = scene_->textureFrames();
         for (std::size_t at = 0; at < views_.size(); ++at) {
@@ -118,6 +135,27 @@ public:
                 scene_->missed(views_[at]->id());
             }
             frames_->ready(*views_[at]);
+        }
+        const std::span<const render_scene::RegionFrame> kRegions = scene_->regionFrames();
+        for (std::size_t at = 0; at < regions_.size() && at < kRegions.size(); ++at) {
+            const render_scene::RegionFrame& kRegion = kRegions[at];
+            const bool kShown = kRegion.width != 0 && kRegion.height != 0;
+            if (kShown) {
+                if (auto resized = regions_[at]->resize(kRegion.width, kRegion.height); !resized.has_value()) {
+                    failed_ = true;
+                    emitter_.log(diagnostics::Severity::Error,
+                                 kFailed,
+                                 "a local player's view could not be drawn: nothing more is",
+                                 {diagnostics::field("reason", std::string{resized.error().description()})});
+                    return;
+                }
+            }
+            regions_[at]->prepare(kShown ? kRegion.frame : nullptr,
+                                  meshes_,
+                                  textures_,
+                                  viewPointers_,
+                                  kShown ? std::optional{Placement{.x = kRegion.x, .y = kRegion.y}} : std::nullopt);
+            frames_->ready(*regions_[at]);
         }
         frames_->ready(*renderer_);
         frames_->ready(renderer_->composed());
@@ -169,8 +207,23 @@ public:
             return;
         }
         RendererStatistics statistics;
+        // In split-screen, the first player's view's (D362).
+        const bool kSplit = !regions_.empty();
+        std::uint64_t regionFrames = 0;
+        for (const std::unique_ptr<TextureView>& region : regions_) {
+            regionFrames += region->statistics().frames;
+        }
+        if (kSplit) {
+            statistics = regions_.front()->statistics();
+        }
+        for (const std::unique_ptr<TextureView>& region : regions_) {
+            frames_->leave(*region);
+        }
+        regions_.clear();
         if (renderer_ != nullptr) {
-            statistics = renderer_->statistics();
+            if (!kSplit) {
+                statistics = renderer_->statistics();
+            }
             frames_->leave(renderer_->composed());
             frames_->leave(*renderer_);
             renderer_.reset();
@@ -213,7 +266,8 @@ public:
                       diagnostics::field("emittersLeftOut", statistics.emittersLeftOut),
                       diagnostics::field("particlesSpawned", statistics.particlesSpawned),
                       diagnostics::field("ribbonsDrawn", statistics.ribbonsDrawn),
-                      diagnostics::field("viewFrames", viewFrames)});
+                      diagnostics::field("viewFrames", viewFrames),
+                      diagnostics::field("regionFrames", regionFrames)});
     }
 
 private:
@@ -225,6 +279,8 @@ private:
     /// The render textures' views (D361), drawn before the scene.
     std::vector<std::unique_ptr<TextureView>> views_;
     std::vector<TextureView*> viewPointers_;
+    /// In split-screen, the local players' views (D362), drawn after them.
+    std::vector<std::unique_ptr<TextureView>> regions_;
     /// The frame a tool asked to capture, and whether the renderer was
     /// asked to read it.
     std::optional<render_scene::SceneFrame> capturing_;

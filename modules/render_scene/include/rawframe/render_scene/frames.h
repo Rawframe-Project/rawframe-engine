@@ -25,6 +25,23 @@ struct TextureFrame {
     const SceneFrame* frame = nullptr;
 };
 
+/// A local player's region of the window in split-screen (ADR-0052,
+/// D362), in pixels from its top left, and the frame queued for it; none
+/// while its client has no World.
+struct RegionFrame {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    const SceneFrame* frame = nullptr;
+};
+
+/// A layout's region (fractions of the window) in pixels of a window
+/// `width` by `height`: each edge at the nearest pixel, so regions sharing
+/// an edge tile the window exactly.
+[[nodiscard]] RegionFrame
+regionIn(float x, float y, float regionWidth, float regionHeight, std::uint32_t width, std::uint32_t height) noexcept;
+
 class SceneFrames {
 public:
     SceneFrames() = default;
@@ -40,6 +57,11 @@ public:
     /// this Host iteration's `present` (D361), until the next iteration's
     /// `presentation_extract`; a device draws them before the view's.
     [[nodiscard]] virtual std::span<const TextureFrame> textureFrames() const noexcept = 0;
+    /// In split-screen (D362), each local player's region and frame, the
+    /// first's the frame `queued` gives, in the players' order, each
+    /// composed over those before; none while one player fills the window.
+    /// Kept as `textureFrames` is.
+    [[nodiscard]] virtual std::span<const RegionFrame> regionFrames() const noexcept = 0;
     /// The device did not draw the frame the render texture `id` was last
     /// given: one drawn on demand is offered it again in the next
     /// iteration, unless a new one is due.

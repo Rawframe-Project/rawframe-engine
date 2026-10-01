@@ -111,3 +111,65 @@ RAWFRAME_TEST(AViewsTextureIsSampledByTheSceneItShows) {
         RAWFRAME_EXPECT(kKept[0] > 200 && kKept[1] < 40 && kKept[2] < 40);
     }
 }
+
+RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
+    // Two local players' views (D362), each drawn apart and copied into its
+    // half of the frame's picture, the first clearing it.
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto scene = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(scene.has_value() && framer.has_value());
+    if (!scene.has_value() || !framer.has_value()) {
+        return;
+    }
+    auto left = render_scene_gpu::TextureView::create(*kDevice, **scene, 0, 16, 16);
+    auto right = render_scene_gpu::TextureView::create(*kDevice, **scene, 0, 16, 16);
+    RAWFRAME_EXPECT(left.has_value() && right.has_value());
+    if (!left.has_value() || !right.has_value()) {
+        return;
+    }
+    // Each its region's size from the next frame.
+    RAWFRAME_EXPECT((**left).resize(kSide / 2, kSide).has_value() && (**right).resize(kSide / 2, kSide).has_value() &&
+                    (**right).width() == kSide / 2);
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    render_scene::MaterialBlob unlit = render_scene::noMaterial();
+    unlit[15] = 1 + 2;
+    const auto kWall = [&](std::array<float, 4> color) {
+        SceneFrame seen = looking();
+        seen.shadows.count = 0;
+        seen.dither = false;
+        seen.tonemapper = render_scene::Tonemapper::Linear;
+        SceneDraw wall = box(4, 20, color);
+        wall.material = 1;
+        seen.draws = {wall};
+        seen.materials = {render_scene::noMaterial(), unlit};
+        seen.textures = {{}, {}};
+        return seen;
+    };
+    const SceneFrame kRed = kWall({1, 0, 0, 1});
+    const SceneFrame kGreen = kWall({0, 1, 0, 1});
+    const std::array<render::FrameRecorder*, 3> kRecorders = {left->get(), right->get(), scene->get()};
+    std::optional<std::vector<std::byte>> pixels;
+    for (int attempt = 0; attempt < 1000 && ((**left).statistics().frames == 0 || (**right).statistics().frames == 0);
+         ++attempt) {
+        (**left).prepare(&kRed, kMeshes, {}, {}, render_scene_gpu::Placement{.x = 0, .y = 0});
+        (**right).prepare(&kGreen, kMeshes, {}, {}, render_scene_gpu::Placement{.x = kSide / 2, .y = 0});
+        (**scene).prepare(nullptr, kMeshes);
+        RAWFRAME_EXPECT(
+            (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
+        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+        pixels = (*framer)->pixels();
+    }
+    RAWFRAME_EXPECT(pixels.has_value());
+    if (pixels.has_value()) {
+        const std::array<int, 3> kLeft = at(*pixels, kSide / 4, kSide / 2);
+        const std::array<int, 3> kRight = at(*pixels, kSide * 3 / 4, kSide / 2);
+        RAWFRAME_EXPECT(kLeft[0] > 200 && kLeft[1] < 40 && kLeft[2] < 40);
+        RAWFRAME_EXPECT(kRight[0] < 40 && kRight[1] > 200 && kRight[2] < 40);
+    }
+}

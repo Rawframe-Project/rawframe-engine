@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -226,6 +227,28 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
         client_ = client;
+        // Split-screen (D362): the process's local players, each in its
+        // region by the game's layout for their count, the first in the
+        // first.
+        if (const std::size_t kPlayers = clients_->localPlayers(); kPlayers > 1) {
+            const auto& kLayouts = files->description().layouts;
+            const auto kLayout = std::ranges::find(kLayouts, kPlayers, &world_kest::GameLayout::players);
+            if (client.has_value() || kLayout == kLayouts.end()) {
+                return std::unexpected<result::Error>{
+                    result::fail(result::ErrorClass::InvalidArgument,
+                                 composition::kCompositionDomain,
+                                 code(composition::CompositionError::BadConfiguration),
+                                 "local players are shown by the game's layout for their count, which it must have, "
+                                 "and scene.client names none")
+                        .error()};
+            }
+            client_ = 0;
+            regions_ = kLayout->regions;
+            for (std::size_t other = 1; other < kPlayers; ++other) {
+                localPlayers_.push_back(LocalPlayer{.client = other});
+            }
+            regionFrames_.resize(regions_.size());
+        }
         cameraComponents_ = game->cameras;
         viewComponent_ = game->view;
         for (const world_kest::GameRenderTexture& kTexture : files->description().renderTextures) {
@@ -355,12 +378,18 @@ public:
             for (TextureFrame& each : textureFrames_) {
                 each.frame = nullptr;
             }
+            for (RegionFrame& each : regionFrames_) {
+                each.frame = nullptr;
+            }
             ++tick_;
             updateTextures();
             extract();
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
             camera_.aspect = static_cast<float>(width_) / static_cast<float>(height_);
+            if (!regions_.empty()) {
+                presentPlayers(frame.now);
+            }
             // The seconds since the frame before, on the Host's timeline
             // (D293): nought for the first.
             camera_.elapsed =
@@ -378,6 +407,9 @@ public:
                 askPicture(kDecal.normal);
             }
             queued_ = &kFrame;
+            if (!regionFrames_.empty() && regionFrames_[0].width != 0) {
+                regionFrames_[0].frame = &kFrame;
+            }
             ++frames_;
             drawn_ += kFrame.drawn;
             culled_ += kFrame.culled;
@@ -430,7 +462,9 @@ public:
             diagnostics::field("shadowSquares", shadowSquares_),
             diagnostics::field("shadowsEvicted", shadowsEvicted_),
             diagnostics::field("decalsDrawn", decalsDrawn_),
-            diagnostics::field("decalsCulled", decalsCulled_)};
+            diagnostics::field("decalsCulled", decalsCulled_),
+            diagnostics::field("players", static_cast<std::uint64_t>(localPlayers_.size() + 1)),
+            diagnostics::field("playerFrames", playerFrames_)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
         if (!textureViews_.empty()) {
             emitter_.log(diagnostics::Severity::Info,
@@ -460,6 +494,10 @@ public:
 
     std::span<const TextureFrame> textureFrames() const noexcept override {
         return textureFrames_;
+    }
+
+    std::span<const RegionFrame> regionFrames() const noexcept override {
+        return regionFrames_;
     }
 
     void missed(std::uint64_t id) noexcept override {
@@ -704,6 +742,67 @@ private:
             ++viewed_;
         }
         extractViews(*kView.world);
+        extractPlayers();
+    }
+
+    /// The other local players' Worlds (D362), each extracted into its own
+    /// scene and its camera read from its player.
+    void extractPlayers() {
+        for (LocalPlayer& each : localPlayers_) {
+            each.extracted = false;
+            const world_replication::ClientView kView = clients_->client(each.client);
+            if (kView.world == nullptr) {
+                continue;
+            }
+            if (each.scene == nullptr) {
+                auto made = Scene::create(kView.world->registry(), settings_);
+                if (!made.has_value()) {
+                    continue;
+                }
+                each.scene = std::move(*made);
+            }
+            each.scene->extract(*kView.world);
+            if (!kView.owned.isNull() && kView.world->alive(kView.owned)) {
+                static_cast<void>(readCamera(*kView.world, kView.owned, each.camera));
+            }
+            each.extracted = true;
+        }
+    }
+
+    /// Each local player's region placed in the window as it is now, the
+    /// first's camera given its aspect, the others' frames queued (D362).
+    void presentPlayers(execution::MonotonicInstant now) {
+        for (std::size_t at = 0; at < regions_.size(); ++at) {
+            const world_kest::GameRegion& kRegion = regions_[at];
+            regionFrames_[at] = regionIn(kRegion.x, kRegion.y, kRegion.width, kRegion.height, width_, height_);
+        }
+        if (regionFrames_[0].width != 0 && regionFrames_[0].height != 0) {
+            camera_.aspect = static_cast<float>(regionFrames_[0].width) / static_cast<float>(regionFrames_[0].height);
+        }
+        for (std::size_t at = 0; at < localPlayers_.size(); ++at) {
+            LocalPlayer& each = localPlayers_[at];
+            RegionFrame& region = regionFrames_[at + 1];
+            if (!each.extracted || region.width == 0 || region.height == 0) {
+                each.presented.reset();
+                continue;
+            }
+            each.camera.aspect = static_cast<float>(region.width) / static_cast<float>(region.height);
+            each.camera.elapsed =
+                each.presented.has_value() ? static_cast<float>((now - *each.presented).nanoseconds) / 1e9F : 0.0F;
+            each.presented = now;
+            const SceneFrame& kFrame = each.scene->queue(each.camera);
+            askPicture(kFrame.lights.environment);
+            askPicture(kFrame.grading.table);
+            for (const SceneProbe& kProbe : kFrame.probes) {
+                askPicture(kProbe.environment);
+            }
+            for (const SceneDecal& kDecal : kFrame.decals) {
+                askPicture(kDecal.texture);
+                askPicture(kDecal.normal);
+            }
+            region.frame = &kFrame;
+            ++playerFrames_;
+        }
     }
 
     /// The camera on `entity` and its effects read into `camera`, the eye
@@ -893,6 +992,20 @@ private:
     ShadowSettings shadows_;
     SceneCamera camera_;
     std::vector<schema::ComponentTypeId> cameraComponents_;
+    /// Split-screen (D362): the layout's regions, the local players after
+    /// the first (whose are `scene_` and `camera_`), each region's frame,
+    /// and the frames queued for the others.
+    struct LocalPlayer {
+        std::size_t client = 0;
+        std::unique_ptr<Scene> scene;
+        SceneCamera camera;
+        std::optional<execution::MonotonicInstant> presented;
+        bool extracted = false;
+    };
+    std::vector<world_kest::GameRegion> regions_;
+    std::vector<LocalPlayer> localPlayers_;
+    std::vector<RegionFrame> regionFrames_;
+    std::uint64_t playerFrames_ = 0;
     /// The views into render textures (D361): the game's view component,
     /// its query, each render texture's view and scene, the frames they
     /// queued, and the views drawn, kept (on demand, nothing asked), missed
@@ -1012,6 +1125,18 @@ result::Result<composition::ParticipantOwner> make(composition::ParticipantConte
 }
 
 } // namespace
+
+RegionFrame
+regionIn(float x, float y, float regionWidth, float regionHeight, std::uint32_t width, std::uint32_t height) noexcept {
+    const auto kEdge = [](float at, std::uint32_t side) {
+        return static_cast<std::uint32_t>(std::lround(std::clamp(at, 0.0F, 1.0F) * static_cast<float>(side)));
+    };
+    const std::uint32_t kLeft = kEdge(x, width);
+    const std::uint32_t kTop = kEdge(y, height);
+    const std::uint32_t kRight = std::max(kLeft, kEdge(x + regionWidth, width));
+    const std::uint32_t kBottom = std::max(kTop, kEdge(y + regionHeight, height));
+    return RegionFrame{.x = kLeft, .y = kTop, .width = kRight - kLeft, .height = kBottom - kTop};
+}
 
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
     registrar.submit(composition::ParticipantDeclaration{
