@@ -5,7 +5,7 @@
 # this.
 rawframe_module(NAME world_ui
     SOURCES src/world_ui.cpp src/participant.cpp
-    DEPS ui view world_replication world_kest kest world composition schema execution diagnostics result base
+    DEPS ui view game_textures game_content content texture graph world_replication world_kest kest world composition schema execution diagnostics result base
 )
 
 rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp)

@@ -58,7 +58,15 @@ std::optional<ui::Layout> layoutOf(const Node& node) noexcept {
 }
 
 ui::Look lookOf(const Node& node) noexcept {
-    return ui::Look{.fill = node.fill, .borderColor = node.borderColor, .radius = node.radius, .clip = node.clip != 0};
+    const float kSlice = node.imageSlice;
+    return ui::Look{.fill = node.fill,
+                    .borderColor = node.borderColor,
+                    .radius = node.radius,
+                    .clip = node.clip != 0,
+                    .image = node.image,
+                    .imageSlice = {kSlice, kSlice, kSlice, kSlice},
+                    // Nought draws it as it is.
+                    .imageTint = node.imageTint != 0 ? node.imageTint : 0xFFFFFFFF};
 }
 
 std::uint64_t keyOf(ui::Node node) noexcept {

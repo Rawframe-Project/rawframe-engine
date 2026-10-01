@@ -24,8 +24,12 @@ module rawframe.ui
 //
 // It shows a rounded box: `fill` and `borderColor`, 0xRRGGBBAA, sRGB (an
 // alpha of nought draws nothing), corners of `radius` pixels, and with
-// `clip` its children are cut to it. A zeroed node, as presentation attaches
-// it, is empty and draws nothing.
+// `clip` its children are cut to it. Over its fill it may show an `image`
+// (D378), a texture by the identity the game's `texture` line gives it,
+// stretched over the box, or in nine slices whose corners keep
+// `imageSlice` of the texture's pixels each way at a pixel each, tinted by
+// `imageTint` (nought draws it as it is). A zeroed node, as presentation
+// attaches it, is empty and draws nothing.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -53,6 +57,9 @@ struct Node {
     radius: f32
     clip: u32
     order: i32
+    image: u64
+    imageTint: u32
+    imageSlice: f32
 }
 
 // A node's `direction`.

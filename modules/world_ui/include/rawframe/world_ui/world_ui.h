@@ -49,6 +49,9 @@ struct Node {
     float radius = 0;
     std::uint32_t clip = 0;
     std::int32_t order = 0;
+    std::uint64_t image = 0;
+    std::uint32_t imageTint = 0;
+    float imageSlice = 0;
 };
 
 /// The game's node components, in declaration order, and the one each is

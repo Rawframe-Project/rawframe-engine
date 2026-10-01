@@ -1,4 +1,7 @@
 #include "rawframe/composition/composition.h"
+#include "rawframe/game_content/game_content.h"
+#include "rawframe/game_textures/asked.h"
+#include "rawframe/graph/graph.h"
 #include "rawframe/view/players.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/layouts.h"
@@ -21,9 +24,15 @@ namespace {
 
 constexpr diagnostics::EventIdentity kUiSummary{"ui", "ui_summary"};
 constexpr diagnostics::EventIdentity kFailed{"ui", "ui_failed"};
+constexpr diagnostics::EventIdentity kImageUnknown{"ui", "image_unknown"};
+constexpr diagnostics::EventIdentity kImageUnread{"ui", "image_unavailable"};
+/// The decoded levels each image may hold.
+constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 constexpr std::string_view kProvided[] = {kUiFrames.name};
-constexpr std::string_view kMaybe[] = {
-    world_replication::kClientWorlds.name, world_kest::kGameFiles.name, view::kPlayerViews.name};
+constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
+                                       world_kest::kGameFiles.name,
+                                       view::kPlayerViews.name,
+                                       game_content::kGameContent.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 std::unexpected<result::Error> refuse(std::string_view why) {
@@ -75,7 +84,10 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
                                 {"borderColor", offsetof(Node, borderColor)},
                                 {"radius", offsetof(Node, radius)},
                                 {"clip", offsetof(Node, clip)},
-                                {"order", offsetof(Node, order)}})) {
+                                {"order", offsetof(Node, order)},
+                                {"image", offsetof(Node, image)},
+                                {"imageTint", offsetof(Node, imageTint)},
+                                {"imageSlice", offsetof(Node, imageSlice)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -101,6 +113,13 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(const world_kest::GameFiles* files, context.capability(world_kest::kGameFiles));
         if (!files->named()) {
+            return {};
+        }
+        // A game without node components has no UI: its program is not
+        // compiled again for one.
+        if (std::ranges::none_of(files->description().components, [](const world_kest::GameComponent& component) {
+                return world_kest::ofEngineType(component, "rawframe.ui.Node");
+            })) {
             return {};
         }
         std::string report;
@@ -131,6 +150,21 @@ public:
             regions_.assign(1, world_kest::GameRegion{});
         }
         aspect_ = files->description().aspect;
+        // The images the UI names, each read from the game's cooked content
+        // on its first naming (D378); without content, none is ever ready.
+        std::optional<game_textures::TextureReading> reading;
+        if (context.has(game_content::kGameContent.name) && context.cpuExecutor() != nullptr) {
+            RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
+            if (content->held()) {
+                RAWFRAME_TRY(content->admit(game_textures::textureRepresentations()));
+                reading = game_textures::TextureReading{.store = &content->store(),
+                                                        .cpu = context.cpuExecutor(),
+                                                        .owner = context.owner(),
+                                                        .scope = &context.scope(),
+                                                        .clock = &context.clock()};
+            }
+        }
+        images_ = game_textures::AskedTextures{reading, files->textures(), kImageBudgetBytes};
         return {};
     }
 
@@ -177,6 +211,26 @@ public:
         }
         drawn_ = &ui_->drawn();
         boxes_ += drawn_->boxes.size();
+        imagesDrawn_ += drawn_->images.size();
+        ++tick_;
+        for (const ui::Image& kImage : drawn_->images) {
+            if (const std::optional<result::Error> kNone = images_.ask(kImage.image)) {
+                const bool kUnknown = kNone->errorClass() == result::ErrorClass::NotFound;
+                emitter_.log(diagnostics::Severity::Warning,
+                             kUnknown ? kImageUnknown : kImageUnread,
+                             kUnknown ? "the UI names an image the game does not declare: it draws nothing"
+                                      : "an image the UI names could not be asked for: it draws nothing",
+                             {diagnostics::field("texture", graph::nodeIdText(kImage.image)),
+                              diagnostics::field("reason", std::string{kNone->description()})});
+            }
+        }
+        for (const auto& [kId, kError] : images_.update(tick_)) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kImageUnread,
+                         "an image the UI names could not be read: it draws nothing",
+                         {diagnostics::field("texture", graph::nodeIdText(kId)),
+                          diagnostics::field("reason", std::string{kError.description()})});
+        }
     }
 
     void stop() noexcept override {
@@ -192,7 +246,10 @@ public:
                       diagnostics::field("changed", kStatistics.changed),
                       diagnostics::field("leftOut", kStatistics.leftOut),
                       diagnostics::field("mostNodes", kStatistics.mostNodes),
-                      diagnostics::field("boxes", boxes_)});
+                      diagnostics::field("boxes", boxes_),
+                      diagnostics::field("images", imagesDrawn_),
+                      diagnostics::field("imagesRead", images_.read()),
+                      diagnostics::field("imagesReady", images_.ready())});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -213,6 +270,10 @@ public:
         }
     }
 
+    std::shared_ptr<const texture::Texture> image(std::uint64_t id) const override {
+        return images_.texture(id, tick_);
+    }
+
 private:
     world_replication::ClientWorlds* clients_ = nullptr;
     view::PlayerViews* views_ = nullptr;
@@ -224,6 +285,9 @@ private:
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
     std::uint64_t boxes_ = 0;
+    std::uint64_t imagesDrawn_ = 0;
+    game_textures::AskedTextures images_{std::nullopt, {}, 0};
+    std::uint64_t tick_ = 0;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
 };
@@ -244,6 +308,9 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
+        // Images are decoded on the CPU executor; stopping only says what
+        // was drawn.
+        .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
         .observabilityIdentity = "world_ui.ui",
         .budgetOwner = "ui",
