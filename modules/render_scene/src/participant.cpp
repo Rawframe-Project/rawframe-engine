@@ -113,18 +113,21 @@ public:
         }
         // Its filter, a class of ADR-0051's ladder (D330).
         const std::string_view kFilter = configuration.text("scene.shadow_filter").value_or("soft");
-        if (kFilter != "hardware" && kFilter != "soft") {
-            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
-                                                               composition::kCompositionDomain,
-                                                               code(composition::CompositionError::BadConfiguration),
-                                                               "scene.shadow_filter is hardware or soft")
-                                                      .error()};
+        if (kFilter != "hardware" && kFilter != "soft" && kFilter != "contact_hardening") {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             composition::kCompositionDomain,
+                             code(composition::CompositionError::BadConfiguration),
+                             "scene.shadow_filter is hardware, soft, or contact_hardening")
+                    .error()};
         }
         shadows_ = ShadowSettings{.cascades = static_cast<std::uint32_t>(kCascades),
                                   .distance = static_cast<float>(kDistance),
                                   .logarithmicBlend = kShadowDefaults.logarithmicBlend,
                                   .side = static_cast<std::uint32_t>(kSide),
-                                  .filter = kFilter == "soft" ? ShadowFilter::Soft : ShadowFilter::Hardware};
+                                  .filter = kFilter == "contact_hardening" ? ShadowFilter::ContactHardening
+                                            : kFilter == "soft"            ? ShadowFilter::Soft
+                                                                           : ShadowFilter::Hardware};
         // The punctual lights' shadow atlas (D292): its side, a power of two,
         // or nought for none; its squares from a quarter of it, at most 512
         // texels, down to a quarter of that.

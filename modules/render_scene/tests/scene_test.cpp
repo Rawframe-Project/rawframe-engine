@@ -264,6 +264,8 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
     RAWFRAME_EXPECT(near(kDefault.lights.sun[0], 100000, 1) &&
                     near(kDefault.lights.sky[2], 5000 * std::pow((0xEB / 255.0F + 0.055F) / 1.055F, 2.4F), 0.5F) &&
                     kDefault.lights.sky[0] < kDefault.lights.sky[2] && kDefault.lights.toSun[1] > 0.8F);
+    // The default sun is the Sun's size, half a degree (D347).
+    RAWFRAME_EXPECT(near(kDefault.lights.sunWidth, 0.0093F, 0.0001F));
     // The default ground gives back a fifth of the sun's light at its
     // height and the sky's (D304).
     const float kFifth = std::pow((0x7C / 255.0F + 0.055F) / 1.055F, 2.4F);
@@ -272,7 +274,8 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
              kFifth * ((100000 * kDefault.lights.toSun[1] / std::numbers::pi_v<float>)+kDefault.lights.sky[0]),
              1));
     const world::EntityHandle kLight = *rig.world.create();
-    Sun sun{.directionX = 0, .directionY = -2, .directionZ = 0, .illuminance = 1000, .color = 0x808080FF};
+    Sun sun{
+        .directionX = 0, .directionY = -2, .directionZ = 0, .illuminance = 1000, .color = 0x808080FF, .angle = 0.2F};
     Sky sky{.luminance = 10, .color = 0x0000FFFF};
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSunId), &sun).has_value());
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSkyId), &sky).has_value());
@@ -280,6 +283,8 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
     // sRGB 0x80 is about 0.216 linear.
     RAWFRAME_EXPECT(near(kLit.lights.toSun[1], 1) && near(kLit.lights.sun[0], 215.86F, 0.1F) &&
                     near(kLit.lights.sky[0], 0) && near(kLit.lights.sky[2], 10));
+    // Its width is twice the tangent of half its angle.
+    RAWFRAME_EXPECT(near(kLit.lights.sunWidth, 2 * std::tan(0.1F), 0.0001F));
     // A ground giving back nothing is black below the horizon (D304).
     RAWFRAME_EXPECT(kLit.lights.ground == (std::array<float, 3>{0, 0, 0}));
     sky.ground = 0xFFFFFFFF;
@@ -295,6 +300,13 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
     Sun broken{.illuminance = std::numeric_limits<float>::infinity()};
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSunId), &broken).has_value());
     RAWFRAME_EXPECT(rig.frame({}).lights.sun[0] == 0);
+    // A sun's angle is held to twenty degrees, and one not finite is a point.
+    broken = Sun{.illuminance = 1, .angle = 3};
+    RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSunId), &broken).has_value());
+    RAWFRAME_EXPECT(near(rig.frame({}).lights.sunWidth, 2 * std::tan(0.175F), 0.0001F));
+    broken.angle = std::numeric_limits<float>::quiet_NaN();
+    RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSunId), &broken).has_value());
+    RAWFRAME_EXPECT(rig.frame({}).lights.sunWidth == 0);
 }
 
 RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {

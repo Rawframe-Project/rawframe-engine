@@ -322,6 +322,52 @@ Taps tapsAbout(vec2 texel, vec2 size)
     return made;
 }
 
+// A place on the golden angle's spiral of sixteen within the unit disc,
+// the spiral turned by `turn` radians.
+vec2 spiral(int tap, float turn)
+{
+    const float kAngle = float(tap) * 2.3999632 + turn;
+    return sqrt((float(tap) + 0.5) / 16.0) * vec2(cos(kAngle), sin(kAngle));
+}
+
+// ADR-0051's top shadow filter (D347), contact hardening (PCSS): the sun's
+// shadow at `inMap`, `depth` in cascade `at`, as sharp where it meets its
+// caster as the map lets it be, and wider with the distance from it, as
+// the sun's disc makes it. Sixteen of the map's depths within eight texels
+// find the casters above the point; their mean height above it in meters
+// (the cascade's depth is linear in them) times the sun's width is the
+// penumbra, from a texel to the search's eight; then sixteen of the
+// hardware's blends of four across it. Both spirals are turned by the
+// pixel, the noise the temporal pass smooths.
+float hardened(vec2 inMap, float depth, int at)
+{
+    const vec2 kSize = vec2(textureSize(sampler2DShadow(shadowMap, shadowSampler), 0));
+    const mat4 kCascade = frame.cascades[at];
+    const float kPerMeter = length(vec3(kCascade[0][2], kCascade[1][2], kCascade[2][2]));
+    const float kTurn = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    float above = 0.0;
+    float casters = 0.0;
+    for (int tap = 0; tap < 16; ++tap) {
+        const vec2 kAt = inMap + spiral(tap, kTurn) * (8.0 / kSize);
+        const float kNearer = texelFetch(sampler2D(shadowMap, environmentSampler), ivec2(kAt * kSize), 0).r;
+        if (kNearer > depth) {
+            above += kNearer - depth;
+            casters += 1.0;
+        }
+    }
+    if (casters == 0.0) {
+        return 1.0;
+    }
+    const float kPenumbra = clamp(above / (casters * kPerMeter) * frame.sun.w / frame.cascadeTexel[at], 1.0, 8.0);
+    float lit = 0.0;
+    for (int tap = 0; tap < 16; ++tap) {
+        lit += textureLod(sampler2DShadow(shadowMap, shadowSampler),
+                          vec3(inMap + spiral(tap, kTurn) * (kPenumbra / kSize), depth),
+                          0.0);
+    }
+    return lit / 16.0;
+}
+
 float sunlit(vec3 placed, vec3 normal)
 {
     const int kCount = int(frame.shadow.x);
@@ -335,14 +381,17 @@ float sunlit(vec3 placed, vec3 normal)
     }
     const vec4 kClip = frame.cascades[at] * vec4(placed + normal * (frame.cascadeTexel[at] * 1.5), 1.0);
     // Within the cascade's square, kept from its edges so the texels
-    // blended are its own (half a texel, or three filtered soft); the
-    // squares tile the map two by two.
+    // blended are its own (half a texel, three filtered soft, nine
+    // hardening at contact); the squares tile the map two by two.
     const bool kSoft = frame.shadow.w > 0.5;
-    const float kHalfTexel = (kSoft ? 3.0 : 0.5) / frame.shadow.z;
+    const bool kHardening = frame.shadow.w > 1.5;
+    const float kHalfTexel = (kHardening ? 9.0 : kSoft ? 3.0 : 0.5) / frame.shadow.z;
     const vec2 kInSquare = clamp(vec2(kClip.x * 0.5 + 0.5, 0.5 - kClip.y * 0.5), vec2(kHalfTexel), vec2(1.0 - kHalfTexel));
     const vec2 kInMap = (kInSquare + vec2(float(at % 2), float(at / 2))) * 0.5;
     float lit = 0.0;
-    if (kSoft) {
+    if (kHardening) {
+        lit = hardened(kInMap, kClip.z, at);
+    } else if (kSoft) {
         const vec2 kSize = vec2(textureSize(sampler2DShadow(shadowMap, shadowSampler), 0));
         const Taps kTaps = tapsAbout(kInMap * kSize, kSize);
         for (int tap = 0; tap < 9; ++tap) {

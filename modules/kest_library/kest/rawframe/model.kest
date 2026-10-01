@@ -183,14 +183,19 @@ struct AutoExposure {
 // The sun (ADR-0051's directional light), on any entity: light arriving
 // along the direction (`directionX`, `directionY`, `directionZ`), the way
 // it travels, `illuminance` lux on a surface facing it (about 100,000 at
-// noon), in `color` (0xRRGGBBAA, sRGB; alpha unused). A game declares at
-// most one sun; without one, a sun at noon lights the World.
+// noon), in `color` (0xRRGGBBAA, sRGB; alpha unused). `angle` is the
+// angle its disc spans, in radians (the Sun's is 0.0093, half a degree; at
+// most 0.35), which widens its shadows away from their casters where the
+// view's shadows harden at contact (D347); nought is a point. A game
+// declares at most one sun; without one, a sun at noon, the Sun's size,
+// lights the World.
 struct Sun {
     directionX: f32
     directionY: f32
     directionZ: f32
     illuminance: f32
     color: u32
+    angle: f32
 }
 
 // The sky's light, arriving from above the horizon (ADR-0051's ambient

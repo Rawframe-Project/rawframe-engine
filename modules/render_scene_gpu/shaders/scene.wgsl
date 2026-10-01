@@ -218,7 +218,38 @@ fn tapsAbout(texel: vec2f, size: vec2f) -> Taps {
     return made;
 }
 
-fn sunlit(placed: vec3f, normal: vec3f) -> f32 {
+fn spiral(tap: i32, turn: f32) -> vec2f {
+    let angle = f32(tap) * 2.3999632 + turn;
+    return sqrt((f32(tap) + 0.5) / 16.0) * vec2f(cos(angle), sin(angle));
+}
+
+fn hardened(inMap: vec2f, depth: f32, at: i32, pixel: vec2f) -> f32 {
+    let size = vec2f(textureDimensions(shadowMap));
+    let cascade = frame.cascades[at];
+    let perMeter = length(vec3f(cascade[0][2], cascade[1][2], cascade[2][2]));
+    let turn = 6.2831853 * fract(52.9829189 * fract(dot(pixel, vec2f(0.06711056, 0.00583715))));
+    var above = 0.0;
+    var casters = 0.0;
+    for (var tap = 0; tap < 16; tap++) {
+        let place = inMap + spiral(tap, turn) * (8.0 / size);
+        let nearer = textureLoad(shadowMap, vec2i(place * size), 0);
+        if (nearer > depth) {
+            above += nearer - depth;
+            casters += 1.0;
+        }
+    }
+    if (casters == 0.0) {
+        return 1.0;
+    }
+    let penumbra = clamp(above / (casters * perMeter) * frame.sun.w / frame.cascadeTexel[at], 1.0, 8.0);
+    var lit = 0.0;
+    for (var tap = 0; tap < 16; tap++) {
+        lit += textureSampleCompareLevel(shadowMap, shadowSampler, inMap + spiral(tap, turn) * (penumbra / size), depth);
+    }
+    return lit / 16.0;
+}
+
+fn sunlit(placed: vec3f, normal: vec3f, pixel: vec2f) -> f32 {
     let count = i32(frame.shadow.x);
     let ahead = dot(placed, frame.forward.xyz);
     if (count == 0 || ahead > frame.shadow.y) {
@@ -230,11 +261,14 @@ fn sunlit(placed: vec3f, normal: vec3f) -> f32 {
     }
     let clip = frame.cascades[at] * vec4f(placed + normal * (frame.cascadeTexel[at] * 1.5), 1.0);
     let soft = frame.shadow.w > 0.5;
-    let halfTexel = select(0.5, 3.0, soft) / frame.shadow.z;
+    let hardening = frame.shadow.w > 1.5;
+    let halfTexel = select(select(0.5, 3.0, soft), 9.0, hardening) / frame.shadow.z;
     let inSquare = clamp(vec2f(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5), vec2f(halfTexel), vec2f(1.0 - halfTexel));
     let inMap = (inSquare + vec2f(f32(at % 2), f32(at / 2))) * 0.5;
     var lit = 0.0;
-    if (soft) {
+    if (hardening) {
+        lit = hardened(inMap, clip.z, at, pixel);
+    } else if (soft) {
         let size = vec2f(textureDimensions(shadowMap));
         let taps = tapsAbout(inMap * size, size);
         for (var tap = 0; tap < 9; tap++) {
@@ -436,7 +470,7 @@ fn shaded(position: vec4f, normal: vec3f, color: vec4f, placed: vec3f, now: vec3
     if (frame.contact.x > 0.5 && opacity >= 0.999) {
         contacted = textureLoad(contactTexture, vec2i(position.xy), 0).r;
     }
-    let direct = frame.sun.rgb * sunlit(placed, n) * contacted * reflected(surface, n, toEye, frame.toSun.xyz) +
+    let direct = frame.sun.rgb * sunlit(placed, n, position.xy) * contacted * reflected(surface, n, toEye, frame.toSun.xyz) +
                  punctual(range, placed, n, surface, toEye);
     let nv = max(dot(n, toEye), 0.0);
     let sheen = surface.headOn + (max(vec3f(1.0 - surface.roughness), surface.headOn) - surface.headOn) *

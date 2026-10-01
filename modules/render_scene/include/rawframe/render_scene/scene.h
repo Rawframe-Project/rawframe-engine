@@ -133,6 +133,8 @@ struct Sun {
     float directionZ = 0;
     float illuminance = 0;
     std::uint32_t color = 0xFFFFFFFF;
+    /// The angle its disc spans, in radians (D347).
+    float angle = 0;
 };
 
 /// `rawframe.model.Sky` as C++ reads it.
@@ -328,6 +330,10 @@ struct SceneLights {
     std::array<float, 3> toSun{0, 1, 0};
     std::array<float, 3> sun{0, 0, 0};
     std::array<float, 3> sky{0, 0, 0};
+    /// The sun's width (D347): twice the tangent of half the angle its disc
+    /// spans, how far its penumbra spreads for each meter between a caster
+    /// and what it shades.
+    float sunWidth = 0;
     /// The ground's luminance below the horizon (D304): its albedo times
     /// the sun's illuminance on it and the sky's, over π.
     std::array<float, 3> ground{0, 0, 0};
@@ -481,13 +487,17 @@ struct ShadowCascade {
 };
 
 /// ADR-0051's typed ladder of shadow filters (D330): the hardware's two by
-/// two blend of four compared texels, its base; and a five by five
+/// two blend of four compared texels, its base; a five by five
 /// tent-weighted blend from nine of those (Castaño's optimized PCF), the
-/// middle class. Contact-hardening (PCSS) joins as the top class when it
-/// is built.
+/// middle class; and contact hardening (PCSS), the top class (D347): the
+/// sun's shadows sharp where they meet their casters and wider with the
+/// distance from them, as wide as the sun's disc makes them. A point or
+/// spot light has no size, so its shadows are filtered by the middle class
+/// in the top class.
 enum class ShadowFilter : std::uint8_t {
     Hardware,
-    Soft
+    Soft,
+    ContactHardening
 };
 
 /// The sun's shadows as the view stage derives them (ADR-0051's cascaded

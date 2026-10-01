@@ -37,6 +37,10 @@ constexpr std::uint32_t kClearSky = 0x8FB8EBFF;
 /// The default ground's albedo, sRGB: a fifth, near the Earth's land's
 /// (D304).
 constexpr std::uint32_t kGround = 0x7C7C7CFF;
+/// The angle the Sun's disc spans seen from the Earth, in radians, the
+/// default sun's (D347); and the most a sun's may, twenty degrees.
+constexpr float kSunAngle = 0.0093F;
+constexpr float kMostSunAngle = 0.35F;
 
 /// A mesh with the sphere around it, in its own space.
 /// A run of a mesh's parts that draw with one material: its indices and
@@ -212,8 +216,12 @@ struct Scene::State {
     bool meteredBefore = false;
 
     void lights() {
-        const Sun kSun = sunNow.value_or(Sun{
-            .directionX = -0.3F, .directionY = -1.0F, .directionZ = -0.4F, .illuminance = 100000, .color = 0xFFFFFFFF});
+        const Sun kSun = sunNow.value_or(Sun{.directionX = -0.3F,
+                                             .directionY = -1.0F,
+                                             .directionZ = -0.4F,
+                                             .illuminance = 100000,
+                                             .color = 0xFFFFFFFF,
+                                             .angle = kSunAngle});
         // A clear day's sky: its light, and its blue.
         const Sky kSky = skyNow.value_or(Sky{.luminance = 5000, .color = kClearSky, .ground = kGround});
         const Vector kToSun = normalized({-kSun.directionX, -kSun.directionY, -kSun.directionZ});
@@ -221,11 +229,13 @@ struct Scene::State {
         const Vector kSkyColor = colorOf(kSky.color);
         const float kIlluminance = std::isfinite(kSun.illuminance) ? std::max(kSun.illuminance, 0.0F) : 0.0F;
         const float kLuminance = std::isfinite(kSky.luminance) ? std::max(kSky.luminance, 0.0F) : 0.0F;
-        frame.lights =
-            SceneLights{.toSun = kToSun,
-                        .sun = {kSunColor[0] * kIlluminance, kSunColor[1] * kIlluminance, kSunColor[2] * kIlluminance},
-                        .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance},
-                        .environment = kSky.environment};
+        frame.lights = SceneLights{
+            .toSun = kToSun,
+            .sun = {kSunColor[0] * kIlluminance, kSunColor[1] * kIlluminance, kSunColor[2] * kIlluminance},
+            .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance},
+            .sunWidth =
+                2 * std::tan(std::clamp(std::isfinite(kSun.angle) ? kSun.angle : 0.0F, 0.0F, kMostSunAngle) / 2),
+            .environment = kSky.environment};
         // The ground, level and unshadowed: what reaches it, the sun's at
         // its height and the whole upper sky's (π times its luminance),
         // given back evenly by its albedo.
@@ -1026,7 +1036,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"directionY", offsetof(Sun, directionY)},
                            {"directionZ", offsetof(Sun, directionZ)},
                            {"illuminance", offsetof(Sun, illuminance)},
-                           {"color", offsetof(Sun, color)}}));
+                           {"color", offsetof(Sun, color)},
+                           {"angle", offsetof(Sun, angle)}}));
     RAWFRAME_TRY(kLaidOut(loaded.sky.has_value(),
                           "rawframe.model.Sky",
                           sizeof(Sky),

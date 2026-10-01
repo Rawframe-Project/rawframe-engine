@@ -82,7 +82,7 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     block.previous = frame.temporal.enabled ? frame.temporal.previousViewProjection : block.unjittered;
     const render_scene::SceneLights& kLights = frame.lights;
     block.toSun = {kLights.toSun[0], kLights.toSun[1], kLights.toSun[2], 0};
-    block.sun = {kLights.sun[0], kLights.sun[1], kLights.sun[2], 0};
+    block.sun = {kLights.sun[0], kLights.sun[1], kLights.sun[2], kLights.sunWidth};
     block.sky = {kLights.sky[0], kLights.sky[1], kLights.sky[2], 0};
     block.ground = {kLights.ground[0], kLights.ground[1], kLights.ground[2], 0};
     block.exposure = {factorOf(frame.exposure), 0, 0, 0};
@@ -97,7 +97,7 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     block.shadow = {static_cast<float>(kShadows.count),
                     kShadows.distance,
                     static_cast<float>(std::max<std::uint32_t>(kShadows.side, 1)),
-                    kShadows.filter == render_scene::ShadowFilter::Soft ? 1.0F : 0.0F};
+                    static_cast<float>(kShadows.filter)};
     const render_scene::SceneClusters& kClusters = frame.clusters;
     const bool kClustered =
         (!frame.lights3d.empty() || !frame.decals.empty() || !frame.probes.empty()) && kClusters.near > 0 &&

@@ -21,12 +21,13 @@ constexpr std::uint32_t kVertexBytes = 48;
 struct FrameBlock {
     std::array<float, 16> viewProjection{};
     std::array<float, 4> toSun{};
+    /// The sun's light, and its width (D347).
     std::array<float, 4> sun{};
     std::array<float, 4> sky{};
     std::array<float, 4> exposure{};
     /// The eye's forward; each cascade's far end and texel; the cascades,
-    /// the shadows' distance, a cascade's side (D289), and one where the
-    /// shadows are filtered soft (D330).
+    /// the shadows' distance, a cascade's side (D289), and their filter's
+    /// class (D330, D347).
     std::array<float, 4> forward{};
     std::array<float, 4> cascadeFar{};
     std::array<float, 4> cascadeTexel{};
