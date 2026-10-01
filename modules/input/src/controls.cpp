@@ -152,6 +152,14 @@ constexpr std::array<std::string_view, 19> kGamepad = {
     "stick_right_click", "start",         "select",     "guide",
 };
 
+constexpr std::array<std::string_view, 5> kTouch = {
+    "left",
+    "right",
+    "stick_left",
+    "stick_right",
+    "pointer",
+};
+
 std::span<const std::string_view> tableOf(DeviceClass device) noexcept {
     switch (device) {
     case DeviceClass::Keyboard:
@@ -160,6 +168,8 @@ std::span<const std::string_view> tableOf(DeviceClass device) noexcept {
         return kMouse;
     case DeviceClass::Gamepad:
         return kGamepad;
+    case DeviceClass::Touch:
+        return kTouch;
     }
     return {};
 }
@@ -195,8 +205,7 @@ ControlShape shapeOf(Control control) noexcept {
     if (kName == "wheel_x" || kName == "wheel_y" || kName == "trigger_left" || kName == "trigger_right") {
         return ControlShape::Axis1;
     }
-    if (kName == "delta" || kName == "stick_left" || kName == "stick_right" ||
-        (control.device == DeviceClass::Mouse && kName == "pointer")) {
+    if (kName == "delta" || kName == "stick_left" || kName == "stick_right" || kName == "pointer") {
         return ControlShape::Axis2;
     }
     return ControlShape::Digital;
@@ -207,11 +216,13 @@ bool relative(Control control) noexcept {
 }
 
 bool positional(Control control) noexcept {
-    return control.device == DeviceClass::Mouse && nameOf(control) == "pointer";
+    return (control.device == DeviceClass::Mouse || control.device == DeviceClass::Touch) &&
+           nameOf(control) == "pointer";
 }
 
 std::optional<DeviceClass> deviceClassNamed(std::string_view name) noexcept {
-    for (const DeviceClass kDevice : {DeviceClass::Keyboard, DeviceClass::Mouse, DeviceClass::Gamepad}) {
+    for (const DeviceClass kDevice :
+         {DeviceClass::Keyboard, DeviceClass::Mouse, DeviceClass::Gamepad, DeviceClass::Touch}) {
         if (nameOf(kDevice) == name) {
             return kDevice;
         }
@@ -227,6 +238,8 @@ std::string_view nameOf(DeviceClass device) noexcept {
         return "mouse";
     case DeviceClass::Gamepad:
         return "gamepad";
+    case DeviceClass::Touch:
+        return "touch";
     }
     return {};
 }

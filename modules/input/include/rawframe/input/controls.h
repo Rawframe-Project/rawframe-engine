@@ -1,8 +1,9 @@
 #pragma once
 
 // The physical controls bindings name (SPEC-0029's binding grammar): keys by
-// where they are on the keyboard, mouse buttons, wheel, and motion, and the
-// standard gamepad by location. Every control has one name and one shape.
+// where they are on the keyboard, mouse buttons, wheel, and motion, the
+// standard gamepad by location, and a touch screen's virtual controls
+// (D387). Every control has one name and one shape.
 
 #include <compare>
 #include <cstdint>
@@ -11,11 +12,13 @@
 
 namespace rawframe::input {
 
-/// SPEC-0029's closed generation-1 set.
+/// SPEC-0029's closed generation-1 set, and a touch screen (D387), the
+/// class ADR-0037 left open.
 enum class DeviceClass : std::uint8_t {
     Keyboard,
     Mouse,
-    Gamepad
+    Gamepad,
+    Touch
 };
 
 /// What a control reports: on or off, one axis, or two.
@@ -43,7 +46,10 @@ struct Control {
 /// the same place on every layout. Mouse controls: `left`, `right`,
 /// `middle`, `back`, `forward`, `wheel_x`, `wheel_y`, `delta`, and
 /// `pointer` (D367), the cursor's place over the window. Gamepad
-/// controls are SPEC-0029's standard locations.
+/// controls are SPEC-0029's standard locations. Touch controls (D387):
+/// `stick_left` and `stick_right`, a stick under a touch that began in that
+/// half of the window, and `left` and `right`, held while that touch is;
+/// and `pointer`, the newest touch's place.
 [[nodiscard]] std::optional<Control> controlNamed(DeviceClass device, std::string_view name) noexcept;
 [[nodiscard]] std::string_view nameOf(Control control) noexcept;
 /// The key at a USB HID keyboard usage (page 7), the number a window system
@@ -55,8 +61,8 @@ struct Control {
 /// in one tick adds up, and it rests at nought after.
 [[nodiscard]] bool relative(Control control) noexcept;
 /// Whether a control reports a place rather than a deflection: the mouse's
-/// `pointer`, the cursor over the window in logical pixels from its top
-/// left, y down (ADR-0046's screen space, D367). Its value is the place,
+/// and the touch screen's `pointer`, over the window in logical pixels from
+/// its top left, y down (ADR-0046's screen space, D367). Its value is the place,
 /// neither clamped nor dead-zoned, and it stays where it was last told.
 [[nodiscard]] bool positional(Control control) noexcept;
 
