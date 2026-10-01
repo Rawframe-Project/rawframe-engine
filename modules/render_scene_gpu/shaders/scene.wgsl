@@ -83,6 +83,7 @@ struct Decal {
 
 @group(0) @binding(24) var<storage, read> decals: array<Decal>;
 @group(0) @binding(25) var decalAtlas: texture_2d_array<f32>;
+@group(0) @binding(27) var decalNormals: texture_2d_array<f32>;
 
 // The frame's reflection probes (D325, D340); scene.frag's Probe.
 struct Probe {
@@ -286,9 +287,16 @@ fn clusterOf(placed: vec3f) -> vec4u {
     return ranges[(slice * grid.y + y) * grid.x + x];
 }
 
+// The surface a decal lays (D342): its color, normal, and roughness.
+struct Laid {
+    color: vec3f,
+    normal: vec3f,
+    roughness: f32,
+}
+
 // scene.frag's decalled.
-fn decalled(range: vec4u, color: vec3f, placed: vec3f, normal: vec3f, along: vec3f, aside: vec3f) -> vec3f {
-    var under = color;
+fn decalled(range: vec4u, placed: vec3f, facing: vec3f, along: vec3f, aside: vec3f, surface: Laid) -> Laid {
+    var under = surface;
     for (var at = range.x + range.y; at < range.x + range.y + range.z; at += 1u) {
         let decal = decals[indices[at]];
         let box = (decal.toBox * vec4f(placed, 1.0)).xyz;
@@ -298,11 +306,24 @@ fn decalled(range: vec4u, color: vec3f, placed: vec3f, normal: vec3f, along: vec
         let into = mat3x3f(decal.toBox[0].xyz, decal.toBox[1].xyz, decal.toBox[2].xyz);
         let front = normalize(vec3f(decal.toBox[0].z, decal.toBox[1].z, decal.toBox[2].z));
         let spot = vec2f(box.x * 0.5 + 0.5, 0.5 - box.y * 0.5);
-        let texel = textureSampleGrad(decalAtlas, environmentSampler, spot, i32(decal.layer.x),
-                                      (into * along).xy * vec2f(0.5, -0.5), (into * aside).xy * vec2f(0.5, -0.5));
-        let covers = texel.a * decal.color.a * smoothstep(0.0, 0.3, dot(normal, front)) *
+        let stepX = (into * along).xy * vec2f(0.5, -0.5);
+        let stepY = (into * aside).xy * vec2f(0.5, -0.5);
+        let texel = textureSampleGrad(decalAtlas, environmentSampler, spot, i32(decal.layer.x), stepX, stepY);
+        let covers = texel.a * decal.color.a * smoothstep(0.0, 0.3, dot(facing, front)) *
                      (1.0 - smoothstep(0.8, 1.0, abs(box.z)));
-        under = mix(under, texel.rgb * decal.color.rgb, covers);
+        under.color = mix(under.color, texel.rgb * decal.color.rgb, covers);
+        if (decal.layer.y >= 0.0 && covers > 0.0) {
+            let bent = textureSampleGrad(decalNormals, environmentSampler, spot, i32(decal.layer.y), stepX,
+                                         stepY).xyz * 2.0 - 1.0;
+            let right = vec3f(decal.toBox[0].x, decal.toBox[1].x, decal.toBox[2].x);
+            let across = normalize(right - under.normal * dot(under.normal, right));
+            let up = cross(under.normal, across);
+            under.normal = normalize(mix(under.normal,
+                                         normalize(across * bent.x + up * bent.y + under.normal * bent.z), covers));
+        }
+        if (decal.layer.z > 0.0) {
+            under.roughness = mix(under.roughness, decal.layer.z, covers);
+        }
     }
     return under;
 }
@@ -391,12 +412,16 @@ fn shaded(position: vec4f, normal: vec3f, color: vec4f, placed: vec3f, now: vec3
         n = normalize(across * bent.x + up * bent.y + n * bent.z);
     }
     var tinted = color.rgb * base.rgb * select(vec3f(1.0), sampled.rgb, (flags & 2u) != 0u);
+    var roughness = specular.w * channelOf(packed, channels.y);
     if (decaled && frame.decals.x > 0.5) {
-        tinted = decalled(range, tinted, placed, normalize(normal), dpdx(placed), dpdy(placed));
+        let laid = decalled(range, placed, normalize(normal), dpdx(placed), dpdy(placed),
+                            Laid(tinted, n, roughness));
+        tinted = laid.color;
+        n = laid.normal;
+        roughness = laid.roughness;
     }
     let opacity = rest.x * color.a * select(1.0, sampled.a, (flags & 4u) != 0u);
     let metalness = base.w * channelOf(packed, channels.x);
-    let roughness = specular.w * channelOf(packed, channels.y);
     let occlusion = rest.y * channelOf(packed, channels.z);
     var out: Shaded;
     out.motion = (now.xy / now.z - before.xy / before.z) * vec2f(0.5, -0.5);

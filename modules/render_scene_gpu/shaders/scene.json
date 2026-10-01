@@ -104,7 +104,9 @@
     {"table": 0, "slot": 25, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "float", "view_dimension": "2d_array", "multisampled": false},
     {"table": 0, "slot": 26, "kind": "sampled_texture", "stages": ["fragment"],
-     "sample_type": "float", "view_dimension": "cube_array", "multisampled": false}
+     "sample_type": "float", "view_dimension": "cube_array", "multisampled": false},
+    {"table": 0, "slot": 27, "kind": "sampled_texture", "stages": ["fragment"],
+     "sample_type": "float", "view_dimension": "2d_array", "multisampled": false}
   ],
   "constants": []
 }

@@ -59,6 +59,7 @@ Pipelines::~Pipelines() {
                          &maskedLitDecaled,
                          &glassDecaled,
                          &probeFill,
+                         &decalNormalFill,
                          &lit,
                          &maskedLit,
                          &glass,
@@ -531,6 +532,12 @@ result::Status Pipelines::askFor(Effect effect) {
         def.colorTargetCount = 1;
         def.colorTargets[0].format = kPictureFormat;
         RAWFRAME_TRY(ask(def, decalFill));
+        // A decal's normal texture into the normals' atlas (D342).
+        constexpr std::string_view kNormalLabel = "rawframe.scene.decals.fill.normal";
+        def.label = kNormalLabel.data();
+        def.labelLength = kNormalLabel.size();
+        def.colorTargets[0].format = kNormalsFormat;
+        RAWFRAME_TRY(ask(def, decalNormalFill));
         // The lit, masked, and translucent models under the decals.
         constexpr std::array<std::string_view, 3> kLabels = {
             "rawframe.scene.lit.decaled", "rawframe.scene.lit.masked.decaled", "rawframe.scene.glass.decaled"};
@@ -631,7 +638,7 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
     case Effect::ContactShadows:
         return answered({&contactShade});
     case Effect::Decals:
-        return answered({&decalFill, &litDecaled, &maskedLitDecaled, &glassDecaled});
+        return answered({&decalFill, &decalNormalFill, &litDecaled, &maskedLitDecaled, &glassDecaled});
     case Effect::Probes:
         return answered({&probeFill});
     }

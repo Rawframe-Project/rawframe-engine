@@ -210,6 +210,8 @@ layout(set = 0, binding = 24, std430) readonly buffer Decals
 };
 
 layout(set = 0, binding = 25) uniform texture2DArray decalAtlas;
+// The decals' normal textures (D342), linear.
+layout(set = 0, binding = 27) uniform texture2DArray decalNormals;
 
 // A texture's channel a number is read from: one to four, red to alpha;
 // nought for none, which reads one.
@@ -407,15 +409,24 @@ uvec4 clusterOf(vec3 placed)
 }
 
 #ifdef DECALS
-// The surface's color under the decals of its cluster (D339), each in the
+// The surface under the decals of its cluster (D339, D342), each in the
 // frame's order over those before: inside a decal's box, its texture at
 // the place's spot of it, tinted, covers the color by its alpha, fading
-// toward the box's front and back and on surfaces turned from it. Its mip
-// is from the place's derivatives across the pixel, `along` and `aside`.
-vec3 decalled(uvec4 range, vec3 color, vec3 placed, vec3 normal, vec3 along, vec3 aside)
+// toward the box's front and back and on surfaces turned from it, `facing`
+// the way the surface faces. As much, its normal texture's normal, laid
+// along the surface the way the decal's right and up run, covers the
+// normal, and a roughness it lays the roughness. Its mip is from the
+// place's derivatives across the pixel, `along` and `aside`.
+void decalled(uvec4 range,
+              vec3 placed,
+              vec3 facing,
+              vec3 along,
+              vec3 aside,
+              inout vec3 color,
+              inout vec3 normal,
+              inout float roughness)
 {
     const uvec4 kRange = range;
-    vec3 under = color;
     for (uint at = kRange.x + kRange.y; at < kRange.x + kRange.y + kRange.z; ++at) {
         const Decal kDecal = decals[indices[at]];
         const vec3 kBox = (kDecal.toBox * vec4(placed, 1.0)).xyz;
@@ -425,15 +436,27 @@ vec3 decalled(uvec4 range, vec3 color, vec3 placed, vec3 normal, vec3 along, vec
         const mat3 kInto = mat3(kDecal.toBox);
         const vec3 kFront = normalize(vec3(kDecal.toBox[0][2], kDecal.toBox[1][2], kDecal.toBox[2][2]));
         const vec2 kAt = vec2(kBox.x * 0.5 + 0.5, 0.5 - kBox.y * 0.5);
-        const vec4 kTexel = textureGrad(sampler2DArray(decalAtlas, environmentSampler),
-                                        vec3(kAt, kDecal.layer.x),
-                                        (kInto * along).xy * vec2(0.5, -0.5),
-                                        (kInto * aside).xy * vec2(0.5, -0.5));
-        const float kCovers = kTexel.a * kDecal.color.a * smoothstep(0.0, 0.3, dot(normal, kFront)) *
+        const vec2 kAlong = (kInto * along).xy * vec2(0.5, -0.5);
+        const vec2 kAside = (kInto * aside).xy * vec2(0.5, -0.5);
+        const vec4 kTexel =
+            textureGrad(sampler2DArray(decalAtlas, environmentSampler), vec3(kAt, kDecal.layer.x), kAlong, kAside);
+        const float kCovers = kTexel.a * kDecal.color.a * smoothstep(0.0, 0.3, dot(facing, kFront)) *
                               (1.0 - smoothstep(0.8, 1.0, abs(kBox.z)));
-        under = mix(under, kTexel.rgb * kDecal.color.rgb, kCovers);
+        color = mix(color, kTexel.rgb * kDecal.color.rgb, kCovers);
+        if (kDecal.layer.y >= 0.0 && kCovers > 0.0) {
+            const vec3 kBent = textureGrad(sampler2DArray(decalNormals, environmentSampler),
+                                           vec3(kAt, kDecal.layer.y),
+                                           kAlong,
+                                           kAside).xyz * 2.0 - 1.0;
+            const vec3 kRight = vec3(kDecal.toBox[0][0], kDecal.toBox[1][0], kDecal.toBox[2][0]);
+            const vec3 kAcross = normalize(kRight - normal * dot(normal, kRight));
+            const vec3 kUp = cross(normal, kAcross);
+            normal = normalize(mix(normal, normalize(kAcross * kBent.x + kUp * kBent.y + normal * kBent.z), kCovers));
+        }
+        if (kDecal.layer.z > 0.0) {
+            roughness = mix(roughness, kDecal.layer.z, kCovers);
+        }
     }
-    return under;
 }
 #endif
 
@@ -527,20 +550,21 @@ void main()
         const vec3 kUp = cross(normal, kAcross) * inTangent.w;
         normal = normalize(kAcross * bent.x + kUp * bent.y + normal * bent.z);
     }
-    const vec3 kNormal = normal;
-    const vec3 kTinted = inColor.rgb * kBase.rgb * ((kFlags & 2u) != 0u ? sampled.rgb : vec3(1.0));
+    vec3 color = inColor.rgb * kBase.rgb * ((kFlags & 2u) != 0u ? sampled.rgb : vec3(1.0));
+    float roughness = kSpecular.w * channelOf(packed, kChannels.y);
 #ifdef DECALS
     // Entry "fsDecaled", for frames with decals: under them.
-    const vec3 kColor = frame.decals.x > 0.5 ? decalled(kRange, kTinted, inPlaced, normalize(inNormal), kAlong, kAside)
-                                             : kTinted;
-#else
-    const vec3 kColor = kTinted;
+    if (frame.decals.x > 0.5) {
+        decalled(kRange, inPlaced, normalize(inNormal), kAlong, kAside, color, normal, roughness);
+    }
 #endif
+    const vec3 kNormal = normal;
+    const vec3 kColor = color;
+    const float kRoughness = roughness;
     // How much of what is behind it a translucent model hides (D305): its
     // material's opacity times its color's alpha.
     const float kOpacity = kRest.x * inColor.a * ((kFlags & 4u) != 0u ? sampled.a : 1.0);
     const float kMetalness = kBase.w * channelOf(packed, kChannels.x);
-    const float kRoughness = kSpecular.w * channelOf(packed, kChannels.y);
     const float kOcclusion = kRest.y * channelOf(packed, kChannels.z);
     const vec3 kGlow = kEmission.rgb * glow;
     outMotion = (inNow.xy / inNow.z - inBefore.xy / inBefore.z) * vec2(0.5, -0.5);

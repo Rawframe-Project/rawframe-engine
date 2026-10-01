@@ -156,9 +156,12 @@ struct SceneRenderer::State {
                 probePictures.insert(kProbe.environment);
             }
         }
-        // Each decal's texture (D339).
+        // Each decal's texture (D339), and its normals' (D342).
         for (const render_scene::SceneDecal& kDecal : scene.decals) {
             static_cast<void>(textures->choose(kDecal.texture, sampled ? sampled(kDecal.texture) : nullptr));
+            if (kDecal.normal != 0) {
+                static_cast<void>(textures->choose(kDecal.normal, sampled ? sampled(kDecal.normal) : nullptr));
+            }
         }
         for (const std::vector<render_scene::SceneDraw>* kList :
              {&scene.draws, &scene.shadows.casters, &scene.lightShadows.casters}) {
@@ -572,7 +575,10 @@ struct SceneRenderer::State {
         reads.push_back(wholeOf(now.skyResource, mrhi_accessUniform));
         reads.push_back(wholeOf(decalAtlas->blocks(), mrhi_accessStorageRead));
         if (decalAtlas->drawn() > 0) {
-            reads.push_back(wholeOf(decalAtlas->atlas(), mrhi_accessSampled));
+            reads.push_back(wholeOf(decalAtlas->colors(), mrhi_accessSampled));
+        }
+        if (decalAtlas->bent() > 0) {
+            reads.push_back(wholeOf(decalAtlas->normals(), mrhi_accessSampled));
         }
         reads.push_back(wholeOf(probeAtlas->blocks(), mrhi_accessStorageRead));
         if (probeAtlas->drawn() > 0) {
@@ -757,11 +763,12 @@ struct SceneRenderer::State {
         // shadows let through, or white (D338); 24 and 25 the decals and
         // their atlas, or white seen as an array where none is drawn
         // (D339); 26 the probes' atlas, or the dark cube seen as an array
-        // where none is drawn (D340).
+        // where none is drawn (D340); 27 the decals' normals' atlas, or
+        // white seen as an array where none bends the normals (D342).
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
             samplerAt(19, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
-        const std::array<mrhiBinding, 27> kFrameBinding = {
+        const std::array<mrhiBinding, 28> kFrameBinding = {
             bufferAt(0, now.blockResource, sizeof(FrameBlock)),
             depthAt(1, now.shadowMap),
             samplerAt(2, pipelines.shadowSampler),
@@ -787,9 +794,9 @@ struct SceneRenderer::State {
             textureAt(22, reflecting->enabled() ? reflecting->reflected() : resourceOf(textures->resource(0))),
             textureAt(23, contact->enabled() ? contact->lit() : resourceOf(textures->resource(0))),
             bufferAt(24, decalAtlas->blocks(), decalAtlas->blockBytes()),
-            arrayAt(25, decalAtlas->drawn() > 0 ? decalAtlas->atlas() : resourceOf(textures->resource(0))),
-            cubesAt(26,
-                    probeAtlas->drawn() > 0 ? probeAtlas->atlas() : resourceOf(textures->resource(kNoEnvironment)))};
+            arrayAt(25, decalAtlas->drawn() > 0 ? decalAtlas->colors() : resourceOf(textures->resource(0))),
+            cubesAt(26, probeAtlas->drawn() > 0 ? probeAtlas->atlas() : resourceOf(textures->resource(kNoEnvironment))),
+            arrayAt(27, decalAtlas->bent() > 0 ? decalAtlas->normals() : resourceOf(textures->resource(0)))};
         std::array<mrhiBinding, 4> skyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
                                                  bufferAt(1, metering->exposure(), sizeof(ExposureBlock)),
                                                  kPicture,
@@ -809,7 +816,7 @@ struct SceneRenderer::State {
                 mrhiSetVertexBuffer(native, pass, 1, now.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
                 return failed("the models could not be set up", mrhi_errorState);
             }
-            std::array<mrhiBinding, 27> binding = kFrameBinding;
+            std::array<mrhiBinding, 28> binding = kFrameBinding;
             // The prepass, which the occlusion, the reflections, and the
             // contact shadows come after, reads white.
             if (pass.index1 == now.depthPass.index1 && pass.generation == now.depthPass.generation) {

@@ -30,6 +30,8 @@ constexpr mrhiFormat kSurfaceFormat = mrhi_formatRgba16Float;
 constexpr mrhiFormat kAmbientFormat = mrhi_formatR8Unorm;
 /// What each point reflects of the picture before, and how much (D331).
 constexpr mrhiFormat kReflectionFormat = mrhi_formatRgba16Float;
+/// The decals' normals' atlas (D342): linear, as normal textures are.
+constexpr mrhiFormat kNormalsFormat = mrhi_formatRgba8Unorm;
 /// The reflection probes' atlas (D340), as the pictures it holds are.
 constexpr mrhiFormat kProbeFormat = mrhi_formatRgba16Float;
 /// The frame's picture, as `render` declares it.
@@ -121,9 +123,11 @@ struct Pipelines {
     Asked focusCombine;
     /// The contact shadows (D338).
     Asked contactShade;
-    /// A decal's texture drawn into the atlas, and the lit, masked, and
-    /// translucent models under the frame's decals (D339).
+    /// A decal's texture drawn into the colors' atlas, its normal texture
+    /// into the normals' (D342), and the lit, masked, and translucent
+    /// models under the frame's decals (D339).
     Asked decalFill;
+    Asked decalNormalFill;
     Asked litDecaled;
     Asked maskedLitDecaled;
     Asked glassDecaled;
