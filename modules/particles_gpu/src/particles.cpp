@@ -676,6 +676,9 @@ struct Particles::State {
         drawDef.colorTargetCount = 1;
         drawDef.accesses = reads.data();
         drawDef.accessCount = static_cast<std::uint32_t>(reads.size());
+        // Kept even where nothing in the frame reads the picture after: it
+        // may be shown or read back outside the frame's passes.
+        drawDef.neverCull = true;
         return addPass(drawDef, drawPass);
     }
 
