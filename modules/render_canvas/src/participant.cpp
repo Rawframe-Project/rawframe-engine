@@ -120,6 +120,28 @@ public:
                                                                "canvas.width and canvas.height are 1 to 65536 pixels")
                                                       .error()};
         }
+        // Split-screen (D364): the process's local players, each in its
+        // region by the game's layout for their count, the first in the
+        // first, as the scene's are.
+        if (const std::size_t kPlayers = clients_->localPlayers(); kPlayers > 1) {
+            const auto& kLayouts = files->description().layouts;
+            const auto kLayout = std::ranges::find(kLayouts, kPlayers, &world_kest::GameLayout::players);
+            if (client_.has_value() || kLayout == kLayouts.end()) {
+                return std::unexpected<result::Error>{
+                    result::fail(result::ErrorClass::InvalidArgument,
+                                 composition::kCompositionDomain,
+                                 code(composition::CompositionError::BadConfiguration),
+                                 "local players are shown by the game's layout for their count, which it must have, "
+                                 "and canvas.client names none")
+                        .error()};
+            }
+            client_ = 0;
+            regions_ = kLayout->regions;
+            for (std::size_t other = 1; other < kPlayers; ++other) {
+                localPlayers_.push_back(LocalPlayer{.client = other});
+            }
+            regionFrames_.resize(regions_.size());
+        }
         cameraComponent_ = game->camera;
         camera_.aspect = static_cast<float>(kWidth) / static_cast<float>(kHeight);
         width_ = static_cast<std::uint32_t>(kWidth);
@@ -208,6 +230,9 @@ public:
         if (phase == composition::HostPhase::PresentationExtract) {
             ++tick_;
             queued_ = nullptr;
+            for (CanvasRegion& each : regionFrames_) {
+                each.frame = nullptr;
+            }
             if (textures_ != nullptr) {
                 const game_textures::TextureChanges kChanges = textures_->update(tick_);
                 for (const auto& [kId, kError] : kChanges.failed) {
@@ -247,8 +272,14 @@ public:
             camera_.elapsed =
                 presented_.has_value() ? static_cast<float>((frame.now - *presented_).nanoseconds) / 1e9F : 0.0F;
             presented_ = frame.now;
+            if (!regions_.empty()) {
+                presentPlayers(frame.now);
+            }
             const CanvasFrame& kFrame = canvas_->queue(camera_);
             queued_ = &kFrame;
+            if (!regionFrames_.empty() && regionFrames_[0].width != 0) {
+                regionFrames_[0].frame = &kFrame;
+            }
             // What a device would draw this frame: the draws whose texture
             // and whose material's texture are decoded and held.
             const auto kWaits = [this](std::uint64_t id) {
@@ -299,7 +330,9 @@ public:
             diagnostics::field("texturesReady", static_cast<std::uint64_t>(kTextures.ready)),
             diagnostics::field("texturesFailed", static_cast<std::uint64_t>(kTextures.failed)),
             diagnostics::field("texturesReloaded", reloaded_),
-            diagnostics::field("textureBytes", kTextures.bytes)};
+            diagnostics::field("textureBytes", kTextures.bytes),
+            diagnostics::field("players", static_cast<std::uint64_t>(localPlayers_.size() + 1)),
+            diagnostics::field("playerFrames", playerFrames_)};
         const auto kParticles = particles_.fields();
         fields.insert(fields.end(), kParticles.begin(), kParticles.end());
         emitter_.log(diagnostics::Severity::Info, kCanvasSummary, "what one client's canvas drew", fields);
@@ -314,6 +347,10 @@ public:
 
     const CanvasFrame* queued() const noexcept override {
         return queued_;
+    }
+
+    std::span<const CanvasRegion> regionFrames() const noexcept override {
+        return regionFrames_;
     }
 
     std::uint32_t width() const noexcept override {
@@ -356,24 +393,85 @@ private:
         }
         canvas_->extract(*kView.world);
         extracted_ = true;
-        if (kView.owned.isNull() || !kView.world->alive(kView.owned)) {
-            return;
+        if (!kView.owned.isNull() && kView.world->alive(kView.owned) &&
+            readCamera(*kView.world, kView.owned, camera_)) {
+            ++viewed_;
         }
+        extractPlayers();
+    }
+
+    /// The camera on `entity` read into `camera`, the view placed by the
+    /// entity's pose; whether it has one (else it sees as the default
+    /// does).
+    bool readCamera(world::World& world, world::EntityHandle entity, CanvasCamera& camera) const {
         Camera view{.height = kDefaultViewHeight};
+        bool found = false;
         if (cameraComponent_.has_value()) {
-            if (const auto kCamera = kView.world->registry().find(*cameraComponent_)) {
-                if (const auto* placed = static_cast<const Camera*>(kView.world->getErased(kView.owned, *kCamera))) {
+            if (const auto kCamera = world.registry().find(*cameraComponent_)) {
+                if (const auto* placed = static_cast<const Camera*>(world.getErased(entity, *kCamera))) {
                     view = *placed;
-                    ++viewed_;
+                    found = true;
                 }
             }
         }
-        camera_.height = view.height;
-        if (const auto kPose = kView.world->registry().key<physics2d::Pose2D>()) {
-            if (const auto* pose = kView.world->get(kView.owned, *kPose)) {
-                camera_.x = pose->x + view.offsetX;
-                camera_.y = pose->y + view.offsetY;
+        camera.height = view.height;
+        if (const auto kPose = world.registry().key<physics2d::Pose2D>()) {
+            if (const auto* pose = world.get(entity, *kPose)) {
+                camera.x = pose->x + view.offsetX;
+                camera.y = pose->y + view.offsetY;
             }
+        }
+        return found;
+    }
+
+    /// The other local players' Worlds (D364), each extracted into its own
+    /// canvas and its camera read from its player.
+    void extractPlayers() {
+        for (LocalPlayer& each : localPlayers_) {
+            each.extracted = false;
+            const world_replication::ClientView kView = clients_->client(each.client);
+            if (kView.world == nullptr) {
+                continue;
+            }
+            if (each.canvas == nullptr) {
+                auto made = Canvas::create(kView.world->registry(), settings_);
+                if (!made.has_value()) {
+                    continue;
+                }
+                each.canvas = std::move(*made);
+            }
+            each.canvas->extract(*kView.world);
+            if (!kView.owned.isNull() && kView.world->alive(kView.owned)) {
+                static_cast<void>(readCamera(*kView.world, kView.owned, each.camera));
+            }
+            each.extracted = true;
+        }
+    }
+
+    /// Each local player's region placed in the window as it is now, the
+    /// first's camera given its aspect, the others' frames queued (D364).
+    void presentPlayers(execution::MonotonicInstant now) {
+        for (std::size_t at = 0; at < regions_.size(); ++at) {
+            const world_kest::RegionPixels kPixels = world_kest::pixelsOf(regions_[at], width_, height_);
+            regionFrames_[at] =
+                CanvasRegion{.x = kPixels.x, .y = kPixels.y, .width = kPixels.width, .height = kPixels.height};
+        }
+        if (regionFrames_[0].width != 0 && regionFrames_[0].height != 0) {
+            camera_.aspect = static_cast<float>(regionFrames_[0].width) / static_cast<float>(regionFrames_[0].height);
+        }
+        for (std::size_t at = 0; at < localPlayers_.size(); ++at) {
+            LocalPlayer& each = localPlayers_[at];
+            CanvasRegion& region = regionFrames_[at + 1];
+            if (!each.extracted || region.width == 0 || region.height == 0) {
+                each.presented.reset();
+                continue;
+            }
+            each.camera.aspect = static_cast<float>(region.width) / static_cast<float>(region.height);
+            each.camera.elapsed =
+                each.presented.has_value() ? static_cast<float>((now - *each.presented).nanoseconds) / 1e9F : 0.0F;
+            each.presented = now;
+            region.frame = &each.canvas->queue(each.camera);
+            ++playerFrames_;
         }
     }
 
@@ -383,6 +481,20 @@ private:
     CanvasCamera camera_;
     std::optional<execution::MonotonicInstant> presented_;
     std::optional<schema::ComponentTypeId> cameraComponent_;
+    /// Split-screen (D364): the layout's regions, the local players after
+    /// the first (whose are `canvas_` and `camera_`), each region's frame,
+    /// and the frames queued for the others.
+    struct LocalPlayer {
+        std::size_t client = 0;
+        std::unique_ptr<Canvas> canvas;
+        CanvasCamera camera;
+        std::optional<execution::MonotonicInstant> presented;
+        bool extracted = false;
+    };
+    std::vector<world_kest::GameRegion> regions_;
+    std::vector<LocalPlayer> localPlayers_;
+    std::vector<CanvasRegion> regionFrames_;
+    std::uint64_t playerFrames_ = 0;
     /// Frames seen through the player's own camera.
     std::uint64_t viewed_ = 0;
     std::uint64_t reloaded_ = 0;

@@ -4,8 +4,11 @@
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_canvas_gpu/renderer.h"
 
+#include <array>
 #include <memory>
+#include <span>
 #include <string>
+#include <vector>
 
 namespace rawframe::render_canvas_gpu {
 
@@ -62,6 +65,21 @@ public:
             }
             renderer_ = std::move(*made);
             frames_->join(*renderer_, kOrder);
+            // In split-screen, a renderer for each other local player's
+            // region (D364), each drawing after those before it.
+            for (std::size_t other = 1; other < canvas_->regionFrames().size(); ++other) {
+                auto another = CanvasRenderer::create(*device);
+                if (!another.has_value()) {
+                    failed_ = true;
+                    emitter_.log(diagnostics::Severity::Error,
+                                 kFailed,
+                                 "a local player's canvas could not be drawn: nothing more is",
+                                 {diagnostics::field("reason", std::string{another.error().description()})});
+                    return;
+                }
+                frames_->join(**another, kOrder);
+                others_.push_back(std::move(*another));
+            }
         }
         const auto kPlanned = frames_->planned();
         if (!kPlanned.has_value()) {
@@ -69,7 +87,22 @@ public:
         }
         // The view follows the frame from the next one.
         canvas_->resize(kPlanned->first, kPlanned->second);
-        renderer_->prepare(canvas_->queued(), textures_);
+        const std::span<const render_canvas::CanvasRegion> kRegions = canvas_->regionFrames();
+        if (kRegions.empty()) {
+            renderer_->prepare(canvas_->queued(), textures_);
+        } else {
+            const auto kPrepare = [this](CanvasRenderer& renderer, const render_canvas::CanvasRegion& region) {
+                const bool kShown = region.width != 0 && region.height != 0;
+                renderer.prepare(kShown ? region.frame : nullptr,
+                                 textures_,
+                                 std::array<std::uint32_t, 4>{region.x, region.y, region.width, region.height});
+            };
+            kPrepare(*renderer_, kRegions[0]);
+            for (std::size_t at = 0; at < others_.size() && at + 1 < kRegions.size(); ++at) {
+                kPrepare(*others_[at], kRegions[at + 1]);
+                frames_->ready(*others_[at]);
+            }
+        }
         frames_->ready(*renderer_);
     }
 
@@ -78,6 +111,13 @@ public:
             return;
         }
         RendererStatistics statistics;
+        // The other local players' frames drawn (D364).
+        std::uint64_t playerFrames = 0;
+        for (const std::unique_ptr<CanvasRenderer>& other : others_) {
+            playerFrames += other->statistics().frames;
+            frames_->leave(*other);
+        }
+        others_.clear();
         if (renderer_ != nullptr) {
             statistics = renderer_->statistics();
             frames_->leave(*renderer_);
@@ -97,7 +137,8 @@ public:
                       diagnostics::field("emittersDrawn", statistics.emittersDrawn),
                       diagnostics::field("emittersLeftOut", statistics.emittersLeftOut),
                       diagnostics::field("particlesSpawned", statistics.particlesSpawned),
-                      diagnostics::field("ribbonsDrawn", statistics.ribbonsDrawn)});
+                      diagnostics::field("ribbonsDrawn", statistics.ribbonsDrawn),
+                      diagnostics::field("playerFrames", playerFrames)});
     }
 
 private:
@@ -105,6 +146,9 @@ private:
     render_canvas::CanvasFrames* canvas_ = nullptr;
     TextureSource textures_;
     std::unique_ptr<CanvasRenderer> renderer_;
+    /// In split-screen, the other local players' renderers (D364); the
+    /// first player's is `renderer_`.
+    std::vector<std::unique_ptr<CanvasRenderer>> others_;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
 };

@@ -178,6 +178,7 @@ struct CanvasRenderer::State {
     /// What the next frame draws.
     const render_canvas::CanvasFrame* frame = nullptr;
     TextureSource textures;
+    std::optional<std::array<std::uint32_t, 4>> region;
     /// What the open frame declared, until it is recorded and ends.
     bool declared = false;
     std::optional<mrhiPassId> upload;
@@ -351,6 +352,18 @@ struct CanvasRenderer::State {
         if (frame == nullptr) {
             return {};
         }
+        // A region as far as the frame reaches: the view's size follows the
+        // frame's a frame late, so a region may pass it once (D364).
+        if (region.has_value()) {
+            auto& [x, y, width, height] = *region;
+            x = std::min(x, open.width);
+            y = std::min(y, open.height);
+            width = std::min(width, open.width - x);
+            height = std::min(height, open.height - y);
+            if (width == 0 || height == 0) {
+                return {};
+            }
+        }
         device->pump();
         if (!pipelineReady) {
             bool all = true;
@@ -445,10 +458,11 @@ struct CanvasRenderer::State {
             return failed("the drawing pass could not be added", kAdded);
         }
         // The particles, trails, and beams over every sprite (D357).
-        RAWFRAME_TRY(particles->declare(frame->particles,
-                                        particleMaterials(),
-                                        particleViewOf(frame->extent, frame->particles.clock),
-                                        {.picture = open.picture, .exposure = std::nullopt, .depth = std::nullopt}));
+        RAWFRAME_TRY(particles->declare(
+            frame->particles,
+            particleMaterials(),
+            particleViewOf(frame->extent, frame->particles.clock),
+            {.picture = open.picture, .exposure = std::nullopt, .depth = std::nullopt, .region = region}));
         declared = true;
         return {};
     }
@@ -482,6 +496,22 @@ struct CanvasRenderer::State {
         }
         if (mrhiBeginPass(native, drawing) != mrhi_success) {
             return failed("the drawing pass could not begin", mrhi_errorState);
+        }
+        // A local player's region in split-screen (D364): its draws land
+        // there and nowhere else.
+        if (region.has_value()) {
+            const auto& [kX, kY, kWidth, kHeight] = *region;
+            const mrhiViewport kViewport{.x = static_cast<float>(kX),
+                                         .y = static_cast<float>(kY),
+                                         .width = static_cast<float>(kWidth),
+                                         .height = static_cast<float>(kHeight),
+                                         .minDepth = 0,
+                                         .maxDepth = 1};
+            const mrhiScissorRect kScissor{.x = kX, .y = kY, .width = kWidth, .height = kHeight};
+            if (mrhiSetViewport(native, drawing, &kViewport) != mrhi_success ||
+                mrhiSetScissor(native, drawing, &kScissor) != mrhi_success) {
+                return failed("the drawing's region could not be set", mrhi_errorState);
+            }
         }
         drawn = 0;
         std::uint64_t leftOut = 0;
@@ -583,9 +613,12 @@ result::Result<std::unique_ptr<CanvasRenderer>> CanvasRenderer::create(render::D
     return std::unique_ptr<CanvasRenderer>{new CanvasRenderer{std::move(state)}};
 }
 
-void CanvasRenderer::prepare(const render_canvas::CanvasFrame* frame, TextureSource textures) {
+void CanvasRenderer::prepare(const render_canvas::CanvasFrame* frame,
+                             TextureSource textures,
+                             std::optional<std::array<std::uint32_t, 4>> region) {
     state_->frame = frame;
     state_->textures = std::move(textures);
+    state_->region = region;
 }
 
 result::Status CanvasRenderer::declare(render::Frame& frame) {

@@ -785,6 +785,20 @@ struct Particles::State {
         if (mrhiBeginPass(native, kPass) != mrhi_success) {
             return failed("the particles' drawing could not begin", mrhi_errorState);
         }
+        if (with.region.has_value()) {
+            const auto& [kX, kY, kWidth, kHeight] = *with.region;
+            const mrhiViewport kViewport{.x = static_cast<float>(kX),
+                                         .y = static_cast<float>(kY),
+                                         .width = static_cast<float>(kWidth),
+                                         .height = static_cast<float>(kHeight),
+                                         .minDepth = 0,
+                                         .maxDepth = 1};
+            const mrhiScissorRect kScissor{.x = kX, .y = kY, .width = kWidth, .height = kHeight};
+            if (mrhiSetViewport(native, kPass, &kViewport) != mrhi_success ||
+                mrhiSetScissor(native, kPass, &kScissor) != mrhi_success) {
+                return failed("the particles' region could not be set", mrhi_errorState);
+            }
+        }
         std::array<mrhiBinding, 10> table = {bufferAt(0, viewResource, sizeof(ViewBlock)),
                                              bufferAt(1, {}, sizeof(EmitterBlock)),
                                              bufferAt(2, {}, 0),

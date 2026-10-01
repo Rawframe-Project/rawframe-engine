@@ -406,3 +406,42 @@ RAWFRAME_TEST(AStreakedParticleTrailsWhereItWas) {
         RAWFRAME_EXPECT(kRed(12, 31) == 0 && kRed(30, 31) == 0);
     }
 }
+
+RAWFRAME_TEST(SplitScreenCanvasesDrawInTheirRegions) {
+    // Two local players' canvases (D364), each its whole view filled, each
+    // landing in its half of the picture and nowhere else.
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto left = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto right = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(left.has_value() && right.has_value() && framer.has_value());
+    if (!left.has_value() || !right.has_value() || !framer.has_value()) {
+        return;
+    }
+    const auto kWhiteTexel = image(1, {255, 255, 255, 255});
+    const render_canvas_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == kWhite ? kWhiteTexel : nullptr;
+    };
+    CanvasFrame red;
+    quad(red, kWhite, -1, 1, 1, -1, 0xFF0000FF);
+    CanvasFrame green;
+    quad(green, kWhite, -1, 1, 1, -1, 0x00FF00FF);
+    const std::array<render::FrameRecorder*, 2> kRecorders = {left->get(), right->get()};
+    for (int attempt = 0; attempt < 1000 && ((**left).statistics().frames == 0 || (**right).statistics().frames == 0);
+         ++attempt) {
+        (**left).prepare(&red, kTextures, std::array<std::uint32_t, 4>{0, 0, kSide / 2, kSide});
+        (**right).prepare(&green, kTextures, std::array<std::uint32_t, 4>{kSide / 2, 0, kSide / 2, kSide});
+        RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+        RAWFRAME_EXPECT((*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
+    }
+    RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+    const auto kPixels = (*framer)->pixels();
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (kPixels.has_value()) {
+        RAWFRAME_EXPECT(near(*kPixels, 4, 4, {255, 0, 0, 255}) && near(*kPixels, kSide / 2 - 2, 60, {255, 0, 0, 255}) &&
+                        near(*kPixels, kSide / 2 + 2, 4, {0, 255, 0, 255}) && near(*kPixels, 60, 60, {0, 255, 0, 255}));
+    }
+}

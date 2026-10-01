@@ -10,8 +10,20 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 
 namespace rawframe::render_canvas {
+
+/// A local player's region of the window in split-screen (ADR-0052, D364),
+/// in pixels from its top left, and the frame queued for it; none while
+/// its client has no World.
+struct CanvasRegion {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    const CanvasFrame* frame = nullptr;
+};
 
 class CanvasFrames {
 public:
@@ -24,6 +36,10 @@ public:
     /// iteration's `presentation_extract`; none in an iteration that queued
     /// none, and while the canvas is idle.
     [[nodiscard]] virtual const CanvasFrame* queued() const noexcept = 0;
+    /// In split-screen (D364), each local player's region and frame, the
+    /// first's the frame `queued` gives, in the players' order; none while
+    /// one player fills the window. Kept as `queued` is.
+    [[nodiscard]] virtual std::span<const CanvasRegion> regionFrames() const noexcept = 0;
     /// The view's size in pixels: `canvas.width` and `canvas.height` until
     /// what shows it sets another.
     [[nodiscard]] virtual std::uint32_t width() const noexcept = 0;

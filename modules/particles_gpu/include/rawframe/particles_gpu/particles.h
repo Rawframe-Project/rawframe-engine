@@ -100,11 +100,14 @@ enum class Target : std::uint8_t {
 /// exposure (a buffer whose second number multiplies the emission), or
 /// none for one; and the depth they are hidden by and fade into
 /// (reversed-Z, its depth aspect sampled), or none for nought, hiding
-/// nothing.
+/// nothing; and the region of the picture they draw in, its left, top,
+/// width, and height in pixels (a local player's in split-screen, D364),
+/// or none for the whole.
 struct Drawing {
     std::uint64_t picture = 0;
     std::optional<std::uint64_t> exposure;
     std::optional<std::uint64_t> depth;
+    std::optional<std::array<std::uint32_t, 4>> region;
 };
 
 /// The particles, trails, and beams on the device (D353, D354, D357). An
