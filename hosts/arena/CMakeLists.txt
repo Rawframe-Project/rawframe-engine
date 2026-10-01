@@ -275,6 +275,24 @@ if(RAWFRAME_BUILD_TESTS)
             set_tests_properties(plaza_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
         endif()
+        # Both bots' scenes drawn split-screen (D362): each local player's
+        # view drawn into its half, the second's frames queued, and the
+        # picture read back in many shades.
+        set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.tga)
+        configure_file(tests/plaza_split.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.conf @ONLY)
+        add_test(NAME plaza_split
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
+                         $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(plaza_split PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,[^\n]*\"regionFrames\":[1-9][0-9]+.*\"code\":\"scene_summary\"[^\n]*\"players\":2,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
+        if(RAWFRAME_SANITIZE STREQUAL "thread")
+            set_tests_properties(plaza_split PROPERTIES ENVIRONMENT
+                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
+        endif()
     endif()
     # Four bots predict their walkers in 3D: at least a thousand ticks
     # confirmed, the rollbacks only those of admission, and no checksum
