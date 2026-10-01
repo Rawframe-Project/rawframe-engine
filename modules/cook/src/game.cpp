@@ -124,15 +124,17 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
     }
 
     // Each material: the resource its sidecar names, cooked by
-    // rawframe.material.
+    // rawframe.material, or by rawframe.postprocess for one of that
+    // domain (D348).
     for (const world_kest::GameMaterial& material : kDescription.materials) {
         auto sidecarBytes = reads.file(material.path + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
             return refuse("a material the description names has a sidecar", material.path);
         }
         RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
-        if (kSidecar.importer != "rawframe.material") {
-            return refuse("a material the description names is cooked by rawframe.material", material.path);
+        if (kSidecar.importer != "rawframe.material" && kSidecar.importer != "rawframe.postprocess") {
+            return refuse("a material the description names is cooked by rawframe.material or rawframe.postprocess",
+                          material.path);
         }
         game.materials.push_back(world_kest::CookedGameMaterial{.path = material.path, .material = kSidecar.id.value});
     }

@@ -1,0 +1,41 @@
+{
+  "formatVersion": 1,
+  "kind": "post_process",
+  "interface": {},
+  "graph": {
+    "1f00000000000001": {
+      "type": "rawframe/scene_color@1",
+      "params": {},
+      "inputs": {}
+    },
+    "1f00000000000002": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "1f00000000000001",
+          "output": "color"
+        },
+        "b": [
+          1,
+          0.97,
+          0.92,
+          1
+        ]
+      }
+    },
+    "2f00000000000001": {
+      "type": "rawframe/post_process@1",
+      "params": {},
+      "inputs": {
+        "color": {
+          "node": "1f00000000000002",
+          "output": "out"
+        }
+      }
+    }
+  },
+  "states": {
+    "insertion": "before_tonemap"
+  }
+}

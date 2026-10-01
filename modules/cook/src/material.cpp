@@ -2,6 +2,7 @@
 
 #include "rawframe/cook/errors.h"
 #include "rawframe/material/material.h"
+#include "rawframe/material/post_process.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -57,10 +58,26 @@ result::Result<Artifact> cookMaterial(std::span<const std::byte> source, std::st
                     .report = reportOf(kCompiled)};
 }
 
+/// A post process folds to one form (D348): one variant.
+result::Result<Artifact> cookPostProcess(std::span<const std::byte> source, std::string_view, Reads&) {
+    const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
+    RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, material::readPostProcess(kText));
+    RAWFRAME_TRY_ASSIGN(const material::PostProcess kCompiled, material::compilePostProcess(kDocument));
+    return Artifact{.type = content::ResourceTypeId{material::kPostProcessType},
+                    .representation = *content::RepresentationId::parse(material::kPostProcessRepresentation),
+                    .bytes = material::encodePostProcess(kCompiled),
+                    .subassets = {},
+                    .report = {{"variants", 1}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial - 1}}};
+}
+
 } // namespace
 
 Importer materialImporter() noexcept {
     return Importer{.identity = "rawframe.material", .normalize = &normalize, .cook = &cookMaterial};
+}
+
+Importer postProcessImporter() noexcept {
+    return Importer{.identity = "rawframe.postprocess", .normalize = &normalize, .cook = &cookPostProcess};
 }
 
 } // namespace rawframe::cook

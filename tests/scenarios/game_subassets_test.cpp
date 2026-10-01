@@ -61,13 +61,14 @@ RAWFRAME_TEST(AGameKnowsItsMeshesSubassetsCookedOrNot) {
     const fs::path kBase = test::scratchDirectory("game_subassets");
     fs::remove_all(kBase);
     const fs::path kOutput = kBase / "content";
-    static const std::array<cook::Importer, 10> kImporters = {cook::animationImporter(),
+    static const std::array<cook::Importer, 11> kImporters = {cook::animationImporter(),
                                                               cook::audioImporter(),
                                                               cook::gameImporter(),
                                                               cook::kestImporter(),
                                                               cook::materialImporter(),
                                                               cook::meshImporter(),
                                                               cook::modImporter(),
+                                                              cook::postProcessImporter(),
                                                               cook::sceneImporter(),
                                                               cook::textImporter(),
                                                               cook::textureImporter()};

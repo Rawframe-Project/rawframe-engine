@@ -27,6 +27,7 @@
 #include "rawframe/kest_library/library.h"
 #include "rawframe/localization/table.h"
 #include "rawframe/material/material.h"
+#include "rawframe/material/post_process.h"
 #include "rawframe/mesh/errors.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/test/test.h"
@@ -700,6 +701,39 @@ RAWFRAME_TEST(AMaterialsQualitiesAreItsVariants) {
     RAWFRAME_EXPECT(readText(kProject.output / "cook.receipt")
                         .find("\"variants\": 2,\n        \"axes\": 1,\n        \"qualityCardinality\": 3,\n        "
                               "\"qualityVariants\": 1,\n        \"variantsHeadroom\": 1") != std::string::npos);
+}
+
+RAWFRAME_TEST(APostProcessCooksIntoItsFoldedForm) {
+    // Plaza's warmth (D348): the picture tinted before the tonemapper.
+    const Project kProject;
+    fs::copy_file(fs::path{RAWFRAME_SAMPLE_GAMES} / "plaza" / "warmth.rfmaterial",
+                  kProject.sources / "warmth.rfmaterial");
+    writeText(kProject.sources / "warmth.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000c3", "", "rawframe.postprocess"));
+    static const std::array<Importer, 3> kImporters = {audioImporter(), materialImporter(), postProcessImporter()};
+    const auto kReport =
+        cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kImporters});
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty() && kReport->variants == 1);
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    RAWFRAME_EXPECT(kManifest.has_value());
+    bool found = false;
+    for (const content::ManifestEntry& each :
+         kManifest.has_value() ? *kManifest : std::vector<content::ManifestEntry>{}) {
+        if (each.type.value == material::kPostProcessType &&
+            each.representation.text() == material::kPostProcessRepresentation) {
+            const std::string kBytes = readText(kProject.output / each.locator);
+            const auto kRead = material::decodePostProcess(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
+            found = kRead.has_value() && kRead->insertion == material::Insertion::BeforeTonemap &&
+                    (kRead->scene == std::array<float, 3>{1, 0.97F, 0.92F});
+        }
+    }
+    RAWFRAME_EXPECT(found);
+    // A surface material's sidecar cannot cook it.
+    writeText(kProject.sources / "warmth.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000c3", "", "rawframe.material"));
+    const auto kWrong =
+        cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kImporters});
+    RAWFRAME_EXPECT(kWrong.has_value() && kWrong->failures.size() == 1);
 }
 
 RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {

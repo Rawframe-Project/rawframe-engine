@@ -115,13 +115,14 @@ int main(int argc, char** argv) {
         std::fputs("rawframe-cook: cannot read its own executable\n", stderr);
         return 1;
     }
-    const std::array<rawframe::cook::Importer, 10> kImporters = {rawframe::cook::animationImporter(),
+    const std::array<rawframe::cook::Importer, 11> kImporters = {rawframe::cook::animationImporter(),
                                                                  rawframe::cook::audioImporter(),
                                                                  rawframe::cook::gameImporter(),
                                                                  rawframe::cook::kestImporter(),
                                                                  rawframe::cook::materialImporter(),
                                                                  rawframe::cook::meshImporter(),
                                                                  rawframe::cook::modImporter(),
+                                                                 rawframe::cook::postProcessImporter(),
                                                                  rawframe::cook::sceneImporter(),
                                                                  rawframe::cook::textImporter(),
                                                                  rawframe::cook::textureImporter()};

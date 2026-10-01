@@ -9,5 +9,8 @@
 namespace rawframe::cook {
 
 [[nodiscard]] Importer materialImporter() noexcept;
+/// The post-process importer (`rawframe.postprocess`, D348): a post
+/// process's graph document, read and folded alike. It takes no settings.
+[[nodiscard]] Importer postProcessImporter() noexcept;
 
 } // namespace rawframe::cook
