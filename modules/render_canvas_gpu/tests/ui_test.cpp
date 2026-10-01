@@ -292,3 +292,55 @@ RAWFRAME_TEST(AnImageIsDrawnStretchedOrInNineSlices) {
     RAWFRAME_EXPECT(near(at(*kPixels, 44, 1), {0, 0, 128}));
     RAWFRAME_EXPECT(near(at(*kPixels, 44, 0), {255, 0, 0}));
 }
+
+RAWFRAME_TEST(AShadowFadesOutsideItsBoxAndInsideAnInsetOne) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto tree = ui::Tree::create(4);
+    if (!tree.has_value()) {
+        return;
+    }
+    ui::Tree& made = **tree;
+    const ui::Node kWindow = *made.add(1);
+    const ui::Node kCard = *made.add(2);
+    const ui::Node kWell = *made.add(3);
+    RAWFRAME_EXPECT(made.attach(kWindow, kCard).has_value() && made.attach(kWindow, kWell).has_value());
+    RAWFRAME_EXPECT(made.setLayout(kWindow,
+                                   {.width = ui::pixels(64),
+                                    .height = ui::pixels(64),
+                                    .direction = ui::Direction::Column,
+                                    .alignItems = ui::Align::Start,
+                                    .gap = 12,
+                                    .padding = {12, 12, 4, 4}})
+                        .has_value());
+    RAWFRAME_EXPECT(made.setLayout(kCard, {.width = ui::pixels(20), .height = ui::pixels(20)}).has_value());
+    RAWFRAME_EXPECT(made.setLayout(kWell, {.width = ui::pixels(40), .height = ui::pixels(20)}).has_value());
+    // A white card casting red over 8 pixels; a blue well darkened green
+    // inside its edge over 4.
+    RAWFRAME_EXPECT(
+        made.setLook(kCard, {.fill = 0xFFFFFFFF, .outerShadow = {.color = 0xFF0000FF, .blur = 8}}).has_value());
+    RAWFRAME_EXPECT(
+        made.setLook(kWell, {.fill = 0x0000FFFF, .innerShadow = {.color = 0x00FF00FF, .blur = 4}}).has_value());
+    RAWFRAME_EXPECT(made.layOut(kWindow, kSide, kSide).has_value());
+    ui::DrawList list;
+    RAWFRAME_EXPECT(made.draw(kWindow, 1, list).has_value() && list.shadows.size() == 2);
+    const auto kPixels = drawn(*kDevice, list);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    // The card from (12, 4) to (32, 24): white inside, untouched by its
+    // shadow; red just past its edge, fading with distance, none far off.
+    RAWFRAME_EXPECT(near(at(*kPixels, 22, 14), {255, 255, 255}));
+    const int kNear = at(*kPixels, 33, 14)[0];
+    const int kFar = at(*kPixels, 39, 14)[0];
+    RAWFRAME_EXPECT(kNear > 120 && kFar > 10 && kFar < kNear && at(*kPixels, 33, 14)[1] < 10);
+    RAWFRAME_EXPECT(at(*kPixels, 52, 14)[0] < 8);
+    // The well from (12, 36) to (52, 56): green over its blue at its edge,
+    // its own blue at its middle.
+    const std::array<int, 4> kEdge = at(*kPixels, 32, 36);
+    RAWFRAME_EXPECT(kEdge[1] > 120 && kEdge[2] < 230);
+    RAWFRAME_EXPECT(near(at(*kPixels, 32, 46), {0, 0, 255}, 12));
+}

@@ -1,5 +1,6 @@
-// The UI's boxes and images (SPEC-0032, D375, D377, D378), for WebGPU:
-// the entries of ui.vert, ui.frag, ui.image.vert, and ui.image.frag.
+// The UI's boxes, images, and shadows (SPEC-0032, D375, D377, D378,
+// D381), for WebGPU: the entries of ui.vert, ui.frag, ui.image.vert,
+// ui.image.frag, ui.shadow.vert, and ui.shadow.frag.
 
 struct View {
     size: vec4f,
@@ -35,6 +36,16 @@ struct Image {
 @group(0) @binding(3) var<storage, read> images: array<Image>;
 @group(0) @binding(4) var picture: texture_2d<f32>;
 @group(0) @binding(5) var pictureSampler: sampler;
+
+struct Shadow {
+    rect: vec4f,
+    radii: vec4f,
+    color: vec4f,
+    shape: vec4f,
+    flags: vec4f,
+}
+
+@group(0) @binding(6) var<storage, read> shadows: array<Shadow>;
 
 const kDeepestClip = 64;
 
@@ -152,6 +163,101 @@ fn imageFs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32
     let sampled = textureSample(picture, pictureSampler, at);
     var color = vec4f(sampled.rgb * sampled.a, sampled.a) * image.tint;
     var clip = i32(image.clip.x);
+    for (var depth = 0; depth < kDeepestClip && clip > 0; depth++) {
+        let kept = coverage(distanceTo(pixel, clips[clip].rect, clips[clip].radii));
+        color *= select(kept, 1.0 - kept, clips[clip].link.y > 0.5);
+        clip = i32(clips[clip].link.x);
+    }
+    return color;
+}
+
+struct Cast {
+    @builtin(position) position: vec4f,
+    @location(0) pixel: vec2f,
+    @location(1) @interpolate(flat) shadow: u32,
+}
+
+@vertex
+fn shadowVs(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32) -> Cast {
+    var corners = array<vec2f, 6>(vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0), vec2f(0.0, 1.0),
+                                  vec2f(1.0, 0.0), vec2f(1.0, 1.0));
+    var rect = shadows[instance].rect;
+    let shape = shadows[instance].shape;
+    if (shadows[instance].flags.x < 0.5) {
+        let reach = max(shape.w, 0.0) + 1.5 * shape.z + 1.0;
+        rect = vec4f(rect.xy + shape.xy - vec2f(reach), rect.zw + vec2f(2.0 * reach));
+    }
+    let pixel = rect.xy + corners[index] * rect.zw;
+    var out: Cast;
+    out.position = vec4f(pixel.x / view.size.x * 2.0 - 1.0, 1.0 - pixel.y / view.size.y * 2.0, 0.0, 1.0);
+    out.pixel = pixel;
+    out.shadow = instance;
+    return out;
+}
+
+fn errorFunction(value: vec2f) -> vec2f {
+    let signs = sign(value);
+    let magnitude = abs(value);
+    var x = 1.0 + (0.278393 + (0.230389 + 0.078108 * (magnitude * magnitude)) * magnitude) * magnitude;
+    x *= x;
+    return signs - signs / (x * x);
+}
+
+fn gaussian(x: f32, sigma: f32) -> f32 {
+    return exp(-(x * x) / (2.0 * sigma * sigma)) / (2.5066283 * sigma);
+}
+
+fn across(x: f32, y: f32, sigma: f32, corner: f32, halfSize: vec2f) -> f32 {
+    let delta = min(halfSize.y - corner - abs(y), 0.0);
+    let curved = halfSize.x - corner + sqrt(max(0.0, corner * corner - delta * delta));
+    let integral = 0.5 + 0.5 * errorFunction((x + vec2f(-curved, curved)) * (0.70710678 / sigma));
+    return integral.y - integral.x;
+}
+
+fn blurred(pixel: vec2f, rect: vec4f, radii: vec4f, sigma: f32) -> f32 {
+    if (sigma < 0.25) {
+        return coverage(distanceTo(pixel, rect, radii));
+    }
+    let halfSize = rect.zw * 0.5;
+    let at = pixel - (rect.xy + halfSize);
+    var corner = radii.y;
+    if (at.x < 0.0) {
+        corner = select(radii.w, radii.x, at.y < 0.0);
+    } else {
+        corner = select(radii.z, radii.y, at.y < 0.0);
+    }
+    corner = min(corner, min(halfSize.x, halfSize.y));
+    let low = at.y - halfSize.y;
+    let high = at.y + halfSize.y;
+    let start = clamp(-3.0 * sigma, low, high);
+    let end = clamp(3.0 * sigma, low, high);
+    let step = (end - start) / 4.0;
+    var y = start + step * 0.5;
+    var value = 0.0;
+    for (var row = 0; row < 4; row++) {
+        value += across(at.x, at.y - y, sigma, corner, halfSize) * gaussian(y, sigma) * step;
+        y += step;
+    }
+    return value;
+}
+
+@fragment
+fn shadowFs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32) -> @location(0) vec4f {
+    let shadow = shadows[index];
+    let sigma = shadow.shape.z * 0.5;
+    let inside = coverage(distanceTo(pixel, shadow.rect, shadow.radii));
+    var value = 0.0;
+    if (shadow.flags.x < 0.5) {
+        let grown = vec4f(shadow.rect.xy + shadow.shape.xy - vec2f(shadow.shape.w),
+                          shadow.rect.zw + vec2f(2.0 * shadow.shape.w));
+        value = blurred(pixel, grown, max(shadow.radii + vec4f(shadow.shape.w), vec4f(0.0)), sigma) * (1.0 - inside);
+    } else {
+        let shrunk = vec4f(shadow.rect.xy + shadow.shape.xy + vec2f(shadow.shape.w),
+                           max(shadow.rect.zw - vec2f(2.0 * shadow.shape.w), vec2f(0.0)));
+        value = inside * (1.0 - blurred(pixel, shrunk, max(shadow.radii - vec4f(shadow.shape.w), vec4f(0.0)), sigma));
+    }
+    var color = shadow.color * value;
+    var clip = i32(shadow.flags.y);
     for (var depth = 0; depth < kDeepestClip && clip > 0; depth++) {
         let kept = coverage(distanceTo(pixel, clips[clip].rect, clips[clip].radii));
         color *= select(kept, 1.0 - kept, clips[clip].link.y > 0.5);

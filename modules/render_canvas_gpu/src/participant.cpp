@@ -233,7 +233,8 @@ public:
                      {diagnostics::field("frames", statistics.frames),
                       diagnostics::field("boxes", statistics.boxes),
                       diagnostics::field("images", statistics.images),
-                      diagnostics::field("imagesWaiting", statistics.imagesWaiting)});
+                      diagnostics::field("imagesWaiting", statistics.imagesWaiting),
+                      diagnostics::field("shadows", statistics.shadows)});
     }
 
 private:

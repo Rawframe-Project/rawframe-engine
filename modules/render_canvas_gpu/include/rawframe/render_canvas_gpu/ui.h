@@ -6,7 +6,8 @@
 // inside it, smoothed over a pixel, inside its clip, premultiplied and
 // blended over what is behind it in linear light, inside its clip and
 // every clip that one is inside (D377); and its images in their place in
-// the order, each its texture's part stretched or in nine slices (D378).
+// the order, each its texture's part stretched or in nine slices (D378);
+// and its shadows, as CSS's box-shadow, blurred by a Gaussian (D381).
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
@@ -31,6 +32,8 @@ struct UiStatistics {
     /// ready or past the textures held (D378).
     std::uint64_t images = 0;
     std::uint64_t imagesWaiting = 0;
+    /// Shadows drawn in all (D381).
+    std::uint64_t shadows = 0;
 };
 
 class UiRenderer final : public render::FrameRecorder {
