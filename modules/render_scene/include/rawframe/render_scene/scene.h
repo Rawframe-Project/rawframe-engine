@@ -914,11 +914,12 @@ private:
     std::unique_ptr<State> state_;
 };
 
-/// A game's scene, declared: its model components, its camera, sun, and
-/// sky components, if it has them, and its meshes.
+/// A game's scene, declared: its model components, its camera
+/// components (a player's and its views', D361), its sun and sky
+/// components, if it has them, and its meshes.
 struct GameScene {
     std::vector<schema::ComponentTypeId> models;
-    std::optional<schema::ComponentTypeId> camera;
+    std::vector<schema::ComponentTypeId> cameras;
     /// The views into render textures (D361).
     std::optional<schema::ComponentTypeId> view;
     std::optional<schema::ComponentTypeId> autoExposure;

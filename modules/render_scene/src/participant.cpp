@@ -27,6 +27,9 @@ namespace rawframe::render_scene {
 namespace {
 
 constexpr diagnostics::EventIdentity kSceneSummary{"scene", "scene_summary"};
+// The particles' apart: with them the summary would pass the 32 fields a
+// record carries (D361).
+constexpr diagnostics::EventIdentity kParticlesSummary{"scene", "scene_particles_summary"};
 constexpr std::string_view kProvided[] = {kSceneFrames.name};
 constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
 constexpr diagnostics::EventIdentity kTextureUnknown{"scene", "material_texture_unknown"};
@@ -222,7 +225,7 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
         client_ = client;
-        cameraComponent_ = game->camera;
+        cameraComponents_ = game->cameras;
         viewComponent_ = game->view;
         for (const world_kest::GameRenderTexture& kTexture : files->description().renderTextures) {
             textureViews_.push_back(TextureView{.id = kTexture.id, .width = kTexture.width, .height = kTexture.height});
@@ -422,10 +425,14 @@ public:
             diagnostics::field("shadowSquares", shadowSquares_),
             diagnostics::field("shadowsEvicted", shadowsEvicted_),
             diagnostics::field("decalsDrawn", decalsDrawn_),
-            diagnostics::field("decalsCulled", decalsCulled_)};
-        const auto kParticles = particles_.fields();
-        fields.insert(fields.end(), kParticles.begin(), kParticles.end());
+            diagnostics::field("decalsCulled", decalsCulled_),
+            diagnostics::field("viewsDrawn", viewsDrawn_),
+            diagnostics::field("viewsLeftOut", viewsLeftOut_),
+            diagnostics::field("viewsRefused", viewsRefused_)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
+        const auto kParticles = particles_.fields();
+        emitter_.log(
+            diagnostics::Severity::Info, kParticlesSummary, "what one client's scene's emitters drew", kParticles);
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -685,11 +692,14 @@ private:
     bool readCamera(world::World& world, world::EntityHandle entity, SceneCamera& camera) const {
         Camera view = kDefaultCamera;
         bool found = false;
-        if (cameraComponent_.has_value()) {
-            if (const auto kCamera = world.registry().find(*cameraComponent_)) {
+        // The first of the game's camera components the entity has
+        // (D361: a player's and its views' may differ).
+        for (const schema::ComponentTypeId kComponent : cameraComponents_) {
+            if (const auto kCamera = world.registry().find(kComponent)) {
                 if (const auto* placed = static_cast<const Camera*>(world.getErased(entity, *kCamera))) {
                     view = *placed;
                     found = true;
+                    break;
                 }
             }
         }
@@ -837,7 +847,7 @@ private:
     SceneSettings settings_;
     ShadowSettings shadows_;
     SceneCamera camera_;
-    std::optional<schema::ComponentTypeId> cameraComponent_;
+    std::vector<schema::ComponentTypeId> cameraComponents_;
     /// The views into render textures (D361): the game's view component,
     /// its query, each render texture's view and scene, the frames they
     /// queued, and the views drawn, left out, and refused.

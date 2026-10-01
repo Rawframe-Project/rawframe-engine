@@ -347,6 +347,7 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
                                "rawframe.model.ReflectionProbe\n";
     const std::string kView =
         "component 7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.view rawframe.model.Camera\n"
+        "component 7f8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.lens rawframe.model.Camera\n"
         "component bc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.meter rawframe.model.AutoExposure\n"
         "component cc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.grade rawframe.model.Grading\n"
         "component ec8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.hidden "
@@ -367,7 +368,9 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
     RAWFRAME_EXPECT(
         kLoaded.has_value() && kLoaded->models == (std::vector<schema::ComponentTypeId>{kModelId}) &&
         kLoaded->sun == kSunId && kLoaded->sky == kSkyId &&
-        kLoaded->camera == schema::ComponentTypeId::fromText("7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18") &&
+        kLoaded->cameras == (std::vector<schema::ComponentTypeId>{
+                                schema::ComponentTypeId::fromText("7c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18"),
+                                schema::ComponentTypeId::fromText("7f8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18")}) &&
         kLoaded->meshes.empty() && kLoaded->points == (std::vector<schema::ComponentTypeId>{kPointId}) &&
         kLoaded->spots == (std::vector<schema::ComponentTypeId>{kSpotId}) &&
         kLoaded->probes == (std::vector<schema::ComponentTypeId>{kProbeId}) &&
@@ -390,7 +393,7 @@ RAWFRAME_TEST(AGamesSceneLoadsAgainstItsProgram) {
         kLoaded->beams == (std::vector<schema::ComponentTypeId>{
                               schema::ComponentTypeId::fromText("9d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18")}));
     const auto kPlain = kLoad(kUses, kModel);
-    RAWFRAME_EXPECT(kPlain.has_value() && !kPlain->camera && !kPlain->sun && !kPlain->sky);
+    RAWFRAME_EXPECT(kPlain.has_value() && kPlain->cameras.empty() && !kPlain->sun && !kPlain->sky);
     // A client has one view, and the World one sun and one sky.
     const auto kTwoSuns = kLoad(
         kUses, kModel + kLights + "component 8c8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18 shown.moon rawframe.model.Sun\n");

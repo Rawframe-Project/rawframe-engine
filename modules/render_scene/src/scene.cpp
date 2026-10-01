@@ -1044,7 +1044,7 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
         if (world_kest::ofEngineType(component, "rawframe.model.Model")) {
             loaded.models.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.Camera")) {
-            RAWFRAME_TRY(kOne(loaded.camera, component.id, "a game has at most one 3D camera: a client has one view"));
+            loaded.cameras.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.View")) {
             RAWFRAME_TRY(kOne(loaded.view, component.id, "a game has at most one view component"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.AutoExposure")) {
@@ -1111,7 +1111,7 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"scaleZ", offsetof(Model, scaleZ)},
                            {"color", offsetof(Model, color)},
                            {"material", offsetof(Model, material)}}));
-    RAWFRAME_TRY(kLaidOut(loaded.camera.has_value(),
+    RAWFRAME_TRY(kLaidOut(!loaded.cameras.empty(),
                           "rawframe.model.Camera",
                           sizeof(Camera),
                           {{"offsetX", offsetof(Camera, offsetX)},
