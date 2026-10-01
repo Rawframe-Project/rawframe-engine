@@ -422,7 +422,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
         return report.has_value() ? std::move(*report) : CookReport{};
     };
     const CookReport kFirst = kCook();
-    RAWFRAME_EXPECT(kFirst.cooked == 19 && kFirst.failures.empty());
+    RAWFRAME_EXPECT(kFirst.cooked == 20 && kFirst.failures.empty());
     const auto kCooked = [&kProject]() -> std::optional<world_kest::CookedGame> {
         const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
         if (!kManifest.has_value()) {
@@ -455,7 +455,7 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     RAWFRAME_EXPECT(kGameRead->texts.size() == 2 && kGameRead->textDocument("hud.strings") != nullptr &&
                     kGameRead->textDocument("hud.strings")->document ==
                         base::parseBits128Hex("aefdab1e47c086ddf189f56bbb92c4f0").value);
-    RAWFRAME_EXPECT(kGameRead->textures.size() == 2 && kGameRead->texture("runner.png") != nullptr &&
+    RAWFRAME_EXPECT(kGameRead->textures.size() == 3 && kGameRead->texture("runner.png") != nullptr &&
                     kGameRead->texture("runner.png")->texture ==
                         base::parseBits128Hex("2cf4e6afa86830492ee14a9e8067986a").value);
     const base::Bits128 kSources = base::parseBits128Hex(kSourcesId).value;

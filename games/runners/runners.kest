@@ -27,6 +27,8 @@ const HURT: u64 = 0x81012dde2ad3952f
 // What a runner looks like (runners.game's `texture` line): a sheet of six
 // cells in a row, standing, four strides, and in the air.
 const RUNNER_LOOK: u64 = 0xeddbc014cab63eb2
+// The HUD's target (runners.game's `texture` line, D378).
+const HUD_TARGET: u64 = 0xc067c4be8ce86d12
 // The runners' look's material (D356).
 const RUNNER_GLOW: u64 = 0xea61c563796c6e4b
 const CELL: f32 = 0.16666667
@@ -132,16 +134,16 @@ fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
 }
 
 // The player's HUD (D376): a dark panel 240 pixels wide centered 12 above
-// the bottom of its view, and in it a green meter of the hits its runner
-// landed over a red one of those it took, each a tenth of the panel's
-// inside for each hit, starting again at ten.
-fn gauge(count: i32, scores: [Score], huds: [ui.Node], landed: [ui.Node], taken: [ui.Node]) {
+// the bottom of its view, a pale target (D378) beside a green meter of the
+// hits its runner landed over a red one of those it took, each a tenth of
+// the meters' width for each hit, starting again at ten.
+fn gauge(count: i32, scores: [Score], huds: [ui.Node], targets: [ui.Node], meters: [ui.Node], landed: [ui.Node],
+         taken: [ui.Node]) {
     let i = 0
     while i < count {
         huds[i].widthOffset = 240.0
-        huds[i].direction = ui.COLUMN
-        huds[i].alignItems = ui.ALIGN_START
-        huds[i].gap = 4.0
+        huds[i].alignItems = ui.ALIGN_CENTER
+        huds[i].gap = 8.0
         huds[i].padding = 6.0
         huds[i].absolute = u32(1)
         huds[i].xScale = 0.5
@@ -151,11 +153,20 @@ fn gauge(count: i32, scores: [Score], huds: [ui.Node], landed: [ui.Node], taken:
         huds[i].anchorY = 1.0
         huds[i].fill = u32(0x101820C0)
         huds[i].radius = 6.0
-        landed[i].widthOffset = 22.8 * f32(scores[i].hits % 10)
+        targets[i].widthOffset = 16.0
+        targets[i].heightOffset = 16.0
+        targets[i].image = HUD_TARGET
+        targets[i].imageTint = u32(0xD8E4FFFF)
+        meters[i].direction = ui.COLUMN
+        meters[i].alignItems = ui.ALIGN_START
+        meters[i].gap = 4.0
+        meters[i].grow = 1.0
+        meters[i].order = 1
+        landed[i].widthOffset = 20.4 * f32(scores[i].hits % 10)
         landed[i].heightOffset = 8.0
         landed[i].fill = u32(0x58D068FF)
         landed[i].radius = 4.0
-        taken[i].widthOffset = 22.8 * f32(scores[i].taken % 10)
+        taken[i].widthOffset = 20.4 * f32(scores[i].taken % 10)
         taken[i].heightOffset = 8.0
         taken[i].fill = u32(0xE05050FF)
         taken[i].radius = 4.0

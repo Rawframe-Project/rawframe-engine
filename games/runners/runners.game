@@ -32,6 +32,8 @@ component fd2777e2-c81b-4588-9117-dd0e4acc564d runners.sparks rawframe.model.Par
 component d30c12f9-2754-4113-9519-0afbf0ea2970 runners.hud rawframe.ui.Node
 component 6293ab03-1010-42b8-bef6-f06379468d19 runners.landed rawframe.ui.Node
 component 1e5be856-5be3-47ab-84a3-433ac63f84c6 runners.taken rawframe.ui.Node
+component d06185a9-60a5-4e0a-9779-7ca0cb5699c9 runners.target rawframe.ui.Node
+component beb08a69-db84-40d4-bc0f-d7deafc09bc9 runners.meters rawframe.ui.Node
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
@@ -121,15 +123,19 @@ present runners.wince wince write runners.wince
 # client's own particles, drawn over the canvas.
 presentation runners.dust runners.sparks on runners.stick
 present runners.glint glint read runners.emitter write runners.dust write runners.sparks
-# The player's HUD (D376): a panel along the bottom of its view, a green
-# meter of the hits its runner landed and a red one of those it took, each
-# filling over ten and starting again; the client's own, drawn over all.
-presentation runners.hud runners.landed runners.taken on player
-ui runners.landed in runners.hud
-ui runners.taken in runners.hud
-present runners.gauge gauge read runners.score write runners.hud write runners.landed write runners.taken
+# The player's HUD (D376): a panel along the bottom of its view, a target
+# (hud.png, D378) beside a green meter of the hits its runner landed and a
+# red one of those it took, each filling over ten and starting again; the
+# client's own, drawn over all.
+presentation runners.hud runners.target runners.meters runners.landed runners.taken on player
+ui runners.target in runners.hud
+ui runners.meters in runners.hud
+ui runners.landed in runners.meters
+ui runners.taken in runners.meters
+present runners.gauge gauge read runners.score write runners.hud write runners.target write runners.meters write runners.landed write runners.taken
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
+texture c067c4be8ce86d12 hud.png
 # The runners' look lit a little warm from within: a canvas material
 # (D356).
 material ea61c563796c6e4b runner.rfmaterial

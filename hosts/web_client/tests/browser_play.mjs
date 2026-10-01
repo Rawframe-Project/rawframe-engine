@@ -388,7 +388,7 @@ try {
                    field('confirmed') > 100 && drawing !== null && Number(drawing[1]) > 0 && shown > 1000 &&
                    gpuErrors.length === 0;
     const runnersPlayed = felt !== null && Number(felt[1]) > 0 && drawn !== null && Number(drawn[1]) > 0 &&
-                          Number(drawn[2]) > 0 && Number(drawn[3]) === 2 && viewed !== null && Number(viewed[1]) > 0 &&
+                          Number(drawn[2]) > 0 && Number(drawn[3]) === 3 && viewed !== null && Number(viewed[1]) > 0 &&
                           heard.frames > 48000 && heard.peak > 0.05;
     const plazaPlayed = seen3d !== null && Number(seen3d[1]) > 0 && Number(seen3d[2]) > 0 && drawn3d !== null &&
                         Number(drawn3d[1]) > 0;
