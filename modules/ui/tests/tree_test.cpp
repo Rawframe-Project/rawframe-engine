@@ -231,3 +231,37 @@ RAWFRAME_TEST(AnImageIsDrawnOverItsNodesFillInPaintOrder) {
     RAWFRAME_EXPECT(near(kImage.tint[3], 128.0F / 255.0F) && near(kImage.tint[0], 128.0F / 255.0F) &&
                     kImage.tint[1] == 0);
 }
+
+RAWFRAME_TEST(AShadowIsDrawnOutsideOrInsideItsBox) {
+    auto tree = Tree::create(4);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    const Node kCard = *ui.add(1);
+    RAWFRAME_EXPECT(ui.setLayout(kCard, {.width = pixels(100), .height = pixels(50)}).has_value());
+    RAWFRAME_EXPECT(ui.setLook(kCard,
+                               {.fill = 0xFFFFFFFF,
+                                .radius = 4,
+                                .outerShadow = {.color = 0x00000080, .x = 2, .y = 3, .blur = 6, .spread = 1},
+                                .innerShadow = {.color = 0xFF0000FF, .blur = 2}})
+                        .has_value());
+    // A blur below nought is refused.
+    RAWFRAME_EXPECT(!ui.setLook(kCard, {.outerShadow = {.color = 0x000000FF, .blur = -1}}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kCard, 640, 360).has_value());
+    DrawList list;
+    RAWFRAME_EXPECT(ui.draw(kCard, 1, list).has_value());
+    // The outer shadow under the box, the inner one over its fill.
+    RAWFRAME_EXPECT(list.commands.size() == 3 && list.shadows.size() == 2 && list.boxes.size() == 1);
+    if (list.commands.size() != 3 || list.shadows.size() != 2) {
+        return;
+    }
+    RAWFRAME_EXPECT(list.commands[0].kind == DrawCommand::Kind::Shadow &&
+                    list.commands[1].kind == DrawCommand::Kind::Box &&
+                    list.commands[2].kind == DrawCommand::Kind::Shadow);
+    const Shadow& kOuter = list.shadows[0];
+    RAWFRAME_EXPECT(!kOuter.inset && placed(kOuter.rect, 0, 0, 100, 50) && kOuter.x == 2 && kOuter.y == 3 &&
+                    kOuter.blur == 6 && kOuter.spread == 1 && kOuter.radii[0] == 4 &&
+                    near(kOuter.color[3], 128.0F / 255.0F));
+    RAWFRAME_EXPECT(list.shadows[1].inset && list.shadows[1].color == (std::array<float, 4>{1, 0, 0, 1}));
+}

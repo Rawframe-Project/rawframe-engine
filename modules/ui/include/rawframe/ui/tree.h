@@ -94,6 +94,17 @@ struct Layout {
     Placement placement;
 };
 
+/// A shadow of a node's rounded box, as CSS's box-shadow (D381): its color,
+/// 0xRRGGBBAA sRGB with straight alpha (nought casts none), its offset in
+/// pixels, the distance it blurs over, and how far it grows past the box.
+struct ShadowLook {
+    std::uint32_t color = 0;
+    float x = 0;
+    float y = 0;
+    float blur = 0;
+    float spread = 0;
+};
+
 /// A node's look (SPEC-0032's box): its fill and its border's color, each
 /// 0xRRGGBBAA, sRGB with straight alpha (nought draws nothing); its
 /// corners' radius in pixels, held to half its shorter side; whether it
@@ -109,6 +120,9 @@ struct Look {
     std::uint64_t image = 0;
     std::array<float, 4> imageSlice{};
     std::uint32_t imageTint = 0xFFFFFFFF;
+    /// Cast outside its border box, and inside its padding box (D381).
+    ShadowLook outerShadow;
+    ShadowLook innerShadow;
 };
 
 /// A node's border box from the last layout that reached it, relative to
@@ -148,12 +162,29 @@ struct Image {
     std::uint32_t clip = 0;
 };
 
-/// A command of a list in paint order: a box or an image, by its index in
-/// the list's own.
+/// A shadow to draw (SPEC-0032, D381): of the rounded box `rect` and
+/// `radii`, outside it or, inset, inside it; offset, grown by `spread`, and
+/// blurred over `blur` pixels (a Gaussian of half that deviation); its
+/// color linear with premultiplied alpha; and its clip.
+struct Shadow {
+    Rect rect;
+    std::array<float, 4> radii{};
+    std::array<float, 4> color{};
+    float x = 0;
+    float y = 0;
+    float blur = 0;
+    float spread = 0;
+    bool inset = false;
+    std::uint32_t clip = 0;
+};
+
+/// A command of a list in paint order: a box, an image, or a shadow, by its
+/// index in the list's own.
 struct DrawCommand {
     enum class Kind : std::uint8_t {
         Box,
-        Image
+        Image,
+        Shadow
     };
     Kind kind = Kind::Box;
     std::uint32_t index = 0;
@@ -168,14 +199,15 @@ struct Clip {
     bool invert = false;
 };
 
-/// What a tree draws: its boxes and images, `commands` saying their paint
-/// order, and its clips, the first a placeholder for none, in logical
-/// pixels, `scale` device pixels each. Commands generation 1 does not draw
-/// yet (shadows, gradients over a fill, glyph runs, transformed ones) are
+/// What a tree draws: its boxes, images, and shadows, `commands` saying
+/// their paint order, and its clips, the first a placeholder for none, in
+/// logical pixels, `scale` device pixels each. Commands generation 1 does
+/// not draw yet (gradients over a fill, glyph runs, transformed ones) are
 /// counted, not kept.
 struct DrawList {
     std::vector<Box> boxes;
     std::vector<Image> images;
+    std::vector<Shadow> shadows;
     std::vector<DrawCommand> commands;
     std::vector<Clip> clips;
     std::uint32_t skipped = 0;

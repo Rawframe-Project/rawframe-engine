@@ -186,6 +186,15 @@ result::Status Tree::setLook(Node node, const Look& look) {
                                 .top = look.imageSlice[0],
                                 .bottom = look.imageSlice[2]};
     style.imageTint = colorOf(look.imageTint);
+    const auto kShadow = [](const ShadowLook& shadow) {
+        return muiShadow{.color = colorOf(shadow.color),
+                         .offsetX = shadow.x,
+                         .offsetY = shadow.y,
+                         .blur = shadow.blur,
+                         .spread = shadow.spread};
+    };
+    style.outerShadow = kShadow(look.outerShadow);
+    style.innerShadow = kShadow(look.innerShadow);
     return checked(muiNode_SetVisualValues(state_->context, idOf(node), &style, MUI_VISUAL_PROPERTIES),
                    "a UI node's look was refused");
 }
@@ -197,6 +206,7 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
     RAWFRAME_TRY(checked(muiGetDrawList(state_->context, &list), "a UI tree's drawing could not be read"));
     into.boxes.clear();
     into.images.clear();
+    into.shadows.clear();
     into.commands.clear();
     into.clips.clear();
     into.skipped = 0;
@@ -221,6 +231,21 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
                       .slice = {kImage.slice.top, kImage.slice.right, kImage.slice.bottom, kImage.slice.left},
                       .tint = linearOf(kImage.tint),
                       .clip = kCommand.clip});
+            continue;
+        }
+        if (kCommand.kind == mui_drawShadow && kCommand.transform == 0) {
+            const muiDrawShadow& kShadow = kCommand.shadow;
+            into.commands.push_back(DrawCommand{.kind = DrawCommand::Kind::Shadow,
+                                                .index = static_cast<std::uint32_t>(into.shadows.size())});
+            into.shadows.push_back(Shadow{.rect = ui::rectOf(kShadow.rect),
+                                          .radii = cornersOf(kShadow.radii),
+                                          .color = linearOf(kShadow.color),
+                                          .x = kShadow.offsetX,
+                                          .y = kShadow.offsetY,
+                                          .blur = kShadow.blur,
+                                          .spread = kShadow.spread,
+                                          .inset = kShadow.inset != 0,
+                                          .clip = kCommand.clip});
             continue;
         }
         if (kCommand.kind != mui_drawBox || kCommand.transform != 0 || kCommand.box.gradient != 0) {
