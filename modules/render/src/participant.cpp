@@ -20,6 +20,20 @@ constexpr diagnostics::EventIdentity kSurfaceMade{"render", "surface_made"};
 constexpr diagnostics::EventIdentity kSurfaceFailed{"render", "surface_failed"};
 constexpr diagnostics::EventIdentity kSubstituted{"render", "present_policy_substituted"};
 constexpr diagnostics::EventIdentity kSurfaceSummary{"render", "surface_summary"};
+constexpr diagnostics::EventIdentity kOutputRecord{"render", "output_record"};
+constexpr diagnostics::EventIdentity kOutputSubstituted{"render", "output_substituted"};
+
+/// The modes a record says its surface offers, apart by spaces.
+std::string offeredText(const OutputRecord& record) {
+    std::string text;
+    for (std::size_t at = 0; at < kOutputModes; ++at) {
+        if (record.offered.at(at)) {
+            text += text.empty() ? "" : " ";
+            text += nameOf(static_cast<OutputMode>(at));
+        }
+    }
+    return text;
+}
 constexpr std::string_view kProvided[] = {kDevice.name};
 constexpr std::string_view kMaybe[] = {window::kSurfaces.name};
 
@@ -68,6 +82,20 @@ public:
                                  "render.present is vsync, adaptive_vsync, low_latency_vsync, or immediate")
                         .error()};
             }
+        }
+        // ADR-0047's output mode asked of every window (D365): SDR unless
+        // named; one that cannot be used falls back to SDR, said so.
+        if (const auto kOutput = context.configuration().text("render.output")) {
+            const auto kMode = outputModeNamed(*kOutput);
+            if (!kMode.has_value()) {
+                return std::unexpected<result::Error>{
+                    result::fail(result::ErrorClass::InvalidArgument,
+                                 composition::kCompositionDomain,
+                                 code(composition::CompositionError::BadConfiguration),
+                                 "render.output is sdr_srgb, hdr_linear_fp16_rec709, or hdr10_pq_rec2020")
+                        .error()};
+            }
+            output_ = *kMode;
         }
         if (context.has(window::kSurfaces.name)) {
             RAWFRAME_TRY_ASSIGN(windows_, context.capability(window::kSurfaces));
@@ -128,7 +156,7 @@ public:
             if (state.window != window) {
                 continue;
             }
-            auto prepared = device->prepare(kSurface->second.key, state, policy_);
+            auto prepared = device->prepare(kSurface->second.key, state, policy_, output_);
             if (!prepared.has_value()) {
                 failedSurface(prepared.error());
                 device->release(kSurface->second.key);
@@ -149,12 +177,39 @@ public:
             if (prepared->reconfigured) {
                 used_ = prepared->policy;
             }
+            if (prepared->outputChanged) {
+                told(prepared->output);
+            }
             return std::pair{kSurface->second.key, *prepared};
         }
         return std::nullopt;
     }
 
 private:
+    /// A window's HDR capability record told at each revision (D365), and
+    /// the mode asked for, when another is used, said so.
+    void told(const OutputRecord& record) noexcept {
+        emitter_.log(diagnostics::Severity::Info,
+                     kOutputRecord,
+                     "a window's HDR capability record moved to a new revision",
+                     {diagnostics::field("revision", record.revision),
+                      diagnostics::field("offered", offeredText(record)),
+                      diagnostics::field("active", nameOf(record.active)),
+                      diagnostics::field("referenceWhiteNits", static_cast<double>(record.referenceWhiteNits)),
+                      diagnostics::field("hdrReported", record.display.reported),
+                      diagnostics::field("hdrOn", record.display.hdrOn),
+                      diagnostics::field("peakNits", static_cast<double>(record.display.peakNits))});
+        if (record.fallback != OutputFallback::None) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kOutputSubstituted,
+                         "the output mode asked for is not used: SDR is",
+                         {diagnostics::field("asked", nameOf(output_)),
+                          diagnostics::field("used", nameOf(record.active)),
+                          diagnostics::field("why", nameOf(record.fallback)),
+                          diagnostics::field("revision", record.revision)});
+        }
+    }
+
     /// A window's surface on the device, for one surface generation.
     struct Surface {
         std::uint64_t key = 0;
@@ -276,6 +331,7 @@ private:
 
     std::optional<DeviceSettings> settings_;
     PresentPolicy policy_ = PresentPolicy::Vsync;
+    OutputMode output_ = OutputMode::SdrSrgb;
     std::optional<PresentPolicy> used_;
     window::Surfaces* windows_ = nullptr;
     bool requested_ = false;

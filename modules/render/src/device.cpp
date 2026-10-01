@@ -150,7 +150,33 @@ struct Held {
     PresentPolicy asked = PresentPolicy::Vsync;
     PresentPolicy used = PresentPolicy::Vsync;
     mrhiFormat format = mrhi_formatNone;
+    /// The output modes the surface offers, its display's facts when they
+    /// were read, and its HDR capability record (D365).
+    std::array<bool, kOutputModes> offered{};
+    std::optional<window::DisplayFacts> facts;
+    OutputRecord output;
 };
+
+/// The output modes a surface's colors offer (ADR-0047's three).
+std::array<bool, kOutputModes> offeredBy(const mrhiSurfaceCaps& caps) noexcept {
+    std::array<bool, kOutputModes> offered{};
+    for (std::uint32_t at = 0; at < caps.colorCount; ++at) {
+        const mrhiSurfaceColor& kColor = caps.colors[at];
+        if (standardColor(kColor)) {
+            offered[static_cast<std::size_t>(OutputMode::SdrSrgb)] = true;
+        } else if (kColor.format == mrhi_formatRgba16Float && kColor.primaries == mrhi_primariesBt709 &&
+                   kColor.transfer == mrhi_transferLinear && kColor.range == mrhi_rangeExtended) {
+            offered[static_cast<std::size_t>(OutputMode::HdrLinearFp16Rec709)] = true;
+        } else if (kColor.format == mrhi_formatRgb10a2Unorm && kColor.primaries == mrhi_primariesBt2020 &&
+                   kColor.transfer == mrhi_transferPq) {
+            offered[static_cast<std::size_t>(OutputMode::Hdr10PqRec2020)] = true;
+        }
+    }
+    return offered;
+}
+
+/// The modes the display pass draws: SDR only in generation 1 (D365).
+constexpr std::array<OutputMode, 1> kDrawn = {OutputMode::SdrSrgb};
 
 } // namespace
 
@@ -359,7 +385,7 @@ void Device::release(std::uint64_t surface) noexcept {
 }
 
 result::Result<PreparedSurface>
-Device::prepare(std::uint64_t surface, const window::SurfaceState& window, PresentPolicy policy) {
+Device::prepare(std::uint64_t surface, const window::SurfaceState& window, PresentPolicy policy, OutputMode output) {
     State& state = *state_;
     const auto kFound = state.surfaces.find(surface);
     if (state.phase != Phase::Ready || kFound == state.surfaces.end()) {
@@ -372,12 +398,25 @@ Device::prepare(std::uint64_t surface, const window::SurfaceState& window, Prese
     }
     const bool kFits = held.configured && !held.outOfDate && held.asked == policy &&
                        held.size.width == window.pixelSize.width && held.size.height == window.pixelSize.height;
-    if (!kFits) {
-        mrhiSurfaceCaps caps{};
+    // What the surface offers, read again when it is configured and when
+    // its display's facts change (D365).
+    mrhiSurfaceCaps caps{};
+    if (!kFits || held.facts != window.display) {
         if (const mrhiResult kRead = mrhiGetSurfaceCaps(state.instance, held.id, state.chosen, &caps);
             kRead != mrhi_success) {
             return failed("the surface's capabilities could not be read", kRead);
         }
+        held.offered = offeredBy(caps);
+        held.facts = window.display;
+    }
+    OutputRecord record = resolveOutput(held.offered, window.display, output, kDrawn);
+    if (held.output.revision == 0 || !record.sameAs(held.output)) {
+        record.revision = held.output.revision + 1;
+        held.output = record;
+        prepared.outputChanged = true;
+    }
+    prepared.output = held.output;
+    if (!kFits) {
         if (!caps.presentable) {
             return refuse(result::ErrorClass::Unavailable, RenderError::Device, "the adapter cannot present there");
         }

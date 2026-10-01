@@ -14,6 +14,7 @@
 // acquired into a frame.
 
 #include "rawframe/composition/participant.h"
+#include "rawframe/render/output.h"
 #include "rawframe/result/result.h"
 #include "rawframe/window/handles.h"
 #include "rawframe/window/surfaces.h"
@@ -76,6 +77,10 @@ struct PreparedSurface {
     PresentPolicy policy = PresentPolicy::Vsync;
     /// Its images' size.
     window::PixelSize size;
+    /// Its window's HDR capability record (D365), and whether this frame
+    /// moved its revision.
+    OutputRecord output;
+    bool outputChanged = false;
 };
 
 /// A request of the device's, as the rendering cluster names it to find its
@@ -134,8 +139,13 @@ public:
     /// SPEC-0024's `prepare` for one surface, once a frame before a frame
     /// draws to it: configured again when its window's size, the policy,
     /// or an image out of date says so, at most once a frame.
-    [[nodiscard]] result::Result<PreparedSurface>
-    prepare(std::uint64_t surface, const window::SurfaceState& state, PresentPolicy policy);
+    /// Its HDR capability record is derived again each time, from what the
+    /// surface offers (read again when it is configured or its display's
+    /// facts change) and the display's facts, `output` resolved against it.
+    [[nodiscard]] result::Result<PreparedSurface> prepare(std::uint64_t surface,
+                                                          const window::SurfaceState& state,
+                                                          PresentPolicy policy,
+                                                          OutputMode output = OutputMode::SdrSrgb);
     /// In an open frame: the surface's next image as the frame's resource,
     /// named as `requestKey` names ids, presented when the frame is
     /// submitted; none when it has none this frame (hidden, or out of date,

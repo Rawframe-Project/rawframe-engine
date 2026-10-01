@@ -6,7 +6,7 @@ if(NOT TARGET maul-rhi)
     return()
 endif()
 
-rawframe_module(NAME render SOURCES src/capture.cpp src/device.cpp src/display.cpp src/frame.cpp src/frames.cpp src/participant.cpp src/textures.cpp DEPS texture window composition diagnostics result base)
+rawframe_module(NAME render SOURCES src/capture.cpp src/device.cpp src/display.cpp src/frame.cpp src/frames.cpp src/output.cpp src/participant.cpp src/textures.cpp DEPS texture window composition diagnostics result base)
 target_link_libraries(rawframe_render PUBLIC maul-rhi)
 
-rawframe_module_tests(NAME render SOURCES tests/device_test.cpp tests/frame_test.cpp)
+rawframe_module_tests(NAME render SOURCES tests/device_test.cpp tests/frame_test.cpp tests/output_test.cpp)
