@@ -15,6 +15,7 @@
 #include "rawframe/material/material.h"
 #include "rawframe/material/post_process.h"
 #include "rawframe/mesh/mesh.h"
+#include "rawframe/particles/particles.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
 #include "rawframe/world/world.h"
@@ -163,57 +164,6 @@ struct Decal {
 struct PostProcess {
     std::uint64_t material = 0;
     float weight = 0;
-};
-
-/// `rawframe.model.ParticleEmitter` as C++ reads it (D352).
-struct ParticleEmitter {
-    std::uint64_t material = 0;
-    float rate = 0;
-    float lifetime = 0;
-    float speed = 0;
-    float spread = 0;
-    float radius = 0;
-    float sizeStart = 0;
-    float sizeEnd = 0;
-    std::uint32_t colorStart = 0xFFFFFFFF;
-    std::uint32_t colorEnd = 0xFFFFFFFF;
-    float accelerationX = 0;
-    float accelerationY = 0;
-    float accelerationZ = 0;
-    float drag = 0;
-    float variation = 0;
-    std::uint32_t bursts = 0;
-    std::uint32_t burstCount = 0;
-    std::uint32_t seed = 0;
-};
-
-/// `rawframe.model.Trail` as C++ reads it (D354).
-struct Trail {
-    std::uint64_t material = 0;
-    float lifetime = 0;
-    float spacing = 0;
-    float widthStart = 0;
-    float widthEnd = 0;
-    std::uint32_t colorStart = 0xFFFFFFFF;
-    std::uint32_t colorEnd = 0xFFFFFFFF;
-};
-
-/// `rawframe.model.Beam` as C++ reads it (D354).
-struct Beam {
-    std::uint64_t material = 0;
-    float toX = 0;
-    float toY = 0;
-    float toZ = 0;
-    float bendX = 0;
-    float bendY = 0;
-    float bendZ = 0;
-    std::uint32_t segments = 0;
-    float widthStart = 0;
-    float widthEnd = 0;
-    std::uint32_t colorStart = 0xFFFFFFFF;
-    std::uint32_t colorEnd = 0xFFFFFFFF;
-    float textureLength = 0;
-    float textureSpeed = 0;
 };
 
 /// `rawframe.model.ReflectionProbe` as C++ reads it (D325).
@@ -438,95 +388,6 @@ struct ProbeInstance {
     world::EntityHandle entity;
     ReflectionProbe probe;
     std::array<double, 3> position{};
-};
-
-/// A particle emitter as the extract stage copies it out of the World,
-/// where its entity's pose puts it (D352): its entity and which of the
-/// game's emitter components it is.
-struct EmitterInstance {
-    world::EntityHandle entity;
-    std::uint32_t component = 0;
-    ParticleEmitter emitter;
-    std::array<double, 3> position{};
-    std::array<float, 4> rotation{0, 0, 0, 1};
-};
-
-/// The seconds a frame's particle clock runs before it wraps to nought
-/// (D352): far past any particle's life, and short enough that a float
-/// keeps a twentieth of a millisecond.
-inline constexpr float kParticleClockPeriod = 4096;
-
-/// An emitter a frame draws (ADR-0053, D352), its particles moving in
-/// closed form from their births: its identity across frames (its entity
-/// and component), its material's place among the frame's materials; its
-/// anchor relative to the eye, where it spawns now relative to its anchor,
-/// and the way it emits (its pose's +Y); its particles' life (seconds),
-/// speed (meters a second), the cone's half angle about that way
-/// (radians), the sphere about the spawn they start in (meters), their
-/// size at birth and death (meters), their color and alpha at birth and
-/// death (linear), their constant acceleration (meters a second squared),
-/// their drag (a second), and how much each one's life, speed, and size
-/// vary (nought to one); its ring of particles: its size, where this
-/// frame's spawn starts in it, how many it spawns, the first `steady` born
-/// one `step` apart from `born` on the particle clock and the rest (its
-/// bursts) at its now; its seed; and how many times its ring has started
-/// anew, which a device's ring follows (D353).
-struct SceneEmitter {
-    std::uint64_t key = 0;
-    std::uint32_t material = 0;
-    std::array<float, 3> anchor{};
-    std::array<float, 3> origin{};
-    std::array<float, 3> direction{0, 1, 0};
-    float lifetime = 0;
-    float speed = 0;
-    float spread = 0;
-    float radius = 0;
-    float sizeStart = 0;
-    float sizeEnd = 0;
-    std::array<float, 4> colorStart{1, 1, 1, 1};
-    std::array<float, 4> colorEnd{1, 1, 1, 1};
-    std::array<float, 3> acceleration{};
-    float drag = 0;
-    float variation = 0;
-    std::uint32_t capacity = 0;
-    std::uint32_t first = 0;
-    std::uint32_t spawned = 0;
-    std::uint32_t steady = 0;
-    float born = 0;
-    float step = 0;
-    std::uint32_t seed = 0;
-    std::uint32_t ring = 0;
-};
-
-/// A trail or a beam as the extract stage copies it out of the World,
-/// where its entity's pose puts it (D354): its entity and which of the
-/// game's trail or beam components it is.
-template <typename Ribbon> struct RibbonInstance {
-    world::EntityHandle entity;
-    std::uint32_t component = 0;
-    Ribbon ribbon;
-    std::array<double, 3> position{};
-};
-using TrailInstance = RibbonInstance<Trail>;
-using BeamInstance = RibbonInstance<Beam>;
-
-/// A point of a ribbon a frame draws (D354): where it is relative to the
-/// eye, how wide it is there (meters), its color and alpha there (linear),
-/// and its texture's coordinate along the ribbon.
-struct SceneRibbonPoint {
-    std::array<float, 3> place{};
-    float width = 0;
-    std::array<float, 4> color{1, 1, 1, 1};
-    float along = 0;
-};
-
-/// A ribbon a frame draws, a trail's or a beam's (D354): its material's
-/// place among the frame's materials, and its points among the frame's,
-/// at least two.
-struct SceneRibbon {
-    std::uint32_t material = 0;
-    std::uint32_t first = 0;
-    std::uint32_t count = 0;
 };
 
 /// A decal as the extract stage copies it out of the World, where its
@@ -871,25 +732,10 @@ struct SceneFrame {
     /// nothing and is not counted.
     std::vector<ScenePostProcess> postProcesses;
     std::size_t postProcessesLeftOut = 0;
-    /// The particle emitters that reach the view, farthest first, at most
-    /// the limit (D352); the particle clock now, seconds, wrapping at
-    /// `kParticleClockPeriod`; and the emitters left out: not sound (a
-    /// value not finite), or past the limit; those held to a limit point
-    /// (their rate, life, or ring); and particles a spawn could not hold
-    /// (a burst past the ring).
-    std::vector<SceneEmitter> emitters;
-    float particleClock = 0;
-    std::size_t emittersLeftOut = 0;
-    std::size_t emittersHeld = 0;
-    std::size_t particlesLeftOut = 0;
-    /// The trails and beams that reach the view as ribbons, farthest first,
-    /// at most the limit, and their points (D354); and those left out:
-    /// not sound, or past the limit; and those held to a limit point (a
-    /// trail's points, or a beam's segments).
-    std::vector<SceneRibbon> ribbons;
-    std::vector<SceneRibbonPoint> ribbonPoints;
-    std::size_t ribbonsLeftOut = 0;
-    std::size_t ribbonsHeld = 0;
+    /// The particle emitters, trails, and beams that reach the view, and
+    /// what they spawn and leave out (D352, D354, D357), a material named
+    /// by its place among the frame's materials.
+    rawframe::particles::Frame particles;
     /// EV100.
     float exposure = 15;
     SceneLights lights;
@@ -941,19 +787,8 @@ struct SceneLimits {
     std::size_t maximumProbesPerCluster = 8;
     /// The post processes a view runs (D349).
     std::size_t maximumPostProcesses = 8;
-    /// ADR-0053's particle limit points (D352): the emitters a view draws,
-    /// the particles an emitter holds alive, the particles it spawns a
-    /// second, and the seconds one lives.
-    std::size_t maximumEmitters = 64;
-    std::uint32_t maximumParticlesPerEmitter = 4096;
-    float maximumParticleRate = 1000;
-    float maximumParticleLifetime = 20;
-    /// ADR-0053's trail and beam limit points (D354): the trails and beams
-    /// a view draws, the points a trail keeps, and the segments a beam
-    /// is cut into.
-    std::size_t maximumRibbons = 64;
-    std::uint32_t maximumTrailPoints = 256;
-    std::uint32_t maximumBeamSegments = 64;
+    /// ADR-0053's particle, trail, and beam limit points (D352, D354).
+    rawframe::particles::Limits particles;
 };
 
 /// ADR-0051's one typed atlas for the punctual lights' shadows (D292), a
@@ -1056,9 +891,9 @@ public:
     [[nodiscard]] std::span<const LightInstance> extractedLights() const noexcept;
     [[nodiscard]] std::span<const ProbeInstance> extractedProbes() const noexcept;
     [[nodiscard]] std::span<const DecalInstance> extractedDecals() const noexcept;
-    [[nodiscard]] std::span<const EmitterInstance> extractedEmitters() const noexcept;
-    [[nodiscard]] std::span<const TrailInstance> extractedTrails() const noexcept;
-    [[nodiscard]] std::span<const BeamInstance> extractedBeams() const noexcept;
+    [[nodiscard]] std::span<const particles::EmitterInstance> extractedEmitters() const noexcept;
+    [[nodiscard]] std::span<const particles::TrailInstance> extractedTrails() const noexcept;
+    [[nodiscard]] std::span<const particles::BeamInstance> extractedBeams() const noexcept;
 
     /// The mesh a Model names by `id`: the game's or the engine's; none for
     /// another.

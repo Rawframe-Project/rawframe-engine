@@ -2,7 +2,6 @@
 
 #include "decals.h"
 #include "lights.h"
-#include "particles.h"
 #include "probes.h"
 #include "rawframe/material/material.h"
 #include "rawframe/physics3d/components.h"
@@ -10,7 +9,6 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/layouts.h"
-#include "ribbons.h"
 
 #include <algorithm>
 #include <cmath>
@@ -21,6 +19,14 @@
 #include <tuple>
 
 namespace rawframe::render_scene {
+
+using particles::Beam;
+using particles::BeamInstance;
+using particles::EmitterInstance;
+using particles::ParticleEmitter;
+using particles::RibbonInstance;
+using particles::Trail;
+using particles::TrailInstance;
 
 MaterialBlob noMaterial() noexcept {
     material::Material plain;
@@ -177,21 +183,16 @@ struct Scene::State {
     /// The decals' queries, and what the frame extracted (D339).
     std::vector<world::ColumnQuery> decalQueries;
     std::vector<DecalInstance> decals;
-    /// The particle emitters' queries, what the frame extracted, what each
-    /// keeps from frame to frame, the particle clock (seconds, before
-    /// wrapping), and the frames queued with it (D352).
+    /// The particle emitters', trails', and beams' queries, what the frame
+    /// extracted (D352, D354), and the view's accounting of them from
+    /// frame to frame (D357).
     std::vector<world::ColumnQuery> emitterQueries;
-    std::vector<EmitterInstance> emitters;
-    std::map<EmitterKey, EmitterHistory> emitterHistories;
-    /// The trails' and beams' queries, what the frame extracted, and what
-    /// each trail keeps from frame to frame (D354).
     std::vector<world::ColumnQuery> trailQueries;
     std::vector<world::ColumnQuery> beamQueries;
+    std::vector<EmitterInstance> emitters;
     std::vector<TrailInstance> trails;
     std::vector<BeamInstance> beams;
-    std::map<TrailKey, TrailHistory> trailHistories;
-    double particleClock = 0;
-    std::uint64_t particleFrames = 0;
+    rawframe::particles::Particles particles;
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
     std::map<std::uint64_t, Bounded> meshes;
@@ -644,30 +645,20 @@ struct Scene::State {
         packClusters(frame, named, settings.limits);
         shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
         // The particles, on a clock the Host's timeline moves (D352).
-        const float kElapsed = std::isfinite(camera.elapsed) ? std::clamp(camera.elapsed, 0.0F, 0.25F) : 0.0F;
-        particleClock += kElapsed;
-        ++particleFrames;
-        spawnParticles(frame,
-                       emitters,
-                       camera,
-                       {kRight, kUp, kForward},
-                       {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
-                       materials,
-                       settings.limits,
-                       particleClock,
-                       kElapsed,
-                       particleFrames,
-                       emitterHistories);
-        makeRibbons(frame,
-                    trails,
-                    beams,
-                    camera,
-                    {kRight, kUp, kForward},
-                    {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
-                    materials,
-                    settings.limits,
-                    particleClock,
-                    trailHistories);
+        const std::array<Vector, 3> kAxes = {kRight, kUp, kForward};
+        const ViewShape kView{.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear};
+        particles.update(frame.particles,
+                         emitters,
+                         trails,
+                         beams,
+                         {.eye = camera.eye,
+                          .sees =
+                              [&kAxes, &kView](const Vector& center, float radius) {
+                                  return !outsideView(kAxes, kView, center, radius);
+                              }},
+                         materials,
+                         settings.limits.particles,
+                         camera.elapsed);
         return frame;
     }
 
@@ -957,7 +948,7 @@ void Scene::extract(world::World& world) {
                     if (const auto* pose =
                             static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
                         instance.position = {pose->x, pose->y, pose->z};
-                        instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
+                        instance.way = turnOf({pose->qx, pose->qy, pose->qz, pose->qw})[1];
                     }
                 }
                 state.emitters.push_back(instance);

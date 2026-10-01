@@ -4,8 +4,8 @@
 # Client only: the dedicated server carries the components as plain values
 # and links none of this. The device half is render_scene_gpu's.
 rawframe_module(NAME render_scene
-    SOURCES src/clusters.cpp src/decals.cpp src/grading.cpp src/lights.cpp src/meshes.cpp src/effects.cpp src/participant.cpp src/particles.cpp src/probes.cpp src/ribbons.cpp src/scene.cpp
-    DEPS game_textures texture material graph game_content content physics3d mesh world_replication world_kest kest world composition schema execution diagnostics result base
+    SOURCES src/clusters.cpp src/decals.cpp src/grading.cpp src/lights.cpp src/meshes.cpp src/effects.cpp src/participant.cpp src/probes.cpp src/scene.cpp
+    DEPS particles game_textures texture material graph game_content content physics3d mesh world_replication world_kest kest world composition schema execution diagnostics result base
 )
 
-rawframe_module_tests(NAME render_scene SOURCES tests/kelvin_test.cpp tests/particle_test.cpp tests/ribbon_test.cpp tests/scene_test.cpp)
+rawframe_module_tests(NAME render_scene SOURCES tests/kelvin_test.cpp tests/scene_test.cpp)

@@ -40,26 +40,26 @@ render_scene::MaterialBlob glowing() {
 
 /// An emitter five meters ahead, its ring of `capacity`, spawning `spawned`
 /// at once at the clock's now, a meter across, living two seconds.
-render_scene::SceneEmitter emitterOf(std::uint32_t capacity, std::uint32_t spawned) {
-    return render_scene::SceneEmitter{.key = 7,
-                                      .anchor = {0, 0, -5},
-                                      .lifetime = 2,
-                                      .sizeStart = 1,
-                                      .sizeEnd = 1,
-                                      .capacity = capacity,
-                                      .spawned = spawned,
-                                      .seed = 99};
+particles::EmitterDraw emitterOf(std::uint32_t capacity, std::uint32_t spawned) {
+    return particles::EmitterDraw{.key = 7,
+                                  .anchor = {0, 0, -5},
+                                  .lifetime = 2,
+                                  .sizeStart = 1,
+                                  .sizeEnd = 1,
+                                  .capacity = capacity,
+                                  .spawned = spawned,
+                                  .seed = 99};
 }
 
 /// The view of the sky through a linear tonemapper, with `emitter` drawn
 /// with `material` at the particle clock `clock`.
-SceneFrame seen(const render_scene::SceneEmitter& emitter, render_scene::MaterialBlob material, float clock) {
+SceneFrame seen(const particles::EmitterDraw& emitter, render_scene::MaterialBlob material, float clock) {
     SceneFrame made = looking();
     made.tonemapper = render_scene::Tonemapper::Linear;
     made.materials = {material};
     made.textures = {render_scene::SceneTextures{}};
-    made.emitters = {emitter};
-    made.particleClock = clock;
+    made.particles.emitters = {emitter};
+    made.particles.clock = clock;
     return made;
 }
 
@@ -118,7 +118,7 @@ RAWFRAME_TEST(ParticlesAreBornDrawnAndGone) {
     // drag of one: 2 (1 - 1/e) = 1.26 meters right, eight pixels at five
     // meters ahead (a quarter turn high over 64 pixels), small enough to
     // leave the middle.
-    render_scene::SceneEmitter moving = emitterOf(16, 1);
+    particles::EmitterDraw moving = emitterOf(16, 1);
     moving.key = 8;
     moving.ring = 1;
     moving.direction = {1, 0, 0};
@@ -147,10 +147,10 @@ RAWFRAME_TEST(ParticlesAreBornDrawnAndGone) {
 
     // Behind a grey box between it and the eye: hidden.
     SceneFrame hidden = seen(emitterOf(16, 10), red(), 300);
-    hidden.emitters[0].key = 9;
+    hidden.particles.emitters[0].key = 9;
     hidden.draws = {box(3, 0.5F, {0.5F, 0.5F, 0.5F, 1})};
     const auto kHidden = drawn(**framer, **made, hidden, kMeshes);
-    hidden.emitters.clear();
+    hidden.particles.emitters.clear();
     const auto kBox = drawn(**framer, **made, hidden, kMeshes);
     RAWFRAME_EXPECT(kHidden.has_value() && kBox.has_value());
     if (kHidden.has_value() && kBox.has_value()) {
@@ -159,7 +159,7 @@ RAWFRAME_TEST(ParticlesAreBornDrawnAndGone) {
 
     // Emitting with no opacity: its green added over the sky, the sky's
     // red and blue kept.
-    render_scene::SceneEmitter glow = emitterOf(16, 10);
+    particles::EmitterDraw glow = emitterOf(16, 10);
     glow.key = 10;
     const auto kGlow = drawn(**framer, **made, seen(glow, glowing(), 400), kMeshes);
     RAWFRAME_EXPECT(kGlow.has_value());
@@ -186,10 +186,10 @@ RAWFRAME_TEST(AnEmitterThePoolCannotHoldIsLeftOut) {
         return render_scene::engineMesh(id);
     };
     // Sixty, then a second emitter's sixty more: the second left out.
-    render_scene::SceneEmitter second = emitterOf(60, 10);
+    particles::EmitterDraw second = emitterOf(60, 10);
     second.key = 2;
     SceneFrame both = seen(emitterOf(60, 10), red(), 10);
-    both.emitters.push_back(second);
+    both.particles.emitters.push_back(second);
     const auto kDrawn =
         drawnWith(**framer, **made, both, kMeshes, &render_scene_gpu::RendererStatistics::emittersDrawn);
     RAWFRAME_EXPECT(kDrawn.has_value());
@@ -217,10 +217,10 @@ RAWFRAME_TEST(ARibbonIsDrawnAcrossItsPoints) {
     // and a meter wide: three pixels either side of its line, joined where
     // it bends.
     SceneFrame crossing = seen({}, red(), 0);
-    crossing.emitters.clear();
-    crossing.ribbonPoints = {
+    crossing.particles.emitters.clear();
+    crossing.particles.ribbonPoints = {
         {.place = {-3, 0, -5}, .width = 1}, {.place = {0, 0, -5}, .width = 1}, {.place = {3, -1, -5}, .width = 1}};
-    crossing.ribbons = {{.material = 0, .first = 0, .count = 3}};
+    crossing.particles.ribbons = {{.material = 0, .first = 0, .count = 3}};
     const auto kCrossed =
         drawnWith(**framer, **made, crossing, kMeshes, &render_scene_gpu::RendererStatistics::ribbonsDrawn);
     RAWFRAME_EXPECT(kSky.has_value() && kCrossed.has_value());

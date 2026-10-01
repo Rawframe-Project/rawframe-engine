@@ -25,7 +25,7 @@ mrhiAccess wholeOf(mrhiResourceId resource, mrhiAccessKind kind) noexcept {
 constexpr std::uint32_t kSpawnGroup = 64;
 
 /// An emitter as its shaders read it, its ring at `offset`.
-EmitterBlock blockOf(const render_scene::SceneEmitter& emitter, std::uint32_t offset, float now) noexcept {
+EmitterBlock blockOf(const rawframe::particles::EmitterDraw& emitter, std::uint32_t offset, float now) noexcept {
     return EmitterBlock{
         .anchor = {emitter.anchor[0], emitter.anchor[1], emitter.anchor[2], 0},
         .origin = {emitter.origin[0], emitter.origin[1], emitter.origin[2], emitter.radius},
@@ -43,8 +43,8 @@ EmitterBlock blockOf(const render_scene::SceneEmitter& emitter, std::uint32_t of
 
 ParticleViewBlock viewOf(const render_scene::SceneFrame& frame) noexcept {
     // The eye's right and up: the view's first two rows.
-    return ParticleViewBlock{.right = {frame.view[0], frame.view[4], frame.view[8], frame.particleClock},
-                             .up = {frame.view[1], frame.view[5], frame.view[9], render_scene::kParticleClockPeriod},
+    return ParticleViewBlock{.right = {frame.view[0], frame.view[4], frame.view[8], frame.particles.clock},
+                             .up = {frame.view[1], frame.view[5], frame.view[9], rawframe::particles::kClockPeriod},
                              .lens = {frame.projection[14], 0, 0, 0}};
 }
 
@@ -86,9 +86,9 @@ ParticlePass::declare(const render_scene::SceneFrame& frame, bool made, std::vec
     blocks_.clear();
     leftOut_ = 0;
     spawned_ = 0;
-    if (!made || frame.emitters.empty()) {
+    if (!made || frame.particles.emitters.empty()) {
         // A frame drawing none lets every ring go.
-        if (frame.emitters.empty()) {
+        if (frame.particles.emitters.empty()) {
             rings_.clear();
         }
         return {};
@@ -103,8 +103,8 @@ ParticlePass::declare(const render_scene::SceneFrame& frame, bool made, std::vec
     }
     // Rings let go: their emitter not drawn, or its ring started anew or
     // changed its size.
-    std::map<std::uint64_t, const render_scene::SceneEmitter*> wanted;
-    for (const render_scene::SceneEmitter& kEmitter : frame.emitters) {
+    std::map<std::uint64_t, const rawframe::particles::EmitterDraw*> wanted;
+    for (const rawframe::particles::EmitterDraw& kEmitter : frame.particles.emitters) {
         wanted.emplace(kEmitter.key, &kEmitter);
     }
     std::erase_if(rings_, [&wanted](const auto& each) {
@@ -114,7 +114,7 @@ ParticlePass::declare(const render_scene::SceneFrame& frame, bool made, std::vec
     });
     // Each emitter its ring, the farthest first as the frame orders them;
     // one the pool has no room for is left out.
-    for (const render_scene::SceneEmitter& kEmitter : frame.emitters) {
+    for (const rawframe::particles::EmitterDraw& kEmitter : frame.particles.emitters) {
         auto ring = rings_.find(kEmitter.key);
         const bool kFresh = ring == rings_.end();
         if (kFresh) {
@@ -132,7 +132,7 @@ ParticlePass::declare(const render_scene::SceneFrame& frame, bool made, std::vec
         }
         const std::size_t kAt = blocks_.size();
         blocks_.resize(kAt + kBlockStride);
-        const EmitterBlock kBlock = blockOf(kEmitter, ring->second.offset, frame.particleClock);
+        const EmitterBlock kBlock = blockOf(kEmitter, ring->second.offset, frame.particles.clock);
         std::memcpy(blocks_.data() + kAt, &kBlock, sizeof(kBlock));
         render_scene::SceneTextures textures;
         if (kEmitter.material < frame.textures.size()) {

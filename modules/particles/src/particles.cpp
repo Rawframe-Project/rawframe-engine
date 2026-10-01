@@ -1,4 +1,6 @@
-#include "particles.h"
+#include "rawframe/particles/particles.h"
+
+#include "rawframe/base/color.h"
 
 #include <algorithm>
 #include <cmath>
@@ -6,14 +8,20 @@
 #include <set>
 #include <vector>
 
-namespace rawframe::render_scene {
+namespace rawframe::particles {
 
 namespace {
 
 /// A time on the particle clock, wrapped into its period.
 float wrapped(double seconds) noexcept {
-    const double kWrapped = std::fmod(seconds, double{kParticleClockPeriod});
-    return static_cast<float>(kWrapped < 0 ? kWrapped + kParticleClockPeriod : kWrapped);
+    const double kWrapped = std::fmod(seconds, double{kClockPeriod});
+    return static_cast<float>(kWrapped < 0 ? kWrapped + kClockPeriod : kWrapped);
+}
+
+/// `a` made a meter long; straight up if it has no length.
+Vector normalized(const Vector& a) noexcept {
+    const float kLength = std::hypot(a[0], a[1], a[2]);
+    return kLength > 0 ? Vector{a[0] / kLength, a[1] / kLength, a[2] / kLength} : Vector{0, 1, 0};
 }
 
 /// An emitter's seed when it names none: its identity, mixed.
@@ -36,24 +44,19 @@ struct Kept {
 
 } // namespace
 
-void spawnParticles(SceneFrame& frame,
-                    std::span<const EmitterInstance> emitters,
-                    const SceneCamera& camera,
-                    const std::array<Vector, 3>& axes,
-                    const ViewShape& view,
-                    const std::map<std::uint64_t, std::uint32_t>& materials,
-                    const SceneLimits& limits,
-                    double clock,
-                    float elapsed,
-                    std::uint64_t frameIndex,
-                    std::map<EmitterKey, EmitterHistory>& histories) {
+void Particles::spawn(Frame& frame,
+                      std::span<const EmitterInstance> emitters,
+                      const Viewer& viewer,
+                      const std::map<std::uint64_t, std::uint32_t>& materials,
+                      const Limits& limits,
+                      float elapsed) {
     frame.emitters.clear();
     frame.emittersLeftOut = 0;
     frame.emittersHeld = 0;
     frame.particlesLeftOut = 0;
-    frame.particleClock = wrapped(clock);
+    frame.clock = wrapped(clock_);
     std::vector<Kept> kept;
-    std::set<EmitterKey> present;
+    std::set<Key> present;
     for (const EmitterInstance& kInstance : emitters) {
         const ParticleEmitter& kEmitter = kInstance.emitter;
         present.insert({kInstance.entity, kInstance.component});
@@ -76,7 +79,7 @@ void spawnParticles(SceneFrame& frame,
                                                  [](double value) {
                                                      return std::isfinite(value);
                                                  }) &&
-                             std::ranges::all_of(kInstance.rotation, [](float value) {
+                             std::ranges::all_of(kInstance.way, [](float value) {
                                  return std::isfinite(value);
                              });
         if (!kFinite) {
@@ -105,10 +108,10 @@ void spawnParticles(SceneFrame& frame,
                              (std::abs(kEmitter.speed) * (1 + kVariation) * kLongest) +
                              (0.5F * kAcceleration * kLongest * kLongest) +
                              (std::max(kEmitter.sizeStart, kEmitter.sizeEnd) * (1 + kVariation));
-        const Vector kCenter = {static_cast<float>(kInstance.position[0] - camera.eye[0]),
-                                static_cast<float>(kInstance.position[1] - camera.eye[1]),
-                                static_cast<float>(kInstance.position[2] - camera.eye[2])};
-        if (kCapacity == 0 || outsideView(axes, view, kCenter, kReach)) {
+        const Vector kCenter = {static_cast<float>(kInstance.position[0] - viewer.eye[0]),
+                                static_cast<float>(kInstance.position[1] - viewer.eye[1]),
+                                static_cast<float>(kInstance.position[2] - viewer.eye[2])};
+        if (kCapacity == 0 || !viewer.sees(kCenter, kReach)) {
             continue;
         }
         frame.emittersHeld += held ? 1 : 0;
@@ -119,7 +122,7 @@ void spawnParticles(SceneFrame& frame,
                             .capacity = kCapacity});
     }
     // An emitter gone keeps nothing.
-    std::erase_if(histories, [&present](const auto& each) {
+    std::erase_if(emitters_, [&present](const auto& each) {
         return !present.contains(each.first);
     });
     // The nearest up to the limit, drawn farthest first.
@@ -133,7 +136,7 @@ void spawnParticles(SceneFrame& frame,
     for (const Kept& kKept : kept) {
         const EmitterInstance& kInstance = *kKept.instance;
         const ParticleEmitter& kEmitter = kInstance.emitter;
-        auto [history, fresh] = histories.try_emplace(EmitterKey{kInstance.entity, kInstance.component});
+        auto [history, fresh] = emitters_.try_emplace(Key{kInstance.entity, kInstance.component});
         EmitterHistory& remembered = history->second;
         const double kAway = std::hypot(kInstance.position[0] - remembered.anchor[0],
                                         kInstance.position[1] - remembered.anchor[1],
@@ -147,7 +150,7 @@ void spawnParticles(SceneFrame& frame,
                                         .drawn = remembered.drawn,
                                         .ring = remembered.ring + 1};
         }
-        if (remembered.drawn + 1 != frameIndex) {
+        if (remembered.drawn + 1 != frames_) {
             remembered.owed = 0;
         }
         remembered.owed += double{kKept.rate} * kElapsed;
@@ -166,40 +169,54 @@ void spawnParticles(SceneFrame& frame,
                                    ((std::uint64_t{kInstance.entity.generation} & 0xFFFFFFU) << 8U) |
                                    (kInstance.component & 0xFFU);
         const auto kMaterial = materials.find(kEmitter.material);
-        const Vector kWay = turnOf(kInstance.rotation)[1];
         const float kVariation = std::clamp(kEmitter.variation, 0.0F, 1.0F);
-        SceneEmitter made{.key = kKey,
-                          .material = kMaterial != materials.end() ? kMaterial->second : 0,
-                          .anchor = {static_cast<float>(remembered.anchor[0] - camera.eye[0]),
-                                     static_cast<float>(remembered.anchor[1] - camera.eye[1]),
-                                     static_cast<float>(remembered.anchor[2] - camera.eye[2])},
-                          .origin = {static_cast<float>(kInstance.position[0] - remembered.anchor[0]),
-                                     static_cast<float>(kInstance.position[1] - remembered.anchor[1]),
-                                     static_cast<float>(kInstance.position[2] - remembered.anchor[2])},
-                          .direction = normalized(kWay),
-                          .lifetime = kKept.lifetime,
-                          .speed = kEmitter.speed,
-                          .spread = std::clamp(kEmitter.spread, 0.0F, std::numbers::pi_v<float>),
-                          .radius = std::max(kEmitter.radius, 0.0F),
-                          .sizeStart = std::max(kEmitter.sizeStart, 0.0F),
-                          .sizeEnd = std::max(kEmitter.sizeEnd, 0.0F),
-                          .colorStart = colorAndAlphaOf(kEmitter.colorStart),
-                          .colorEnd = colorAndAlphaOf(kEmitter.colorEnd),
-                          .acceleration = {kEmitter.accelerationX, kEmitter.accelerationY, kEmitter.accelerationZ},
-                          .drag = std::max(kEmitter.drag, 0.0F),
-                          .variation = kVariation,
-                          .capacity = kKept.capacity,
-                          .first = remembered.next,
-                          .spawned = static_cast<std::uint32_t>(kSpawned),
-                          .steady = static_cast<std::uint32_t>(steady),
-                          .born = wrapped(clock - kElapsed),
-                          .step = steady > 0 ? kElapsed / static_cast<float>(steady) : 0.0F,
-                          .seed = kEmitter.seed != 0 ? kEmitter.seed : seedOf(kKey),
-                          .ring = remembered.ring};
+        EmitterDraw made{.key = kKey,
+                         .material = kMaterial != materials.end() ? kMaterial->second : 0,
+                         .anchor = {static_cast<float>(remembered.anchor[0] - viewer.eye[0]),
+                                    static_cast<float>(remembered.anchor[1] - viewer.eye[1]),
+                                    static_cast<float>(remembered.anchor[2] - viewer.eye[2])},
+                         .origin = {static_cast<float>(kInstance.position[0] - remembered.anchor[0]),
+                                    static_cast<float>(kInstance.position[1] - remembered.anchor[1]),
+                                    static_cast<float>(kInstance.position[2] - remembered.anchor[2])},
+                         .direction = normalized(kInstance.way),
+                         .lifetime = kKept.lifetime,
+                         .speed = kEmitter.speed,
+                         .spread = std::clamp(kEmitter.spread, 0.0F, std::numbers::pi_v<float>),
+                         .radius = std::max(kEmitter.radius, 0.0F),
+                         .sizeStart = std::max(kEmitter.sizeStart, 0.0F),
+                         .sizeEnd = std::max(kEmitter.sizeEnd, 0.0F),
+                         .colorStart = base::colorAndAlphaOf(kEmitter.colorStart),
+                         .colorEnd = base::colorAndAlphaOf(kEmitter.colorEnd),
+                         .acceleration = {kEmitter.accelerationX, kEmitter.accelerationY, kEmitter.accelerationZ},
+                         .drag = std::max(kEmitter.drag, 0.0F),
+                         .variation = kVariation,
+                         .capacity = kKept.capacity,
+                         .first = remembered.next,
+                         .spawned = static_cast<std::uint32_t>(kSpawned),
+                         .steady = static_cast<std::uint32_t>(steady),
+                         .born = wrapped(clock_ - kElapsed),
+                         .step = steady > 0 ? kElapsed / static_cast<float>(steady) : 0.0F,
+                         .seed = kEmitter.seed != 0 ? kEmitter.seed : seedOf(kKey),
+                         .ring = remembered.ring};
         remembered.next = static_cast<std::uint32_t>((remembered.next + kSpawned) % kKept.capacity);
-        remembered.drawn = frameIndex;
+        remembered.drawn = frames_;
         frame.emitters.push_back(made);
     }
 }
 
-} // namespace rawframe::render_scene
+void Particles::update(Frame& frame,
+                       std::span<const EmitterInstance> emitters,
+                       std::span<const TrailInstance> trails,
+                       std::span<const BeamInstance> beams,
+                       const Viewer& viewer,
+                       const std::map<std::uint64_t, std::uint32_t>& materials,
+                       const Limits& limits,
+                       float elapsed) {
+    const float kElapsed = std::isfinite(elapsed) ? std::clamp(elapsed, 0.0F, 0.25F) : 0.0F;
+    clock_ += kElapsed;
+    ++frames_;
+    spawn(frame, emitters, viewer, materials, limits, kElapsed);
+    makeRibbons(frame, trails, beams, viewer, materials, limits);
+}
+
+} // namespace rawframe::particles

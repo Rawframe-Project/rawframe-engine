@@ -201,10 +201,10 @@ struct SceneRenderer::State {
         // Each emitter's and ribbon's material's base and emission
         // textures (D353, D354).
         std::vector<std::uint32_t> shown;
-        for (const render_scene::SceneEmitter& kEmitter : scene.emitters) {
+        for (const rawframe::particles::EmitterDraw& kEmitter : scene.particles.emitters) {
             shown.push_back(kEmitter.material);
         }
-        for (const render_scene::SceneRibbon& kRibbon : scene.ribbons) {
+        for (const rawframe::particles::Ribbon& kRibbon : scene.particles.ribbons) {
             shown.push_back(kRibbon.material);
         }
         for (const std::uint32_t kMaterial : shown) {
@@ -464,8 +464,9 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(bloom->declare(*frame, kBlooming, open.width, open.height));
         RAWFRAME_TRY_ASSIGN(const bool kPosting, made(!frame->postProcesses.empty(), Effect::PostProcess));
         RAWFRAME_TRY(post->declare(*frame, kPosting, *textures, writes));
-        RAWFRAME_TRY_ASSIGN(const bool kEmitting,
-                            made(!frame->emitters.empty() || !frame->ribbons.empty(), Effect::Particles));
+        RAWFRAME_TRY_ASSIGN(
+            const bool kEmitting,
+            made(!frame->particles.emitters.empty() || !frame->particles.ribbons.empty(), Effect::Particles));
         RAWFRAME_TRY(particles->declare(*frame, kEmitting, writes));
         RAWFRAME_TRY(ribbons->declare(*frame, kEmitting, writes));
         const std::uint64_t kTable = frame->grading.table;

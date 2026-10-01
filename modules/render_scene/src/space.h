@@ -1,11 +1,13 @@
 #pragma once
 
+#include "rawframe/base/color.h"
+
 #include <array>
 #include <cmath>
 #include <cstdint>
 
 // The scene's small geometry: vectors of three floats, their cross product
-// and direction, a color's linear light, and a quaternion's turn.
+// and direction, a color's linear light (base's), and a quaternion's turn.
 
 namespace rawframe::render_scene {
 
@@ -21,22 +23,13 @@ inline Vector normalized(const Vector& a) noexcept {
     return kLength > 0 ? Vector{a[0] / kLength, a[1] / kLength, a[2] / kLength} : Vector{0, 1, 0};
 }
 
-/// An sRGB channel of 0xRRGGBBAA, `shift` bits up, in linear light.
-inline float linearOf(std::uint32_t color, unsigned shift) noexcept {
-    const float kEncoded = static_cast<float>((color >> shift) & 0xFFU) / 255.0F;
-    return kEncoded <= 0.04045F ? kEncoded / 12.92F : std::pow((kEncoded + 0.055F) / 1.055F, 2.4F);
-}
-
 /// 0xRRGGBBAA's red, green, and blue in linear light.
 inline Vector colorOf(std::uint32_t color) noexcept {
-    return {linearOf(color, 24), linearOf(color, 16), linearOf(color, 8)};
+    const std::array<float, 4> kColor = base::colorAndAlphaOf(color);
+    return {kColor[0], kColor[1], kColor[2]};
 }
 
-/// 0xRRGGBBAA's red, green, and blue in linear light, and its alpha.
-inline std::array<float, 4> colorAndAlphaOf(std::uint32_t color) noexcept {
-    const Vector kColor = colorOf(color);
-    return {kColor[0], kColor[1], kColor[2], static_cast<float>(color & 0xFFU) / 255.0F};
-}
+using base::colorAndAlphaOf;
 
 /// The columns of a unit quaternion's turn.
 inline std::array<Vector, 3> turnOf(const std::array<float, 4>& q) noexcept {

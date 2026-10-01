@@ -28,7 +28,7 @@ RibbonPass::RibbonPass(mrhiDevice* native) noexcept : native_(native) {
 }
 
 result::Status RibbonPass::declare(const render_scene::SceneFrame& frame, bool made, std::vector<mrhiAccess>& writes) {
-    enabled_ = made && !frame.ribbons.empty();
+    enabled_ = made && !frame.particles.ribbons.empty();
     points_.clear();
     blocks_.clear();
     textures_.clear();
@@ -36,14 +36,14 @@ result::Status RibbonPass::declare(const render_scene::SceneFrame& frame, bool m
     if (!enabled_) {
         return {};
     }
-    points_.reserve(frame.ribbonPoints.size());
-    for (const render_scene::SceneRibbonPoint& kPoint : frame.ribbonPoints) {
+    points_.reserve(frame.particles.ribbonPoints.size());
+    for (const rawframe::particles::RibbonPoint& kPoint : frame.particles.ribbonPoints) {
         points_.push_back(
             RibbonPointBlock{.placeWidth = {kPoint.place[0], kPoint.place[1], kPoint.place[2], kPoint.width},
                              .color = kPoint.color,
                              .along = {kPoint.along, 0, 0, 0}});
     }
-    for (const render_scene::SceneRibbon& kRibbon : frame.ribbons) {
+    for (const rawframe::particles::Ribbon& kRibbon : frame.particles.ribbons) {
         const std::size_t kAt = blocks_.size();
         blocks_.resize(kAt + kBlockStride);
         const std::array<std::uint32_t, 4> kRange = {kRibbon.first, kRibbon.count, kRibbon.material, 0};

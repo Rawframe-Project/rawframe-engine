@@ -7,7 +7,8 @@
 // and sky light in linear physical units; point and spot lights light in
 // candela, are culled by their reach, and name the clusters they reach; a
 // draw reflects the reflection probe that holds it; a camera's post
-// processes run in its order; and a game's scene loads against its
+// processes run in its order; an emitter emits the way its pose turns
+// it, placed relative to the eye; and a game's scene loads against its
 // program.
 
 #include "rawframe/physics3d/components.h"
@@ -39,6 +40,7 @@ constexpr auto kPointId = schema::ComponentTypeId::fromText("9c8e1f52-7d04-4a2b-
 constexpr auto kSpotId = schema::ComponentTypeId::fromText("ac8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr auto kProbeId = schema::ComponentTypeId::fromText("dc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr auto kDecalId = schema::ComponentTypeId::fromText("4d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
+constexpr auto kEmitterId = schema::ComponentTypeId::fromText("7d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 constexpr std::uint64_t kRock = 0xc1;
 
 /// The registry holds a name as a view: each is a literal.
@@ -57,6 +59,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(plain<SpotLight>(kSpotId, "test.torch"));
     builder.add(plain<ReflectionProbe>(kProbeId, "test.probe"));
     builder.add(plain<Decal>(kDecalId, "test.decal"));
+    builder.add(plain<particles::ParticleEmitter>(kEmitterId, "test.emitter"));
     builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }
@@ -83,6 +86,7 @@ struct Rig {
                                 .spots = {kSpotId},
                                 .probes = {kProbeId},
                                 .decals = {kDecalId},
+                                .emitters = {kEmitterId},
                                 .meshes = {{.id = kRock, .mesh = rock()}},
                                 .limits = limits});
     }
@@ -1233,5 +1237,31 @@ RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
                         kFrame.postProcesses[1].insertion == material::Insertion::BeforeTonemap &&
                         kFrame.postProcesses[1].blob[5] == 0.9F);
         RAWFRAME_EXPECT(kFrame.postProcesses[2].blob == material::blobOf(kFade));
+    }
+}
+
+RAWFRAME_TEST(AnEmitterEmitsTheWayItsPoseTurnsIt) {
+    // Far from the origin, so its anchor is placed relative to the eye.
+    constexpr double kX = 100000;
+    Rig rig;
+    const auto kPlace = [&rig](double z, std::array<float, 4> turn) {
+        particles::ParticleEmitter emitter{.rate = 10, .lifetime = 1, .speed = 1, .sizeStart = 0.1F};
+        const world::EntityHandle kEntity = *rig.world.create();
+        RAWFRAME_EXPECT(rig.world.insertErased(kEntity, *rig.schema->find(kEmitterId), &emitter).has_value());
+        const physics3d::Pose3D kPose{
+            .x = kX, .y = 0, .z = z, .qx = turn[0], .qy = turn[1], .qz = turn[2], .qw = turn[3]};
+        RAWFRAME_EXPECT(rig.world.insert(kEntity, *rig.schema->key<physics3d::Pose3D>(), kPose).has_value());
+    };
+    // Ahead, turned a quarter about the view's axis so its up is the
+    // World's -X; and behind the eye, out of view.
+    const float kHalfTurn = std::sqrt(0.5F);
+    kPlace(-10, {0, 0, kHalfTurn, kHalfTurn});
+    kPlace(30, {0, 0, 0, 1});
+    const SceneFrame& kFrame = rig.frame({.eye = {kX, 0, 0}, .fovY = 1.2F, .aspect = 1});
+    RAWFRAME_EXPECT(kFrame.particles.emitters.size() == 1 && kFrame.particles.emittersLeftOut == 0);
+    if (kFrame.particles.emitters.size() == 1) {
+        const particles::EmitterDraw& kDrawn = kFrame.particles.emitters[0];
+        RAWFRAME_EXPECT(near(kDrawn.direction[0], -1) && near(kDrawn.direction[1], 0));
+        RAWFRAME_EXPECT(near(kDrawn.anchor[0], 0) && near(kDrawn.anchor[2], -10));
     }
 }
