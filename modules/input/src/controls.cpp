@@ -133,7 +133,7 @@ constexpr std::array<std::uint16_t, kKeys.size()> kKeyUsages = {
     41,  58,  59, 60, 61,  62,  63,  64, 65,  66,  67,  68,  69, 70, 71, 72,     // function
 };
 
-constexpr std::array<std::string_view, 8> kMouse = {
+constexpr std::array<std::string_view, 9> kMouse = {
     "left",
     "right",
     "middle",
@@ -142,6 +142,7 @@ constexpr std::array<std::string_view, 8> kMouse = {
     "wheel_x",
     "wheel_y",
     "delta",
+    "pointer",
 };
 
 constexpr std::array<std::string_view, 19> kGamepad = {
@@ -194,14 +195,19 @@ ControlShape shapeOf(Control control) noexcept {
     if (kName == "wheel_x" || kName == "wheel_y" || kName == "trigger_left" || kName == "trigger_right") {
         return ControlShape::Axis1;
     }
-    if (kName == "delta" || kName == "stick_left" || kName == "stick_right") {
+    if (kName == "delta" || kName == "stick_left" || kName == "stick_right" ||
+        (control.device == DeviceClass::Mouse && kName == "pointer")) {
         return ControlShape::Axis2;
     }
     return ControlShape::Digital;
 }
 
 bool relative(Control control) noexcept {
-    return control.device == DeviceClass::Mouse && shapeOf(control) != ControlShape::Digital;
+    return control.device == DeviceClass::Mouse && shapeOf(control) != ControlShape::Digital && !positional(control);
+}
+
+bool positional(Control control) noexcept {
+    return control.device == DeviceClass::Mouse && nameOf(control) == "pointer";
 }
 
 std::optional<DeviceClass> deviceClassNamed(std::string_view name) noexcept {

@@ -191,7 +191,7 @@ struct Mapper::State {
             }
             case ControlShape::Axis2: {
                 const float kLength = std::hypot(kHeld.x, kHeld.y);
-                if (relative(kControl) || kLength == 0) {
+                if (relative(kControl) || positional(kControl) || kLength == 0) {
                     value = {kHeld.x, kHeld.y};
                 } else {
                     const float kScale = deadzoned(kLength, binding) / kLength;
@@ -331,11 +331,12 @@ struct Mapper::State {
         evaluate(slot);
     }
 
-    /// Every control of the player's devices at rest.
+    /// Every control of the player's devices at rest. The pointer is a
+    /// place, not something held: it stays where it was last told (D367).
     void releasePlayer(std::uint8_t slot) {
         for (auto& [kKey, value] : held) {
             const Device* device = deviceOf(DeviceId{kKey.first});
-            if (device != nullptr && device->player == slot) {
+            if (device != nullptr && device->player == slot && !positional(kKey.second)) {
                 value = Held{};
             }
         }
@@ -357,6 +358,9 @@ struct Mapper::State {
             if (relative(event.control)) {
                 state.x += event.x;
                 state.y += event.y;
+            } else if (positional(event.control)) {
+                state.x = event.x;
+                state.y = event.y;
             } else {
                 state.x = std::clamp(event.x, -1.0F, 1.0F);
                 state.y = std::clamp(event.y, -1.0F, 1.0F);

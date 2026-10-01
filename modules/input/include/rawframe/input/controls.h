@@ -41,7 +41,8 @@ struct Control {
 /// `code` values are, written in snake case (`KeyW` is `key_w`,
 /// `ArrowUp` is `arrow_up`, `ShiftLeft` is `shift_left`), so a binding means
 /// the same place on every layout. Mouse controls: `left`, `right`,
-/// `middle`, `back`, `forward`, `wheel_x`, `wheel_y`, `delta`. Gamepad
+/// `middle`, `back`, `forward`, `wheel_x`, `wheel_y`, `delta`, and
+/// `pointer` (D367), the cursor's place over the window. Gamepad
 /// controls are SPEC-0029's standard locations.
 [[nodiscard]] std::optional<Control> controlNamed(DeviceClass device, std::string_view name) noexcept;
 [[nodiscard]] std::string_view nameOf(Control control) noexcept;
@@ -53,6 +54,11 @@ struct Control {
 /// position: the wheel and the mouse's delta. What such a control reports
 /// in one tick adds up, and it rests at nought after.
 [[nodiscard]] bool relative(Control control) noexcept;
+/// Whether a control reports a place rather than a deflection: the mouse's
+/// `pointer`, the cursor over the window in logical pixels from its top
+/// left, y down (ADR-0046's screen space, D367). Its value is the place,
+/// neither clamped nor dead-zoned, and it stays where it was last told.
+[[nodiscard]] bool positional(Control control) noexcept;
 
 [[nodiscard]] std::optional<DeviceClass> deviceClassNamed(std::string_view name) noexcept;
 [[nodiscard]] std::string_view nameOf(DeviceClass device) noexcept;

@@ -91,6 +91,14 @@ void Bridge::take(const window::Event& event) {
                            .x = event.motion.y});
         }
         break;
+    case EventKind::CursorMoved:
+        // Where the cursor is over the window, logical pixels from its top
+        // left, y down (D367).
+        feed_->submit({.device = kMouse,
+                       .control = *input::controlNamed(input::DeviceClass::Mouse, "pointer"),
+                       .x = event.pointer.position.x,
+                       .y = event.pointer.position.y});
+        break;
     case EventKind::RawPointerDelta:
         // Up positive, as a stick is, so one look action reads both.
         feed_->submit({.device = kMouse,

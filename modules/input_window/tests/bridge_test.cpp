@@ -1,8 +1,9 @@
 // A window's raw input reaching actions as a player's would: keys by HID
 // usage, mouse buttons, the wheel, and captured motion; a gamepad's two
-// stick axes combined and turned up positive; focus loss letting go of
-// everything; a gamepad that goes letting go of what it held; a haptic
-// output felt through a gamepad's motors (D251).
+// stick axes combined and turned up positive; the cursor's place as the
+// mouse's pointer (D367); focus loss letting go of everything; a gamepad
+// that goes letting go of what it held; a haptic output felt through a
+// gamepad's motors (D251).
 
 #include "rawframe/input/mapper.h"
 #include "rawframe/input_window/bridge.h"
@@ -27,6 +28,7 @@ constexpr std::size_t kFire = 1;
 constexpr std::size_t kZoom = 2;
 constexpr std::size_t kLook = 3;
 constexpr std::size_t kMove = 4;
+constexpr std::size_t kAim = 5;
 
 Binding single(DeviceClass device, std::string_view name) {
     Binding binding;
@@ -48,8 +50,10 @@ ActionSet actions() {
     look.bindings = {single(DeviceClass::Mouse, "delta")};
     Action move{.id = 5, .name = "move", .type = ValueType::Axis2D};
     move.bindings = {single(DeviceClass::Gamepad, "stick_left")};
-    set.actions = {jump, fire, zoom, look, move};
-    set.contexts.push_back(Context{.id = 10, .name = "play", .actions = {kJump, kFire, kZoom, kLook, kMove}});
+    Action aim{.id = 6, .name = "aim", .type = ValueType::Axis2D};
+    aim.bindings = {single(DeviceClass::Mouse, "pointer")};
+    set.actions = {jump, fire, zoom, look, move, aim};
+    set.contexts.push_back(Context{.id = 10, .name = "play", .actions = {kJump, kFire, kZoom, kLook, kMove, kAim}});
     return set;
 }
 
@@ -133,6 +137,32 @@ RAWFRAME_TEST(KeysButtonsWheelAndMotionReachTheirActions) {
     rig.take(record(window::EventKind::FocusLost));
     rig.commit();
     RAWFRAME_EXPECT(!rig.state(kFire).on);
+}
+
+RAWFRAME_TEST(TheCursorsPlaceIsThePointerAndStaysWhereItWasLastTold) {
+    Rig rig;
+    window::Event moved = record(window::EventKind::CursorMoved);
+    moved.pointer.position = {.x = 640, .y = 360};
+    rig.take(moved);
+    rig.commit();
+    // Logical pixels, y down, neither clamped nor turned up positive.
+    RAWFRAME_EXPECT(near(rig.state(kAim).x, 640) && near(rig.state(kAim).y, 360));
+    // Not motion: a tick without a move keeps the place, and so does
+    // focus going.
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kAim).x, 640) && near(rig.state(kAim).y, 360));
+    rig.take(record(window::EventKind::FocusLost));
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kAim).x, 640) && near(rig.state(kAim).y, 360));
+    moved.pointer.position = {.x = 2.5F, .y = 1200};
+    rig.take(moved);
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kAim).x, 2.5F) && near(rig.state(kAim).y, 1200));
+    // The window's top left is a place too, not rest.
+    moved.pointer.position = {.x = 0, .y = 0};
+    rig.take(moved);
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kAim).x, 0) && near(rig.state(kAim).y, 0));
 }
 
 RAWFRAME_TEST(AGamepadsSticksCombineAndItsDepartureLetsGo) {
