@@ -298,13 +298,14 @@ fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
     }
 }
 
-// What a stroller carries (D290): a warm lantern of 400 lumens, reaching
-// six meters, where its pose stands; faint by day, it shows once the
-// plaza's light falls. It casts no shadows: it hangs inside its figure.
+// What a stroller carries (D290): a warm lantern of 400 lumens at 3,450 K,
+// reaching six meters, where its pose stands; faint by day, it shows once
+// the plaza's light falls. It casts no shadows: it hangs inside its figure.
 fn lantern(count: i32, strollers: [Stroller], lanterns: [model.PointLight]) {
+    let warm = model.kelvin(3450.0)
     let i = 0
     while i < count {
-        lanterns[i] = model.PointLight(400.0, 6.0, 0xFFC98AFF, false)
+        lanterns[i] = model.PointLight(400.0, 6.0, warm, false)
         i = i + 1
     }
 }

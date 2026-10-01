@@ -282,3 +282,72 @@ struct SpotLight {
 
 // White: a surface, a sun, or a sky as it is.
 const WHITE: u32 = 0xFFFFFFFF
+
+// A linear channel's sRGB byte: nought to one, as the colors above hold
+// it, rounded. Below nought is nought and above one is 255.
+fn channel(linear: f32) -> u32 {
+    if linear <= 0.0 {
+        return u32(0)
+    }
+    if linear >= 1.0 {
+        return u32(255)
+    }
+    if linear <= 0.0031308 {
+        return u32(linear * 12.92 * 255.0 + 0.5)
+    }
+    // The power of 1/2.4 as the twelfth root's fifth power, the root by
+    // Newton's method from one, which comes down to it within twelve steps.
+    let root = 1.0
+    let step = 0
+    while step < 12 {
+        let squared = root * root
+        let eighth = squared * squared * squared * squared
+        root = (11.0 * root + linear / (eighth * squared * root)) / 12.0
+        step = step + 1
+    }
+    let fifth = root * root * root * root * root
+    return u32((1.055 * fifth - 0.055) * 255.0 + 0.5)
+}
+
+// The color of a light at a color temperature (ADR-0051's Kelvin input,
+// which derives a color and is never kept beside one): 0xRRGGBBFF in sRGB,
+// for a light's `color`. A black body at `temperature` on Kim et al.'s fit of
+// the Planckian locus, 1,667 to 25,000 K (outside, its nearer end), seen in
+// linear Rec. 709 against one at 6,500 K, so 6,500 is white (D65), lower is
+// warmer, higher is bluer; its brightest channel full, as a light's
+// intensity is its lumens alone.
+fn kelvin(temperature: f32) -> u32 {
+    let t = temperature
+    if t < 1667.0 {
+        t = 1667.0
+    }
+    if t > 25000.0 {
+        t = 25000.0
+    }
+    let k = 1000.0 / t
+    let x = -3.0258469 * k * k * k + 2.1070379 * k * k + 0.2226347 * k + 0.24039
+    if t <= 4000.0 {
+        x = -0.2661239 * k * k * k - 0.2343589 * k * k + 0.8776956 * k + 0.17991
+    }
+    let y = 3.081758 * x * x * x - 5.8733867 * x * x + 3.75112997 * x - 0.37001483
+    if t <= 2222.0 {
+        y = -1.1063814 * x * x * x - 1.3481102 * x * x + 2.18555832 * x - 0.20219683
+    } else if t <= 4000.0 {
+        y = -0.9549476 * x * x * x - 1.37418593 * x * x + 2.09137015 * x - 0.16748867
+    }
+    // Its XYZ at a luminance of one, then Rec. 709 over 6,500 K's.
+    let big = x / y
+    let small = (1.0 - x - y) / y
+    let red = (3.2404542 * big - 1.5371385 - 0.4985314 * small) / 1.0426302
+    let green = (-0.969266 * big + 1.8760108 + 0.041556 * small) / 0.98378255
+    let blue = (0.0556434 * big - 0.2040259 + 1.0572252 * small) / 1.0350764
+    let most = red
+    if green > most {
+        most = green
+    }
+    if blue > most {
+        most = blue
+    }
+    let rgb = (channel(red / most) << u32(24)) | (channel(green / most) << u32(16)) | (channel(blue / most) << u32(8))
+    return rgb | u32(0xFF)
+}

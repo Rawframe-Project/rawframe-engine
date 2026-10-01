@@ -8,4 +8,4 @@ rawframe_module(NAME render_scene
     DEPS game_textures texture material graph game_content content physics3d mesh world_replication world_kest kest world composition schema execution diagnostics result base
 )
 
-rawframe_module_tests(NAME render_scene SOURCES tests/scene_test.cpp)
+rawframe_module_tests(NAME render_scene SOURCES tests/kelvin_test.cpp tests/scene_test.cpp)
