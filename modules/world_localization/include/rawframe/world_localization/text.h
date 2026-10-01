@@ -55,7 +55,8 @@ private:
     localization::Locale projectDefault_;
 };
 
-/// The Runtime's text, when its game names any and cooked content holds it.
+/// The Runtime's text: its game's, when it names any and cooked content holds
+/// it; else none, every key unknown (D386).
 inline constexpr composition::Capability<GameText> kGameText{"rawframe.world_localization.text"};
 
 } // namespace rawframe::world_localization

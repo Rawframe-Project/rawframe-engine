@@ -79,9 +79,23 @@ result::Result<std::string> readResource(content::ContentStore& store, const con
 class TextParticipant final : public composition::Participant {
 public:
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
-        if (capability == kGameText.name && text_ != nullptr) {
-            return composition::provideAs<GameText>(*text_);
+        if (capability == kGameText.name) {
+            return composition::provideAs<GameText>(text_ != nullptr ? *text_ : *none_);
         }
+        return {};
+    }
+
+    /// What is provided when the game's text is not read: no table, so every
+    /// key is unknown (D386).
+    result::Status prepareNone() {
+        if (text_ != nullptr) {
+            return {};
+        }
+        RAWFRAME_TRY_ASSIGN(localization::Catalog catalog, localization::Catalog::build({}, {}));
+        none_ = std::make_unique<GameText>(std::move(catalog),
+                                           std::vector<std::pair<std::string, base::Bits128>>{},
+                                           localization::Locale{.language = "und"},
+                                           localization::Locale{.language = "und"});
         return {};
     }
 
@@ -226,6 +240,7 @@ private:
     };
 
     std::unique_ptr<GameText> text_;
+    std::unique_ptr<GameText> none_;
     Summary summary_;
     bool unavailable_ = false;
     std::optional<std::string> refusedLocale_;
@@ -234,6 +249,7 @@ private:
 result::Result<composition::ParticipantOwner> make(composition::ParticipantContext& context) noexcept {
     auto participant = std::make_unique<TextParticipant>();
     RAWFRAME_TRY(participant->load(context));
+    RAWFRAME_TRY(participant->prepareNone());
     return composition::ParticipantOwner{participant.release()};
 }
 
