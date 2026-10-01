@@ -3,6 +3,7 @@
 #include "rawframe/render/display.h"
 #include "rawframe/render/errors.h"
 
+#include <cmath>
 #include <maul-rhi/encoder.h>
 #include <maul-rhi/frame.h>
 #include <maul-rhi/resources.h>
@@ -254,6 +255,11 @@ std::optional<std::vector<std::byte>> Framer::pixels() {
 
 const FramerStatistics& Framer::statistics() const noexcept {
     return state_->statistics;
+}
+
+float linearOf(std::uint8_t encoded) noexcept {
+    const float kValue = static_cast<float>(encoded) / 255.0F;
+    return kValue <= 0.04045F ? kValue / 12.92F : std::pow((kValue + 0.055F) / 1.055F, 2.4F);
 }
 
 } // namespace rawframe::render

@@ -9,6 +9,7 @@
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/texture/texture.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -56,6 +57,9 @@ public:
     /// composed over those before; none while one player fills the window.
     /// Kept as `textureFrames` is.
     [[nodiscard]] virtual std::span<const RegionFrame> regionFrames() const noexcept = 0;
+    /// The color around the regions, 8-bit sRGB: a constrained aspect's
+    /// bars (D369), else black.
+    [[nodiscard]] virtual std::array<std::uint8_t, 3> bars() const noexcept = 0;
     /// The device did not draw the frame the render texture `id` was last
     /// given: one drawn on demand is offered it again in the next
     /// iteration, unless a new one is due.

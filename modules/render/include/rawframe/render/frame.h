@@ -41,7 +41,16 @@ struct Frame {
         return !std::exchange(drawn, true);
     }
     bool drawn = false;
+    /// What drew into the picture first, under all after it, told by the
+    /// recorder `clearsPicture` answered true if it cares: the canvas's
+    /// local players learn from it whether theirs is the views' ground
+    /// (D369).
+    const void* ground = nullptr;
 };
+
+/// An 8-bit sRGB channel in linear light, what a pass clearing an sRGB
+/// target to that color is given (a constrained view's bars, D369).
+[[nodiscard]] float linearOf(std::uint8_t encoded) noexcept;
 
 /// A bridge's part of each frame (the scene's, the canvas's).
 class FrameRecorder {

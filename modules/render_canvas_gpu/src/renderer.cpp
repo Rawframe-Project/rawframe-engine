@@ -58,6 +58,8 @@ static_assert(sizeof(MaterialBlock) == 80, "the sprite shader reads a material a
 /// The stride between materials' blocks: no device asks uniform offsets
 /// aligned past 256 bytes.
 constexpr std::uint64_t kBlockStride = 256;
+/// What the canvas tells a frame it cleared, as the views' ground (D369).
+constexpr char kCanvasGround = 0;
 
 /// None: white, over what is behind.
 constexpr material::CanvasMaterial kPlain{.shading = material::Shading::Unlit};
@@ -179,8 +181,18 @@ struct CanvasRenderer::State {
     const render_canvas::CanvasFrame* frame = nullptr;
     TextureSource textures;
     std::optional<std::array<std::uint32_t, 4>> region;
-    /// What the open frame declared, until it is recorded and ends.
+    /// What the picture is cleared to, 8-bit sRGB (D369).
+    std::array<std::uint8_t, 3> bars{};
+    /// What the open frame declared, until it is recorded and ends: and,
+    /// where the canvas is the ground of a region between bars (D369), the
+    /// passes clearing the picture to the bars, a picture the region's size
+    /// to black, and copying that into the region.
     bool declared = false;
+    std::optional<mrhiPassId> barsClearing;
+    std::optional<mrhiPassId> groundClearing;
+    std::optional<mrhiPassId> groundCopying;
+    mrhiResourceId ground{};
+    mrhiResourceId groundOf{};
     std::optional<mrhiPassId> upload;
     mrhiPassId drawing{};
     std::uint64_t drawn = 0;
@@ -445,11 +457,19 @@ struct CanvasRenderer::State {
         for (const std::uint64_t kTexture : held->chosen()) {
             reads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
         }
+        const bool kClears = open.clearsPicture();
+        if (kClears) {
+            open.ground = &kCanvasGround;
+        }
+        RAWFRAME_TRY(declareGround(open, kClears));
         mrhiPassDef drawDef = mrhiDefaultPassDef();
         drawDef.colorTargets[0].resource = resourceOf(open.picture);
-        drawDef.colorTargets[0].load = open.clearsPicture() ? mrhi_loadClear : mrhi_loadKeep;
+        drawDef.colorTargets[0].load = kClears && !barsClearing.has_value() ? mrhi_loadClear : mrhi_loadKeep;
         drawDef.colorTargets[0].store = mrhi_storeKeep;
-        drawDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+        drawDef.colorTargets[0].clear = mrhiClearColor{.red = render::linearOf(bars[0]),
+                                                       .green = render::linearOf(bars[1]),
+                                                       .blue = render::linearOf(bars[2]),
+                                                       .alpha = 1};
         drawDef.colorTargetCount = 1;
         drawDef.accesses = reads.data();
         drawDef.accessCount = static_cast<std::uint32_t>(reads.size());
@@ -464,6 +484,91 @@ struct CanvasRenderer::State {
             particleViewOf(frame->extent, frame->particles.clock),
             {.picture = open.picture, .exposure = std::nullopt, .depth = std::nullopt, .region = region}));
         declared = true;
+        return {};
+    }
+
+    /// A canvas region of a picture whose ground the canvas is, between
+    /// bars of a color (D369): the picture cleared to the bars first if
+    /// this clears it, then the region cleared black, through a picture of
+    /// its own (a pass clears a whole target), as the whole picture is
+    /// without bars.
+    result::Status declareGround(render::Frame& open, bool clears) {
+        barsClearing.reset();
+        groundClearing.reset();
+        groundCopying.reset();
+        if (!region.has_value() || open.ground != &kCanvasGround || bars == std::array<std::uint8_t, 3>{}) {
+            return {};
+        }
+        if (clears) {
+            mrhiPassDef def = mrhiDefaultPassDef();
+            def.colorTargets[0].resource = resourceOf(open.picture);
+            def.colorTargets[0].load = mrhi_loadClear;
+            def.colorTargets[0].store = mrhi_storeKeep;
+            def.colorTargets[0].clear = mrhiClearColor{.red = render::linearOf(bars[0]),
+                                                       .green = render::linearOf(bars[1]),
+                                                       .blue = render::linearOf(bars[2]),
+                                                       .alpha = 1};
+            def.colorTargetCount = 1;
+            def.neverCull = true;
+            mrhiPassId made{};
+            if (const mrhiResult kAdded = mrhiAddPass(native, &def, &made); kAdded != mrhi_success) {
+                return failed("the bars could not be cleared", kAdded);
+            }
+            barsClearing = made;
+        }
+        const auto& [kX, kY, kWidth, kHeight] = *region;
+        mrhiTextureDef groundDef = mrhiDefaultTextureDef();
+        groundDef.format = mrhi_formatRgba8UnormSrgb;
+        groundDef.width = kWidth;
+        groundDef.height = kHeight;
+        if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &groundDef, &ground); kDeclared != mrhi_success) {
+            return failed("a region's ground could not be declared", kDeclared);
+        }
+        mrhiPassDef clearDef = mrhiDefaultPassDef();
+        clearDef.colorTargets[0].resource = ground;
+        clearDef.colorTargets[0].load = mrhi_loadClear;
+        clearDef.colorTargets[0].store = mrhi_storeKeep;
+        clearDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+        clearDef.colorTargetCount = 1;
+        mrhiPassId cleared{};
+        if (const mrhiResult kAdded = mrhiAddPass(native, &clearDef, &cleared); kAdded != mrhi_success) {
+            return failed("a region's ground could not be cleared", kAdded);
+        }
+        groundClearing = cleared;
+        const std::array<mrhiAccess, 2> kAccesses = {wholeOf(ground, mrhi_accessCopySource),
+                                                     wholeOf(resourceOf(open.picture), mrhi_accessCopyDestination)};
+        mrhiPassDef copyDef = mrhiDefaultPassDef();
+        copyDef.passClass = mrhi_passTransfer;
+        copyDef.accesses = kAccesses.data();
+        copyDef.accessCount = static_cast<std::uint32_t>(kAccesses.size());
+        copyDef.neverCull = true;
+        mrhiPassId copied{};
+        if (const mrhiResult kAdded = mrhiAddPass(native, &copyDef, &copied); kAdded != mrhi_success) {
+            return failed("a region's ground could not be laid", kAdded);
+        }
+        groundCopying = copied;
+        groundOf = resourceOf(open.picture);
+        return {};
+    }
+
+    result::Status recordGround() {
+        for (const std::optional<mrhiPassId>& kClearing : {barsClearing, groundClearing}) {
+            if (kClearing.has_value() && (mrhiBeginPass(native, *kClearing) != mrhi_success ||
+                                          mrhiEndPass(native, *kClearing) != mrhi_success)) {
+                return failed("the bars or a region's ground could not be cleared", mrhi_errorState);
+            }
+        }
+        if (groundCopying.has_value()) {
+            const auto& [kX, kY, kWidth, kHeight] = *region;
+            const mrhiTextureCopy kFrom{.resource = ground};
+            const mrhiTextureCopy kTo{.resource = groundOf, .x = kX, .y = kY};
+            const mrhiExtent3d kExtent{.width = kWidth, .height = kHeight, .depthOrLayers = 1};
+            if (mrhiBeginPass(native, *groundCopying) != mrhi_success ||
+                mrhiCopyTexture(native, *groundCopying, &kFrom, &kTo, &kExtent) != mrhi_success ||
+                mrhiEndPass(native, *groundCopying) != mrhi_success) {
+                return failed("a region's ground could not be laid", mrhi_errorState);
+            }
+        }
         return {};
     }
 
@@ -494,6 +599,7 @@ struct CanvasRenderer::State {
                 return failed("the upload pass could not end", mrhi_errorState);
             }
         }
+        RAWFRAME_TRY(recordGround());
         if (mrhiBeginPass(native, drawing) != mrhi_success) {
             return failed("the drawing pass could not begin", mrhi_errorState);
         }
@@ -615,10 +721,12 @@ result::Result<std::unique_ptr<CanvasRenderer>> CanvasRenderer::create(render::D
 
 void CanvasRenderer::prepare(const render_canvas::CanvasFrame* frame,
                              TextureSource textures,
-                             std::optional<std::array<std::uint32_t, 4>> region) {
+                             std::optional<std::array<std::uint32_t, 4>> region,
+                             std::array<std::uint8_t, 3> bars) {
     state_->frame = frame;
     state_->textures = std::move(textures);
     state_->region = region;
+    state_->bars = bars;
 }
 
 result::Status CanvasRenderer::declare(render::Frame& frame) {

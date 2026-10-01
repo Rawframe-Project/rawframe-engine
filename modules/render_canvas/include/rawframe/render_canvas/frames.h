@@ -8,6 +8,7 @@
 #include "rawframe/render_canvas/canvas.h"
 #include "rawframe/texture/texture.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -40,6 +41,9 @@ public:
     /// first's the frame `queued` gives, in the players' order; none while
     /// one player fills the window. Kept as `queued` is.
     [[nodiscard]] virtual std::span<const CanvasRegion> regionFrames() const noexcept = 0;
+    /// The color around the regions, 8-bit sRGB: a constrained aspect's
+    /// bars (D369), else black.
+    [[nodiscard]] virtual std::array<std::uint8_t, 3> bars() const noexcept = 0;
     /// The view's size in pixels: `canvas.width` and `canvas.height` until
     /// what shows it sets another.
     [[nodiscard]] virtual std::uint32_t width() const noexcept = 0;

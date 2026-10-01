@@ -132,8 +132,9 @@ RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
         return;
     }
     // Each its region's size from the next frame.
-    RAWFRAME_EXPECT((**left).resize(kSide / 2, kSide).has_value() && (**right).resize(kSide / 2, kSide).has_value() &&
-                    (**right).width() == kSide / 2);
+    // The right letterboxed (D369): half as tall, between blue bars.
+    RAWFRAME_EXPECT((**left).resize(kSide / 2, kSide).has_value() &&
+                    (**right).resize(kSide / 2, kSide / 2).has_value() && (**right).width() == kSide / 2);
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
@@ -157,8 +158,10 @@ RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
     std::optional<std::vector<std::byte>> pixels;
     for (int attempt = 0; attempt < 1000 && ((**left).statistics().frames == 0 || (**right).statistics().frames == 0);
          ++attempt) {
-        (**left).prepare(&kRed, kMeshes, {}, {}, render_scene_gpu::Placement{.x = 0, .y = 0});
-        (**right).prepare(&kGreen, kMeshes, {}, {}, render_scene_gpu::Placement{.x = kSide / 2, .y = 0});
+        constexpr std::array<std::uint8_t, 3> kBlue{0, 0, 255};
+        (**left).prepare(&kRed, kMeshes, {}, {}, render_scene_gpu::Placement{.x = 0, .y = 0, .bars = kBlue});
+        (**right).prepare(
+            &kGreen, kMeshes, {}, {}, render_scene_gpu::Placement{.x = kSide / 2, .y = kSide / 4, .bars = kBlue});
         (**scene).prepare(nullptr, kMeshes);
         RAWFRAME_EXPECT(
             (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
@@ -171,5 +174,7 @@ RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
         const std::array<int, 3> kRight = at(*pixels, kSide * 3 / 4, kSide / 2);
         RAWFRAME_EXPECT(kLeft[0] > 200 && kLeft[1] < 40 && kLeft[2] < 40);
         RAWFRAME_EXPECT(kRight[0] < 40 && kRight[1] > 200 && kRight[2] < 40);
+        const std::array<int, 3> kBar = at(*pixels, kSide * 3 / 4, 2);
+        RAWFRAME_EXPECT(kBar[0] == 0 && kBar[1] == 0 && kBar[2] >= 254);
     }
 }

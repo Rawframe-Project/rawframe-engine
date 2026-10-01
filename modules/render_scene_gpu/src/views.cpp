@@ -129,7 +129,10 @@ result::Status TextureView::declare(render::Frame& frame) {
         def.colorTargets[0].resource = resourceOf(frame.picture);
         def.colorTargets[0].load = mrhi_loadClear;
         def.colorTargets[0].store = mrhi_storeKeep;
-        def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+        def.colorTargets[0].clear = mrhiClearColor{.red = render::linearOf(state.placed->bars[0]),
+                                                   .green = render::linearOf(state.placed->bars[1]),
+                                                   .blue = render::linearOf(state.placed->bars[2]),
+                                                   .alpha = 1};
         def.colorTargetCount = 1;
         def.neverCull = true;
         mrhiPassId made{};

@@ -257,6 +257,13 @@ public:
             }
             regionFrames_.resize(regions_.size());
         }
+        // A constrained aspect (D369): one player's view is placed in the
+        // window as a split-screen player's is in its region.
+        aspect_ = files->description().aspect;
+        if (aspect_.has_value() && regions_.empty()) {
+            regions_.push_back(world_kest::GameRegion{});
+            regionFrames_.resize(1);
+        }
         cameraComponents_ = game->cameras;
         viewComponent_ = game->view;
         for (const world_kest::GameRenderTexture& kTexture : files->description().renderTextures) {
@@ -515,6 +522,10 @@ public:
             kView->resend = true;
             ++viewsMissed_;
         }
+    }
+
+    std::array<std::uint8_t, 3> bars() const noexcept override {
+        return aspect_.has_value() ? aspect_->bars : std::array<std::uint8_t, 3>{};
     }
 
     std::uint32_t width() const noexcept override {
@@ -783,7 +794,9 @@ private:
     void presentPlayers(execution::MonotonicInstant now) {
         for (std::size_t at = 0; at < regions_.size(); ++at) {
             const world_kest::GameRegion& kRegion = regions_[at];
-            const world_kest::RegionPixels kPixels = world_kest::pixelsOf(kRegion, width_, height_);
+            const world_kest::RegionPixels kWhole = world_kest::pixelsOf(kRegion, width_, height_);
+            const world_kest::RegionPixels kPixels =
+                aspect_.has_value() ? world_kest::constrainedTo(kWhole, *aspect_) : kWhole;
             regionFrames_[at] =
                 RegionFrame{.x = kPixels.x, .y = kPixels.y, .width = kPixels.width, .height = kPixels.height};
         }
@@ -1043,6 +1056,9 @@ private:
         bool extracted = false;
     };
     std::vector<world_kest::GameRegion> regions_;
+    /// The game's constrained aspect, each region's view centered between
+    /// bars (D369); none fills.
+    std::optional<world_kest::GameAspect> aspect_;
     std::vector<LocalPlayer> localPlayers_;
     std::vector<RegionFrame> regionFrames_;
     std::uint64_t playerFrames_ = 0;

@@ -95,7 +95,8 @@ public:
                 const bool kShown = region.width != 0 && region.height != 0;
                 renderer.prepare(kShown ? region.frame : nullptr,
                                  textures_,
-                                 std::array<std::uint32_t, 4>{region.x, region.y, region.width, region.height});
+                                 std::array<std::uint32_t, 4>{region.x, region.y, region.width, region.height},
+                                 canvas_->bars());
             };
             kPrepare(*renderer_, kRegions[0]);
             for (std::size_t at = 0; at < others_.size() && at + 1 < kRegions.size(); ++at) {

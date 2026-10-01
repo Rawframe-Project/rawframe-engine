@@ -83,11 +83,13 @@ public:
     /// What the next frame draws: `frame`'s draws, the textures they name
     /// uploaded if they must be; nothing for none; in `region` of the
     /// frame's picture (left, top, width, height in pixels: a local
-    /// player's in split-screen, D364), or the whole for none. All are held
-    /// until the frame is made.
+    /// player's in split-screen, D364), or the whole for none, the picture
+    /// cleared to `bars` (8-bit sRGB, D369) if this is the first to draw
+    /// into it. All are held until the frame is made.
     void prepare(const render_canvas::CanvasFrame* frame,
                  TextureSource textures,
-                 std::optional<std::array<std::uint32_t, 4>> region = std::nullopt);
+                 std::optional<std::array<std::uint32_t, 4>> region = std::nullopt,
+                 std::array<std::uint8_t, 3> bars = {});
 
     [[nodiscard]] result::Status declare(render::Frame& frame) override;
     [[nodiscard]] result::Status record(render::Frame& frame) override;

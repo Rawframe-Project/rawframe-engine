@@ -154,7 +154,9 @@ public:
                                   meshes_,
                                   textures_,
                                   viewPointers_,
-                                  kShown ? std::optional{Placement{.x = kRegion.x, .y = kRegion.y}} : std::nullopt);
+                                  kShown
+                                      ? std::optional{Placement{.x = kRegion.x, .y = kRegion.y, .bars = scene_->bars()}}
+                                      : std::nullopt);
             frames_->ready(*regions_[at]);
         }
         frames_->ready(*renderer_);

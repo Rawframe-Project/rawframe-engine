@@ -186,10 +186,12 @@ private:
 };
 
 /// Where a view's picture is composed into the frame's (D362): its top
-/// left, in pixels.
+/// left, in pixels; and the color, 8-bit sRGB, the frame's picture is
+/// cleared to around it (a constrained aspect's bars, D369).
 struct Placement {
     std::uint32_t x = 0;
     std::uint32_t y = 0;
+    std::array<std::uint8_t, 3> bars{};
 };
 
 /// A view drawn apart on the device (ADR-0052, D361, D362): its picture, a
