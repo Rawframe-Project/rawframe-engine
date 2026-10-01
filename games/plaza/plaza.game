@@ -35,9 +35,10 @@ material b6b2fb38f649a30b paving.rfmaterial
 # A warmth over the picture before the tonemapper (D350): a post process.
 material 8d099ac296f9483e warmth.rfmaterial
 # A monitor showing what a lens high over it sees (D361): the lens's view
-# drawn each frame into a render texture of 320 by 180, which the
-# monitor's material shines with.
-rendertexture f18de9a0974d265b 320 180
+# drawn into a render texture of 256 by 144 once a second, when asked,
+# which the monitor's material shines with: a second view costs the
+# browser's software rasterizer dearly.
+rendertexture f18de9a0974d265b 256 144 on_demand
 material a09d6b8277396fcd monitor.rfmaterial
 
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
@@ -60,6 +61,7 @@ component ad3b9917-5f69-4d91-830b-b1aeab52a92e plaza.monitor Monitor
 component 9c9c4ade-0b73-4b76-ab31-90b52b98ff23 plaza.screen rawframe.model.Model
 component 05158b5b-4886-4c43-9384-9b9a9c0a3f4a plaza.lens rawframe.model.Camera
 component 9ef4a751-96de-4694-b07d-b3fccbd00a18 plaza.watch rawframe.model.View
+component da853e38-3ed1-4e7d-9ddb-4cf11b3834f2 plaza.shutter Shutter
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -153,7 +155,7 @@ predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.veloc
 # (D353), the strollers' traces (D354), and the monitor's screen showing
 # its lens's view (D361); no server carries a look, a figure, a lantern, a
 # view, a meter, an occlusion, a sky, a probe, a warmth, a fountain, a
-# trace, a screen, a lens, or a watch.
+# trace, a screen, a lens, a shutter, or a watch.
 presentation plaza.look on rawframe.physics3d.body
 present plaza.dress dress read rawframe.physics3d.body write plaza.look
 present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
@@ -177,7 +179,7 @@ presentation plaza.warmth on player
 present plaza.warm warm read plaza.stick write plaza.warmth
 presentation plaza.fountain on plaza.spring
 present plaza.fountain fountain read plaza.spring write plaza.fountain
-presentation plaza.screen plaza.lens plaza.watch on plaza.monitor
+presentation plaza.screen plaza.lens plaza.shutter plaza.watch on plaza.monitor
 present plaza.screen screen read plaza.monitor write plaza.screen
 present plaza.aim aim read plaza.monitor write plaza.lens
-present plaza.watch watch read plaza.monitor write plaza.watch
+present plaza.watch watch read plaza.monitor write plaza.shutter write plaza.watch

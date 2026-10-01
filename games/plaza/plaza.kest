@@ -403,12 +403,18 @@ fn aim(count: i32, monitors: [Monitor], lenses: [model.Camera]) {
     }
 }
 
+// A monitor's presentation ticks, counted to ask for its lens's picture.
+struct Shutter {
+    ticks: u32
+}
+
 // What a monitor's lens is drawn into: the render texture its screen
-// shines with.
-fn watch(count: i32, monitors: [Monitor], watches: [model.View]) {
+// shines with, asked for anew every sixty ticks, once a second.
+fn watch(count: i32, monitors: [Monitor], shutters: [Shutter], watches: [model.View]) {
     let i = 0
     while i < count {
-        watches[i] = model.View(LENSED, 0)
+        shutters[i].ticks = shutters[i].ticks + u32(1)
+        watches[i] = model.View(LENSED, 0, shutters[i].ticks / u32(60))
         i = i + 1
     }
 }
