@@ -270,6 +270,7 @@ public:
             overLimit_ += kFrame.overLimit;
             mostDraws_ = std::max(mostDraws_, kFrame.draws.size());
             mostVertices_ = std::max(mostVertices_, kFrame.vertices.size());
+            particles_.add(kFrame.particles, emitter_);
         }
     }
 
@@ -279,28 +280,29 @@ public:
         }
         const game_textures::TextureCounts kTextures =
             textures_ != nullptr ? textures_->counts() : game_textures::TextureCounts{};
-        emitter_.log(diagnostics::Severity::Info,
-                     kCanvasSummary,
-                     "what one client's canvas drew",
-                     {diagnostics::field("frames", frames_),
-                      diagnostics::field("framesViewed", viewed_),
-                      diagnostics::field("viewWidth", width_),
-                      diagnostics::field("viewHeight", height_),
-                      diagnostics::field("spritesDrawn", drawn_),
-                      diagnostics::field("spritesAnimated", animated_),
-                      diagnostics::field("culled", culled_),
-                      diagnostics::field("hidden", hidden_),
-                      diagnostics::field("malformed", malformed_),
-                      diagnostics::field("unknownTextures", unknownTextures_),
-                      diagnostics::field("unknownMaterials", unknownMaterials_),
-                      diagnostics::field("overLimit", overLimit_),
-                      diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
-                      diagnostics::field("mostVertices", static_cast<std::uint64_t>(mostVertices_)),
-                      diagnostics::field("drawsWaiting", drawsWaiting_),
-                      diagnostics::field("texturesReady", static_cast<std::uint64_t>(kTextures.ready)),
-                      diagnostics::field("texturesFailed", static_cast<std::uint64_t>(kTextures.failed)),
-                      diagnostics::field("texturesReloaded", reloaded_),
-                      diagnostics::field("textureBytes", kTextures.bytes)});
+        std::vector<diagnostics::Field> fields = {
+            diagnostics::field("frames", frames_),
+            diagnostics::field("framesViewed", viewed_),
+            diagnostics::field("viewWidth", width_),
+            diagnostics::field("viewHeight", height_),
+            diagnostics::field("spritesDrawn", drawn_),
+            diagnostics::field("spritesAnimated", animated_),
+            diagnostics::field("culled", culled_),
+            diagnostics::field("hidden", hidden_),
+            diagnostics::field("malformed", malformed_),
+            diagnostics::field("unknownTextures", unknownTextures_),
+            diagnostics::field("unknownMaterials", unknownMaterials_),
+            diagnostics::field("overLimit", overLimit_),
+            diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
+            diagnostics::field("mostVertices", static_cast<std::uint64_t>(mostVertices_)),
+            diagnostics::field("drawsWaiting", drawsWaiting_),
+            diagnostics::field("texturesReady", static_cast<std::uint64_t>(kTextures.ready)),
+            diagnostics::field("texturesFailed", static_cast<std::uint64_t>(kTextures.failed)),
+            diagnostics::field("texturesReloaded", reloaded_),
+            diagnostics::field("textureBytes", kTextures.bytes)};
+        const auto kParticles = particles_.fields();
+        fields.insert(fields.end(), kParticles.begin(), kParticles.end());
+        emitter_.log(diagnostics::Severity::Info, kCanvasSummary, "what one client's canvas drew", fields);
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -401,6 +403,8 @@ private:
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownTextures_ = 0;
     std::uint64_t unknownMaterials_ = 0;
+    /// The particles' frames, summed (D360).
+    rawframe::particles::Tally particles_;
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;

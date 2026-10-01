@@ -8,6 +8,8 @@
 // what it gives. Client only: a server carries the components as plain
 // values and links none of this.
 
+#include "rawframe/diagnostics/emitter.h"
+#include "rawframe/diagnostics/record.h"
 #include "rawframe/world/entity.h"
 
 #include <array>
@@ -222,6 +224,30 @@ struct Frame {
     std::vector<RibbonPoint> ribbonPoints;
     std::size_t ribbonsLeftOut = 0;
     std::size_t ribbonsHeld = 0;
+};
+
+/// What a view's frames drew and left out of the triad, summed for its
+/// host's summary (D360): emitters and ribbons drawn, and what `Frame`
+/// counts left out and held.
+class Tally {
+public:
+    /// Adds `frame`'s counts. A frame that leaves out or holds any is told
+    /// on `emitter` (`particles_held`, a warning the identity's rate limit
+    /// thins): ADR-0053's limit points are a typed event, never a silent
+    /// drop.
+    void add(const Frame& frame, const diagnostics::Emitter& emitter) noexcept;
+
+    /// Its counts as a summary's fields.
+    [[nodiscard]] std::array<diagnostics::Field, 7> fields() const noexcept;
+
+private:
+    std::uint64_t emittersDrawn_ = 0;
+    std::uint64_t emittersLeftOut_ = 0;
+    std::uint64_t emittersHeld_ = 0;
+    std::uint64_t particlesLeftOut_ = 0;
+    std::uint64_t ribbonsDrawn_ = 0;
+    std::uint64_t ribbonsLeftOut_ = 0;
+    std::uint64_t ribbonsHeld_ = 0;
 };
 
 /// A view as the accounting sees it: where its eye is in the World, and

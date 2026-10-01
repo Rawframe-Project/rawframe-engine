@@ -5,7 +5,7 @@
 # this.
 rawframe_module(NAME particles
     SOURCES src/particles.cpp src/ribbons.cpp
-    DEPS world base
+    DEPS world diagnostics result base
 )
 
 rawframe_module_tests(NAME particles SOURCES tests/particle_test.cpp tests/ribbon_test.cpp)

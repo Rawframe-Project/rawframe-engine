@@ -374,6 +374,7 @@ public:
             shadowsEvicted_ += kFrame.lightShadows.evicted;
             decalsDrawn_ += kFrame.decals.size();
             decalsCulled_ += kFrame.decalsCulled + kFrame.decalsOverLimit;
+            particles_.add(kFrame.particles, emitter_);
         }
     }
 
@@ -381,37 +382,37 @@ public:
         if (clients_ == nullptr) {
             return;
         }
-        emitter_.log(
-            diagnostics::Severity::Info,
-            kSceneSummary,
-            "what one client's scene drew",
-            {diagnostics::field("frames", frames_),
-             diagnostics::field("framesViewed", viewed_),
-             diagnostics::field("viewWidth", width_),
-             diagnostics::field("viewHeight", height_),
-             diagnostics::field("modelsDrawn", drawn_),
-             diagnostics::field("culled", culled_),
-             diagnostics::field("hidden", hidden_),
-             diagnostics::field("malformed", malformed_),
-             diagnostics::field("unknownMeshes", unknownMeshes_),
-             diagnostics::field("overLimit", overLimit_),
-             diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
-             diagnostics::field("gameMeshes", static_cast<std::uint64_t>(gameMeshes_)),
-             diagnostics::field("gameMaterials", static_cast<std::uint64_t>(gameMaterials_)),
-             diagnostics::field("unknownMaterials", unknownMaterials_),
-             diagnostics::field("materialTextures", static_cast<std::uint64_t>(sampled_)),
-             diagnostics::field("texturesReady",
-                                static_cast<std::uint64_t>(textures_ != nullptr ? textures_->counts().ready : 0)),
-             diagnostics::field("pictures", picturesRead_),
-             diagnostics::field("picturesReady", picturesReady()),
-             diagnostics::field("lightsLit", lightsLit_),
-             diagnostics::field("lightsCulled", lightsCulled_),
-             diagnostics::field("lightsOverLimit", lightsOverLimit_),
-             diagnostics::field("clusterOverflow", clusterOverflow_),
-             diagnostics::field("shadowSquares", shadowSquares_),
-             diagnostics::field("shadowsEvicted", shadowsEvicted_),
-             diagnostics::field("decalsDrawn", decalsDrawn_),
-             diagnostics::field("decalsCulled", decalsCulled_)});
+        std::vector<diagnostics::Field> fields = {
+            diagnostics::field("frames", frames_),
+            diagnostics::field("framesViewed", viewed_),
+            diagnostics::field("viewWidth", width_),
+            diagnostics::field("viewHeight", height_),
+            diagnostics::field("modelsDrawn", drawn_),
+            diagnostics::field("culled", culled_),
+            diagnostics::field("hidden", hidden_),
+            diagnostics::field("malformed", malformed_),
+            diagnostics::field("unknownMeshes", unknownMeshes_),
+            diagnostics::field("overLimit", overLimit_),
+            diagnostics::field("mostDraws", static_cast<std::uint64_t>(mostDraws_)),
+            diagnostics::field("gameMeshes", static_cast<std::uint64_t>(gameMeshes_)),
+            diagnostics::field("gameMaterials", static_cast<std::uint64_t>(gameMaterials_)),
+            diagnostics::field("unknownMaterials", unknownMaterials_),
+            diagnostics::field("materialTextures", static_cast<std::uint64_t>(sampled_)),
+            diagnostics::field("texturesReady",
+                               static_cast<std::uint64_t>(textures_ != nullptr ? textures_->counts().ready : 0)),
+            diagnostics::field("pictures", picturesRead_),
+            diagnostics::field("picturesReady", picturesReady()),
+            diagnostics::field("lightsLit", lightsLit_),
+            diagnostics::field("lightsCulled", lightsCulled_),
+            diagnostics::field("lightsOverLimit", lightsOverLimit_),
+            diagnostics::field("clusterOverflow", clusterOverflow_),
+            diagnostics::field("shadowSquares", shadowSquares_),
+            diagnostics::field("shadowsEvicted", shadowsEvicted_),
+            diagnostics::field("decalsDrawn", decalsDrawn_),
+            diagnostics::field("decalsCulled", decalsCulled_)};
+        const auto kParticles = particles_.fields();
+        fields.insert(fields.end(), kParticles.begin(), kParticles.end());
+        emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -783,6 +784,8 @@ private:
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownMeshes_ = 0;
     std::uint64_t unknownMaterials_ = 0;
+    /// The particles' frames, summed (D360).
+    rawframe::particles::Tally particles_;
     std::size_t gameMaterials_ = 0;
     /// Materials that could not be read, and why, said at start.
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;

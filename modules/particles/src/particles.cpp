@@ -295,6 +295,38 @@ std::span<const Field> beamFields() noexcept {
     return kFields;
 }
 
+void Tally::add(const Frame& frame, const diagnostics::Emitter& emitter) noexcept {
+    static constexpr diagnostics::EventIdentity kHeld{"particles", "particles_held"};
+    emittersDrawn_ += frame.emitters.size();
+    emittersLeftOut_ += frame.emittersLeftOut;
+    emittersHeld_ += frame.emittersHeld;
+    particlesLeftOut_ += frame.particlesLeftOut;
+    ribbonsDrawn_ += frame.ribbons.size();
+    ribbonsLeftOut_ += frame.ribbonsLeftOut;
+    ribbonsHeld_ += frame.ribbonsHeld;
+    if (frame.emittersLeftOut + frame.emittersHeld + frame.particlesLeftOut + frame.ribbonsLeftOut + frame.ribbonsHeld >
+        0) {
+        emitter.log(diagnostics::Severity::Warning,
+                    kHeld,
+                    "a frame left out or held particles at a limit point",
+                    {diagnostics::field("emittersLeftOut", static_cast<std::uint64_t>(frame.emittersLeftOut)),
+                     diagnostics::field("emittersHeld", static_cast<std::uint64_t>(frame.emittersHeld)),
+                     diagnostics::field("particlesLeftOut", static_cast<std::uint64_t>(frame.particlesLeftOut)),
+                     diagnostics::field("ribbonsLeftOut", static_cast<std::uint64_t>(frame.ribbonsLeftOut)),
+                     diagnostics::field("ribbonsHeld", static_cast<std::uint64_t>(frame.ribbonsHeld))});
+    }
+}
+
+std::array<diagnostics::Field, 7> Tally::fields() const noexcept {
+    return {diagnostics::field("particleEmitters", emittersDrawn_),
+            diagnostics::field("particleEmittersLeftOut", emittersLeftOut_),
+            diagnostics::field("particleEmittersHeld", emittersHeld_),
+            diagnostics::field("particlesLeftOut", particlesLeftOut_),
+            diagnostics::field("ribbons", ribbonsDrawn_),
+            diagnostics::field("ribbonsLeftOut", ribbonsLeftOut_),
+            diagnostics::field("ribbonsHeld", ribbonsHeld_)};
+}
+
 void Particles::update(Frame& frame,
                        std::span<const EmitterInstance> emitters,
                        std::span<const TrailInstance> trails,

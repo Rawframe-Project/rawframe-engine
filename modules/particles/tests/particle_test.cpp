@@ -4,9 +4,11 @@
 // around, and starts anew at another size (D353); emitters out of view are
 // left alone, the nearest are kept up to the limit and drawn farthest
 // first, and values past a limit point are held and counted; an emitter
-// gone keeps nothing; and its particles inherit its velocity, up to the
-// limit (D359).
+// gone keeps nothing; its particles inherit its velocity, up to the limit
+// (D359); and a frame that holds any is told as a typed event and summed
+// (D360).
 
+#include "rawframe/diagnostics/router.h"
 #include "rawframe/particles/particles.h"
 #include "rawframe/test/test.h"
 
@@ -169,4 +171,28 @@ RAWFRAME_TEST(AnEmittersParticlesInheritItsVelocity) {
     if (kFlung.emitters.size() == 1) {
         RAWFRAME_EXPECT(std::abs(kFlung.emitters[0].inherited[0] - 100) < 1e-3F);
     }
+}
+
+RAWFRAME_TEST(AFrameHoldingParticlesIsTold) {
+    // A sink that counts what reaches it by code.
+    struct Counted final : diagnostics::Sink {
+        int held = 0;
+        void accept(const diagnostics::Record& record) noexcept override {
+            held += record.identity.code == "particles_held" ? 1 : 0;
+        }
+    };
+    Counted counted;
+    std::array<diagnostics::Sink*, 1> sinks = {&counted};
+    diagnostics::Router router({}, sinks);
+    Rig rig;
+    rig.place(fountain(), -5);
+    Tally tally;
+    tally.add(rig.update(0.1F), router.emitter());
+    RAWFRAME_EXPECT(counted.held == 0);
+    // Past the rate's limit point: held, told, and summed.
+    rig.emitters[0].emitter.rate = 5000;
+    tally.add(rig.update(0.1F), router.emitter());
+    RAWFRAME_EXPECT(counted.held == 1);
+    const auto kFields = tally.fields();
+    RAWFRAME_EXPECT(kFields.size() == 7);
 }
