@@ -180,6 +180,12 @@ result::Status Tree::setLook(Node node, const Look& look) {
     const muiDimension kRadius{.scale = 0, .offset = look.radius, .kind = mui_dimensionValue};
     style.radius = muiCornerRadii{.topStart = kRadius, .topEnd = kRadius, .bottomEnd = kRadius, .bottomStart = kRadius};
     style.clip = look.clip;
+    style.image = look.image;
+    style.imageSlice = muiEdges{.start = look.imageSlice[3],
+                                .end = look.imageSlice[1],
+                                .top = look.imageSlice[0],
+                                .bottom = look.imageSlice[2]};
+    style.imageTint = colorOf(look.imageTint);
     return checked(muiNode_SetVisualValues(state_->context, idOf(node), &style, MUI_VISUAL_PROPERTIES),
                    "a UI node's look was refused");
 }
@@ -190,6 +196,8 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
     muiDrawList list{};
     RAWFRAME_TRY(checked(muiGetDrawList(state_->context, &list), "a UI tree's drawing could not be read"));
     into.boxes.clear();
+    into.images.clear();
+    into.commands.clear();
     into.clips.clear();
     into.skipped = 0;
     into.scale = scale;
@@ -202,10 +210,25 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
     }
     for (std::uint32_t at = 0; at < list.commandCount; ++at) {
         const muiDrawCommand& kCommand = list.commands[at];
+        if (kCommand.kind == mui_drawImage && kCommand.transform == 0) {
+            const muiDrawImage& kImage = kCommand.image;
+            into.commands.push_back(
+                DrawCommand{.kind = DrawCommand::Kind::Image, .index = static_cast<std::uint32_t>(into.images.size())});
+            into.images.push_back(
+                Image{.rect = ui::rectOf(kImage.rect),
+                      .image = kImage.image,
+                      .uv = ui::rectOf(kImage.uv),
+                      .slice = {kImage.slice.top, kImage.slice.right, kImage.slice.bottom, kImage.slice.left},
+                      .tint = linearOf(kImage.tint),
+                      .clip = kCommand.clip});
+            continue;
+        }
         if (kCommand.kind != mui_drawBox || kCommand.transform != 0 || kCommand.box.gradient != 0) {
             ++into.skipped;
             continue;
         }
+        into.commands.push_back(
+            DrawCommand{.kind = DrawCommand::Kind::Box, .index = static_cast<std::uint32_t>(into.boxes.size())});
         const muiDrawBox& kBox = kCommand.box;
         into.boxes.push_back(Box{.rect = ui::rectOf(kBox.rect),
                                  .radii = cornersOf(kBox.radii),

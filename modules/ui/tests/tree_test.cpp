@@ -195,3 +195,39 @@ RAWFRAME_TEST(ALaidOutTreeDrawsItsBoxesInPaintOrder) {
         RAWFRAME_EXPECT(near(kChipBox.fill[3], kAlpha) && near(kChipBox.fill[0], 0.2158605F * kAlpha));
     }
 }
+
+RAWFRAME_TEST(AnImageIsDrawnOverItsNodesFillInPaintOrder) {
+    auto tree = Tree::create(8);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    const Node kPanel = *ui.add(1);
+    const Node kIcon = *ui.add(2);
+    const Node kAfter = *ui.add(3);
+    RAWFRAME_EXPECT(ui.attach(kPanel, kIcon).has_value() && ui.attach(kPanel, kAfter).has_value());
+    RAWFRAME_EXPECT(
+        ui.setLayout(kPanel, {.width = pixels(100), .height = pixels(40), .alignItems = Align::Start}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kIcon, {.width = pixels(32), .height = pixels(32)}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kAfter, {.width = pixels(20), .height = pixels(20)}).has_value());
+    RAWFRAME_EXPECT(ui.setLook(kPanel, {.fill = 0x000000FF}).has_value());
+    RAWFRAME_EXPECT(
+        ui.setLook(kIcon, {.fill = 0x202020FF, .image = 0xab, .imageSlice = {4, 5, 6, 7}, .imageTint = 0xFF000080})
+            .has_value());
+    RAWFRAME_EXPECT(ui.setLook(kAfter, {.fill = 0xFFFFFFFF}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kPanel, 640, 360).has_value());
+    DrawList list;
+    RAWFRAME_EXPECT(ui.draw(kPanel, 1, list).has_value());
+    // The panel, the icon's fill, its image over it, then the next child.
+    RAWFRAME_EXPECT(list.boxes.size() == 3 && list.images.size() == 1 && list.commands.size() == 4);
+    if (list.commands.size() != 4 || list.images.size() != 1) {
+        return;
+    }
+    RAWFRAME_EXPECT(list.commands[2].kind == DrawCommand::Kind::Image && list.commands[3].index == 2);
+    const Image& kImage = list.images[0];
+    RAWFRAME_EXPECT(kImage.image == 0xab && placed(kImage.rect, 0, 0, 32, 32) && placed(kImage.uv, 0, 0, 1, 1));
+    RAWFRAME_EXPECT(kImage.slice == (std::array<float, 4>{4, 5, 6, 7}));
+    // Red at half alpha, premultiplied.
+    RAWFRAME_EXPECT(near(kImage.tint[3], 128.0F / 255.0F) && near(kImage.tint[0], 128.0F / 255.0F) &&
+                    kImage.tint[1] == 0);
+}

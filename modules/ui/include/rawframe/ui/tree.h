@@ -96,13 +96,19 @@ struct Layout {
 
 /// A node's look (SPEC-0032's box): its fill and its border's color, each
 /// 0xRRGGBBAA, sRGB with straight alpha (nought draws nothing); its
-/// corners' radius in pixels, held to half its shorter side; and whether
-/// it clips its children to its rounded border box.
+/// corners' radius in pixels, held to half its shorter side; whether it
+/// clips its children to its rounded border box; and an image filling its
+/// border box over its fill (D378): the owner's key for it (nought for
+/// none), insets of its nine-slice center in its pixels (top, right,
+/// bottom, left; all nought stretches it whole), and its tint.
 struct Look {
     std::uint32_t fill = 0;
     std::uint32_t borderColor = 0;
     float radius = 0;
     bool clip = false;
+    std::uint64_t image = 0;
+    std::array<float, 4> imageSlice{};
+    std::uint32_t imageTint = 0xFFFFFFFF;
 };
 
 /// A node's border box from the last layout that reached it, relative to
@@ -128,6 +134,31 @@ struct Box {
     std::uint32_t clip = 0;
 };
 
+/// An image to draw (SPEC-0032, D378): its owner's key, the part of it
+/// (`uv`, nought to one from its top left) drawn into `rect`, its nine-slice
+/// insets in its own pixels (top, right, bottom, left), whose corners keep
+/// their size at one logical pixel a pixel; its tint, linear with
+/// premultiplied alpha; and its clip.
+struct Image {
+    Rect rect;
+    std::uint64_t image = 0;
+    Rect uv;
+    std::array<float, 4> slice{};
+    std::array<float, 4> tint{};
+    std::uint32_t clip = 0;
+};
+
+/// A command of a list in paint order: a box or an image, by its index in
+/// the list's own.
+struct DrawCommand {
+    enum class Kind : std::uint8_t {
+        Box,
+        Image
+    };
+    Kind kind = Kind::Box;
+    std::uint32_t index = 0;
+};
+
 /// A clip: drawing kept inside the rounded rectangle (outside it, when
 /// inverted) and inside its parent, an index of the list's clips.
 struct Clip {
@@ -137,12 +168,15 @@ struct Clip {
     bool invert = false;
 };
 
-/// What a tree draws, in paint order: its boxes, and its clips, the first
-/// a placeholder for none, in logical pixels, `scale` device pixels each. Commands generation 1 does not draw yet
-/// (shadows, images, gradients over a fill, glyph runs, transformed ones)
-/// are counted, not kept.
+/// What a tree draws: its boxes and images, `commands` saying their paint
+/// order, and its clips, the first a placeholder for none, in logical
+/// pixels, `scale` device pixels each. Commands generation 1 does not draw
+/// yet (shadows, gradients over a fill, glyph runs, transformed ones) are
+/// counted, not kept.
 struct DrawList {
     std::vector<Box> boxes;
+    std::vector<Image> images;
+    std::vector<DrawCommand> commands;
     std::vector<Clip> clips;
     std::uint32_t skipped = 0;
     float scale = 1;
