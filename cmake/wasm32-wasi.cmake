@@ -12,3 +12,7 @@ set(CMAKE_C_COMPILER_TARGET wasm32-wasi)
 set(CMAKE_CXX_COMPILER_TARGET wasm32-wasi)
 set(CMAKE_CROSSCOMPILING_EMULATOR node;--no-warnings;${CMAKE_CURRENT_LIST_DIR}/../tools/wasi_run.mjs)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+# setjmp.h, which wasi-libc as packaged lacks (cmake/wasi, D383): found
+# after every other include directory, by FreeType alone.
+set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_LIST_DIR}/wasi)
+set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_LIST_DIR}/wasi)
