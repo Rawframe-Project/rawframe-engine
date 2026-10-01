@@ -366,6 +366,19 @@ struct GameRegion {
     float height = 1;
 };
 
+/// A region in pixels of a window, from its top left.
+struct RegionPixels {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
+/// `region` in pixels of a window `width` by `height` (ADR-0052's declared
+/// rounding, D362): each edge at the nearest pixel, so regions sharing an
+/// edge tile the window exactly; a region too small for a pixel has none.
+[[nodiscard]] RegionPixels pixelsOf(const GameRegion& region, std::uint32_t width, std::uint32_t height) noexcept;
+
 /// A split-screen layout (ADR-0052, D362): the regions `players` local
 /// players see the game in, in the players' order, each composed over
 /// those before it.

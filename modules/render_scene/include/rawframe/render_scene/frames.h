@@ -36,12 +36,6 @@ struct RegionFrame {
     const SceneFrame* frame = nullptr;
 };
 
-/// A layout's region (fractions of the window) in pixels of a window
-/// `width` by `height`: each edge at the nearest pixel, so regions sharing
-/// an edge tile the window exactly.
-[[nodiscard]] RegionFrame
-regionIn(float x, float y, float regionWidth, float regionHeight, std::uint32_t width, std::uint32_t height) noexcept;
-
 class SceneFrames {
 public:
     SceneFrames() = default;

@@ -774,7 +774,9 @@ private:
     void presentPlayers(execution::MonotonicInstant now) {
         for (std::size_t at = 0; at < regions_.size(); ++at) {
             const world_kest::GameRegion& kRegion = regions_[at];
-            regionFrames_[at] = regionIn(kRegion.x, kRegion.y, kRegion.width, kRegion.height, width_, height_);
+            const world_kest::RegionPixels kPixels = world_kest::pixelsOf(kRegion, width_, height_);
+            regionFrames_[at] =
+                RegionFrame{.x = kPixels.x, .y = kPixels.y, .width = kPixels.width, .height = kPixels.height};
         }
         if (regionFrames_[0].width != 0 && regionFrames_[0].height != 0) {
             camera_.aspect = static_cast<float>(regionFrames_[0].width) / static_cast<float>(regionFrames_[0].height);
@@ -1125,18 +1127,6 @@ result::Result<composition::ParticipantOwner> make(composition::ParticipantConte
 }
 
 } // namespace
-
-RegionFrame
-regionIn(float x, float y, float regionWidth, float regionHeight, std::uint32_t width, std::uint32_t height) noexcept {
-    const auto kEdge = [](float at, std::uint32_t side) {
-        return static_cast<std::uint32_t>(std::lround(std::clamp(at, 0.0F, 1.0F) * static_cast<float>(side)));
-    };
-    const std::uint32_t kLeft = kEdge(x, width);
-    const std::uint32_t kTop = kEdge(y, height);
-    const std::uint32_t kRight = std::max(kLeft, kEdge(x + regionWidth, width));
-    const std::uint32_t kBottom = std::max(kTop, kEdge(y + regionHeight, height));
-    return RegionFrame{.x = kLeft, .y = kTop, .width = kRight - kLeft, .height = kBottom - kTop};
-}
 
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
     registrar.submit(composition::ParticipantDeclaration{

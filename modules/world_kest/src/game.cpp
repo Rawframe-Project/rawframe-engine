@@ -870,4 +870,15 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
     return value.value;
 }
 
+RegionPixels pixelsOf(const GameRegion& region, std::uint32_t width, std::uint32_t height) noexcept {
+    const auto kEdge = [](float at, std::uint32_t side) {
+        return static_cast<std::uint32_t>(std::lround(std::clamp(at, 0.0F, 1.0F) * static_cast<float>(side)));
+    };
+    const std::uint32_t kLeft = kEdge(region.x, width);
+    const std::uint32_t kTop = kEdge(region.y, height);
+    const std::uint32_t kRight = std::max(kLeft, kEdge(region.x + region.width, width));
+    const std::uint32_t kBottom = std::max(kTop, kEdge(region.y + region.height, height));
+    return RegionPixels{.x = kLeft, .y = kTop, .width = kRight - kLeft, .height = kBottom - kTop};
+}
+
 } // namespace rawframe::world_kest
