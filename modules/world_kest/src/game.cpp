@@ -244,10 +244,33 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     number, WorldKestError::BadGameLine, "a texture line is `texture <16 hex digits> <file>`");
             }
             if (std::ranges::contains(game.textures, *kId, &GameTexture::id) ||
-                std::ranges::contains(game.textures, kWords[2], &GameTexture::path)) {
+                std::ranges::contains(game.textures, kWords[2], &GameTexture::path) ||
+                std::ranges::contains(game.renderTextures, *kId, &GameRenderTexture::id)) {
                 return badLine(number, WorldKestError::BadGameLine, "a texture's identity and file are used once");
             }
             game.textures.push_back(GameTexture{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "rendertexture") {
+            const auto kId = kWords.size() == 4 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kWidth = kWords.size() == 4 ? parseReal(kWords[2], 1, kMaximumRenderTextureSide) : std::nullopt;
+            const auto kHeight = kWords.size() == 4 ? parseReal(kWords[3], 1, kMaximumRenderTextureSide) : std::nullopt;
+            if (!kId || *kId == 0 || !kWidth || !kHeight || std::floor(*kWidth) != *kWidth ||
+                std::floor(*kHeight) != *kHeight) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a render texture line is `rendertexture <16 hex digits> <width> <height>`, each side "
+                               "1 to 4096 pixels");
+            }
+            if (std::ranges::contains(game.renderTextures, *kId, &GameRenderTexture::id) ||
+                std::ranges::contains(game.textures, *kId, &GameTexture::id)) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a render texture's identity is no other texture's");
+            }
+            if (game.renderTextures.size() == kMaximumRenderTextures) {
+                return badLine(number, WorldKestError::BadGameLine, "a game declares at most 8 render textures");
+            }
+            game.renderTextures.push_back(GameRenderTexture{.id = *kId,
+                                                            .width = static_cast<std::uint32_t>(*kWidth),
+                                                            .height = static_cast<std::uint32_t>(*kHeight)});
         } else if (kKeyword == "material") {
             const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {

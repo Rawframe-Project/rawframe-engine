@@ -62,6 +62,18 @@ struct Camera {
     tonemapper: u32
 }
 
+// A view (ADR-0052, D361), on an entity with a camera: what the camera
+// sees from the entity's pose drawn each frame into the game's render
+// texture `target` (a `rendertexture` line's identity), which a material
+// samples as it would any texture, a frame behind at most. The camera's
+// offsets, aim, lens, and effects are its own, as a player's are. A render
+// texture shows one view: of those naming it, the one of the lowest
+// `order`; two of the same lowest order show none, and are told.
+struct View {
+    target: u64
+    order: i32
+}
+
 // The tonemappers a camera may map its light with (ADR-0047).
 const AGX: u32 = 0
 const PBR_NEUTRAL: u32 = 1

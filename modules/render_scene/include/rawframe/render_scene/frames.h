@@ -15,6 +15,16 @@
 
 namespace rawframe::render_scene {
 
+/// A render texture's frame (ADR-0052, D361): its identity and size, and
+/// the frame its view queued this Host iteration; none while no view names
+/// it.
+struct TextureFrame {
+    std::uint64_t id = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    const SceneFrame* frame = nullptr;
+};
+
 class SceneFrames {
 public:
     SceneFrames() = default;
@@ -26,6 +36,10 @@ public:
     /// iteration's `presentation_extract`; none in an iteration that queued
     /// none, and while the scene is idle.
     [[nodiscard]] virtual const SceneFrame* queued() const noexcept = 0;
+    /// The game's render textures, each with the frame its view queued in
+    /// this Host iteration's `present` (D361), until the next iteration's
+    /// `presentation_extract`; a device draws them before the view's.
+    [[nodiscard]] virtual std::span<const TextureFrame> textureFrames() const noexcept = 0;
     /// The view's size in pixels: `scene.width` and `scene.height` until
     /// what shows it sets another.
     [[nodiscard]] virtual std::uint32_t width() const noexcept = 0;

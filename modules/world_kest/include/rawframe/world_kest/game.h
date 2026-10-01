@@ -333,6 +333,21 @@ struct GameTexture {
     std::string path;
 };
 
+/// A render texture (ADR-0052, D361), by the identity a material names it
+/// by as it would a texture: a picture `width` by `height` pixels that a
+/// `rawframe.model.View` draws a camera's view into each frame, nothing
+/// cooked.
+struct GameRenderTexture {
+    std::uint64_t id = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
+/// ADR-0052's limit points for render textures, profile values: the most
+/// a game declares, and the most pixels a side.
+inline constexpr std::size_t kMaximumRenderTextures = 8;
+inline constexpr std::uint32_t kMaximumRenderTextureSide = 4096;
+
 /// A surface material a `rawframe.model.Model` names (D303), by the
 /// identity the model names it by. Its source beside the description is a
 /// material document the cook compiles (`rawframe.material`).
@@ -449,6 +464,8 @@ struct GameDescription {
     std::vector<GameMesh> meshes;
     /// From `texture <16 hex digits> <file>` lines.
     std::vector<GameTexture> textures;
+    /// From `rendertexture <16 hex digits> <width> <height>` lines (D361).
+    std::vector<GameRenderTexture> renderTextures;
     /// From `material <16 hex digits> <file>` lines.
     std::vector<GameMaterial> materials;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]

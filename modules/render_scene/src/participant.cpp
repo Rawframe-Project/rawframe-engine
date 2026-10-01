@@ -9,10 +9,13 @@
 #include "rawframe/render_scene/frames.h"
 #include "rawframe/render_scene/registrar.h"
 #include "rawframe/render_scene/scene.h"
+#include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/client_worlds.h"
 
 #include <algorithm>
+#include <array>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <optional>
@@ -33,6 +36,7 @@ constexpr diagnostics::EventIdentity kTextureReloaded{"scene", "texture_reloaded
 constexpr diagnostics::EventIdentity kTexturesRead{"scene", "textures_read"};
 constexpr diagnostics::EventIdentity kPictureUnknown{"scene", "picture_unknown"};
 constexpr diagnostics::EventIdentity kPictureUnread{"scene", "picture_unavailable"};
+constexpr diagnostics::EventIdentity kViewRefused{"scene", "view_refused"};
 /// The decoded levels the materials' textures may hold.
 constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
 constexpr std::string_view kMaybe[] = {
@@ -219,6 +223,11 @@ public:
         RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
         client_ = client;
         cameraComponent_ = game->camera;
+        viewComponent_ = game->view;
+        for (const world_kest::GameRenderTexture& kTexture : files->description().renderTextures) {
+            textureViews_.push_back(TextureView{.id = kTexture.id, .width = kTexture.width, .height = kTexture.height});
+        }
+        textureFrames_.resize(textureViews_.size());
         autoExposureComponent_ = game->autoExposure;
         gradingComponent_ = game->grading;
         occlusionComponent_ = game->occlusion;
@@ -335,6 +344,9 @@ public:
         }
         if (phase == composition::HostPhase::PresentationExtract) {
             queued_ = nullptr;
+            for (TextureFrame& each : textureFrames_) {
+                each.frame = nullptr;
+            }
             ++tick_;
             updateTextures();
             extract();
@@ -346,6 +358,7 @@ public:
             camera_.elapsed =
                 presented_.has_value() ? static_cast<float>((frame.now - *presented_).nanoseconds) / 1e9F : 0.0F;
             presented_ = frame.now;
+            presentViews(frame.now);
             const SceneFrame& kFrame = scene_->queue(camera_);
             askPicture(kFrame.lights.environment);
             askPicture(kFrame.grading.table);
@@ -426,6 +439,10 @@ public:
         return queued_;
     }
 
+    std::span<const TextureFrame> textureFrames() const noexcept override {
+        return textureFrames_;
+    }
+
     std::uint32_t width() const noexcept override {
         return width_;
     }
@@ -487,6 +504,11 @@ private:
         }
         for (const auto& [kMaterial, texture] : named) {
             if (texture->id == 0) {
+                continue;
+            }
+            // A render texture is drawn, not read (D361).
+            if (std::ranges::contains(
+                    files.description().renderTextures, texture->id, &world_kest::GameRenderTexture::id)) {
                 continue;
             }
             if (std::ranges::find(files.textures(), texture->id, &world_kest::GameTextureResource::id) ==
@@ -651,105 +673,162 @@ private:
         if (kView.owned.isNull() || !kView.world->alive(kView.owned)) {
             return;
         }
+        if (readCamera(*kView.world, kView.owned, camera_)) {
+            ++viewed_;
+        }
+        extractViews(*kView.world);
+    }
+
+    /// The camera on `entity` and its effects read into `camera`, the eye
+    /// placed by the entity's pose; whether it has a camera (else it looks
+    /// as the default does).
+    bool readCamera(world::World& world, world::EntityHandle entity, SceneCamera& camera) const {
         Camera view = kDefaultCamera;
+        bool found = false;
         if (cameraComponent_.has_value()) {
-            if (const auto kCamera = kView.world->registry().find(*cameraComponent_)) {
-                if (const auto* placed = static_cast<const Camera*>(kView.world->getErased(kView.owned, *kCamera))) {
+            if (const auto kCamera = world.registry().find(*cameraComponent_)) {
+                if (const auto* placed = static_cast<const Camera*>(world.getErased(entity, *kCamera))) {
                     view = *placed;
-                    ++viewed_;
+                    found = true;
                 }
             }
         }
-        camera_.yaw = view.yaw;
-        camera_.pitch = view.pitch;
-        camera_.fovY = view.fovY;
-        camera_.near = view.near;
-        camera_.exposure = view.exposure;
-        camera_.tonemapper = view.tonemapper;
-        camera_.metering.reset();
-        camera_.grading.reset();
-        if (gradingComponent_.has_value()) {
-            if (const auto kGrading = kView.world->registry().find(*gradingComponent_)) {
-                if (const auto* asked = static_cast<const Grading*>(kView.world->getErased(kView.owned, *kGrading))) {
-                    camera_.grading = *asked;
+        camera.yaw = view.yaw;
+        camera.pitch = view.pitch;
+        camera.fovY = view.fovY;
+        camera.near = view.near;
+        camera.exposure = view.exposure;
+        camera.tonemapper = view.tonemapper;
+        const auto kRead = [&world, entity]<typename T>(const std::optional<schema::ComponentTypeId>& component,
+                                                        std::optional<T>& into) {
+            into.reset();
+            if (component.has_value()) {
+                if (const auto kId = world.registry().find(*component)) {
+                    if (const auto* asked = static_cast<const T*>(world.getErased(entity, *kId))) {
+                        into = *asked;
+                    }
                 }
             }
-        }
-        camera_.reflections.reset();
-        if (reflectionsComponent_.has_value()) {
-            if (const auto kReflections = kView.world->registry().find(*reflectionsComponent_)) {
-                if (const auto* asked = static_cast<const ScreenSpaceReflections*>(
-                        kView.world->getErased(kView.owned, *kReflections))) {
-                    camera_.reflections = *asked;
-                }
-            }
-        }
-        camera_.motionBlur.reset();
-        if (motionBlurComponent_.has_value()) {
-            if (const auto kMotionBlur = kView.world->registry().find(*motionBlurComponent_)) {
-                if (const auto* asked =
-                        static_cast<const MotionBlur*>(kView.world->getErased(kView.owned, *kMotionBlur))) {
-                    camera_.motionBlur = *asked;
-                }
-            }
-        }
-        camera_.depthOfField.reset();
-        if (depthOfFieldComponent_.has_value()) {
-            if (const auto kDepthOfField = kView.world->registry().find(*depthOfFieldComponent_)) {
-                if (const auto* asked =
-                        static_cast<const DepthOfField*>(kView.world->getErased(kView.owned, *kDepthOfField))) {
-                    camera_.depthOfField = *asked;
-                }
-            }
-        }
-        camera_.contactShadows.reset();
-        if (contactShadowsComponent_.has_value()) {
-            if (const auto kContact = kView.world->registry().find(*contactShadowsComponent_)) {
-                if (const auto* asked =
-                        static_cast<const ContactShadows*>(kView.world->getErased(kView.owned, *kContact))) {
-                    camera_.contactShadows = *asked;
-                }
-            }
-        }
-        camera_.bloom.reset();
-        if (bloomComponent_.has_value()) {
-            if (const auto kBloom = kView.world->registry().find(*bloomComponent_)) {
-                if (const auto* asked = static_cast<const Bloom*>(kView.world->getErased(kView.owned, *kBloom))) {
-                    camera_.bloom = *asked;
-                }
-            }
-        }
+        };
+        kRead(gradingComponent_, camera.grading);
+        kRead(reflectionsComponent_, camera.reflections);
+        kRead(motionBlurComponent_, camera.motionBlur);
+        kRead(depthOfFieldComponent_, camera.depthOfField);
+        kRead(contactShadowsComponent_, camera.contactShadows);
+        kRead(bloomComponent_, camera.bloom);
+        kRead(occlusionComponent_, camera.occlusion);
+        kRead(autoExposureComponent_, camera.metering);
         // Its post processes, in the game's order (D349).
-        camera_.postProcesses.clear();
+        camera.postProcesses.clear();
         for (const schema::ComponentTypeId kComponent : postProcessComponents_) {
-            if (const auto kProcess = kView.world->registry().find(kComponent)) {
-                if (const auto* asked =
-                        static_cast<const PostProcess*>(kView.world->getErased(kView.owned, *kProcess))) {
-                    camera_.postProcesses.push_back(*asked);
+            if (const auto kProcess = world.registry().find(kComponent)) {
+                if (const auto* asked = static_cast<const PostProcess*>(world.getErased(entity, *kProcess))) {
+                    camera.postProcesses.push_back(*asked);
                 }
             }
         }
-        camera_.occlusion.reset();
-        if (occlusionComponent_.has_value()) {
-            if (const auto kOcclusion = kView.world->registry().find(*occlusionComponent_)) {
-                if (const auto* asked =
-                        static_cast<const AmbientOcclusion*>(kView.world->getErased(kView.owned, *kOcclusion))) {
-                    camera_.occlusion = *asked;
-                }
+        if (const auto kPose = world.registry().key<physics3d::Pose3D>()) {
+            if (const auto* pose = world.get(entity, *kPose)) {
+                camera.eye = {pose->x + view.offsetX, pose->y + view.offsetY, pose->z + view.offsetZ};
             }
         }
-        if (autoExposureComponent_.has_value()) {
-            if (const auto kMetering = kView.world->registry().find(*autoExposureComponent_)) {
-                if (const auto* asked =
-                        static_cast<const AutoExposure*>(kView.world->getErased(kView.owned, *kMetering))) {
-                    camera_.metering = *asked;
-                }
-            }
+        return found;
+    }
+
+    /// Each render texture's view (D361): of the entities whose view names
+    /// it, the one of the lowest order, its World extracted by the render
+    /// texture's own scene and its camera read. Two of the lowest order
+    /// show none, and are told; the others are left out.
+    void extractViews(world::World& world) {
+        for (TextureView& each : textureViews_) {
+            each.entity.reset();
+            each.order = 0;
+            each.tied = false;
         }
-        if (const auto kPose = kView.world->registry().key<physics3d::Pose3D>()) {
-            if (const auto* pose = kView.world->get(kView.owned, *kPose)) {
-                camera_.eye = {pose->x + view.offsetX, pose->y + view.offsetY, pose->z + view.offsetZ};
+        if (!viewComponent_.has_value() || textureViews_.empty()) {
+            return;
+        }
+        const auto kView = world.registry().find(*viewComponent_);
+        if (!kView.has_value()) {
+            return;
+        }
+        if (!viewQuery_.has_value()) {
+            const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kView, world::Access::Read}};
+            auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+            if (!query.has_value()) {
+                return;
             }
+            viewQuery_ = std::move(*query);
+        }
+        viewQuery_->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                View asked;
+                std::memcpy(&asked, chunk.columns[0] + (row * sizeof(View)), sizeof(View));
+                const auto kTarget = std::ranges::find(textureViews_, asked.target, &TextureView::id);
+                if (kTarget == textureViews_.end()) {
+                    continue;
+                }
+                if (kTarget->entity.has_value()) {
+                    ++viewsLeftOut_;
+                    if (asked.order > kTarget->order) {
+                        continue;
+                    }
+                    kTarget->tied = asked.order == kTarget->order;
+                    if (kTarget->tied) {
+                        continue;
+                    }
+                }
+                kTarget->entity = chunk.entities[row];
+                kTarget->order = asked.order;
+                kTarget->tied = false;
+            }
+        });
+        for (TextureView& each : textureViews_) {
+            if (!each.entity.has_value()) {
+                continue;
+            }
+            if (each.tied) {
+                ++viewsRefused_;
+                emitter_.log(diagnostics::Severity::Warning,
+                             kViewRefused,
+                             "two views of one order name a render texture: it shows neither",
+                             {diagnostics::field("texture", graph::nodeIdText(each.id)),
+                              diagnostics::field("order", static_cast<std::int64_t>(each.order))});
+                each.entity.reset();
+                continue;
+            }
+            if (each.scene == nullptr) {
+                auto made = Scene::create(world.registry(), settings_);
+                if (!made.has_value()) {
+                    each.entity.reset();
+                    continue;
+                }
+                each.scene = std::move(*made);
+            }
+            each.scene->extract(world);
+            static_cast<void>(readCamera(world, *each.entity, each.camera));
+        }
+    }
+
+    /// Each render texture's view queued, at its own aspect and on its
+    /// own clock (D361).
+    void presentViews(execution::MonotonicInstant now) {
+        for (std::size_t at = 0; at < textureViews_.size(); ++at) {
+            TextureView& each = textureViews_[at];
+            textureFrames_[at] = TextureFrame{.id = each.id, .width = each.width, .height = each.height};
+            if (!each.entity.has_value() || each.scene == nullptr) {
+                each.presented.reset();
+                continue;
+            }
+            each.camera.aspect = static_cast<float>(each.width) / static_cast<float>(each.height);
+            each.camera.elapsed =
+                each.presented.has_value() ? static_cast<float>((now - *each.presented).nanoseconds) / 1e9F : 0.0F;
+            each.presented = now;
+            const SceneFrame& kFrame = each.scene->queue(each.camera);
+            askPicture(kFrame.lights.environment);
+            askPicture(kFrame.grading.table);
+            textureFrames_[at].frame = &kFrame;
+            ++viewsDrawn_;
         }
     }
 
@@ -759,6 +838,27 @@ private:
     ShadowSettings shadows_;
     SceneCamera camera_;
     std::optional<schema::ComponentTypeId> cameraComponent_;
+    /// The views into render textures (D361): the game's view component,
+    /// its query, each render texture's view and scene, the frames they
+    /// queued, and the views drawn, left out, and refused.
+    struct TextureView {
+        std::uint64_t id = 0;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        std::optional<world::EntityHandle> entity;
+        std::int32_t order = 0;
+        bool tied = false;
+        std::unique_ptr<Scene> scene;
+        SceneCamera camera;
+        std::optional<execution::MonotonicInstant> presented;
+    };
+    std::optional<schema::ComponentTypeId> viewComponent_;
+    std::optional<world::ColumnQuery> viewQuery_;
+    std::vector<TextureView> textureViews_;
+    std::vector<TextureFrame> textureFrames_;
+    std::uint64_t viewsDrawn_ = 0;
+    std::uint64_t viewsLeftOut_ = 0;
+    std::uint64_t viewsRefused_ = 0;
     std::optional<schema::ComponentTypeId> autoExposureComponent_;
     std::optional<schema::ComponentTypeId> gradingComponent_;
     std::optional<schema::ComponentTypeId> occlusionComponent_;

@@ -56,6 +56,14 @@ struct Camera {
     std::uint32_t tonemapper = 0;
 };
 
+/// `rawframe.model.View` as C++ reads it (ADR-0052, D361): the render
+/// texture its entity's camera draws into, and its order among the views
+/// naming it.
+struct View {
+    std::uint64_t target = 0;
+    std::int32_t order = 0;
+};
+
 /// ADR-0047's closed tonemapper set, as a camera names it (D295): AgX, the
 /// default; Khronos PBR Neutral; and linear, for measuring.
 enum class Tonemapper : std::uint8_t {
@@ -911,6 +919,8 @@ private:
 struct GameScene {
     std::vector<schema::ComponentTypeId> models;
     std::optional<schema::ComponentTypeId> camera;
+    /// The views into render textures (D361).
+    std::optional<schema::ComponentTypeId> view;
     std::optional<schema::ComponentTypeId> autoExposure;
     std::optional<schema::ComponentTypeId> grading;
     std::optional<schema::ComponentTypeId> occlusion;

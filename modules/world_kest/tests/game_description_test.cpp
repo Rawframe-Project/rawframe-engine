@@ -222,6 +222,26 @@ RAWFRAME_TEST(TexturesAreDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(RenderTexturesAreDeclaredByLine) {
+    const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
+    const auto kGame = parseGame(kHead + "rendertexture 00000000000000d1 256 128\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->renderTextures.size() == 1 && kGame->renderTextures[0].id == 0xD1 &&
+                    kGame->renderTextures[0].width == 256 && kGame->renderTextures[0].height == 128);
+    // Its identity is no other texture's; each side 1 to 4096 pixels (D361).
+    for (const std::string_view kLines : {"rendertexture 00000000000000d1 256\n",
+                                          "rendertexture 0000000000000000 256 128\n",
+                                          "rendertexture 00000000000000d1 0 128\n",
+                                          "rendertexture 00000000000000d1 256 4097\n",
+                                          "rendertexture 00000000000000d1 25.5 128\n",
+                                          "texture 00000000000000d1 a.png\nrendertexture 00000000000000d1 256 128\n",
+                                          "rendertexture 00000000000000d1 256 128\ntexture 00000000000000d1 a.png\n",
+                                          "rendertexture 00000000000000d1 2 2\nrendertexture 00000000000000d1 4 4\n"}) {
+        const std::string kText = kHead + std::string{kLines};
+        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kText, WorldKestError::BadGameLine, "4"));
+    }
+}
+
 RAWFRAME_TEST(MaterialsAreDeclaredByLine) {
     const std::string kHead = "program p.kest\ncomponent 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.look Model\n";
     const auto kGame =
