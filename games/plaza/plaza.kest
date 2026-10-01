@@ -342,6 +342,17 @@ fn fountain(count: i32, springs: [Spring], fountains: [model.ParticleEmitter]) {
     }
 }
 
+// What a stroller leaves behind it (D354): a faint warm trace at its
+// middle, a point every quarter meter, each lasting two seconds, a tenth
+// of a meter wide narrowing to nothing and fading out.
+fn trace(count: i32, strollers: [Stroller], trails: [model.Trail]) {
+    let i = 0
+    while i < count {
+        trails[i] = model.Trail(u64(0), 2.0, 0.25, 0.1, 0.0, 0xFFD9A6A0, 0xFFD9A600)
+        i = i + 1
+    }
+}
+
 // Where the plaza's reflection probe's box reaches from its middle, in
 // meters (D325).
 struct Hall {

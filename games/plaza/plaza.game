@@ -50,6 +50,7 @@ component a05f1e72-8622-4587-a629-f9a65dc4431a plaza.probe rawframe.model.Reflec
 component 19968421-e479-4d0d-84b5-3f15409045fa plaza.warmth rawframe.model.PostProcess
 component 8e5894e9-5540-470d-9ad5-9de0e9c44c1a plaza.spring Spring
 component 23c49c96-4115-4e9b-93bf-ad66da086d57 plaza.fountain rawframe.model.ParticleEmitter
+component e11486aa-d0b3-421d-aaf7-76d14abb942d plaza.trace rawframe.model.Trail
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -134,9 +135,10 @@ predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.veloc
 # walker's camera, and the strollers as figures where their poses stand
 # (D288), each with a lantern (D290), the view's exposure metered (D293),
 # under the sky's picture (D322), reflecting the plaza's probe (D325),
-# darkened where things meet (D327), warmed (D350), and the spring's
-# fountain (D353); no server carries a look, a figure, a lantern, a view,
-# a meter, an occlusion, a sky, a probe, a warmth, or a fountain.
+# darkened where things meet (D327), warmed (D350), the spring's fountain
+# (D353), and the strollers' traces (D354); no server carries a look, a
+# figure, a lantern, a view, a meter, an occlusion, a sky, a probe, a
+# warmth, a fountain, or a trace.
 presentation plaza.look on rawframe.physics3d.body
 present plaza.dress dress read rawframe.physics3d.body write plaza.look
 present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
@@ -144,6 +146,8 @@ presentation plaza.figure on plaza.stroller
 present plaza.figure figure read plaza.stroller write plaza.figure
 presentation plaza.lantern on plaza.stroller
 present plaza.lantern lantern read plaza.stroller write plaza.lantern
+presentation plaza.trace on plaza.stroller
+present plaza.trace trace read plaza.stroller write plaza.trace
 presentation plaza.view on player
 present plaza.frame frame read plaza.stick write plaza.view
 presentation plaza.meter on player

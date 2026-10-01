@@ -325,8 +325,10 @@ try {
     // The canvas takes the focus, then D (W in the plaza) is held: the
     // player runs.
     // The plaza's page draws about eight frames a second on the software
-    // rasterizer, and confirms fewer of its ticks for it: it plays a second
-    // longer, so its confirmations clear the bar by more than chance (D333).
+    // rasterizer, and confirms fewer of its ticks for it: it plays three
+    // seconds longer, so its confirmations clear the bar by more than chance
+    // (D333; and two more once its fountain and traces cost it a frame in
+    // twelve and a full check's load left it 105, D354).
     // Its first frames make the rasterizer compile what each new way of
     // drawing needs (an effect's pipeline, a texture kind first sampled),
     // and a player starting during them confirms a fifth fewer ticks: it
@@ -337,7 +339,7 @@ try {
     }
     await tab.click('canvas');
     await tab.keyboard.down(forward);
-    await sleep(plaza ? 2000 : 1000);
+    await sleep(plaza ? 4000 : 1000);
     await tab.keyboard.down('Space');
     await sleep(200);
     await tab.keyboard.up('Space');
