@@ -136,8 +136,9 @@ if(RAWFRAME_BUILD_TESTS)
                          "\"written\":true,\"frames\":[0-9]+,\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9][0-9]*,\"emitterCues\":\"[1-9][0-9]* [1-9][0-9]*\",\"effects\":[1-9]")
     # Four bots play runners and the first one's canvas is drawn offscreen
     # on the one device (D279): frames are drawn with their sprites, the
-    # runners' trails and their shots' sparks (D357), and a frame read back
-    # shows them. Only where Maul RHI is built; a machine
+    # runners' trails and their shots' sparks (D357), each local player's
+    # HUD over its view (D376), and a frame read back shows them. Only where
+    # Maul RHI is built; a machine
     # without an adapter skips unless the check requires one.
     if(RAWFRAME_ARENA_DRAWS)
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/runners_drawn.tga)
@@ -150,7 +151,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
+                             "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"boxes\":[1-9][0-9]+.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,\"mostNodes\":6,.*\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(runners_drawn PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

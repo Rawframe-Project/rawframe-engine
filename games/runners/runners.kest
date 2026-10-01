@@ -11,6 +11,7 @@ import rawframe.physics2d
 import rawframe.random
 import rawframe.replication
 import rawframe.sound
+import rawframe.ui
 import rawframe.world
 import std.math
 
@@ -126,6 +127,39 @@ fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
             views[i].offsetY = 1.0
         }
         views[i].offsetX = views[i].offsetX + (sticks[i].run * 2.0 - views[i].offsetX) * 0.05
+        i = i + 1
+    }
+}
+
+// The player's HUD (D376): a dark panel 240 pixels wide centered 12 above
+// the bottom of its view, and in it a green meter of the hits its runner
+// landed over a red one of those it took, each a tenth of the panel's
+// inside for each hit, starting again at ten.
+fn gauge(count: i32, scores: [Score], huds: [ui.Node], landed: [ui.Node], taken: [ui.Node]) {
+    let i = 0
+    while i < count {
+        huds[i].widthOffset = 240.0
+        huds[i].direction = ui.COLUMN
+        huds[i].alignItems = ui.ALIGN_START
+        huds[i].gap = 4.0
+        huds[i].padding = 6.0
+        huds[i].absolute = u32(1)
+        huds[i].xScale = 0.5
+        huds[i].yScale = 1.0
+        huds[i].yOffset = -12.0
+        huds[i].anchorX = 0.5
+        huds[i].anchorY = 1.0
+        huds[i].fill = u32(0x101820C0)
+        huds[i].radius = 6.0
+        landed[i].widthOffset = 22.8 * f32(scores[i].hits % 10)
+        landed[i].heightOffset = 8.0
+        landed[i].fill = u32(0x58D068FF)
+        landed[i].radius = 4.0
+        taken[i].widthOffset = 22.8 * f32(scores[i].taken % 10)
+        taken[i].heightOffset = 8.0
+        taken[i].fill = u32(0xE05050FF)
+        taken[i].radius = 4.0
+        taken[i].order = 1
         i = i + 1
     }
 }

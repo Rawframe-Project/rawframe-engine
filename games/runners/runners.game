@@ -29,6 +29,9 @@ component 3149b7ac-718f-4686-a572-6241d54af2a3 runners.view rawframe.canvas.Came
 component b668075a-c5b2-45fa-af7e-0aa7f62c8808 runners.wince rawframe.sound.Emitter
 component c68ee156-5575-4b58-9ed0-41395d2a7bdc runners.dust rawframe.model.Trail
 component fd2777e2-c81b-4588-9117-dd0e4acc564d runners.sparks rawframe.model.ParticleEmitter
+component d30c12f9-2754-4113-9519-0afbf0ea2970 runners.hud rawframe.ui.Node
+component 6293ab03-1010-42b8-bef6-f06379468d19 runners.landed rawframe.ui.Node
+component 1e5be856-5be3-47ab-84a3-433ac63f84c6 runners.taken rawframe.ui.Node
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
@@ -118,6 +121,13 @@ present runners.wince wince write runners.wince
 # client's own particles, drawn over the canvas.
 presentation runners.dust runners.sparks on runners.stick
 present runners.glint glint read runners.emitter write runners.dust write runners.sparks
+# The player's HUD (D376): a panel along the bottom of its view, a green
+# meter of the hits its runner landed and a red one of those it took, each
+# filling over ten and starting again; the client's own, drawn over all.
+presentation runners.hud runners.landed runners.taken on player
+ui runners.landed in runners.hud
+ui runners.taken in runners.hud
+present runners.gauge gauge read runners.score write runners.hud write runners.landed write runners.taken
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
 # The runners' look lit a little warm from within: a canvas material
