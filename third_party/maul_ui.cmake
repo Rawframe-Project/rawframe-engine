@@ -25,8 +25,11 @@ add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/maul-ui" "${CMAKE_BINARY_DIR}/third_
 # On the web, FreeType's setjmp and longjmp (a damaged font's validation
 # jumps out) run through WebAssembly's exception handling: its sources are
 # lowered so, and the runtime they call is linked with Maul UI (D383).
+# FreeType and HarfBuzz are built for size there, which the download
+# budget counts and their speed does not need (D384).
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
-    target_compile_options(maul_ui_freetype PRIVATE -mllvm -wasm-enable-sjlj -mexception-handling)
+    target_compile_options(maul_ui_freetype PRIVATE -mllvm -wasm-enable-sjlj -mexception-handling -Oz)
+    target_compile_options(maul_ui_harfbuzz PRIVATE -Oz)
     add_library(rawframe_wasi_setjmp STATIC "${PROJECT_SOURCE_DIR}/cmake/wasi/setjmp.c")
     target_compile_options(rawframe_wasi_setjmp PRIVATE -mllvm -wasm-enable-sjlj -mexception-handling)
     target_link_libraries(maul-ui PRIVATE rawframe_wasi_setjmp)
