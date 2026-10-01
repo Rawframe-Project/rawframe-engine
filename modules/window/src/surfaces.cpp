@@ -35,7 +35,8 @@ void Surfaces::update(const Windows& windows) {
                            .generation = kState->created && !kState->surfaceLost ? kState->surfaceGeneration : 0,
                            .pixelSize = kState->pixelSize,
                            .occluded = kState->occluded || kState->mode == Mode::Minimized ||
-                                       kState->pixelSize.width == 0 || kState->pixelSize.height == 0};
+                                       kState->pixelSize.width == 0 || kState->pixelSize.height == 0,
+                           .display = windows.display(states_[at].window)};
         std::optional<HandleBundle> pending = std::move(pending_[at]);
         std::uint32_t read = read_[at];
         if (state.generation == 0) {

@@ -3,7 +3,8 @@
 // caused and superseded when replaced, stale ids refused, input reset on
 // focus loss, raw input and drops carried whole, gamepads about no window,
 // a program whose start fails, and the seam's window side: a surface
-// generation's handles given once, none while the surface is lost.
+// generation's handles given once, none while the surface is lost, and its
+// display's facts as the platform tells them (D365).
 
 #include "rawframe/test/test.h"
 #include "rawframe/window/errors.h"
@@ -362,4 +363,37 @@ RAWFRAME_TEST(EachSurfaceGenerationsHandlesAreGivenOnce) {
     }};
     RAWFRAME_EXPECT(testing::run(script, RunSettings{}).has_value());
     RAWFRAME_EXPECT(script.stoppedWell);
+}
+
+RAWFRAME_TEST(AWindowsDisplayFactsAreReadAsThePlatformTellsThem) {
+    // A window made on a monitor that says nothing of HDR reads no facts;
+    // once its facts change, they are what the window's display reads, and
+    // what the device side's surface state carries (D365).
+    Surfaces surfaces;
+    MonitorId monitor;
+    WindowId shown;
+    Script script{{
+        [&](Windows& windows, Script&) {
+            const auto kAdded = testing::addMonitor(windows, {});
+            RAWFRAME_EXPECT(kAdded.has_value());
+            monitor = kAdded.value_or(MonitorId{});
+            shown = windows.create(WindowSettings{.title = "Shown"}).value_or(WindowId{});
+        },
+        [](Windows&, Script&) {},
+        [&](Windows& windows, Script&) {
+            const auto kState = windows.state(shown);
+            RAWFRAME_EXPECT(kState.has_value() && kState->monitor == monitor);
+            RAWFRAME_EXPECT(!windows.display(shown).reported);
+            RAWFRAME_EXPECT(
+                testing::changeMonitor(
+                    windows, monitor, {.reported = true, .hdrOn = true, .peakNits = 1000, .sdrWhiteNits = 240})
+                    .has_value());
+            const DisplayFacts kFacts = windows.display(shown);
+            RAWFRAME_EXPECT(kFacts.reported && kFacts.hdrOn && kFacts.peakNits == 1000 && kFacts.sdrWhiteNits == 240);
+            surfaces.watch(shown);
+            surfaces.update(windows);
+            RAWFRAME_EXPECT(surfaces.states().size() == 1 && surfaces.states()[0].display == kFacts);
+        },
+    }};
+    RAWFRAME_EXPECT(testing::run(script, RunSettings{}).has_value());
 }

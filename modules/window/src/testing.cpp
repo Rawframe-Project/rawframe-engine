@@ -49,6 +49,38 @@ result::Status setTime(Windows& windows, std::uint64_t timeNs) {
     return checked(mwinTestSetTime(Platform::contextOf(windows), timeNs), "the test clock");
 }
 
+namespace {
+
+/// A full HD monitor at the origin, of `facts`.
+mwinMonitorInfo monitorOf(const DisplayFacts& facts) noexcept {
+    mwinMonitorInfo info{};
+    info.bounds = {.x = 0, .y = 0, .width = 1920, .height = 1080};
+    info.workArea = info.bounds;
+    info.scale = 1;
+    info.primary = true;
+    info.hdr = {.known = facts.reported,
+                .active = facts.hdrOn,
+                .peakNits = facts.peakNits,
+                .fullFrameNits = 0,
+                .sdrWhiteNits = facts.sdrWhiteNits};
+    return info;
+}
+
+} // namespace
+
+result::Result<MonitorId> addMonitor(Windows& windows, const DisplayFacts& facts) {
+    const mwinMonitorInfo kInfo = monitorOf(facts);
+    mwinMonitorId monitor{};
+    RAWFRAME_TRY(checked(mwinTestAddMonitor(Platform::contextOf(windows), &kInfo, &monitor), "a test monitor"));
+    return fromMaul(monitor);
+}
+
+result::Status changeMonitor(Windows& windows, MonitorId monitor, const DisplayFacts& facts) {
+    const mwinMonitorInfo kInfo = monitorOf(facts);
+    return checked(mwinTestChangeMonitor(Platform::contextOf(windows), toMaul(monitor), &kInfo),
+                   "changing a test monitor");
+}
+
 result::Result<GamepadId> addGamepad(Windows& windows) {
     mwinGamepadInfo info{};
     info.mapped = true;

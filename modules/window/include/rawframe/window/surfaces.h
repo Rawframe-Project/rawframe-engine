@@ -28,6 +28,8 @@ struct SurfaceState {
     PixelSize pixelSize;
     /// Hidden, minimized, or without size: nothing to present to.
     bool occluded = false;
+    /// Its monitor's facts, read each frame (D365).
+    DisplayFacts display;
 };
 
 class Surfaces {

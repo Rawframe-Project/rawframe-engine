@@ -2,6 +2,7 @@
 
 #include <maul-window/gamepad.h>
 #include <maul-window/input.h>
+#include <maul-window/monitor.h>
 #include <maul-window/native.h>
 #include <maul-window/window.h>
 #include <utility>
@@ -220,6 +221,21 @@ result::Result<RequestId> Windows::requestTextInput(WindowId window, bool enable
                              mwinRect{.x = caret.x, .y = caret.y, .width = caret.width, .height = caret.height},
                              &request);
     return requested(kStatus, request, "a text input request");
+}
+
+DisplayFacts Windows::display(WindowId window) const {
+    mwinWindowState state{};
+    if (mwinGetWindowState(platform_->context, toMaul(window), &state) != mwin_success || state.monitor.index1 == 0) {
+        return {};
+    }
+    mwinMonitorInfo info{};
+    if (mwinGetMonitorInfo(platform_->context, state.monitor, &info) != mwin_success || !info.hdr.known) {
+        return {};
+    }
+    return DisplayFacts{.reported = true,
+                        .hdrOn = info.hdr.active,
+                        .peakNits = info.hdr.peakNits,
+                        .sdrWhiteNits = info.hdr.sdrWhiteNits};
 }
 
 result::Result<HandleBundle> Windows::handles(WindowId window) const {

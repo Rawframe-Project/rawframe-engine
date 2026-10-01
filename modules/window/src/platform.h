@@ -56,6 +56,12 @@ struct Platform {
 [[nodiscard]] inline mwinGamepadId toMaul(GamepadId id) noexcept {
     return {.index1 = id.index, .generation = id.generation};
 }
+[[nodiscard]] inline MonitorId fromMaul(mwinMonitorId id) noexcept {
+    return {.index = id.index1, .generation = id.generation};
+}
+[[nodiscard]] inline mwinMonitorId toMaul(MonitorId id) noexcept {
+    return {.index1 = id.index, .generation = id.generation};
+}
 
 [[nodiscard]] mwinWindowMode toMaul(Mode mode) noexcept;
 [[nodiscard]] mwinRequestKind toMaul(RequestKind kind) noexcept;

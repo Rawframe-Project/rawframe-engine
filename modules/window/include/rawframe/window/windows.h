@@ -67,6 +67,19 @@ struct WindowState {
     std::uint32_t surfaceGeneration = 0;
 };
 
+/// What the platform tells now of the monitor showing a window, for its
+/// HDR capability record (ADR-0052, D365): whether it reports HDR facts at
+/// all, whether HDR output is on, its peak luminance, and the luminance it
+/// shows SDR white at, in nits, nought where it does not tell. Facts may
+/// lag the platform's events: they are read again, never kept.
+struct DisplayFacts {
+    bool reported = false;
+    bool hdrOn = false;
+    float peakNits = 0;
+    float sdrWhiteNits = 0;
+    friend constexpr bool operator==(const DisplayFacts&, const DisplayFacts&) noexcept = default;
+};
+
 /// The named limits (SPEC-0025's limit points). Each is a hard ceiling: a
 /// request past one is refused with OverLimit, and discrete input past its
 /// queue becomes InputStateReset. The values are the Maul Window defaults
@@ -110,6 +123,9 @@ public:
     /// SurfaceLost and SurfaceRestored). For the seam to the device only
     /// (`Surfaces`), never to be kept past the generation.
     [[nodiscard]] result::Result<HandleBundle> handles(WindowId window) const;
+    /// What the platform tells now of the monitor showing most of `window`
+    /// (D365); none known before it says which monitor, and for one gone.
+    [[nodiscard]] DisplayFacts display(WindowId window) const;
 
     [[nodiscard]] result::Result<RequestId> requestTitle(WindowId window, std::string_view title);
     /// Answered by Resized and PixelSizeChanged with what the platform

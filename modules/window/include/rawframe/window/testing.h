@@ -45,6 +45,11 @@ namespace rawframe::window::testing {
 [[nodiscard]] result::Status pressGamepad(Windows& windows, GamepadId gamepad, GamepadButton button, bool down);
 [[nodiscard]] result::Status moveGamepad(Windows& windows, GamepadId gamepad, GamepadAxis axis, float value);
 
+/// Connects a monitor of `facts` at once, the primary one, which windows
+/// made from now on show on (D365); changes a connected one's facts.
+[[nodiscard]] result::Result<MonitorId> addMonitor(Windows& windows, const DisplayFacts& facts);
+[[nodiscard]] result::Status changeMonitor(Windows& windows, MonitorId monitor, const DisplayFacts& facts);
+
 /// The last rumble a test gamepad was given, and how many it was given.
 struct Rumble {
     float low = 0;
