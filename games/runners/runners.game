@@ -12,6 +12,9 @@ collision class runner 2ebcd16c10c5f6a4
 # quarters.
 layout 2 0 0 1 0.5 0 0.5 1 0.5
 layout 4 0 0 0.5 0.5 0.5 0 0.5 0.5 0 0.5 0.5 0.5 0.5 0.5 0.5 0.5
+# Every player sees the level in 16:9, however the window or its region is
+# shaped, between slate bars (D369): no shape of window shows more of it.
+aspect 16 9 24 28 40
 
 component 6b05cdb4-0683-437a-aaac-7ad990b2ddb4 runners.stick Stick
 component f6453556-fcdd-46e8-9208-866fade389cf runners.score Score

@@ -156,6 +156,24 @@ if(RAWFRAME_BUILD_TESTS)
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
         endif()
     endif()
+    # Runners' 16:9 view drawn into a 4:3 picture is letterboxed (D369): the
+    # captured picture's bars are the game's slate and its view is not.
+    if(RAWFRAME_ARENA_DRAWS)
+        set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/runners_boxed.tga)
+        configure_file(tests/runners_boxed.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_boxed.conf @ONLY)
+        add_test(NAME runners_boxed
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_boxed.sh
+                         $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/runners_boxed.conf ${CAPTURE}
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(runners_boxed PROPERTIES
+                             FIXTURES_REQUIRED runners_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION "boxed: 120 of 120 bar rows slate, 0 view rows slate")
+        if(RAWFRAME_SANITIZE STREQUAL "thread")
+            set_tests_properties(runners_boxed PROPERTIES ENVIRONMENT
+                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
+        endif()
+    endif()
     # Four bots play runners and the first one's World is played on a null
     # device: its thread renders the mixer, and shots reach the master bus.
     configure_file(tests/runners_played.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_played.conf @ONLY)

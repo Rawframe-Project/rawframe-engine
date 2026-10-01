@@ -1,0 +1,19 @@
+# Two bots play the sample platformer for three seconds while the first's
+# canvas is drawn on the one device into a 4:3 offscreen picture: runners
+# declares a 16:9 aspect (D369), so its view is letterboxed, bars above and
+# below, slate. The last frame read back is written to a TGA image in the build
+# tree for runners_boxed.sh to look at. A software rasterizer may serve.
+host.maximum_iterations = 360
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/runners/runners.game
+content.root = @CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 2
+bots.endpoint = arena
+render.device = any
+render.offscreen = true
+render.width = 640
+render.height = 480
+render.capture = @CAPTURE@
