@@ -5,6 +5,8 @@
 #include "rawframe/render_scene_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/renderer.h"
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <span>
@@ -95,8 +97,7 @@ public:
             // In split-screen, each local player's view, in the players'
             // order, after the render textures (D362).
             for (const render_scene::RegionFrame& kRegion : scene_->regionFrames()) {
-                auto view = TextureView::create(
-                    *device, *renderer_, 0, std::max(kRegion.width, 1U), std::max(kRegion.height, 1U));
+                auto view = TextureView::create(*device, *renderer_, 0, scaled(kRegion.width), scaled(kRegion.height));
                 if (!view.has_value()) {
                     failed_ = true;
                     emitter_.log(diagnostics::Severity::Error,
@@ -141,7 +142,8 @@ public:
             const render_scene::RegionFrame& kRegion = kRegions[at];
             const bool kShown = kRegion.width != 0 && kRegion.height != 0;
             if (kShown) {
-                if (auto resized = regions_[at]->resize(kRegion.width, kRegion.height); !resized.has_value()) {
+                if (auto resized = regions_[at]->resize(scaled(kRegion.width), scaled(kRegion.height));
+                    !resized.has_value()) {
                     failed_ = true;
                     emitter_.log(diagnostics::Severity::Error,
                                  kFailed,
@@ -154,13 +156,22 @@ public:
                                   meshes_,
                                   textures_,
                                   viewPointers_,
-                                  kShown
-                                      ? std::optional{Placement{.x = kRegion.x, .y = kRegion.y, .bars = scene_->bars()}}
-                                      : std::nullopt);
+                                  kShown ? std::optional{Placement{.x = kRegion.x,
+                                                                   .y = kRegion.y,
+                                                                   .width = kRegion.width,
+                                                                   .height = kRegion.height,
+                                                                   .bars = scene_->bars()}}
+                                         : std::nullopt);
             frames_->ready(*regions_[at]);
         }
         frames_->ready(*renderer_);
         frames_->ready(renderer_->composed());
+    }
+
+    /// A local player's region side in the pixels its view is drawn at
+    /// (D373): its render scale's share, at least one.
+    [[nodiscard]] std::uint32_t scaled(std::uint32_t side) const noexcept {
+        return std::max(1U, static_cast<std::uint32_t>(std::lround(static_cast<float>(side) * scene_->renderScale())));
     }
 
     /// The render textures' frames queued in an iteration no frame draws,

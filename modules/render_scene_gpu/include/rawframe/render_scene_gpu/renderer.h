@@ -186,11 +186,15 @@ private:
 };
 
 /// Where a view's picture is composed into the frame's (D362): its top
-/// left, in pixels; and the color, 8-bit sRGB, the frame's picture is
-/// cleared to around it (a constrained aspect's bars, D369).
+/// left, in pixels; the size it covers there, nought for its own (a view
+/// drawn at a render scale is scaled to its region's, D373); and the
+/// color, 8-bit sRGB, the frame's picture is cleared to around it (a
+/// constrained aspect's bars, D369).
 struct Placement {
     std::uint32_t x = 0;
     std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
     std::array<std::uint8_t, 3> bars{};
 };
 

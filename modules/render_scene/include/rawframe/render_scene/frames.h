@@ -60,6 +60,10 @@ public:
     /// The color around the regions, 8-bit sRGB: a constrained aspect's
     /// bars (D369), else black.
     [[nodiscard]] virtual std::array<std::uint8_t, 3> bars() const noexcept = 0;
+    /// The share of its region's pixels each way a local player's view is
+    /// drawn at (ADR-0052's render scale, D373): `scene.render_scale`, one
+    /// unless asked; the view is scaled to its region.
+    [[nodiscard]] virtual float renderScale() const noexcept = 0;
     /// The device did not draw the frame the render texture `id` was last
     /// given: one drawn on demand is offered it again in the next
     /// iteration, unless a new one is due.

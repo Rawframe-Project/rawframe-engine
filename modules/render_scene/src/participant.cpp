@@ -192,6 +192,19 @@ public:
         quality_ = kQuality == "low"      ? material::Quality::Low
                    : kQuality == "medium" ? material::Quality::Medium
                                           : material::Quality::High;
+        // ADR-0052's render scale (D373): each local player's view drawn at
+        // this many hundredths of its region's pixels each way, and scaled
+        // to its region; every one unless asked.
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kPercent,
+                            configuration.unsignedInteger("scene.render_scale_percent", 100));
+        if (kPercent < 25 || kPercent > 100) {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                               composition::kCompositionDomain,
+                                                               code(composition::CompositionError::BadConfiguration),
+                                                               "scene.render_scale_percent is 25 to 100")
+                                                      .error()};
+        }
+        renderScale_ = static_cast<float>(kPercent) / 100.0F;
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
         }
@@ -246,10 +259,11 @@ public:
             }
             regionFrames_.resize(regions_.size());
         }
-        // A constrained aspect (D369): one player's view is placed in the
-        // window as a split-screen player's is in its region.
+        // A constrained aspect (D369), or a render scale (D373): one
+        // player's view is placed in the window as a split-screen player's
+        // is in its region.
         aspect_ = files->description().aspect;
-        if (aspect_.has_value() && regions_.empty()) {
+        if ((aspect_.has_value() || renderScale_ < 1) && regions_.empty()) {
             regions_.push_back(world_kest::GameRegion{});
             regionFrames_.resize(1);
         }
@@ -491,6 +505,10 @@ public:
             kView->resend = true;
             ++viewsMissed_;
         }
+    }
+
+    float renderScale() const noexcept override {
+        return renderScale_;
     }
 
     std::array<std::uint8_t, 3> bars() const noexcept override {
@@ -908,6 +926,9 @@ private:
     std::uint32_t height_ = 720;
     /// The local players' views, told each frame (D367).
     view::PlayerViews* views_ = nullptr;
+    /// Each local player's view drawn at this share of its region's pixels
+    /// each way (D373).
+    float renderScale_ = 1;
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
     std::uint64_t culled_ = 0;

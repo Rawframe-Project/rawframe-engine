@@ -1,4 +1,5 @@
 #include "pipelines.h"
+#include "rawframe/render/display.h"
 #include "rawframe/render_scene_gpu/renderer.h"
 #include "tables.h"
 
@@ -34,6 +35,10 @@ struct TextureView::State {
     std::optional<Placement> placed;
     std::optional<mrhiPassId> clearing;
     std::optional<mrhiPassId> copying;
+    /// Placed at another size than its own, scaled there by a pass of its
+    /// own (D373), made the first time it is.
+    std::unique_ptr<render::Display> scaler;
+    std::optional<std::uint64_t> scaling;
     mrhiResourceId imported{};
     std::uint32_t copyWidth = 0;
     std::uint32_t copyHeight = 0;
@@ -122,6 +127,7 @@ result::Status TextureView::declare(render::Frame& frame) {
     state.drawing = false;
     state.clearing.reset();
     state.copying.reset();
+    state.scaling.reset();
     // Placed, the frame's picture cleared first if nothing drew into it
     // before: a copy keeps what is there.
     if (state.placed.has_value() && frame.clearsPicture()) {
@@ -162,6 +168,22 @@ result::Status TextureView::declare(render::Frame& frame) {
     if (state.drawn || state.drawing) {
         state.picture = kPicture;
     }
+    // Placed at another size, scaled into its region once drawn (D373).
+    const bool kScaled = state.placed.has_value() && state.placed->width != 0 && state.placed->height != 0 &&
+                         (state.placed->width != state.width || state.placed->height != state.height);
+    if (kScaled && state.picture.has_value() && state.placed->x < frame.width && state.placed->y < frame.height) {
+        if (state.scaler == nullptr) {
+            RAWFRAME_TRY_ASSIGN(state.scaler, render::Display::create(*state.inner.device));
+        }
+        RAWFRAME_TRY_ASSIGN(state.scaling,
+                            state.scaler->place(*state.picture,
+                                                frame.picture,
+                                                {state.placed->x,
+                                                 state.placed->y,
+                                                 std::min(state.placed->width, frame.width - state.placed->x),
+                                                 std::min(state.placed->height, frame.height - state.placed->y)}));
+        return {};
+    }
     // Placed, copied into the frame's picture once drawn.
     if (state.placed.has_value() && state.picture.has_value() && state.placed->x < frame.width &&
         state.placed->y < frame.height) {
@@ -197,6 +219,9 @@ result::Status TextureView::record(render::Frame& frame) {
     if (state.frame != nullptr) {
         RAWFRAME_TRY(state.renderer->record(state.inner));
         RAWFRAME_TRY(state.renderer->composed().record(state.inner));
+    }
+    if (state.scaling.has_value()) {
+        RAWFRAME_TRY(state.scaler->record(*state.scaling));
     }
     if (state.copying.has_value()) {
         const mrhiTextureCopy kFrom{.resource = state.imported};

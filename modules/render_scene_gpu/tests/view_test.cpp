@@ -1,8 +1,9 @@
 // A render texture's view on the device (ADR-0052, D361) on lavapipe: a
 // view draws its frame into its texture, and the player's view samples it
 // where a material names the render texture; before the view has drawn,
-// the material samples white. Skips where no adapter answers, unless
-// RAWFRAME_REQUIRE_GPU is set.
+// the material samples white; a split-screen view is placed in its
+// region, and one drawn at a render scale is scaled to fill it (D373).
+// Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "fixture.h"
 #include "rawframe/render/device.h"
@@ -176,5 +177,60 @@ RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
         RAWFRAME_EXPECT(kRight[0] < 40 && kRight[1] > 200 && kRight[2] < 40);
         const std::array<int, 3> kBar = at(*pixels, kSide * 3 / 4, 2);
         RAWFRAME_EXPECT(kBar[0] == 0 && kBar[1] == 0 && kBar[2] >= 254);
+    }
+}
+
+RAWFRAME_TEST(AViewDrawnAtItsRenderScaleFillsItsRegion) {
+    // A view drawn at half its region's size each way (D373), scaled into
+    // the whole frame's picture: red to its corners.
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto scene = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(scene.has_value() && framer.has_value());
+    if (!scene.has_value() || !framer.has_value()) {
+        return;
+    }
+    auto view = render_scene_gpu::TextureView::create(*kDevice, **scene, 0, kSide / 2, kSide / 2);
+    RAWFRAME_EXPECT(view.has_value());
+    if (!view.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    render_scene::MaterialBlob unlit = render_scene::noMaterial();
+    unlit[15] = 1 + 2;
+    SceneFrame red = looking();
+    red.shadows.count = 0;
+    red.dither = false;
+    red.tonemapper = render_scene::Tonemapper::Linear;
+    SceneDraw wall = box(4, 20, {1, 0, 0, 1});
+    wall.material = 1;
+    red.draws = {wall};
+    red.materials = {render_scene::noMaterial(), unlit};
+    red.textures = {{}, {}};
+    const std::array<render::FrameRecorder*, 2> kRecorders = {view->get(), scene->get()};
+    std::optional<std::vector<std::byte>> pixels;
+    const auto kRed = [](const std::array<int, 3>& color) {
+        return color[0] > 200 && color[1] < 40 && color[2] < 40;
+    };
+    for (int attempt = 0; attempt < 1000 &&
+                          (!pixels.has_value() || !kRed(at(*pixels, 1, 1)) || !kRed(at(*pixels, kSide - 2, kSide - 2)));
+         ++attempt) {
+        (**view).prepare(
+            &red, kMeshes, {}, {}, render_scene_gpu::Placement{.x = 0, .y = 0, .width = kSide, .height = kSide});
+        (**scene).prepare(nullptr, kMeshes);
+        RAWFRAME_EXPECT(
+            (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
+        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+        pixels = (*framer)->pixels();
+    }
+    RAWFRAME_EXPECT(pixels.has_value());
+    if (pixels.has_value()) {
+        RAWFRAME_EXPECT(kRed(at(*pixels, 1, 1)) && kRed(at(*pixels, kSide - 2, kSide - 2)) &&
+                        kRed(at(*pixels, kSide / 2, kSide / 2)));
     }
 }
