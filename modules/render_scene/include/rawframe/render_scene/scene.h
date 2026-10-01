@@ -122,6 +122,8 @@ struct AutoExposure {
     float compensation = 0;
     float low = 0;
     float high = 0;
+    /// How much more the middle of the picture counts (D345).
+    float centered = 0;
 };
 
 /// `rawframe.model.Sun` as C++ reads it.

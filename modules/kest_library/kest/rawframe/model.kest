@@ -164,7 +164,9 @@ struct ContactShadows {
 // one) left out, the rest averaged into an EV100 less `compensation`
 // stops, kept between `minimum` and `maximum`, and reached at `brighten`
 // EV a second when the picture must brighten and `darken` when it must
-// darken; at once when the metering starts or the eye cuts away. One
+// darken; at once when the metering starts or the eye cuts away. The
+// middle of the picture counts more by `centered` (nought to one): at one,
+// a pixel in the middle counts sixteen times one in a corner (D345). One
 // whose maximum is not above its minimum meters nothing. Without one, the
 // camera's `exposure` holds.
 struct AutoExposure {
@@ -175,6 +177,7 @@ struct AutoExposure {
     compensation: f32
     low: f32
     high: f32
+    centered: f32
 }
 
 // The sun (ADR-0051's directional light), on any entity: light arriving

@@ -85,19 +85,25 @@ Bounded bounded(std::shared_ptr<const mesh::Mesh> made) {
 /// The camera's metering made sound (D293): off when it asks for none, a
 /// value is not finite, or its maximum is not above its minimum (a camera's
 /// meter not yet set is all nought); the rates not negative,
-/// the fractions within nought and one with low below high, and the
+/// the fractions within nought and one with low below high, the middle's
+/// weight within nought and one (D345), and the
 /// seconds since the frame before at most a quarter.
 SceneMetering meteringOf(const SceneCamera& camera) noexcept {
     if (!camera.metering.has_value()) {
         return {};
     }
     AutoExposure asked = *camera.metering;
-    if (!std::ranges::all_of(
-            std::array{
-                asked.minimum, asked.maximum, asked.brighten, asked.darken, asked.compensation, asked.low, asked.high},
-            [](float value) {
-                return std::isfinite(value);
-            })) {
+    if (!std::ranges::all_of(std::array{asked.minimum,
+                                        asked.maximum,
+                                        asked.brighten,
+                                        asked.darken,
+                                        asked.compensation,
+                                        asked.low,
+                                        asked.high,
+                                        asked.centered},
+                             [](float value) {
+                                 return std::isfinite(value);
+                             })) {
         return {};
     }
     if (asked.maximum <= asked.minimum) {
@@ -107,6 +113,7 @@ SceneMetering meteringOf(const SceneCamera& camera) noexcept {
     asked.darken = std::max(asked.darken, 0.0F);
     asked.low = std::clamp(asked.low, 0.0F, 1.0F);
     asked.high = std::clamp(asked.high, asked.low, 1.0F);
+    asked.centered = std::clamp(asked.centered, 0.0F, 1.0F);
     const float kElapsed = std::isfinite(camera.elapsed) ? std::clamp(camera.elapsed, 0.0F, 0.25F) : 0.0F;
     return {.enabled = true, .settings = asked, .elapsed = kElapsed};
 }
@@ -970,7 +977,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"darken", offsetof(AutoExposure, darken)},
                            {"compensation", offsetof(AutoExposure, compensation)},
                            {"low", offsetof(AutoExposure, low)},
-                           {"high", offsetof(AutoExposure, high)}}));
+                           {"high", offsetof(AutoExposure, high)},
+                           {"centered", offsetof(AutoExposure, centered)}}));
     RAWFRAME_TRY(kLaidOut(
         loaded.bloom.has_value(), "rawframe.model.Bloom", sizeof(Bloom), {{"intensity", offsetof(Bloom, intensity)}}));
     RAWFRAME_TRY(kLaidOut(loaded.reflections.has_value(),

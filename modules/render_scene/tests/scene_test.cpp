@@ -691,18 +691,24 @@ RAWFRAME_TEST(AMeteredCameraIsMadeSound) {
     Rig rig;
     SceneCamera camera{.fovY = 1, .near = 0.1F, .aspect = 1};
     RAWFRAME_EXPECT(!rig.frame(camera).metering.enabled);
-    // A negative rate, fractions past one, and a long pause: stopped,
-    // clamped, and cut to a quarter second; the first metered frame goes
+    // A negative rate, fractions and a middle's weight past one (D345), and
+    // a long pause: stopped, clamped, and cut to a quarter second; the first metered frame goes
     // at once to what it measures, the next at the rates, and one after
     // the eye cuts away at once again.
-    camera.metering = AutoExposure{
-        .minimum = 8, .maximum = 16, .brighten = -1, .darken = 2, .compensation = 1, .low = 0.9F, .high = 1.5F};
+    camera.metering = AutoExposure{.minimum = 8,
+                                   .maximum = 16,
+                                   .brighten = -1,
+                                   .darken = 2,
+                                   .compensation = 1,
+                                   .low = 0.9F,
+                                   .high = 1.5F,
+                                   .centered = 2};
     camera.elapsed = 3;
     const SceneMetering kMetering = rig.frame(camera).metering;
     RAWFRAME_EXPECT(kMetering.enabled && kMetering.settings.minimum == 8 && kMetering.settings.maximum == 16 &&
                     kMetering.settings.brighten == 0 && kMetering.settings.darken == 2 &&
                     kMetering.settings.low == 0.9F && kMetering.settings.high == 1 && kMetering.elapsed == 0.25F &&
-                    kMetering.snap);
+                    kMetering.settings.centered == 1 && kMetering.snap);
     RAWFRAME_EXPECT(!rig.frame(camera).metering.snap);
     camera.eye = {0, 0, 40};
     RAWFRAME_EXPECT(rig.frame(camera).metering.snap);

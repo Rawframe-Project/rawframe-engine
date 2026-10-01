@@ -258,11 +258,11 @@ fn frame(count: i32, sticks: [controls.Stick], views: [model.Camera]) {
 // sees, between EV100 5 and 17, brightening at three stops a second and
 // darkening at one, the darkest tenth and the brightest tenth of the
 // picture left out, a stop brighter than the average: the plaza's pale
-// paving fills most of the view.
+// paving fills most of the view; every pixel counted alike (D345).
 fn meter(count: i32, sticks: [controls.Stick], meters: [model.AutoExposure]) {
     let i = 0
     while i < count {
-        meters[i] = model.AutoExposure(5.0, 17.0, 3.0, 1.0, 1.0, 0.1, 0.9)
+        meters[i] = model.AutoExposure(5.0, 17.0, 3.0, 1.0, 1.0, 0.1, 0.9, 0.0)
         i = i + 1
     }
 }
