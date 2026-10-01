@@ -9,6 +9,7 @@
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
