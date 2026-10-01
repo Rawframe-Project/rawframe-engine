@@ -1,0 +1,85 @@
+// The UI's boxes (SPEC-0032, D375), for WebGPU: the entries of
+// ui.vert and ui.frag.
+
+struct View {
+    size: vec4f,
+}
+
+struct Box {
+    rect: vec4f,
+    radii: vec4f,
+    fill: vec4f,
+    widths: vec4f,
+    borders: array<vec4f, 4>,
+    clipRect: vec4f,
+    clipRadii: vec4f,
+    clipFlags: vec4f,
+}
+
+@group(0) @binding(0) var<uniform> view: View;
+@group(0) @binding(1) var<storage, read> boxes: array<Box>;
+
+struct Corner {
+    @builtin(position) position: vec4f,
+    @location(0) pixel: vec2f,
+    @location(1) @interpolate(flat) box: u32,
+}
+
+@vertex
+fn vs(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32) -> Corner {
+    var corners = array<vec2f, 6>(vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0), vec2f(0.0, 1.0),
+                                  vec2f(1.0, 0.0), vec2f(1.0, 1.0));
+    let rect = boxes[instance].rect;
+    let pixel = rect.xy - vec2f(1.0) + corners[index] * (rect.zw + vec2f(2.0));
+    var out: Corner;
+    out.position = vec4f(pixel.x / view.size.x * 2.0 - 1.0, 1.0 - pixel.y / view.size.y * 2.0, 0.0, 1.0);
+    out.pixel = pixel;
+    out.box = instance;
+    return out;
+}
+
+fn distanceTo(pixel: vec2f, rect: vec4f, radii: vec4f) -> f32 {
+    let halfSize = rect.zw * 0.5;
+    let at = pixel - (rect.xy + halfSize);
+    var radius = radii.y;
+    if (at.x < 0.0) {
+        radius = select(radii.w, radii.x, at.y < 0.0);
+    } else {
+        radius = select(radii.z, radii.y, at.y < 0.0);
+    }
+    let past = abs(at) - halfSize + vec2f(radius);
+    return min(max(past.x, past.y), 0.0) + length(max(past, vec2f(0.0))) - radius;
+}
+
+fn coverage(distance: f32) -> f32 {
+    return clamp(0.5 - distance, 0.0, 1.0);
+}
+
+@fragment
+fn fs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32) -> @location(0) vec4f {
+    let box = boxes[index];
+    let outer = coverage(distanceTo(pixel, box.rect, box.radii));
+    let widths = box.widths;
+    let inner = vec4f(box.rect.x + widths.w, box.rect.y + widths.x, box.rect.z - widths.w - widths.y,
+                      box.rect.w - widths.x - widths.z);
+    let innerRadii = max(box.radii - vec4f(max(widths.w, widths.x), max(widths.x, widths.y),
+                                           max(widths.y, widths.z), max(widths.z, widths.w)), vec4f(0.0));
+    var filled = 0.0;
+    if (inner.z > 0.0 && inner.w > 0.0) {
+        filled = coverage(distanceTo(pixel, inner, innerRadii));
+    }
+    let reach = vec4f(pixel.y - box.rect.y, box.rect.x + box.rect.z - pixel.x, box.rect.y + box.rect.w - pixel.y,
+                      pixel.x - box.rect.x) / max(widths, vec4f(1e-4));
+    var side = 0;
+    for (var at = 1; at < 4; at++) {
+        if (reach[at] < reach[side]) {
+            side = at;
+        }
+    }
+    var color = mix(box.borders[side], box.fill, filled) * outer;
+    if (box.clipFlags.x > 0.5) {
+        let kept = coverage(distanceTo(pixel, box.clipRect, box.clipRadii));
+        color *= select(kept, 1.0 - kept, box.clipFlags.y > 0.5);
+    }
+    return color;
+}

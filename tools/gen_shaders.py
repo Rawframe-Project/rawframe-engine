@@ -22,6 +22,7 @@ WRITER = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_container.
 CONTAINERS = (
     ("render", "display", (("vert", "vs"), ("frag", "fs"))),
     ("render_canvas_gpu", "sprite", (("vert", "vs"), ("frag", "fs"))),
+    ("render_canvas_gpu", "ui", (("vert", "vs"), ("frag", "fs"))),
     ("render_scene_gpu", "scene", (("vert", "vs"), ("frag", "fs"), ("frag", "fsDecaled", "DECALS"),
                                    ("cut.frag", "cut"), ("normal.frag", "normal"), ("cutnormal.frag", "cutNormal"))),
     ("render_scene_gpu", "occlusion", (("vert", "vs"), ("frag", "occlude"), ("blur.frag", "blur"))),
