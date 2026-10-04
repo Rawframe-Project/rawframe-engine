@@ -4,8 +4,9 @@
 // blends over what is behind it; a clipping parent keeps its child
 // inside it; a child is kept inside every clip above it (D377); and an
 // image is drawn stretched, or in nine slices, over its node's fill (D378);
-// a run of glyphs, waiting for glyph images, is counted and left out between
-// boxes it does not join (D384).
+// a run of glyphs with no atlas is counted and left out between boxes it
+// does not join (D384), and with one, each glyph's coverage is drawn texel
+// for pixel in its run's color, inside its clip (D398).
 // Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "rawframe/render/device.h"
@@ -433,4 +434,60 @@ RAWFRAME_TEST(AGlyphRunWaitsBetweenBoxesItDoesNotJoin) {
     }
     RAWFRAME_EXPECT(near(at(*kPixels, 8, 36), {255, 0, 0}) && near(at(*kPixels, 48, 36), {0, 0, 255}));
     RAWFRAME_EXPECT(statistics.boxes == 2 && statistics.shadows == 0 && statistics.glyphRunsWaiting == 1);
+}
+
+RAWFRAME_TEST(AGlyphsCoverageIsDrawnFromTheAtlasInItsRunsColor) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    // An atlas of two glyphs: a block four texels square covered whole but
+    // for one texel half covered, and a bar a texel wide.
+    ui::GlyphAtlas atlas{.side = 16, .coverage = std::vector<std::uint8_t>(16 * 16, 0), .revision = 1};
+    for (std::uint32_t y = 2; y < 6; ++y) {
+        for (std::uint32_t x = 2; x < 6; ++x) {
+            atlas.coverage[(y * 16) + x] = 255;
+        }
+    }
+    atlas.coverage[(5 * 16) + 5] = 128;
+    for (std::uint32_t y = 8; y < 16; ++y) {
+        atlas.coverage[(y * 16) + 10] = 255;
+    }
+    ui::DrawList list;
+    list.clips.push_back({});
+    // The second run is clipped to the picture's left half.
+    list.clips.push_back({.rect = {.x = 0, .y = 0, .width = 32, .height = 64}});
+    list.gradients.push_back({});
+    list.atlas = &atlas;
+    list.glyphRuns.push_back({.size = 4, .color = {1, 1, 1, 1}, .x = 10, .y = 24, .first = 0, .count = 2});
+    list.glyphRuns.push_back(
+        {.size = 8, .color = {0, 0.5F, 0, 0.5F}, .x = 28, .y = 48, .first = 2, .count = 2, .clip = 1});
+    list.glyphs.push_back({.id = 1,
+                           .image = {.x = 10, .y = 20, .width = 4, .height = 4},
+                           .atlas = {.x = 2, .y = 2, .width = 4, .height = 4}});
+    // A space: no image.
+    list.glyphs.push_back({.id = 2, .x = 4});
+    list.glyphs.push_back({.id = 3,
+                           .image = {.x = 30, .y = 40, .width = 1, .height = 8},
+                           .atlas = {.x = 10, .y = 8, .width = 1, .height = 8}});
+    list.glyphs.push_back({.id = 3,
+                           .x = 6,
+                           .image = {.x = 34, .y = 40, .width = 1, .height = 8},
+                           .atlas = {.x = 10, .y = 8, .width = 1, .height = 8}});
+    list.commands = {{.kind = ui::DrawCommand::Kind::Glyphs, .index = 0},
+                     {.kind = ui::DrawCommand::Kind::Glyphs, .index = 1}};
+    render_canvas_gpu::UiStatistics statistics;
+    const auto kPixels = drawn(*kDevice, list, {}, &statistics);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(near(at(*kPixels, 10, 20), {255, 255, 255}) && near(at(*kPixels, 12, 22), {255, 255, 255}));
+    // Half covered, half the light: 188 in sRGB.
+    RAWFRAME_EXPECT(near(at(*kPixels, 13, 23), {188, 188, 188}, 4));
+    RAWFRAME_EXPECT(near(at(*kPixels, 9, 20), {0, 0, 0}) && near(at(*kPixels, 14, 22), {0, 0, 0}));
+    // Half-transparent green inside the clip, nothing past it.
+    RAWFRAME_EXPECT(near(at(*kPixels, 30, 44), {0, 188, 0}, 4) && near(at(*kPixels, 31, 44), {0, 0, 0}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 34, 44), {0, 0, 0}));
+    RAWFRAME_EXPECT(statistics.glyphRuns == 2 && statistics.glyphs == 4 && statistics.glyphRunsWaiting == 0);
 }

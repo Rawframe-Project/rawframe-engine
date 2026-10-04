@@ -37,6 +37,15 @@ struct Image {
 @group(0) @binding(4) var picture: texture_2d<f32>;
 @group(0) @binding(5) var pictureSampler: sampler;
 
+struct Glyph {
+    rect: vec4f,
+    atlas: vec4f,
+    color: vec4f,
+    clip: vec4f,
+}
+
+@group(0) @binding(8) var<storage, read> glyphs: array<Glyph>;
+
 struct Shadow {
     rect: vec4f,
     radii: vec4f,
@@ -233,6 +242,40 @@ fn imageFs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32
     let sampled = textureSample(picture, pictureSampler, at);
     var color = vec4f(sampled.rgb * sampled.a, sampled.a) * image.tint;
     var clip = i32(image.clip.x);
+    for (var depth = 0; depth < kDeepestClip && clip > 0; depth++) {
+        let kept = coverage(distanceTo(pixel, clips[clip].rect, clips[clip].radii));
+        color *= select(kept, 1.0 - kept, clips[clip].link.y > 0.5);
+        clip = i32(clips[clip].link.x);
+    }
+    return color;
+}
+
+struct Inked {
+    @builtin(position) position: vec4f,
+    @location(0) pixel: vec2f,
+    @location(1) @interpolate(flat) glyph: u32,
+}
+
+@vertex
+fn glyphVs(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32) -> Inked {
+    var corners = array<vec2f, 6>(vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0), vec2f(0.0, 1.0),
+                                  vec2f(1.0, 0.0), vec2f(1.0, 1.0));
+    let rect = glyphs[instance].rect;
+    let pixel = rect.xy + corners[index] * rect.zw;
+    var out: Inked;
+    out.position = vec4f(pixel.x / view.size.x * 2.0 - 1.0, 1.0 - pixel.y / view.size.y * 2.0, 0.0, 1.0);
+    out.pixel = pixel;
+    out.glyph = instance;
+    return out;
+}
+
+@fragment
+fn glyphFs(@location(0) pixel: vec2f, @location(1) @interpolate(flat) index: u32) -> @location(0) vec4f {
+    let glyph = glyphs[index];
+    let within = clamp(floor(pixel - glyph.rect.xy), vec2f(0.0), max(glyph.atlas.zw - 1.0, vec2f(0.0)));
+    let covered = textureLoad(picture, vec2i(glyph.atlas.xy + within), 0).r;
+    var color = glyph.color * covered;
+    var clip = i32(glyph.clip.x);
     for (var depth = 0; depth < kDeepestClip && clip > 0; depth++) {
         let kept = coverage(distanceTo(pixel, clips[clip].rect, clips[clip].radii));
         color *= select(kept, 1.0 - kept, clips[clip].link.y > 0.5);

@@ -235,6 +235,8 @@ public:
                       diagnostics::field("images", statistics.images),
                       diagnostics::field("imagesWaiting", statistics.imagesWaiting),
                       diagnostics::field("shadows", statistics.shadows),
+                      diagnostics::field("glyphRuns", statistics.glyphRuns),
+                      diagnostics::field("glyphs", statistics.glyphs),
                       diagnostics::field("glyphRunsWaiting", statistics.glyphRunsWaiting)});
     }
 

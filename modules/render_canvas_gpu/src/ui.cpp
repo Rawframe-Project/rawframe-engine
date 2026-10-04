@@ -54,12 +54,16 @@ mrhiBinding bufferAt(std::uint32_t slot, mrhiResourceId resource, std::uint64_t 
 
 /// A box as the shader reads it (ui.vert): nine vectors of four; a clip
 /// (ui.frag): three; an image (ui.image.vert): five; a shadow
-/// (ui.shadow.vert): five; a gradient (ui.frag): six.
+/// (ui.shadow.vert): five; a gradient (ui.frag): six; a glyph
+/// (ui.glyph.vert): four.
 constexpr std::size_t kBoxFloats = 36;
 constexpr std::size_t kClipFloats = 12;
 constexpr std::size_t kImageFloats = 20;
 constexpr std::size_t kShadowFloats = 20;
 constexpr std::size_t kGradientFloats = 24;
+constexpr std::size_t kGlyphFloats = 16;
+/// The glyph atlas among the textures held, by an id no image's key is.
+constexpr std::uint64_t kAtlasId = ~std::uint64_t{0};
 /// The UI's share of a frame's uploads, for its images.
 constexpr std::uint64_t kImageUploadBytes = render::kFrameUploadBytes / 8;
 
@@ -175,6 +179,36 @@ std::array<float, kShadowFloats> shadowBlockOf(const ui::Shadow& shadow, float s
             0};
 }
 
+/// `list`'s glyphs in the shader's layout and the picture's pixels, each
+/// with its run's color and clip; a glyph with no image is an empty quad.
+std::vector<float> glyphsOf(const ui::DrawList& list) {
+    std::vector<float> glyphs(list.glyphs.size() * kGlyphFloats, 0);
+    for (const ui::GlyphRun& kRun : list.glyphRuns) {
+        const std::uint32_t kClip = kRun.clip < list.clips.size() ? kRun.clip : 0;
+        for (std::uint32_t at = kRun.first; at < kRun.first + kRun.count && at < list.glyphs.size(); ++at) {
+            const ui::Glyph& kGlyph = list.glyphs[at];
+            const std::array<float, kGlyphFloats> kBlock = {kGlyph.image.x * list.scale,
+                                                            kGlyph.image.y * list.scale,
+                                                            kGlyph.image.width * list.scale,
+                                                            kGlyph.image.height * list.scale,
+                                                            kGlyph.atlas.x,
+                                                            kGlyph.atlas.y,
+                                                            kGlyph.atlas.width,
+                                                            kGlyph.atlas.height,
+                                                            kRun.color[0],
+                                                            kRun.color[1],
+                                                            kRun.color[2],
+                                                            kRun.color[3],
+                                                            static_cast<float>(kClip),
+                                                            0,
+                                                            0,
+                                                            0};
+            std::ranges::copy(kBlock, glyphs.begin() + static_cast<std::ptrdiff_t>(at * kGlyphFloats));
+        }
+    }
+    return glyphs;
+}
+
 /// `list`'s clips in the shader's layout and the picture's pixels, the
 /// first the placeholder for none; a parent that is not before its child
 /// is taken as none, so every chain ends.
@@ -207,9 +241,9 @@ struct UiRenderer::State {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
     mrhiShaderId shader{};
-    /// Boxes, images, and shadows.
-    std::array<mrhiGraphicsPipelineId, 3> pipelines{};
-    std::array<std::uint64_t, 3> requests{};
+    /// Boxes, images, shadows, and glyphs.
+    std::array<mrhiGraphicsPipelineId, 4> pipelines{};
+    std::array<std::uint64_t, 4> requests{};
     bool ready = false;
     mrhiSamplerId nearest{};
     mrhiSamplerId linear{};
@@ -227,6 +261,12 @@ struct UiRenderer::State {
     std::vector<float> imageBlocks;
     std::vector<float> shadowBlocks;
     std::vector<float> gradients;
+    std::vector<float> glyphBlocks;
+    /// The glyph atlas as the textures held take it, made again when its
+    /// revision changes, and whether this frame draws from it.
+    std::shared_ptr<const texture::Texture> atlas;
+    std::uint64_t atlasRevision = 0;
+    bool atlasHeld = false;
     /// Each image's held texture this frame, none for one not drawn.
     std::vector<std::uint64_t> imageTextures;
     std::array<float, 4> view{};
@@ -236,6 +276,7 @@ struct UiRenderer::State {
     mrhiResourceId imagesResource{};
     mrhiResourceId shadowsResource{};
     mrhiResourceId gradientsResource{};
+    mrhiResourceId glyphsResource{};
     mrhiPassId upload{};
     mrhiPassId drawing{};
 
@@ -260,10 +301,11 @@ struct UiRenderer::State {
         if (const mrhiResult kMade = mrhiCreateShader(native, &shaderDef, &shader); kMade != mrhi_success) {
             return failed("the UI's shader could not be made", kMade);
         }
-        constexpr std::array<std::array<std::string_view, 3>, 3> kEntries = {{
+        constexpr std::array<std::array<std::string_view, 3>, 4> kEntries = {{
             {"rawframe.ui.boxes", "vs", "fs"},
             {"rawframe.ui.images", "imageVs", "imageFs"},
             {"rawframe.ui.shadows", "shadowVs", "shadowFs"},
+            {"rawframe.ui.glyphs", "glyphVs", "glyphFs"},
         }};
         for (std::size_t at = 0; at < kEntries.size(); ++at) {
             mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
@@ -331,6 +373,22 @@ struct UiRenderer::State {
                 ++statistics.imagesWaiting;
             }
         }
+        // The glyph atlas, a new texture whenever its coverage changed.
+        atlasHeld = false;
+        const ui::GlyphAtlas* kAtlas = list->atlas;
+        if (kAtlas != nullptr && !list->glyphRuns.empty() && kAtlas->side > 0 &&
+            kAtlas->coverage.size() == std::size_t{kAtlas->side} * kAtlas->side) {
+            if (atlas == nullptr || atlasRevision != kAtlas->revision) {
+                texture::Texture made{.format = texture::Format::R8};
+                const auto* kBytes = reinterpret_cast<const std::byte*>(kAtlas->coverage.data());
+                made.levels.push_back(texture::Level{.width = kAtlas->side,
+                                                     .height = kAtlas->side,
+                                                     .bytes = {kBytes, kBytes + kAtlas->coverage.size()}});
+                atlas = std::make_shared<const texture::Texture>(std::move(made));
+                atlasRevision = kAtlas->revision;
+            }
+            atlasHeld = held->choose(kAtlasId, atlas);
+        }
     }
 
     result::Status declare(render::Frame& open) {
@@ -365,6 +423,7 @@ struct UiRenderer::State {
         }
         clips = clipsOf(*list);
         gradients = gradientsOf(*list);
+        glyphBlocks = glyphsOf(*list);
         shadowBlocks.clear();
         for (const ui::Shadow& kShadow : list->shadows) {
             ui::Shadow shadow = kShadow;
@@ -384,6 +443,9 @@ struct UiRenderer::State {
         if (shadowBlocks.empty()) {
             shadowBlocks.assign(kShadowFloats, 0);
         }
+        if (glyphBlocks.empty()) {
+            glyphBlocks.assign(kGlyphFloats, 0);
+        }
         view = {static_cast<float>(open.width), static_cast<float>(open.height), 0, 0};
         mrhiBufferDef viewDef = mrhiDefaultBufferDef();
         viewDef.size = sizeof(view);
@@ -397,12 +459,15 @@ struct UiRenderer::State {
         shadowsDef.size = shadowBlocks.size() * sizeof(float);
         mrhiBufferDef gradientsDef = mrhiDefaultBufferDef();
         gradientsDef.size = gradients.size() * sizeof(float);
+        mrhiBufferDef glyphsDef = mrhiDefaultBufferDef();
+        glyphsDef.size = glyphBlocks.size() * sizeof(float);
         if (mrhiDeclareBuffer(native, &viewDef, &viewResource) != mrhi_success ||
             mrhiDeclareBuffer(native, &boxesDef, &boxesResource) != mrhi_success ||
             mrhiDeclareBuffer(native, &clipsDef, &clipsResource) != mrhi_success ||
             mrhiDeclareBuffer(native, &imagesDef, &imagesResource) != mrhi_success ||
             mrhiDeclareBuffer(native, &shadowsDef, &shadowsResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &gradientsDef, &gradientsResource) != mrhi_success) {
+            mrhiDeclareBuffer(native, &gradientsDef, &gradientsResource) != mrhi_success ||
+            mrhiDeclareBuffer(native, &glyphsDef, &glyphsResource) != mrhi_success) {
             return failed("the UI's boxes could not be declared", mrhi_errorCapacity);
         }
         std::vector<mrhiAccess> writes = {wholeOf(viewResource, mrhi_accessCopyDestination),
@@ -410,7 +475,8 @@ struct UiRenderer::State {
                                           wholeOf(clipsResource, mrhi_accessCopyDestination),
                                           wholeOf(imagesResource, mrhi_accessCopyDestination),
                                           wholeOf(shadowsResource, mrhi_accessCopyDestination),
-                                          wholeOf(gradientsResource, mrhi_accessCopyDestination)};
+                                          wholeOf(gradientsResource, mrhi_accessCopyDestination),
+                                          wholeOf(glyphsResource, mrhi_accessCopyDestination)};
         for (const std::uint64_t kTexture : held->uploading()) {
             writes.push_back(wholeOf(resourceOf(kTexture), mrhi_accessCopyDestination));
         }
@@ -426,7 +492,8 @@ struct UiRenderer::State {
                                          wholeOf(clipsResource, mrhi_accessStorageRead),
                                          wholeOf(imagesResource, mrhi_accessStorageRead),
                                          wholeOf(shadowsResource, mrhi_accessStorageRead),
-                                         wholeOf(gradientsResource, mrhi_accessStorageRead)};
+                                         wholeOf(gradientsResource, mrhi_accessStorageRead),
+                                         wholeOf(glyphsResource, mrhi_accessStorageRead)};
         for (const std::uint64_t kTexture : held->chosen()) {
             reads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
         }
@@ -447,7 +514,7 @@ struct UiRenderer::State {
     }
 
     /// The bindings of a draw sampling `texture` (the clear one for none).
-    [[nodiscard]] std::array<mrhiBinding, 8> bindings(std::uint64_t texture) const noexcept {
+    [[nodiscard]] std::array<mrhiBinding, 9> bindings(std::uint64_t texture) const noexcept {
         const std::uint64_t kHeld = held->resource(texture);
         return {bufferAt(0, viewResource, sizeof(view)),
                 bufferAt(1, boxesResource, blocks.size() * sizeof(float)),
@@ -456,7 +523,8 @@ struct UiRenderer::State {
                 textureAt(4, resourceOf(kHeld != 0 ? kHeld : held->resource(0))),
                 samplerAt(5, texture != 0 && held->compressed(texture) ? linear : nearest),
                 bufferAt(6, shadowsResource, shadowBlocks.size() * sizeof(float)),
-                bufferAt(7, gradientsResource, gradients.size() * sizeof(float))};
+                bufferAt(7, gradientsResource, gradients.size() * sizeof(float)),
+                bufferAt(8, glyphsResource, glyphBlocks.size() * sizeof(float))};
     }
 
     result::Status record() {
@@ -476,6 +544,9 @@ struct UiRenderer::State {
                 native, upload, shadowsResource, 0, shadowBlocks.data(), shadowBlocks.size() * sizeof(float)) !=
                 mrhi_success ||
             mrhiWriteBuffer(native, upload, gradientsResource, 0, gradients.data(), gradients.size() * sizeof(float)) !=
+                mrhi_success ||
+            mrhiWriteBuffer(
+                native, upload, glyphsResource, 0, glyphBlocks.data(), glyphBlocks.size() * sizeof(float)) !=
                 mrhi_success) {
             return failed("the UI's boxes could not be written", mrhi_errorCapacity);
         }
@@ -487,14 +558,26 @@ struct UiRenderer::State {
             return failed("the UI could not be drawn", mrhi_errorState);
         }
         // In paint order: each run of boxes, and each of shadows, one
-        // instanced draw; each image drawn alone with its texture; glyphs
-        // not yet.
+        // instanced draw; each image drawn alone with its texture; each run
+        // of glyphs one instanced draw from the atlas, once it is held.
         const std::vector<ui::DrawCommand>& kCommands = list->commands;
         std::uint64_t boxes = 0;
         for (std::size_t at = 0; at < kCommands.size();) {
             const ui::DrawCommand& kCommand = kCommands[at];
             if (kCommand.kind == ui::DrawCommand::Kind::Glyphs) {
-                ++statistics.glyphRunsWaiting;
+                const ui::GlyphRun& kRun = list->glyphRuns.at(kCommand.index);
+                if (!atlasHeld) {
+                    ++statistics.glyphRunsWaiting;
+                } else if (kRun.count > 0 && kRun.first + kRun.count <= list->glyphs.size()) {
+                    const std::array<mrhiBinding, 9> kBindings = bindings(kAtlasId);
+                    if (mrhiSetGraphicsPipeline(native, drawing, pipelines[3]) != mrhi_success ||
+                        mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
+                        mrhiDraw(native, drawing, 6, kRun.count, 0, kRun.first) != mrhi_success) {
+                        return failed("the UI's glyphs could not be drawn", mrhi_errorState);
+                    }
+                    ++statistics.glyphRuns;
+                    statistics.glyphs += kRun.count;
+                }
                 ++at;
                 continue;
             }
@@ -505,7 +588,7 @@ struct UiRenderer::State {
                     ++end;
                 }
                 const auto kCount = static_cast<std::uint32_t>(end - at);
-                const std::array<mrhiBinding, 8> kBindings = bindings(0);
+                const std::array<mrhiBinding, 9> kBindings = bindings(0);
                 const bool kBoxes = kCommand.kind == ui::DrawCommand::Kind::Box;
                 if (mrhiSetGraphicsPipeline(native, drawing, pipelines[kBoxes ? 0 : 2]) != mrhi_success ||
                     mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
@@ -518,7 +601,7 @@ struct UiRenderer::State {
             }
             const std::uint64_t kTexture = imageTextures.at(kCommand.index);
             if (kTexture != 0) {
-                const std::array<mrhiBinding, 8> kBindings = bindings(kTexture);
+                const std::array<mrhiBinding, 9> kBindings = bindings(kTexture);
                 if (mrhiSetGraphicsPipeline(native, drawing, pipelines[1]) != mrhi_success ||
                     mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
                     mrhiDraw(native, drawing, 6, 1, 0, kCommand.index) != mrhi_success) {

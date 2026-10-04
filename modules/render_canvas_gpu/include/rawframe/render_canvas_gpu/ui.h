@@ -9,7 +9,9 @@
 // the order, each its texture's part stretched or in nine slices (D378);
 // its shadows, as CSS's box-shadow, blurred by a Gaussian (D381); and its
 // boxes' gradients over their fills, moving through premultiplied Oklab
-// (D382).
+// (D382); and its glyph runs, each glyph's coverage read from the tree's
+// glyph atlas, held on the device as a texture made again when the atlas
+// changes (D398).
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
@@ -36,8 +38,10 @@ struct UiStatistics {
     std::uint64_t imagesWaiting = 0;
     /// Shadows drawn in all (D381).
     std::uint64_t shadows = 0;
-    /// Runs of glyphs left out in all: they wait for Maul UI's glyph images
-    /// (D384).
+    /// Runs of glyphs drawn in all, and their glyphs (spaces among them),
+    /// and runs left out while the atlas was not held (D398).
+    std::uint64_t glyphRuns = 0;
+    std::uint64_t glyphs = 0;
     std::uint64_t glyphRunsWaiting = 0;
 };
 

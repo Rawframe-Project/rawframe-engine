@@ -294,6 +294,7 @@ public:
         drawn_ = &ui_->drawn();
         boxes_ += drawn_->boxes.size();
         glyphRuns_ += drawn_->glyphRuns.size();
+        glyphsLeftOut_ += drawn_->glyphsLeftOut;
         shadows_ += drawn_->shadows.size();
         imagesDrawn_ += drawn_->images.size();
         ++tick_;
@@ -338,7 +339,10 @@ public:
                       diagnostics::field("fontsRead", fontsRead_),
                       diagnostics::field("texts", kStatistics.texts),
                       diagnostics::field("textsUnknown", kStatistics.textsUnknown),
-                      diagnostics::field("glyphRuns", glyphRuns_)});
+                      diagnostics::field("glyphRuns", glyphRuns_),
+                      diagnostics::field("glyphsLeftOut", glyphsLeftOut_),
+                      diagnostics::field("atlasRevisions",
+                                         drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -426,6 +430,7 @@ private:
     std::vector<WantedFont> fonts_;
     std::uint64_t fontsRead_ = 0;
     std::uint64_t glyphRuns_ = 0;
+    std::uint64_t glyphsLeftOut_ = 0;
     std::uint64_t tick_ = 0;
     bool failed_ = false;
     diagnostics::Emitter emitter_;

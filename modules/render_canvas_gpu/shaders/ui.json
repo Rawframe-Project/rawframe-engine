@@ -21,6 +21,13 @@
     {"name": "shadowFs", "stage": "fragment",
      "variables": [{"location": 0, "type": "float32", "components": 2},
                    {"location": 1, "type": "uint32", "components": 1}],
+     "outputs": [{"location": 0, "type": "float32", "components": 4}]},
+    {"name": "glyphVs", "stage": "vertex",
+     "variables": [{"location": 0, "type": "float32", "components": 2},
+                   {"location": 1, "type": "uint32", "components": 1}]},
+    {"name": "glyphFs", "stage": "fragment",
+     "variables": [{"location": 0, "type": "float32", "components": 2},
+                   {"location": 1, "type": "uint32", "components": 1}],
      "outputs": [{"location": 0, "type": "float32", "components": 4}]}
   ],
   "bindings": [
@@ -32,7 +39,8 @@
      "sample_type": "float", "view_dimension": "2d", "multisampled": false},
     {"table": 0, "slot": 5, "kind": "sampler", "stages": ["fragment"], "sampler": "filtering"},
     {"table": 0, "slot": 6, "kind": "read_only_storage_buffer", "stages": ["vertex", "fragment"], "min_size": 80},
-    {"table": 0, "slot": 7, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 96}
+    {"table": 0, "slot": 7, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 96},
+    {"table": 0, "slot": 8, "kind": "read_only_storage_buffer", "stages": ["vertex", "fragment"], "min_size": 64}
   ],
   "constants": []
 }
