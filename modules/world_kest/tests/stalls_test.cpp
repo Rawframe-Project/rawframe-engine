@@ -2,8 +2,9 @@
 // press, and up to the highest level and no further; another owner pressing
 // on that stall raises nothing (D391). Customers come to the stall, are
 // served, and what they pay reaches its owner, no customer staying past its
-// patience (D392). The test moves the owners' hands between ticks, as their
-// clients' input would.
+// patience (D392). An owner reaching the goal wins the round, and the lot
+// starts afresh (D394). The test moves the owners' hands between ticks, as
+// their clients' input would.
 
 #include "game_harness.h"
 #include "rawframe/physics3d/registrar.h"
@@ -67,6 +68,7 @@ struct Till {
 };
 
 constexpr auto kTillId = schema::ComponentTypeId::fromText("160c062b-09b3-46a0-8435-9575f99339c1");
+constexpr auto kRoundId = schema::ComponentTypeId::fromText("7c496087-7144-4230-85e9-fd119433276c");
 constexpr auto kCustomerId = schema::ComponentTypeId::fromText("bd13f2d3-dc87-46f2-b480-ff2eaf5fcdf1");
 
 /// Every entity with component `id`, in World order.
@@ -176,13 +178,16 @@ RAWFRAME_TEST(AnOwnerRaisesItsOwnStallsAndNoOneElses) {
         return;
     }
     const world::EntityHandle kStall = stalls[0];
+    // Nought, or a zeroed owner, for one gone.
     const auto kLevel = [&] {
-        return valueOf<Stall>(world, kStall, kStallId)->level;
+        const Stall* const kFound = valueOf<Stall>(world, kStall, kStallId);
+        return kFound != nullptr ? kFound->level : 0;
     };
     const auto kOwner = [&](world::EntityHandle entity) {
-        return *valueOf<Owner>(world, entity, kOwnerId);
+        const Owner* const kFound = valueOf<Owner>(world, entity, kOwnerId);
+        return kFound != nullptr ? *kFound : Owner{};
     };
-    RAWFRAME_EXPECT(valueOf<Stall>(world, kStall, kStallId)->owner == kBuilder && kLevel() == 1);
+    RAWFRAME_EXPECT(kLevel() == 1 && valueOf<Stall>(world, kStall, kStallId)->owner == kBuilder);
     RAWFRAME_EXPECT(kOwner(kBuilder).coins == 50 && kOwner(kBuilder).stalls == 1 && kOwner(kBuilder).levels == 1);
 
     // Held, the press raises nothing more; let go and pressed again, it
@@ -211,18 +216,18 @@ RAWFRAME_TEST(AnOwnerRaisesItsOwnStallsAndNoOneElses) {
     kPress(kBuilder, 0);
     kPress(kBuilder, 1);
     RAWFRAME_EXPECT(kLevel() == 2);
-    valueOf<Owner>(world, kBuilder, kOwnerId)->coins = 1000;
+    valueOf<Owner>(world, kBuilder, kOwnerId)->coins = 500;
     kPress(kBuilder, 0);
     kPress(kBuilder, 1);
-    RAWFRAME_EXPECT(kLevel() == 3 && kOwner(kBuilder).coins == 900 && kOwner(kBuilder).levels == 3);
+    RAWFRAME_EXPECT(kLevel() == 3 && kOwner(kBuilder).coins == 400 && kOwner(kBuilder).levels == 3);
     kPress(kBuilder, 0);
     kPress(kBuilder, 1);
-    RAWFRAME_EXPECT(kLevel() == 3 && kOwner(kBuilder).coins == 900);
+    RAWFRAME_EXPECT(kLevel() == 3 && kOwner(kBuilder).coins == 400);
 
     // Each second, an owner earns for every level of its stalls.
     kPress(kBuilder, 0);
     kRun(60);
-    RAWFRAME_EXPECT(kOwner(kBuilder).coins == 906);
+    RAWFRAME_EXPECT(kOwner(kBuilder).coins == 406);
 }
 
 RAWFRAME_TEST(CustomersBuyAtAStallAndItsOwnerTakesWhatTheyPay) {
@@ -262,4 +267,46 @@ RAWFRAME_TEST(CustomersBuyAtAStallAndItsOwnerTakesWhatTheyPay) {
     // Its coins: what it started with, less the stall, its income, and
     // what it took.
     RAWFRAME_EXPECT(kOwner.coins == 100 - 50 + (2 * 30) + kOwner.collected);
+}
+
+RAWFRAME_TEST(TheFirstOwnerToTheGoalWinsTheRoundAndTheLotStartsAfresh) {
+    Played played;
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
+        return;
+    }
+    world::World& world = *simulation->world();
+    played.run(3);
+    const std::vector<world::EntityHandle> kRounds = holding(world, kRoundId);
+    const std::vector<world::EntityHandle> kStalls = holding(world, kStallId);
+    RAWFRAME_EXPECT(kRounds.size() == 1 && kStalls.size() == 1);
+    if (kRounds.size() != 1 || kStalls.size() != 1) {
+        return;
+    }
+    const auto kNumber = [&] {
+        return *valueOf<std::uint32_t>(world, kRounds[0], kRoundId);
+    };
+    const world::EntityHandle kBuilder = valueOf<Stall>(world, kStalls[0], kStallId)->owner;
+    // Short of the goal, the round goes on; the second's income takes the
+    // builder past it, and the round ends that tick.
+    valueOf<Owner>(world, kBuilder, kOwnerId)->coins = 999;
+    played.run(50);
+    RAWFRAME_EXPECT(kNumber() == 0 && holding(world, kStallId).size() == 1);
+    played.run(10);
+    RAWFRAME_EXPECT(kNumber() == 1);
+    // Every owner starts again, and no stall or customer stands.
+    RAWFRAME_EXPECT(holding(world, kStallId).empty() && holding(world, kCustomerId).empty());
+    for (const world::EntityHandle kOwner : holding(world, kOwnerId)) {
+        const Owner& owner = *valueOf<Owner>(world, kOwner, kOwnerId);
+        RAWFRAME_EXPECT(owner.coins == 100 && owner.stalls == 0 && owner.levels == 0 && owner.collected == 0);
+    }
+    // The next round is played on: once let go and pressed again, the
+    // builder builds anew.
+    Hand& hand = *valueOf<Hand>(world, kBuilder, kHandId);
+    hand.build = 0;
+    played.run(2);
+    valueOf<Hand>(world, kBuilder, kHandId)->build = 1;
+    played.run(2);
+    RAWFRAME_EXPECT(holding(world, kStallId).size() == 1 && valueOf<Owner>(world, kBuilder, kOwnerId)->coins == 50 &&
+                    kNumber() == 1);
 }

@@ -7,7 +7,9 @@ module tycoon
 // building on one of its own stalls raises its level (D391), up to TOP;
 // each stall earns its owner a little every second for each level, and
 // customers come through the lot's south edge to buy at a stall, paying
-// more at a higher one (D392). The server decides every build and sale.
+// more at a higher one (D392). The first owner to GOAL coins wins the
+// round: every owner is told, and the lot starts afresh (D394). The server
+// decides every build, sale, and round.
 
 import controls
 import rawframe.model
@@ -51,10 +53,16 @@ const SECOND: u32 = 60
 // The cursor's speed at a full tilt, meters a tick: twelve a second.
 const GLIDE: f64 = 0.2
 
-// The HUD's font and its coins' label (tycoon.game's `font` and `label`
-// lines).
+// The coins that win a round, and the ticks a round's end is shown.
+const GOAL: i64 = 1000
+const CHEER: u32 = 300
+
+// The HUD's font and its labels (tycoon.game's `font` and `label` lines):
+// the coins, and a round won or lost.
 const HUD_FONT: u64 = 0x8e12f827f47f7d51
 const HUD_COINS: u64 = 0xf1182d0420cc09a0
+const HUD_WON: u64 = 0xafcb66432b6d2152
+const HUD_LOST: u64 = 0xb777d548435986ab
 
 // An owner: whether it has joined, its cursor on the ground, its coins, its
 // stalls and their levels together, whether the build it asked for is
@@ -99,6 +107,35 @@ struct Customer {
     ticks: u32
 }
 
+// The round being played, from the first.
+struct Round {
+    number: u32
+}
+
+// What the server tells every owner when a round ends (tycoon.game's
+// `message` line): whether it won, and which round it was.
+struct Won {
+    mine: u32
+    round: u32
+}
+
+// A client's round's end, while it is shown: the ticks left, and what it
+// was told.
+struct Cheer {
+    ticks: u32
+    mine: u32
+    round: u32
+}
+
+extern fn Messages.won(to: world.Entity, value: Won)
+extern fn ReceivedCount.won() -> i32
+extern fn Received.won(index: i32) -> Won
+extern fn Owner.insert(entity: world.Entity, value: Owner)
+extern fn Owner.get(entity: world.Entity) -> Owner
+extern fn Owner.count() -> i32
+extern fn Owner.entity(index: i32) -> world.Entity
+extern fn Customer.count() -> i32
+extern fn Customer.entity(index: i32) -> world.Entity
 extern fn Stall.insert(entity: world.Entity, value: Stall)
 extern fn Till.insert(entity: world.Entity, value: Till)
 extern fn Till.get(entity: world.Entity) -> Till
@@ -315,6 +352,58 @@ fn serve(count: i32, stalls: [Stall], tills: [Till], poses: [physics3d.Pose3D]) 
     }
 }
 
+// Once a tick, after the owners have earned: the first owner (in World
+// order) with the most coins, at least GOAL, wins the round. Every owner is
+// told whether it won and starts again with START coins, its cursor where
+// it was; every stall and customer is gone (D394). The owners are found
+// and given again, and the stalls and customers found, through lookups
+// (D391, D393).
+fn judge(count: i32, rounds: [Round]) {
+    let i = 0
+    while i < count {
+        let owners = Owner.count()
+        let winner = -1
+        let best = GOAL - i64(1)
+        let k = 0
+        while k < owners {
+            let coins = Owner.get(Owner.entity(k)).coins
+            if coins > best {
+                best = coins
+                winner = k
+            }
+            k = k + 1
+        }
+        if winner >= 0 {
+            rounds[i].number = rounds[i].number + u32(1)
+            k = 0
+            while k < owners {
+                let entity = Owner.entity(k)
+                let mine = u32(0)
+                if k == winner {
+                    mine = u32(1)
+                }
+                Messages.won(entity, Won(mine, rounds[i].number))
+                let o = Owner.get(entity)
+                Owner.insert(entity, Owner(o.joined, o.cursorX, o.cursorZ, START, u32(0), u32(0), o.held, u32(0), i64(0)))
+                k = k + 1
+            }
+            k = 0
+            let stalls = Stall.count()
+            while k < stalls {
+                world.destroy(Stall.entity(k))
+                k = k + 1
+            }
+            k = 0
+            let customers = Customer.count()
+            while k < customers {
+                world.destroy(Customer.entity(k))
+                k = k + 1
+            }
+        }
+        i = i + 1
+    }
+}
+
 // What a client shows (D389): every body it mirrors as a box, the lot's
 // ground grass green and each stall a warm awning red; no server carries a
 // look.
@@ -395,6 +484,43 @@ fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
         huds[i].textSize = 18.0
         huds[i].textColor = u32(0xF4E9C8FF)
         huds[i].textWrap = ui.NO_WRAP
+        i = i + 1
+    }
+}
+
+// A round's end, in the middle of the client's view for five seconds
+// (D394): "You won round 3!" in gold, or that another owner won it, in a
+// dark panel; nothing between rounds.
+fn cheer(count: i32, cheers: [Cheer], banners: [ui.Node]) {
+    let i = 0
+    while i < count {
+        if ReceivedCount.won() > 0 {
+            let told = Received.won(0)
+            cheers[i] = Cheer(CHEER, told.mine, told.round)
+        }
+        banners[i].text = u64(0)
+        banners[i].fill = u32(0)
+        if cheers[i].ticks > u32(0) {
+            cheers[i].ticks = cheers[i].ticks - u32(1)
+            banners[i].absolute = u32(1)
+            banners[i].xScale = 0.5
+            banners[i].yScale = 0.4
+            banners[i].anchorX = 0.5
+            banners[i].anchorY = 0.5
+            banners[i].padding = 16.0
+            banners[i].fill = u32(0x101820E0)
+            banners[i].radius = 8.0
+            banners[i].text = HUD_LOST
+            banners[i].textColor = u32(0xF4E9C8FF)
+            if cheers[i].mine == u32(1) {
+                banners[i].text = HUD_WON
+                banners[i].textColor = u32(0xE8B83AFF)
+            }
+            banners[i].textValue = i64(cheers[i].round)
+            banners[i].font = HUD_FONT
+            banners[i].textSize = 28.0
+            banners[i].textWrap = ui.NO_WRAP
+        }
         i = i + 1
     }
 }

@@ -6,6 +6,14 @@
     "hud.coins": {
       "message": ".input {$coins :integer}\n.match $coins\none {{{$coins} coin}}\n* {{{$coins} coins}}",
       "description": "The owner's coins, shown in the HUD."
+    },
+    "hud.lost": {
+      "message": "Round {$round :integer} went to another owner.",
+      "description": "Shown to every other owner when a round ends."
+    },
+    "hud.won": {
+      "message": "You won round {$round :integer}!",
+      "description": "Shown to the owner that won a round, when it ends."
     }
   }
 }

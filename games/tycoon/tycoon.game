@@ -5,7 +5,8 @@
 # level (D391), and each stall earns its owner every second for each level
 # (tycoon.kest). The server decides every build; the lot's ground and the
 # stalls are static bodies, so a build asks the physics which plots are
-# taken, and looks up the stall it finds.
+# taken, and looks up the stall it finds. Customers buy at the stalls
+# (D392); the first owner to a thousand coins wins the round (D394).
 program tycoon.kest
 physics3d gravity 0 -10 0
 collision class stall b0eb8fc52cd9d4ac
@@ -16,6 +17,7 @@ component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
 component bd13f2d3-dc87-46f2-b480-ff2eaf5fcdf1 tycoon.customer Customer
 component 160c062b-09b3-46a0-8435-9575f99339c1 tycoon.till Till
 component 11a256e6-f691-4f0f-8feb-aef4694891f0 tycoon.gate Gate
+component 7c496087-7144-4230-85e9-fd119433276c tycoon.round Round
 # A stall's owner is an entity: sent as one, each client reads its own
 # name for it (D390).
 entity tycoon.stall owner
@@ -23,6 +25,8 @@ component 63d9aa3b-30b0-49df-9371-b682ff281ec0 tycoon.look rawframe.model.Model
 component 2e380a54-69cf-4905-86f2-68f895d954fe tycoon.mark rawframe.model.Model
 component 991e8dec-fbd5-4790-954b-283eea27fe90 tycoon.view rawframe.model.Camera
 component 043c72ce-e948-490a-80d6-e3a22fbdb695 tycoon.purse rawframe.ui.Node
+component e7564868-c06a-4065-ad77-a8ab9ea2aa71 tycoon.cheer Cheer
+component da4daa93-8f6e-4f41-8ce5-ea5ae423e4a0 tycoon.banner rawframe.ui.Node
 system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step
 # Customers (D392): through the gate, walking before the step moves their
@@ -31,10 +35,15 @@ system tycoon.open simulation open write tycoon.gate random arrivals lookup tyco
 system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d.pose write rawframe.physics3d.velocity entities before rawframe.physics3d.step
 system tycoon.serve simulation serve read tycoon.stall write tycoon.till read rawframe.physics3d.pose after tycoon.tend
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
+# Rounds (D394): the first owner to the goal wins; every owner is told by
+# message, and the lot starts afresh.
+system tycoon.judge simulation judge write tycoon.round lookup tycoon.owner lookup tycoon.stall lookup tycoon.customer after tycoon.earn
 # The lot's ground, its top at nought.
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity
-# The gate customers come through.
+# The gate customers come through, and the round.
 spawn 1 tycoon.gate
+spawn 1 tycoon.round
+message won Won
 
 # Networked play: every owner, stall, and customer is sent to every client,
 # which shows the customers walking between the states it receives (D392);
@@ -55,15 +64,19 @@ sample sample.kest sample
 # lot seen from a fixed point above its south edge; and its coins in words
 # (tycoon.strings) in Inter 4.1 (Inter-Regular.ttf from its release archive,
 # SIL Open Font License 1.1 in Inter-LICENSE.txt), along the top of its
-# view. No server carries any of it.
+# view; a round's end in its middle for five seconds (D394). No server
+# carries any of it.
 text tycoon.strings
 locale en
 font 8e12f827f47f7d51 Inter-Regular.ttf
 label f1182d0420cc09a0 tycoon.strings hud.coins coins
+label afcb66432b6d2152 tycoon.strings hud.won round
+label b777d548435986ab tycoon.strings hud.lost round
 presentation tycoon.look on rawframe.physics3d.body
 present tycoon.dress dress read rawframe.physics3d.body write tycoon.look
 present tycoon.tint tint read tycoon.stall write tycoon.look
-presentation tycoon.mark tycoon.view tycoon.purse on player
+presentation tycoon.mark tycoon.view tycoon.purse tycoon.cheer tycoon.banner on player
 present tycoon.mark mark read tycoon.owner write tycoon.mark
 present tycoon.frame frame read rawframe.physics3d.pose write tycoon.view
 present tycoon.purse purse read tycoon.owner write tycoon.purse
+present tycoon.cheer cheer write tycoon.cheer write tycoon.banner
