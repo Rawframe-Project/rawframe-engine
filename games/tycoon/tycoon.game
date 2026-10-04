@@ -36,9 +36,11 @@ spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 ra
 # The gate customers come through.
 spawn 1 tycoon.gate
 
-# Networked play: every owner and stall is sent to every client; each
-# player's hand is its input, and its pose the plot under its cursor.
+# Networked play: every owner, stall, and customer is sent to every client,
+# which shows the customers walking between the states it receives (D392);
+# each player's hand is its input, and its pose the plot under its cursor.
 replicate tycoon.owner tycoon.stall rawframe.physics3d.body rawframe.physics3d.pose
+interpolate rawframe.physics3d.pose
 player tycoon.hand tycoon.owner rawframe.physics3d.pose
 input tycoon.hand
 # A client makes its hand from its player's actions (tycoon.actions) with
