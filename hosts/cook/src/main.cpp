@@ -20,6 +20,7 @@
 #include "rawframe/cook/scene.h"
 #include "rawframe/cook/text.h"
 #include "rawframe/cook/texture.h"
+#include "rawframe/process/self.h"
 
 #include <array>
 #include <cstdint>
@@ -29,43 +30,7 @@
 #include <string>
 #include <string_view>
 
-#if defined(_WIN32)
-#include <windows.h>
-#elif defined(__APPLE__)
-#include <cstdint>
-#include <mach-o/dyld.h>
-#endif
-
 namespace {
-
-/// Where this program's own file is, to read it (D236, D237 on Windows).
-std::filesystem::path ownExecutable() {
-#if defined(_WIN32)
-    std::wstring path(MAX_PATH, L'\0');
-    for (;;) {
-        const DWORD kLength = ::GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
-        if (kLength == 0) {
-            return {};
-        }
-        if (kLength < path.size()) {
-            path.resize(kLength);
-            return path;
-        }
-        path.resize(path.size() * 2);
-    }
-#elif defined(__APPLE__)
-    std::uint32_t size = 0;
-    static_cast<void>(::_NSGetExecutablePath(nullptr, &size));
-    std::string path(size, '\0');
-    if (::_NSGetExecutablePath(path.data(), &size) != 0) {
-        return {};
-    }
-    path.resize(path.find('\0'));
-    return path;
-#else
-    return "/proc/self/exe";
-#endif
-}
 
 void print(const rawframe::result::Error& error) {
     std::string_view where;
@@ -111,7 +76,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     // The tool's own bytes are its identity in every cook key.
-    const auto kToolchain = rawframe::cook::digestOfFile(ownExecutable());
+    const auto kToolchain = rawframe::cook::digestOfFile(rawframe::process::ownExecutable());
     if (!kToolchain.has_value()) {
         std::fputs("rawframe-cook: cannot read its own executable\n", stderr);
         return 1;

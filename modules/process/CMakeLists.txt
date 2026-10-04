@@ -1,9 +1,9 @@
-# Child processes a launcher starts (ADR-0084, D395): a program run as it is
-# named, its exit code asked without waiting, a stop request, a kill.
-# Launcher and packaging tooling; never part of a dedicated server, and
-# never on the web, which starts no processes.
+# This process and the children it starts (ADR-0084, D395): its own
+# executable, and a program run as it is named, its exit code asked without
+# waiting, a stop request, a kill. Tooling and launchers; never part of a
+# dedicated server, and never on the web, which starts no processes.
 rawframe_module(NAME process
-    SOURCES src/child.cpp
+    SOURCES src/child.cpp src/self.cpp
     DEPS result base
 )
 
