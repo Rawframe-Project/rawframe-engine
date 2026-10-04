@@ -50,8 +50,8 @@ struct KestColumn {
 /// A component programs may add and take away through the doors
 /// `<kestType>.insert(entity: Entity, value: <kestType>)` and
 /// `<kestType>.remove(entity: Entity)`, recorded in the running system's
-/// command buffer. It must be plain data shaped like its Kest type. A Kest
-/// type two components share has no such doors (D260).
+/// command buffer, and look up where a system declares it (D391). It must be plain data shaped like its Kest type. A
+/// Kest type two components share has no such doors (D260).
 struct KestComponent {
     schema::ComponentTypeId component;
     std::string_view kestType;
@@ -71,6 +71,11 @@ struct KestSystemDeclaration {
     /// The World random streams the system draws from; the program names one
     /// by its place in this list (`rawframe.random`).
     std::span<const std::string_view> randomStreams;
+    /// Components the system reads on any entity through
+    /// `<kestType>.get(entity: Entity) -> <kestType>` and
+    /// `<kestType>.has(entity: Entity) -> bool` (D391), ordered as reads;
+    /// never one it writes. Another run's doors refuse them.
+    std::span<const schema::ComponentTypeId> lookups;
 };
 
 /// A scene a program spawns whole with `Scene.spawn(prefab: u64)` (D98):

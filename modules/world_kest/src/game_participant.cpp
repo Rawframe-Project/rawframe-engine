@@ -193,6 +193,10 @@ public:
             after_.emplace_back(system.after.begin(), system.after.end());
             before_.emplace_back(system.before.begin(), system.before.end());
             streams_.emplace_back(system.randomStreams.begin(), system.randomStreams.end());
+            std::vector<schema::ComponentTypeId>& lookups = lookups_.emplace_back();
+            for (const std::string& name : system.lookups) {
+                lookups.push_back(componentNamed(name)->id);
+            }
         }
         // A system a mod replaces runs the mod's function instead, on the
         // mod's machine (D200).
@@ -215,7 +219,8 @@ public:
                                                          .columns = columns_[index],
                                                          .after = after_[index],
                                                          .before = before_[index],
-                                                         .randomStreams = streams_[index]});
+                                                         .randomStreams = streams_[index],
+                                                         .lookups = lookups_[index]});
         }
         entityOffsets_.reserve(game_.components.size());
         for (const GameComponent& component : game_.components) {
@@ -926,6 +931,7 @@ private:
     std::vector<std::vector<std::string_view>> after_;
     std::vector<std::vector<std::string_view>> before_;
     std::vector<std::vector<std::string_view>> streams_;
+    std::vector<std::vector<schema::ComponentTypeId>> lookups_;
     /// Before the machines whose doors name its services.
     std::unique_ptr<ModServices> modServices_;
     /// Every Kest system's time per tick, the game's and its mods' (D210).

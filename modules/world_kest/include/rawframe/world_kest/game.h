@@ -174,6 +174,9 @@ struct GameSystem {
     std::vector<std::string> before;
     /// World random streams, drawn from by place through `rawframe.random`.
     std::vector<std::string> randomStreams;
+    /// Components it reads on any entity, from `lookup <component>` pairs
+    /// (D391): never one it writes.
+    std::vector<std::string> lookups;
     /// Runs on predicting clients too, over the player alone.
     bool predicted = false;
     /// The effects it emits, from `emits <name>` pairs (D219); only a

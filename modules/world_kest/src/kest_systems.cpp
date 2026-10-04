@@ -58,8 +58,11 @@ struct KestSystems::Doorway {
         std::string kestType;
         std::string insertName;
         std::string removeName;
+        std::string getName;
+        std::string hasName;
         std::array<kest::Parameter, 2> insertTakes{kest::Parameter{kest::Slot::Value, kEntityType},
                                                    kest::Parameter{kest::Slot::Value, ""}};
+        std::array<kest::Parameter, 1> getGives{kest::Parameter{kest::Slot::Value, ""}};
         schema::ComponentRuntimeId runtime;
         const schema::ComponentDescriptor* descriptor = nullptr;
         std::vector<std::byte> scratch;
@@ -78,6 +81,8 @@ struct KestSystems::Doorway {
     };
 
     world::SystemContext* context = nullptr;
+    /// What the running system may look up on any entity (D391).
+    std::span<const schema::ComponentRuntimeId> lookups;
     /// Journal bytes the machine's systems took in `journalTick`, against
     /// `journalLimit` (D229).
     std::uint64_t journalTick = std::numeric_limits<std::uint64_t>::max();
@@ -254,6 +259,7 @@ constexpr std::array<kest::Parameter, 2> kStreamAndBound = {kest::Slot::I32, kes
 constexpr std::array<kest::Parameter, 1> kStream = {kest::Slot::I32};
 constexpr std::array<kest::Parameter, 1> kU32 = {kest::Slot::U32};
 constexpr std::array<kest::Parameter, 1> kF64 = {kest::Slot::F64};
+constexpr std::array<kest::Parameter, 1> kBool = {kest::Slot::Bool};
 
 void insertDoor(kest::DoorCall& call, void* context) noexcept {
     Doorway::Component& component = *static_cast<Doorway::Component*>(context);
@@ -305,6 +311,52 @@ void removeDoor(kest::DoorCall& call, void* context) noexcept {
     }
 }
 
+/// Where `component` of the entity a call names lies in the World, null
+/// when the entity has none (gone, or created by this run and so without
+/// values yet); false when the call failed: no system runs, or the running
+/// one never declared the lookup.
+bool lookUp(kest::DoorCall& call, const Doorway::Component& component, const void*& value) noexcept {
+    const Doorway& doorway = *component.doorway;
+    if (doorway.context == nullptr) {
+        call.fail("components are looked up only while a system runs");
+        return false;
+    }
+    if (component.descriptor == nullptr || !std::ranges::contains(doorway.lookups, component.runtime)) {
+        call.fail("the running system does not look this component up: its line has no `lookup` of it");
+        return false;
+    }
+    world::EntityHandle entity;
+    if (!call.value(0, std::as_writable_bytes(std::span{&entity, 1}))) {
+        call.fail("an entity did not cross as an entity");
+        return false;
+    }
+    value = doorway.context->world.getErased(entity, component.runtime);
+    return true;
+}
+
+void getDoor(kest::DoorCall& call, void* context) noexcept {
+    const auto& component = *static_cast<const Doorway::Component*>(context);
+    const void* value = nullptr;
+    if (!lookUp(call, component, value)) {
+        return;
+    }
+    if (value == nullptr) {
+        call.fail("the entity has no such component: ask `has` first");
+        return;
+    }
+    if (!call.answerValue(std::span{static_cast<const std::byte*>(value), component.descriptor->size})) {
+        call.fail("the component's value did not cross as its Kest type");
+    }
+}
+
+void hasDoor(kest::DoorCall& call, void* context) noexcept {
+    const auto& component = *static_cast<const Doorway::Component*>(context);
+    const void* value = nullptr;
+    if (lookUp(call, component, value)) {
+        call.answerBoolean(value != nullptr);
+    }
+}
+
 } // namespace
 
 /// A declaration with every view it borrowed copied into strings it owns.
@@ -324,6 +376,7 @@ struct KestSystems::Declared {
     std::vector<std::string> after;
     std::vector<std::string> before;
     std::vector<std::string> randomStreams;
+    std::vector<schema::ComponentTypeId> lookups;
     std::vector<std::string_view> afterViews;
     std::vector<std::string_view> beforeViews;
     std::vector<std::string_view> streamViews;
@@ -344,10 +397,18 @@ public:
                Doorway& doorway,
                kest::Entry entry,
                world::ColumnQuery query,
-               std::vector<DataColumn> columns) noexcept
-        : machine_(&machine), doorway_(&doorway), entry_(entry), query_(std::move(query)),
-          columns_(std::move(columns)) {
+               std::vector<DataColumn> columns,
+               std::vector<schema::ComponentRuntimeId> lookups) noexcept
+        : machine_(&machine), doorway_(&doorway), entry_(entry), query_(std::move(query)), columns_(std::move(columns)),
+          lookups_(std::move(lookups)) {
         reads_ = query_.reads();
+        // A lookup reads its component wherever it lies: the schedule
+        // orders it as a read.
+        for (const schema::ComponentRuntimeId kLookup : lookups_) {
+            if (!std::ranges::contains(reads_, kLookup)) {
+                reads_.push_back(kLookup);
+            }
+        }
         writes_ = query_.writes();
         frame_.resize(entry_.frameSlots);
     }
@@ -433,6 +494,7 @@ private:
 
         // The doors act on this run's command buffer, and only during it.
         doorway_->context = &context;
+        doorway_->lookups = lookups_;
         ++doorway_->run;
         const std::size_t kCommandsBefore = context.commands.size();
         for (KestStaging* each : doorway_->staging) {
@@ -443,6 +505,7 @@ private:
             called = callOnce(chunks_[at], at == 0 ? kest::Fuel::Refill : kest::Fuel::Continue);
         }
         doorway_->context = nullptr;
+        doorway_->lookups = {};
         result::Status kept = keep(context, kCommandsBefore, std::move(called));
         for (KestStaging* each : doorway_->staging) {
             each->end(kept.has_value());
@@ -545,6 +608,7 @@ private:
     kest::Entry entry_;
     world::ColumnQuery query_;
     std::vector<DataColumn> columns_;
+    std::vector<schema::ComponentRuntimeId> lookups_;
     std::vector<schema::ComponentRuntimeId> reads_;
     std::vector<schema::ComponentRuntimeId> writes_;
     std::vector<kest::Value> frame_;
@@ -642,6 +706,8 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         added.entityFields.assign(component.entityFields.begin(), component.entityFields.end());
         added.insertName = added.kestType + ".insert";
         added.removeName = added.kestType + ".remove";
+        added.getName = added.kestType + ".get";
+        added.hasName = added.kestType + ".has";
     }
     // rawframe.world asks for the persistent identity's insert whether or
     // not the game lists it; any program that lays it out may insert it.
@@ -656,6 +722,8 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         added.kestType = "Persistent";
         added.insertName = "Persistent.insert";
         added.removeName = "Persistent.remove";
+        added.getName = "Persistent.get";
+        added.hasName = "Persistent.has";
         added.optional = true;
     }
     for (const KestPrefab& prefab : settings.prefabs) {
@@ -691,6 +759,21 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                                           .takes = component.insertTakes}));
         RAWFRAME_TRY(doors.add(kest::Door{
             .name = component.removeName, .function = &removeDoor, .context = &component, .takes = kEntityParameter}));
+        // A lookup only reads a component the running system declared, of
+        // a live entity, within its size (D391).
+        component.getGives[0] = kest::Parameter{kest::Slot::Value, component.kestType};
+        RAWFRAME_TRY(doors.add(kest::Door{.name = component.getName,
+                                          .function = &getDoor,
+                                          .context = &component,
+                                          .takes = kEntityParameter,
+                                          .gives = component.getGives,
+                                          .safeForUntrusted = true}));
+        RAWFRAME_TRY(doors.add(kest::Door{.name = component.hasName,
+                                          .function = &hasDoor,
+                                          .context = &component,
+                                          .takes = kEntityParameter,
+                                          .gives = kBool,
+                                          .safeForUntrusted = true}));
     }
 
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine,
@@ -707,6 +790,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                       .after = {system.after.begin(), system.after.end()},
                       .before = {system.before.begin(), system.before.end()},
                       .randomStreams = {system.randomStreams.begin(), system.randomStreams.end()},
+                      .lookups = {system.lookups.begin(), system.lookups.end()},
                       .afterViews = {},
                       .beforeViews = {},
                       .streamViews = {}};
@@ -814,8 +898,20 @@ result::Status KestSystems::declareSystems(const schema::SchemaRegistry& registr
                                                   .chunkColumn = chunkColumns++});
         }
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(terms, registry));
-        auto system =
-            std::make_unique<KestSystem>(*machine_, *doorway_, declared.entry, std::move(query), std::move(data));
+        std::vector<schema::ComponentRuntimeId> lookups;
+        for (const schema::ComponentTypeId kLookup : declared.lookups) {
+            RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, registry.find(kLookup));
+            // Its own writes are journaled until the run ends, so a lookup
+            // of what it writes would read the value from before them.
+            if (std::ranges::contains(query.writes(), kId)) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              WorldKestError::ColumnMismatch,
+                              "a Kest system looks up a component it writes");
+            }
+            lookups.push_back(kId);
+        }
+        auto system = std::make_unique<KestSystem>(
+            *machine_, *doorway_, declared.entry, std::move(query), std::move(data), std::move(lookups));
         systems.push_back(world::SystemDeclaration{.identity = declared.identity,
                                                    .phase = declared.phase,
                                                    .reads = system->reads(),

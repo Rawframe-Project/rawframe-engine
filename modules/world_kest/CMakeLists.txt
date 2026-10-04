@@ -15,7 +15,7 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(rawframe_world_kest_directory_tests tests/animation_game_test.cpp tests/game_description_test.cpp tests/game_scene_test.cpp tests/game_test.cpp tests/persistent_test.cpp tests/save_game_test.cpp)
 endif()
 rawframe_module_tests(NAME world_kest SOURCES tests/admission_test.cpp tests/cooked_game_test.cpp tests/door_test.cpp tests/effect_test.cpp tests/kest_timing_test.cpp tests/mod_api_test.cpp tests/mod_services_test.cpp
-    tests/held_game_test.cpp tests/kest_systems_test.cpp tests/message_test.cpp tests/presentation_test.cpp tests/regions_test.cpp
+    tests/held_game_test.cpp tests/kest_systems_test.cpp tests/lookup_test.cpp tests/message_test.cpp tests/presentation_test.cpp tests/regions_test.cpp
     ${rawframe_world_kest_directory_tests})
 rawframe_module_fuzz(NAME world_kest TARGET cooked RUNS 10000 MAX_LEN 16384 SEEDS tests/seeds/cooked SOURCES tests/fuzz_cooked.cpp)
 rawframe_module_fuzz(NAME world_kest TARGET descriptions RUNS 10000 MAX_LEN 8192 SEEDS tests/seeds/descriptions SOURCES tests/fuzz_descriptions.cpp)

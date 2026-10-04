@@ -418,6 +418,36 @@ RAWFRAME_TEST(CollisionIsDeclaredByLine) {
         refusedAt("program p.kest\ncollision class ball 3f1c9a7e52d04b18\n", WorldKestError::BadGameLine, "2"));
 }
 
+RAWFRAME_TEST(LookupsAreDeclaredByLine) {
+    constexpr std::string_view kComponents = "program p.kest\n"
+                                             "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.position Position\n"
+                                             "component 5b1c9e22-4f07-4d3a-8c6b-91e7d2a0f4c8 a.target Target\n";
+    auto game = parseGame(std::string{kComponents} +
+                          "system a.follow simulation follow read a.target lookup a.position after a.move\n"
+                          "present a.show show read a.target lookup a.position\n");
+    RAWFRAME_EXPECT(game.has_value());
+    if (game.has_value()) {
+        RAWFRAME_EXPECT((game->systems[0].lookups == std::vector<std::string>{"a.position"}) &&
+                        game->systems[0].columns.size() == 1 &&
+                        (game->systems[0].after == std::vector<std::string>{"a.move"}));
+        RAWFRAME_EXPECT((game->presented[0].lookups == std::vector<std::string>{"a.position"}) &&
+                        game->presented[0].columns.size() == 1);
+    }
+    // Never of what the system writes, nor of what the game does not
+    // declare.
+    RAWFRAME_EXPECT(refusedAt(std::string{kComponents} + "system a.x simulation f write a.position lookup a.position\n",
+                              WorldKestError::BadGameLine,
+                              "4"));
+    RAWFRAME_EXPECT(refusedAt(std::string{kComponents} + "present a.x f write a.position lookup a.position\n",
+                              WorldKestError::BadGameLine,
+                              "4"));
+    RAWFRAME_EXPECT(refusedAt(std::string{kComponents} + "system a.x simulation f read a.target lookup a.nothing\n",
+                              WorldKestError::UnknownName,
+                              "4"));
+    RAWFRAME_EXPECT(
+        refusedAt(std::string{kComponents} + "system a.x simulation f lookup\n", WorldKestError::BadGameLine, "4"));
+}
+
 RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
     constexpr std::string_view kProgram = "program p.kest\n";
     RAWFRAME_EXPECT(refusedAt("program p.kest\nbuild x\n", WorldKestError::BadGameLine, "2"));

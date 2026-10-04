@@ -38,6 +38,7 @@ struct ClientPresentation::State {
     /// `settings.game->presented`.
     std::vector<std::vector<KestColumn>> columns;
     std::vector<std::vector<std::string_view>> after;
+    std::vector<std::vector<schema::ComponentTypeId>> lookups;
     std::vector<KestComponent> components;
     /// What the present systems' doors answer from: the mirror's animation
     /// and the player presented; no physics steps on a mirror, so its doors
@@ -102,7 +103,8 @@ struct ClientPresentation::State {
                                                              .columns = columns[index],
                                                              .after = after[index],
                                                              .before = {},
-                                                             .randomStreams = {}});
+                                                             .randomStreams = {},
+                                                             .lookups = lookups[index]});
             }
             kest::DoorTable doors;
             RAWFRAME_TRY(kest::addStandardMath(doors));
@@ -180,6 +182,10 @@ result::Result<std::unique_ptr<ClientPresentation>> ClientPresentation::create(P
         std::vector<std::string_view>& after = state->after.emplace_back();
         if (state->after.size() > 1) {
             after.emplace_back(game.presented[state->after.size() - 2].identity);
+        }
+        std::vector<schema::ComponentTypeId>& lookups = state->lookups.emplace_back();
+        for (const std::string& name : system.lookups) {
+            lookups.push_back(componentNamed(game, name)->id);
         }
         std::vector<KestColumn>& columns = state->columns.emplace_back();
         for (const GameColumn& column : system.columns) {

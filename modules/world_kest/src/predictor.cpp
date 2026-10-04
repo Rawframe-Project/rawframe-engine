@@ -77,6 +77,9 @@ public:
             }
             declared.after.assign(system.after.begin(), system.after.end());
             declared.before.assign(system.before.begin(), system.before.end());
+            for (const std::string& name : system.lookups) {
+                declared.lookups.push_back(*kIdOf(name));
+            }
         }
         std::vector<KestSystemDeclaration> declarations;
         for (const Declared& declared : declared_) {
@@ -86,7 +89,8 @@ public:
                                                          .columns = declared.columns,
                                                          .after = declared.after,
                                                          .before = declared.before,
-                                                         .randomStreams = {}});
+                                                         .randomStreams = {},
+                                                         .lookups = declared.lookups});
         }
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
@@ -253,6 +257,7 @@ private:
         std::vector<KestColumn> columns;
         std::vector<std::string_view> after;
         std::vector<std::string_view> before;
+        std::vector<schema::ComponentTypeId> lookups;
     };
 
     std::shared_ptr<const schema::SchemaRegistry> registry_;

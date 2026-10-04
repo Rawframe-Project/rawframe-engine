@@ -125,6 +125,15 @@ std::optional<world::Access> accessNamed(std::string_view name) noexcept {
     return std::nullopt;
 }
 
+/// Whether a system writes a component it looks up: its own writes are
+/// journaled until its run ends, so the lookup would read what was there
+/// before them (D391).
+bool writesALookup(const GameSystem& system) {
+    return std::ranges::any_of(system.columns, [&system](const GameColumn& column) {
+        return column.access == world::Access::Write && std::ranges::contains(system.lookups, column.component);
+    });
+}
+
 std::unexpected<result::Error> badLine(std::size_t line, WorldKestError error, std::string_view why) {
     return std::unexpected<result::Error>{
         result::fail(result::ErrorClass::InvalidArgument, kWorldKestDomain, code(error), why)
@@ -490,6 +499,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 const std::string kName{kWords[at + 1]};
                 if (kWhat == "random") {
                     system.randomStreams.push_back(kName);
+                } else if (kWhat == "lookup") {
+                    system.lookups.push_back(kName);
+                    uses.emplace_back(number, kName);
                 } else if (kWhat == "emits") {
                     system.emits.push_back(kName);
                 } else if (kWhat == "after") {
@@ -504,8 +516,11 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                    WorldKestError::BadGameLine,
                                    "a system column is entities, or read, write, with, or without a component; an "
                                    "edge is after or before a system; a stream is random and its name; an effect "
-                                   "is emits and its name");
+                                   "is emits and its name; a lookup is lookup and a component");
                 }
+            }
+            if (writesALookup(system)) {
+                return badLine(number, WorldKestError::BadGameLine, "a system looks up a component it writes");
             }
             game.systems.push_back(std::move(system));
         } else if (kKeyword == "present") {
@@ -521,15 +536,23 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     --at;
                     continue;
                 }
+                if (kWords[at] == "lookup" && at + 1 < kWords.size()) {
+                    system.lookups.emplace_back(kWords[at + 1]);
+                    uses.emplace_back(number, std::string{kWords[at + 1]});
+                    continue;
+                }
                 const auto kAccess = accessNamed(kWords[at]);
                 if (!kAccess.has_value() || at + 1 == kWords.size()) {
                     return badLine(number,
                                    WorldKestError::BadGameLine,
                                    "a present system's column is entities, or read, write, with, or without a "
-                                   "component");
+                                   "component; a lookup is lookup and a component");
                 }
                 system.columns.push_back(GameColumn{.access = *kAccess, .component = std::string{kWords[at + 1]}});
                 uses.emplace_back(number, std::string{kWords[at + 1]});
+            }
+            if (writesALookup(system)) {
+                return badLine(number, WorldKestError::BadGameLine, "a present system looks up a component it writes");
             }
             if (std::ranges::contains(game.presented, system.identity, &GameSystem::identity)) {
                 return badLine(number, WorldKestError::BadGameLine, "a present system's identity is its own");
