@@ -56,7 +56,7 @@ std::uint32_t wordAt(std::span<const std::byte> bytes, std::size_t at) {
 } // namespace
 
 RAWFRAME_TEST(EveryFormatRoundTripsWithItsLevels) {
-    for (const Format kFormat : {Format::Rgba8, Format::Rgba8Srgb, Format::Bc7, Format::Bc7Srgb}) {
+    for (const Format kFormat : {Format::Rgba8, Format::Rgba8Srgb, Format::Bc7, Format::Bc7Srgb, Format::R8}) {
         for (const Texture& kTexture : {chain(kFormat, 5, 3), chain(kFormat, 64, 16), chain(kFormat, 9, 9, 1)}) {
             const auto kBytes = encode(kTexture);
             RAWFRAME_EXPECT(kBytes.has_value());
@@ -75,7 +75,8 @@ RAWFRAME_TEST(EveryFormatRoundTripsWithItsLevels) {
 
 RAWFRAME_TEST(TheContainerIsKhronossForEachFormat) {
     // The Vulkan format, then the descriptor's color model, primaries, and
-    // transfer, and for sRGB RGBA8 the alpha sample marked linear.
+    // transfer, and for sRGB RGBA8 the alpha sample marked linear; R8's one
+    // channel (D398) still on four bytes' alignment.
     struct Case {
         Format format;
         std::uint32_t vulkan;
@@ -85,7 +86,8 @@ RAWFRAME_TEST(TheContainerIsKhronossForEachFormat) {
     for (const Case& each : {Case{Format::Rgba8, 37, 1, 1},
                              Case{Format::Rgba8Srgb, 43, 1, 2},
                              Case{Format::Bc7, 145, 134, 1},
-                             Case{Format::Bc7Srgb, 146, 134, 2}}) {
+                             Case{Format::Bc7Srgb, 146, 134, 2},
+                             Case{Format::R8, 9, 1, 1}}) {
         const auto kBytes = encode(chain(each.format, 8, 8));
         RAWFRAME_EXPECT(kBytes.has_value());
         if (!kBytes.has_value()) {

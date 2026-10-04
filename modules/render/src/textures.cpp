@@ -37,6 +37,8 @@ mrhiFormat formatOf(texture::Format format) noexcept {
         return mrhi_formatBc7RgbaUnormSrgb;
     case texture::Format::Rgba16Float:
         return mrhi_formatRgba16Float;
+    case texture::Format::R8:
+        return mrhi_formatR8Unorm;
     }
     return mrhi_formatRgba8Unorm;
 }

@@ -55,13 +55,20 @@ std::uint32_t vulkanFormat(Format format) noexcept {
         return 146; // VK_FORMAT_BC7_SRGB_BLOCK
     case Format::Rgba16Float:
         return 97; // VK_FORMAT_R16G16B16A16_SFLOAT
+    case Format::R8:
+        return 9; // VK_FORMAT_R8_UNORM
     }
     return 0;
 }
 
 /// Bytes a texel of an uncompressed format takes.
 std::uint32_t texelBytes(Format format) noexcept {
-    return format == Format::Rgba16Float ? 8 : 4;
+    return format == Format::Rgba16Float ? 8 : format == Format::R8 ? 1 : 4;
+}
+
+/// The channels of an uncompressed format's texel.
+std::uint32_t channelsOf(Format format) noexcept {
+    return format == Format::R8 ? 1 : 4;
 }
 
 /// KTX 2.0's type size: a channel's bytes, for what a reader swaps.
@@ -70,7 +77,8 @@ std::uint32_t typeSize(Format format) noexcept {
 }
 
 std::optional<Format> formatOfVulkan(std::uint32_t value) noexcept {
-    for (const Format kFormat : {Format::Rgba8, Format::Rgba8Srgb, Format::Bc7, Format::Bc7Srgb, Format::Rgba16Float}) {
+    for (const Format kFormat :
+         {Format::Rgba8, Format::Rgba8Srgb, Format::Bc7, Format::Bc7Srgb, Format::Rgba16Float, Format::R8}) {
         if (vulkanFormat(kFormat) == value) {
             return kFormat;
         }
@@ -81,7 +89,7 @@ std::optional<Format> formatOfVulkan(std::uint32_t value) noexcept {
 /// A level's alignment in the file: its texel block's bytes and four,
 /// whose least common multiple is the larger here.
 std::size_t alignmentOf(Format format) noexcept {
-    return compressed(format) ? 16 : texelBytes(format);
+    return compressed(format) ? 16 : std::max<std::size_t>(texelBytes(format), 4);
 }
 
 /// The data format descriptor, total size first, as 32-bit words.
@@ -104,8 +112,9 @@ std::vector<std::uint32_t> descriptorOf(Format format) {
                  0xFFFFFFFFU};
         return words;
     }
-    constexpr std::uint32_t kBlockBytes = 24 + (4 * 16);
-    const std::uint32_t kBits = texelBytes(format) * 2;
+    const std::uint32_t kChannels = channelsOf(format);
+    const std::uint32_t kBlockBytes = 24 + (kChannels * 16);
+    const std::uint32_t kBits = texelBytes(format) * 8 / kChannels;
     const bool kFloat = format == Format::Rgba16Float;
     words = {4 + kBlockBytes,
              0,
@@ -114,12 +123,12 @@ std::vector<std::uint32_t> descriptorOf(Format format) {
              0,
              texelBytes(format),
              0};
-    // Red, green, blue, and alpha, a byte or a half float each; alpha is
-    // linear even in an sRGB format.
-    constexpr std::array<std::uint32_t, 4> kChannels = {0, 1, 2, kChannelAlpha};
-    for (std::uint32_t index = 0; index < 4; ++index) {
-        const std::uint32_t kType = kChannels[index] |
-                                    (kChannels[index] == kChannelAlpha && isSrgb(format) ? kSampleLinear : 0U) |
+    // Red, green, blue, and alpha (red alone for R8), a byte or a half float
+    // each; alpha is linear even in an sRGB format.
+    constexpr std::array<std::uint32_t, 4> kChannelIds = {0, 1, 2, kChannelAlpha};
+    for (std::uint32_t index = 0; index < kChannels; ++index) {
+        const std::uint32_t kType = kChannelIds[index] |
+                                    (kChannelIds[index] == kChannelAlpha && isSrgb(format) ? kSampleLinear : 0U) |
                                     (kFloat ? kSampleFloat | kSampleSigned : 0U);
         for (const std::uint32_t kWord : {(index * kBits) | ((kBits - 1) << 16U) | (kType << 24U),
                                           0U,

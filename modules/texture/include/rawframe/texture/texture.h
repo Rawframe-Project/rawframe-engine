@@ -25,19 +25,21 @@ inline constexpr std::string_view kTextureRepresentation = "rawframe.texture";
 /// How a level's texels are stored. The block-compressed BC7 is the desktop
 /// form ADR-0058 names; RGBA8 is kept uncompressed, for what must stay
 /// exact (pixel art, interface images); RGBA16F holds light past one, in
-/// linear Rec. 709, for environments (D320).
+/// linear Rec. 709, for environments (D320); R8 holds one linear channel,
+/// a glyph atlas's coverage (D398).
 enum class Format : std::uint8_t {
     Rgba8,
     Rgba8Srgb,
     Bc7,
     Bc7Srgb,
-    Rgba16Float
+    Rgba16Float,
+    R8
 };
 
 /// Whether a format's color channels are sRGB-encoded (alpha never is).
 [[nodiscard]] bool isSrgb(Format format) noexcept;
-/// The bytes a face of a level of this size takes: four a texel for RGBA8,
-/// eight for RGBA16F, sixteen a 4x4 block (partial blocks whole) for BC7.
+/// The bytes a face of a level of this size takes: one a texel for R8, four
+/// for RGBA8, eight for RGBA16F, sixteen a 4x4 block (partial blocks whole) for BC7.
 [[nodiscard]] std::size_t levelBytes(Format format, std::uint32_t width, std::uint32_t height) noexcept;
 
 /// A float as the IEEE half an RGBA16F channel holds, rounded to nearest,
