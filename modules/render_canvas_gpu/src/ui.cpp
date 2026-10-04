@@ -398,12 +398,18 @@ struct UiRenderer::State {
         }
         if (!ready) {
             device->pump();
+            // An answer is taken once: one that came is kept as nought, as
+            // the others may come in later frames.
             bool all = true;
-            for (const std::uint64_t kRequest : requests) {
-                if (const auto kAnswer = device->answer(kRequest)) {
+            for (std::uint64_t& request : requests) {
+                if (request == 0) {
+                    continue;
+                }
+                if (const auto kAnswer = device->answer(request)) {
                     if (!kAnswer->has_value()) {
                         return std::unexpected<result::Error>{kAnswer->error().clone()};
                     }
+                    request = 0;
                 } else {
                     all = false;
                 }
