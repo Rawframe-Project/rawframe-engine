@@ -11,6 +11,9 @@ collision class stall b0eb8fc52cd9d4ac
 component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
 component 4143f760-31c1-469d-bda7-7946878bcaba tycoon.owner Owner
 component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
+# A stall's owner is an entity: sent as one, each client reads its own
+# name for it (D390).
+entity tycoon.stall owner
 component 63d9aa3b-30b0-49df-9371-b682ff281ec0 tycoon.look rawframe.model.Model
 component 2e380a54-69cf-4905-86f2-68f895d954fe tycoon.mark rawframe.model.Model
 component 991e8dec-fbd5-4790-954b-283eea27fe90 tycoon.view rawframe.model.Camera
@@ -34,16 +37,18 @@ actions tycoon.actions
 sample sample.kest sample
 
 # What a client shows (D389): every body as a box, the ground green and the
-# stalls red; its own cursor's plot marked; the lot seen from a fixed point
-# above its south edge; and its coins in words (tycoon.strings) in Inter 4.1
-# (Inter-Regular.ttf from its release archive, SIL Open Font License 1.1 in
-# Inter-LICENSE.txt), along the top of its view. No server carries any of it.
+# stalls red, its own stalls gold (D390); its own cursor's plot marked; the
+# lot seen from a fixed point above its south edge; and its coins in words
+# (tycoon.strings) in Inter 4.1 (Inter-Regular.ttf from its release archive,
+# SIL Open Font License 1.1 in Inter-LICENSE.txt), along the top of its
+# view. No server carries any of it.
 text tycoon.strings
 locale en
 font 8e12f827f47f7d51 Inter-Regular.ttf
 label f1182d0420cc09a0 tycoon.strings hud.coins coins
 presentation tycoon.look on rawframe.physics3d.body
 present tycoon.dress dress read rawframe.physics3d.body write tycoon.look
+present tycoon.tint tint read tycoon.stall write tycoon.look
 presentation tycoon.mark tycoon.view tycoon.purse on player
 present tycoon.mark mark read tycoon.owner write tycoon.mark
 present tycoon.frame frame read rawframe.physics3d.pose write tycoon.view

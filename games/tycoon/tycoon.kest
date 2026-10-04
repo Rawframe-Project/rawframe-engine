@@ -10,6 +10,7 @@ module tycoon
 import controls
 import rawframe.model
 import rawframe.physics3d
+import rawframe.replication
 import rawframe.ui
 import rawframe.world
 
@@ -175,6 +176,19 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
             look.color = 0xC8553DFF
         }
         looks[i] = look
+        i = i + 1
+    }
+}
+
+// The client's own stalls (D390) a sunny gold, told from the others' red
+// by the owner each names: the client's own name for its player.
+fn tint(count: i32, stalls: [Stall], looks: [model.Model]) {
+    let me = replication.player()
+    let i = 0
+    while i < count {
+        if stalls[i].owner == me {
+            looks[i].color = 0xE8B83AFF
+        }
         i = i + 1
     }
 }

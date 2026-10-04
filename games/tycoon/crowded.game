@@ -8,6 +8,7 @@ collision class stall b0eb8fc52cd9d4ac
 component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
 component 4143f760-31c1-469d-bda7-7946878bcaba tycoon.owner Owner
 component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
+entity tycoon.stall owner
 system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities after tycoon.join after rawframe.physics3d.step
 system tycoon.earn simulation earn write tycoon.owner after tycoon.tend
