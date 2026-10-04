@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The launcher plays a game as a standalone export does (D395): it starts
 # the dedicated server, waits for its fingerprint, starts the client pinned
-# to it (here a bots process with one bot, which plays for three seconds and
+# to it (here a bots process with one bot, which plays for eight seconds and
 # ends), and then asks the server to stop. Prints the client's log, the
 # server's, and the launcher's exit code. Run from the repository root.
 #
@@ -33,7 +33,7 @@ network.quic.fingerprint_file = fingerprint
 replication.endpoint = 127.0.0.1:$port
 CONF
 cat >"$work/client.conf" <<CONF
-host.maximum_iterations = 360
+host.maximum_iterations = 960
 host.iteration_rate = 120
 kest.game = $game
 kest.plan_only = true
