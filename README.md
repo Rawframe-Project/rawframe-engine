@@ -1,6 +1,6 @@
 # Rawframe Engine
 
-A performance-oriented, network-first engine for 2D and 3D games and real-time simulations. The core is C++23. Gameplay and tooling are written in [Kest](https://github.com/Rawframe-Project/kest), a deterministic, statically typed game language. Physics comes from [Maul2D](https://github.com/Rawframe-Project/maul2d) and [Maul3D](https://github.com/Rawframe-Project/maul3d).
+A performance-oriented, network-first engine for 2D and 3D games and real-time simulations. The core is C++23. Gameplay and tooling are written in [Kest](https://github.com/Rawframe-Project/kest), a deterministic, statically typed game language. Physics comes from [Maul2D](https://github.com/Rawframe-Project/maul2d) and [Maul3D](https://github.com/Rawframe-Project/maul3d), and navigation from [Maul Nav](https://github.com/Rawframe-Project/maul-nav).
 
 Its first milestone, a headless, networked, Kest-scripted World with a dedicated server, is done. Clients play from a window on the desktop and from a canvas in a browser, drawn through [Maul RHI](https://github.com/Rawframe-Project/maul-rhi) (Vulkan, and WebGPU in the browser) in 2D and 3D, heard, and felt through a gamepad. The reference games are under `games/`: Runners (2D) and Stalls (a small 3D tycoon), with the plaza as the 3D sample. A game can be exported into a folder that plays on its own, or into a site that plays in a browser. There are no releases yet, and every surface is unstable.
 
