@@ -1,11 +1,12 @@
 // A client's presentation of the World it mirrors (D260): each presentation
 // component attached to the entities that have its `on` component, or to
 // the client's own player alone (D261), the present systems run over the
-// mirror in line order, a refused one changing nothing, and a new mirror
-// bound afresh.
+// mirror in line order, telling the client's own player from others
+// (D390), a refused one changing nothing, and a new mirror bound afresh.
 
 #include "../src/presentation.h"
 #include "rawframe/test/test.h"
+#include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/game_files.h"
 
 #include <cstdio>
@@ -22,21 +23,27 @@ constexpr auto kStickId = schema::ComponentTypeId::fromText("51a3c0de-1111-4a2b-
 constexpr auto kLookId = schema::ComponentTypeId::fromText("51a3c0de-2222-4a2b-8c3d-4e5f60718293");
 constexpr auto kViewId = schema::ComponentTypeId::fromText("51a3c0de-3333-4a2b-8c3d-4e5f60718293");
 
-/// A game whose clients give each stick a look, then size it by the stick's
-/// run, then check it, failing once a look is too wide; and the player's
+/// A game whose clients give each stick a look, the player's its own, then
+/// size it by the stick's run, then check it, failing once a look is too wide; and the player's
 /// view, framed a meter further each tick.
 constexpr std::string_view kProgram = R"(module shown
 
 import rawframe.canvas
+import rawframe.replication
+import rawframe.world
 
 struct Stick {
     run: f32
 }
 
-fn dress(count: i32, sticks: [Stick], looks: [canvas.Sprite]) {
+fn dress(count: i32, sticks: [Stick], looks: [canvas.Sprite], entities: [world.Entity]) {
+    let me = replication.player()
     let i = 0
     while i < count {
         looks[i].texture = u64(7)
+        if entities[i] == me {
+            looks[i].texture = u64(8)
+        }
         i = i + 1
     }
 }
@@ -78,7 +85,7 @@ constexpr std::string_view kGame = "program shown.kest\n"
                                    "presentation shown.look on shown.stick\n"
                                    "presentation shown.view on player\n"
                                    "present shown.frame frame write shown.view\n"
-                                   "present shown.dress dress read shown.stick write shown.look\n"
+                                   "present shown.dress dress read shown.stick write shown.look entities\n"
                                    "present shown.size size read shown.stick write shown.look\n"
                                    "present shown.check check write shown.look\n";
 
@@ -135,6 +142,13 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
     for (const schema::ComponentDescriptor& descriptor : kDescriptors) {
         builder.add(descriptor);
     }
+    // rawframe.world's persistent identity, which a World registers itself
+    // and a program importing rawframe.world may insert.
+    builder.add({.id = world::Persistent::kComponentTypeId,
+                 .name = world::Persistent::kComponentName,
+                 .size = sizeof(world::Persistent),
+                 .alignment = alignof(world::Persistent),
+                 .plainData = true});
     const auto kRegistry = *builder.freeze();
     world::World mirror{kRegistry};
     const auto kStick = *kRegistry->find(kStickId);
@@ -154,10 +168,11 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
     };
     const world::EntityHandle kRunner = kSpawn(2.0F);
     const world::EntityHandle kLevel = *mirror.create();
-    // The look attached, zeroed, to what has a stick, then dressed and sized
-    // in line order, and checked; the player's view framed.
+    // The look attached, zeroed, to what has a stick, then dressed (the
+    // player's its own) and sized in line order, and checked; the player's
+    // view framed.
     RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, {}, *world::TickRate::of(60)).has_value());
-    RAWFRAME_EXPECT(kLookOf(kRunner) != nullptr && kLookOf(kRunner)->texture == 7 &&
+    RAWFRAME_EXPECT(kLookOf(kRunner) != nullptr && kLookOf(kRunner)->texture == 8 &&
                     kLookOf(kRunner)->placed[4] == 2.0F && kLookOf(kRunner)->placed[5] == 1.0F &&
                     kLookOf(kLevel) == nullptr && kViewOf(kRunner) != nullptr && kViewOf(kRunner)->height == 8.0F &&
                     kViewOf(kRunner)->offsetX == 1.0F);
@@ -165,7 +180,7 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
     // not this client's player. Nothing is attached twice.
     const world::EntityHandle kLate = kSpawn(1.0F);
     RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, {}, *world::TickRate::of(60)).has_value());
-    RAWFRAME_EXPECT(kLookOf(kLate) != nullptr && kLookOf(kLate)->placed[4] == 1.0F &&
+    RAWFRAME_EXPECT(kLookOf(kLate) != nullptr && kLookOf(kLate)->texture == 7 && kLookOf(kLate)->placed[4] == 1.0F &&
                     kLookOf(kRunner)->placed[4] == 4.0F && kViewOf(kLate) == nullptr &&
                     kViewOf(kRunner)->offsetX == 2.0F && (*presentation)->statistics().attached == 3);
     // Past ten meters wide, the check runs out of fuel: its writes are
@@ -176,7 +191,8 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
     RAWFRAME_EXPECT(kLookOf(kRunner)->placed[4] == 12.0F && kLookOf(kRunner)->placed[5] == 1.0F &&
                     (*presentation)->statistics().systemsFailed >= 1);
     // A new mirror (a client that made its World again) is bound afresh;
-    // before its player arrives, no view is attached.
+    // before its player arrives, no view is attached, and no stick is the
+    // player's.
     world::World again{kRegistry};
     const world::EntityHandle kAgain = *again.create();
     Stick stick{.run = 1.0F};

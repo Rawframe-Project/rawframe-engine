@@ -10,6 +10,7 @@
 #include "mod_services.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
+#include "player_doors.h"
 #include "predictor.h"
 #include "presentation.h"
 #include "rawframe/base/platform.h"
@@ -236,6 +237,8 @@ public:
         kest::DoorTable doors;
         RAWFRAME_TRY(kest::addStandardMath(doors));
         RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors_));
+        // A server plays for everyone: it shows no one player.
+        RAWFRAME_TRY(addPlayerDoor(doors, nullptr));
         std::vector<std::size_t> sizes;
         for (const kest::TypeLayout& layout : layouts_) {
             sizes.push_back(layout.size);

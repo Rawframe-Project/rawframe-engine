@@ -5,6 +5,7 @@
 #include "message_doors.h"
 #include "mod_services.h"
 #include "physics_doors.h"
+#include "player_doors.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/world/column_query.h"
@@ -38,9 +39,11 @@ struct ClientPresentation::State {
     std::vector<std::vector<KestColumn>> columns;
     std::vector<std::vector<std::string_view>> after;
     std::vector<KestComponent> components;
-    /// What the present systems' doors answer from: the mirror's animation;
-    /// no physics steps on a mirror, so its doors refuse, and no mod runs.
+    /// What the present systems' doors answer from: the mirror's animation
+    /// and the player presented; no physics steps on a mirror, so its doors
+    /// refuse, and no mod runs.
     AnimationDoorContext animationDoors;
+    PlayerDoorContext playerDoor;
     PhysicsDoorContext physicsDoors;
     std::unique_ptr<ModServices> services;
     std::unique_ptr<EffectDoors> effects;
@@ -104,6 +107,7 @@ struct ClientPresentation::State {
             kest::DoorTable doors;
             RAWFRAME_TRY(kest::addStandardMath(doors));
             RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors));
+            RAWFRAME_TRY(addPlayerDoor(doors, &playerDoor));
             RAWFRAME_TRY(services->addDoors(doors));
             RAWFRAME_TRY(effects->addDoors(doors));
             RAWFRAME_TRY(messages->addDoors(doors));
@@ -217,6 +221,7 @@ result::Status ClientPresentation::present(world::World& mirror,
     }
     ++state.statistics.ticks;
     RAWFRAME_TRY(state.attach(mirror, player));
+    state.playerDoor.player = player;
     state.messages->arrived(arrived);
     RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, state.schedule->runTick(mirror, state.tick, rate, emitter));
     for (const world::TickReport::Failure& failure : kReport.failures) {

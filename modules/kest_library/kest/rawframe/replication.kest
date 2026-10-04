@@ -2,6 +2,8 @@ module rawframe.replication
 
 // What replication hands a Kest-scripted game (SPEC-0041).
 
+import rawframe.world
+
 // The moment a player saw when it gave the command being run: the server
 // tick of the older of the two states its client showed between, and
 // 65536ths of the way to the next. A player of a game whose input line says
@@ -14,4 +16,16 @@ struct Perception {
     baseTick: u64
     fraction: u16
     viewer: u32
+}
+
+// The player the machine running a system shows: in a client's present
+// systems, its own player in the World it presents, which a program tells
+// its own things from others' by (an entity a replicated value names is the
+// client's own name for it); in every simulation system, on a server (which
+// plays for everyone) and in a client's prediction alike, the null entity,
+// so no simulation depends on which machine runs it.
+extern fn Replication.player() -> world.Entity
+
+fn player() -> world.Entity {
+    return Replication.player()
 }

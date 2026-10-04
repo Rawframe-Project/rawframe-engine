@@ -6,6 +6,7 @@
 #include "mod_services.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
+#include "player_doors.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/errors.h"
@@ -91,6 +92,9 @@ public:
         RAWFRAME_TRY(kest::addStandardMath(doors));
         // A predicting client plays no animation: its doors refuse.
         RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors_));
+        // Nor tells its systems whose client it is: they must decide what
+        // the server's do.
+        RAWFRAME_TRY(addPlayerDoor(doors, nullptr));
         // Nor runs a mod: a service answers the value it is given, and the
         // server's state corrects what a provider would have changed.
         std::vector<std::size_t> sizes;
