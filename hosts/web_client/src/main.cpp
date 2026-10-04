@@ -48,6 +48,7 @@
 #include "rawframe/world_audio/frame_sink.h"
 #include "rawframe/world_audio/registrar.h"
 #include "rawframe/world_kest/registrar.h"
+#include "rawframe/world_localization/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
 #include "rawframe/world_ui/registrar.h"
@@ -70,9 +71,10 @@ using namespace rawframe;
 
 // A client playing a game from its content or held sources: the World, a
 // Kest game, 2D and 3D physics, the simulation's animation, replication
-// over the page's WebTransport with the game's input sources, and its sound,
-// which the page takes and plays (D259).
-constexpr std::array<composition::RegistrarEntry, 16> kRegistrars = {
+// over the page's WebTransport with the game's input sources, its sound,
+// which the page takes and plays (D259), and its words, which its UI shows
+// (D398).
+constexpr std::array<composition::RegistrarEntry, 17> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
     composition::RegistrarEntry{"network_web", &network_web::registerParticipants, network_web::kScopes},
@@ -88,6 +90,8 @@ constexpr std::array<composition::RegistrarEntry, 16> kRegistrars = {
     composition::RegistrarEntry{"world_animation", &world_animation::registerParticipants, world_animation::kScopes},
     composition::RegistrarEntry{"world_audio", &world_audio::registerParticipants, world_audio::kScopes},
     composition::RegistrarEntry{"world_kest", &world_kest::registerParticipants, world_kest::kScopes},
+    composition::RegistrarEntry{
+        "world_localization", &world_localization::registerParticipants, world_localization::kScopes},
     composition::RegistrarEntry{
         "world_replication", &world_replication::registerParticipants, world_replication::kScopes},
     composition::RegistrarEntry{"world_runtime", &world_runtime::registerParticipants, world_runtime::kScopes},

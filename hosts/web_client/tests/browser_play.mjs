@@ -6,7 +6,8 @@
 // in the canvas runs the player, another makes it jump, a jump the player
 // feels (D251, though the page has no gamepad to feel it on) and hears
 // (D259: the page takes the client's sound and plays it), seen through the
-// camera the page's own present system places (D261), and a stop
+// camera the page's own present system places (D261), its HUD's score in
+// words drawn (D398), and a stop
 // asked of the page ends the run in order. The game is as a web game ships
 // (D256, D397): exported for the web, so cooked, packed into a signed
 // Build, installed in the site's library, and named by a Composition, which
@@ -281,6 +282,14 @@ try {
     console.log(`page: the canvas drew ${drawn ? drawn[1] : 'no'} sprites, ${drawn ? drawn[2] : 'no'} animated, ` +
                 `with ${drawn ? drawn[3] : 'no'} textures, ${viewed ? viewed[1] : 'no'} frames through the ` +
                 `player's camera`);
+    // The HUD's words, in the game's font, read from its string tables and
+    // drawn from the glyph atlas (D398).
+    const worded = /"code":"ui_drawing_summary"[^\n]*"glyphRuns":(\d+),"glyphs":(\d+),"glyphRunsWaiting":(\d+)/.exec(
+        clientLog);
+    if (!plaza) {
+        console.log(`page: the UI drew ${worded ? worded[1] : 'no'} runs of ${worded ? worded[2] : 'no'} glyphs, ` +
+                    `${worded ? worded[3] : 'no'} waiting`);
+    }
     // The plaza's walker, seen in 3D through the camera its present system
     // placed, its models drawn on the device.
     const seen3d = /"code":"scene_summary"[^\n]*"framesViewed":(\d+)[^\n]*"modelsDrawn":(\d+)/.exec(clientLog);
@@ -294,7 +303,8 @@ try {
                    gpuErrors.length === 0;
     const runnersPlayed = felt !== null && Number(felt[1]) > 0 && drawn !== null && Number(drawn[1]) > 0 &&
                           Number(drawn[2]) > 0 && Number(drawn[3]) === 3 && viewed !== null && Number(viewed[1]) > 0 &&
-                          heard.frames > 48000 && heard.peak > 0.05;
+                          heard.frames > 48000 && heard.peak > 0.05 && worded !== null && Number(worded[1]) > 0 &&
+                          Number(worded[3]) === 0;
     const plazaPlayed = seen3d !== null && Number(seen3d[1]) > 0 && Number(seen3d[2]) > 0 && drawn3d !== null &&
                         Number(drawn3d[1]) > 0 && /"code":"game_silent"/.test(clientLog);
     verdict = played && (plaza ? plazaPlayed : runnersPlayed) ? 0 : 1;
