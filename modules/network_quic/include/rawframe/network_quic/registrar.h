@@ -15,7 +15,9 @@ namespace rawframe::network_quic {
 ///   network.quic.private_key_file   its PEM private key
 ///   network.quic.self_signed        true: make a fresh identity at start
 ///   network.quic.fingerprint_file   where to write the identity's
-///                                   fingerprint, for clients to pin
+///                                   fingerprint, for clients to pin:
+///                                   whole, on the first iteration, once
+///                                   whatever listens is listening (D395)
 ///   network.quic.pin                the server fingerprint a client accepts
 ///   network.quic.pin_file           the same, read from a file
 ///   network.quic.idle_timeout_ms    (10000)

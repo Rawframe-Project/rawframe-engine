@@ -7,6 +7,7 @@
 #include "rawframe/network_quic/registrar.h"
 
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 namespace rawframe::network_quic {
@@ -16,6 +17,7 @@ namespace {
 using diagnostics::EventIdentity;
 
 constexpr EventIdentity kReady{"network_quic", "ready"};
+constexpr EventIdentity kUnwritten{"network_quic", "fingerprint_unwritten"};
 constexpr std::string_view kProvided[] = {network::kTransport.name};
 /// A PEM file or a fingerprint file larger than this is not one.
 constexpr std::size_t kMaximumFileBytes = 64 * 1024;
@@ -40,13 +42,21 @@ result::Result<std::string> readFile(const std::string& path) {
     return text;
 }
 
+/// Writes the file whole beside itself, then renames it into place, so a
+/// reader waiting for it never reads it half written.
 result::Status writeFile(const std::string& path, std::string_view text) {
-    std::FILE* file = std::fopen(path.c_str(), "wb");
+    const std::string kPart = path + ".part";
+    std::FILE* file = std::fopen(kPart.c_str(), "wb");
     if (file == nullptr) {
         return badFile("the fingerprint file cannot be written");
     }
     const bool kWritten = std::fwrite(text.data(), 1, text.size(), file) == text.size();
     if (std::fclose(file) != 0 || !kWritten) {
+        return badFile("the fingerprint file cannot be written");
+    }
+    std::error_code error;
+    std::filesystem::rename(kPart, path, error);
+    if (error) {
         return badFile("the fingerprint file cannot be written");
     }
     return {};
@@ -63,8 +73,10 @@ std::string_view trimmed(std::string_view text) noexcept {
 
 class QuicTransport final : public composition::Participant, public network::Transport {
 public:
-    explicit QuicTransport(std::unique_ptr<QuicNetwork> network, std::optional<Fingerprint> identity)
-        : network_(std::move(network)), identity_(identity) {
+    QuicTransport(std::unique_ptr<QuicNetwork> network,
+                  std::optional<Fingerprint> identity,
+                  std::optional<std::string> fingerprintFile)
+        : network_(std::move(network)), identity_(identity), fingerprintFile_(std::move(fingerprintFile)) {
     }
 
     result::Result<std::unique_ptr<network::Provider>> provider(const network::ProviderProfile& profile) override {
@@ -89,10 +101,23 @@ public:
         return {};
     }
 
-    /// MsQuic's heap, twice a second at 120 iterations (D234).
+    /// MsQuic's heap, twice a second at 120 iterations (D234). On the first
+    /// iteration, the fingerprint file: every participant has started, so
+    /// whatever listens through this transport is listening, and a launcher
+    /// that waits for the file can start its client (D395).
     void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
         if (context_ != nullptr && frame.iteration % 60 == 0) {
             context_->reportMemory(quicHeapBytes().value_or(0));
+        }
+        if (context_ != nullptr && fingerprintFile_.has_value() && identity_.has_value()) {
+            const result::Status kWritten = writeFile(*fingerprintFile_, formatFingerprint(*identity_) + "\n");
+            if (!kWritten.has_value()) {
+                context_->emitter().log(diagnostics::Severity::Error,
+                                        kUnwritten,
+                                        "the fingerprint file cannot be written",
+                                        {diagnostics::field("path", std::string_view{*fingerprintFile_})});
+            }
+            fingerprintFile_.reset();
         }
     }
 
@@ -100,6 +125,8 @@ private:
     composition::ParticipantContext* context_ = nullptr;
     std::unique_ptr<QuicNetwork> network_;
     std::optional<Fingerprint> identity_;
+    /// Where the fingerprint goes on the first iteration; nothing once there.
+    std::optional<std::string> fingerprintFile_;
 };
 
 result::Result<std::optional<Certificate>> identityOf(const composition::Configuration& configuration, bool browsers) {
@@ -180,12 +207,10 @@ result::Result<composition::ParticipantOwner> makeQuic(composition::ParticipantC
     std::optional<Fingerprint> identity;
     if (settings.certificate.has_value()) {
         RAWFRAME_TRY_ASSIGN(identity, fingerprintOf(*settings.certificate));
-        if (const auto kPath = configuration.path("network.quic.fingerprint_file")) {
-            RAWFRAME_TRY(writeFile(std::string{*kPath}, formatFingerprint(*identity) + "\n"));
-        }
     }
+    std::optional<std::string> fingerprintFile = configuration.path("network.quic.fingerprint_file");
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<QuicNetwork> network, QuicNetwork::create(std::move(settings)));
-    return composition::ParticipantOwner{new QuicTransport{std::move(network), identity}};
+    return composition::ParticipantOwner{new QuicTransport{std::move(network), identity, std::move(fingerprintFile)}};
 }
 
 } // namespace
