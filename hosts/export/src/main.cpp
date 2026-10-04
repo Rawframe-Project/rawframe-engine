@@ -2,8 +2,8 @@
 // headless operation over the one container model, with receipts, D396):
 // a game made into a folder that plays on this machine with nothing else.
 // It runs the cook and the build tool as they run for any Build (the game
-// cooked, packed into a Build signed by a publisher key made for it, the
-// secret then deleted, installed into the folder's library, and named by a
+// cooked, packed into a Build signed by the publisher's key, installed into
+// the folder's library, which pins the publisher's key set, and named by a
 // Composition), copies the dedicated server, the client, and the launcher
 // beside it, and writes their configurations: the launcher starts the
 // server on this machine's loopback at the port given, and the client,
@@ -11,6 +11,13 @@
 //
 //   rawframe-export <game directory> <output directory> [--game <file>]
 //                   [--port <port>] [--version <version>] [--tools <directory>]
+//                   [--key <secret key> --publisher <name>]
+//
+// With `--key`, the Build is signed by that secret (`rawframe-build key`
+// writes it beside `<publisher>.keys`, which the folder's library pins);
+// the secret is read, never copied. Without it, a key is made for this
+// export under the publisher `local`, and its secret deleted once the Build
+// is signed.
 //
 // The game is `<directory name>.game` unless named. The tools (rawframe-cook,
 // rawframe-build, rawframe-server, rawframe-client, rawframe-play) are found
@@ -157,7 +164,8 @@ bool portLike(const std::string& text) {
 
 int usage() {
     std::fputs("usage: rawframe-export <game directory> <output directory> [--game <file>] [--port <port>]\n"
-               "                       [--version <version>] [--tools <directory>] [--<tool> <path>]...\n",
+               "                       [--version <version>] [--tools <directory>] [--<tool> <path>]...\n"
+               "                       [--key <secret key> --publisher <name>]\n",
                stderr);
     return 2;
 }
@@ -176,6 +184,8 @@ int main(int argc, char** argv) {
     std::string gameFile = kGame.filename().string() + ".game";
     std::string port = "47217";
     std::string version = "0.1.0";
+    std::optional<fs::path> key;
+    std::string publisher = "local";
     fs::path toolDirectory = kSelf.parent_path();
     std::map<std::string, fs::path, std::less<>> tools;
     for (int at = 3; at + 1 < argc; at += 2) {
@@ -187,6 +197,10 @@ int main(int argc, char** argv) {
             port = kValue;
         } else if (kOption == "--version") {
             version = kValue;
+        } else if (kOption == "--key") {
+            key = fs::absolute(kValue);
+        } else if (kOption == "--publisher") {
+            publisher = kValue;
         } else if (kOption == "--tools") {
             toolDirectory = kValue;
         } else if (kOption == "--cook" || kOption == "--build" || kOption == "--server" || kOption == "--client" ||
@@ -231,27 +245,41 @@ int main(int argc, char** argv) {
                  kWork / "cook.log")) {
         return 1;
     }
-    // A publisher key made for this export, its secret deleted once the
-    // Build is signed: the library pins its public half.
-    const auto kKeyMade = runTool(kTool("build"), {"key", "local", (kLibrary / "keys").string()}, kWork / "key.log");
-    const auto kKid = kKeyMade ? wordAfter(*kKeyMade, "key") : std::nullopt;
-    if (!kKid.has_value()) {
-        return 1;
+    // The publisher's key set pinned by the library: the one beside the
+    // secret given, or one made for this export.
+    fs::path secret;
+    if (key.has_value()) {
+        fs::copy_file(key->parent_path() / (publisher + ".keys"), kLibrary / "keys" / (publisher + ".keys"), error);
+        if (error) {
+            std::fprintf(stderr, "rawframe-export: no %s.keys beside the key\n", publisher.c_str());
+            return 1;
+        }
+        secret = *key;
+    } else {
+        const auto kKeyMade =
+            runTool(kTool("build"), {"key", publisher, (kLibrary / "keys").string()}, kWork / "key.log");
+        const auto kKid = kKeyMade ? wordAfter(*kKeyMade, "key") : std::nullopt;
+        if (!kKid.has_value()) {
+            return 1;
+        }
+        secret = kLibrary / "keys" / (*kKid + ".key");
     }
-    const fs::path kSecret = kLibrary / "keys" / (*kKid + ".key");
     const auto kBuilt = runTool(kTool("build"),
                                 {(kWork / "cooked").string(),
                                  (kWork / "build").string(),
-                                 "local/" + kName,
+                                 publisher + "/" + kName,
                                  version,
                                  std::string{kPlatform},
                                  std::string{kArchitecture},
                                  "client",
                                  std::string{"build."} + RAWFRAME_CONFIGURATION_NAME,
                                  "tool",
-                                 kSecret.string()},
+                                 secret.string()},
                                 kWork / "build.log");
-    fs::remove(kSecret, error);
+    // A secret made here goes once it has signed; one given stays where it is.
+    if (!key.has_value()) {
+        fs::remove(secret, error);
+    }
     if (!kBuilt.has_value()) {
         return 1;
     }

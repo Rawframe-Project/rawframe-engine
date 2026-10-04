@@ -9,8 +9,9 @@ rawframe_host(NAME export_tool OUTPUT rawframe-export
 if(RAWFRAME_BUILD_TESTS)
     add_test(NAME export_usage COMMAND rawframe_host_export_tool)
     set_tests_properties(export_usage PROPERTIES WILL_FAIL TRUE)
-    # Stalls exported and played from its folder with the real client in a
-    # window (D396): its font read from the folder's library, the player
+    # Stalls exported under a studio's key and played from its folder with
+    # the real client in a window (D396): the key set pinned and the secret
+    # left out, its font read from the folder's library, the player
     # admitted, frames shown, and both sides stopping cleanly.
     if(TARGET rawframe_host_client AND RAWFRAME_XVFB_RUN)
         add_test(NAME stalls_exported
@@ -23,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS)
         set_tests_properties(stalls_exported PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "export: fonts read 1, admitted 1, frames shown [1-9][0-9]+, client clean_stop, server clean_stop, play exit 0")
+                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]+, client clean_stop, server clean_stop, play exit 0")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(stalls_exported PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

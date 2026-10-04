@@ -2,7 +2,7 @@
 
 A performance-oriented, network-first engine for 2D and 3D games and real-time simulations. The core is C++23. Gameplay and tooling are written in [Kest](https://github.com/Rawframe-Project/kest), a deterministic, statically typed game language. Physics comes from [Maul2D](https://github.com/Rawframe-Project/maul2d) and [Maul3D](https://github.com/Rawframe-Project/maul3d).
 
-Its first milestone, a headless, networked, Kest-scripted World with a dedicated server, is done. Clients now play from a real window on the desktop and from a canvas in a browser, heard and felt through a gamepad, but nothing is drawn yet: the renderer waits for Maul RHI. There are no releases yet, and every surface is unstable.
+Its first milestone, a headless, networked, Kest-scripted World with a dedicated server, is done. Clients play from a window on the desktop and from a canvas in a browser, drawn through [Maul RHI](https://github.com/Rawframe-Project/maul-rhi) (Vulkan, and WebGPU in the browser) in 2D and 3D, heard, and felt through a gamepad. The reference games are under `games/`: Runners (2D) and Stalls (a small 3D tycoon), with the plaza as the 3D sample. A game can be exported into a folder that plays on its own. There are no releases yet, and every surface is unstable.
 
 ## Building
 
@@ -28,6 +28,10 @@ The full check needs, beyond GCC and Clang 20 with `clang-format-20`:
 - optionally `xvfb`, in whose display the desktop client plays a dedicated server (`client_plays_runners`), and Puppeteer with its browser under `/opt/webtest` (or `RAWFRAME_NODE_MODULES` and `PUPPETEER_CACHE_DIR`), with which a real browser plays from a canvas. Without them those tests are skipped.
 
 On Debian or Ubuntu, `apt-get install` installs each of them under the name given.
+
+## Exporting a game
+
+`rawframe-export <game directory> <output directory>` cooks the game, packs and signs it, installs it into the folder's own library, and copies the dedicated server, the client, and the launcher beside it. Running the folder's `rawframe-play` starts the game's server on this machine and then its client. Pass `--key <secret key> --publisher <name>` to sign with a publisher key made by `rawframe-build key`; `export.receipt` lists what was written.
 
 ## Layout
 
