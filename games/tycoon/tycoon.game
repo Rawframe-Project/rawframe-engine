@@ -1,10 +1,11 @@
 # Stalls (D388), the second reference game's beginning (ROADMAP Phase 5): a
 # simple 3D tycoon. Each player owns coins and a cursor over a lot of twelve
 # plots by twelve; a build puts a stall on the plot under the cursor when it
-# is free and the owner has its cost, and each stall earns its owner every
-# second (tycoon.kest). The server decides every build; the lot's ground and
-# the stalls are static bodies, so a build asks the physics which plots are
-# taken.
+# is free and the owner has its cost, or raises one of the owner's own a
+# level (D391), and each stall earns its owner every second for each level
+# (tycoon.kest). The server decides every build; the lot's ground and the
+# stalls are static bodies, so a build asks the physics which plots are
+# taken, and looks up the stall it finds.
 program tycoon.kest
 physics3d gravity 0 -10 0
 collision class stall b0eb8fc52cd9d4ac
@@ -19,7 +20,7 @@ component 2e380a54-69cf-4905-86f2-68f895d954fe tycoon.mark rawframe.model.Model
 component 991e8dec-fbd5-4790-954b-283eea27fe90 tycoon.view rawframe.model.Camera
 component 043c72ce-e948-490a-80d6-e3a22fbdb695 tycoon.purse rawframe.ui.Node
 system tycoon.join simulation join write tycoon.owner
-system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities after tycoon.join after rawframe.physics3d.step
+system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step
 system tycoon.earn simulation earn write tycoon.owner after tycoon.tend
 # The lot's ground, its top at nought.
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity

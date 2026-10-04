@@ -1,7 +1,7 @@
-# Stalls' builds when owners crowd one plot (D388): three owners, there from
-# the start, point at the same plot and build in the same tick, before any
-# step has seen a stall there. One stall stands, never three; and an owner
-# short of the cost builds nothing (the fourth starts with no coins).
+# Stalls' levels (D391), driven by a test (world_kest's stalls_test): two
+# owners, there from the start, whose hands the test moves. The first builds
+# on the lot's corner plot and raises its stall; the second, pressing on the
+# first's stall, raises nothing.
 program tycoon.kest
 physics3d gravity 0 -10 0
 collision class stall b0eb8fc52cd9d4ac
@@ -13,5 +13,5 @@ system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step
 system tycoon.earn simulation earn write tycoon.owner after tycoon.tend
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity
-spawn 3 tycoon.hand pointed=1 pointX=1 pointZ=1 build=1 tycoon.owner rawframe.physics3d.pose
-spawn 1 tycoon.hand pointed=1 pointX=9 pointZ=9 build=1 tycoon.owner joined=1 rawframe.physics3d.pose
+spawn 1 tycoon.hand pointed=1 pointX=-22 pointZ=-22 build=1 tycoon.owner rawframe.physics3d.pose
+spawn 1 tycoon.hand pointed=1 pointX=22 pointZ=22 tycoon.owner rawframe.physics3d.pose
