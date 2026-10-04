@@ -5,7 +5,7 @@
 # Maul Unicode and Maul Window bring their own CMake, which the engine
 # configures with its options (third_party/maul_window.cmake).
 #
-#   tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window|maul-rhi|maul-ui|maul-nav> <checkout> <revision>
+#   tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window|maul-rhi|maul-ui|maul-nav|maul-audio> <checkout> <revision>
 #
 # Files are extracted with the time they are written, not their commit's,
 # so a build that already ran builds everything from them again.
@@ -20,8 +20,9 @@ maul-window) paths=(include src cmake protocols tools/gen_web_glue.py CMakeLists
 maul-rhi) paths=(include src khronos cmake tools/mrhi_container.py tools/gen_web_glue.py docs/contract/mrhi.json CMakeLists.txt LICENSE) ;;
 maul-ui) paths=(include src cmake CMakeLists.txt LICENSE THIRD_PARTY.md) ;;
 maul-nav) paths=(include src cmake CMakeLists.txt LICENSE) ;;
+maul-audio) paths=(include src cmake CMakeLists.txt LICENSE) ;;
 *)
-    echo "update_maul.sh: the library is maul2d, maul3d, maul-unicode, maul-window, maul-rhi, maul-ui, or maul-nav" >&2
+    echo "update_maul.sh: the library is maul2d, maul3d, maul-unicode, maul-window, maul-rhi, maul-ui, maul-nav, or maul-audio" >&2
     exit 2
     ;;
 esac
