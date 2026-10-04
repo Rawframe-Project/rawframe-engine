@@ -6,7 +6,9 @@
 // the folder's library, which pins the publisher's key set, and named by a
 // Composition), copies the dedicated server, the client, and the launcher
 // beside it, and writes their configurations: the launcher starts the
-// server on this machine's loopback at the port given, and the client,
+// server on this machine's loopback at the port given (by default one of
+// 20000 to 29999 taken from the game's resource identity, so two exported
+// games can run at once, D402), and the client,
 // pinned to the certificate the server makes as it starts, plays it.
 //
 //   rawframe-export <game directory> <output directory> [--game <file>]
@@ -192,6 +194,19 @@ bool portLike(const std::string& text) {
     return value <= 65535U;
 }
 
+/// The port a game's export uses unless one is given: 20000 to 29999, from
+/// FNV-1a over the game's resource identity, so two exported games running
+/// at once do not reach for the same one (D402). The window is under the
+/// ports systems hand out for outgoing connections (from 32768 on Linux,
+/// 49152 on Windows and macOS).
+std::string portOf(const std::string& gameResource) {
+    std::uint32_t hash = 2166136261U;
+    for (const char kByte : gameResource) {
+        hash = (hash ^ static_cast<std::uint8_t>(kByte)) * 16777619U;
+    }
+    return std::to_string(20000U + (hash % 10000U));
+}
+
 /// What every export writes its configurations from.
 struct Exported {
     fs::path output;
@@ -355,7 +370,7 @@ int main(int argc, char** argv) {
     const fs::path kSelf = fs::canonical(process::ownExecutable(), error);
     const std::string kSuffix = kSelf.extension().string();
     std::string gameFile = kGame.filename().string() + ".game";
-    std::string port = "47217";
+    std::optional<std::string> port;
     std::string version = "0.1.0";
     std::optional<fs::path> key;
     std::string publisher = "local";
@@ -387,7 +402,7 @@ int main(int argc, char** argv) {
             return usage();
         }
     }
-    if (argc % 2 == 0 || !portLike(port)) {
+    if (argc % 2 == 0 || (port.has_value() && !portLike(*port))) {
         return usage();
     }
     const auto kTool = [&](const char* name) {
@@ -412,6 +427,9 @@ int main(int argc, char** argv) {
         return 1;
     }
     const std::string& kGameResource = *kResource;
+    if (!port.has_value()) {
+        port = portOf(kGameResource);
+    }
 
     // The working files under the output, gone at the end.
     const fs::path kWork = kOutput / ".export";
@@ -484,7 +502,7 @@ int main(int argc, char** argv) {
 
     // The programs, and what each reads: every path under the folder.
     const Exported kExported{
-        .output = kOutput, .record = kRecord, .gameResource = kGameResource, .port = port, .suffix = kSuffix};
+        .output = kOutput, .record = kRecord, .gameResource = kGameResource, .port = *port, .suffix = kSuffix};
     std::vector<std::string> written;
     const bool kWritten = web ? writeWeb(kExported,
                                          {.client = kWebFile("web-client", "rawframe-web-client.wasm"),
@@ -515,7 +533,7 @@ int main(int argc, char** argv) {
     receipt.add("formatVersion", document::Value::integer(1));
     receipt.add("game", document::Value::string(kGameResource));
     receipt.add("kind", document::Value::string("export.receipt"));
-    receipt.add("port", document::Value::integer(std::stoll(port)));
+    receipt.add("port", document::Value::integer(std::stoll(*port)));
     receipt.add("target", document::Value::string(web ? "web" : "native"));
     const auto kReceipt = document::writeCanonicalRecord(receipt);
     if (!kReceipt.has_value() || !writeText(kOutput / "export.receipt", *kReceipt)) {
