@@ -13,6 +13,7 @@ module tycoon
 
 import controls
 import rawframe.model
+import rawframe.navigation
 import rawframe.physics3d
 import rawframe.random
 import rawframe.replication
@@ -41,10 +42,12 @@ const PRICE: i64 = 4
 const TOP: u32 = 3
 
 // Customers (D392): one arrives every ARRIVAL ticks when some stall stands,
-// heading for a stall drawn among them; it walks STEP meters a tick, a
-// stall serves it once within REACH meters of the stall's middle, and it
-// leaves after PATIENCE ticks unserved.
+// heading for the front of a stall drawn among them, FRONT meters south of
+// its middle, past its side and a customer's girth (D400); it walks STEP
+// meters a tick, a stall serves it once within REACH meters of the stall's
+// middle, and it leaves after PATIENCE ticks unserved.
 const ARRIVAL: u32 = 40
+const FRONT: f64 = 1.95
 const STEP: f64 = 0.04
 const REACH: f32 = 1.8
 const PATIENCE: u32 = 1800
@@ -291,7 +294,7 @@ fn open(count: i32, gates: [Gate]) {
             let stalls = Stall.count()
             if stalls > 0 {
                 let stall = Stall.get(Stall.entity(i32(random.below(0, u32(stalls)))))
-                arrive(random.unit(0) * HALF * 2.0 - HALF, middleOf(stall.plotX), middleOf(stall.plotZ))
+                arrive(random.unit(0) * HALF * 2.0 - HALF, middleOf(stall.plotX), middleOf(stall.plotZ) + FRONT)
             }
         }
         i = i + 1
@@ -309,20 +312,28 @@ fn arrive(fromX: f64, x: f64, z: f64) {
     Velocity3D.insert(customer, physics3d.Velocity3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
 }
 
-// Customers walk straight for their stall, the physics moving them by
-// their velocity (a written pose would remake the body where it is put);
-// one that has walked PATIENCE ticks unserved leaves.
+// Customers walk for their stall the way the navmesh gives round the
+// other stalls (D400), each tick toward the way's next corner, the physics
+// moving them by their velocity (a written pose would remake the body
+// where it is put); with no way known (before the first bake), straight for
+// it. One that has walked PATIENCE ticks unserved leaves.
 fn walk(count: i32, customers: [Customer], poses: [physics3d.Pose3D], velocities: [physics3d.Velocity3D],
         entities: [world.Entity]) {
     let i = 0
     while i < count {
         let c = customers[i]
+        let way = navigation.next(poses[i].x, poses[i].y, poses[i].z, c.targetX, 0.0, c.targetZ)
         let dx = c.targetX - poses[i].x
         let dz = c.targetZ - poses[i].z
+        if way.remaining > f32(0.0) {
+            dx = way.x - poses[i].x
+            dz = way.z - poses[i].z
+        }
         let far = math.sqrt(dx * dx + dz * dz)
         velocities[i].x = 0.0
         velocities[i].z = 0.0
-        if far > STEP {
+        // Past a corner within a step when the way goes on beyond it.
+        if far > STEP || (far > 0.000001 && f64(way.remaining) > far + STEP) {
             velocities[i].x = f32(dx / far * STEP * f64(SECOND))
             velocities[i].z = f32(dz / far * STEP * f64(SECOND))
         }
@@ -334,9 +345,9 @@ fn walk(count: i32, customers: [Customer], poses: [physics3d.Pose3D], velocities
     }
 }
 
-// Each stall serves every customer within REACH of its middle: the
-// customer pays for each of the stall's levels and is gone. Stalls stand
-// four meters apart, so no customer is within reach of two.
+// Each stall serves every customer whose body is within REACH of its
+// middle: the customer pays for each of the stall's levels and is gone. A
+// customer stops beside its own stall, where the navmesh ends round it.
 fn serve(count: i32, stalls: [Stall], tills: [Till], poses: [physics3d.Pose3D]) {
     let i = 0
     while i < count {

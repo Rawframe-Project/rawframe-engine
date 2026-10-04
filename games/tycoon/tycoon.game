@@ -9,6 +9,10 @@
 # (D392); the first owner to a thousand coins wins the round (D394).
 program tycoon.kest
 physics3d gravity 0 -10 0
+# Customers find their way round the stalls (D400): the server bakes a
+# navmesh for them from the static bodies, the lot and the stalls, and bakes
+# again where a stall is built or goes.
+navigation radius 0.35 height 1.8 step 0.3 slope 30 cell 0.2
 collision class stall b0eb8fc52cd9d4ac
 collision class customer 1a6375d11861b18d
 component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
