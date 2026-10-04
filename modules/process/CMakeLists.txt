@@ -9,8 +9,10 @@ rawframe_module(NAME process
 
 rawframe_module_tests(NAME process SOURCES tests/child_test.cpp)
 if(TARGET rawframe_process_tests)
-    # The program the tests start.
+    # The program the tests start, under the engine's language policy (on
+    # Windows, clang-cl's default is older than C++17).
     add_executable(rawframe_process_child tests/child.cpp)
+    target_link_libraries(rawframe_process_child PRIVATE rawframe_policy)
     target_compile_definitions(rawframe_process_tests PRIVATE
         RAWFRAME_PROCESS_CHILD="$<TARGET_FILE:rawframe_process_child>")
     add_dependencies(rawframe_process_tests rawframe_process_child)
