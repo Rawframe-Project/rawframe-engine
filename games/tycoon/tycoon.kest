@@ -39,12 +39,10 @@ const PRICE: i64 = 4
 const TOP: u32 = 3
 
 // Customers (D392): one arrives every ARRIVAL ticks when some stall stands,
-// heading for a stall drawn among them (all within LOT meters of the
-// lot's middle); it walks STEP meters a tick, a stall serves it once within
-// REACH meters of the stall's middle, and it leaves after PATIENCE ticks
-// unserved.
+// heading for a stall drawn among them; it walks STEP meters a tick, a
+// stall serves it once within REACH meters of the stall's middle, and it
+// leaves after PATIENCE ticks unserved.
 const ARRIVAL: u32 = 40
-const LOT: f32 = 36.0
 const STEP: f64 = 0.04
 const REACH: f32 = 1.8
 const PATIENCE: u32 = 1800
@@ -107,6 +105,8 @@ extern fn Till.get(entity: world.Entity) -> Till
 extern fn Customer.insert(entity: world.Entity, value: Customer)
 extern fn Stall.get(entity: world.Entity) -> Stall
 extern fn Stall.has(entity: world.Entity) -> bool
+extern fn Stall.count() -> i32
+extern fn Stall.entity(index: i32) -> world.Entity
 extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
 extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
 extern fn Velocity3D.insert(entity: world.Entity, value: physics3d.Velocity3D)
@@ -216,8 +216,8 @@ fn tend(count: i32, hands: [controls.Hand], owners: [Owner], poses: [physics3d.P
 }
 
 // Each second, every owner's stalls earn it their income, each level once,
-// and it takes what its stalls' tills hold past what it took before: each
-// plot is asked for the stall on it, which is looked up (D391).
+// and it takes what its stalls' tills hold past what it took before: every
+// stall is looked up (D391, D393) and its own counted.
 fn earn(count: i32, owners: [Owner], entities: [world.Entity]) {
     let i = 0
     while i < count {
@@ -226,17 +226,14 @@ fn earn(count: i32, owners: [Owner], entities: [world.Entity]) {
             owners[i].clock = u32(0)
             owners[i].coins = owners[i].coins + i64(owners[i].levels) * INCOME
             let takings = i64(0)
-            let plot = 0
-            while plot < PLOTS * PLOTS {
-                let x = plot % PLOTS
-                let z = plot / PLOTS
-                let standing = physics3d.overlapSphere(STALLS, middleOf(x), 1.0, middleOf(z), 0.5, u32(0))
-                if standing.count > u32(0) && Stall.has(standing.entity) {
-                    if Stall.get(standing.entity).owner == entities[i] {
-                        takings = takings + Till.get(standing.entity).takings
-                    }
+            let stalls = Stall.count()
+            let k = 0
+            while k < stalls {
+                let stall = Stall.entity(k)
+                if Stall.get(stall).owner == entities[i] {
+                    takings = takings + Till.get(stall).takings
                 }
-                plot = plot + 1
+                k = k + 1
             }
             owners[i].coins = owners[i].coins + takings - owners[i].collected
             owners[i].collected = takings
@@ -246,22 +243,18 @@ fn earn(count: i32, owners: [Owner], entities: [world.Entity]) {
 }
 
 // Every ARRIVAL ticks a customer comes through the south edge, at a place
-// drawn along it, heading for a stall drawn among all that stand (one
-// sphere over the whole lot finds them; the drawn one's plot is looked
-// up); while none stands, nobody comes.
+// drawn along it, heading for a stall drawn among all that stand (D393);
+// while none stands, nobody comes.
 fn open(count: i32, gates: [Gate]) {
     let i = 0
     while i < count {
         gates[i].clock = gates[i].clock + u32(1)
         if gates[i].clock >= ARRIVAL {
             gates[i].clock = u32(0)
-            let all = physics3d.overlapSphere(STALLS, 0.0, 1.0, 0.0, LOT, u32(0))
-            if all.count > u32(0) {
-                let drawn = physics3d.overlapSphere(STALLS, 0.0, 1.0, 0.0, LOT, random.below(0, all.count))
-                if Stall.has(drawn.entity) {
-                    let stall = Stall.get(drawn.entity)
-                    arrive(random.unit(0) * HALF * 2.0 - HALF, middleOf(stall.plotX), middleOf(stall.plotZ))
-                }
+            let stalls = Stall.count()
+            if stalls > 0 {
+                let stall = Stall.get(Stall.entity(i32(random.below(0, u32(stalls)))))
+                arrive(random.unit(0) * HALF * 2.0 - HALF, middleOf(stall.plotX), middleOf(stall.plotZ))
             }
         }
         i = i + 1
