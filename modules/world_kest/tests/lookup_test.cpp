@@ -2,7 +2,8 @@
 // (D391): a declared lookup reads another entity's value and is ordered as
 // a read; an entity without the component is answered by `has`; a system
 // that never declared the lookup, a `get` of what an entity lacks, and a
-// lookup of a component the system writes are refused.
+// lookup of a component the system writes are refused. A declared lookup
+// also counts and names the component's holders across archetypes (D393).
 
 #include "rawframe/kest_library/library.h"
 #include "rawframe/test/test.h"
@@ -38,6 +39,16 @@ struct Target {
     world::EntityHandle entity;
 };
 
+/// What a census counted of the positions.
+struct Tally {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("e05a9c3b-7d41-4f28-a6b9-13c8d2f0e574");
+    static constexpr std::string_view kComponentName = "test.tally";
+    std::int32_t holders = 0;
+    float sum = 0;
+    std::uint32_t past = 0;
+};
+
 /// What a follower saw of its target.
 struct Seen {
     static constexpr schema::ComponentTypeId kComponentTypeId =
@@ -65,8 +76,36 @@ struct Seen {
     found: u32
 }
 
+struct Tally {
+    holders: i32
+    sum: f32
+    past: u32
+}
+
 extern fn Position.get(entity: world.Entity) -> Position
 extern fn Position.has(entity: world.Entity) -> bool
+extern fn Position.count() -> i32
+extern fn Position.entity(index: i32) -> world.Entity
+
+fn census(count: i32, tallies: [Tally]) {
+    let i = 0
+    while i < count {
+        let holders = Position.count()
+        let sum: f32 = 0.0
+        let k = 0
+        while k < holders {
+            sum = sum + Position.get(Position.entity(k)).x
+            k = k + 1
+        }
+        tallies[i].holders = holders
+        tallies[i].sum = sum
+        tallies[i].past = u32(0)
+        if Position.has(Position.entity(holders)) || Position.has(Position.entity(-1)) {
+            tallies[i].past = u32(1)
+        }
+        i = i + 1
+    }
+}
 
 fn follow(count: i32, targets: [Target], seens: [Seen]) {
     let i = 0
@@ -112,6 +151,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(schema::describeComponent<Position>());
     builder.add(schema::describeComponent<Target>());
     builder.add(schema::describeComponent<Seen>());
+    builder.add(schema::describeComponent<Tally>());
     return *builder.freeze();
 }
 
@@ -236,4 +276,48 @@ RAWFRAME_TEST(LookupsOutsideTheDeclarationAreRefused) {
         KestSystemDeclaration{.identity = "look.shift", .entry = "shift", .columns = kMover, .lookups = kPositions}};
     declared.clear();
     RAWFRAME_EXPECT(!scheduled(kWritten, *kRegistry, kest, declared).has_value());
+}
+
+RAWFRAME_TEST(ALookupCountsAndNamesTheComponentsHolders) {
+    const auto kRegistry = registry();
+    world::World world{kRegistry};
+    const auto kPosition = *kRegistry->key<Position>();
+    const auto kSeen = *kRegistry->key<Seen>();
+    const auto kTally = *kRegistry->key<Tally>();
+    // Three positions in two archetypes, and the census apart from them.
+    for (const float kX : {1.0F, 2.0F, 4.0F}) {
+        const world::EntityHandle kEntity = *world.create();
+        RAWFRAME_EXPECT(world.insert(kEntity, kPosition, Position{kX, 0}).has_value());
+        if (kX == 2.0F) {
+            RAWFRAME_EXPECT(world.insert(kEntity, kSeen, Seen{}).has_value());
+        }
+    }
+    const world::EntityHandle kCensus = *world.create();
+    RAWFRAME_EXPECT(world.insert(kCensus, kTally, Tally{}).has_value());
+    constexpr std::array<KestColumn, 1> kTallies = {
+        KestColumn{.component = Tally::kComponentTypeId, .element = "Tally", .access = world::Access::Write}};
+    const std::array<KestSystemDeclaration, 1> kDeclared = {KestSystemDeclaration{
+        .identity = "look.census", .entry = "census", .columns = kTallies, .lookups = kPositions}};
+    std::unique_ptr<KestSystems> kest;
+    std::vector<world::SystemDeclaration> declared;
+    auto ticks = scheduled(kDeclared, *kRegistry, kest, declared);
+    RAWFRAME_EXPECT(ticks.has_value());
+    world::TickIndex tick;
+    if (ticks.has_value()) {
+        const auto kReport = ticks->runTick(world, tick, *world::TickRate::of(60));
+        RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty());
+        // Every holder once, and past either end the null entity.
+        const Tally& tally = *world.get(kCensus, kTally);
+        RAWFRAME_EXPECT(tally.holders == 3 && tally.sum == 7 && tally.past == 0);
+    }
+    // Undeclared, the count is refused.
+    const std::array<KestSystemDeclaration, 1> kUndeclared = {
+        KestSystemDeclaration{.identity = "look.census", .entry = "census", .columns = kTallies}};
+    declared.clear();
+    ticks = scheduled(kUndeclared, *kRegistry, kest, declared);
+    RAWFRAME_EXPECT(ticks.has_value());
+    if (ticks.has_value()) {
+        const auto kReport = ticks->runTick(world, tick, *world::TickRate::of(60));
+        RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.size() == 1);
+    }
 }

@@ -73,8 +73,10 @@ struct KestSystemDeclaration {
     std::span<const std::string_view> randomStreams;
     /// Components the system reads on any entity through
     /// `<kestType>.get(entity: Entity) -> <kestType>` and
-    /// `<kestType>.has(entity: Entity) -> bool` (D391), ordered as reads;
-    /// never one it writes. Another run's doors refuse them.
+    /// `<kestType>.has(entity: Entity) -> bool` (D391), and whose holders it
+    /// counts and names in World order through `<kestType>.count() -> i32`
+    /// and `<kestType>.entity(index: i32) -> Entity` (D393), ordered as
+    /// reads; never one it writes. Another run's doors refuse them.
     std::span<const schema::ComponentTypeId> lookups;
 };
 

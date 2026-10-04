@@ -60,6 +60,8 @@ struct KestSystems::Doorway {
         std::string removeName;
         std::string getName;
         std::string hasName;
+        std::string countName;
+        std::string entityName;
         std::array<kest::Parameter, 2> insertTakes{kest::Parameter{kest::Slot::Value, kEntityType},
                                                    kest::Parameter{kest::Slot::Value, ""}};
         std::array<kest::Parameter, 1> getGives{kest::Parameter{kest::Slot::Value, ""}};
@@ -67,6 +69,9 @@ struct KestSystems::Doorway {
         const schema::ComponentDescriptor* descriptor = nullptr;
         std::vector<std::byte> scratch;
         std::vector<std::size_t> entityFields;
+        /// Every entity holding it, for a lookup's count and entity doors
+        /// (D393); made with the descriptor.
+        std::optional<world::ColumnQuery> holders;
         /// Offered though the game does not list it: a World without it
         /// refuses the door when called, not the systems when declared.
         bool optional = false;
@@ -260,6 +265,7 @@ constexpr std::array<kest::Parameter, 1> kStream = {kest::Slot::I32};
 constexpr std::array<kest::Parameter, 1> kU32 = {kest::Slot::U32};
 constexpr std::array<kest::Parameter, 1> kF64 = {kest::Slot::F64};
 constexpr std::array<kest::Parameter, 1> kBool = {kest::Slot::Bool};
+constexpr std::array<kest::Parameter, 1> kI32 = {kest::Slot::I32};
 
 void insertDoor(kest::DoorCall& call, void* context) noexcept {
     Doorway::Component& component = *static_cast<Doorway::Component*>(context);
@@ -311,11 +317,10 @@ void removeDoor(kest::DoorCall& call, void* context) noexcept {
     }
 }
 
-/// Where `component` of the entity a call names lies in the World, null
-/// when the entity has none (gone, or created by this run and so without
-/// values yet); false when the call failed: no system runs, or the running
-/// one never declared the lookup.
-bool lookUp(kest::DoorCall& call, const Doorway::Component& component, const void*& value) noexcept {
+/// Whether the running system may look `component` up; false, with the
+/// call failed, while no system runs or when the running one never
+/// declared the lookup.
+bool mayLookUp(kest::DoorCall& call, const Doorway::Component& component) noexcept {
     const Doorway& doorway = *component.doorway;
     if (doorway.context == nullptr) {
         call.fail("components are looked up only while a system runs");
@@ -323,6 +328,17 @@ bool lookUp(kest::DoorCall& call, const Doorway::Component& component, const voi
     }
     if (component.descriptor == nullptr || !std::ranges::contains(doorway.lookups, component.runtime)) {
         call.fail("the running system does not look this component up: its line has no `lookup` of it");
+        return false;
+    }
+    return true;
+}
+
+/// Where `component` of the entity a call names lies in the World, null
+/// when the entity has none (gone, or created by this run and so without
+/// values yet); false when the call failed (`mayLookUp`).
+bool lookUp(kest::DoorCall& call, const Doorway::Component& component, const void*& value) noexcept {
+    const Doorway& doorway = *component.doorway;
+    if (!mayLookUp(call, component)) {
         return false;
     }
     world::EntityHandle entity;
@@ -354,6 +370,41 @@ void hasDoor(kest::DoorCall& call, void* context) noexcept {
     const void* value = nullptr;
     if (lookUp(call, component, value)) {
         call.answerBoolean(value != nullptr);
+    }
+}
+
+// The entities holding a looked-up component, in World order (D393): no
+// structure changes during a run, so a count and the places below it name
+// the same entities until the run ends.
+void countDoor(kest::DoorCall& call, void* context) noexcept {
+    auto& component = *static_cast<Doorway::Component*>(context);
+    if (!mayLookUp(call, component)) {
+        return;
+    }
+    const std::size_t kCount = component.holders->count(component.doorway->context->world);
+    call.answerInteger(
+        static_cast<std::int64_t>(std::min<std::size_t>(kCount, std::numeric_limits<std::int32_t>::max())));
+}
+
+void entityDoor(kest::DoorCall& call, void* context) noexcept {
+    auto& component = *static_cast<Doorway::Component*>(context);
+    if (!mayLookUp(call, component)) {
+        return;
+    }
+    // Past the last, or below the first, the null entity.
+    world::EntityHandle found;
+    const std::int64_t kIndex = call.integer(0);
+    if (kIndex >= 0) {
+        auto left = static_cast<std::uint64_t>(kIndex);
+        component.holders->forEachChunk(component.doorway->context->world, [&](const world::ColumnChunk& chunk) {
+            if (found.isNull() && left < chunk.entities.size()) {
+                found = chunk.entities[left];
+            }
+            left -= std::min<std::uint64_t>(left, chunk.entities.size());
+        });
+    }
+    if (!call.answerValue(std::as_bytes(std::span{&found, 1}))) {
+        call.fail("an entity did not cross as an entity");
     }
 }
 
@@ -708,6 +759,8 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         added.removeName = added.kestType + ".remove";
         added.getName = added.kestType + ".get";
         added.hasName = added.kestType + ".has";
+        added.countName = added.kestType + ".count";
+        added.entityName = added.kestType + ".entity";
     }
     // rawframe.world asks for the persistent identity's insert whether or
     // not the game lists it; any program that lays it out may insert it.
@@ -724,6 +777,8 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         added.removeName = "Persistent.remove";
         added.getName = "Persistent.get";
         added.hasName = "Persistent.has";
+        added.countName = "Persistent.count";
+        added.entityName = "Persistent.entity";
         added.optional = true;
     }
     for (const KestPrefab& prefab : settings.prefabs) {
@@ -773,6 +828,17 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                                           .context = &component,
                                           .takes = kEntityParameter,
                                           .gives = kBool,
+                                          .safeForUntrusted = true}));
+        RAWFRAME_TRY(doors.add(kest::Door{.name = component.countName,
+                                          .function = &countDoor,
+                                          .context = &component,
+                                          .gives = kI32,
+                                          .safeForUntrusted = true}));
+        RAWFRAME_TRY(doors.add(kest::Door{.name = component.entityName,
+                                          .function = &entityDoor,
+                                          .context = &component,
+                                          .takes = kI32,
+                                          .gives = kEntityParameter,
                                           .safeForUntrusted = true}));
     }
 
@@ -843,10 +909,13 @@ result::Status KestSystems::declareSystems(const schema::SchemaRegistry& registr
     for (Doorway::Component& component : doorway_->components) {
         if (component.optional && !registry.find(component.id).has_value()) {
             component.descriptor = nullptr;
+            component.holders.reset();
             continue;
         }
         RAWFRAME_TRY_ASSIGN(component.runtime, registry.find(component.id));
         component.descriptor = &registry.descriptor(component.runtime);
+        const std::array<world::ColumnTerm, 1> kHeld = {world::ColumnTerm{component.runtime, world::Access::With}};
+        RAWFRAME_TRY_ASSIGN(component.holders, world::ColumnQuery::resolve(kHeld, registry));
         RAWFRAME_TRY(kShaped(*component.descriptor, component.kestType));
         component.scratch.resize(component.descriptor->size);
     }
