@@ -5,18 +5,23 @@ module tycoon
 // meters each, centered on the origin. Building puts a stall on the plot
 // under the cursor when no stall stands there and the owner has its cost;
 // building on one of its own stalls raises its level (D391), up to TOP;
-// each stall earns its owner a little every second for each level. The
-// server decides every build.
+// each stall earns its owner a little every second for each level, and
+// customers come through the lot's south edge to buy at a stall, paying
+// more at a higher one (D392). The server decides every build and sale.
 
 import controls
 import rawframe.model
 import rawframe.physics3d
+import rawframe.random
 import rawframe.replication
 import rawframe.ui
 import rawframe.world
+import std.math
 
-// The stalls' collision class (tycoon.game), the one a build asks about.
+// The stalls' collision class (tycoon.game), the one a build asks about,
+// and the customers', the one a stall serves.
 const STALLS: u64 = 0xb0eb8fc52cd9d4ac
+const CUSTOMERS: u64 = 0x1a6375d11861b18d
 
 // The lot: PLOTS plots a side, PLOT meters each, HALF meters from the
 // origin to each edge.
@@ -25,12 +30,24 @@ const PLOT: f64 = 4.0
 const HALF: f64 = 24.0
 
 // Coins an owner starts with, a stall costs (and a level costs, times the
-// level it has), and a stall earns a second for each level; the highest
-// level.
+// level it has), a stall earns a second for each level, and a customer pays
+// for each level of the stall it buys at; the highest level.
 const START: i64 = 100
 const COST: i64 = 50
-const INCOME: i64 = 5
+const INCOME: i64 = 2
+const PRICE: i64 = 4
 const TOP: u32 = 3
+
+// Customers (D392): one arrives every ARRIVAL ticks when some stall stands,
+// heading for a stall drawn among them (all within LOT meters of the
+// lot's middle); it walks STEP meters a tick, a stall serves it once within
+// REACH meters of the stall's middle, and it leaves after PATIENCE ticks
+// unserved.
+const ARRIVAL: u32 = 40
+const LOT: f32 = 36.0
+const STEP: f64 = 0.04
+const REACH: f32 = 1.8
+const PATIENCE: u32 = 1800
 const SECOND: u32 = 60
 
 // The cursor's speed at a full tilt, meters a tick: twelve a second.
@@ -43,8 +60,8 @@ const HUD_COINS: u64 = 0xf1182d0420cc09a0
 
 // An owner: whether it has joined, its cursor on the ground, its coins, its
 // stalls and their levels together, whether the build it asked for is
-// still held (one build each time it is pressed), and the ticks toward its
-// next income.
+// still held (one build each time it is pressed), the ticks toward its
+// next income, and what it has taken from its stalls' tills so far.
 struct Owner {
     joined: u32
     cursorX: f64
@@ -54,6 +71,7 @@ struct Owner {
     levels: u32
     held: u32
     clock: u32
+    collected: i64
 }
 
 // A stall, by its owner and its plot, and its level, one to TOP.
@@ -64,7 +82,29 @@ struct Stall {
     level: u32
 }
 
+// What a stall's customers have paid, ever. Only the stall's own system
+// adds to it; its owner reads it and keeps what it has taken, so no entity
+// writes another's value.
+struct Till {
+    takings: i64
+}
+
+// Where customers come from: the ticks toward the next.
+struct Gate {
+    clock: u32
+}
+
+// A customer, by the plot middle it heads for and the ticks it has walked.
+struct Customer {
+    targetX: f64
+    targetZ: f64
+    ticks: u32
+}
+
 extern fn Stall.insert(entity: world.Entity, value: Stall)
+extern fn Till.insert(entity: world.Entity, value: Till)
+extern fn Till.get(entity: world.Entity) -> Till
+extern fn Customer.insert(entity: world.Entity, value: Customer)
 extern fn Stall.get(entity: world.Entity) -> Stall
 extern fn Stall.has(entity: world.Entity) -> bool
 extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
@@ -77,7 +117,7 @@ fn join(count: i32, owners: [Owner]) {
     let i = 0
     while i < count {
         if owners[i].joined == u32(0) {
-            owners[i] = Owner(u32(1), 0.0, 0.0, START, u32(0), u32(0), u32(0), u32(0))
+            owners[i] = Owner(u32(1), 0.0, 0.0, START, u32(0), u32(0), u32(0), u32(0), i64(0))
         }
         i = i + 1
     }
@@ -113,6 +153,7 @@ fn middleOf(plot: i32) -> f64 {
 fn raise(owner: world.Entity, x: i32, z: i32) {
     let stall = world.create()
     Stall.insert(stall, Stall(owner, x, z, u32(1)))
+    Till.insert(stall, Till(i64(0)))
     Body3D.insert(stall, physics3d.Body3D(physics3d.STATIC, physics3d.BOX, true, false, false, STALLS, 1.5, 1.0,
                                           1.5, 0.0, 0.0, 0.0, 0.0, 0.0))
     Pose3D.insert(stall, physics3d.Pose3D(middleOf(x), 1.0, middleOf(z), 0.0, 0.0, 0.0, 1.0))
@@ -174,14 +215,108 @@ fn tend(count: i32, hands: [controls.Hand], owners: [Owner], poses: [physics3d.P
     }
 }
 
-// Each second, every owner's stalls earn it their income, each level once.
-fn earn(count: i32, owners: [Owner]) {
+// Each second, every owner's stalls earn it their income, each level once,
+// and it takes what its stalls' tills hold past what it took before: each
+// plot is asked for the stall on it, which is looked up (D391).
+fn earn(count: i32, owners: [Owner], entities: [world.Entity]) {
     let i = 0
     while i < count {
         owners[i].clock = owners[i].clock + u32(1)
         if owners[i].clock >= SECOND {
             owners[i].clock = u32(0)
             owners[i].coins = owners[i].coins + i64(owners[i].levels) * INCOME
+            let takings = i64(0)
+            let plot = 0
+            while plot < PLOTS * PLOTS {
+                let x = plot % PLOTS
+                let z = plot / PLOTS
+                let standing = physics3d.overlapSphere(STALLS, middleOf(x), 1.0, middleOf(z), 0.5, u32(0))
+                if standing.count > u32(0) && Stall.has(standing.entity) {
+                    if Stall.get(standing.entity).owner == entities[i] {
+                        takings = takings + Till.get(standing.entity).takings
+                    }
+                }
+                plot = plot + 1
+            }
+            owners[i].coins = owners[i].coins + takings - owners[i].collected
+            owners[i].collected = takings
+        }
+        i = i + 1
+    }
+}
+
+// Every ARRIVAL ticks a customer comes through the south edge, at a place
+// drawn along it, heading for a stall drawn among all that stand (one
+// sphere over the whole lot finds them; the drawn one's plot is looked
+// up); while none stands, nobody comes.
+fn open(count: i32, gates: [Gate]) {
+    let i = 0
+    while i < count {
+        gates[i].clock = gates[i].clock + u32(1)
+        if gates[i].clock >= ARRIVAL {
+            gates[i].clock = u32(0)
+            let all = physics3d.overlapSphere(STALLS, 0.0, 1.0, 0.0, LOT, u32(0))
+            if all.count > u32(0) {
+                let drawn = physics3d.overlapSphere(STALLS, 0.0, 1.0, 0.0, LOT, random.below(0, all.count))
+                if Stall.has(drawn.entity) {
+                    let stall = Stall.get(drawn.entity)
+                    arrive(random.unit(0) * HALF * 2.0 - HALF, middleOf(stall.plotX), middleOf(stall.plotZ))
+                }
+            }
+        }
+        i = i + 1
+    }
+}
+
+// A customer at `fromX` on the south edge heading for (x, z): a small
+// kinematic sensor of the customers' class, pushing nothing.
+fn arrive(fromX: f64, x: f64, z: f64) {
+    let customer = world.create()
+    Customer.insert(customer, Customer(x, z, u32(0)))
+    Body3D.insert(customer, physics3d.Body3D(physics3d.KINEMATIC, physics3d.SPHERE, true, false, true, CUSTOMERS,
+                                             0.35, 0.35, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0))
+    Pose3D.insert(customer, physics3d.Pose3D(fromX, 0.35, HALF, 0.0, 0.0, 0.0, 1.0))
+    Velocity3D.insert(customer, physics3d.Velocity3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+}
+
+// Customers walk straight for their stall, the physics moving them by
+// their velocity (a written pose would remake the body where it is put);
+// one that has walked PATIENCE ticks unserved leaves.
+fn walk(count: i32, customers: [Customer], poses: [physics3d.Pose3D], velocities: [physics3d.Velocity3D],
+        entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let c = customers[i]
+        let dx = c.targetX - poses[i].x
+        let dz = c.targetZ - poses[i].z
+        let far = math.sqrt(dx * dx + dz * dz)
+        velocities[i].x = 0.0
+        velocities[i].z = 0.0
+        if far > STEP {
+            velocities[i].x = f32(dx / far * STEP * f64(SECOND))
+            velocities[i].z = f32(dz / far * STEP * f64(SECOND))
+        }
+        customers[i].ticks = c.ticks + u32(1)
+        if customers[i].ticks >= PATIENCE {
+            world.destroy(entities[i])
+        }
+        i = i + 1
+    }
+}
+
+// Each stall serves every customer within REACH of its middle: the
+// customer pays for each of the stall's levels and is gone. Stalls stand
+// four meters apart, so no customer is within reach of two.
+fn serve(count: i32, stalls: [Stall], tills: [Till], poses: [physics3d.Pose3D]) {
+    let i = 0
+    while i < count {
+        let first = physics3d.overlapSphere(CUSTOMERS, poses[i].x, 0.35, poses[i].z, REACH, u32(0))
+        let served = u32(0)
+        while served < first.count {
+            let one = physics3d.overlapSphere(CUSTOMERS, poses[i].x, 0.35, poses[i].z, REACH, served)
+            world.destroy(one.entity)
+            tills[i].takings = tills[i].takings + PRICE * i64(stalls[i].level)
+            served = served + 1
         }
         i = i + 1
     }
@@ -197,6 +332,11 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
         let look = model.Model(model.BOX, b.width, b.height, b.depth, 0x5E8C3AFF, u64(0))
         if b.collisionClass == STALLS {
             look.color = 0xC8553DFF
+        }
+        // A customer (D392): a blue ball, drawn larger than its body so it
+        // is seen from the camera high above.
+        if b.collisionClass == CUSTOMERS {
+            look = model.Model(model.SPHERE, 0.7, 0.7, 0.7, 0x3A7BD5FF, u64(0))
         }
         looks[i] = look
         i = i + 1

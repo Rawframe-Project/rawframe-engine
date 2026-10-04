@@ -1,15 +1,19 @@
-// Stalls' levels (D391), played: an owner builds a stall, raises it a level
-// with another press, and up to the highest level and no further; another
-// owner pressing on that stall raises nothing. The test moves the owners'
-// hands between ticks, as their clients' input would.
+// Stalls played: an owner builds a stall, raises it a level with another
+// press, and up to the highest level and no further; another owner pressing
+// on that stall raises nothing (D391). Customers come to the stall, are
+// served, and what they pay reaches its owner, no customer staying past its
+// patience (D392). The test moves the owners' hands between ticks, as their
+// clients' input would.
 
 #include "game_harness.h"
 #include "rawframe/physics3d/registrar.h"
 #include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -48,6 +52,7 @@ struct Owner {
     std::uint32_t levels = 0;
     std::uint32_t held = 0;
     std::uint32_t clock = 0;
+    std::int64_t collected = 0;
 };
 
 struct Stall {
@@ -56,6 +61,13 @@ struct Stall {
     std::int32_t plotZ = 0;
     std::uint32_t level = 0;
 };
+
+struct Till {
+    std::int64_t takings = 0;
+};
+
+constexpr auto kTillId = schema::ComponentTypeId::fromText("160c062b-09b3-46a0-8435-9575f99339c1");
+constexpr auto kCustomerId = schema::ComponentTypeId::fromText("bd13f2d3-dc87-46f2-b480-ff2eaf5fcdf1");
 
 /// Every entity with component `id`, in World order.
 std::vector<world::EntityHandle> holding(world::World& world, schema::ComponentTypeId id) {
@@ -73,37 +85,75 @@ template <typename T> T* valueOf(world::World& world, world::EntityHandle entity
     return static_cast<T*>(world.getErased(entity, *world.registry().find(id)));
 }
 
+/// Stalls' levels game, composed and started, ticked at 60 Hz on a
+/// manual clock.
+class Played {
+public:
+    Played() {
+        std::vector<composition::Problem> problems;
+        auto plan = composition::compose(
+            composition::CompositionRequest{.registrars = kWithPhysics,
+                                            .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+            problems);
+        const std::string kText = "kest.game = " + std::string{RAWFRAME_SAMPLE_GAMES} + "tycoon/levels.game\n" +
+                                  "world.tick_rate = 60\nworld.maximum_ticks_per_iteration = 1\n";
+        auto configuration = composition::Configuration::parse(kText);
+        if (!plan.has_value() || !configuration.has_value()) {
+            return;
+        }
+        plan_.emplace(std::move(*plan));
+        configuration_.emplace(std::move(*configuration));
+        composition_.emplace(*plan_,
+                             composition::HostServices{.clock = &clock_,
+                                                       .scope = &root_,
+                                                       .cpu = &test::cpuExecutor(),
+                                                       .blockingIo = &test::blockingIoExecutor(),
+                                                       .configuration = &*configuration_});
+        started_ = composition_->start().has_value();
+    }
+
+    Played(const Played&) = delete;
+    Played& operator=(const Played&) = delete;
+
+    ~Played() {
+        if (started_) {
+            composition_->stop();
+        }
+        simulation = nullptr;
+    }
+
+    [[nodiscard]] bool started() const noexcept {
+        return started_;
+    }
+
+    void run(std::uint64_t ticks) {
+        for (std::uint64_t tick = 0; tick < ticks; ++tick) {
+            clock_.advance(execution::MonotonicDuration{16'666'667});
+            composition_->runHostPhase(composition::HostPhase::RunWorlds,
+                                       composition::HostFrame{.iteration = iteration_++, .now = clock_.now()});
+        }
+    }
+
+private:
+    std::optional<composition::Plan> plan_;
+    std::optional<composition::Configuration> configuration_;
+    execution::ManualClock clock_;
+    execution::CancellationScope root_{clock_};
+    std::optional<composition::Composition> composition_;
+    std::uint64_t iteration_ = 0;
+    bool started_ = false;
+};
+
 } // namespace
 
 RAWFRAME_TEST(AnOwnerRaisesItsOwnStallsAndNoOneElses) {
-    std::vector<composition::Problem> problems;
-    auto plan = composition::compose(
-        composition::CompositionRequest{.registrars = kWithPhysics,
-                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
-        problems);
-    const std::string kText = "kest.game = " + std::string{RAWFRAME_SAMPLE_GAMES} + "tycoon/levels.game\n" +
-                              "world.tick_rate = 60\nworld.maximum_ticks_per_iteration = 1\n";
-    const auto kConfiguration = composition::Configuration::parse(kText);
-    execution::ManualClock clock;
-    execution::CancellationScope root{clock};
-    composition::Composition composition{*plan,
-                                         composition::HostServices{.clock = &clock,
-                                                                   .scope = &root,
-                                                                   .cpu = &test::cpuExecutor(),
-                                                                   .blockingIo = &test::blockingIoExecutor(),
-                                                                   .configuration = &*kConfiguration}};
-    const auto kStarted = composition.start();
-    RAWFRAME_EXPECT(kStarted.has_value());
-    if (!kStarted.has_value()) {
+    Played played;
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
         return;
     }
-    std::uint64_t iteration = 0;
-    const auto kRun = [&](std::uint64_t ticks) {
-        for (std::uint64_t tick = 0; tick < ticks; ++tick) {
-            clock.advance(execution::MonotonicDuration{16'666'667});
-            composition.runHostPhase(composition::HostPhase::RunWorlds,
-                                     composition::HostFrame{.iteration = iteration++, .now = clock.now()});
-        }
+    const auto kRun = [&played](std::uint64_t ticks) {
+        played.run(ticks);
     };
     world::World& world = *simulation->world();
 
@@ -112,7 +162,6 @@ RAWFRAME_TEST(AnOwnerRaisesItsOwnStallsAndNoOneElses) {
     std::vector<world::EntityHandle> owners = holding(world, kOwnerId);
     RAWFRAME_EXPECT(owners.size() == 2);
     if (owners.size() != 2) {
-        composition.stop();
         return;
     }
     // The builder is the one whose cursor is on the corner plot.
@@ -124,7 +173,6 @@ RAWFRAME_TEST(AnOwnerRaisesItsOwnStallsAndNoOneElses) {
     std::vector<world::EntityHandle> stalls = holding(world, kStallId);
     RAWFRAME_EXPECT(stalls.size() == 1);
     if (stalls.size() != 1) {
-        composition.stop();
         return;
     }
     const world::EntityHandle kStall = stalls[0];
@@ -174,7 +222,44 @@ RAWFRAME_TEST(AnOwnerRaisesItsOwnStallsAndNoOneElses) {
     // Each second, an owner earns for every level of its stalls.
     kPress(kBuilder, 0);
     kRun(60);
-    RAWFRAME_EXPECT(kOwner(kBuilder).coins == 915);
-    composition.stop();
-    simulation = nullptr;
+    RAWFRAME_EXPECT(kOwner(kBuilder).coins == 906);
+}
+
+RAWFRAME_TEST(CustomersBuyAtAStallAndItsOwnerTakesWhatTheyPay) {
+    Played played;
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
+        return;
+    }
+    // Nobody comes while no stall stands; then the first owner's stall
+    // stands, and for half a minute customers walk to it and buy.
+    world::World& world = *simulation->world();
+    played.run(1);
+    std::vector<world::EntityHandle> stalls = holding(world, kStallId);
+    RAWFRAME_EXPECT(stalls.size() == 1 && holding(world, kCustomerId).empty());
+    if (stalls.size() != 1) {
+        return;
+    }
+    const world::EntityHandle kStall = stalls[0];
+    const world::EntityHandle kBuilder = valueOf<Stall>(world, kStall, kStallId)->owner;
+    std::int64_t served = 0;
+    std::size_t most = 0;
+    for (int second = 0; second < 30; ++second) {
+        played.run(60);
+        most = std::max(most, holding(world, kCustomerId).size());
+    }
+    served = valueOf<Till>(world, kStall, kTillId)->takings;
+    // One came every forty ticks, 45 in all, each walking some twenty
+    // seconds across the lot; each served paid four at a stall of the first
+    // level and is gone, and the rest are still walking.
+    const std::size_t kWalking = holding(world, kCustomerId).size();
+    RAWFRAME_EXPECT(served > 0 && served % 4 == 0 && kWalking + static_cast<std::size_t>(served / 4) == 45 &&
+                    most >= kWalking);
+    const Owner kOwner = *valueOf<Owner>(world, kBuilder, kOwnerId);
+    // The owner took the till as of its last second: everything but what
+    // the last moments brought.
+    RAWFRAME_EXPECT(kOwner.collected > 0 && kOwner.collected <= served && served - kOwner.collected <= 16);
+    // Its coins: what it started with, less the stall, its income, and
+    // what it took.
+    RAWFRAME_EXPECT(kOwner.coins == 100 - 50 + (2 * 30) + kOwner.collected);
 }
