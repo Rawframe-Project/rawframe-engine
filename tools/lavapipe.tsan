@@ -5,3 +5,15 @@
 # the engine's or Maul RHI's (Maul RHI's own suite suppresses the same).
 called_from_lib:libvulkan_lvp.so
 called_from_lib:libLLVM
+# The window's system libraries are built without ThreadSanitizer too:
+# libxcb (the X connection) and libdbus (the desktop's settings) take and
+# release their own locks inside themselves, where ThreadSanitizer sees only
+# half, and it reports inversions, a double lock, and a race within one
+# thread's calls (D396). They are the system's to check.
+called_from_lib:libxcb.so
+called_from_lib:libdbus-1.so
+# One of libdbus's own unlocks reaches ThreadSanitizer from a tail call,
+# as though Maul Window's caller made it, after the lock it pairs with was
+# ignored inside libdbus; the mutex is libdbus's, reached through Maul
+# Window's bus calls (linux_bus.c), which take no lock of their own.
+mutex:mwinBus*
