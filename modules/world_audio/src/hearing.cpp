@@ -36,6 +36,7 @@ using diagnostics::EventIdentity;
 constexpr EventIdentity kRecording{"audio", "recording_summary"};
 constexpr EventIdentity kPlaying{"audio", "playing_summary"};
 constexpr EventIdentity kUnheard{"audio", "output_unavailable"};
+constexpr EventIdentity kSilent{"audio", "game_silent"};
 constexpr EventIdentity kUnread{"audio", "sounds_unavailable"};
 constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
 constexpr EventIdentity kSoundsRead{"audio", "sounds_read"};
@@ -380,6 +381,23 @@ public:
         if (!kPlay.has_value()) {
             return {};
         }
+        if (*kPlay != "sink" && *kPlay != "null" && *kPlay != "device") {
+            return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                         WorldAudioError::NoAudio,
+                                                         "audio.play is `device`, `null`, or `sink`")
+                                                      .error()
+                                                      .withContext("value", std::string{*kPlay})};
+        }
+        // A game that declares no mixer plays on in silence (D397): a player
+        // may be set to play sound whatever game it is given, as an export's
+        // is.
+        if (context.has(world_kest::kGameFiles.name)) {
+            RAWFRAME_TRY_ASSIGN(const world_kest::GameFiles* files, context.capability(world_kest::kGameFiles));
+            if (files != nullptr && files->named() && !files->description().audio) {
+                silent_ = true;
+                return {};
+            }
+        }
         if (*kPlay == "sink") {
             // The host plays what the frames render (D259): a page.
             if (!context.has(kFrameSink.name)) {
@@ -394,12 +412,6 @@ public:
         audio::OutputSettings settings;
         if (*kPlay == "null") {
             settings.backend = audio::OutputBackend::Null;
-        } else if (*kPlay != "device") {
-            return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
-                                                         WorldAudioError::NoAudio,
-                                                         "audio.play is `device`, `null`, or `sink`")
-                                                      .error()
-                                                      .withContext("value", std::string{*kPlay})};
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kPeriod, configuration.unsignedInteger("audio.play_period", 256));
         settings.periodFrames = static_cast<std::uint32_t>(std::min<std::uint64_t>(kPeriod, 1U << 16U));
@@ -421,6 +433,9 @@ public:
                          kUnheard,
                          "no output device: the World goes unheard",
                          {diagnostics::field("reason", *unavailable_)});
+        }
+        if (silent_) {
+            emitter_.log(diagnostics::Severity::Info, kSilent, "the game declares no mixer: nothing is played", {});
         }
         return {};
     }
@@ -507,6 +522,7 @@ private:
     std::uint64_t sunk_ = 0;
     std::uint64_t dropped_ = 0;
     std::optional<std::string> unavailable_;
+    bool silent_ = false;
     float peak_ = 0;
     bool lostReported_ = false;
     diagnostics::Emitter emitter_;
