@@ -1,6 +1,6 @@
-// Where the platform gives this module no device: the web, until Maul Audio
-// brings one (D174). Opening refuses as a machine without a device does, and
-// a client runs on without sound; nothing else can be reached.
+// Where this module opens no device: the web, whose page plays a client's
+// sound from what its frames render (D259). Opening refuses as a machine
+// without a device does; nothing else can be reached.
 #include "rawframe/audio/errors.h"
 #include "rawframe/audio/output.h"
 

@@ -40,12 +40,13 @@ BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
 BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
 # Vendored providers stay behind their module (ADR-0005, ADR-0038): no public
 # header includes one.
-PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h|cgltf\.h|maul-rhi/|maul-window/|maul-nav/)', re.MULTILINE)
+PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h|cgltf\.h|maul-rhi/|maul-window/|maul-nav/|maul-audio/)', re.MULTILINE)
 # Maul RHI is declared by the rendering cluster alone, Maul Window by the
-# window module alone (ADR-0045), Maul UI by the UI module, and Maul Nav by
-# the navigation module (D399): anywhere else, including one is refused.
-CLUSTERS = {"maul-rhi/": {"render", "render_canvas", "render_canvas_gpu", "render_scene", "render_scene_gpu", "particles_gpu"}, "maul-window/": {"window"}, "maul-ui/": {"ui"}, "maul-nav/": {"navigation"}}
-CLUSTER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](maul-rhi/|maul-window/|maul-ui/|maul-nav/)', re.MULTILINE)
+# window module alone (ADR-0045), Maul UI by the UI module, Maul Nav by the
+# navigation module (D399), and Maul Audio by the audio module (D401):
+# anywhere else, including one is refused.
+CLUSTERS = {"maul-rhi/": {"render", "render_canvas", "render_canvas_gpu", "render_scene", "render_scene_gpu", "particles_gpu"}, "maul-window/": {"window"}, "maul-ui/": {"ui"}, "maul-nav/": {"navigation"}, "maul-audio/": {"audio"}}
+CLUSTER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](maul-rhi/|maul-window/|maul-ui/|maul-nav/|maul-audio/)', re.MULTILINE)
 SERVER = "dedicated_server"
 NOT_IN_SERVER = {
     "audio", "world_audio", "localization", "world_localization", "authoring",

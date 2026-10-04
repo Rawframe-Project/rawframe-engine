@@ -15,10 +15,11 @@ apply to vendored files; the code is upstream's, not ours.
 | Maul RHI, unreleased main at `668ffc8` (its Vulkan driver natively, Windows included; its WebGPU driver on the web, built with wasm32-wasi, D282) | `Rawframe-Project/maul-rhi` | `668ffc8c68005c6cea6828b7d1e0daf86c9576c2` | MIT (its Khronos headers: Apache-2.0 or MIT) | `include/`, `src/`, `khronos/`, `cmake/`, `tools/mrhi_container.py` and the `docs/contract/mrhi.json` it reads, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |
 | Maul UI, unreleased main at `0931f5a` (its core: node tree, flex layout, style, draw-command list; its text component on, over FreeType, HarfBuzz, and Maul Unicode below, D383; its glyph images, D398) | `Rawframe-Project/maul-ui` | `0931f5ad119e4ee6cb49c19f08d1721e0c617265` | MIT | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE`, `THIRD_PARTY.md` |
 | Maul Nav, unreleased main at `ddbdbd0` (navmesh generation, path and spatial queries, flow fields, avoidance; ADR-0056 as amended by D126, D399) | `Rawframe-Project/maul-nav` | `ddbdbd084391fb0d4170a8f3190168d46ec1c262` | MIT | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
+| Maul Audio, unreleased main at `fbd946d` (its device layer: PipeWire, PulseAudio, and ALSA opened at run time on Linux, WASAPI, Core Audio, and its offline backend; the audio module's output, D401) | `Rawframe-Project/maul-audio` | `fbd946d0e120d2e8726d7cef0d80610f9e0c4b5c` | MIT | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
 | FreeType 2.14.3, Maul UI's text component's (D383) | `freetype/freetype` release archive, SHA-256 `36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f` | 2.14.3 | FreeType License (FTL; dual with GPLv2, the FTL is the one taken) | `include/`, `src/` of the modules Maul UI builds (`base`, `cff`, `psaux`, `pshinter`, `psnames`, `sfnt`, `smooth`, `truetype`), `LICENSE.TXT`, `docs/FTL.TXT` |
 | HarfBuzz 14.5.1, Maul UI's text component's (D383) | `harfbuzz/harfbuzz` release archive, SHA-256 `7e2fa4e8c7c98e8d8140671f5772542afaaa6acccfbd746506886b6d85f7f8d6` | 14.5.1 | MIT ("Old MIT") | `src/` without its build files, scripts, and generator sources, `COPYING` |
 | OpenType Sanitizer 9.3.0, the cook's font sanitizer (ADR-0078, D385); import tooling only | `khaledhosny/ots` release archive, SHA-256 `23814f8e90ee77379f54e86a012c09bba2d133940e5257546b29cf087a73beec` | 9.3.0 | BSD-3-Clause | `include/`, `src/` without Graphite's tables, `LICENSE`, `README.md`; ours: `CMakeLists.txt`, `rawframe/` (its configuration, and refusing stand-ins for zlib and the WOFF 2.0 decoder) |
-| miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 (stb_vorbis v1.22: public domain or MIT) | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |
+| miniaudio 0.11.25, the import tooling's decoders (the output plays through Maul Audio, D401) | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 (stb_vorbis v1.22: public domain or MIT) | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |
 | MsQuic 2.6.1 | `microsoft/msquic` | `a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83` | MIT | build files, `src/` without tests, tools, or Windows PGO data, notices |
 | XDP for Windows, MsQuic's submodule | `microsoft/xdp-for-windows` | `d372b52577a724e04fa4c06acb90bbfa4719fc25`, the revision MsQuic's pin names | MIT | `published/external` (headers MsQuic's Windows datapath includes), `LICENSE`, at `msquic/submodules/xdp-for-windows` |
 | Opus 1.5.2 | `xiph/opus` | `ddbe48383984d56acd9e1ab6a090c54ca6b735a6` | BSD-3-Clause | `include/`, `src/`, `celt/`, `silk/`, the three source lists, `COPYING` |
@@ -49,12 +50,13 @@ To move the Kest pin, run `tools/update_kest.sh <kest checkout> <revision>`,
 build, run the full check, and commit the result with the new revision in this
 table.
 
-To move a Maul pin, run `tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window|maul-rhi|maul-ui|maul-nav> <checkout> <revision>`,
+To move a Maul pin, run `tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window|maul-rhi|maul-ui|maul-nav|maul-audio> <checkout> <revision>`,
 bring the source list in `third_party/<engine>/CMakeLists.txt` in line with
 upstream's (Maul2D and Maul3D; Maul Unicode, Maul Window, Maul RHI, and
-Maul UI, and Maul Nav keep their own CMake, configured by
+Maul UI, Maul Nav, and Maul Audio keep their own CMake, configured by
 `third_party/maul_window.cmake`, `third_party/maul_rhi.cmake`,
-`third_party/maul_ui.cmake`, and `third_party/maul_nav.cmake`), and proceed
+`third_party/maul_ui.cmake`, `third_party/maul_nav.cmake`, and
+`third_party/maul_audio.cmake`), and proceed
 as for Kest.
 Maul Window's pin names the Maul Unicode release it was made with; move both
 together. Maul snapshots and journals refuse

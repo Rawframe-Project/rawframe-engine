@@ -6,7 +6,7 @@ Its first milestone, a headless, networked, Kest-scripted World with a dedicated
 
 ## Building
 
-Requirements: CMake 3.28, Ninja, and GCC 14 or Clang 19 or newer (MSVC 17.10 on Windows). On Linux, the window module's backends need the development files of Wayland and X11: `libwayland-dev`, `wayland-protocols`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`, `libxcb1-dev`, `libxcb-randr0-dev`, `libxcb-xkb-dev`, `libxcb-cursor-dev`, and `libxcb-xinput-dev`.
+Requirements: CMake 3.28, Ninja, and GCC 14 or Clang 19 or newer (MSVC 17.10 on Windows). On Linux, the window module's backends need the development files of Wayland and X11: `libwayland-dev`, `wayland-protocols`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`, `libxcb1-dev`, `libxcb-randr0-dev`, `libxcb-xkb-dev`, `libxcb-cursor-dev`, and `libxcb-xinput-dev`; and Maul Audio's devices, the headers of PipeWire, PulseAudio, and ALSA: `libpipewire-0.3-dev`, `libpulse-dev`, and `libasound2-dev` (the libraries themselves are opened at run time).
 
 ```sh
 cmake --preset clang-development

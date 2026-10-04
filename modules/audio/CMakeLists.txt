@@ -1,9 +1,9 @@
 # Audio (ADR-0038, SPEC-0036): the mixer layout, the mixer rendering into
-# buffers, and the output rendering it to a device. Client only: the dedicated
-# server links none of it. miniaudio and libopus are linked privately, so no
-# header above this module can include them.
-# The web has no device here until Maul Audio brings one (D174): its output
-# refuses to open, and a client runs on without sound.
+# buffers, and the output rendering it to a device through Maul Audio
+# (D401). Client only: the dedicated server links none of it. Maul Audio and
+# libopus are linked privately, so no header above this module can include
+# them. On the web the page plays a client's sound (D259): its output
+# refuses to open.
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(rawframe_audio_output src/output_none.cpp)
 else()
@@ -15,7 +15,7 @@ rawframe_module(NAME audio
 )
 target_link_libraries(rawframe_audio PRIVATE rawframe_opus_vendor)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")
-    target_link_libraries(rawframe_audio PRIVATE rawframe_miniaudio_vendor)
+    target_link_libraries(rawframe_audio PRIVATE maul-audio)
 endif()
 
 # The device's tests need a device, which the web has none of yet.

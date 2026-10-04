@@ -4,21 +4,31 @@
 #include "rawframe/execution/time.h"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
-#include <miniaudio.h>
+#include <chrono>
+#include <maul-audio/context.h>
+#include <maul-audio/device.h>
+#include <maul-audio/stream.h>
 #include <span>
 #include <string>
+#include <thread>
 #include <utility>
+#include <vector>
 
 namespace rawframe::audio {
 
 namespace {
 
-constexpr ma_uint32 kChannels = 2;
+constexpr std::uint32_t kChannels = 2;
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AudioError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kAudioDomain, code(error), why).error()};
+}
+
+std::unexpected<result::Error> noDevice(std::string_view why, maudResult outcome) {
+    return std::unexpected<result::Error>{refuse(result::ErrorClass::Unavailable, AudioError::NoDevice, why)
+                                              .error()
+                                              .withContext("outcome", maudResultName(outcome))};
 }
 
 void raise(std::atomic<std::int64_t>& largest, std::int64_t value) noexcept {
@@ -27,62 +37,102 @@ void raise(std::atomic<std::int64_t>& largest, std::int64_t value) noexcept {
     }
 }
 
+std::string_view nameOf(maudBackendKind backend) noexcept {
+    switch (backend) {
+    case maud_backendOffline:
+        return "Null";
+    case maud_backendPipewire:
+        return "PipeWire";
+    case maud_backendPulse:
+        return "PulseAudio";
+    case maud_backendAlsa:
+        return "ALSA";
+    case maud_backendWasapi:
+        return "WASAPI";
+    case maud_backendCoreAudio:
+        return "Core Audio";
+    case maud_backendAaudio:
+        return "AAudio";
+    case maud_backendWeb:
+        return "Web Audio";
+    default:
+        return "native";
+    }
+}
+
 /// What the device's thread and the owner share.
 struct Shared {
     execution::SteadyClock clock;
     /// The mixer the device's thread renders, or none.
     std::atomic<Mixer*> mixer{nullptr};
-    std::atomic<OutputState> state{OutputState::Stopped};
-    /// Set while the owner stops the device, so its stopping is not a loss.
-    std::atomic<bool> stopping{false};
     std::atomic<std::uint64_t> callbacks{0};
     std::atomic<std::uint64_t> frames{0};
     std::atomic<std::int64_t> largestCallbackFrames{0};
     std::atomic<std::int64_t> longestCallbackNanoseconds{0};
 };
 
-// The device's thread: renders the mixer into the buffer it asks for. The
-// buffer arrives silent, so a missing mixer leaves silence.
-void render(ma_device* device, void* output, const void* /*input*/, ma_uint32 frameCount) {
-    auto& shared = *static_cast<Shared*>(device->pUserData);
+// The device's thread: renders the mixer into the block it asks for. The
+// block arrives silent, so a missing mixer leaves silence.
+void render(const maudStreamBlock* block, void* user) {
+    auto& shared = *static_cast<Shared*>(user);
     shared.callbacks.fetch_add(1, std::memory_order_relaxed);
-    shared.frames.fetch_add(frameCount, std::memory_order_relaxed);
-    raise(shared.largestCallbackFrames, frameCount);
+    shared.frames.fetch_add(block->frameCount, std::memory_order_relaxed);
+    raise(shared.largestCallbackFrames, block->frameCount);
     Mixer* const kMixer = shared.mixer.load(std::memory_order_acquire);
-    if (kMixer == nullptr) {
+    if (kMixer == nullptr || block->output == nullptr) {
         return;
     }
     const execution::MonotonicInstant kBegan = shared.clock.now();
-    kMixer->render(std::span{static_cast<float*>(output), static_cast<std::size_t>(frameCount) * kChannels});
+    kMixer->render(std::span{block->output, static_cast<std::size_t>(block->frameCount) * kChannels});
     const execution::MonotonicInstant kEnded = shared.clock.now();
     raise(shared.longestCallbackNanoseconds, (kEnded - kBegan).nanoseconds);
-}
-
-// A device that stops without its owner asking is lost: output suspends.
-void notice(const ma_device_notification* notification) {
-    auto& shared = *static_cast<Shared*>(notification->pDevice->pUserData);
-    if (notification->type == ma_device_notification_type_stopped && !shared.stopping.load(std::memory_order_acquire)) {
-        shared.mixer.store(nullptr, std::memory_order_release);
-        shared.state.store(OutputState::Lost, std::memory_order_release);
-    }
 }
 
 } // namespace
 
 struct Output::State {
-    ma_context context{};
-    ma_device device{};
-    bool contextOpen = false;
-    bool deviceOpen = false;
-    ma_backend backend = ma_backend_null;
+    maudContext* context = nullptr;
+    maudStreamId stream{};
+    maudBackendKind backend = maud_backendOffline;
+    std::uint32_t rate = 0;
+    std::uint32_t period = 0;
+    bool rendering = false;
+    bool lost = false;
     Shared shared;
+    /// The null device's thread: renders the offline stream a period at a
+    /// time at the wall clock's pace, as a device would ask for it.
+    std::thread pacer;
+    std::atomic<bool> pacing{false};
 
+    State() = default;
+    State(const State&) = delete;
+    State& operator=(const State&) = delete;
     ~State() {
-        if (deviceOpen) {
-            ma_device_uninit(&device);
+        stopPacing();
+        if (stream.index1 != 0) {
+            static_cast<void>(maudDestroyStream(context, stream));
         }
-        if (contextOpen) {
-            ma_context_uninit(&context);
+        static_cast<void>(maudDestroyContext(context));
+    }
+
+    void startPacing() {
+        pacing.store(true, std::memory_order_release);
+        pacer = std::thread([this] {
+            std::vector<float> buffer(static_cast<std::size_t>(period) * kChannels);
+            const auto kPeriod = std::chrono::nanoseconds{std::int64_t{1'000'000'000} * period / rate};
+            auto next = std::chrono::steady_clock::now();
+            while (pacing.load(std::memory_order_acquire)) {
+                static_cast<void>(maudRenderStream(context, stream, buffer.data(), period));
+                next += kPeriod;
+                std::this_thread::sleep_until(next);
+            }
+        });
+    }
+
+    void stopPacing() noexcept {
+        pacing.store(false, std::memory_order_release);
+        if (pacer.joinable()) {
+            pacer.join();
         }
     }
 };
@@ -101,58 +151,60 @@ result::Result<std::unique_ptr<Output>> Output::open(const OutputSettings& setti
                       "an output needs a period, and a rate of 8 to 192 kHz or the device's own");
     }
     auto state = std::make_unique<State>();
+    const bool kNull = settings.backend == OutputBackend::Null;
 
-    // The platform's backends, never the null one: a machine without sound
-    // has no device rather than a silent one it did not ask for.
-    std::array<ma_backend, MA_BACKEND_COUNT> backends{};
-    std::size_t count = 0;
-    if (settings.backend == OutputBackend::Null) {
-        backends[count++] = ma_backend_null;
-    } else {
-        std::array<ma_backend, MA_BACKEND_COUNT> enabled{};
-        std::size_t enabledCount = 0;
-        if (ma_get_enabled_backends(enabled.data(), enabled.size(), &enabledCount) == MA_SUCCESS) {
-            for (std::size_t index = 0; index < enabledCount; ++index) {
-                if (enabled[index] != ma_backend_null) {
-                    backends[count++] = enabled[index];
-                }
-            }
-        }
+    // The platform's best backend, never a silent one it did not ask for: a
+    // machine without sound has no device. The null device is Maul Audio's
+    // offline backend, rendered on a timer.
+    maudContextDef contextDef = maudDefaultContextDef();
+    contextDef.backend = kNull ? maud_backendOffline : maud_backendNative;
+    contextDef.limits.periodFrames = std::max(contextDef.limits.periodFrames, settings.periodFrames);
+    if (kNull) {
+        contextDef.offlineSampleRate = settings.rate != 0 ? settings.rate : 48'000;
     }
-    ma_context_config contextConfig = ma_context_config_init();
-    if (count == 0 ||
-        ma_context_init(backends.data(), static_cast<ma_uint32>(count), &contextConfig, &state->context) !=
-            MA_SUCCESS) {
-        return refuse(result::ErrorClass::Unavailable, AudioError::NoDevice, "no audio backend is available");
+    if (const maudResult kMade = maudCreateContext(&contextDef, &state->context); kMade != maud_success) {
+        return noDevice("no audio backend is available", kMade);
     }
-    state->contextOpen = true;
-    state->backend = state->context.backend;
+    state->backend = maudGetContextBackend(state->context);
+    maudDeviceId device{};
+    if (const maudResult kFound = maudGetDefaultDevice(state->context, maud_directionOutput, maud_roleGeneral, &device);
+        kFound != maud_success || device.index1 == 0) {
+        return std::unexpected<result::Error>{noDevice("no output device could be opened", kFound)
+                                                  .error()
+                                                  .withContext("backend", std::string{nameOf(state->backend)})};
+    }
 
-    ma_device_config config = ma_device_config_init(ma_device_type_playback);
-    config.playback.format = ma_format_f32;
-    config.playback.channels = kChannels;
-    config.sampleRate = settings.rate;
-    config.periodSizeInFrames = settings.periodFrames;
-    config.performanceProfile = ma_performance_profile_low_latency;
-    config.dataCallback = &render;
-    config.notificationCallback = &notice;
-    config.pUserData = &state->shared;
-    if (ma_device_init(&state->context, &config, &state->device) != MA_SUCCESS) {
-        auto refused =
-            refuse(result::ErrorClass::Unavailable, AudioError::NoDevice, "no output device could be opened");
-        refused.error() = std::move(refused.error()).withContext("backend", ma_get_backend_name(state->backend));
-        return refused;
+    maudStreamDef streamDef = maudDefaultStreamDef();
+    streamDef.direction = maud_directionOutput;
+    // The offline backend is pulled by the null device's thread; a device's
+    // calls back from its own.
+    streamDef.mode = kNull ? maud_modePull : maud_modeCallback;
+    streamDef.layout = maud_layoutStereo;
+    streamDef.ratePolicy = settings.rate != 0 && !kNull ? maud_ratePlatformConverted : maud_rateNative;
+    streamDef.sampleRate = settings.rate != 0 && !kNull ? settings.rate : 0;
+    streamDef.periodFrames = settings.periodFrames;
+    streamDef.callback = &render;
+    streamDef.user = &state->shared;
+    if (const maudResult kMade = maudCreateStream(state->context, &streamDef, &state->stream); kMade != maud_success) {
+        return std::unexpected<result::Error>{noDevice("no output device could be opened", kMade)
+                                                  .error()
+                                                  .withContext("backend", std::string{nameOf(state->backend)})};
     }
-    state->deviceOpen = true;
+    maudStreamFormat format{};
+    if (const maudResult kRead = maudGetStreamFormat(state->context, state->stream, &format); kRead != maud_success) {
+        return noDevice("the output device's format could not be read", kRead);
+    }
+    state->rate = format.sampleRate;
+    state->period = format.periodFrames != 0 ? format.periodFrames : settings.periodFrames;
     return std::unique_ptr<Output>{new Output{std::move(state)}};
 }
 
 std::uint32_t Output::rate() const noexcept {
-    return state_->device.sampleRate;
+    return state_->rate;
 }
 
 std::string Output::backendName() const {
-    return ma_get_backend_name(state_->backend);
+    return std::string{nameOf(state_->backend)};
 }
 
 result::Status Output::start(Mixer& mixer) {
@@ -163,32 +215,45 @@ result::Status Output::start(Mixer& mixer) {
                 .withContext("mixer", std::to_string(mixer.rate()))
                 .withContext("device", std::to_string(rate()))};
     }
-    if (state_->shared.state.load(std::memory_order_acquire) == OutputState::Rendering) {
+    if (state_->rendering) {
         return refuse(result::ErrorClass::FailedPrecondition, AudioError::BadSettings, "the output is rendering");
     }
-    state_->shared.stopping.store(false, std::memory_order_release);
     state_->shared.mixer.store(&mixer, std::memory_order_release);
-    state_->shared.state.store(OutputState::Rendering, std::memory_order_release);
-    if (ma_device_start(&state_->device) != MA_SUCCESS) {
+    if (const maudResult kStarted = maudStartStream(state_->context, state_->stream); kStarted != maud_success) {
         state_->shared.mixer.store(nullptr, std::memory_order_release);
-        state_->shared.state.store(OutputState::Lost, std::memory_order_release);
-        return refuse(result::ErrorClass::Unavailable, AudioError::NoDevice, "the output device would not start");
+        state_->lost = true;
+        return noDevice("the output device would not start", kStarted);
+    }
+    state_->rendering = true;
+    state_->lost = false;
+    if (state_->backend == maud_backendOffline) {
+        state_->startPacing();
     }
     return {};
 }
 
 void Output::stop() noexcept {
-    state_->shared.stopping.store(true, std::memory_order_release);
-    // Returns once the device's thread has left its last callback.
-    ma_device_stop(&state_->device);
-    state_->shared.mixer.store(nullptr, std::memory_order_release);
-    if (state_->shared.state.load(std::memory_order_acquire) == OutputState::Rendering) {
-        state_->shared.state.store(OutputState::Stopped, std::memory_order_release);
+    state_->stopPacing();
+    if (state_->rendering) {
+        // Returns once the device's thread has left its last callback.
+        static_cast<void>(maudStopStream(state_->context, state_->stream));
+        state_->rendering = false;
     }
+    state_->shared.mixer.store(nullptr, std::memory_order_release);
 }
 
 OutputState Output::state() const noexcept {
-    return state_->shared.state.load(std::memory_order_acquire);
+    if (!state_->rendering) {
+        return state_->lost ? OutputState::Lost : OutputState::Stopped;
+    }
+    // A device that went away, or a default that left no device, suspends
+    // the stream: output is lost, and the mixer is not rendered.
+    maudStreamStatus status{};
+    if (maudGetStreamStatus(state_->context, state_->stream, &status) == maud_success &&
+        (status.suspension == maud_suspendDeviceLost || status.suspension == maud_suspendNoDevice)) {
+        return OutputState::Lost;
+    }
+    return OutputState::Rendering;
 }
 
 OutputStatistics Output::statistics() const noexcept {
