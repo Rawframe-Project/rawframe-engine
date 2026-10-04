@@ -2,7 +2,8 @@
 // an ascent of 0.8 em and a descent of 0.2: a node sized by its line, lines
 // wrapped to a width, glyph runs drawn on the baseline in the text's color,
 // a node's text changed and cleared, bytes that are not a font refused, a
-// removed font's text refused, and a removed subtree's text gone with it.
+// removed font's text refused, a removed subtree's text gone with it, and
+// glyphs rendered into the tree's atlas (D398).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -141,4 +142,59 @@ RAWFRAME_TEST(ARemovedSubtreesTextGoesWithIt) {
     const Node kPlain = *ui.add(3);
     RAWFRAME_EXPECT(ui.layOut(kPlain, 100, 100).has_value());
     RAWFRAME_EXPECT(sized(ui.rectOf(kPlain), 0, 0));
+}
+
+RAWFRAME_TEST(GlyphsAreRenderedIntoTheAtlasOnceAndPlacedOnDevicePixels) {
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    // Room for few glyphs: 32 pixels square.
+    auto tree = Tree::create(16, 4, 32);
+    RAWFRAME_EXPECT(tree.has_value());
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    RAWFRAME_EXPECT(ui.addFont(bytesOf(kAhem)).has_value());
+    const Node kLabel = *ui.add(1);
+    RAWFRAME_EXPECT(ui.setText(kLabel, "XX X", {.size = 10}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
+
+    DrawList list;
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1, list).has_value());
+    RAWFRAME_EXPECT(list.atlas != nullptr && list.glyphsLeftOut == 0 && list.glyphs.size() == 4);
+    if (list.atlas == nullptr || list.glyphs.size() != 4) {
+        return;
+    }
+    // An em box, ten pixels on the pen, its top 0.8 em above the baseline,
+    // covered whole; the same glyph at the same quarter is rendered once,
+    // and the space has no image.
+    const Glyph& kFirst = list.glyphs[0];
+    RAWFRAME_EXPECT(kFirst.image.x == 0 && kFirst.image.y == 0 && sized(kFirst.image, 10, 10));
+    RAWFRAME_EXPECT(sized(kFirst.atlas, 10, 10) && list.glyphs[1].image.x == 10);
+    RAWFRAME_EXPECT(list.glyphs[1].atlas.x == kFirst.atlas.x && list.glyphs[1].atlas.y == kFirst.atlas.y);
+    RAWFRAME_EXPECT(sized(list.glyphs[2].image, 0, 0) && list.glyphs[3].image.x == 30);
+    const GlyphAtlas& kAtlas = *list.atlas;
+    RAWFRAME_EXPECT(kAtlas.side == 32 && kAtlas.coverage.size() == 32 * 32 && kAtlas.revision == 1);
+    const auto kAt = [&](float x, float y) {
+        return kAtlas.coverage.at((static_cast<std::size_t>(y) * kAtlas.side) + static_cast<std::size_t>(x));
+    };
+    RAWFRAME_EXPECT(kAt(kFirst.atlas.x, kFirst.atlas.y) == 255 && kAt(kFirst.atlas.x + 9, kFirst.atlas.y + 9) == 255);
+    RAWFRAME_EXPECT(kAt(kFirst.atlas.x + 10, kFirst.atlas.y) == 0);
+    // Drawn again, nothing is rendered.
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1, list).has_value());
+    RAWFRAME_EXPECT(list.atlas->revision == 1);
+
+    // At a scale of 1.25, a 12.5-pixel em, the second pen half a pixel past
+    // an edge: its image starts on that pixel, rendered apart at that half.
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1.25F, list).has_value());
+    RAWFRAME_EXPECT(list.glyphsLeftOut == 0 && list.atlas->revision == 2);
+    RAWFRAME_EXPECT(list.glyphs[0].atlas.height == 13 && list.glyphs[0].image.y == 0);
+    RAWFRAME_EXPECT(list.glyphs[1].image.x * 1.25F == 12 && list.glyphs[1].atlas.x != list.glyphs[0].atlas.x);
+
+    // Past what the atlas holds: it is emptied and this list's glyphs
+    // rendered again, and a glyph larger than it is left out.
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1.1F, list).has_value());
+    RAWFRAME_EXPECT(list.glyphsLeftOut == 0 && list.atlas->revision == 3);
+    RAWFRAME_EXPECT(list.glyphs[0].atlas.x == 0 && list.glyphs[0].atlas.y == 0);
+    RAWFRAME_EXPECT(ui.draw(kLabel, 4, list).has_value());
+    RAWFRAME_EXPECT(list.glyphsLeftOut == 3 && sized(list.glyphs[0].image, 0, 0));
 }

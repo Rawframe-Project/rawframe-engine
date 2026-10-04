@@ -6,8 +6,9 @@
 // rectangles relative to their parents, and drawn as SPEC-0032's
 // draw-command list. A node and a subtree that did not change are not laid
 // out or painted again. A node may show text in a font the tree holds,
-// measured by its lines and drawn as glyph runs (D384). Maul UI's types stay
-// inside this module.
+// measured by its lines and drawn as glyph runs (D384), each glyph's image
+// rendered into the tree's glyph atlas (D398). Maul UI's types stay inside
+// this module.
 
 #include "rawframe/result/result.h"
 
@@ -246,11 +247,30 @@ struct Shadow {
 };
 
 /// A glyph of a run (D384): its id in the run's font and its place from the
-/// run's origin, in pixels, y down.
+/// run's origin, in pixels, y down; and its image (D398): the rectangle it
+/// is drawn in, from the root's top left in pixels, its edges on device
+/// pixels, and where its coverage is in the list's atlas, in the atlas's
+/// pixels. Both are empty for a glyph with no outline (a space), and for one
+/// left out.
 struct Glyph {
     std::uint32_t id = 0;
     float x = 0;
     float y = 0;
+    Rect image;
+    Rect atlas;
+};
+
+/// The coverage of the glyphs a tree draws (D398): `side` by `side` bytes,
+/// rows from the top, each nought outside a glyph's outline to 255 inside,
+/// linear in the area it covers; `revision` changes whenever they do.
+/// Glyphs are rendered into it as lists first draw them, unhinted, at their
+/// size in device pixels and the quarter of a device pixel their pen falls
+/// on, and kept; when it is full it is emptied, and the list that filled it
+/// renders its own again.
+struct GlyphAtlas {
+    std::uint32_t side = 0;
+    std::vector<std::uint8_t> coverage;
+    std::uint64_t revision = 0;
 };
 
 /// A run of glyphs to draw (D384): its font, its size in pixels (an em),
@@ -306,6 +326,12 @@ struct DrawList {
     std::vector<Gradient> gradients;
     std::uint32_t skipped = 0;
     float scale = 1;
+    /// The tree's glyph atlas, which the glyphs' images are in (D398), until
+    /// the tree draws again.
+    const GlyphAtlas* atlas = nullptr;
+    /// Glyphs with an outline left out: past what the atlas holds at once,
+    /// or of a size or font that cannot be rendered.
+    std::uint32_t glyphsLeftOut = 0;
 };
 
 /// A node of a tree, by its slot and generation; a node removed leaves its
@@ -319,9 +345,10 @@ struct Node {
 class Tree {
 public:
     /// A tree of at most `maximumNodes` nodes and `maximumFonts` fonts,
-    /// their room reserved now.
-    [[nodiscard]] static result::Result<std::unique_ptr<Tree>> create(std::uint32_t maximumNodes = 4096,
-                                                                      std::uint32_t maximumFonts = 64);
+    /// their room reserved now, and a glyph atlas `atlasSide` pixels square
+    /// (D398), made when a glyph first needs it.
+    [[nodiscard]] static result::Result<std::unique_ptr<Tree>>
+    create(std::uint32_t maximumNodes = 4096, std::uint32_t maximumFonts = 64, std::uint32_t atlasSide = 1024);
 
     Tree(const Tree&) = delete;
     Tree& operator=(const Tree&) = delete;
@@ -375,6 +402,7 @@ public:
 
     /// What `root`'s subtree, laid out, draws, into `into`, its last
     /// contents replaced; `scale` device pixels a pixel, which edges snap to.
+    /// Its glyphs' images are rendered into the atlas as they are needed.
     [[nodiscard]] result::Status draw(Node root, float scale, DrawList& into);
 
     struct State;
