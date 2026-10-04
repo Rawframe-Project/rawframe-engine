@@ -77,6 +77,7 @@ import: audio_import audio result base
 cook_tool: cook process localization animation material graph mesh_import mesh texture_import texture font_import ui scene world_kest input kest_library kest audio_import audio content document execution result base
 build_tool: build install signature content document result base
 install_tool: install content result base
+play_tool: process composition result base
 scene_tool: world_kest scene kest result base
 author: authoring world_kest kest content scene schema document result base
 animation_tool: animation_import animation content result base
