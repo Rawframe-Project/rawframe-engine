@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rawframe</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<script type="module">
+// A web game as exported (D397): play.json names the game's Composition,
+// the library's files, the configuration, and the port its server listens
+// on; the server's certificate is trusted by the fingerprint the server
+// writes beside this page as it listens (`fingerprint`), or where none is
+// served, as any site's is (a server given a certificate for its name), and
+// it is reached on the host this page came from. The client plays from a canvas, drawn
+// through the browser's WebGPU, its sound played by the page once the
+// player has touched it. The page answers `rawframeStop()`,
+// `rawframeGpuErrors()`, and `rawframeSound()` for whoever drives it, and
+// says `page: play <code>` and `page: ended <code>` on its console.
+import { WebClient } from './page/client.mjs';
+import { PageTransport } from './page/transport.mjs';
+import { PageSound } from './page/sound.mjs';
+import { maulWindowImports } from './maul-window.mjs';
+import { maulRhiImports } from './maul-rhi.mjs';
+
+const setup = await (await fetch('play.json', { cache: 'no-store' })).json();
+const pinned = await fetch('fingerprint', { cache: 'no-store' });
+const transport = new PageTransport({ certificateHashes: pinned.ok ? [(await pinned.text()).trim()] : [] });
+const client = await WebClient.load(await WebAssembly.compileStreaming(fetch('client.wasm')),
+                                    { transport, log: (line) => console.log(line), windowImports: maulWindowImports,
+                                      deviceImports: maulRhiImports });
+const hold = async (path) => {
+    if (!client.hold(path, new Uint8Array(await (await fetch(path)).arrayBuffer()))) {
+        throw new Error('a file was refused: ' + path);
+    }
+};
+await hold(setup.composition);
+for (const file of setup.files) {
+    await hold('library/' + file);
+}
+const endpoint = `bots.endpoint = https://${location.hostname}:${setup.port}/rawframe\n`;
+console.log('page: play ' + client.play(setup.configuration + endpoint));
+const sound = new PageSound(client);
+document.addEventListener('pointerdown', () => sound.resume());
+document.addEventListener('keydown', () => sound.resume());
+window.rawframeStop = () => client.requestStop();
+// WebGPU's errors, which Maul RHI reads as the device closes.
+window.rawframeGpuErrors = async () => {
+    const gpu = client.gpu.mrhiGpu;
+    for (let waited = 0; gpu && gpu.closing > 0 && waited < 10000; waited += 10) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return gpu?.errors ?? [];
+};
+window.rawframeSound = () => ({ frames: sound.frames, peak: sound.peak, state: sound.context.state });
+const watch = () => {
+    const code = client.ended();
+    if (code === null) {
+        requestAnimationFrame(watch);
+    } else {
+        console.log('page: ended ' + code);
+    }
+};
+requestAnimationFrame(watch);
+</script>
+</body>
+</html>

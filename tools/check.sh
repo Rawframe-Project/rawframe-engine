@@ -121,18 +121,21 @@ else
         # browser are installed: RAWFRAME_NODE_MODULES and
         # PUPPETEER_CACHE_DIR, or under /opt/webtest, which any user
         # (the CI runner's too) can read.
-        # Runners, then the plaza, the sample 3D game (D287).
+        # Runners, then the plaza, the sample 3D game (D287), each exported
+        # for the web and played from its site (D397).
         for game in runners plaza; do
             step "web play $game"
             play_status=0
             RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
                 PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
                 tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
-                out/clang-development/hosts/dedicated_server/rawframe-server \
-                out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
-                out/wasm-development/third_party/maul-window/maul-window.mjs "$PWD" \
+                out/clang-development/hosts/export/rawframe-export \
                 out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
-                out/clang-development/hosts/bots/rawframe-bots out/wasm-development/third_party/maul-rhi/maul-rhi.mjs \
+                out/clang-development/hosts/dedicated_server/rawframe-server \
+                out/clang-development/hosts/bots/rawframe-bots \
+                out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
+                out/wasm-development/third_party/maul-window/maul-window.mjs \
+                out/wasm-development/third_party/maul-rhi/maul-rhi.mjs "$PWD" \
                 "$game" >"out/web-play-$game.log" 2>&1 ||
                 play_status=$?
             if [ "$play_status" -eq 77 ]; then

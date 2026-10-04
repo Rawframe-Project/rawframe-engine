@@ -2,7 +2,7 @@
 
 A performance-oriented, network-first engine for 2D and 3D games and real-time simulations. The core is C++23. Gameplay and tooling are written in [Kest](https://github.com/Rawframe-Project/kest), a deterministic, statically typed game language. Physics comes from [Maul2D](https://github.com/Rawframe-Project/maul2d) and [Maul3D](https://github.com/Rawframe-Project/maul3d).
 
-Its first milestone, a headless, networked, Kest-scripted World with a dedicated server, is done. Clients play from a window on the desktop and from a canvas in a browser, drawn through [Maul RHI](https://github.com/Rawframe-Project/maul-rhi) (Vulkan, and WebGPU in the browser) in 2D and 3D, heard, and felt through a gamepad. The reference games are under `games/`: Runners (2D) and Stalls (a small 3D tycoon), with the plaza as the 3D sample. A game can be exported into a folder that plays on its own. There are no releases yet, and every surface is unstable.
+Its first milestone, a headless, networked, Kest-scripted World with a dedicated server, is done. Clients play from a window on the desktop and from a canvas in a browser, drawn through [Maul RHI](https://github.com/Rawframe-Project/maul-rhi) (Vulkan, and WebGPU in the browser) in 2D and 3D, heard, and felt through a gamepad. The reference games are under `games/`: Runners (2D) and Stalls (a small 3D tycoon), with the plaza as the 3D sample. A game can be exported into a folder that plays on its own, or into a site that plays in a browser. There are no releases yet, and every surface is unstable.
 
 ## Building
 
@@ -32,6 +32,8 @@ On Debian or Ubuntu, `apt-get install` installs each of them under the name give
 ## Exporting a game
 
 `rawframe-export <game directory> <output directory>` cooks the game, packs and signs it, installs it into the folder's own library, and copies the dedicated server, the client, and the launcher beside it. Running the folder's `rawframe-play` starts the game's server on this machine and then its client. Pass `--key <secret key> --publisher <name>` to sign with a publisher key made by `rawframe-build key`; `export.receipt` lists what was written.
+
+With `--target web`, the folder holds a site and its server instead. Serve `web/` as it is from any static file server, and run `server/rawframe-server --config server/server.conf` on the same host: it listens for browsers over WebTransport on every address at the port given, and writes the fingerprint of the certificate it makes as it starts into `web/`, where the page reads it. A browser trusts such a certificate for at most fourteen days, so restart the server within thirteen, or give it a certificate for the host's name (`network.quic.certificate_file` and `network.quic.private_key_file` in place of `network.quic.self_signed`, and no `network.quic.fingerprint_file`).
 
 ## Layout
 

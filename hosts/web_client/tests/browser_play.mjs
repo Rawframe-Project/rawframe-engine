@@ -8,9 +8,12 @@
 // (D259: the page takes the client's sound and plays it), seen through the
 // camera the page's own present system places (D261), and a stop
 // asked of the page ends the run in order. The game is as a web game ships
-// (D256): cooked, packed into a signed Build, installed in a library, and
-// named by a Composition, which the server reads from its disk and the page
-// holds, so the client reads its game, scenes, and textures from the Build.
+// (D256, D397): exported for the web, so cooked, packed into a signed
+// Build, installed in the site's library, and named by a Composition, which
+// the exported server reads from the site and the page holds, so the client
+// reads its game, scenes, and textures from the Build; the site is served
+// as it was written, and its server run as it was written, its certificate's
+// fingerprint read by the page from beside itself.
 // Native players share the server with the page (D263): a bots process of
 // two runners joins from the same Composition over QUIC, pinning the
 // server's certificate, and plays beside the browser throughout. The game
@@ -19,27 +22,29 @@
 // of the canvas shows what was drawn.
 // The sample 3D game plays the same way when named (D287): plaza, its
 // walker walked by W and made to jump, its scene drawn in the canvas (its
-// models seen through the player's camera and drawn), and neither sound nor
-// sprites asked of it.
+// models seen through the player's camera and drawn), no sprites asked of
+// it, and the sound the export asks of every game played as silence, since
+// the plaza declares no mixer (D397).
 // Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser from where
 // Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test is
 // skipped (77).
 //
-// usage: browser_play.mjs <rawframe-server> <rawframe-web-client.wasm> <maul-window.mjs> <repository>
-//                         <rawframe-cook> <rawframe-build> <rawframe-bots> <maul-rhi.mjs> [game]
+// usage: browser_play.mjs <rawframe-export> <rawframe-cook> <rawframe-build> <rawframe-server> <rawframe-bots>
+//                         <rawframe-web-client.wasm> <maul-window.mjs> <maul-rhi.mjs> <repository> [game]
 import { execFileSync, spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, extname, join, normalize, relative } from 'node:path';
+import { dirname, extname, join, normalize } from 'node:path';
 import { argv, env } from 'node:process';
 import { inflateSync } from 'node:zlib';
 import { end } from './verdict.mjs';
 
-const [serverPath, wasmPath, windowPath, repository, cookPath, buildPath, botsPath, devicePath, named] = argv.slice(2);
+const [exportPath, cookPath, buildPath, serverPath, botsPath, wasmPath, windowPath, devicePath, repository, named] =
+    argv.slice(2);
 // runners, or plaza.
 const name = named ?? 'runners';
 const plaza = name === 'plaza';
@@ -57,20 +62,6 @@ if (!existsSync(browserPath)) {
 }
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const work = await mkdtemp(join(tmpdir(), 'rawframe-play-'));
-const game = join(repository, 'games', name);
-
-// The game cooked, packed for the web, signed, installed, and composed. The
-// publisher's secret key is gone before anything is served.
-const run = (path, args) => execFileSync(path, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
-const library = join(work, 'library');
-run(cookPath, [game, join(work, 'cooked'), join(work, 'cache')]);
-const kid = run(buildPath, ['key', 'rawframe', join(library, 'keys')]).split(' ')[1].trim();
-run(buildPath, [join(work, 'cooked'), join(work, 'build'), `rawframe/${name}`, '0.1.0', 'web', 'wasm32', 'client',
-                'build.development', 'tool', join(library, 'keys', `${kid}.key`)]);
-await unlink(join(library, 'keys', `${kid}.key`));
-const root = run(buildPath, ['install', join(work, 'build'), library]).split(' ')[1].trim();
-run(buildPath, ['compose', library, root, 'tool', join(work, `${name}.composition`)]);
-const gameResource = /"resourceId": "([0-9a-f]+)"/.exec(await readFile(join(game, `${name}.game.rfmeta`), 'utf8'))[1];
 
 /** A UDP port nothing holds right now. */
 const port = await new Promise((resolve) => {
@@ -81,19 +72,28 @@ const port = await new Promise((resolve) => {
     });
 });
 
-await writeFile(join(work, 'server.conf'), [
-    'host.iteration_rate = 120',
-    'world.tick_rate = 60',
-    `kest.game_resource = ${gameResource}`,
-    `content.composition = ${join(work, `${name}.composition`)}`,
-    `content.library = ${library}`,
-    'network.quic.self_signed = true',
-    'network.quic.webtransport = true',
-    `network.quic.fingerprint_file = ${join(work, 'fingerprint')}`,
-    `replication.endpoint = 127.0.0.1:${port}`,
+// The game exported for the web: the site and its server.
+const exported = join(work, 'exported');
+const site = join(exported, 'web');
+execFileSync(exportPath, [join(repository, 'games', name), exported, '--target', 'web', '--port', String(port),
+                          '--cook', cookPath, '--build', buildPath, '--server', serverPath, '--web-client', wasmPath,
+                          '--maul-window', windowPath, '--maul-rhi', devicePath, '--page',
+                          join(repository, 'hosts/web_client/page')],
+             { stdio: ['ignore', 'inherit', 'inherit'] });
+const setup = JSON.parse(await readFile(join(site, 'play.json'), 'utf8'));
+// Here a software adapter draws, which a player's machine is not asked to
+// allow; the plaza's shadow map is small, and its view drawn at half scale
+// (D373, D379), for the software rasterizer.
+setup.configuration += [
+    'render.device = any',
+    ...(plaza ? ['scene.shadow_side = 256', 'scene.shadow_filter = hardware', 'scene.render_scale_percent = 50'] : []),
     '',
-].join('\n'));
-const server = spawn(serverPath, ['--config', join(work, 'server.conf')], { stdio: ['ignore', 'pipe', 'inherit'], cwd: repository });
+].join('\n');
+await writeFile(join(site, 'play.json'), JSON.stringify(setup));
+const gameResource = /kest\.game_resource = ([0-9a-f]+)/.exec(setup.configuration)[1];
+
+const server = spawn(join(exported, 'server', 'rawframe-server'), ['--config', join(exported, 'server', 'server.conf')],
+                     { stdio: ['ignore', 'pipe', 'inherit'], cwd: work });
 process.on('exit', () => server.kill('SIGKILL'));
 let serverLog = '';
 server.stdout.on('data', (chunk) => {
@@ -102,7 +102,7 @@ server.stdout.on('data', (chunk) => {
 let fingerprint;
 for (let tries = 0; tries < 500 && fingerprint === undefined; tries += 1) {
     await sleep(10);
-    fingerprint = await readFile(join(work, 'fingerprint'), 'utf8').then((text) => text.trim(), () => undefined);
+    fingerprint = await readFile(join(site, 'fingerprint'), 'utf8').then((text) => text.trim(), () => undefined);
 }
 if (fingerprint === undefined) {
     console.log('page: the server wrote no fingerprint');
@@ -113,10 +113,10 @@ if (fingerprint === undefined) {
 await writeFile(join(work, 'bots.conf'), [
     'host.iteration_rate = 120',
     `kest.game_resource = ${gameResource}`,
-    `content.composition = ${join(work, `${name}.composition`)}`,
-    `content.library = ${library}`,
+    `content.composition = ${join(site, setup.composition)}`,
+    `content.library = ${join(site, 'library')}`,
     'kest.plan_only = true',
-    `network.quic.pin_file = ${join(work, 'fingerprint')}`,
+    `network.quic.pin_file = ${join(site, 'fingerprint')}`,
     'bots.count = 2',
     `bots.endpoint = 127.0.0.1:${port}`,
     '',
@@ -128,116 +128,19 @@ natives.stdout.on('data', (chunk) => {
     nativeLog += chunk;
 });
 
-// What the page fetches: its modules, the client, the window's page side,
-// the Composition's record, and the library, which it hands the client under
-// library/.
-const files = [];
-async function list(directory) {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-        const path = join(directory, entry.name);
-        if (entry.isDirectory()) {
-            await list(path);
-        } else {
-            files.push(relative(library, path));
-        }
-    }
-}
-await list(library);
-const setup = {
-    fingerprint,
-    composition: `${name}.composition`,
-    files,
-    configuration: [
-        'host.iteration_rate = 120',
-        `kest.game_resource = ${gameResource}`,
-        `content.composition = ${name}.composition`,
-        'content.library = library',
-        'kest.plan_only = true',
-        // The plaza makes no sound: it has no mixer to play; its shadow map
-        // is small, and its view drawn at half scale (D373, D379), for the
-        // software rasterizer.
-        ...(plaza ? ['scene.shadow_side = 256', 'scene.shadow_filter = hardware', 'scene.render_scale_percent = 50']
-                  : ['audio.play = sink']),
-        'bots.player = true',
-        'render.device = any',
-        `bots.endpoint = https://127.0.0.1:${port}/rawframe`,
-        '',
-    ].join('\n'),
-};
-const page = `<!doctype html><html><head><meta charset="utf-8"></head><body>
-<script type="module">
-import { WebClient } from '/page/client.mjs';
-import { PageTransport } from '/page/transport.mjs';
-import { PageSound } from '/page/sound.mjs';
-import { maulWindowImports } from '/maul-window.mjs';
-import { maulRhiImports } from '/maul-rhi.mjs';
-const setup = await (await fetch('/setup.json')).json();
-const transport = new PageTransport({ certificateHashes: [setup.fingerprint] });
-const client = await WebClient.load(await (await fetch('/client.wasm')).arrayBuffer(),
-                                    { transport, log: (line) => console.log(line), windowImports: maulWindowImports,
-                                      deviceImports: maulRhiImports });
-const hold = async (path, url) => {
-    if (!client.hold(path, new Uint8Array(await (await fetch(url)).arrayBuffer()))) {
-        throw new Error('a file was refused: ' + path);
-    }
-};
-await hold(setup.composition, '/' + setup.composition);
-for (const path of setup.files) {
-    await hold('library/' + path, '/library/' + path);
-}
-console.log('page: play ' + client.play(setup.configuration));
-const sound = new PageSound(client);
-document.addEventListener('pointerdown', () => sound.resume());
-window.rawframeStop = () => client.requestStop();
-// WebGPU's errors, which Maul RHI reads as the device closes.
-window.rawframeGpuErrors = async () => {
-    const gpu = client.gpu.mrhiGpu;
-    for (let waited = 0; gpu && gpu.closing > 0 && waited < 10000; waited += 10) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    return gpu?.errors ?? [];
-};
-window.rawframeSound = () => ({ frames: sound.frames, peak: sound.peak, state: sound.context.state });
-const watch = () => {
-    const code = client.ended();
-    if (code === null) {
-        requestAnimationFrame(watch);
-    } else {
-        console.log('page: ended ' + code);
-    }
-};
-requestAnimationFrame(watch);
-</script></body></html>`;
-const types = { '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json' };
+// The site, served as it was written, as any static file server would.
+const types = { '.html': 'text/html', '.mjs': 'text/javascript', '.wasm': 'application/wasm',
+                '.json': 'application/json' };
 const http = createServer(async (request, response) => {
-    const url = decodeURIComponent(request.url);
-    const serve = async (path, type) => {
-        response.writeHead(200, { 'Content-Type': type ?? types[extname(path)] ?? 'application/octet-stream' });
-        response.end(await readFile(path));
-    };
+    const url = decodeURIComponent(new URL(request.url, 'http://page').pathname);
+    const path = normalize(join(site, url === '/' ? 'index.html' : url));
     try {
-        if (url === '/') {
-            response.writeHead(200, { 'Content-Type': 'text/html' });
-            response.end(page);
-        } else if (url === '/setup.json') {
-            response.writeHead(200, { 'Content-Type': 'application/json' });
-            response.end(JSON.stringify(setup));
-        } else if (url === '/client.wasm') {
-            await serve(wasmPath);
-        } else if (url === '/maul-window.mjs') {
-            await serve(windowPath);
-        } else if (url === '/maul-rhi.mjs') {
-            await serve(devicePath);
-        } else if (url.startsWith('/page/')) {
-            await serve(join(repository, 'hosts/web_client/page', normalize(url.slice(6))));
-        } else if (url === `/${name}.composition`) {
-            await serve(join(work, `${name}.composition`));
-        } else if (url.startsWith('/library/')) {
-            await serve(join(library, normalize(url.slice(9))));
-        } else {
-            response.writeHead(404);
-            response.end();
+        if (!path.startsWith(site + '/')) {
+            throw new Error('outside the site');
         }
+        const bytes = await readFile(path);
+        response.writeHead(200, { 'Content-Type': types[extname(path)] ?? 'application/octet-stream' });
+        response.end(bytes);
     } catch {
         response.writeHead(404);
         response.end();
@@ -393,7 +296,7 @@ try {
                           Number(drawn[2]) > 0 && Number(drawn[3]) === 3 && viewed !== null && Number(viewed[1]) > 0 &&
                           heard.frames > 48000 && heard.peak > 0.05;
     const plazaPlayed = seen3d !== null && Number(seen3d[1]) > 0 && Number(seen3d[2]) > 0 && drawn3d !== null &&
-                        Number(drawn3d[1]) > 0;
+                        Number(drawn3d[1]) > 0 && /"code":"game_silent"/.test(clientLog);
     verdict = played && (plaza ? plazaPlayed : runnersPlayed) ? 0 : 1;
 } catch (error) {
     console.log(`page: ${error.message}`);

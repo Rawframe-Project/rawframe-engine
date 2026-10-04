@@ -11,7 +11,7 @@
 //
 //   rawframe-export <game directory> <output directory> [--game <file>]
 //                   [--port <port>] [--version <version>] [--tools <directory>]
-//                   [--key <secret key> --publisher <name>]
+//                   [--key <secret key> --publisher <name>] [--target web]
 //
 // With `--key`, the Build is signed by that secret (`rawframe-build key`
 // writes it beside `<publisher>.keys`, which the folder's library pins);
@@ -26,12 +26,28 @@
 // `--play`). The output directory must not exist, or be empty. Running the
 // folder's `rawframe-play` plays the game; `export.receipt` lists what was
 // written, each file's SHA-256, the Build's root, and the Composition.
+//
+// With `--target web` (D397) the game is packed for the web and the folder
+// holds a site and its server instead. `web/` is served as it is by any
+// static file server: its page (`index.html`, with the page's modules under
+// `page/`), the web client (`client.wasm`), Maul Window's and Maul RHI's
+// page sides, the Composition, the library, and `play.json`, which names
+// them, the configuration the client plays, and the server's port.
+// `server/` holds the dedicated server and its configuration: it listens on
+// every address at the port, for browsers over WebTransport, with an
+// identity made as it starts, whose fingerprint it writes into `web/` for
+// the page to trust; the page reaches it on the host the page came from.
+// The web client and the page sides are found under `<tools>/web/`
+// (`rawframe-web-client.wasm`, `maul-window.mjs`, `maul-rhi.mjs`, and
+// `page/`, the page's own files) unless named (`--web-client`,
+// `--maul-window`, `--maul-rhi`, `--page`).
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/document/json.h"
 #include "rawframe/process/child.h"
 #include "rawframe/process/self.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -147,6 +163,20 @@ std::optional<std::string> resourceOf(const std::string& sidecar) {
     return id;
 }
 
+/// Every file under `directory`, by its path from there with `/` between
+/// names, in order.
+std::vector<std::string> filesUnder(const fs::path& directory) {
+    std::vector<std::string> files;
+    std::error_code error;
+    for (fs::recursive_directory_iterator walk{directory, error}, end; !error && walk != end; walk.increment(error)) {
+        if (walk->is_regular_file(error)) {
+            files.push_back(fs::relative(walk->path(), directory, error).generic_string());
+        }
+    }
+    std::ranges::sort(files);
+    return files;
+}
+
 /// A port, 1 to 65535, written plainly.
 bool portLike(const std::string& text) {
     if (text.empty() || text.size() > 5 || text.front() == '0') {
@@ -162,10 +192,153 @@ bool portLike(const std::string& text) {
     return value <= 65535U;
 }
 
+/// What every export writes its configurations from.
+struct Exported {
+    fs::path output;
+    /// The Composition's record, beside the library it names.
+    std::string record;
+    std::string gameResource;
+    std::string port;
+    /// The programs' suffix on this system (`.exe` on Windows).
+    std::string suffix;
+};
+
+/// Copies `from` to `file` under the output and adds it to `written`.
+bool copyInto(const fs::path& from,
+              const Exported& exported,
+              const std::string& file,
+              std::vector<std::string>& written) {
+    std::error_code error;
+    fs::create_directories((exported.output / file).parent_path(), error);
+    fs::copy_file(from, exported.output / file, fs::copy_options::overwrite_existing, error);
+    if (error) {
+        std::fprintf(stderr, "rawframe-export: %s cannot be copied\n", from.string().c_str());
+        return false;
+    }
+    written.push_back(file);
+    return true;
+}
+
+/// Writes `text` to `file` under the output and adds it to `written`.
+bool writeInto(const Exported& exported,
+               const std::string& file,
+               std::string_view text,
+               std::vector<std::string>& written) {
+    if (!writeText(exported.output / file, text)) {
+        std::fprintf(stderr, "rawframe-export: %s cannot be written\n", file.c_str());
+        return false;
+    }
+    written.push_back(file);
+    return true;
+}
+
+/// The folder that plays on this machine: the server, the client, the
+/// launcher, and their configurations.
+bool writeNative(const Exported& exported, const std::array<fs::path, 3>& programs, std::vector<std::string>& written) {
+    const std::string& kSuffix = exported.suffix;
+    const std::array<std::string, 3> kFiles{
+        "rawframe-server" + kSuffix, "rawframe-client" + kSuffix, "rawframe-play" + kSuffix};
+    for (std::size_t at = 0; at < programs.size(); ++at) {
+        if (!copyInto(programs[at], exported, kFiles[at], written)) {
+            return false;
+        }
+    }
+    const std::string kContent = "kest.game_resource = " + exported.gameResource +
+                                 "\ncontent.composition = " + exported.record + "\ncontent.library = library\n";
+    const std::string kServer = "# The game's dedicated server, on this machine's loopback, with an identity\n"
+                                "# made as it starts.\n"
+                                "host.iteration_rate = 120\nworld.tick_rate = 60\n" +
+                                kContent +
+                                "network.quic.self_signed = true\nnetwork.quic.fingerprint_file = fingerprint\n"
+                                "replication.endpoint = 127.0.0.1:" +
+                                exported.port + "\n";
+    const std::string kClient = "# The player, from this window, pinned to the server's identity, heard on\n"
+                                "# this machine's sound device.\n"
+                                "host.iteration_rate = 120\nbots.player = true\naudio.play = device\n" +
+                                kContent +
+                                "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
+                                "bots.endpoint = 127.0.0.1:" +
+                                exported.port + "\n";
+    const std::string kPlay = "# Run rawframe-play" + kSuffix +
+                              " to play: it starts the server, then the client.\n"
+                              "play.server = rawframe-server" +
+                              kSuffix + "\nplay.server_config = server.conf\nplay.server_log = server.log\n" +
+                              "play.client = rawframe-client" + kSuffix +
+                              "\nplay.client_config = client.conf\nplay.client_log = client.log\n"
+                              "play.fingerprint = fingerprint\n";
+    if (!writeInto(exported, "server.conf", kServer, written) ||
+        !writeInto(exported, "client.conf", kClient, written) || !writeInto(exported, "play.conf", kPlay, written)) {
+        return false;
+    }
+    written.push_back(exported.record);
+    return true;
+}
+
+/// What a web export takes from the web build and the native one.
+struct WebFiles {
+    fs::path client;
+    fs::path window;
+    fs::path device;
+    /// The page's own files: `play.html` and its modules.
+    fs::path page;
+    fs::path server;
+};
+
+/// The site under `web/` and its server under `server/` (D397).
+bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::string>& written) {
+    if (!copyInto(from.page / "play.html", exported, "web/index.html", written) ||
+        !copyInto(from.client, exported, "web/client.wasm", written) ||
+        !copyInto(from.window, exported, "web/maul-window.mjs", written) ||
+        !copyInto(from.device, exported, "web/maul-rhi.mjs", written) ||
+        !copyInto(from.server, exported, "server/rawframe-server" + exported.suffix, written)) {
+        return false;
+    }
+    for (const char* module : {"client.mjs", "sound.mjs", "transport.mjs", "wasi.mjs"}) {
+        if (!copyInto(from.page / module, exported, std::string{"web/page/"} + module, written)) {
+            return false;
+        }
+    }
+    // What the page fetches and hands the client, and what the client plays;
+    // the page adds where the server is.
+    document::Value files = document::Value::array();
+    for (const std::string& file : filesUnder(exported.output / "web" / "library")) {
+        files.push(document::Value::string(file));
+    }
+    document::Value play = document::Value::object();
+    play.add("composition", document::Value::string(exported.record));
+    play.add("configuration",
+             document::Value::string("host.iteration_rate = 120\nbots.player = true\naudio.play = sink\n"
+                                     "kest.game_resource = " +
+                                     exported.gameResource + "\ncontent.composition = " + exported.record +
+                                     "\ncontent.library = library\nkest.plan_only = true\n"));
+    play.add("files", std::move(files));
+    play.add("port", document::Value::integer(std::stoll(exported.port)));
+    const auto kPlay = document::writeCanonicalRecord(play);
+    const std::string kServer = "# The game's dedicated server, on every address, for browsers over\n"
+                                "# WebTransport, with an identity made as it starts, whose fingerprint the\n"
+                                "# page reads beside itself. Run it from anywhere: rawframe-server" +
+                                exported.suffix +
+                                " --config server.conf\n"
+                                "host.iteration_rate = 120\nworld.tick_rate = 60\n"
+                                "kest.game_resource = " +
+                                exported.gameResource + "\ncontent.composition = ../web/" + exported.record +
+                                "\ncontent.library = ../web/library\n"
+                                "network.quic.self_signed = true\nnetwork.quic.webtransport = true\n"
+                                "network.quic.fingerprint_file = ../web/fingerprint\n"
+                                "replication.endpoint = :" +
+                                exported.port + "\n";
+    if (!kPlay.has_value() || !writeInto(exported, "web/play.json", *kPlay, written) ||
+        !writeInto(exported, "server/server.conf", kServer, written)) {
+        return false;
+    }
+    written.push_back("web/" + exported.record);
+    return true;
+}
+
 int usage() {
     std::fputs("usage: rawframe-export <game directory> <output directory> [--game <file>] [--port <port>]\n"
                "                       [--version <version>] [--tools <directory>] [--<tool> <path>]...\n"
-               "                       [--key <secret key> --publisher <name>]\n",
+               "                       [--key <secret key> --publisher <name>] [--target web]\n",
                stderr);
     return 2;
 }
@@ -186,6 +359,7 @@ int main(int argc, char** argv) {
     std::string version = "0.1.0";
     std::optional<fs::path> key;
     std::string publisher = "local";
+    bool web = false;
     fs::path toolDirectory = kSelf.parent_path();
     std::map<std::string, fs::path, std::less<>> tools;
     for (int at = 3; at + 1 < argc; at += 2) {
@@ -203,8 +377,11 @@ int main(int argc, char** argv) {
             publisher = kValue;
         } else if (kOption == "--tools") {
             toolDirectory = kValue;
+        } else if (kOption == "--target" && (kValue == "web" || kValue == "native")) {
+            web = kValue == "web";
         } else if (kOption == "--cook" || kOption == "--build" || kOption == "--server" || kOption == "--client" ||
-                   kOption == "--play") {
+                   kOption == "--play" || kOption == "--web-client" || kOption == "--maul-window" ||
+                   kOption == "--maul-rhi" || kOption == "--page") {
             tools.emplace(kOption.substr(2), kValue);
         } else {
             return usage();
@@ -217,6 +394,11 @@ int main(int argc, char** argv) {
         const auto kNamed = tools.find(name);
         return kNamed != tools.end() ? fs::absolute(kNamed->second)
                                      : toolDirectory / (std::string{"rawframe-"} + name + kSuffix);
+    };
+    // What a web export takes from the web build, under `<tools>/web/`.
+    const auto kWebFile = [&](const char* name, const char* file) {
+        const auto kNamed = tools.find(name);
+        return kNamed != tools.end() ? fs::absolute(kNamed->second) : toolDirectory / "web" / file;
     };
     if (fs::exists(kOutput) && !fs::is_empty(kOutput, error)) {
         std::fprintf(stderr, "rawframe-export: %s is not empty\n", kOutput.string().c_str());
@@ -233,7 +415,9 @@ int main(int argc, char** argv) {
 
     // The working files under the output, gone at the end.
     const fs::path kWork = kOutput / ".export";
-    const fs::path kLibrary = kOutput / "library";
+    // The folder the client plays from: the site, for the web.
+    const fs::path kSite = web ? kOutput / "web" : kOutput;
+    const fs::path kLibrary = kSite / "library";
     fs::create_directories(kWork, error);
     fs::create_directories(kLibrary / "keys", error);
     if (error) {
@@ -269,8 +453,8 @@ int main(int argc, char** argv) {
                                  (kWork / "build").string(),
                                  publisher + "/" + kName,
                                  version,
-                                 std::string{kPlatform},
-                                 std::string{kArchitecture},
+                                 std::string{web ? "web" : kPlatform},
+                                 std::string{web ? "wasm32" : kArchitecture},
                                  "client",
                                  std::string{"build."} + RAWFRAME_CONFIGURATION_NAME,
                                  "tool",
@@ -291,7 +475,7 @@ int main(int argc, char** argv) {
     }
     const std::string kRecord = kName + ".composition";
     const auto kComposed = runTool(kTool("build"),
-                                   {"compose", kLibrary.string(), *kRoot, "tool", (kOutput / kRecord).string()},
+                                   {"compose", kLibrary.string(), *kRoot, "tool", (kSite / kRecord).string()},
                                    kWork / "compose.log");
     const auto kComposition = kComposed ? wordAfter(*kComposed, "composition") : std::nullopt;
     if (!kComposition.has_value()) {
@@ -299,47 +483,20 @@ int main(int argc, char** argv) {
     }
 
     // The programs, and what each reads: every path under the folder.
+    const Exported kExported{
+        .output = kOutput, .record = kRecord, .gameResource = kGameResource, .port = port, .suffix = kSuffix};
     std::vector<std::string> written;
-    for (const char* name : {"server", "client", "play"}) {
-        const std::string kFile = std::string{"rawframe-"} + name + kSuffix;
-        fs::copy_file(kTool(name), kOutput / kFile, fs::copy_options::overwrite_existing, error);
-        if (error) {
-            std::fprintf(stderr, "rawframe-export: %s cannot be copied\n", kTool(name).string().c_str());
-            return 1;
-        }
-        written.push_back(kFile);
+    const bool kWritten = web ? writeWeb(kExported,
+                                         {.client = kWebFile("web-client", "rawframe-web-client.wasm"),
+                                          .window = kWebFile("maul-window", "maul-window.mjs"),
+                                          .device = kWebFile("maul-rhi", "maul-rhi.mjs"),
+                                          .page = kWebFile("page", "page"),
+                                          .server = kTool("server")},
+                                         written)
+                              : writeNative(kExported, {kTool("server"), kTool("client"), kTool("play")}, written);
+    if (!kWritten) {
+        return 1;
     }
-    const std::string kContent = "kest.game_resource = " + kGameResource + "\ncontent.composition = " + kRecord +
-                                 "\ncontent.library = library\n";
-    const std::string kServer = "# The game's dedicated server, on this machine's loopback, with an identity\n"
-                                "# made as it starts.\n"
-                                "host.iteration_rate = 120\nworld.tick_rate = 60\n" +
-                                kContent +
-                                "network.quic.self_signed = true\nnetwork.quic.fingerprint_file = fingerprint\n"
-                                "replication.endpoint = 127.0.0.1:" +
-                                port + "\n";
-    const std::string kClient = "# The player, from this window, pinned to the server's identity.\n"
-                                "host.iteration_rate = 120\nbots.player = true\n" +
-                                kContent +
-                                "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
-                                "bots.endpoint = 127.0.0.1:" +
-                                port + "\n";
-    const std::string kPlay = "# Run rawframe-play" + kSuffix +
-                              " to play: it starts the server, then the client.\n"
-                              "play.server = rawframe-server" +
-                              kSuffix + "\nplay.server_config = server.conf\nplay.server_log = server.log\n" +
-                              "play.client = rawframe-client" + kSuffix +
-                              "\nplay.client_config = client.conf\nplay.client_log = client.log\n"
-                              "play.fingerprint = fingerprint\n";
-    for (const auto& [file, text] : std::array<std::pair<const char*, const std::string*>, 3>{
-             {{"server.conf", &kServer}, {"client.conf", &kClient}, {"play.conf", &kPlay}}}) {
-        if (!writeText(kOutput / file, *text)) {
-            std::fprintf(stderr, "rawframe-export: %s cannot be written\n", file);
-            return 1;
-        }
-        written.emplace_back(file);
-    }
-    written.push_back(kRecord);
     fs::remove_all(kWork, error);
 
     // The receipt: what was written, by digest, and the Build it plays.
@@ -359,6 +516,7 @@ int main(int argc, char** argv) {
     receipt.add("game", document::Value::string(kGameResource));
     receipt.add("kind", document::Value::string("export.receipt"));
     receipt.add("port", document::Value::integer(std::stoll(port)));
+    receipt.add("target", document::Value::string(web ? "web" : "native"));
     const auto kReceipt = document::writeCanonicalRecord(receipt);
     if (!kReceipt.has_value() || !writeText(kOutput / "export.receipt", *kReceipt)) {
         std::fputs("rawframe-export: the receipt cannot be written\n", stderr);
