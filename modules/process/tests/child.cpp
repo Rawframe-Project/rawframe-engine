@@ -13,6 +13,8 @@
 #include <thread>
 
 #if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
 #include <windows.h>
 #endif
 
@@ -37,6 +39,11 @@ BOOL WINAPI askStopOnEvent(DWORD event) {
 } // namespace
 
 int main(int argc, char** argv) {
+#if defined(_WIN32)
+    // Its lines as written, not with the C runtime's carriage returns.
+    static_cast<void>(::_setmode(::_fileno(stdout), _O_BINARY));
+    static_cast<void>(::_setmode(::_fileno(stderr), _O_BINARY));
+#endif
     const std::string_view kMode = argc > 1 ? argv[1] : "";
     if (kMode == "exit" && argc > 2) {
         return std::atoi(argv[2]);
