@@ -14,6 +14,7 @@ apply to vendored files; the code is upstream's, not ours.
 | Maul Window 0.1.0 and main to `bf9502d` (the web without Emscripten, mwin-0022, D250; Xbox pads through Windows.Gaming.Input, mwin-0023, D251) | `Rawframe-Project/maul-window` | `bf9502defa010b615bbdf4527fe85818582df37a` | MIT (its gamepad tables: SDL_GameControllerDB, zlib) | `include/`, `src/`, `cmake/`, `protocols/`, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |
 | Maul RHI, unreleased main at `668ffc8` (its Vulkan driver natively, Windows included; its WebGPU driver on the web, built with wasm32-wasi, D282) | `Rawframe-Project/maul-rhi` | `668ffc8c68005c6cea6828b7d1e0daf86c9576c2` | MIT (its Khronos headers: Apache-2.0 or MIT) | `include/`, `src/`, `khronos/`, `cmake/`, `tools/mrhi_container.py` and the `docs/contract/mrhi.json` it reads, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |
 | Maul UI, unreleased main at `0931f5a` (its core: node tree, flex layout, style, draw-command list; its text component on, over FreeType, HarfBuzz, and Maul Unicode below, D383; its glyph images, D398) | `Rawframe-Project/maul-ui` | `0931f5ad119e4ee6cb49c19f08d1721e0c617265` | MIT | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE`, `THIRD_PARTY.md` |
+| Maul Nav, unreleased main at `ddbdbd0` (navmesh generation, path and spatial queries, flow fields, avoidance; ADR-0056 as amended by D126, D399) | `Rawframe-Project/maul-nav` | `ddbdbd084391fb0d4170a8f3190168d46ec1c262` | MIT | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
 | FreeType 2.14.3, Maul UI's text component's (D383) | `freetype/freetype` release archive, SHA-256 `36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f` | 2.14.3 | FreeType License (FTL; dual with GPLv2, the FTL is the one taken) | `include/`, `src/` of the modules Maul UI builds (`base`, `cff`, `psaux`, `pshinter`, `psnames`, `sfnt`, `smooth`, `truetype`), `LICENSE.TXT`, `docs/FTL.TXT` |
 | HarfBuzz 14.5.1, Maul UI's text component's (D383) | `harfbuzz/harfbuzz` release archive, SHA-256 `7e2fa4e8c7c98e8d8140671f5772542afaaa6acccfbd746506886b6d85f7f8d6` | 14.5.1 | MIT ("Old MIT") | `src/` without its build files, scripts, and generator sources, `COPYING` |
 | OpenType Sanitizer 9.3.0, the cook's font sanitizer (ADR-0078, D385); import tooling only | `khaledhosny/ots` release archive, SHA-256 `23814f8e90ee77379f54e86a012c09bba2d133940e5257546b29cf087a73beec` | 9.3.0 | BSD-3-Clause | `include/`, `src/` without Graphite's tables, `LICENSE`, `README.md`; ours: `CMakeLists.txt`, `rawframe/` (its configuration, and refusing stand-ins for zlib and the WOFF 2.0 decoder) |
@@ -48,11 +49,12 @@ To move the Kest pin, run `tools/update_kest.sh <kest checkout> <revision>`,
 build, run the full check, and commit the result with the new revision in this
 table.
 
-To move a Maul pin, run `tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window|maul-rhi|maul-ui> <checkout> <revision>`,
+To move a Maul pin, run `tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window|maul-rhi|maul-ui|maul-nav> <checkout> <revision>`,
 bring the source list in `third_party/<engine>/CMakeLists.txt` in line with
 upstream's (Maul2D and Maul3D; Maul Unicode, Maul Window, Maul RHI, and
-Maul UI keep their own CMake, configured by `third_party/maul_window.cmake`,
-`third_party/maul_rhi.cmake`, and `third_party/maul_ui.cmake`), and proceed
+Maul UI, and Maul Nav keep their own CMake, configured by
+`third_party/maul_window.cmake`, `third_party/maul_rhi.cmake`,
+`third_party/maul_ui.cmake`, and `third_party/maul_nav.cmake`), and proceed
 as for Kest.
 Maul Window's pin names the Maul Unicode release it was made with; move both
 together. Maul snapshots and journals refuse
