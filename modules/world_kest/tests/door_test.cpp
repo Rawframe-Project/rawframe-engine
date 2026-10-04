@@ -126,3 +126,19 @@ RAWFRAME_TEST(StructuralDoorsTwiceOverAreSkippedAtTheBarrier) {
         RAWFRAME_EXPECT(marked == 0 && world.entityCount() == 4);
     });
 }
+
+RAWFRAME_TEST(LookupsOfWhatIsNotThereAnswerWithoutHarm) {
+    play("peek.game", 3, [](world::World& world) {
+        // Of thirteen asked, the three marks alone are found, at their
+        // places; the count is right; nothing failed.
+        const auto kProbe =
+            world.registry().find(schema::ComponentTypeId::fromText("3d6c1e2a-8f47-4b09-a5d1-7c2e9f0b4a63"));
+        const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kProbe, world::Access::Read}};
+        auto probes = world::ColumnQuery::resolve(kTerms, world.registry());
+        std::array<std::uint32_t, 3> seen{};
+        probes->forEachChunk(world, [&seen](const world::ColumnChunk& chunk) {
+            std::memcpy(seen.data(), chunk.columns[0], sizeof seen);
+        });
+        RAWFRAME_EXPECT(seen[0] == 14 && seen[1] == 3 && seen[2] == 21);
+    });
+}

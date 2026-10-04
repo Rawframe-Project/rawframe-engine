@@ -1,0 +1,64 @@
+module peek
+
+import rawframe.replication
+import rawframe.world
+
+// What the probe saw in its last run: the calls it made, the places that
+// named a mark, and the marks' values summed.
+struct Probe {
+    calls: u32
+    found: u32
+    sum: u32
+}
+
+struct Mark {
+    at: u32
+}
+
+extern fn Mark.get(entity: world.Entity) -> Mark
+extern fn Mark.has(entity: world.Entity) -> bool
+extern fn Mark.count() -> i32
+extern fn Mark.entity(index: i32) -> world.Entity
+
+// Asks `has` of an entity, and `get` only where `has` said yes.
+fn ask(probe: Probe, entity: world.Entity) -> Probe {
+    let seen = probe
+    seen.calls = seen.calls + u32(1)
+    if Mark.has(entity) {
+        seen.found = seen.found + u32(1)
+        seen.sum = seen.sum + Mark.get(entity).at
+    }
+    return seen
+}
+
+fn peek(count: i32, probes: [Probe], entities: [world.Entity]) {
+    let places = array(10, 0)
+    places[0] = -2147483647 - 1
+    places[1] = -1000000
+    places[2] = -1
+    places[3] = 0
+    places[4] = 1
+    places[5] = 2
+    places[6] = 3
+    places[7] = 4
+    places[8] = 1000000
+    places[9] = 2147483647
+    let i = 0
+    while i < count {
+        let probe = Probe(u32(0), u32(0), u32(0))
+        let k = 0
+        while k < 10 {
+            probe = ask(probe, Mark.entity(places[k]))
+            k = k + 1
+        }
+        probe = ask(probe, world.create())
+        probe = ask(probe, entities[i])
+        probe = ask(probe, replication.player())
+        // Counted once more, between the others.
+        if Mark.count() == 3 {
+            probe.calls = probe.calls + u32(1)
+        }
+        probes[i] = probe
+        i = i + 1
+    }
+}

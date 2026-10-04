@@ -1,0 +1,12 @@
+# A program asking the lookup doors (D391, D393) and the player door (D390)
+# for what is not there: places past either end and far past them, an
+# entity this run made, one without the component, and the null entity.
+program peek.kest
+
+component 3d6c1e2a-8f47-4b09-a5d1-7c2e9f0b4a63 peek.probe Probe
+component 9a41f7c5-2e6d-4b38-91fa-0c5d8e3b7a12 peek.mark Mark
+
+system peek.peek simulation peek write peek.probe lookup peek.mark entities
+
+spawn 1 peek.probe
+spawn 3 peek.mark at=7
