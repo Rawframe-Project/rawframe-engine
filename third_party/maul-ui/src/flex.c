@@ -74,6 +74,15 @@ static muiAlign AlignOf(const Frame* frame, const muiLayoutStyle* child)
                                                   : frame->style->container.alignItems;
 }
 
+// Whether a child takes part in its line's baseline alignment (section
+// 9.4 step 8): it aligns by baseline in a row, whose main axis is the
+// inline axis, and neither cross margin is automatic.
+static bool IsBaselineAligned(const Frame* frame, const muiLayoutStyle* child)
+{
+    return frame->row && AlignOf(frame, child) == mui_alignBaseline &&
+           !muiIsMarginAutoStart(child, false) && !muiIsMarginAutoEnd(child, false);
+}
+
 // Whether a child takes its line's cross size: it aligns by stretch and
 // neither cross margin is automatic.
 static bool IsStretched(const Frame* frame, const muiLayoutStyle* child)
@@ -319,10 +328,14 @@ static void SizeMain(Frame* frame)
 }
 
 // Section 9.4 step 7 and 8: each child's hypothetical cross size at its
-// target main size; returns the line's cross size.
+// target main size and, aligned by baseline, its ascent there; returns
+// the line's cross size, which holds the other children and the
+// baseline-aligned ones aligned.
 static float HypotheticalCross(const Frame* frame, uint32_t first, uint32_t count)
 {
     float line = 0.0f;
+    float ascent = 0.0f;
+    float descent = 0.0f;
     for (uint32_t c = first, i = 0; i < count;
          c = muiNextFlowChild(frame->solver->tree, frame->solver->nodes, c), i++)
     {
@@ -334,9 +347,44 @@ static float HypotheticalCross(const Frame* frame, uint32_t first, uint32_t coun
         float size = CrossOf(frame, frame->solver->solve(frame->solver, c, &input, false));
         item->cross =
             muiClampSize(size, item->minCross, item->maxCross, muiBoxSum(style, !frame->row));
-        line = fmaxf(line, item->cross + item->marginCross);
+        float outer = item->cross + item->marginCross;
+        if (IsBaselineAligned(frame, style))
+        {
+            muiEdges margins = muiMarginsOf(style);
+            muiSizingInput at = ChildInput(frame, muiExact(item->target), muiExact(item->cross));
+            item->ascent =
+                muiEdgeStart(&margins, false) + frame->solver->baseline(frame->solver, c, &at);
+            ascent = fmaxf(ascent, item->ascent);
+            descent = fmaxf(descent, outer - item->ascent);
+            ItemOf(frame, first)->lineBaselines = true;
+        }
+        else
+        {
+            line = fmaxf(line, outer);
+        }
     }
-    return line;
+    return ItemOf(frame, first)->lineBaselines ? fmaxf(line, ascent + descent) : line;
+}
+
+// Where a line's baseline-aligned children put its baseline, from its
+// cross start: they are a group flush with the line's cross start, which
+// wrap-reverse puts at the physical end.
+static float LineBaseline(const Frame* frame, uint32_t first, uint32_t count)
+{
+    float ascent = 0.0f;
+    float descent = 0.0f;
+    for (uint32_t c = first, i = 0; i < count;
+         c = muiNextFlowChild(frame->solver->tree, frame->solver->nodes, c), i++)
+    {
+        if (IsBaselineAligned(frame, &frame->solver->nodes[c - 1].style))
+        {
+            const muiFlexItemState* item = ItemOf(frame, c);
+            ascent = fmaxf(ascent, item->ascent);
+            descent = fmaxf(descent, item->cross + item->marginCross - item->ascent);
+        }
+    }
+    float line = ItemOf(frame, first)->lineCross;
+    return frame->wrapReverse ? line - descent : ascent;
 }
 
 // Section 9.4 step 11: stretched children take their line's cross size.
@@ -440,7 +488,7 @@ static float AutoCrossOffset(const Frame* frame, const muiLayoutStyle* style,
 // its margin included. Under wrap-reverse the cross start is the
 // physical end, so start and end alignment swap.
 static float CrossOffset(const Frame* frame, const muiLayoutStyle* style,
-                         const muiFlexItemState* item, float line)
+                         const muiFlexItemState* item, float line, float baseline)
 {
     if (muiIsMarginAutoStart(style, !frame->row) || muiIsMarginAutoEnd(style, !frame->row))
     {
@@ -450,6 +498,17 @@ static float CrossOffset(const Frame* frame, const muiLayoutStyle* style,
     float start = muiEdgeStart(&margins, !frame->row);
     float end = muiEdgeEnd(&margins, !frame->row);
     muiAlign align = AlignOf(frame, style);
+    if (align == mui_alignBaseline && frame->row)
+    {
+        // Section 9.6 step 14: the line's baseline-aligned children share
+        // its baseline.
+        return baseline - item->ascent + start;
+    }
+    if (align == mui_alignBaseline)
+    {
+        // In a column the cross axis is the inline axis: start.
+        align = mui_alignStart;
+    }
     if (frame->wrapReverse && (align == mui_alignStart || align == mui_alignEnd))
     {
         align = align == mui_alignStart ? mui_alignEnd : mui_alignStart;
@@ -469,6 +528,17 @@ static float CrossOffset(const Frame* frame, const muiLayoutStyle* style,
     }
 }
 
+// What a child is laid out in full under: its final sizes, against the
+// container's content box.
+static muiSizingInput FinalInput(const Frame* frame, uint32_t child)
+{
+    const muiFlexItemState* item = ItemOf(frame, child);
+    muiSizingInput input = ChildInput(frame, muiExact(item->target), muiExact(item->cross));
+    input.parentWidth = frame->row ? frame->innerMain : frame->innerCross;
+    input.parentHeight = frame->row ? frame->innerCross : frame->innerMain;
+    return input;
+}
+
 // Sets a child's rectangle from its main and cross offsets within the
 // content box and lays it out in full.
 static void PlaceChild(const Frame* frame, uint32_t child, float main, float cross)
@@ -479,14 +549,27 @@ static void PlaceChild(const Frame* frame, uint32_t child, float main, float cro
     float crossAt = frame->boxCrossStart + cross;
     layout->rect = frame->row ? (muiRect){mainAt, crossAt, item->target, item->cross}
                               : (muiRect){crossAt, mainAt, item->cross, item->target};
-    muiSizingInput input = ChildInput(frame, muiExact(item->target), muiExact(item->cross));
-    input.parentWidth = frame->row ? frame->innerMain : frame->innerCross;
-    input.parentHeight = frame->row ? frame->innerCross : frame->innerMain;
+    muiSizingInput input = FinalInput(frame, child);
     (void)frame->solver->solve(frame->solver, child, &input, true);
 }
 
-// Section 9.5 and 9.6: justifies one line and places its children.
-static void PlaceLine(const Frame* frame, uint32_t first, uint32_t count)
+// The line's physical start on the cross axis.
+static float LineStart(const Frame* frame, const muiFlexItemState* head)
+{
+    return frame->wrapReverse ? frame->innerCross - head->lineOffset - head->lineCross
+                              : head->lineOffset;
+}
+
+// A child's offsets from the container's content box.
+typedef struct Offsets
+{
+    float main;
+    float cross;
+} Offsets;
+
+// Section 9.5 and 9.6: justifies one line and places its children; with
+// a probe, places none and returns where the probe goes.
+static Offsets PlaceLine(const Frame* frame, uint32_t first, uint32_t count, uint32_t probe)
 {
     const muiTree* tree = frame->solver->tree;
     const muiFlexItemState* head = ItemOf(frame, first);
@@ -514,9 +597,8 @@ static void PlaceLine(const Frame* frame, uint32_t first, uint32_t count)
     {
         muiJustifySpacing(frame->style->container.justify, freeSpace, count, &lead, &between);
     }
-    // The line's physical start on the cross axis.
-    float lineStart = frame->wrapReverse ? frame->innerCross - head->lineOffset - head->lineCross
-                                         : head->lineOffset;
+    float lineStart = LineStart(frame, head);
+    float baseline = head->lineBaselines ? LineBaseline(frame, first, count) : NAN;
     float flow = lead;
     for (uint32_t c = first, i = 0; i < count;
          c = muiNextFlowChild(tree, frame->solver->nodes, c), i++)
@@ -532,18 +614,70 @@ static void PlaceLine(const Frame* frame, uint32_t first, uint32_t count)
         flow += frame->reverse ? end : start;
         float main = frame->reverse ? frame->innerMain - flow - item->target : flow;
         flow += item->target + (frame->reverse ? start : end) + frame->gap + between;
-        float cross = lineStart + CrossOffset(frame, style, item, head->lineCross);
-        PlaceChild(frame, c, main, cross);
+        float cross = lineStart + CrossOffset(frame, style, item, head->lineCross, baseline);
+        if (c == probe)
+        {
+            return (Offsets){main, cross};
+        }
+        if (probe == 0)
+        {
+            PlaceChild(frame, c, main, cross);
+        }
     }
+    return (Offsets){0.0f, 0.0f};
 }
 
-static void Place(const Frame* frame)
+// Places every line's children; with a line and a probe in it, places
+// none and returns where the probe goes.
+static Offsets Place(const Frame* frame, uint32_t line, uint32_t probe)
 {
+    Offsets at = {0.0f, 0.0f};
     for (uint32_t first = muiFirstFlowChild(frame->solver->tree, frame->solver->nodes, frame->node);
          first != 0; first = Skip(frame, first, ItemOf(frame, first)->lineCount))
     {
-        PlaceLine(frame, first, ItemOf(frame, first)->lineCount);
+        if (line == 0 || first == line)
+        {
+            at = PlaceLine(frame, first, ItemOf(frame, first)->lineCount, probe);
+        }
     }
+    return at;
+}
+
+// Section 8.5 as Chrome reads it: the first baseline comes from the line
+// at the top of a row (the last under wrap-reverse) or the inline start
+// of a column, from its baseline-aligned children if it has any, else
+// from its child first in the container's direction, the last when it is
+// reversed.
+static float FirstBaseline(const Frame* frame)
+{
+    const muiSolver* solver = frame->solver;
+    uint32_t line = 0;
+    for (uint32_t first = muiFirstFlowChild(solver->tree, solver->nodes, frame->node); first != 0;
+         first = Skip(frame, first, ItemOf(frame, first)->lineCount))
+    {
+        line = line == 0 || frame->wrapReverse ? first : line;
+    }
+    if (line == 0)
+    {
+        return NAN;
+    }
+    const muiFlexItemState* head = ItemOf(frame, line);
+    uint32_t child = line;
+    for (uint32_t c = line, i = 0; i < head->lineCount;
+         c = muiNextFlowChild(solver->tree, solver->nodes, c), i++)
+    {
+        child = frame->reverse ? c : child;
+    }
+    if (head->lineBaselines)
+    {
+        return frame->boxCrossStart + LineStart(frame, head) +
+               LineBaseline(frame, line, head->lineCount);
+    }
+    muiSizingInput at = FinalInput(frame, child);
+    float own = solver->baseline(solver, child, &at);
+    Offsets offsets = Place(frame, line, child);
+    return own +
+           (frame->row ? frame->boxCrossStart + offsets.cross : frame->boxMainStart + offsets.main);
 }
 
 // Sizes a row container's width as fit-content: its max-content size
@@ -563,8 +697,11 @@ static muiMeasureAxis FitMain(const muiSolver* solver, uint32_t node, const muiS
     return muiExact(size);
 }
 
-muiSize muiLayoutFlex(const muiSolver* solver, uint32_t node, const muiSizingInput* input,
-                      bool perform)
+// Sizes a container and, with perform, places its children; with
+// baseline, finds its first baseline instead. The one caller of the
+// steps, so that they inline into it.
+static muiSize Flex(const muiSolver* solver, uint32_t node, const muiSizingInput* input,
+                    bool perform, float* baseline)
 {
     const muiLayoutStyle* style = &solver->nodes[node - 1].style;
     bool row = style->container.direction == mui_flexRow ||
@@ -580,11 +717,28 @@ muiSize muiLayoutFlex(const muiSolver* solver, uint32_t node, const muiSizingInp
     Frame frame = Setup(solver, node, &fitted);
     SizeMain(&frame);
     SizeCross(&frame);
-    if (perform)
+    if (baseline != nullptr)
     {
-        Place(&frame);
+        *baseline = FirstBaseline(&frame);
+    }
+    else if (perform)
+    {
+        (void)Place(&frame, 0, 0);
     }
     float mainSize = frame.innerMain + frame.boxMain;
     float crossSize = frame.innerCross + frame.boxCross;
     return row ? (muiSize){mainSize, crossSize} : (muiSize){crossSize, mainSize};
+}
+
+muiSize muiLayoutFlex(const muiSolver* solver, uint32_t node, const muiSizingInput* input,
+                      bool perform)
+{
+    return Flex(solver, node, input, perform, nullptr);
+}
+
+float muiFlexBaseline(const muiSolver* solver, uint32_t node, const muiSizingInput* input)
+{
+    float baseline = NAN;
+    (void)Flex(solver, node, input, false, &baseline);
+    return baseline;
 }

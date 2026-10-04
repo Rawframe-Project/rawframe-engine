@@ -19,13 +19,21 @@ typedef struct muiSolver muiSolver;
 typedef muiSize (*muiSolveFunction)(const muiSolver* solver, uint32_t node,
                                     const muiSizingInput* input, bool perform);
 
+// Returns node's first baseline laid out at input, exact on both axes:
+// its distance down from the top of its border box, which is its bottom
+// when it has none, as CSS synthesizes one.
+typedef float (*muiBaselineSolveFunction)(const muiSolver* solver, uint32_t node,
+                                          const muiSizingInput* input);
+
 struct muiSolver
 {
     const muiTree* tree;
     muiLayoutNode* nodes;
     muiMeasureFunction measure;
     void* measureUser;
+    muiBaselineFunction measureBaseline;
     muiSolveFunction solve;
+    muiBaselineSolveFunction baseline;
     // Where the solver requests style for the next pass, on nodes whose
     // conditions read a size or direction their layout changed, and paint
     // on nodes whose rectangle or direction is not what was last painted.

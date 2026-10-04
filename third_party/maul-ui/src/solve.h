@@ -20,6 +20,9 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
 // The input a root is sized under in the host's space: its definite
 // sizes within its limits; otherwise fit-content, which on the vertical
 // axis is max-content, as for CSS's absolutely positioned boxes.
+// The muiBaselineSolveFunction of the solver.
+float muiSolveBaseline(const muiSolver* solver, uint32_t node, const muiSizingInput* input);
+
 muiSizingInput muiRootInput(const muiLayoutStyle* style, float availableWidth,
                             float availableHeight);
 

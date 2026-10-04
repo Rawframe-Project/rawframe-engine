@@ -102,6 +102,10 @@ extern "C"
         mui_alignStart = 2,
         mui_alignEnd = 3,
         mui_alignCenter = 4,
+        // First baselines line up, as CSS's baseline: in a row container
+        // the children so aligned share their line's baseline; in a column
+        // container it is start.
+        mui_alignBaseline = 5,
     };
 
     // Whether a container breaks its children into lines.
@@ -291,6 +295,13 @@ extern "C"
     typedef muiSize (*muiMeasureFunction)(void* user, muiNodeId nodeId, uint64_t hostKey,
                                           muiMeasureAxis width, muiMeasureAxis height);
 
+    // Returns the first baseline of a node's host content laid out at a
+    // content-box size: its distance down from the content box's top, or
+    // NaN when the content has none. It runs as the measure function does,
+    // with the same user pointer.
+    typedef float (*muiBaselineFunction)(void* user, muiNodeId nodeId, uint64_t hostKey,
+                                         float width, float height);
+
     // What muiComputeLayout lays a root out in.
     typedef struct muiLayoutInput
     {
@@ -304,6 +315,10 @@ extern "C"
         // events: running transitions move to it. A time before the last
         // counts as no time passed.
         uint64_t timeNs;
+        // Gives host content's baseline, for baseline alignment, with
+        // measureUser; NULL gives none, and a baseline is then the bottom
+        // of the node's border box, as CSS synthesizes one.
+        muiBaselineFunction baseline;
     } muiLayoutInput;
 
     /// Returns the default layout style: CSS's initial values (row, one

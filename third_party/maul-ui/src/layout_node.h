@@ -62,8 +62,15 @@ typedef struct muiFlexItemState
     float minCross;
     float maxCross;
     float base;
-    // The base without padding and border, which scales shrinking.
-    float innerBase;
+    union
+    {
+        // The base without padding and border, which scales shrinking,
+        // while main sizes resolve.
+        float innerBase;
+        // Then, for a baseline-aligned item: its baseline's distance from
+        // its outer cross start, its margin included.
+        float ascent;
+    };
     float hypothetical;
     float target;
     float cross;
@@ -74,9 +81,10 @@ typedef struct muiFlexItemState
     // The automatic minimum is not computed yet: it only matters when the
     // line shrinks, as a content-based base is never below it.
     bool minimumPending;
-    // Set on the first child of each line: how many children the line
-    // holds, its cross size and its offset from the container's cross
-    // start, in the direction lines follow.
+    // Set on the first child of each line: whether any of its children
+    // align by baseline, how many it holds, its cross size and its offset
+    // from the container's cross start, in the direction lines follow.
+    bool lineBaselines;
     uint32_t lineCount;
     float lineCross;
     float lineOffset;
@@ -105,6 +113,10 @@ typedef struct muiLayoutNode
     bool held;
     muiSize heldSizes[2];
 } muiLayoutNode;
+
+// Nodes are whole cache lines, so that every node's rectangle and cache
+// sit on the same lines in each.
+static_assert(sizeof(muiLayoutNode) % 64 == 0, "a layout node is whole cache lines");
 
 static inline bool muiIsSameRect(muiRect a, muiRect b)
 {

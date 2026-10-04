@@ -15,4 +15,8 @@
 muiSize muiLayoutFlex(const muiSolver* solver, uint32_t node, const muiSizingInput* input,
                       bool perform);
 
+// A container's first baseline laid out at input, exact on both axes,
+// from the top of its border box; NaN when it has no flow children.
+float muiFlexBaseline(const muiSolver* solver, uint32_t node, const muiSizingInput* input);
+
 #endif // MAUL_UI_SRC_FLEX_H

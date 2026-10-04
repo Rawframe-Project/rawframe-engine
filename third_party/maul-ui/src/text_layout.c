@@ -40,17 +40,6 @@ static muiTextBlock* FindBlock(const muiTextService* service, uint64_t key)
 }
 
 // The font a key names, and its key, key 0 being the default font's.
-static const muiFont* FindFont(const muiTextService* service, uint64_t key, uint64_t* keyOut)
-{
-    if (key == 0)
-    {
-        key = muiFont_GetKey(service->defaultFont);
-    }
-    uint32_t slot = muiPoolResolve(&service->fonts.pool, (uint32_t)key, (uint32_t)(key >> 32));
-    *keyOut = key;
-    return slot != 0 ? &service->fonts.fonts[slot - 1] : nullptr;
-}
-
 // Sets up a node's paragraph; false when there is nothing to lay out or
 // its shaping found no memory, which the service counts.
 static bool Prepare(const muiTextHost* host, muiNodeId nodeId, uint64_t hostKey, Paragraph* out)
@@ -63,7 +52,7 @@ static bool Prepare(const muiTextHost* host, muiNodeId nodeId, uint64_t hostKey,
     muiTextService* service = host->service;
     out->service = service;
     out->block = FindBlock(service, hostKey);
-    out->font = FindFont(service, out->style.font, &out->fontKey);
+    out->font = muiFindFont(service, out->style.font, &out->fontKey);
     if (out->block == nullptr || out->font == nullptr)
     {
         return false;
@@ -334,6 +323,18 @@ static void PaintLine(const Paragraph* paragraph, const muiTextLine* line, float
         pen = PaintRun(paragraph, &source, start, start + (uint32_t)runs[i].length,
                        (runs[i].level & 1) != 0, pen, baseline, sink);
     }
+}
+
+float muiTextBaseline(void* user, muiNodeId nodeId, uint64_t hostKey, float width, float height)
+{
+    (void)width;
+    (void)height;
+    Paragraph paragraph;
+    if (!Prepare(user, nodeId, hostKey, &paragraph) || paragraph.block->length == 0)
+    {
+        return NAN;
+    }
+    return paragraph.baseline;
 }
 
 void muiPaintText(void* user, muiNodeId nodeId, uint64_t hostKey, float width, float height,

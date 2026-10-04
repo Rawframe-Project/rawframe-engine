@@ -321,6 +321,32 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
     return size;
 }
 
+// Host content's baseline from the border box's top; NaN without one.
+static float LeafBaseline(const muiSolver* solver, uint32_t node, const muiSizingInput* input)
+{
+    const muiLayoutStyle* style = &solver->nodes[node - 1].style;
+    if (style->content != mui_contentHost || solver->measureBaseline == nullptr)
+    {
+        return NAN;
+    }
+    float top = muiEdgeStart(&style->padding, false) + muiEdgeStart(&style->border, false);
+    float width = fmaxf(input->width.size - muiBoxSum(style, true), 0.0f);
+    float height = fmaxf(input->height.size - muiBoxSum(style, false), 0.0f);
+    muiNodeId id = muiTreeIdOf(solver->tree, node);
+    uint64_t hostKey = muiTreeAt(solver->tree, node)->hostKey;
+    return top + solver->measureBaseline(solver->measureUser, id, hostKey, width, height);
+}
+
+float muiSolveBaseline(const muiSolver* solver, uint32_t node, const muiSizingInput* input)
+{
+    MUI_ASSERT(input->width.mode == mui_measureExact && input->height.mode == mui_measureExact);
+    muiSizingInput own = OwnDirection(&solver->nodes[node - 1].style, input);
+    float baseline = muiTreeAt(solver->tree, node)->links.firstChild == 0
+                         ? LeafBaseline(solver, node, &own)
+                         : muiFlexBaseline(solver, node, &own);
+    return isfinite(baseline) ? baseline : input->height.size;
+}
+
 muiSizingInput muiRootInput(const muiLayoutStyle* style, float availableWidth,
                             float availableHeight)
 {

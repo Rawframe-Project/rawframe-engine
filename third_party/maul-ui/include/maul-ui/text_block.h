@@ -163,6 +163,26 @@ extern "C"
     MUI_API void muiPaintText(void* user, muiNodeId nodeId, uint64_t hostKey, float width,
                               float height, muiDrawSink* sink);
 
+    /// Returns the baseline of a text block's first line, as a
+    /// muiBaselineFunction: user is a muiTextHost, and hostKey a block's
+    /// key. Lines are a line height apart from the content box's top, so
+    /// the first baseline does not depend on the width.
+    ///
+    /// @param user     A muiTextHost.
+    /// @param nodeId   The node, whose text style is read.
+    /// @param hostKey  The block's key.
+    /// @param width    The content box's width, which the baseline does not
+    ///                 use.
+    /// @param height   The content box's height, which it does not use.
+    /// @return The baseline's distance down from the content box's top;
+    ///         NaN for empty text, which has no lines, and where
+    ///         muiMeasureText measures nothing.
+    /// @par Thread safety
+    /// Safe from any thread; the service and context are used by one
+    /// thread at a time.
+    MUI_API float muiTextBaseline(void* user, muiNodeId nodeId, uint64_t hostKey, float width,
+                                  float height);
+
 #ifdef __cplusplus
 }
 #endif

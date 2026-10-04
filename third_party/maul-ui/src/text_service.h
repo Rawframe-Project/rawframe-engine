@@ -45,4 +45,8 @@ struct muiTextService
     muiBuffer lineGlyphs;
 };
 
+// The font a key names, key 0 naming the default font, and the key it
+// resolves to; NULL when it names none.
+muiFont* muiFindFont(const muiTextService* service, uint64_t key, uint64_t* keyOut);
+
 #endif // MAUL_UI_SRC_TEXT_SERVICE_H

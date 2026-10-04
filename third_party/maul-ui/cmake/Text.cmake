@@ -7,6 +7,7 @@
 target_sources(maul-ui PRIVATE
     src/font.c
     src/font_store.c
+    src/glyph_image.c
     src/line_break.c
     src/text_block.c
     src/text_blocks.c

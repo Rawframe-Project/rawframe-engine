@@ -133,7 +133,9 @@ muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayou
         .nodes = context->layout,
         .measure = input->measure,
         .measureUser = input->measureUser,
+        .measureBaseline = input->baseline,
         .solve = muiSolveNode,
+        .baseline = muiSolveBaseline,
         .restyle = &context->tree,
         .painted = context->draw.states,
     };

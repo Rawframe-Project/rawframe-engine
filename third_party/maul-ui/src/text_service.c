@@ -235,3 +235,14 @@ void muiDestroyTextService(muiTextService* service)
     }
     Release(service);
 }
+
+muiFont* muiFindFont(const muiTextService* service, uint64_t key, uint64_t* keyOut)
+{
+    if (key == 0)
+    {
+        key = ((uint64_t)service->defaultFont.generation << 32) | service->defaultFont.index1;
+    }
+    uint32_t slot = muiPoolResolve(&service->fonts.pool, (uint32_t)key, (uint32_t)(key >> 32));
+    *keyOut = key;
+    return slot != 0 ? &service->fonts.fonts[slot - 1] : nullptr;
+}

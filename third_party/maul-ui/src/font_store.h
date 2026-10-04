@@ -28,6 +28,9 @@ typedef struct muiFont
     // At a scale of the units per em, so positions are the font's own.
     hb_font_t* shapingFont;
     muiFontMetrics metrics;
+    // The size the face was last set to for glyph images, in 64ths of a
+    // pixel; 0 before any.
+    long imageSize;
 } muiFont;
 
 typedef struct muiFontStore
