@@ -333,8 +333,12 @@ console.log(`page: native bots admitted ${nativeField('admitted')}, confirmed ${
 if (nativeField('admitted') !== 2 || nativeField('confirmed') <= 100 || nativeField('stalled') !== 0 || most < 3) {
     verdict = 1;
 }
+// On failure, the client's last lines, every summary it gave, and its first
+// warnings and errors, wherever they fell.
 if (verdict !== 0) {
     process.stdout.write(clientLog.slice(-6000));
+    process.stdout.write((clientLog.match(/^.*"code":"[a-z_]*summary".*$/gm) ?? []).join('\n') + '\n');
+    process.stdout.write((clientLog.match(/^.*"severity":"(warning|error)".*$/gm) ?? []).slice(0, 20).join('\n') + '\n');
     process.stdout.write(nativeLog.slice(-3000));
 }
 end(verdict);
