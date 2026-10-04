@@ -1,6 +1,7 @@
 #include "rawframe/world_kest/game.h"
 
 #include "mod_api.h"
+#include "navigation.h"
 #include "physics_facts.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_animation/components.h"
@@ -157,6 +158,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     bool haveProgram = false;
     std::size_t actionsLine = 0;
     std::size_t admissionLine = 0;
+    std::size_t navigationLine = 0;
     std::size_t mixerLine = 0;
     std::size_t firstSoundLine = 0;
     GameAudio audio;
@@ -673,6 +675,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.entityFields.push_back(GameEntityField{.component = std::string{kFacts.attach}, .field = "parent"});
             game.physics = physics;
+        } else if (kKeyword == "navigation") {
+            GameNavigation navigation;
+            if (game.navigation.has_value() || !readNavigationLine(std::span{kWords}.subspan(1), navigation)) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a game has at most one navigation line, `navigation [radius <m>] [height <m>] [step "
+                               "<m>] [slope <degrees>] [cell <m>]`, each value above nought");
+            }
+            game.navigation = navigation;
+            navigationLine = number;
         } else if (kKeyword == "collision") {
             const auto kRule = [](std::string_view word) -> std::optional<physics::CollisionRule> {
                 if (word == "collide") {
@@ -849,6 +861,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     number, WorldKestError::BadGameLine, "a player's save keeps components players start with");
             }
         }
+    }
+    if (navigationLine != 0 && (!game.physics.has_value() || game.physics->dimensions != 3)) {
+        return badLine(navigationLine, WorldKestError::BadGameLine, "a navigation line needs a physics3d line");
     }
     if (admissionLine != 0 && game.replicated.empty()) {
         return badLine(

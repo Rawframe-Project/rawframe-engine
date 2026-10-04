@@ -8,6 +8,7 @@
 #include "message_doors.h"
 #include "mod_handlers.h"
 #include "mod_services.h"
+#include "navigation.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "player_doors.h"
@@ -261,6 +262,13 @@ public:
         if (game_.physics.has_value()) {
             RAWFRAME_TRY(addPhysicsDoors(doors, game_.physics->dimensions, &doorContext_));
         }
+        // The server bakes the navmesh its programs ask the way across
+        // (D400).
+        if (game_.navigation.has_value()) {
+            navmesh_ = std::make_unique<GameNavmesh>(*game_.navigation);
+            navmesh_->attach(doorContext_.queries3d);
+            RAWFRAME_TRY(addNavigationDoors(doors, navmesh_.get()));
+        }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap, configuration.unsignedInteger("kest.heap_bytes", 64U << 20U));
         // Half a million steps: about 3.5 ms of a spinning loop here, so a
         // system that runs away is stopped within SPEC-0013's 8 ms
@@ -306,6 +314,9 @@ public:
             modHandlerCount_ += modProgram.handlers.size();
             modProviderCount_ += modProgram.providers.size();
             modReplacementCount_ += modProgram.replacements.size();
+        }
+        if (navmesh_ != nullptr) {
+            RAWFRAME_TRY(simulation_->addSystems(*navmesh_));
         }
         return simulation_->addSystems(*systems_);
     }
@@ -367,6 +378,9 @@ public:
 
     /// SPEC-0013's aggregate script time per World tick, once, at stop.
     void stop() noexcept override {
+        if (navmesh_ != nullptr) {
+            navmesh_->report(emitter_);
+        }
         if (timing_ == nullptr) {
             return;
         }
@@ -534,6 +548,9 @@ public:
     }
     void attach(const physics3d::Physics3DQueries* queries) noexcept override {
         doorContext_.queries3d = queries;
+        if (navmesh_ != nullptr) {
+            navmesh_->attach(queries);
+        }
     }
     void attach(const world_replication::InterestHistory* history) noexcept override {
         doorContext_.interest = history;
@@ -923,6 +940,7 @@ private:
     std::optional<physics2d::Physics2DSettings> physics2d_;
     std::optional<physics3d::Physics3DSettings> physics3d_;
     PhysicsDoorContext doorContext_;
+    std::unique_ptr<GameNavmesh> navmesh_;
     std::optional<world_animation::AnimationSettings> animation_;
     AnimationDoorContext animationDoors_;
     GamePersistence persistence_;

@@ -448,6 +448,26 @@ RAWFRAME_TEST(LookupsAreDeclaredByLine) {
         refusedAt(std::string{kComponents} + "system a.x simulation f lookup\n", WorldKestError::BadGameLine, "4"));
 }
 
+RAWFRAME_TEST(ANavigationLineNamesItsAgentAndNeedsThreeDimensions) {
+    auto game = parseGame("program p.kest\nphysics3d\nnavigation radius 0.35 slope 30 cell 0.25\n");
+    RAWFRAME_EXPECT(game.has_value() && game->navigation.has_value());
+    if (game.has_value() && game->navigation.has_value()) {
+        RAWFRAME_EXPECT(game->navigation->radius == 0.35 && game->navigation->slope == 30 &&
+                        game->navigation->cell == 0.25 && game->navigation->height == 1.8 &&
+                        game->navigation->step == 0.4);
+    }
+    // Before its physics line too; never twice, without a value, with an
+    // unknown word or a value not above nought, nor in 2D or without physics.
+    RAWFRAME_EXPECT(parseGame("program p.kest\nnavigation\nphysics3d\n").has_value());
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nphysics3d\nnavigation\nnavigation\n", WorldKestError::BadGameLine, "4"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nphysics3d\nnavigation radius\n", WorldKestError::BadGameLine, "3"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nphysics3d\nnavigation width 1\n", WorldKestError::BadGameLine, "3"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nphysics3d\nnavigation cell 0\n", WorldKestError::BadGameLine, "3"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nphysics3d\nnavigation step nan\n", WorldKestError::BadGameLine, "3"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nphysics2d\nnavigation\n", WorldKestError::BadGameLine, "3"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nnavigation\n", WorldKestError::BadGameLine, "2"));
+}
+
 RAWFRAME_TEST(BadLinesAreRefusedWhereTheyAre) {
     constexpr std::string_view kProgram = "program p.kest\n";
     RAWFRAME_EXPECT(refusedAt("program p.kest\nbuild x\n", WorldKestError::BadGameLine, "2"));

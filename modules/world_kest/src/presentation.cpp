@@ -4,6 +4,7 @@
 #include "effect_doors.h"
 #include "message_doors.h"
 #include "mod_services.h"
+#include "navigation.h"
 #include "physics_doors.h"
 #include "player_doors.h"
 #include "rawframe/composition/composition.h"
@@ -115,6 +116,9 @@ struct ClientPresentation::State {
             RAWFRAME_TRY(messages->addDoors(doors));
             if (game.physics.has_value()) {
                 RAWFRAME_TRY(addPhysicsDoors(doors, game.physics->dimensions, &physicsDoors));
+            }
+            if (game.navigation.has_value()) {
+                RAWFRAME_TRY(addNavigationDoors(doors, nullptr));
             }
             RAWFRAME_TRY_ASSIGN(systems,
                                 KestSystems::create(KestSystemsSettings{.program = settings.program,

@@ -4,6 +4,7 @@
 #include "effect_doors.h"
 #include "message_doors.h"
 #include "mod_services.h"
+#include "navigation.h"
 #include "physics_doors.h"
 #include "physics_facts.h"
 #include "player_doors.h"
@@ -115,6 +116,11 @@ public:
         dimensions_ = settings.physics3d.has_value() ? 3 : settings.physics.has_value() ? 2 : 0;
         if (dimensions_ != 0) {
             RAWFRAME_TRY(addPhysicsDoors(doors, dimensions_, &doorContext_));
+        }
+        // A client bakes no navmesh: its prediction is told there is no way
+        // (D400).
+        if (game.navigation.has_value()) {
+            RAWFRAME_TRY(addNavigationDoors(doors, nullptr));
         }
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{.program = settings.program,

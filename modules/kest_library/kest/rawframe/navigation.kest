@@ -1,0 +1,25 @@
+module rawframe.navigation
+
+// Navigation (ADR-0056, D400): the way across a game's navmesh, which a
+// game with a `navigation` line has, baked on the server from its static
+// bodies for the agent the line names. Meters; y is up.
+
+// The way's next step from a point toward another: the next corner to walk
+// straight to (the end itself when nothing stands between), how far the
+// whole way is from the point, and whether it reaches the end. Short of the
+// end, the corner leads toward the place nearest it the way can reach; off
+// the navmesh, or where no navmesh is (a client's prediction), the step is
+// the point itself, nought meters, not found.
+struct Step {
+    x: f64
+    y: f64
+    z: f64
+    remaining: f32
+    found: bool
+}
+
+extern fn Navigation.next(fromX: f64, fromY: f64, fromZ: f64, toX: f64, toY: f64, toZ: f64) -> Step
+
+fn next(fromX: f64, fromY: f64, fromZ: f64, toX: f64, toY: f64, toZ: f64) -> Step {
+    return Navigation.next(fromX, fromY, fromZ, toX, toY, toZ)
+}

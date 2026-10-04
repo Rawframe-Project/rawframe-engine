@@ -3,16 +3,19 @@
 // on that stall raises nothing (D391). Customers come to the stall, are
 // served, and what they pay reaches its owner, no customer staying past its
 // patience (D392). An owner reaching the goal wins the round, and the lot
-// starts afresh (D394). The test moves the owners' hands between ticks, as
-// their clients' input would.
+// starts afresh (D394). Customers walk round a wall of stalls to the one
+// behind it, never through a stall (D400). The test moves the owners' hands
+// between ticks, as their clients' input would.
 
 #include "game_harness.h"
+#include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/registrar.h"
 #include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstring>
 #include <optional>
 #include <string>
@@ -309,4 +312,66 @@ RAWFRAME_TEST(TheFirstOwnerToTheGoalWinsTheRoundAndTheLotStartsAfresh) {
     played.run(2);
     RAWFRAME_EXPECT(holding(world, kStallId).size() == 1 && valueOf<Owner>(world, kBuilder, kOwnerId)->coins == 50 &&
                     kNumber() == 1);
+}
+
+RAWFRAME_TEST(CustomersFindTheirWayRoundTheStallsInIt) {
+    Played played;
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
+        return;
+    }
+    world::World& world = *simulation->world();
+    played.run(3);
+    std::vector<world::EntityHandle> owners = holding(world, kOwnerId);
+    RAWFRAME_EXPECT(owners.size() == 2 && holding(world, kStallId).size() == 1);
+    if (owners.size() != 2) {
+        return;
+    }
+    if (valueOf<Owner>(world, owners[0], kOwnerId)->cursorX > 0) {
+        std::swap(owners[0], owners[1]);
+    }
+    const world::EntityHandle kBuilder = owners[0];
+    // Behind the corner stall's front, a wall of eight stalls across the
+    // lot, two meters south of its middle: straight from the south edge, a
+    // customer for the corner stall would walk through it.
+    // Enough for the wall and short of a round's goal by its end.
+    valueOf<Owner>(world, kBuilder, kOwnerId)->coins = 420;
+    // The first press, held since the start, let go.
+    valueOf<Hand>(world, kBuilder, kHandId)->build = 0;
+    played.run(2);
+    for (int column = 2; column <= 9; ++column) {
+        Hand& hand = *valueOf<Hand>(world, kBuilder, kHandId);
+        hand.pointed = 1;
+        hand.pointX = static_cast<float>(((column + 0.5) * 4) - 24);
+        hand.pointZ = 2;
+        hand.build = 1;
+        played.run(2);
+        valueOf<Hand>(world, kBuilder, kHandId)->build = 0;
+        played.run(2);
+    }
+    const std::vector<world::EntityHandle> kStalls = holding(world, kStallId);
+    RAWFRAME_EXPECT(kStalls.size() == 9);
+    std::vector<std::array<double, 2>> middles;
+    for (const world::EntityHandle kStall : kStalls) {
+        const Stall& kOne = *valueOf<Stall>(world, kStall, kStallId);
+        middles.push_back({((kOne.plotX + 0.5) * 4) - 24, ((kOne.plotZ + 0.5) * 4) - 24});
+    }
+    // For forty seconds no customer steps inside a stall, and the corner
+    // stall, behind the wall, serves some.
+    const auto kPoseKey = *world.registry().find(physics3d::Pose3D::kComponentTypeId);
+    std::uint64_t inside = 0;
+    std::uint64_t seen = 0;
+    for (int tick = 0; tick < 40 * 60; ++tick) {
+        played.run(1);
+        for (const world::EntityHandle kCustomer : holding(world, kCustomerId)) {
+            const auto& kPose = *static_cast<const physics3d::Pose3D*>(world.getErased(kCustomer, kPoseKey));
+            ++seen;
+            for (const auto& kMiddle : middles) {
+                inside += std::abs(kPose.x - kMiddle[0]) < 1.5 && std::abs(kPose.z - kMiddle[1]) < 1.5 ? 1 : 0;
+            }
+        }
+    }
+    const Till* const kCorner = valueOf<Till>(world, kStalls[0], kTillId);
+    RAWFRAME_EXPECT(seen > 10'000 && inside == 0);
+    RAWFRAME_EXPECT(kCorner != nullptr && kCorner->takings > 0);
 }

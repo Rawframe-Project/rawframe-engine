@@ -282,6 +282,18 @@ struct GamePhysics {
     std::uint32_t substeps = 4;
 };
 
+/// From a `navigation [radius <m>] [height <m>] [step <m>] [slope <degrees>]
+/// [cell <m>]` line (D400), which needs a `physics3d` line: one navmesh for
+/// one agent, baked on the server from the static bodies, each value the
+/// agent's or a cell's side on the ground.
+struct GameNavigation {
+    double radius = 0.4;
+    double height = 1.8;
+    double step = 0.4;
+    double slope = 45;
+    double cell = 0.2;
+};
+
 /// SPEC-0037's collision document, by line.
 struct GameCollision {
     std::vector<GameCollisionClass> classes;
@@ -591,6 +603,7 @@ struct GameDescription {
     std::vector<GameEntityField> entityFields;
     std::optional<GameInterest> interest;
     std::optional<GamePhysics> physics;
+    std::optional<GameNavigation> navigation;
     GameCollision collision;
     /// From an `actions <file>` line and a `sample <program> <entry>` line,
     /// which come together and need an `input` line.
