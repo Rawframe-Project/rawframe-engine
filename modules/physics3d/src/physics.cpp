@@ -3,6 +3,7 @@
 #include "attachments.h"
 #include "bodies.h"
 #include "characters.h"
+#include "geometry.h"
 #include "joints.h"
 #include "meshes.h"
 #include "rawframe/base/threads.h"
@@ -77,6 +78,8 @@ struct Physics3D::State {
     std::vector<schema::ComponentRuntimeId> writes;
     std::unique_ptr<world::System> system;
     std::vector<Row> rows;
+    /// Changes whenever a static body is made or removed (D400).
+    std::uint64_t staticRevision = 0;
 
     ~State() {
         if (m3World_IsValid(physics)) {
@@ -131,6 +134,9 @@ struct Physics3D::State {
             into.refused = true;
             ++statistics.bodiesRefused;
             return false;
+        }
+        if (body.motion == static_cast<std::uint8_t>(physics::Motion::Static)) {
+            ++staticRevision;
         }
         m3ShapeDef shape = m3DefaultShapeDef();
         // Maul3D wants every shape to have a density: nought is taken as
@@ -391,6 +397,9 @@ struct Physics3D::State {
 
     void remove(world::EntityHandle entity, Mapped& entry) {
         if (!entry.refused) {
+            if (entry.made.motion == static_cast<std::uint8_t>(physics::Motion::Static)) {
+                ++staticRevision;
+            }
             owners.erase(entry.shape.index1);
             owners.erase(entry.trigger.index1);
             for (const m3ShapeId kPiece : entry.pieces) {
@@ -863,6 +872,17 @@ void Physics3D::overlapSphere(
     // A body met through its sensor twin too is told once.
     std::ranges::sort(into);
     into.erase(std::unique(into.begin(), into.end()), into.end());
+}
+
+std::uint64_t Physics3D::staticRevision() const noexcept {
+    return state_->staticRevision;
+}
+
+void Physics3D::staticGeometry(StaticGeometry& into) const {
+    into.vertices.clear();
+    into.indices.clear();
+    into.shapes.clear();
+    appendStatic(state_->mapped, state_->meshes, into);
 }
 
 RayHit3D Physics3D::castRayAt(double originX,

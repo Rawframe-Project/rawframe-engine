@@ -848,3 +848,56 @@ RAWFRAME_TEST(AnAttachmentThatCannotFollowStaysWhereItIs) {
     RAWFRAME_EXPECT(scene.physics->statistics().attachmentsRefused == 4);
     RAWFRAME_EXPECT(scene.pose(kOrphan).x == 0 && scene.pose(kFirst).x == 0 && scene.pose(kBodied).y < 3);
 }
+
+RAWFRAME_TEST(TheStaticBodiesAreTheirTrianglesAndTheirRevisionTellsAChange) {
+    Scene scene;
+    // A ground box, a turned post, a crate that moves, and a sensor: only
+    // the ground and the post are static geometry.
+    const world::EntityHandle kGroundBody = scene.body(kGround, Pose3D{.y = -0.5});
+    const world::EntityHandle kPost = scene.body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                                                        .shape = static_cast<std::uint8_t>(Shape::Cylinder),
+                                                        .width = 0.5F,
+                                                        .height = 1},
+                                                 Pose3D{.x = 3, .y = 1});
+    scene.body(kCrate, Pose3D{.y = 2});
+    scene.body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                      .shape = static_cast<std::uint8_t>(Shape::Box),
+                      .sensor = true,
+                      .width = 1,
+                      .height = 1,
+                      .depth = 1},
+               Pose3D{.x = -3});
+    const std::uint64_t kBefore = scene.physics->staticRevision();
+    scene.run(1);
+    const std::uint64_t kMade = scene.physics->staticRevision();
+    RAWFRAME_EXPECT(kMade != kBefore);
+    StaticGeometry geometry;
+    scene.physics->staticGeometry(geometry);
+    RAWFRAME_EXPECT(geometry.shapes.size() == 2);
+    if (geometry.shapes.size() != 2) {
+        return;
+    }
+    const StaticShape& kFloor = geometry.shapes[0];
+    RAWFRAME_EXPECT(kFloor.entity == kGroundBody && kFloor.indexCount == 36);
+    RAWFRAME_EXPECT(kFloor.low[0] == -10 && kFloor.high[0] == 10 && kFloor.low[1] == -1 && kFloor.high[1] == 0);
+    // The post's prism: sixteen sides, two caps of fourteen triangles.
+    const StaticShape& kPrism = geometry.shapes[1];
+    RAWFRAME_EXPECT(kPrism.entity == kPost && kPrism.indexCount == (16 * 2 + 14 * 2) * 3);
+    RAWFRAME_EXPECT(std::abs(kPrism.low[0] - 2.5) < 1e-6 && std::abs(kPrism.high[1] - 2) < 1e-6);
+    RAWFRAME_EXPECT(geometry.indices.size() == kFloor.indexCount + kPrism.indexCount);
+    // The ground's top faces up: its first triangle's normal is +Y.
+    const auto& kA = geometry.vertices[static_cast<std::size_t>(geometry.indices[0])];
+    const auto& kB = geometry.vertices[static_cast<std::size_t>(geometry.indices[1])];
+    const auto& kC = geometry.vertices[static_cast<std::size_t>(geometry.indices[2])];
+    const double kNormalY = ((kB[2] - kA[2]) * (kC[0] - kA[0])) - ((kB[0] - kA[0]) * (kC[2] - kA[2]));
+    RAWFRAME_EXPECT(kNormalY > 0);
+
+    // Steps that change nothing static leave it; removing the post does not.
+    scene.run(10);
+    RAWFRAME_EXPECT(scene.physics->staticRevision() == kMade);
+    RAWFRAME_EXPECT(scene.world.destroy(kPost).has_value());
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->staticRevision() != kMade);
+    scene.physics->staticGeometry(geometry);
+    RAWFRAME_EXPECT(geometry.shapes.size() == 1 && geometry.indices.size() == 36);
+}

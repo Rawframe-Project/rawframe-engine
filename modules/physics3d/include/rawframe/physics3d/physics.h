@@ -35,6 +35,7 @@
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_runtime/simulation.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -106,6 +107,28 @@ struct Physics3DStatistics {
 
 inline constexpr std::string_view kStepSystem = "rawframe.physics3d.step";
 
+/// A static body's share of the static geometry (D400): its entity, its
+/// triangles' span of the indices, and the box its triangles fill.
+struct StaticShape {
+    world::EntityHandle entity;
+    std::uint32_t firstIndex = 0;
+    std::uint32_t indexCount = 0;
+    std::array<double, 3> low{};
+    std::array<double, 3> high{};
+};
+
+/// The static bodies' shapes as triangles in World meters (D400): the
+/// surface other systems read the solid level from (ADR-0056's declared bake
+/// input for navigation), which carries nothing of theirs. A box, a
+/// cylinder's prism, and a mesh are their own triangles, wound outward; a
+/// sphere and a capsule are their bounding boxes'. Sensors and bodies the
+/// physics refused are left out; shapes are in entity order.
+struct StaticGeometry {
+    std::vector<std::array<double, 3>> vertices;
+    std::vector<std::int32_t> indices;
+    std::vector<StaticShape> shapes;
+};
+
 /// Questions about where bodies are, answered from the last step (SPEC-0037
 /// queries against committed state). Only from the World's thread, between
 /// steps or from a system.
@@ -159,6 +182,12 @@ public:
                                float radius,
                                std::uint64_t among,
                                std::vector<world::EntityHandle>& into) const = 0;
+    /// A count that changes whenever a static body is made, made again, or
+    /// removed: the static geometry is the same while it is (D400).
+    [[nodiscard]] virtual std::uint64_t staticRevision() const noexcept = 0;
+    /// The static geometry as the last step left it, into `into`, its last
+    /// contents replaced.
+    virtual void staticGeometry(StaticGeometry& into) const = 0;
 };
 
 class Physics3D final : public world_runtime::SystemContributor, public Physics3DQueries {
@@ -210,6 +239,8 @@ public:
                        float radius,
                        std::uint64_t among,
                        std::vector<world::EntityHandle>& into) const override;
+    [[nodiscard]] std::uint64_t staticRevision() const noexcept override;
+    void staticGeometry(StaticGeometry& into) const override;
 
     struct State;
     explicit Physics3D(std::unique_ptr<State> state) noexcept;
