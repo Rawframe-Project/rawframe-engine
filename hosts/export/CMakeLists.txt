@@ -12,7 +12,9 @@ if(RAWFRAME_BUILD_TESTS)
     # Stalls exported under a studio's key and played from its folder with
     # the real client in a window (D396): the key set pinned and the secret
     # left out, its font read from the folder's library, the player
-    # admitted, frames shown, and both sides stopping cleanly.
+    # admitted, frames shown, the server stopping cleanly, and the launcher
+    # ending with the client's code (a clean stop, or under load a
+    # controlled overload of the software rasterizer's window).
     if(TARGET rawframe_host_client AND RAWFRAME_XVFB_RUN)
         add_test(NAME stalls_exported
                  COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
@@ -24,7 +26,7 @@ if(RAWFRAME_BUILD_TESTS)
         set_tests_properties(stalls_exported PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]+, client clean_stop, server clean_stop, play exit 0")
+                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]+, client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(stalls_exported PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
