@@ -7,8 +7,11 @@
 target_sources(maul-ui PRIVATE
     src/font.c
     src/font_store.c
+    src/glyph_atlas.c
     src/glyph_image.c
+    src/glyph_table.c
     src/line_break.c
+    src/skyline.c
     src/text_block.c
     src/text_blocks.c
     src/text_layout.c

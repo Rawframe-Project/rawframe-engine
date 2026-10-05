@@ -126,6 +126,9 @@ if(MAUL_UI_BUILD_TESTS)
         target_include_directories(test_text_fuzz PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
         maul_add_test(glyph_image)
         target_include_directories(test_glyph_image PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+        maul_add_test(glyph_atlas)
+        target_include_directories(test_glyph_atlas PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+        maul_add_test(skyline WHITEBOX)
     endif()
     # winnls.h defines MUI_ macros; this checks that none clash (family
     # record 0007).
