@@ -146,8 +146,11 @@ RAWFRAME_TEST(ARemovedSubtreesTextGoesWithIt) {
 
 RAWFRAME_TEST(GlyphsAreRenderedIntoTheAtlasOnceAndPlacedOnDevicePixels) {
     const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
-    // Room for few glyphs: 32 pixels square.
-    auto tree = Tree::create(16, 4, 32);
+    // An atlas Maul UI cannot cut into plots is refused (D404).
+    RAWFRAME_EXPECT(!Tree::create(16, 4, 32).has_value() && !Tree::create(16, 4, 66).has_value());
+    // Room for few glyphs: 64 pixels square, sixteen plots of 16, each
+    // taking one ten-pixel image inside its gutter.
+    auto tree = Tree::create(16, 4, 64);
     RAWFRAME_EXPECT(tree.has_value());
     if (!tree.has_value()) {
         return;
@@ -173,7 +176,7 @@ RAWFRAME_TEST(GlyphsAreRenderedIntoTheAtlasOnceAndPlacedOnDevicePixels) {
     RAWFRAME_EXPECT(list.glyphs[1].atlas.x == kFirst.atlas.x && list.glyphs[1].atlas.y == kFirst.atlas.y);
     RAWFRAME_EXPECT(sized(list.glyphs[2].image, 0, 0) && list.glyphs[3].image.x == 30);
     const GlyphAtlas& kAtlas = *list.atlas;
-    RAWFRAME_EXPECT(kAtlas.side == 32 && kAtlas.coverage.size() == 32 * 32 && kAtlas.revision == 1);
+    RAWFRAME_EXPECT(kAtlas.side == 64 && kAtlas.coverage.size() == 64 * 64 && kAtlas.revision == 1);
     const auto kAt = [&](float x, float y) {
         return kAtlas.coverage.at((static_cast<std::size_t>(y) * kAtlas.side) + static_cast<std::size_t>(x));
     };
@@ -188,13 +191,23 @@ RAWFRAME_TEST(GlyphsAreRenderedIntoTheAtlasOnceAndPlacedOnDevicePixels) {
     RAWFRAME_EXPECT(ui.draw(kLabel, 1.25F, list).has_value());
     RAWFRAME_EXPECT(list.glyphsLeftOut == 0 && list.atlas->revision == 2);
     RAWFRAME_EXPECT(list.glyphs[0].atlas.height == 13 && list.glyphs[0].image.y == 0);
-    RAWFRAME_EXPECT(list.glyphs[1].image.x * 1.25F == 12 && list.glyphs[1].atlas.x != list.glyphs[0].atlas.x);
+    RAWFRAME_EXPECT(list.glyphs[1].image.x * 1.25F == 12);
+    RAWFRAME_EXPECT(list.glyphs[1].atlas.x != list.glyphs[0].atlas.x ||
+                    list.glyphs[1].atlas.y != list.glyphs[0].atlas.y);
 
-    // Past what the atlas holds: it is emptied and this list's glyphs
-    // rendered again, and a glyph larger than it is left out.
-    RAWFRAME_EXPECT(ui.draw(kLabel, 1.1F, list).has_value());
-    RAWFRAME_EXPECT(list.glyphsLeftOut == 0 && list.atlas->revision == 3);
-    RAWFRAME_EXPECT(list.glyphs[0].atlas.x == 0 && list.glyphs[0].atlas.y == 0);
+    // Sixteen glyphs fill the sixteen plots, the three drawn before emptied
+    // for them; a seventeenth in one draw has no plot to take and is left
+    // out, and so is a glyph larger than a plot.
+    RAWFRAME_EXPECT(ui.setText(kLabel, "ABCDEFGHIJKLMNOP", {.size = 10}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1, list).has_value());
+    RAWFRAME_EXPECT(list.glyphs.size() == 16 && list.glyphsLeftOut == 0 && list.atlas->revision == 3);
+    RAWFRAME_EXPECT(ui.setText(kLabel, "ABCDEFGHIJKLMNOPQ", {.size = 10}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1, list).has_value());
+    RAWFRAME_EXPECT(list.glyphs.size() == 17 && list.glyphsLeftOut == 1);
+    RAWFRAME_EXPECT(ui.setText(kLabel, "XX X", {.size = 10}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
     RAWFRAME_EXPECT(ui.draw(kLabel, 4, list).has_value());
     RAWFRAME_EXPECT(list.glyphsLeftOut == 3 && sized(list.glyphs[0].image, 0, 0));
 }

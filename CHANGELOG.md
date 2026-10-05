@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- A UI tree's glyph images are kept in Maul UI's glyph atlas: when it is full, the plot least recently drawn is emptied rather than the whole atlas, and `Tree::create` refuses an atlas side outside 64 to 16,384 or not a multiple of 4.
 - An exported game's default port is one of 20000 to 29999 taken from the game's resource identity instead of 47217 for every game, so two exported games can run at once on one machine; `--port` still names one.
 - Navigation, over Maul Nav: `rawframe.navigation` bakes navmeshes from triangles for an agent, tile by tile and the same bytes everywhere, and finds paths over them. A game's `navigation` line has the server bake one from its static bodies (which `rawframe.physics3d` gives as triangles), again wherever they change, and its programs ask the way with `navigation.next`. Stalls' customers walk round the stalls to their fronts.
 - Web export. `rawframe-export --target web` makes a game into a static site (`web/`: the page, the web client, the Composition, the library, and `play.json`) and its dedicated server (`server/`), which listens for browsers over WebTransport and writes its certificate's fingerprint into the site for the page. A player set to play sound (`audio.play`) plays a game that declares no mixer in silence rather than refusing it; the native export's client plays sound on the machine's device.

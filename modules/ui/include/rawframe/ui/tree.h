@@ -265,8 +265,9 @@ struct Glyph {
 /// linear in the area it covers; `revision` changes whenever they do.
 /// Glyphs are rendered into it as lists first draw them, unhinted, at their
 /// size in device pixels and the quarter of a device pixel their pen falls
-/// on, and kept; when it is full it is emptied, and the list that filled it
-/// renders its own again.
+/// on, and kept. It is Maul UI's glyph atlas, one page in plots a quarter of
+/// its side (D404): when no plot has room, the one least recently drawn is
+/// emptied, never one the list being drawn uses.
 struct GlyphAtlas {
     std::uint32_t side = 0;
     std::vector<std::uint8_t> coverage;
@@ -346,7 +347,8 @@ class Tree {
 public:
     /// A tree of at most `maximumNodes` nodes and `maximumFonts` fonts,
     /// their room reserved now, and a glyph atlas `atlasSide` pixels square
-    /// (D398), made when a glyph first needs it.
+    /// (D398), made when a glyph first needs it: from 64 to 16,384, a
+    /// multiple of 4 (D404).
     [[nodiscard]] static result::Result<std::unique_ptr<Tree>>
     create(std::uint32_t maximumNodes = 4096, std::uint32_t maximumFonts = 64, std::uint32_t atlasSide = 1024);
 

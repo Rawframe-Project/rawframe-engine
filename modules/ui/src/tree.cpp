@@ -3,13 +3,12 @@
 #include "rawframe/ui/errors.h"
 
 #include <algorithm>
-#include <bit>
 #include <cmath>
 #include <cstring>
 #include <maul-ui/context.h>
 #include <maul-ui/draw.h>
 #include <maul-ui/font.h>
-#include <maul-ui/glyph_image.h>
+#include <maul-ui/glyph_atlas.h>
 #include <maul-ui/layout.h>
 #include <maul-ui/node.h>
 #include <maul-ui/style.h>
@@ -17,7 +16,6 @@
 #include <maul-ui/text_block.h>
 #include <maul-ui/text_style.h>
 #include <maul-ui/visual.h>
-#include <optional>
 #include <string_view>
 #include <unordered_map>
 
@@ -117,44 +115,6 @@ struct Text {
     muiTextBlockId block{};
 };
 
-/// A glyph image as the atlas keeps it (D398): its font, glyph, em in
-/// device pixels, and the quarter of a pixel its pen is past a pixel's edge.
-struct GlyphKey {
-    std::uint64_t font = 0;
-    std::uint32_t glyph = 0;
-    std::uint32_t size = 0;
-    std::uint32_t quarter = 0;
-    friend bool operator==(const GlyphKey&, const GlyphKey&) noexcept = default;
-};
-
-struct GlyphKeyHash {
-    std::size_t operator()(const GlyphKey& key) const noexcept {
-        std::uint64_t hash = key.font * 0x9E3779B97F4A7C15ULL;
-        hash ^= (std::uint64_t{key.glyph} << 32U | key.size) + 0x632BE59BD9B4E019ULL + (hash << 6U) + (hash >> 2U);
-        return static_cast<std::size_t>(hash ^ key.quarter);
-    }
-};
-
-/// Where a glyph's coverage is in the atlas, and where its image goes from
-/// its pen: its left edge right of it and its top edge above the baseline.
-/// Empty for a glyph with no outline.
-struct Placed {
-    std::uint32_t x = 0;
-    std::uint32_t y = 0;
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::int32_t left = 0;
-    std::int32_t top = 0;
-};
-
-/// A row of the atlas glyphs are put in side by side, `x` the first pixel
-/// free.
-struct Shelf {
-    std::uint32_t y = 0;
-    std::uint32_t height = 0;
-    std::uint32_t x = 0;
-};
-
 } // namespace
 
 struct Tree::State {
@@ -164,16 +124,14 @@ struct Tree::State {
     std::unordered_map<std::uint64_t, muiFontId> fonts;
     /// By the node's slot.
     std::unordered_map<std::uint32_t, Text> texts;
+    /// The atlas's coverage as the draw list hands it over: the one page
+    /// of Maul UI's atlas, copied where it changed (D404).
     GlyphAtlas atlas;
-    std::unordered_map<GlyphKey, Placed, GlyphKeyHash> placed;
-    std::vector<Shelf> shelves;
-    /// The first row below every shelf.
-    std::uint32_t shelvesEnd = 0;
-    std::vector<unsigned char> rendered;
-    /// Whether the atlas changed since its revision did.
-    bool atlasChanged = false;
+    muiGlyphAtlas* glyphs = nullptr;
+    std::vector<muiAtlasUpdate> updates;
 
     ~State() {
+        muiDestroyGlyphAtlas(glyphs);
         muiDestroyContext(context);
         muiDestroyTextService(text);
     }
@@ -195,155 +153,90 @@ struct Tree::State {
         return checked(muiNode_MarkContentChanged(context, node), "a UI node's text could not be marked");
     }
 
-    /// The atlas emptied, its glyphs rendered again as they are next drawn.
-    void emptyAtlas() {
-        placed.clear();
-        shelves.clear();
-        shelvesEnd = 0;
-        std::ranges::fill(atlas.coverage, std::uint8_t{0});
-        atlasChanged = true;
-    }
-
-    /// Room for `width` by `height` pixels, a pixel apart from the rest; none
-    /// when the atlas is full.
-    std::optional<std::pair<std::uint32_t, std::uint32_t>> roomFor(std::uint32_t width, std::uint32_t height) {
-        const std::uint32_t kWide = width + 1;
-        const std::uint32_t kHigh = height + 1;
-        // The lowest shelf that takes it without wasting much of its height.
-        Shelf* best = nullptr;
-        for (Shelf& shelf : shelves) {
-            if (shelf.height >= kHigh && shelf.height <= kHigh + (kHigh / 4) + 2 && shelf.x + kWide <= atlas.side &&
-                (best == nullptr || shelf.height < best->height)) {
-                best = &shelf;
-            }
-        }
-        if (best == nullptr) {
-            if (shelvesEnd + kHigh > atlas.side || kWide > atlas.side) {
-                return std::nullopt;
-            }
-            shelves.push_back(Shelf{.y = shelvesEnd, .height = kHigh, .x = 0});
-            shelvesEnd += kHigh;
-            best = &shelves.back();
-        }
-        const std::pair<std::uint32_t, std::uint32_t> kAt{best->x, best->y};
-        best->x += kWide;
-        return kAt;
-    }
-
-    /// `key`'s image in the atlas, rendered now if it is not there; none for
-    /// one that cannot be rendered, and none with `full` set when the atlas
-    /// has no room for it.
-    std::optional<Placed> imageOf(const GlyphKey& key, float pixelSize, bool& full) {
-        if (const auto kFound = placed.find(key); kFound != placed.end()) {
-            return kFound->second;
-        }
-        muiGlyphImage image{};
-        muiResult outcome = muiRenderGlyph(text,
-                                           key.font,
-                                           key.glyph,
-                                           pixelSize,
-                                           static_cast<float>(key.quarter) / 4.0F,
-                                           &image,
-                                           rendered.data(),
-                                           rendered.size());
-        const std::size_t kBytes = std::size_t{image.width} * image.height;
-        if (outcome == mui_errorCapacity && kBytes > rendered.size()) {
-            rendered.resize(kBytes);
-            outcome = muiRenderGlyph(text,
-                                     key.font,
-                                     key.glyph,
-                                     pixelSize,
-                                     static_cast<float>(key.quarter) / 4.0F,
-                                     &image,
-                                     rendered.data(),
-                                     rendered.size());
-        }
-        if (outcome != mui_success) {
-            return std::nullopt;
-        }
-        Placed made{.width = image.width, .height = image.height, .left = image.left, .top = image.top};
-        if (kBytes != 0) {
-            if (atlas.coverage.empty()) {
-                atlas.coverage.assign(std::size_t{atlas.side} * atlas.side, 0);
-            }
-            const auto kRoom = roomFor(image.width, image.height);
-            if (!kRoom.has_value()) {
-                full = true;
-                return std::nullopt;
-            }
-            made.x = kRoom->first;
-            made.y = kRoom->second;
-            for (std::uint32_t row = 0; row < image.height; ++row) {
-                std::memcpy(&atlas.coverage[((std::size_t{made.y} + row) * atlas.side) + made.x],
-                            &rendered[std::size_t{row} * image.width],
-                            image.width);
-            }
-            atlasChanged = true;
-        }
-        placed.emplace(key, made);
-        return made;
-    }
-
-    /// Each glyph of `list` given its image, rendered into the atlas; when
-    /// the atlas fills, it is emptied and the list's glyphs rendered again,
-    /// and those that still do not fit are left out.
+    /// Each glyph of `list` given its image from Maul UI's atlas, which
+    /// renders and packs it the first time (D404). A draw is the atlas's
+    /// frame: room is made by emptying the plot least recently drawn, never
+    /// one this list uses, and a glyph is left out when there is none, or
+    /// when it cannot be rendered or is larger than a plot.
     void placeGlyphs(DrawList& list) {
-        for (int attempt = 0; attempt < 2; ++attempt) {
-            bool full = false;
-            list.glyphsLeftOut = 0;
-            for (const GlyphRun& kRun : list.glyphRuns) {
-                const float kPixelSize = kRun.size * list.scale;
-                for (std::uint32_t at = kRun.first; at < kRun.first + kRun.count; ++at) {
-                    Glyph& glyph = list.glyphs[at];
-                    glyph.image = {};
-                    glyph.atlas = {};
-                    // The pen on a device pixel's edge and a quarter past it,
-                    // the baseline on a pixel.
-                    const float kPen = (kRun.x + glyph.x) * list.scale;
-                    float pixel = std::floor(kPen);
-                    auto quarter = static_cast<std::uint32_t>(std::lround((kPen - pixel) * 4.0F));
-                    if (quarter == 4) {
-                        pixel += 1;
-                        quarter = 0;
-                    }
-                    const float kBaseline = std::round((kRun.y + glyph.y) * list.scale);
-                    if (!(kPixelSize >= 1.0F / 64.0F && kPixelSize <= MUI_MAX_GLYPH_PIXEL_SIZE) ||
-                        !std::isfinite(kPen) || !std::isfinite(kBaseline)) {
-                        ++list.glyphsLeftOut;
-                        continue;
-                    }
-                    const GlyphKey kKey{.font = kRun.font.key,
-                                        .glyph = glyph.id,
-                                        .size = std::bit_cast<std::uint32_t>(kPixelSize),
-                                        .quarter = quarter};
-                    const std::optional<Placed> kPlaced = imageOf(kKey, kPixelSize, full);
-                    if (!kPlaced.has_value()) {
-                        ++list.glyphsLeftOut;
-                        continue;
-                    }
-                    if (kPlaced->width == 0 || kPlaced->height == 0) {
-                        continue;
-                    }
-                    glyph.image = Rect{.x = (pixel + static_cast<float>(kPlaced->left)) / list.scale,
-                                       .y = (kBaseline - static_cast<float>(kPlaced->top)) / list.scale,
-                                       .width = static_cast<float>(kPlaced->width) / list.scale,
-                                       .height = static_cast<float>(kPlaced->height) / list.scale};
-                    glyph.atlas = Rect{.x = static_cast<float>(kPlaced->x),
-                                       .y = static_cast<float>(kPlaced->y),
-                                       .width = static_cast<float>(kPlaced->width),
-                                       .height = static_cast<float>(kPlaced->height)};
-                }
-            }
-            if (!full || attempt == 1) {
-                break;
-            }
-            emptyAtlas();
-        }
-        if (atlasChanged) {
-            ++atlas.revision;
-            atlasChanged = false;
-        }
+        list.glyphsLeftOut = 0;
         list.atlas = &atlas;
+        if (list.glyphRuns.empty()) {
+            return;
+        }
+        if (glyphs == nullptr) {
+            muiGlyphAtlasDef def = muiDefaultGlyphAtlasDef();
+            def.pageWidth = atlas.side;
+            def.pageHeight = atlas.side;
+            def.plotWidth = atlas.side / 4;
+            def.plotHeight = atlas.side / 4;
+            def.maxPages = 1;
+            if (muiCreateGlyphAtlas(text, &def, &glyphs) != mui_success) {
+                for (const GlyphRun& kRun : list.glyphRuns) {
+                    list.glyphsLeftOut += kRun.count;
+                }
+                return;
+            }
+        }
+        muiGlyphAtlas_NextFrame(glyphs);
+        for (const GlyphRun& kRun : list.glyphRuns) {
+            const float kPixelSize = kRun.size * list.scale;
+            for (std::uint32_t at = kRun.first; at < kRun.first + kRun.count; ++at) {
+                Glyph& glyph = list.glyphs[at];
+                glyph.image = {};
+                glyph.atlas = {};
+                muiAtlasGlyph got{};
+                if (muiGlyphAtlas_Get(glyphs,
+                                      kRun.font.key,
+                                      glyph.id,
+                                      kPixelSize,
+                                      (kRun.x + glyph.x) * list.scale,
+                                      (kRun.y + glyph.y) * list.scale,
+                                      &got) != mui_success) {
+                    ++list.glyphsLeftOut;
+                    continue;
+                }
+                if (got.width == 0 || got.height == 0) {
+                    continue;
+                }
+                glyph.image = Rect{.x = static_cast<float>(got.x) / list.scale,
+                                   .y = static_cast<float>(got.y) / list.scale,
+                                   .width = static_cast<float>(got.width) / list.scale,
+                                   .height = static_cast<float>(got.height) / list.scale};
+                glyph.atlas = Rect{.x = static_cast<float>(got.u),
+                                   .y = static_cast<float>(got.v),
+                                   .width = static_cast<float>(got.width),
+                                   .height = static_cast<float>(got.height)};
+            }
+        }
+        takeUpdates();
+    }
+
+    /// The page's changed rectangles copied into the coverage the list
+    /// hands over, its revision moved when there were any.
+    void takeUpdates() {
+        std::uint32_t count = 0;
+        if (muiGlyphAtlas_TakeUpdates(glyphs, nullptr, 0, &count) == mui_errorCapacity) {
+            updates.resize(count);
+            if (muiGlyphAtlas_TakeUpdates(glyphs, updates.data(), count, &count) != mui_success) {
+                return;
+            }
+        }
+        muiAtlasPage page{};
+        if (count == 0 || muiGlyphAtlas_GetPage(glyphs, 0, &page) != mui_success) {
+            return;
+        }
+        if (atlas.coverage.empty()) {
+            atlas.coverage.assign(std::size_t{atlas.side} * atlas.side, 0);
+        }
+        for (std::uint32_t at = 0; at < count; ++at) {
+            const muiAtlasUpdate& kUpdate = updates[at];
+            for (std::uint32_t row = kUpdate.y; row < kUpdate.y + kUpdate.height; ++row) {
+                const std::size_t kAt = (std::size_t{row} * atlas.side) + kUpdate.x;
+                std::memcpy(&atlas.coverage[kAt], &page.pixels[kAt], kUpdate.width);
+            }
+        }
+        ++atlas.revision;
     }
 };
 
@@ -376,6 +269,9 @@ Tree::~Tree() = default;
 
 result::Result<std::unique_ptr<Tree>>
 Tree::create(std::uint32_t maximumNodes, std::uint32_t maximumFonts, std::uint32_t atlasSide) {
+    if (atlasSide < 64 || atlasSide > 16384 || atlasSide % 4 != 0) {
+        return refuse(UiError::Invalid, "a UI tree's glyph atlas must be 64 to 16,384 pixels, a multiple of 4");
+    }
     muiContextDef def = muiDefaultContextDef();
     def.limits.nodes = maximumNodes;
     auto state = std::make_unique<State>();
@@ -526,9 +422,8 @@ result::Status Tree::removeFont(Font font) {
         return refuse(UiError::Stale, "a font not in the tree could not be removed");
     }
     RAWFRAME_TRY(checked(muiDestroyFont(state_->text, kFound->second), "a font could not be removed"));
+    // Its glyphs' images go stale with its key in the atlas (D404).
     state_->fonts.erase(kFound);
-    // Its glyphs' images go, and the default font's when it was that.
-    state_->emptyAtlas();
     return {};
 }
 
@@ -538,8 +433,7 @@ result::Status Tree::setDefaultFont(Font font) {
         return refuse(UiError::Stale, "a font not in the tree could not be made the default");
     }
     RAWFRAME_TRY(checked(muiSetDefaultFont(state_->text, kFound->second), "a font could not be made the default"));
-    // The null font's images were the old default's.
-    state_->emptyAtlas();
+    // The atlas keys the null font's images by the default's own key (D404).
     return {};
 }
 
