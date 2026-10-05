@@ -3,6 +3,7 @@
 #include "attachments.h"
 #include "bodies.h"
 #include "characters.h"
+#include "contacts.h"
 #include "geometry.h"
 #include "joints.h"
 #include "meshes.h"
@@ -72,7 +73,7 @@ struct Physics3D::State {
     std::vector<std::pair<world::EntityHandle, Joint3D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
-    std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
+    ShapeOwners owners;
     std::vector<m3ContactData> touching;
     std::vector<schema::ComponentRuntimeId> reads;
     std::vector<schema::ComponentRuntimeId> writes;
@@ -245,114 +246,21 @@ struct Physics3D::State {
     /// The entity whose body a shape is, or the null entity for a shape
     /// already gone.
     [[nodiscard]] world::EntityHandle ownerOf(m3ShapeId shape) const {
-        const auto kOwner = owners.find(shape.index1);
-        return kOwner != owners.end() && kOwner->second.first == shape.generation ? kOwner->second.second
-                                                                                  : world::EntityHandle{};
-    }
-
-    [[nodiscard]] Contact3D* contactOf(world::World& world, world::EntityHandle entity) const {
-        return entity.isNull() ? nullptr : static_cast<Contact3D*>(world.getErased(entity, *contact));
+        return shapeOwner(owners, shape);
     }
 
     /// Every Contact3D of a body, from this step's event streams and what
     /// touches and overlaps now, all in Maul3D's canonical order.
     void report(world::World& world) {
-        for (const Row& row : rows) {
-            if (Contact3D* const kContact = contactOf(world, row.entity)) {
-                *kContact = Contact3D{};
-            }
-        }
-        const m3ContactEvents kContacts = m3World_GetContactEvents(physics);
-        for (std::int32_t index = 0; index < kContacts.beginCount; ++index) {
-            ++statistics.contactsBegun;
-            for (const m3ShapeId kShape :
-                 {kContacts.beginEvents[index].shapeIdA, kContacts.beginEvents[index].shapeIdB}) {
-                if (Contact3D* const kContact = contactOf(world, ownerOf(kShape))) {
-                    ++kContact->began;
-                }
-            }
-        }
-        for (std::int32_t index = 0; index < kContacts.endCount; ++index) {
-            for (const m3ShapeId kShape : {kContacts.endEvents[index].shapeIdA, kContacts.endEvents[index].shapeIdB}) {
-                if (Contact3D* const kContact = contactOf(world, ownerOf(kShape))) {
-                    ++kContact->ended;
-                }
-            }
-        }
-        for (std::int32_t index = 0; index < kContacts.hitCount; ++index) {
-            const m3ContactHitEvent& event = kContacts.hitEvents[index];
-            const world::EntityHandle kA = ownerOf(event.shapeIdA);
-            const world::EntityHandle kB = ownerOf(event.shapeIdB);
-            for (const auto& [kSelf, kOther, kSign] : {std::tuple{kA, kB, 1.0F}, std::tuple{kB, kA, -1.0F}}) {
-                Contact3D* const kContact = contactOf(world, kSelf);
-                if (kContact == nullptr || (!kContact->hit.isNull() && event.approachSpeed <= kContact->hitSpeed)) {
-                    continue;
-                }
-                kContact->hit = kOther;
-                kContact->hitSpeed = event.approachSpeed;
-                kContact->hitNormalX = event.normal.x * kSign;
-                kContact->hitNormalY = event.normal.y * kSign;
-                kContact->hitNormalZ = event.normal.z * kSign;
-            }
-        }
-        const m3SensorEvents kOverlaps = m3World_GetSensorEvents(physics);
-        const auto kPair = [this](m3ShapeId one, m3ShapeId other) {
-            const world::EntityHandle kOne = ownerOf(one);
-            const world::EntityHandle kOther = ownerOf(other);
-            return kOne < kOther ? std::pair{kOne, kOther} : std::pair{kOther, kOne};
-        };
-        for (std::int32_t index = 0; index < kOverlaps.beginCount; ++index) {
-            const auto kBetween = kPair(kOverlaps.beginEvents[index].shapeIdA, kOverlaps.beginEvents[index].shapeIdB);
-            if (kBetween.first.isNull() || kBetween.first == kBetween.second || ++overlapping[kBetween] != 1) {
-                continue;
-            }
-            ++statistics.overlapsBegun;
-            for (const auto& [kSelf, kOther] :
-                 {std::pair{kBetween.first, kBetween.second}, std::pair{kBetween.second, kBetween.first}}) {
-                if (Contact3D* const kContact = contactOf(world, kSelf)) {
-                    ++kContact->entered;
-                    kContact->visitor = kContact->visitor.isNull() ? kOther : kContact->visitor;
-                }
-            }
-        }
-        for (std::int32_t index = 0; index < kOverlaps.endCount; ++index) {
-            const auto kFound =
-                overlapping.find(kPair(kOverlaps.endEvents[index].shapeIdA, kOverlaps.endEvents[index].shapeIdB));
-            if (kFound == overlapping.end() || --kFound->second != 0) {
-                continue;
-            }
-            for (const world::EntityHandle kSide : {kFound->first.first, kFound->first.second}) {
-                if (Contact3D* const kContact = contactOf(world, kSide)) {
-                    ++kContact->exited;
-                }
-            }
-            overlapping.erase(kFound);
-        }
-        // What touches and overlaps now.
-        for (const auto& [kBetween, kShapes] : overlapping) {
-            for (const world::EntityHandle kSide : {kBetween.first, kBetween.second}) {
-                if (Contact3D* const kContact = contactOf(world, kSide)) {
-                    ++kContact->overlapping;
-                }
-            }
-        }
-        for (const Row& row : rows) {
-            Contact3D* const kContact = contactOf(world, row.entity);
-            const Mapped& entry = mapped.find(row.entity)->second;
-            if (kContact == nullptr || entry.refused) {
-                continue;
-            }
-            touching.resize(std::max<std::size_t>(touching.size(), 16));
-            std::int32_t total =
-                m3Body_GetContactData(entry.body, touching.data(), static_cast<std::int32_t>(touching.size()));
-            if (static_cast<std::size_t>(total) > touching.size()) {
-                touching.resize(static_cast<std::size_t>(total));
-                total = m3Body_GetContactData(entry.body, touching.data(), total);
-            }
-            for (std::int32_t index = 0; index < total; ++index) {
-                kContact->touching += touching[static_cast<std::size_t>(index)].pointCount > 0 ? 1U : 0U;
-            }
-        }
+        reportContacts(world,
+                       ContactReport{.physics = physics,
+                                     .rows = &rows,
+                                     .mapped = &mapped,
+                                     .owners = &owners,
+                                     .contact = *contact,
+                                     .overlapping = &overlapping,
+                                     .touching = &touching,
+                                     .statistics = &statistics});
     }
 
     /// A character's move this tick, as the velocity its kinematic body

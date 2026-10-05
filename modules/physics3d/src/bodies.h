@@ -13,8 +13,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <maul3d/maul3d.h>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace rawframe::physics3d {
@@ -163,6 +165,18 @@ struct Turned {
     // A margin for the float geometry the shape is tested with.
     const double kWithin = reach + 0.01;
     return (kOff.x * kOff.x) + (kOff.y * kOff.y) + (kOff.z * kOff.z) <= kWithin * kWithin;
+}
+
+/// Which entity each live shape is, by shape index: its generation and
+/// its entity.
+using ShapeOwners = std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>>;
+
+/// The entity whose body a shape is, or the null entity for a shape
+/// already gone.
+[[nodiscard]] inline world::EntityHandle shapeOwner(const ShapeOwners& owners, m3ShapeId shape) {
+    const auto kOwner = owners.find(shape.index1);
+    return kOwner != owners.end() && kOwner->second.first == shape.generation ? kOwner->second.second
+                                                                              : world::EntityHandle{};
 }
 
 /// One entity's body, and what the last step wrote, to tell gameplay's
