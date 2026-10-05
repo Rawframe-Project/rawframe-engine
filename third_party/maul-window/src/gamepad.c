@@ -14,7 +14,7 @@ mwinResult mwinGetGamepads(const mwinContext* context, mwinGamepadId* gamepads, 
 {
     if (context == nullptr || countOut == nullptr || (gamepads == nullptr && capacity != 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     // In the order they came: each round takes the earliest after the last.
     size_t count = 0;
@@ -54,7 +54,7 @@ mwinResult mwinGetGamepadInfo(const mwinContext* context, mwinGamepadId gamepad,
 {
     if (context == nullptr || infoOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     int32_t slot = mwinFindGamepad(context, gamepad);
     if (slot < 0)
@@ -70,7 +70,7 @@ mwinResult mwinGetGamepadState(const mwinContext* context, mwinGamepadId gamepad
 {
     if (context == nullptr || stateOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     int32_t slot = mwinFindGamepad(context, gamepad);
     if (slot < 0)
@@ -91,7 +91,7 @@ mwinResult mwinSetGamepadRumble(mwinContext* context, mwinGamepadId gamepad, flo
 {
     if (context == nullptr || !IsStrength(low) || !IsStrength(high))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     int32_t slot = mwinFindGamepad(context, gamepad);
     if (slot < 0)

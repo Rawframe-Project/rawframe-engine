@@ -13,7 +13,7 @@ mwinResult mwinGetNativeHandles(const mwinContext* context, mwinWindowId window,
 {
     if (context == nullptr || handlesOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     const mwinWindow* found = mwinFindWindow(context, window);
     if (found == nullptr)

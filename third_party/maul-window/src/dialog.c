@@ -11,6 +11,7 @@
 #include "maul-window/services.h"
 
 #include <stdalign.h>
+#include <stdckdint.h>
 #include <string.h>
 
 #define DIALOG_COOKIE 0x6D776664u // "mwfd"
@@ -91,13 +92,22 @@ static const char* Put(char** at, const char* text, size_t length)
 
 static mwinDialogCopy* Copy(const mwinContext* context, const mwinFileDialogDef* def)
 {
-    size_t size = sizeof(mwinDialogCopy) + def->filterCount * sizeof(mwinDialogFilter) +
-                  def->titleLength + def->folderLength + def->nameLength + 3;
-    for (uint32_t i = 0; i < def->filterCount; i++)
+    // The copy, its filters, and each text with its NUL, in checked
+    // arithmetic: a size past size_t is refused as no memory.
+    size_t size = 0;
+    bool overflow = ckd_mul(&size, (size_t)def->filterCount, sizeof(mwinDialogFilter)) ||
+                    ckd_add(&size, size, sizeof(mwinDialogCopy) + 3) ||
+                    ckd_add(&size, size, def->titleLength) ||
+                    ckd_add(&size, size, def->folderLength) ||
+                    ckd_add(&size, size, def->nameLength);
+    for (uint32_t i = 0; i < def->filterCount && !overflow; i++)
     {
-        size += def->filters[i].nameLength + def->filters[i].extensionsLength + 2;
+        overflow = ckd_add(&size, size, def->filters[i].nameLength) ||
+                   ckd_add(&size, size, def->filters[i].extensionsLength) ||
+                   ckd_add(&size, size, 2);
     }
-    mwinDialogCopy* copy = mwinAllocate(&context->allocator, size, alignof(mwinDialogCopy));
+    mwinDialogCopy* copy =
+        overflow ? nullptr : mwinAllocate(&context->allocator, size, alignof(mwinDialogCopy));
     if (copy == nullptr)
     {
         return nullptr;
@@ -126,7 +136,7 @@ mwinResult mwinRequestFileDialog(mwinContext* context, mwinWindowId window,
 {
     if (context == nullptr || def == nullptr || !IsDef(def))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinDialogCopy* copy = Copy(context, def);
     if (copy == nullptr)
@@ -220,7 +230,7 @@ mwinResult mwinGetDialogFiles(const mwinContext* context, mwinRequestId request,
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     const mwinFileList* files = &context->dialogFiles;
     if (request.index1 == 0 || request.index1 != context->dialogRequest.index1 ||

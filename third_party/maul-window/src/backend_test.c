@@ -20,28 +20,53 @@
 #include <math.h>
 #include <string.h>
 
+// Where the platform block's parts lie, laid out with checked
+// arithmetic: the platform, a pending answer per request slot of every
+// window, and a rumble per gamepad.
+typedef struct PlatformParts
+{
+    mwinLayout layout;
+    size_t pending;
+    size_t rumbles;
+} PlatformParts;
+
+static uint32_t PendingCapacity(const mwinLimits* limits)
+{
+    return (uint32_t)limits->windows * limits->requestsPerWindow;
+}
+
+static PlatformParts PartsOf(const mwinLimits* limits)
+{
+    PlatformParts parts = {0};
+    (void)mwinLayoutAdd(&parts.layout, 1, sizeof(mwinTestPlatform), alignof(mwinTestPlatform));
+    parts.pending = mwinLayoutAdd(&parts.layout, PendingCapacity(limits), sizeof(mwinTestPending),
+                                  alignof(mwinTestPending));
+    parts.rumbles = mwinLayoutAdd(&parts.layout, limits->gamepads, sizeof(mwinTestRumble),
+                                  alignof(mwinTestRumble));
+    return parts;
+}
+
 static size_t PlatformBytes(const mwinContext* context)
 {
-    return sizeof(mwinTestPlatform) +
-           (size_t)context->limits.windows * context->limits.requestsPerWindow *
-               sizeof(mwinTestPending) +
-           (size_t)context->limits.gamepads * sizeof(mwinTestRumble);
+    return PartsOf(&context->limits).layout.size;
 }
 
 static mwinResult Start(mwinContext* context)
 {
+    PlatformParts parts = PartsOf(&context->limits);
     unsigned char* block =
-        mwinAllocate(&context->allocator, PlatformBytes(context), alignof(max_align_t));
+        parts.layout.overflow
+            ? nullptr
+            : mwinAllocate(&context->allocator, parts.layout.size, alignof(max_align_t));
     if (block == nullptr)
     {
         return mwin_errorCapacity;
     }
-    memset(block, 0, PlatformBytes(context));
+    memset(block, 0, parts.layout.size);
     mwinTestPlatform* platform = (mwinTestPlatform*)block;
-    platform->pending = (mwinTestPending*)(block + sizeof(mwinTestPlatform));
-    platform->pendingCapacity =
-        (uint32_t)context->limits.windows * context->limits.requestsPerWindow;
-    platform->rumbles = (mwinTestRumble*)(platform->pending + platform->pendingCapacity);
+    platform->pending = (mwinTestPending*)(block + parts.pending);
+    platform->pendingCapacity = PendingCapacity(&context->limits);
+    platform->rumbles = (mwinTestRumble*)(block + parts.rumbles);
     platform->scale = 1.0f;
     context->backendData = platform;
     return mwin_success;
@@ -431,7 +456,7 @@ mwinResult mwinTestSetAnswer(mwinContext* context, mwinRequestKind kind, mwinOut
     if (context == nullptr || kind >= MWIN_TEST_KINDS || outcome == mwin_outcomeSuperseded ||
         cancelled || outcome > mwin_outcomeFailed)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -446,7 +471,7 @@ mwinResult mwinTestHold(mwinContext* context, bool hold)
 {
     if (context == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -528,7 +553,7 @@ mwinResult mwinTestPost(mwinContext* context, const mwinEvent* event)
 {
     if (context == nullptr || event == nullptr || !IsReportable(event->type) || !IsTextValid(event))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -549,7 +574,7 @@ mwinResult mwinTestSetTime(mwinContext* context, uint64_t timeNs)
     mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (context == nullptr || (platform != nullptr && timeNs < platform->timeNs))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (platform == nullptr)
     {
@@ -563,7 +588,7 @@ mwinResult mwinTestSetScale(mwinContext* context, float scale)
 {
     if (context == nullptr || !isfinite(scale) || scale <= 0.0f)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -579,7 +604,7 @@ mwinResult mwinTestGetTitle(const mwinContext* context, mwinWindowId window, cha
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity != 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -604,7 +629,7 @@ mwinResult mwinTestAddMonitor(mwinContext* context, const mwinMonitorInfo* info,
 {
     if (context == nullptr || info == nullptr || monitorOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -624,7 +649,7 @@ mwinResult mwinTestChangeMonitor(mwinContext* context, mwinMonitorId monitor,
 {
     if (context == nullptr || info == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -643,7 +668,7 @@ mwinResult mwinTestRemoveMonitor(mwinContext* context, mwinMonitorId monitor)
 {
     if (context == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -662,7 +687,7 @@ mwinResult mwinTestSetSystemFacts(mwinContext* context, const mwinSystemFacts* f
 {
     if (context == nullptr || facts == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -676,7 +701,7 @@ mwinResult mwinTestSetLocales(mwinContext* context, const char* locales, size_t 
 {
     if (context == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -687,7 +712,7 @@ mwinResult mwinTestSetLocales(mwinContext* context, const char* locales, size_t 
         return mwin_errorCapacity;
     }
     return mwinSetLocales(context, locales, length, Now(context)) ? mwin_success
-                                                                  : mwin_errorInvalid;
+                                                                  : mwinMisuse(context);
 }
 
 // The slot of a gamepad of a test context, or why there is none.
@@ -696,7 +721,7 @@ static mwinResult FindTestGamepad(const mwinContext* context, mwinGamepadId game
 {
     if (context == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -711,7 +736,7 @@ mwinResult mwinTestAddGamepad(mwinContext* context, const mwinGamepadInfo* info,
 {
     if (context == nullptr || info == nullptr || gamepadOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -732,7 +757,7 @@ mwinResult mwinTestChangeGamepad(mwinContext* context, mwinGamepadId gamepad,
 {
     int32_t slot = -1;
     mwinResult status =
-        info != nullptr ? FindTestGamepad(context, gamepad, &slot) : mwin_errorInvalid;
+        info != nullptr ? FindTestGamepad(context, gamepad, &slot) : mwinMisuse(context);
     if (status == mwin_success)
     {
         mwinChangeGamepad(context, (uint32_t)slot, info, Now(context));
@@ -778,11 +803,12 @@ mwinResult mwinTestGamepadAxis(mwinContext* context, mwinGamepadId gamepad, uint
 mwinResult mwinTestGetRumble(const mwinContext* context, mwinGamepadId gamepad, float* lowOut,
                              float* highOut, uint32_t* durationMsOut, uint32_t* countOut)
 {
+    if (lowOut == nullptr || highOut == nullptr || durationMsOut == nullptr || countOut == nullptr)
+    {
+        return mwinMisuse(context);
+    }
     int32_t slot = -1;
-    mwinResult status =
-        lowOut != nullptr && highOut != nullptr && durationMsOut != nullptr && countOut != nullptr
-            ? FindTestGamepad(context, gamepad, &slot)
-            : mwin_errorInvalid;
+    mwinResult status = FindTestGamepad(context, gamepad, &slot);
     if (status == mwin_success)
     {
         const mwinTestRumble* rumble = &mwinTestPlatformOf(context)->rumbles[slot];

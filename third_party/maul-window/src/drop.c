@@ -128,7 +128,7 @@ static mwinResult CopyOut(const mwinContext* context, uint32_t drop, const char*
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (drop == 0 || drop != context->dropNumber)
     {

@@ -9,20 +9,27 @@
 
 #include "maul-unicode/encoding.h"
 
+#include <stdckdint.h>
 #include <string.h>
 
 // Room for a path of a length and its NUL: where it goes, or NULL past
 // the bounds or the allocator's room.
 static char* Room(mwinFileList* list, mwinListBounds bounds, size_t length)
 {
-    size_t needed = (size_t)list->length + length + 1;
-    if (list->count >= bounds.count || needed > bounds.bytes)
+    size_t needed = 0;
+    if (list->count >= bounds.count || ckd_add(&needed, (size_t)list->length, length) ||
+        ckd_add(&needed, needed, 1) || needed > bounds.bytes)
     {
         return nullptr;
     }
     if (needed > list->capacity)
     {
-        size_t capacity = (size_t)list->capacity * 2;
+        // Doubling saturates, then the bounds cap it.
+        size_t capacity = 0;
+        if (ckd_mul(&capacity, (size_t)list->capacity, 2))
+        {
+            capacity = SIZE_MAX;
+        }
         capacity = capacity < needed ? needed : capacity;
         capacity = capacity < bounds.bytes ? capacity : bounds.bytes;
         char* grown = mwinAllocate(bounds.allocator, capacity, 1);

@@ -7,6 +7,7 @@
 
 #include "maul-unicode/encoding.h"
 
+#include <stdckdint.h>
 #include <wchar.h>
 
 #define OPEN_TRIES 5
@@ -31,7 +32,12 @@ static HGLOBAL Wide(const mwinContext* context)
     size_t needed = 0;
     (void)muniConvertUtf8ToUtf16(context->clipboardOffer, context->clipboardOfferLength, nullptr, 0,
                                  muni_convertStrict, &needed);
-    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, (needed + 1) * sizeof(uint16_t));
+    size_t bytes = 0;
+    if (ckd_add(&bytes, needed, 1) || ckd_mul(&bytes, bytes, sizeof(uint16_t)))
+    {
+        return nullptr;
+    }
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
     uint16_t* units = memory != nullptr ? GlobalLock(memory) : nullptr;
     if (units == nullptr)
     {

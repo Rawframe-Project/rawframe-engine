@@ -51,12 +51,37 @@ static mwinWaylandPlatform* PlatformOf(const mwinContext* context)
     return (mwinWaylandPlatform*)context->backendData;
 }
 
+// Where the platform block's parts lie, laid out with checked
+// arithmetic: the platform, its windows and outputs, the title being
+// set, and the text input's preedit and commit.
+typedef struct PlatformParts
+{
+    mwinLayout layout;
+    size_t windows;
+    size_t outputs;
+    size_t title;
+    size_t preedit;
+    size_t commit;
+} PlatformParts;
+
+static PlatformParts PartsOf(const mwinLimits* limits)
+{
+    PlatformParts parts = {0};
+    mwinLayout* layout = &parts.layout;
+    (void)mwinLayoutAdd(layout, 1, sizeof(mwinWaylandPlatform), alignof(mwinWaylandPlatform));
+    parts.windows = mwinLayoutAdd(layout, limits->windows, sizeof(mwinWaylandWindow),
+                                  alignof(mwinWaylandWindow));
+    parts.outputs = mwinLayoutAdd(layout, limits->monitors, sizeof(mwinWaylandOutput),
+                                  alignof(mwinWaylandOutput));
+    parts.title = mwinLayoutAdd(layout, (size_t)limits->titleBytes + 1, 1, 1);
+    parts.preedit = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, 1);
+    parts.commit = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, 1);
+    return parts;
+}
+
 static size_t PlatformBytes(const mwinContext* context)
 {
-    const mwinLimits* limits = &context->limits;
-    return sizeof(mwinWaylandPlatform) + limits->windows * sizeof(mwinWaylandWindow) +
-           limits->monitors * sizeof(mwinWaylandOutput) + limits->titleBytes + 1 +
-           2 * (size_t)limits->textBytesPerWindow;
+    return PartsOf(&context->limits).layout.size;
 }
 
 static void OnPing(void* data, struct xdg_wm_base* wmBase, uint32_t serial)
@@ -299,24 +324,22 @@ static void Stop(mwinContext* context)
 
 static mwinResult Start(mwinContext* context)
 {
+    PlatformParts parts = PartsOf(&context->limits);
     unsigned char* block =
-        mwinAllocate(&context->allocator, PlatformBytes(context), alignof(max_align_t));
+        parts.layout.overflow
+            ? nullptr
+            : mwinAllocate(&context->allocator, parts.layout.size, alignof(max_align_t));
     if (block == nullptr)
     {
         return mwin_errorCapacity;
     }
-    memset(block, 0, PlatformBytes(context));
+    memset(block, 0, parts.layout.size);
     mwinWaylandPlatform* platform = (mwinWaylandPlatform*)block;
-    unsigned char* storage = block + sizeof(mwinWaylandPlatform);
-    platform->windows = (mwinWaylandWindow*)storage;
-    storage += context->limits.windows * sizeof(mwinWaylandWindow);
-    platform->outputs = (mwinWaylandOutput*)storage;
-    storage += context->limits.monitors * sizeof(mwinWaylandOutput);
-    platform->title = (char*)storage;
-    storage += context->limits.titleBytes + 1;
-    platform->text.preedit.bytes = (char*)storage;
-    storage += context->limits.textBytesPerWindow;
-    platform->text.commit.bytes = (char*)storage;
+    platform->windows = (mwinWaylandWindow*)(block + parts.windows);
+    platform->outputs = (mwinWaylandOutput*)(block + parts.outputs);
+    platform->title = (char*)(block + parts.title);
+    platform->text.preedit.bytes = (char*)(block + parts.preedit);
+    platform->text.commit.bytes = (char*)(block + parts.commit);
     platform->context = context;
     platform->keyboard.focus = -1;
     platform->pointer.focus = -1;

@@ -134,8 +134,13 @@ extern "C"
     /// Where the platform owns the loop (the web, iOS) this function may
     /// never return, or, on the web without Emscripten, return
     /// `mwin_success` once init has succeeded while the page's frames run
-    /// the program on; either way put cleanup in quit. It is never called
-    /// from inside a running program's functions.
+    /// the program on; either way put cleanup in quit. On iOS init runs
+    /// when the application's first scene connects, and a program that
+    /// stops or fails there ends with quit while the application runs on.
+    /// On Android the platform begins the run, not the program: see
+    /// mwinAndroidMain; there this function returns
+    /// `mwin_errorUnsupported`. It is never called from inside a running
+    /// program's functions.
     ///
     /// @param def  The program: a valid cookie, init and frame set.
     /// @return init's status when it failed; `mwin_success` after a stop;
@@ -147,6 +152,38 @@ extern "C"
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinRun(const mwinAppDef* def);
+
+#ifdef __ANDROID__
+    /// Defined by the program on Android, in place of the `main` that calls
+    /// mwinRun elsewhere: returns the program, which the library then runs
+    /// as mwinRun would. The library's activity (`maul.window.Activity`,
+    /// named in the manifest with the program's library as
+    /// `android.app.lib_name`) calls it when it is created and no program
+    /// runs; init runs at once, and frames follow on the main thread while
+    /// the activity is started. The program outlives its activity: one the
+    /// system creates anew (a configuration change, the user coming back)
+    /// joins the running program, the window's surface going with the old
+    /// one and coming with the new. A program that stops or fails ends
+    /// with quit and finishes its activity; a later activity calls this
+    /// function anew, in the same process, so the program keeps nothing
+    /// it needs fresh in statics. A shared build of this library finds the
+    /// function in the program's library, which must export it.
+    ///
+    /// @return The program, as mwinRun takes it.
+    /// @par Thread safety
+    /// Called on the main thread.
+    mwinAppDef mwinAndroidMain(void);
+#endif
+
+    /// Returns how many calls the context has refused as invalid input
+    /// (`mwin_errorInvalid`): a count release builds can watch to catch a
+    /// program's bugs. Stale ids are not misuse.
+    ///
+    /// @param context  The context.
+    /// @return The count; 0 for a NULL context.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_API uint64_t mwinGetContextMisuse(const mwinContext* context);
 
 #ifdef __cplusplus
 }

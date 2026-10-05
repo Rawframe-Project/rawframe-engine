@@ -60,10 +60,17 @@ extern "C"
                 void* connection;
                 uint32_t window;
             } x11;
-            // ANativeWindow*.
+            // ANativeWindow*, the ANativeActivity* it belongs to,
+            // through which the program reaches Java and its assets, and
+            // the jobject of the activity's android.view.View, a global
+            // reference, which hosts the accessibility root
+            // (maul-window/accessibility.h). All three change with the
+            // activity.
             struct
             {
                 void* window;
+                void* activity;
+                void* view;
             } android;
             // The NSView or UIView, and its CAMetalLayer.
             struct

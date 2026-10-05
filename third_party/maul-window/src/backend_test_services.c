@@ -64,7 +64,7 @@ mwinResult mwinTestSetClipboard(mwinContext* context, const char* bytes, size_t 
 {
     if (context == nullptr || (bytes == nullptr && length != 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -77,7 +77,7 @@ mwinResult mwinTestSetClipboardUtf16(mwinContext* context, const uint16_t* units
 {
     if (context == nullptr || (units == nullptr && length != 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
@@ -91,7 +91,7 @@ mwinResult mwinTestGetClipboard(const mwinContext* context, char* buffer, size_t
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -113,7 +113,7 @@ mwinResult mwinTestDrop(mwinContext* context, mwinWindowId window, mwinPosition 
     if (context == nullptr || (files == nullptr && filesLength != 0) ||
         (filesLength > 0 && files[filesLength - 1] != '\0'))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -166,7 +166,7 @@ mwinResult mwinTestGetOpened(const mwinContext* context, mwinRequestKind kind, c
     bool known = kind == mwin_requestOpenUrl || kind == mwin_requestRevealFile;
     if (context == nullptr || lengthOut == nullptr || !known || (buffer == nullptr && capacity > 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -188,7 +188,7 @@ mwinResult mwinTestSetDialogFiles(mwinContext* context, const char* files, size_
     if (context == nullptr || (files == nullptr && length > 0) || length > MWIN_TEST_DIALOG_BYTES ||
         (length > 0 && files[length - 1] != '\0'))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -243,7 +243,7 @@ mwinResult mwinTestGetDialog(const mwinContext* context, char* buffer, size_t ca
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -293,7 +293,7 @@ mwinResult mwinTestGetIcon(const mwinContext* context, uint32_t* countOut, uint6
 {
     if (context == nullptr || countOut == nullptr || checksumOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
@@ -309,7 +309,7 @@ mwinResult mwinTestAskAccessibility(mwinContext* context, mwinWindowId window)
 {
     if (context == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {

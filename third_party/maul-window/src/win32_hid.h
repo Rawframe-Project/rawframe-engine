@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Win32 generic gamepads through Raw Input and the HID parser (window
-// decision W12): the joysticks, gamepads and multi-axis controllers
+// Win32 generic gamepads through Raw Input and the HID parser
+// (mwin-0021): the joysticks, gamepads and multi-axis controllers
 // XInput does not read. Devices come and go with Raw Input's arrivals
 // and removals, and their input reports are read as they come. Their
 // controls are numbered as SDL numbers DirectInput's, so the Windows

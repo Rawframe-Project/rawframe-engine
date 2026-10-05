@@ -7,6 +7,7 @@
 
 #include "allocator.h"
 
+#include <stdckdint.h>
 #include <string.h>
 
 static bool IsImage(const mwinIconImage* image)
@@ -18,12 +19,18 @@ static bool IsImage(const mwinIconImage* image)
 
 static mwinIconCopy* Copy(const mwinContext* context, const mwinIconImage* images, uint32_t count)
 {
-    size_t size = sizeof(mwinIconCopy) + count * sizeof(mwinIconCopyImage);
-    for (uint32_t i = 0; i < count; i++)
+    // The copy, its images and their pixels, in checked arithmetic.
+    size_t size = 0;
+    bool overflow = ckd_mul(&size, (size_t)count, sizeof(mwinIconCopyImage)) ||
+                    ckd_add(&size, size, sizeof(mwinIconCopy));
+    for (uint32_t i = 0; i < count && !overflow; i++)
     {
-        size += (size_t)images[i].width * images[i].height * 4;
+        size_t pixels = 0;
+        overflow = ckd_mul(&pixels, (size_t)images[i].width * 4, images[i].height) ||
+                   ckd_add(&size, size, pixels);
     }
-    mwinIconCopy* icon = mwinAllocate(&context->allocator, size, alignof(max_align_t));
+    mwinIconCopy* icon =
+        overflow ? nullptr : mwinAllocate(&context->allocator, size, alignof(max_align_t));
     if (icon == nullptr)
     {
         return nullptr;
@@ -56,7 +63,7 @@ mwinResult mwinRequestIcon(mwinContext* context, mwinWindowId window, const mwin
     }
     if (!valid)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinIconCopy* icon = Copy(context, images, count);
     if (icon == nullptr)

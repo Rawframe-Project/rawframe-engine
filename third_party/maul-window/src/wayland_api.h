@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// libwayland-client and libwayland-cursor, opened at run time (W7), and
+// libwayland-client and libwayland-cursor, opened at run time (mwin-0005), and
 // the protocols the backend speaks. The functions are reached through a
 // table each context loads for itself, so the library keeps no
 // process-wide state. The

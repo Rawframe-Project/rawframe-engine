@@ -207,7 +207,7 @@ mwinResult mwinCreateWindow(mwinContext* context, const mwinWindowDef* def, mwin
 {
     if (context == nullptr || def == nullptr || windowOut == nullptr || !IsDefValid(context, def))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (def->owner.index1 != 0 && mwinFindWindow(context, def->owner) == nullptr)
     {
@@ -253,7 +253,7 @@ mwinResult mwinDestroyWindow(mwinContext* context, mwinWindowId window)
 {
     if (context == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinWindow* found = mwinFindWindow(context, window);
     if (found == nullptr)
@@ -287,7 +287,7 @@ mwinResult mwinGetWindowState(const mwinContext* context, mwinWindowId window,
 {
     if (context == nullptr || stateOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     const mwinWindow* found = mwinFindWindow(context, window);
     if (found == nullptr)
@@ -303,7 +303,7 @@ mwinResult mwinBeginRequest(mwinContext* context, mwinWindowId window, mwinReque
 {
     if (context == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (mwinFindWindow(context, window) == nullptr)
     {
@@ -319,7 +319,7 @@ mwinResult mwinRequestTitle(mwinContext* context, mwinWindowId window, const cha
 {
     if (context != nullptr && !IsText(title, length, context->limits.titleBytes))
     {
-        return length > context->limits.titleBytes ? mwin_errorCapacity : mwin_errorInvalid;
+        return length > context->limits.titleBytes ? mwin_errorCapacity : mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -343,7 +343,7 @@ mwinResult mwinRequestSize(mwinContext* context, mwinWindowId window, mwinSize s
 {
     if (!IsPositive(size))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -361,7 +361,7 @@ mwinResult mwinRequestPosition(mwinContext* context, mwinWindowId window, mwinPo
 {
     if (!isfinite(position.x) || !isfinite(position.y))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -379,7 +379,7 @@ mwinResult mwinRequestMode(mwinContext* context, mwinWindowId window, mwinWindow
 {
     if (mode > mwin_modeMaximized)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -427,7 +427,7 @@ mwinResult mwinRequestSizeLimits(mwinContext* context, mwinWindowId window, mwin
         maximum.height < 0.0f || (maximum.width > 0.0f && maximum.width < minimum.width) ||
         (maximum.height > 0.0f && maximum.height < minimum.height))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -446,7 +446,7 @@ mwinResult mwinRequestAspectRatio(mwinContext* context, mwinWindowId window, uin
 {
     if ((width == 0) != (height == 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -465,7 +465,7 @@ mwinResult mwinRequestStyle(mwinContext* context, mwinWindowId window, mwinWindo
 {
     if (style > ALL_STYLES)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -483,7 +483,7 @@ mwinResult mwinRequestOpacity(mwinContext* context, mwinWindowId window, float o
 {
     if (!(opacity >= 0.0f && opacity <= 1.0f))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;

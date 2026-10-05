@@ -29,10 +29,29 @@ static mwinWebPlatform* PlatformOf(const mwinContext* context)
     return (mwinWebPlatform*)context->backendData;
 }
 
+// Where the platform block's parts lie, laid out with checked
+// arithmetic: the platform, its windows and the text being composed.
+typedef struct PlatformParts
+{
+    mwinLayout layout;
+    size_t windows;
+    size_t text;
+} PlatformParts;
+
+static PlatformParts PartsOf(const mwinLimits* limits)
+{
+    PlatformParts parts = {0};
+    mwinLayout* layout = &parts.layout;
+    (void)mwinLayoutAdd(layout, 1, sizeof(mwinWebPlatform), alignof(mwinWebPlatform));
+    parts.windows =
+        mwinLayoutAdd(layout, limits->windows, sizeof(mwinWebWindow), alignof(mwinWebWindow));
+    parts.text = mwinLayoutAdd(layout, (size_t)limits->textBytesPerWindow + 1, 1, 1);
+    return parts;
+}
+
 static size_t PlatformBytes(const mwinContext* context)
 {
-    return sizeof(mwinWebPlatform) + context->limits.windows * sizeof(mwinWebWindow) +
-           context->limits.textBytesPerWindow + 1u;
+    return PartsOf(&context->limits).layout.size;
 }
 
 static uint64_t NowNs(void)
@@ -176,16 +195,19 @@ static mwinResult Start(mwinContext* context)
     {
         return mwin_errorPlatform;
     }
+    PlatformParts parts = PartsOf(&context->limits);
     unsigned char* block =
-        mwinAllocate(&context->allocator, PlatformBytes(context), alignof(max_align_t));
+        parts.layout.overflow
+            ? nullptr
+            : mwinAllocate(&context->allocator, parts.layout.size, alignof(max_align_t));
     if (block == nullptr)
     {
         return mwin_errorCapacity;
     }
-    memset(block, 0, PlatformBytes(context));
+    memset(block, 0, parts.layout.size);
     mwinWebPlatform* platform = (mwinWebPlatform*)block;
-    platform->windows = (mwinWebWindow*)(block + sizeof(mwinWebPlatform));
-    platform->text = (char*)(platform->windows + context->limits.windows);
+    platform->windows = (mwinWebWindow*)(block + parts.windows);
+    platform->text = (char*)(block + parts.text);
     platform->context = context;
     platform->monitor = -1;
     platform->scale = mwinWebScale();

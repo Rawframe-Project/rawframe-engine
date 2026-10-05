@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Smooth scrolling on X11 (window decision W11): the scroll valuators
+// Smooth scrolling on X11 (mwin-0020): the scroll valuators
 // of XI 2.1 devices, and the wheel movement their changes make. A
 // valuator's change over its increment is one wheel click; a vertical
 // one grows as the content scrolls down, a horizontal one to the right.

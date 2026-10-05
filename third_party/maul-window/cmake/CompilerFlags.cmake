@@ -42,6 +42,9 @@ function(maul_apply_flags target)
         # contraction off is the only change the family needs.
         target_compile_options(${target} PRIVATE /W4 /clang:-ffp-contract=off
                                                  /clang:-Wshadow /clang:-Wmissing-prototypes)
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            target_compile_options(${target} PRIVATE /clang:-Wshorten-64-to-32)
+        endif()
         if(${MAUL_PREFIX}_WERROR)
             target_compile_options(${target} PRIVATE /WX)
         endif()
@@ -50,6 +53,12 @@ function(maul_apply_flags target)
             -ffp-contract=off -fno-trapping-math -fno-fast-math -fno-unsafe-math-optimizations
             -Wall -Wextra -Wshadow -Wdouble-promotion -Wfloat-conversion
             $<$<COMPILE_LANGUAGE:C>:-Wmissing-prototypes>)
+        # A 64-bit value cut to 32 bits, where pointers are 64 bits (a
+        # 32-bit size_t would flag every size taken from a 64-bit value);
+        # GCC has no warning this narrow.
+        if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+            target_compile_options(${target} PRIVATE -Wshorten-64-to-32)
+        endif()
         if(${MAUL_PREFIX}_WERROR)
             target_compile_options(${target} PRIVATE -Werror)
         endif()

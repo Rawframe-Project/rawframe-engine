@@ -8,6 +8,8 @@
 #include "allocator.h"
 #include "icon.h"
 
+#include <stdckdint.h>
+
 mwinOutcome mwinX11SetIcon(mwinX11Platform* platform, xcb_window_t window,
                            const mwinRequest* request)
 {
@@ -30,7 +32,10 @@ mwinOutcome mwinX11SetIcon(mwinX11Platform* platform, xcb_window_t window,
         return mwin_outcomeTooLarge;
     }
     const mwinAllocator* allocator = &platform->context->allocator;
-    uint32_t* data = mwinAllocate(allocator, count * sizeof(uint32_t), alignof(uint32_t));
+    size_t bytes = 0;
+    uint32_t* data = ckd_mul(&bytes, count, sizeof(uint32_t))
+                         ? nullptr
+                         : mwinAllocate(allocator, bytes, alignof(uint32_t));
     if (data == nullptr)
     {
         return mwin_outcomeFailed;

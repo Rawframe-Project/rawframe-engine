@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// libxkbcommon, opened at run time (W7) into a table each context
+// libxkbcommon, opened at run time (mwin-0005) into a table each context
 // loads for itself: keymaps, keyboard state and compose sequences for
 // the Wayland backend, and later the X11 one.
 

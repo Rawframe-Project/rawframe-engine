@@ -9,6 +9,7 @@
 
 #include <ole2.h>
 #include <shellapi.h>
+#include <stdckdint.h>
 #include <stddef.h>
 #include <wchar.h>
 
@@ -116,8 +117,10 @@ static void GatherFiles(mwinContext* context, HDROP files)
     for (UINT i = 0; i < count; i++)
     {
         UINT length = DragQueryFileW(files, i, nullptr, 0);
-        size_t bytes = ((size_t)length + 1) * sizeof(WCHAR);
-        WCHAR* path = mwinAllocate(&context->allocator, bytes, alignof(WCHAR));
+        size_t bytes = 0;
+        WCHAR* path = ckd_mul(&bytes, (size_t)length + 1, sizeof(WCHAR))
+                          ? nullptr
+                          : mwinAllocate(&context->allocator, bytes, alignof(WCHAR));
         if (path == nullptr)
         {
             context->dropping.truncated = true;

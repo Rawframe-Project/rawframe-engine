@@ -8,6 +8,7 @@
 #include "allocator.h"
 #include "monotonic.h"
 
+#include <stdckdint.h>
 #include <string.h>
 
 // The largest piece of text sent at once; more goes in pieces (INCR).
@@ -144,7 +145,13 @@ static bool Append(mwinX11Platform* platform, const char* bytes, uint32_t length
     uint32_t needed = clipboard->used + length;
     if (needed > clipboard->capacity)
     {
-        uint32_t capacity = needed > clipboard->capacity * 2 ? needed : clipboard->capacity * 2;
+        // Doubling saturates, then the limit caps it.
+        uint32_t doubled = 0;
+        if (ckd_mul(&doubled, clipboard->capacity, 2u))
+        {
+            doubled = UINT32_MAX;
+        }
+        uint32_t capacity = needed > doubled ? needed : doubled;
         capacity =
             capacity < context->limits.clipboardBytes ? capacity : context->limits.clipboardBytes;
         char* grown = mwinAllocate(&context->allocator, capacity, 1);

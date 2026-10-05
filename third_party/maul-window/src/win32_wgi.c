@@ -21,6 +21,32 @@
     void* GetRuntimeClassName;                                                                     \
     void* GetTrustLevel;
 
+// The buttons of a reading, as the runtime numbers them.
+enum
+{
+    wgiMenu = 0x1,
+    wgiView = 0x2,
+    wgiA = 0x4,
+    wgiB = 0x8,
+    wgiX = 0x10,
+    wgiY = 0x20,
+    wgiDpadUp = 0x40,
+    wgiDpadDown = 0x80,
+    wgiDpadLeft = 0x100,
+    wgiDpadRight = 0x200,
+    wgiShoulderLeft = 0x400,
+    wgiShoulderRight = 0x800,
+    wgiStickLeft = 0x1000,
+    wgiStickRight = 0x2000,
+};
+
+// The runtime's buttons in mwinGamepadButton order; it gives no guide
+// button.
+static const uint32_t s_buttons[MWIN_GAMEPAD_BUTTONS] = {
+    wgiDpadUp,       wgiDpadDown,      wgiDpadLeft,  wgiDpadRight,  wgiA,    wgiB,    wgiX, wgiY,
+    wgiShoulderLeft, wgiShoulderRight, wgiStickLeft, wgiStickRight, wgiMenu, wgiView, 0,
+};
+
 // The runtime's structs, as it lays them out.
 typedef struct Token
 {
@@ -309,7 +335,9 @@ static void Release(void* self, void* pad)
     (void)gamepad->v->Release(gamepad);
 }
 
-static bool Read(void* self, void* pad, mwinWgiReading* reading)
+// A reading in the contract's terms: View is select and Menu start;
+// sticks' y turned so down is positive.
+static bool Read(void* self, void* pad, mwinPadReading* reading)
 {
     (void)self;
     Gamepad* gamepad = pad;
@@ -318,22 +346,26 @@ static bool Read(void* self, void* pad, mwinWgiReading* reading)
     {
         return false;
     }
-    *reading = (mwinWgiReading){.timestamp = value.timestamp,
-                                .buttons = (uint32_t)value.buttons,
-                                .leftTrigger = value.leftTrigger,
-                                .rightTrigger = value.rightTrigger,
-                                .leftX = value.leftX,
-                                .leftY = value.leftY,
-                                .rightX = value.rightX,
-                                .rightY = value.rightY};
+    *reading = (mwinPadReading){.timestamp = value.timestamp};
+    for (uint32_t i = 0; i < MWIN_GAMEPAD_BUTTONS; i++)
+    {
+        reading->buttons |= ((uint32_t)value.buttons & s_buttons[i]) != 0 ? 1u << i : 0;
+    }
+    reading->axes[mwin_padStickLeftX] = (float)value.leftX;
+    reading->axes[mwin_padStickLeftY] = (float)-value.leftY;
+    reading->axes[mwin_padStickRightX] = (float)value.rightX;
+    reading->axes[mwin_padStickRightY] = (float)-value.rightY;
+    reading->axes[mwin_padTriggerLeft] = (float)value.leftTrigger;
+    reading->axes[mwin_padTriggerRight] = (float)value.rightTrigger;
     return true;
 }
 
-static bool Vibrate(void* self, void* pad, const mwinWgiMotors* motors)
+// The grips' motors; the triggers' stay still.
+static bool Vibrate(void* self, void* pad, float low, float high)
 {
     (void)self;
     Gamepad* gamepad = pad;
-    Vibration value = {motors->low, motors->high, motors->leftTrigger, motors->rightTrigger};
+    Vibration value = {(double)low, (double)high, 0.0, 0.0};
     return SUCCEEDED(gamepad->v->setVibration(gamepad, value));
 }
 
@@ -373,6 +405,7 @@ static void Describe(void* self, void* pad, mwinGamepadInfo* info)
     const mwinWgi* wgi = self;
     Gamepad* gamepad = pad;
     RawStatics* statics = wgi->controllers;
+    info->capabilities = mwin_padRumble;
     Object* controller = nullptr;
     RawController* raw = nullptr;
     bool named = false;
@@ -482,7 +515,7 @@ static bool LoadRuntime(mwinWgi* wgi)
                 sizeof(wgi->stringText));
 }
 
-bool mwinWgiStart(mwinWgi* wgi, mwinWgiApi* api)
+bool mwinWgiStart(mwinWgi* wgi, mwinPadRuntime* runtime)
 {
     *wgi = (mwinWgi){0};
     // The runtime needs COM on the thread; the drop target may have
@@ -499,14 +532,14 @@ bool mwinWgiStart(mwinWgi* wgi, mwinWgiApi* api)
     }
     wgi->controllers = Activate(wgi, L"Windows.Gaming.Input.RawGameController", &s_iidRawStatics);
     Listen(wgi);
-    *api = (mwinWgiApi){.self = wgi,
-                        .list = List,
-                        .release = Release,
-                        .read = Read,
-                        .vibrate = Vibrate,
-                        .describe = Describe,
-                        .battery = Battery,
-                        .changed = Changed};
+    *runtime = (mwinPadRuntime){.self = wgi,
+                                .list = List,
+                                .release = Release,
+                                .read = Read,
+                                .vibrate = Vibrate,
+                                .describe = Describe,
+                                .battery = Battery,
+                                .changed = Changed};
     return true;
 }
 

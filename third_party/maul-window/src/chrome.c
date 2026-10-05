@@ -27,7 +27,7 @@ mwinResult mwinRequestHitRegions(mwinContext* context, mwinWindowId window,
     }
     if (!valid)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;

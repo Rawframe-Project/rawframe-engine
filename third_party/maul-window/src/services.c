@@ -135,7 +135,7 @@ mwinResult mwinRequestOpenUrl(mwinContext* context, mwinWindowId window, const c
 {
     if (context == nullptr || !IsAddress(url, length))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     return RequestText(context, window, mwin_requestOpenUrl, url, length, requestOut);
 }
@@ -145,7 +145,7 @@ mwinResult mwinRequestRevealFile(mwinContext* context, mwinWindowId window, cons
 {
     if (context == nullptr || !IsText(path, length) || !IsAbsolute(path, length))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     return RequestText(context, window, mwin_requestRevealFile, path, length, requestOut);
 }

@@ -75,20 +75,13 @@ static bool IsDefValid(const mwinAppDef* def)
            context->backend <= mwin_backendTest;
 }
 
-static size_t RoundUp(size_t size)
-{
-    return (size + alignof(max_align_t) - 1) & ~(alignof(max_align_t) - 1);
-}
+// Every part of the context's block aligns as the block does.
+#define PART alignof(max_align_t)
 
 // The records a ring of a class holds.
 static size_t RingRecords(const mwinLimits* limits, int kind)
 {
     return kind == mwin_classNotification ? limits->notificationsPerWindow : limits->inputPerWindow;
-}
-
-static size_t RingBytes(size_t records)
-{
-    return RoundUp(records * sizeof(mwinEvent)) + RoundUp(records * sizeof(uint64_t));
 }
 
 // The records the critical ring holds: a surface record per window and a
@@ -98,47 +91,75 @@ static size_t CriticalRecords(const mwinLimits* limits)
     return (size_t)limits->windows + 1;
 }
 
-// Points a ring at its storage and returns the storage after it.
-static unsigned char* LayRing(mwinRing* ring, unsigned char* storage, size_t records)
+// Lays out a ring's records and their sequences, and points the ring at
+// them once the block exists (block and ring NULL while sizing).
+static void PlanRing(mwinLayout* layout, unsigned char* block, mwinRing* ring, size_t records)
 {
-    ring->events = (mwinEvent*)storage;
-    ring->sequences = (uint64_t*)(storage + RoundUp(records * sizeof(mwinEvent)));
-    ring->capacity = (uint16_t)records;
-    return storage + RingBytes(records);
+    size_t events = mwinLayoutAdd(layout, records, sizeof(mwinEvent), PART);
+    size_t sequences = mwinLayoutAdd(layout, records, sizeof(uint64_t), PART);
+    if (block != nullptr)
+    {
+        ring->events = (mwinEvent*)(block + events);
+        ring->sequences = (uint64_t*)(block + sequences);
+        ring->capacity = (uint32_t)records;
+    }
 }
 
-// The bytes one window slot's storage takes.
-static size_t WindowBytes(const mwinLimits* limits)
+// Lays out a window slot's storage: its rings, text, requests and
+// titles, pointing the slot at them once the block exists.
+static void PlanWindow(mwinLayout* layout, const mwinLimits* limits, unsigned char* block,
+                       mwinWindow* window)
 {
-    size_t rings = 0;
     for (int kind = 0; kind < MWIN_CLASSES; kind++)
     {
-        rings += RingBytes(RingRecords(limits, kind));
+        PlanRing(layout, block, block != nullptr ? &window->rings[kind] : nullptr,
+                 RingRecords(limits, kind));
     }
-    return rings + RoundUp(limits->requestsPerWindow * sizeof(mwinRequest)) +
-           2 * RoundUp(limits->titleBytes) + RoundUp(limits->textBytesPerWindow);
+    size_t text = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, PART);
+    size_t requests = mwinLayoutAdd(layout, limits->requestsPerWindow, sizeof(mwinRequest), PART);
+    size_t title = mwinLayoutAdd(layout, limits->titleBytes, 1, PART);
+    size_t pendingTitle = mwinLayoutAdd(layout, limits->titleBytes, 1, PART);
+    if (block != nullptr)
+    {
+        window->text.bytes = (char*)(block + text);
+        window->text.capacity = limits->textBytesPerWindow;
+        window->requests = (mwinRequest*)(block + requests);
+        window->title = (char*)(block + title);
+        window->pendingTitle = (char*)(block + pendingTitle);
+    }
 }
 
-// Points each window slot at its part of the block after the slots.
-static void Lay(mwinContext* context, unsigned char* storage)
+// Lays out the context's block: the context, its rings, locales,
+// monitors, gamepads and window slots, then each slot's storage. Called
+// without a block to size it, then with the block to point the context's
+// parts into it, the same steps both times.
+static void Plan(mwinLayout* layout, const mwinLimits* limits, unsigned char* block)
 {
-    const mwinLimits* limits = &context->limits;
-    for (uint32_t i = 0; i < limits->windows; i++)
+    mwinContext* context = (mwinContext*)block;
+    (void)mwinLayoutAdd(layout, 1, sizeof(mwinContext), PART);
+    PlanRing(layout, block, block != nullptr ? &context->critical : nullptr,
+             CriticalRecords(limits));
+    PlanRing(layout, block, block != nullptr ? &context->global : nullptr,
+             limits->notificationsPerWindow);
+    for (int ring = 0; ring < 2; ring++)
     {
-        mwinWindow* window = &context->windows[i];
-        for (int kind = 0; kind < MWIN_CLASSES; kind++)
-        {
-            storage = LayRing(&window->rings[kind], storage, RingRecords(limits, kind));
-        }
-        window->text.bytes = (char*)storage;
-        window->text.capacity = limits->textBytesPerWindow;
-        storage += RoundUp(limits->textBytesPerWindow);
-        window->requests = (mwinRequest*)storage;
-        storage += RoundUp(limits->requestsPerWindow * sizeof(mwinRequest));
-        window->title = (char*)storage;
-        storage += RoundUp(limits->titleBytes);
-        window->pendingTitle = (char*)storage;
-        storage += RoundUp(limits->titleBytes);
+        PlanRing(layout, block, block != nullptr ? &context->gamepadRings[ring] : nullptr,
+                 limits->inputPerWindow);
+    }
+    size_t locales = mwinLayoutAdd(layout, limits->localeBytes, 1, PART);
+    size_t monitors = mwinLayoutAdd(layout, limits->monitors, sizeof(mwinMonitor), PART);
+    size_t gamepads = mwinLayoutAdd(layout, limits->gamepads, sizeof(mwinGamepad), PART);
+    size_t windows = mwinLayoutAdd(layout, limits->windows, sizeof(mwinWindow), PART);
+    if (block != nullptr)
+    {
+        context->locales = (char*)(block + locales);
+        context->monitors = (mwinMonitor*)(block + monitors);
+        context->gamepads = (mwinGamepad*)(block + gamepads);
+        context->windows = (mwinWindow*)(block + windows);
+    }
+    for (uint32_t i = 0; i < limits->windows && !layout->overflow; i++)
+    {
+        PlanWindow(layout, limits, block, block != nullptr ? &context->windows[i] : nullptr);
     }
 }
 
@@ -152,8 +173,9 @@ static bool IsSet(const char* name)
 #endif
 
 // The backends to try for a kind, in order: for the native one, Win32
-// on Windows; on Linux Wayland where a Wayland session names its
-// display, then X11 where DISPLAY names one (W7). Returns their count.
+// on Windows, AppKit on macOS, UIKit on iOS; on Linux Wayland where a
+// Wayland session names its display, then X11 where DISPLAY names one
+// (mwin-0006). Returns their count.
 static int FindBackends(mwinBackendKind kind, const mwinBackendOps* backends[2])
 {
     int count = 0;
@@ -181,10 +203,28 @@ static int FindBackends(mwinBackendKind kind, const mwinBackendOps* backends[2])
         backends[count++] = &mwinWin32Backend;
     }
 #endif
+#ifdef MAUL_WINDOW_MACOS
+    if (kind == mwin_backendNative)
+    {
+        backends[count++] = &mwinMacBackend;
+    }
+#endif
+#ifdef MAUL_WINDOW_IOS
+    if (kind == mwin_backendNative)
+    {
+        backends[count++] = &mwinIOSBackend;
+    }
+#endif
 #ifdef MAUL_WINDOW_WEB
     if (kind == mwin_backendNative)
     {
         backends[count++] = &mwinWebBackend;
+    }
+#endif
+#ifdef MAUL_WINDOW_ANDROID
+    if (kind == mwin_backendNative)
+    {
+        backends[count++] = &mwinAndroidBackend;
     }
 #endif
     (void)kind;
@@ -195,39 +235,26 @@ static int FindBackends(mwinBackendKind kind, const mwinBackendOps* backends[2])
 static mwinResult CreateContext(const mwinAppDef* def, mwinContext** contextOut)
 {
     const mwinLimits* limits = &def->context.limits;
-    size_t rings = RingBytes(CriticalRecords(limits)) + RingBytes(limits->notificationsPerWindow);
-    size_t header = RoundUp(sizeof(mwinContext)) + rings + 2 * RingBytes(limits->inputPerWindow) +
-                    RoundUp(limits->localeBytes) + RoundUp(limits->monitors * sizeof(mwinMonitor)) +
-                    RoundUp(limits->gamepads * sizeof(mwinGamepad)) +
-                    RoundUp(limits->windows * sizeof(mwinWindow));
-    size_t size = header + limits->windows * WindowBytes(limits);
-    unsigned char* block = mwinAllocate(&def->context.allocator, size, alignof(max_align_t));
+    mwinLayout layout = {0};
+    Plan(&layout, limits, nullptr);
+    unsigned char* block =
+        layout.overflow ? nullptr : mwinAllocate(&def->context.allocator, layout.size, PART);
     if (block == nullptr)
     {
         return mwin_errorCapacity;
     }
-    memset(block, 0, size);
+    memset(block, 0, layout.size);
     mwinContext* context = (mwinContext*)block;
     context->allocator = def->context.allocator;
-    context->memorySize = size;
+    context->memorySize = layout.size;
+    context->misuse = &context->misuseCount;
     context->limits = *limits;
     // A copy: without Emscripten mwinRun returns while the program runs
     // on, and the def may have been the caller's local (mwin-0022).
     context->app = *def;
-    unsigned char* storage = block + RoundUp(sizeof(mwinContext));
-    storage = LayRing(&context->critical, storage, CriticalRecords(limits));
-    storage = LayRing(&context->global, storage, limits->notificationsPerWindow);
-    storage = LayRing(&context->gamepadRings[mwin_padRingButtons], storage, limits->inputPerWindow);
-    storage = LayRing(&context->gamepadRings[mwin_padRingAxes], storage, limits->inputPerWindow);
-    context->locales = (char*)storage;
-    storage += RoundUp(limits->localeBytes);
     context->facts.textScale = 1.0f;
-    context->monitors = (mwinMonitor*)storage;
-    storage += RoundUp(limits->monitors * sizeof(mwinMonitor));
-    context->gamepads = (mwinGamepad*)storage;
-    storage += RoundUp(limits->gamepads * sizeof(mwinGamepad));
-    context->windows = (mwinWindow*)storage;
-    Lay(context, block + header);
+    mwinLayout carving = {0};
+    Plan(&carving, limits, block);
     *contextOut = context;
     return mwin_success;
 }
@@ -249,7 +276,17 @@ static void DestroyContext(mwinContext* context)
     mwinRelease(&allocator, context, context->memorySize, alignof(max_align_t));
 }
 
+uint64_t mwinGetContextMisuse(const mwinContext* context)
+{
+    return context != nullptr ? *context->misuse : 0;
+}
+
 mwinResult mwinRun(const mwinAppDef* def)
+{
+    return mwinRunLaunched(def, nullptr);
+}
+
+mwinResult mwinRunLaunched(const mwinAppDef* def, void* launch)
 {
     if (def == nullptr || !IsDefValid(def))
     {
@@ -269,6 +306,7 @@ mwinResult mwinRun(const mwinAppDef* def)
             return status;
         }
         context->backend = backends[i];
+        context->launch = launch;
         status = backends[i]->start(context);
         if (status == mwin_success)
         {
@@ -305,6 +343,12 @@ bool mwinStepProgram(mwinContext* context, void (*pump)(mwinContext* context))
     if (!context->running || context->stopping)
     {
         return false;
+    }
+    if (context->inProgram)
+    {
+        // The program's own code spun the platform's loop (AppKit's, for
+        // a modal panel or an input method): its frame is not over.
+        return true;
     }
     mwinBeginPump(context);
     pump(context);

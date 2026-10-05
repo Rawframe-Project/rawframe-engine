@@ -7,6 +7,19 @@ set(MAUL_MACRO_PREFIX MWIN)
 set(MAUL_TITLE "Maul Window")
 set(MAUL_PREFIX MAUL_WINDOW)
 
+# The oldest macOS the backend runs on (mwin-0024), unless the build or
+# the project including the library asks for another; the compiler then
+# refuses a later API used without a check. A toolchain file says its
+# own (the iOS simulator's, cmake/ios-simulator.cmake, iOS 15).
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
+   AND NOT CMAKE_TOOLCHAIN_FILE)
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "The oldest iOS to run on")
+    else()
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS to run on")
+    endif()
+endif()
+
 include(cmake/ReadVersion.cmake)
 maul_read_version(${CMAKE_CURRENT_SOURCE_DIR}/include/maul-window/base.h MWIN MAUL_VERSION)
 project(maul-window
@@ -33,6 +46,24 @@ endif()
 option(MAUL_WINDOW_WAYLAND "Build the Wayland backend" ${MAUL_WINDOW_LINUX})
 option(MAUL_WINDOW_X11 "Build the X11 backend" ${MAUL_WINDOW_LINUX})
 option(MAUL_WINDOW_WIN32 "Build the Win32 backend" ${WIN32})
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(MAUL_WINDOW_MACOS_DEFAULT ON)
+else()
+    set(MAUL_WINDOW_MACOS_DEFAULT OFF)
+endif()
+option(MAUL_WINDOW_MACOS "Build the macOS backend" ${MAUL_WINDOW_MACOS_DEFAULT})
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(MAUL_WINDOW_IOS_DEFAULT ON)
+else()
+    set(MAUL_WINDOW_IOS_DEFAULT OFF)
+endif()
+option(MAUL_WINDOW_IOS "Build the iOS backend" ${MAUL_WINDOW_IOS_DEFAULT})
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    set(MAUL_WINDOW_ANDROID_DEFAULT ON)
+else()
+    set(MAUL_WINDOW_ANDROID_DEFAULT OFF)
+endif()
+option(MAUL_WINDOW_ANDROID "Build the Android backend" ${MAUL_WINDOW_ANDROID_DEFAULT})
 # The web: Emscripten's, or a plain WebAssembly toolchain's (mwin-0022).
 if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(MAUL_WINDOW_WEB_DEFAULT ON)
@@ -120,6 +151,12 @@ endif()
 if(MAUL_WINDOW_GAMEPAD)
     target_sources(maul-window PRIVATE src/gamepad.c)
     target_compile_definitions(maul-window PRIVATE MAUL_WINDOW_GAMEPAD)
+    # The pads a runtime lists and reads: Windows.Gaming.Input's and
+    # GameController's (macOS and iOS), and a test's stand-in on every
+    # platform.
+    if(MAUL_WINDOW_WIN32 OR MAUL_WINDOW_MACOS OR MAUL_WINDOW_IOS OR MAUL_WINDOW_TEST_BACKEND)
+        target_sources(maul-window PRIVATE src/pad_tracker.c)
+    endif()
 endif()
 maul_configure_library(maul-window)
 target_link_libraries(maul-window PRIVATE maul-unicode::maul-unicode)
@@ -138,6 +175,15 @@ if(MAUL_WINDOW_X11)
 endif()
 if(MAUL_WINDOW_WIN32)
     include(cmake/Win32.cmake)
+endif()
+if(MAUL_WINDOW_MACOS)
+    include(cmake/MacOS.cmake)
+endif()
+if(MAUL_WINDOW_IOS)
+    include(cmake/IOS.cmake)
+endif()
+if(MAUL_WINDOW_ANDROID)
+    include(cmake/Android.cmake)
 endif()
 if(MAUL_WINDOW_WEB)
     include(cmake/Web.cmake)
@@ -164,8 +210,22 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(owned)
         maul_add_test(chrome WHITEBOX)
         maul_add_test(accessibility WHITEBOX)
+        # Android's pointers as records, on every platform: elsewhere the test
+        # builds the backend's translator itself.
+        maul_add_test(android_motion WHITEBOX)
+        if(TARGET test_android_motion AND NOT MAUL_WINDOW_ANDROID)
+            target_sources(test_android_motion PRIVATE ${PROJECT_SOURCE_DIR}/src/android_motion.c)
+        endif()
         if(MAUL_WINDOW_GAMEPAD)
             maul_add_test(gamepad)
+            # The runtime pads' tracking against a stand-in runtime.
+            maul_add_test(pad_tracker WHITEBOX)
+            # Android's gamepad layouts as records, on every platform.
+            maul_add_test(android_pad_map WHITEBOX)
+            if(TARGET test_android_pad_map AND NOT MAUL_WINDOW_ANDROID)
+                target_sources(test_android_pad_map PRIVATE
+                    ${PROJECT_SOURCE_DIR}/src/android_pad_map.c)
+            endif()
         endif()
     endif()
     if(MAUL_WINDOW_WAYLAND)
@@ -181,6 +241,11 @@ if(MAUL_WINDOW_BUILD_TESTS)
         mwin_add_wayland_server_test(wayland_owned)
         mwin_add_wayland_server_test(wayland_chrome)
         mwin_add_wayland_server_test(wayland_focus)
+        # The pipes other clients write into, read against their limits.
+        maul_add_test(wayland_pipe WHITEBOX POSIX)
+        if(TARGET test_wayland_pipe)
+            target_compile_definitions(test_wayland_pipe PRIVATE _POSIX_C_SOURCE=200809L)
+        endif()
     endif()
     if(MAUL_WINDOW_X11)
         # Needs an X server: skipped without DISPLAY.
@@ -295,6 +360,93 @@ if(MAUL_WINDOW_BUILD_TESTS)
         mwin_add_web_test(web_services)
         mwin_add_web_test(web_drop)
     endif()
+    if(MAUL_WINDOW_MACOS)
+        # Needs the session's window server, which CI's macOS runners have.
+        maul_add_test(macos)
+        if(MAUL_WINDOW_GAMEPAD)
+            maul_add_test(macos_gamepad)
+        endif()
+        maul_add_test(macos_services)
+        target_link_libraries(test_macos_services PRIVATE "-framework CoreFoundation"
+                              "-framework IOKit")
+        # Objective-C, to make the NSEvents AppKit would deliver and call
+        # the view as an input method would.
+        foreach(name macos_input macos_ime macos_pen macos_drop macos_dialog macos_system
+                     macos_owned macos_chrome macos_access)
+            add_executable(test_${name} test/test_${name}.m)
+            target_link_libraries(test_${name} PRIVATE maul-window "-framework AppKit"
+                                  "-framework Carbon" "-framework UniformTypeIdentifiers")
+            maul_apply_flags(test_${name})
+            set_target_properties(test_${name} PROPERTIES OBJC_STANDARD 23
+                                  OBJC_STANDARD_REQUIRED ON OBJC_EXTENSIONS OFF)
+            target_compile_options(test_${name} PRIVATE -fno-objc-arc)
+            add_test(NAME ${name} COMMAND test_${name})
+        endforeach()
+        set_tests_properties(macos macos_input macos_ime macos_pen macos_services macos_drop
+                             macos_dialog macos_system macos_owned macos_chrome macos_access
+                             PROPERTIES TIMEOUT 60)
+        if(MAUL_WINDOW_GAMEPAD)
+            set_tests_properties(macos_gamepad PROPERTIES TIMEOUT 60)
+        endif()
+    endif()
+    if(MAUL_WINDOW_ANDROID AND DEFINED ENV{ANDROID_HOME})
+        # Applications in the emulator, built by tools/build_android_app.sh
+        # without Gradle and run by tools/run_android_app.sh.
+        set(MWIN_ANDROID_TESTS android android_input android_ime android_pad android_services android_dialog android_drop android_system android_access)
+        foreach(name ${MWIN_ANDROID_TESTS})
+            set(package maul.window.tests.${name})
+            add_library(test_${name} SHARED test/test_${name}.c)
+            target_link_libraries(test_${name} PRIVATE maul-window android)
+            target_compile_definitions(test_${name} PRIVATE MWIN_TEST_PACKAGE="${package}")
+            maul_apply_flags(test_${name})
+            file(GLOB_RECURSE MWIN_JAVA_SOURCES ${PROJECT_SOURCE_DIR}/java/*.java
+                 ${PROJECT_SOURCE_DIR}/test/android/java/*.java
+                 ${PROJECT_SOURCE_DIR}/test/android/res/*.xml)
+            add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/test_${name}.apk
+                COMMAND ${CMAKE_COMMAND} -E env ANDROID_HOME=$ENV{ANDROID_HOME}
+                        ${PROJECT_SOURCE_DIR}/tools/build_android_app.sh
+                        ${PROJECT_BINARY_DIR}/test_${name}.apk $<TARGET_FILE:test_${name}>
+                        ${package} ${ANDROID_ABI}
+                DEPENDS test_${name} ${MWIN_JAVA_SOURCES}
+                        ${PROJECT_SOURCE_DIR}/test/android/AndroidManifest.xml
+                        ${PROJECT_SOURCE_DIR}/tools/build_android_app.sh
+                VERBATIM)
+            add_custom_target(test_${name}_apk ALL DEPENDS ${PROJECT_BINARY_DIR}/test_${name}.apk)
+            add_test(NAME ${name} COMMAND ${PROJECT_SOURCE_DIR}/tools/run_android_app.sh
+                     ${PROJECT_BINARY_DIR}/test_${name}.apk ${package})
+            set_tests_properties(${name} PROPERTIES TIMEOUT 240 RESOURCE_LOCK emulator)
+        endforeach()
+    endif()
+    if(MAUL_WINDOW_IOS)
+        # Applications in the simulator, run by tools/run_ios_app.sh; ios_input,
+        # ios_keys and ios_ime hand the view touches, recognizers, presses, text
+        # and compositions as UIKit would.
+        set(MWIN_IOS_TESTS ios ios_input ios_keys ios_ime ios_services ios_drop ios_dialog
+            ios_system)
+        if(MAUL_WINDOW_GAMEPAD)
+            list(APPEND MWIN_IOS_TESTS ios_gamepad)
+        endif()
+        foreach(name ${MWIN_IOS_TESTS})
+            string(REPLACE "_" "-" bundle ${name})
+            add_executable(test_${name} MACOSX_BUNDLE test/test_${name}.m)
+            target_link_libraries(test_${name} PRIVATE maul-window "-framework UIKit")
+            maul_apply_flags(test_${name})
+            set_target_properties(test_${name} PROPERTIES OBJC_STANDARD 23
+                OBJC_STANDARD_REQUIRED ON OBJC_EXTENSIONS OFF
+                MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/test/ios/Info.plist.in
+                MACOSX_BUNDLE_GUI_IDENTIFIER org.maul.window.test.${bundle}
+                MACOSX_BUNDLE_BUNDLE_NAME test_${name}
+                MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+                MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
+            target_compile_options(test_${name} PRIVATE -fno-objc-arc)
+            add_test(NAME ${name} COMMAND ${PROJECT_SOURCE_DIR}/tools/run_ios_app.sh
+                     $<TARGET_BUNDLE_DIR:test_${name}>)
+            set_tests_properties(${name} PROPERTIES TIMEOUT 240 RESOURCE_LOCK simulator)
+        endforeach()
+        if(MAUL_WINDOW_GAMEPAD)
+            target_link_libraries(test_ios_gamepad PRIVATE "-framework GameController")
+        endif()
+    endif()
     if(MAUL_WINDOW_WIN32)
         maul_add_test(win32)
         target_link_libraries(test_win32 PRIVATE user32)
@@ -311,10 +463,9 @@ if(MAUL_WINDOW_BUILD_TESTS)
             # Generic gamepads against a stand-in for Raw Input and the HID
             # parser.
             maul_add_test(win32_hid WHITEBOX)
-            # Xbox gamepads against a stand-in for Windows.Gaming.Input, then
-            # the runtime itself where the system has it.
-            maul_add_test(win32_xbox WHITEBOX)
-            target_link_libraries(test_win32_xbox PRIVATE ole32)
+            # Windows.Gaming.Input itself, where the system has it.
+            maul_add_test(win32_wgi WHITEBOX)
+            target_link_libraries(test_win32_wgi PRIVATE ole32)
         endif()
         # Composes through the input context: skipped with no input method.
         maul_add_test(win32_ime)

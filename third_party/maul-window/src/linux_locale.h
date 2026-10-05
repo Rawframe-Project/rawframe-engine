@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The preferred locales on Linux, from the environment as glibc reads
-// it for messages (window decision W9): the LANGUAGE list in order,
+// it for messages (mwin-0018): the LANGUAGE list in order,
 // unless the messages locale is C, then the messages locale, the first
 // of LC_ALL, LC_MESSAGES and LANG that is set.
 

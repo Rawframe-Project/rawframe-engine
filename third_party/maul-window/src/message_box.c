@@ -28,7 +28,7 @@ static bool IsText(const char* text, size_t length, size_t limit)
 }
 
 #if !defined(MAUL_WINDOW_WIN32) && !defined(MAUL_WINDOW_WEB) && !defined(MAUL_WINDOW_WAYLAND) &&   \
-    !defined(MAUL_WINDOW_X11)
+    !defined(MAUL_WINDOW_X11) && !defined(MAUL_WINDOW_MACOS) && !defined(MAUL_WINDOW_IOS)
 // A build with no platform of its own (the test backend alone).
 mwinResult mwinPlatformMessageBox(const mwinMessageBoxDef* def, bool* acceptedOut)
 {

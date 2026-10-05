@@ -63,7 +63,7 @@ mwinResult mwinGetSystemFacts(const mwinContext* context, mwinSystemFacts* facts
 {
     if (context == nullptr || factsOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     *factsOut = context->facts;
     return mwin_success;
@@ -74,7 +74,7 @@ mwinResult mwinGetPreferredLocales(const mwinContext* context, char* buffer, siz
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity != 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     size_t length = context->localeLength;
     if (capacity > 0 && length > 0)

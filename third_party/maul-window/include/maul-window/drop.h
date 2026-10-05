@@ -16,7 +16,10 @@
 // U+FFFD. Files past the droppedFiles limit, or paths past dropBytes,
 // are left out whole, and text past dropBytes is left out; the drop's
 // record says when anything was. A path names a file; it grants no
-// access the program did not already have.
+// access the program did not already have. On Android, whose documents
+// have no paths, a drop's documents are copied into the application's
+// cache first, and the drop gives their copies' paths once they are
+// whole.
 
 #ifndef MAUL_WINDOW_DROP_H
 #define MAUL_WINDOW_DROP_H

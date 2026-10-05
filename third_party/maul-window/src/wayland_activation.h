@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Focus requests through xdg-activation (window decision W10): a token
+// Focus requests through xdg-activation (mwin-0019): a token
 // asked for with the latest input serial and the surface that has the
 // keyboard, and the window activated with it once it comes. The first
 // window shown activates itself with the launcher's token.

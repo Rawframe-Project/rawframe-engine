@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The desktop's look and motion on Linux, from the Settings portal
-// (window decision W9): asked for at the start without waiting, taken
+// (mwin-0018): asked for at the start without waiting, taken
 // at a later pump, and followed through SettingChanged.
 //
 // - The theme is org.freedesktop.appearance's color-scheme, unknown

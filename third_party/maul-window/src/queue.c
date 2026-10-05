@@ -122,18 +122,18 @@ static int ClassOf(mwinEventType type)
     }
 }
 
-static uint16_t At(const mwinRing* ring, uint16_t index)
+static uint32_t At(const mwinRing* ring, uint32_t index)
 {
-    return (uint16_t)((ring->head + index) % ring->capacity);
+    return (ring->head + index) % ring->capacity;
 }
 
 // Removes the record at position index, keeping the others in order.
-static void RemoveAt(mwinRing* ring, uint16_t index)
+static void RemoveAt(mwinRing* ring, uint32_t index)
 {
-    for (uint16_t i = index; i + 1 < ring->count; i++)
+    for (uint32_t i = index; i + 1 < ring->count; i++)
     {
-        ring->events[At(ring, i)] = ring->events[At(ring, (uint16_t)(i + 1))];
-        ring->sequences[At(ring, i)] = ring->sequences[At(ring, (uint16_t)(i + 1))];
+        ring->events[At(ring, i)] = ring->events[At(ring, i + 1)];
+        ring->sequences[At(ring, i)] = ring->sequences[At(ring, i + 1)];
     }
     ring->count -= 1;
 }
@@ -166,7 +166,7 @@ static bool SameSubject(const mwinEvent* a, const mwinEvent* b)
 static bool Append(mwinContext* context, mwinRing* ring, const mwinEvent* event)
 {
     int coalesce = CoalesceClass(event->type);
-    for (uint16_t i = 0; coalesce != 0 && i < ring->count; i++)
+    for (uint32_t i = 0; coalesce != 0 && i < ring->count; i++)
     {
         const mwinEvent* waiting = &ring->events[At(ring, i)];
         if (CoalesceClass(waiting->type) == coalesce && SameSubject(waiting, event))
@@ -179,7 +179,7 @@ static bool Append(mwinContext* context, mwinRing* ring, const mwinEvent* event)
     {
         return false;
     }
-    uint16_t slot = At(ring, ring->count);
+    uint32_t slot = At(ring, ring->count);
     ring->events[slot] = *event;
     ring->events[slot].samples = 1;
     ring->sequences[slot] = context->sequence++;
@@ -262,9 +262,9 @@ static bool SameKind(const mwinEvent* a, const mwinEvent* b)
 // position wins, deltas and wheel turns add up. False when there is none.
 static bool Merge(mwinRing* ring, const mwinEvent* event)
 {
-    for (uint16_t i = ring->count; i > 0; i--)
+    for (uint32_t i = ring->count; i > 0; i--)
     {
-        mwinEvent* waiting = &ring->events[At(ring, (uint16_t)(i - 1))];
+        mwinEvent* waiting = &ring->events[At(ring, i - 1)];
         if (!SameKind(waiting, event))
         {
             continue;
@@ -449,12 +449,11 @@ void mwinPostDestroyed(mwinContext* context, uint32_t slot, uint64_t timeNs)
 {
     mwinWindow* window = &context->windows[slot];
     mwinWindowId id = mwinWindowIdOf(context, slot);
-    for (uint16_t i = context->critical.count; i > 0; i--)
+    for (uint32_t i = context->critical.count; i > 0; i--)
     {
-        if (SameWindow(context->critical.events[At(&context->critical, (uint16_t)(i - 1))].window,
-                       id))
+        if (SameWindow(context->critical.events[At(&context->critical, i - 1)].window, id))
         {
-            RemoveAt(&context->critical, (uint16_t)(i - 1));
+            RemoveAt(&context->critical, i - 1);
         }
     }
     for (int kind = mwin_classDiscrete; kind < MWIN_CLASSES; kind++)
@@ -465,11 +464,11 @@ void mwinPostDestroyed(mwinContext* context, uint32_t slot, uint64_t timeNs)
     memset(window->consumedKeys, 0, sizeof(window->consumedKeys));
     // Completions stay: every request is answered, even a cancelled one.
     mwinRing* ring = &window->rings[mwin_classNotification];
-    for (uint16_t i = ring->count; i > 0; i--)
+    for (uint32_t i = ring->count; i > 0; i--)
     {
-        if (ring->events[At(ring, (uint16_t)(i - 1))].type != mwin_eventRequestCompleted)
+        if (ring->events[At(ring, i - 1)].type != mwin_eventRequestCompleted)
         {
-            RemoveAt(ring, (uint16_t)(i - 1));
+            RemoveAt(ring, i - 1);
         }
     }
     mwinEvent event = {0};
@@ -528,7 +527,7 @@ mwinResult mwinNextEvent(mwinContext* context, mwinEvent* eventOut)
 {
     if (context == nullptr || eventOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     mwinWindow* window = nullptr;
     mwinRing* oldest = FindOldest(context, &window);
@@ -537,7 +536,7 @@ mwinResult mwinNextEvent(mwinContext* context, mwinEvent* eventOut)
         return mwin_empty;
     }
     *eventOut = oldest->events[oldest->head];
-    oldest->head = (uint16_t)((oldest->head + 1) % oldest->capacity);
+    oldest->head = (oldest->head + 1) % oldest->capacity;
     oldest->count -= 1;
     if (window != nullptr &&
         (eventOut->type == mwin_eventTextInput || eventOut->type == mwin_eventImePreedit))

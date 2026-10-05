@@ -103,7 +103,7 @@ mwinResult mwinRequestClipboardWrite(mwinContext* context, mwinWindowId window, 
     if (context == nullptr || (text == nullptr && length != 0) ||
         muniValidateUtf8(text, length).status != muni_success)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     if (length > context->limits.clipboardBytes)
     {
@@ -153,7 +153,7 @@ mwinResult mwinGetClipboardText(const mwinContext* context, char* buffer, size_t
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     size_t length = context->clipboardFoundLength;
     if (length > 0 && capacity > 0)

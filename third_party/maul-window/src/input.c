@@ -14,7 +14,7 @@ mwinResult mwinRequestVirtualKeyboard(mwinContext* context, mwinWindowId window,
 {
     if (purpose > mwin_purposeUrl)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -36,7 +36,7 @@ mwinResult mwinRequestTextInput(mwinContext* context, mwinWindowId window, bool 
     if (!isfinite(caret.x) || !isfinite(caret.y) || !isfinite(caret.width) ||
         !isfinite(caret.height) || caret.width < 0.0f || caret.height < 0.0f)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -56,7 +56,7 @@ mwinResult mwinRequestCursorMode(mwinContext* context, mwinWindowId window, mwin
 {
     if (mode > mwin_cursorConfinedHidden)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -74,7 +74,7 @@ mwinResult mwinRequestCursorShape(mwinContext* context, mwinWindowId window, mwi
 {
     if (shape > mwin_shapeProgress)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     uint32_t slot = 0;
     int32_t request = 0;
@@ -101,7 +101,7 @@ mwinResult mwinGetKeyboardLayout(const mwinContext* context, char* buffer, size_
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity != 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     return context->backend->keyboardLayout(context, buffer, capacity, lengthOut);
 }

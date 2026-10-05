@@ -2,22 +2,22 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Win32 gamepads. Xbox-compatible pads come through Windows.Gaming.Input
-// (win32_xbox.h) where the runtime is found when a context starts, and
-// otherwise through XInput, loaded from xinput1_4.dll, or xinput1_3.dll
-// or xinput9_1_0.dll on older Windows: up to four pads, mapped. Connected pads are read at
-// each pump; the free player slots are looked at every half second, as
-// asking about a slot with no pad costs time. XInput has no durations,
-// so a rumble is stopped at the pump after its time runs out. The
-// functions are a table, so a test can stand in for XInput. The other
-// gamepads come through Raw Input (win32_hid.h), to a message-only
+// (win32_wgi.h, read by pad_tracker.h) where the runtime is found when a
+// context starts, and otherwise through XInput, loaded from
+// xinput1_4.dll, or xinput1_3.dll or xinput9_1_0.dll on older Windows:
+// up to four pads, mapped. Connected pads are read at each pump; the free player slots are looked
+// at every half second, as asking about a slot with no pad costs time. XInput has no durations, so
+// a rumble is stopped at the pump after its time runs out. The functions are a table, so a test can
+// stand in for XInput. The other gamepads come through Raw Input (win32_hid.h), to a message-only
 // window of the pads' own.
 
 #ifndef MAUL_WINDOW_SRC_WIN32_PAD_H
 #define MAUL_WINDOW_SRC_WIN32_PAD_H
 
 #include "core.h"
+#include "pad_tracker.h"
 #include "win32_hid.h"
-#include "win32_xbox.h"
+#include "win32_wgi.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -63,7 +63,7 @@ typedef struct mwinWin32Pads
     HWND listener;
     // Windows.Gaming.Input and its pads, while the runtime is there.
     mwinWgi wgi;
-    mwinWin32Xbox xbox;
+    mwinPadTracker xbox;
     bool runtime;
 } mwinWin32Pads;
 

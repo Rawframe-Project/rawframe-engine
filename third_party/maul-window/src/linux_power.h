@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The power facts on Linux (window decision W9): low power from the
+// The power facts on Linux (mwin-0018): low power from the
 // desktop portal's PowerProfileMonitor (power-saver-enabled) on the
 // session bus, on battery from UPower's OnBattery on the system bus.
 // Each is asked for at the start without waiting, taken at a later

@@ -46,11 +46,17 @@ mwinResult mwinRunLoop(mwinContext* context, void (*pump)(mwinContext* context))
 
 // The same loop in steps, for a platform that owns the loop and calls
 // the backend once a frame. Start calls init: true when frames follow.
-// Step pumps and runs a frame: false once the program stops. End calls
-// quit and returns init's status.
+// Step pumps and runs a frame: false once the program stops; a step
+// taken while init, a frame or quit runs does nothing. End calls quit
+// and returns init's status.
 bool mwinStartProgram(mwinContext* context);
 bool mwinStepProgram(mwinContext* context, void (*pump)(mwinContext* context));
 mwinResult mwinEndProgram(mwinContext* context);
+
+// Runs a program as mwinRun does, for a platform that begins the run
+// itself, with what it handed over for the backend's start (the
+// context's launch).
+mwinResult mwinRunLaunched(const mwinAppDef* def, void* launch);
 
 // Stops the backend and frees the context, after mwinEndProgram, where
 // mwinRun could not wait for the program to end.
@@ -64,6 +70,15 @@ extern const mwinBackendOps mwinTestBackend;
 extern const mwinBackendOps mwinWaylandBackend;
 extern const mwinBackendOps mwinX11Backend;
 extern const mwinBackendOps mwinWin32Backend;
+
+// The macOS backend, in builds with MAUL_WINDOW_MACOS.
+extern const mwinBackendOps mwinMacBackend;
+
+// The iOS backend, in builds with MAUL_WINDOW_IOS.
+extern const mwinBackendOps mwinIOSBackend;
+
+// The Android backend, in builds with MAUL_WINDOW_ANDROID.
+extern const mwinBackendOps mwinAndroidBackend;
 
 // The web backend, in builds with MAUL_WINDOW_WEB.
 extern const mwinBackendOps mwinWebBackend;

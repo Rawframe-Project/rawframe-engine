@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The request a Linux service answers later: its window slot, request
-// slot and generation, so an answer never goes to a request that took
-// the slot since.
+// The request a backend answers later (a Linux service, a macOS panel):
+// its window slot, request slot and generation, so an answer never goes
+// to a request that took the slot since.
 
-#ifndef MAUL_WINDOW_SRC_LINUX_ANSWER_H
-#define MAUL_WINDOW_SRC_LINUX_ANSWER_H
+#ifndef MAUL_WINDOW_SRC_ANSWER_H
+#define MAUL_WINDOW_SRC_ANSWER_H
 
 #include "core.h"
 
@@ -46,4 +46,4 @@ static inline void mwinAnswer(mwinContext* context, mwinServiceAnswer* to, mwinO
     to->waiting = false;
 }
 
-#endif // MAUL_WINDOW_SRC_LINUX_ANSWER_H
+#endif // MAUL_WINDOW_SRC_ANSWER_H

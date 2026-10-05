@@ -14,6 +14,7 @@
 #include "maul-unicode/encoding.h"
 
 #include <shobjidl.h>
+#include <stdckdint.h>
 #include <string.h>
 
 // The interfaces and classes, defined here: no import library needed.
@@ -243,8 +244,10 @@ void mwinWin32DialogTick(mwinWin32Platform* platform)
 static mwinOutcome Show(mwinWin32Platform* platform, HWND owner, const mwinDialogCopy* copy)
 {
     mwinContext* context = platform->context;
-    size_t size = Units(copy) * sizeof(WCHAR);
-    WCHAR* units = mwinAllocate(&context->allocator, size, alignof(WCHAR));
+    size_t size = 0;
+    WCHAR* units = ckd_mul(&size, Units(copy), sizeof(WCHAR))
+                       ? nullptr
+                       : mwinAllocate(&context->allocator, size, alignof(WCHAR));
     IFileDialog* dialog = nullptr;
     const CLSID* kind = copy->kind == mwin_dialogSave ? &s_saveClass : &s_openClass;
     HRESULT result = units == nullptr ? E_OUTOFMEMORY

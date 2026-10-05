@@ -25,13 +25,46 @@ static mwinWin32Platform* PlatformOf(const mwinContext* context)
     return (mwinWin32Platform*)context->backendData;
 }
 
+// Where the platform block's parts lie, laid out with checked
+// arithmetic: the platform, its windows and outputs, then its UTF-16
+// buffers and its byte buffers.
+typedef struct PlatformParts
+{
+    mwinLayout layout;
+    size_t windows;
+    size_t outputs;
+    size_t title;
+    size_t imeUnits;
+    size_t localeUnits;
+    size_t imeAttributes;
+    size_t imeBytes;
+    size_t localeText;
+} PlatformParts;
+
+static PlatformParts PartsOf(const mwinLimits* limits)
+{
+    PlatformParts parts = {0};
+    mwinLayout* layout = &parts.layout;
+    (void)mwinLayoutAdd(layout, 1, sizeof(mwinWin32Platform), alignof(mwinWin32Platform));
+    parts.windows =
+        mwinLayoutAdd(layout, limits->windows, sizeof(mwinWin32Window), alignof(mwinWin32Window));
+    parts.outputs =
+        mwinLayoutAdd(layout, limits->monitors, sizeof(mwinWin32Output), alignof(mwinWin32Output));
+    parts.title =
+        mwinLayoutAdd(layout, (size_t)limits->titleBytes + 1, sizeof(WCHAR), alignof(WCHAR));
+    parts.imeUnits =
+        mwinLayoutAdd(layout, limits->textBytesPerWindow, sizeof(WCHAR), alignof(WCHAR));
+    parts.localeUnits =
+        mwinLayoutAdd(layout, (size_t)limits->localeBytes + 2, sizeof(WCHAR), alignof(WCHAR));
+    parts.imeAttributes = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, 1);
+    parts.imeBytes = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, 1);
+    parts.localeText = mwinLayoutAdd(layout, limits->localeBytes, 1, 1);
+    return parts;
+}
+
 static size_t PlatformBytes(const mwinContext* context)
 {
-    const mwinLimits* limits = &context->limits;
-    return sizeof(mwinWin32Platform) + limits->windows * sizeof(mwinWin32Window) +
-           limits->monitors * sizeof(mwinWin32Output) + (limits->titleBytes + 1) * sizeof(WCHAR) +
-           limits->textBytesPerWindow * (sizeof(WCHAR) + sizeof(BYTE) + sizeof(char)) +
-           (limits->localeBytes + 2u) * sizeof(WCHAR) + limits->localeBytes;
+    return PartsOf(&context->limits).layout.size;
 }
 
 // Makes the process per-monitor DPI aware, unless it chose an awareness
@@ -85,32 +118,26 @@ static void Stop(mwinContext* context)
 
 static mwinResult Start(mwinContext* context)
 {
+    const mwinLimits* limits = &context->limits;
+    PlatformParts parts = PartsOf(limits);
     unsigned char* block =
-        mwinAllocate(&context->allocator, PlatformBytes(context), alignof(max_align_t));
+        parts.layout.overflow
+            ? nullptr
+            : mwinAllocate(&context->allocator, parts.layout.size, alignof(max_align_t));
     if (block == nullptr)
     {
         return mwin_errorCapacity;
     }
-    memset(block, 0, PlatformBytes(context));
-    const mwinLimits* limits = &context->limits;
+    memset(block, 0, parts.layout.size);
     mwinWin32Platform* platform = (mwinWin32Platform*)block;
-    unsigned char* storage = block + sizeof(mwinWin32Platform);
-    platform->windows = (mwinWin32Window*)storage;
-    storage += limits->windows * sizeof(mwinWin32Window);
-    platform->outputs = (mwinWin32Output*)storage;
-    storage += limits->monitors * sizeof(mwinWin32Output);
-    // The UTF-16 buffers, then the byte ones, so each stays aligned.
-    platform->title = (WCHAR*)storage;
-    storage += (limits->titleBytes + 1) * sizeof(WCHAR);
-    platform->imeUnits = (WCHAR*)storage;
-    storage += limits->textBytesPerWindow * sizeof(WCHAR);
-    platform->localeUnits = (WCHAR*)storage;
-    storage += (limits->localeBytes + 2u) * sizeof(WCHAR);
-    platform->imeAttributes = storage;
-    storage += limits->textBytesPerWindow;
-    platform->imeBytes = (char*)storage;
-    storage += limits->textBytesPerWindow;
-    platform->localeText = (char*)storage;
+    platform->windows = (mwinWin32Window*)(block + parts.windows);
+    platform->outputs = (mwinWin32Output*)(block + parts.outputs);
+    platform->title = (WCHAR*)(block + parts.title);
+    platform->imeUnits = (WCHAR*)(block + parts.imeUnits);
+    platform->localeUnits = (WCHAR*)(block + parts.localeUnits);
+    platform->imeAttributes = block + parts.imeAttributes;
+    platform->imeBytes = (char*)(block + parts.imeBytes);
+    platform->localeText = (char*)(block + parts.localeText);
     for (uint32_t i = 0; i < limits->monitors; i++)
     {
         platform->outputs[i].monitor = -1;

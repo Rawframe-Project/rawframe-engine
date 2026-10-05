@@ -93,7 +93,7 @@ mwinResult mwinGetMonitors(const mwinContext* context, mwinMonitorId* monitors, 
 {
     if (context == nullptr || countOut == nullptr || (monitors == nullptr && capacity != 0))
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     size_t count = 0;
     // The primary first, then the others in slot order.
@@ -122,7 +122,7 @@ mwinResult mwinGetMonitorInfo(const mwinContext* context, mwinMonitorId monitor,
 {
     if (context == nullptr || infoOut == nullptr)
     {
-        return mwin_errorInvalid;
+        return mwinMisuse(context);
     }
     int32_t slot = mwinFindMonitor(context, monitor);
     if (slot < 0)

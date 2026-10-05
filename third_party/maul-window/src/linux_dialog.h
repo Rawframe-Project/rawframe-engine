@@ -12,7 +12,7 @@
 #ifndef MAUL_WINDOW_SRC_LINUX_DIALOG_H
 #define MAUL_WINDOW_SRC_LINUX_DIALOG_H
 
-#include "linux_answer.h"
+#include "answer.h"
 #include "linux_bus.h"
 #include "linux_zenity.h"
 

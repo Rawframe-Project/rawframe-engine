@@ -53,9 +53,9 @@ typedef struct mwinRing
 {
     mwinEvent* events;
     uint64_t* sequences;
-    uint16_t head;
-    uint16_t count;
-    uint16_t capacity;
+    uint32_t head;
+    uint32_t count;
+    uint32_t capacity;
 } mwinRing;
 
 // A request slot is free, active (the backend has it), or answered (its
@@ -190,9 +190,17 @@ struct mwinContext
 {
     mwinAllocator allocator;
     size_t memorySize;
+    // Calls refused as invalid input, counted through misuse, which
+    // points at misuseCount so that calls taking a const context count
+    // too: a context is never a const object.
+    uint64_t misuseCount;
+    uint64_t* misuse;
     mwinLimits limits;
     const mwinBackendOps* backend;
     void* backendData;
+    // What the platform handed the backend's start where it, not the
+    // program, begins the run (Android's activity); null from mwinRun.
+    void* launch;
     mwinAppDef app;
     uint64_t sequence;
     mwinWindow* windows;
@@ -356,6 +364,18 @@ void mwinReleaseIconCopy(const mwinContext* context, mwinRequest* request);
 
 // Gives back whatever a request holds: its text, def or images.
 void mwinReleaseRequestData(const mwinContext* context, mwinRequest* request);
+
+// Counts one misuse on a live context and answers mwin_errorInvalid,
+// which a refused call returns; a NULL context counts nothing. Inline,
+// so that analysis sees every refusal fail.
+static inline mwinResult mwinMisuse(const mwinContext* context)
+{
+    if (context != nullptr)
+    {
+        ++*context->misuse;
+    }
+    return mwin_errorInvalid;
+}
 
 // The id of the request in a window slot's request slot.
 mwinRequestId mwinRequestIdOf(const mwinContext* context, uint32_t slot, uint32_t request);

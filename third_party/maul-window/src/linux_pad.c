@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <linux/input.h>
+#include <stdckdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/inotify.h>
@@ -371,8 +372,10 @@ bool mwinLinuxPadsStart(mwinLinuxPads* pads, mwinContext* context)
     {
         return true;
     }
-    pads->pads =
-        mwinAllocate(&context->allocator, count * sizeof(mwinLinuxPad), alignof(mwinLinuxPad));
+    size_t bytes = 0;
+    pads->pads = ckd_mul(&bytes, (size_t)count, sizeof(mwinLinuxPad))
+                     ? nullptr
+                     : mwinAllocate(&context->allocator, bytes, alignof(mwinLinuxPad));
     if (pads->pads == nullptr)
     {
         return false;

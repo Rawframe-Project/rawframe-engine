@@ -18,7 +18,7 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MWIN_VERSION_MAJOR 0
-#define MWIN_VERSION_MINOR 1
+#define MWIN_VERSION_MINOR 5
 #define MWIN_VERSION_PATCH 0
 
 // MWIN_API marks the public functions: dllexport or dllimport in a

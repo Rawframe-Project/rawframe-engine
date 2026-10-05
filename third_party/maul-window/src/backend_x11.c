@@ -74,11 +74,30 @@ static mwinX11Platform* PlatformOf(const mwinContext* context)
     return (mwinX11Platform*)context->backendData;
 }
 
+// Where the platform block's parts lie, laid out with checked
+// arithmetic: the platform, its windows and its outputs.
+typedef struct PlatformParts
+{
+    mwinLayout layout;
+    size_t windows;
+    size_t outputs;
+} PlatformParts;
+
+static PlatformParts PartsOf(const mwinLimits* limits)
+{
+    PlatformParts parts = {0};
+    mwinLayout* layout = &parts.layout;
+    (void)mwinLayoutAdd(layout, 1, sizeof(mwinX11Platform), alignof(mwinX11Platform));
+    parts.windows =
+        mwinLayoutAdd(layout, limits->windows, sizeof(mwinX11Window), alignof(mwinX11Window));
+    parts.outputs =
+        mwinLayoutAdd(layout, limits->monitors, sizeof(mwinX11Output), alignof(mwinX11Output));
+    return parts;
+}
+
 static size_t PlatformBytes(const mwinContext* context)
 {
-    const mwinLimits* limits = &context->limits;
-    return sizeof(mwinX11Platform) + limits->windows * sizeof(mwinX11Window) +
-           limits->monitors * sizeof(mwinX11Output);
+    return PartsOf(&context->limits).layout.size;
 }
 
 // Interns every atom, the requests sent together before any reply.
@@ -272,17 +291,19 @@ static void Stop(mwinContext* context)
 
 static mwinResult Start(mwinContext* context)
 {
+    PlatformParts parts = PartsOf(&context->limits);
     unsigned char* block =
-        mwinAllocate(&context->allocator, PlatformBytes(context), alignof(max_align_t));
+        parts.layout.overflow
+            ? nullptr
+            : mwinAllocate(&context->allocator, parts.layout.size, alignof(max_align_t));
     if (block == nullptr)
     {
         return mwin_errorCapacity;
     }
-    memset(block, 0, PlatformBytes(context));
+    memset(block, 0, parts.layout.size);
     mwinX11Platform* platform = (mwinX11Platform*)block;
-    platform->windows = (mwinX11Window*)(block + sizeof(mwinX11Platform));
-    platform->outputs = (mwinX11Output*)(block + sizeof(mwinX11Platform) +
-                                         context->limits.windows * sizeof(mwinX11Window));
+    platform->windows = (mwinX11Window*)(block + parts.windows);
+    platform->outputs = (mwinX11Output*)(block + parts.outputs);
     for (uint32_t i = 0; i < context->limits.monitors; i++)
     {
         platform->outputs[i].monitor = -1;

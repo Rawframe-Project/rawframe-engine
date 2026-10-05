@@ -33,7 +33,7 @@ enum
     MWIN_FRAME_PARTS = 5,
 };
 
-// A frame the backend draws where the compositor draws none (W4): a
+// A frame the backend draws where the compositor draws none (mwin-0005): a
 // subsurface per part, their buffers from one shared memory pool, and
 // the caption button under the pointer.
 typedef struct mwinWaylandFrame

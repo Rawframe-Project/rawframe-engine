@@ -19,8 +19,8 @@
 #ifndef MAUL_WINDOW_SRC_LINUX_SERVICES_H
 #define MAUL_WINDOW_SRC_LINUX_SERVICES_H
 
+#include "answer.h"
 #include "core.h"
-#include "linux_answer.h"
 #include "linux_bus.h"
 #include "linux_dialog.h"
 #include "linux_inhibit.h"

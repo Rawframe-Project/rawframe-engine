@@ -113,11 +113,11 @@ void mwinWin32PadsStart(mwinWin32Pads* pads, mwinContext* context)
     *pads = (mwinWin32Pads){.context = context};
     StartListening(pads);
     mwinWin32HidStart(&pads->hid, context, mwinWin32Now());
-    mwinWgiApi runtime;
+    mwinPadRuntime runtime;
     if (mwinWgiStart(&pads->wgi, &runtime))
     {
         pads->runtime = true;
-        mwinWin32XboxStart(&pads->xbox, context, &runtime);
+        mwinPadTrackerStart(&pads->xbox, context, &runtime);
         return;
     }
     static const LPCWSTR libraries[] = {L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll"};
@@ -141,7 +141,7 @@ void mwinWin32PadsStop(mwinWin32Pads* pads)
 {
     if (pads->runtime)
     {
-        mwinWin32XboxStop(&pads->xbox);
+        mwinPadTrackerStop(&pads->xbox);
         mwinWgiStop(&pads->wgi);
     }
     for (DWORD i = 0; i < MWIN_WIN32_PADS && pads->api.setState != nullptr; i++)
@@ -253,7 +253,7 @@ void mwinWin32PadsPump(mwinWin32Pads* pads, uint64_t nowNs)
 {
     if (pads->runtime)
     {
-        mwinWin32XboxPump(&pads->xbox, nowNs);
+        mwinPadTrackerPump(&pads->xbox, nowNs);
         return;
     }
     if (pads->api.getState == nullptr)
@@ -283,7 +283,7 @@ mwinResult mwinWin32PadsRumble(mwinWin32Pads* pads, uint32_t slot, float low, fl
 {
     if (pads->runtime)
     {
-        return mwinWin32XboxRumble(&pads->xbox, slot, low, high, durationMs, nowNs);
+        return mwinPadTrackerRumble(&pads->xbox, slot, low, high, durationMs, nowNs);
     }
     for (DWORD user = 0; user < MWIN_WIN32_PADS && pads->api.setState != nullptr; user++)
     {

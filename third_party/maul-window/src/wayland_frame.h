@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The frame the backend draws for a decorated window where the
-// compositor draws none (W4): no xdg-decoration, or a compositor that
+// compositor draws none (mwin-0005): no xdg-decoration, or a compositor that
 // chose client-side decorations. A caption above the content moves the
 // window and holds close, maximize and minimize buttons drawn as
 // shapes, with no title text; invisible margins around it resize the

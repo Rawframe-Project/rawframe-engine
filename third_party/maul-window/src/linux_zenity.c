@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
+#include <stdckdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -187,7 +188,12 @@ static bool Grow(mwinZenity* zenity, const mwinContext* context)
         zenity->full = true;
         return false;
     }
-    size_t capacity = zenity->capacity == 0 ? 4096 : (size_t)zenity->capacity * 2;
+    // Doubling saturates, then the bound caps it.
+    size_t capacity = 4096;
+    if (zenity->capacity != 0 && ckd_mul(&capacity, (size_t)zenity->capacity, 2))
+    {
+        capacity = SIZE_MAX;
+    }
     capacity = capacity < bound ? capacity : bound;
     char* grown = mwinAllocate(&context->allocator, capacity, 1);
     if (grown == nullptr)

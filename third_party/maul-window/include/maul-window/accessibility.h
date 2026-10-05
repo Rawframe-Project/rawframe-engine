@@ -29,8 +29,34 @@ extern "C"
     /// answers WM_GETOBJECT for UiaRootObjectId with it, and UI
     /// Automation takes references of its own. The provider must stay
     /// valid while it is the window's root. When the window is destroyed,
-    /// UI Automation is told to let go of it. X11, Wayland and the web
-    /// take no root and answer mwin_outcomeUnsupported.
+    /// UI Automation is told to let go of it.
+    ///
+    /// On macOS the root is an object of the NSAccessibility protocol (an
+    /// NSAccessibilityElement, say), whose accessibility parent is the
+    /// window's view (mwinNativeHandles). The view gives it as its child
+    /// and asks it what is focused and what is under a point; the window
+    /// holds a reference to it while it is the root.
+    ///
+    /// On iOS the root is an object of the UIAccessibility protocols (a
+    /// UIAccessibilityElement, say), whose container is the window's view.
+    /// The view gives it as its only accessibility element, and holds a
+    /// reference to it while it is the root.
+    ///
+    /// On Android the root is the jobject of an
+    /// android.view.accessibility.AccessibilityNodeProvider, whose nodes
+    /// name the window's view (mwinNativeHandles) as their source and
+    /// parent. The view gives it as its provider, and holds a global
+    /// reference to it while it is the root; the view changes with the
+    /// activity, the root staying. A root that also implements the
+    /// library's Java interface maul.window.Explorer is explored by
+    /// touch: Android sends touch exploration to the window's input
+    /// rather than to its view, so while there is a root the library
+    /// takes those hovers, asks the root for the virtual view under the
+    /// finger, and announces the one entered and the one left, as
+    /// ExploreByTouchHelper does. The program sees no touch for them.
+    ///
+    /// X11, Wayland and the web take no root and answer
+    /// mwin_outcomeUnsupported.
     ///
     /// @param context    The context.
     /// @param window     The window.

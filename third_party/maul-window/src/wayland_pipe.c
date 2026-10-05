@@ -42,10 +42,13 @@ static bool Grow(mwinWaylandPipe* pipe, const mwinContext* context, uint32_t lim
         *outcomeOut = mwin_outcomeTooLarge;
         return false;
     }
-    // One byte past the limit tells text too large from text that fits.
-    uint32_t capacity = pipe->capacity == 0 ? PIECE : pipe->capacity * 2;
-    capacity = capacity > limit + 1 ? limit + 1 : capacity;
-    char* grown = mwinAllocate(&context->allocator, capacity, 1);
+    // One byte past the limit tells text too large from text that fits;
+    // the sums are 64-bit, and a capacity the pipe cannot count fails.
+    uint64_t wanted = pipe->capacity == 0 ? PIECE : (uint64_t)pipe->capacity * 2;
+    uint64_t most = (uint64_t)limit + 1;
+    wanted = wanted > most ? most : wanted;
+    uint32_t capacity = (uint32_t)wanted;
+    char* grown = wanted > UINT32_MAX ? nullptr : mwinAllocate(&context->allocator, capacity, 1);
     if (grown == nullptr)
     {
         *outcomeOut = mwin_outcomeFailed;
