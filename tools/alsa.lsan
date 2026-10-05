@@ -1,0 +1,4 @@
+# ALSA's library keeps its parsed configuration for the process's life;
+# a test that opens a device on a machine with ALSA reports it as leaked
+# (D401). Nothing of ours is in these frames.
+leak:libasound

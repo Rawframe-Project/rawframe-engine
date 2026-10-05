@@ -226,6 +226,10 @@ function(rawframe_module_tests)
     if(RAWFRAME_SANITIZE STREQUAL "thread")
         set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT
                              "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
+    elseif(RAWFRAME_SANITIZE MATCHES "address")
+        # ALSA's configuration, held for the process's life (D401).
+        set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT
+                             "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/alsa.lsan")
     endif()
     # On the web, Maul RHI's page side for Node's run of a test that holds
     # the device (tools/wasi_run.mjs, D282).
