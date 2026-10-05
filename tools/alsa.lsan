@@ -1,4 +1,8 @@
 # ALSA's library keeps its parsed configuration for the process's life;
 # a test that opens a device on a machine with ALSA reports it as leaked
-# (D401). Nothing of ours is in these frames.
+# (D401). Nothing of ours is in these frames. Maul Audio loads the library
+# at run time and unloads it, so its frames are often unnamed by the time
+# LeakSanitizer reports; the calls into it are named by Maul Audio's own
+# ALSA files instead (D403).
 leak:libasound
+leak:maul-audio/src/alsa_
