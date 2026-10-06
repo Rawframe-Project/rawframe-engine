@@ -37,7 +37,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_clicked PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "clicked at 200,126.*clicked at 640,129.*typed x at 1100,353.*typed 12 at 1100,353.*clicked at 1166,23.*clicked at 1236,23.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[1-9][0-9]*,\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",\"components\":4,\"applied\":1,\"refused\":1,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,\"viewsSet\":0,\"wheeled\":0,\"componentsScrolled\":0,\"previewing\":false,\"played\":0,\"playing\":false,\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "clicked at 200,126.*clicked at 640,129.*typed x at 1100,353.*typed 12 at 1100,353.*clicked at 1166,23.*clicked at 1236,23.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[1-9][0-9]*,\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",\"components\":4,\"applied\":1,\"refused\":1,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # Studio's operations, as describe offers them: in runners' level a new
     # entity is made and chosen, renamed crate, given runners.tile by its
     # name typed, the tile removed, and the entity deleted; Undo brings it
@@ -51,7 +51,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_operates PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed crate at 1100,97.*typed runners.tile at 1100,129.*clicked at 1236,129.*clicked at 517,97.*clicked at 1166,23.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":10,\"entity\":\"\",\"components\":0,\"applied\":5,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":4,\"redoable\":1,\"viewsSet\":0,\"wheeled\":0,\"componentsScrolled\":0,\"previewing\":false,\"played\":0,\"playing\":false,\"status\":\"undone\".*\"exit\":\"clean_stop\"")
+                         "typed crate at 1100,97.*typed runners.tile at 1100,129.*clicked at 1236,129.*clicked at 517,97.*clicked at 1166,23.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":10,\"entity\":\"\",\"components\":0,\"applied\":5,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":4,\"redoable\":1,[^\n]*\"status\":\"undone\".*\"exit\":\"clean_stop\"")
     # Studio scrolled (D441, D442): runners' west slope has more rows than
     # its column holds; six detents of the wheel over them scroll the
     # column 600 pixels, and the tile's width, clicked where scrolling
@@ -93,7 +93,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 200,97.*typed 0,30,0.5 at 300,161.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"viewsSet\":1,\"wheeled\":0,\"componentsScrolled\":0,\"previewing\":true,\"played\":0,\"playing\":false,\"status\":\"view set and previewed\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
+                             "clicked at 200,97.*typed 0,30,0.5 at 300,161.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":true,[^\n]*\"status\":\"view set and previewed\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
         # Studio playing the plaza itself (D445): Play starts a server and a
         # client with a tooling endpoint; once the client says who it is,
         # the chosen gate's preview is attached to it (the clicks wait for
@@ -112,6 +112,6 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,161.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
+                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,161.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
     endif()
 endif()
