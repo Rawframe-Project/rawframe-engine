@@ -19,7 +19,7 @@ native() {
 rm -rf "$work"
 mkdir -p "$work"
 work="$(native "$work")"
-port=$(python3 -c 'import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 printf '%s\n' "$(python3 -c 'import secrets; print(secrets.token_hex(24))')" >"$work/token"
 printf '%s\n' "$(python3 -c 'import secrets; print(secrets.token_hex(24))')" >"$work/other"
 

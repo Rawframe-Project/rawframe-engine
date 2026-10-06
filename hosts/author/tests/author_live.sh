@@ -20,7 +20,7 @@ rm -rf "$work"
 mkdir -p "$work"
 work="$(native "$work")"
 cp -R "$repository/games/runners" "$work/runners"
-port=$(python3 -c 'import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/token"
 body=d0ae39a2-4803-4ee0-9d45-1980875324d0
 pose=fdf0050d-881c-4451-b541-754c67d1bbf8

@@ -19,7 +19,7 @@ rm -rf "$out" "$out.keys"
 # The studio's key, made apart from the folder.
 kid="$("$3" key studio "$out.keys" | cut -d' ' -f2)"
 # A port nothing holds right now.
-port="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 "$1" "$7" "$out" --port "$port" --key "$out.keys/$kid.key" --publisher studio --cook "$2" --build "$3" \
     --server "$4" --client "$5" --play "$6" || exit 1
 printf 'host.maximum_iterations = 600\nrender.device = any\n' >>"$out/client.conf"

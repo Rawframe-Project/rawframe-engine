@@ -17,7 +17,7 @@ here="$(native "$PWD")"
 work="$(native "$(mktemp -d)")"
 pids=()
 trap 'kill ${pids[@]+"${pids[@]}"} 2>/dev/null || true; rm -rf "$work"' EXIT
-port="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 
 cat >"$work/server.conf" <<CONF
 host.iteration_rate = 120

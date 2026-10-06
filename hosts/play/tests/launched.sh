@@ -21,7 +21,7 @@ work="$(native "$(mktemp -d)")"
 trap 'rm -rf "$work"' EXIT
 
 # A port nothing holds right now.
-port="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 
 # Every path in the three files is under their directory.
 cat >"$work/server.conf" <<CONF
