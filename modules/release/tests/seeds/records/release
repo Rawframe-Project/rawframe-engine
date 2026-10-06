@@ -1,0 +1,1 @@
+{"artifacts":[{"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","media_type":"application/vnd.rawframe.composition","platform":"any","size":512}],"created_at":1791000000,"receipts":["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],"schema":1,"subject":"studio/stalls","version":"1.2.0"}
