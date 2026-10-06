@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # A game exported (D396), signed by a studio's own publisher key, and played
 # from its folder as a player would: the folder's launcher starts its
-# server, then its client in a real window (here for five seconds, then it
-# ends on its own). Prints the keys the folder holds (the studio's key set,
+# server, then its client in a real window (here for fifteen seconds, then
+# it ends on its own: the address sanitizer's tree under CI's load has taken
+# more than five to be admitted). Prints the keys the folder holds (the studio's key set,
 # never its secret), the fonts the client read from the folder's library,
 # the players admitted, the frames shown, how each side stopped, and whether
 # the launcher ended with the client's code. A
@@ -22,7 +23,7 @@ kid="$("$3" key studio "$out.keys" | cut -d' ' -f2)"
 port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 "$1" "$7" "$out" --port "$port" --key "$out.keys/$kid.key" --publisher studio --cook "$2" --build "$3" \
     --server "$4" --client "$5" --play "$6" || exit 1
-printf 'host.maximum_iterations = 600\nrender.device = any\n' >>"$out/client.conf"
+printf 'host.maximum_iterations = 1800\nrender.device = any\n' >>"$out/client.conf"
 status=0
 "$out/rawframe-play" || status=$?
 if grep -q '"device_unavailable"' "$out/client.log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
