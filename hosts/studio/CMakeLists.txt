@@ -22,7 +22,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":2,\"scenes\":3,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":15,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":2,\"scenes\":3,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":17,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,.*\"exit\":\"clean_stop\"")
     # Studio clicked: runners' level chosen shows its entities, read from
     # the session, and its ground chosen shows its four components and is
     # chosen in the session; its body's width typed as 12 and given with
@@ -67,19 +67,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "typed attach at 1100,129.*typed west at 1100,161.*typed ground at 1100,161.*typed gr at 1100,161.*clicked at 1100,161.*pressed BackSpace,Return.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"components\":1,\"applied\":5,\"refused\":1,[^\n]*\"status\":\"parent cleared\".*\"exit\":\"clean_stop\"")
-    # A scene's instance placed and removed (D448): in runners' hall, the
-    # instance field refuses x, which no scene is, and places platform; the
-    # entity it brought chosen, Delete removes the instance with it, and
-    # the hall is as it was, byte for byte.
+    # A scene's instance placed and removed (D448, D450): in runners' hall,
+    # the instance field refuses x, which no scene is, and places platform;
+    # the entity it brought chosen, Delete removes it through the instance's
+    # patch, Restore takes it back, and Remove instance removes the whole
+    # instance, so the hall is as it was, byte for byte.
     add_test(NAME studio_instances
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game hall.scene 200,97 674,161:x 674,161:platform 640,161 517,97
+                     589,97 690,97
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_instances PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed x at 674,161.*typed platform at 674,161.*clicked at 640,161.*clicked at 517,97.*hall.scene written: no.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"hall.scene\",\"entities\":1,[^\n]*\"applied\":2,\"refused\":1,[^\n]*\"status\":\"instance removed\".*\"exit\":\"clean_stop\"")
+                         "typed x at 674,161.*typed platform at 674,161.*clicked at 640,161.*clicked at 517,97.*clicked at 589,97.*clicked at 690,97.*hall.scene written: no.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"hall.scene\",\"entities\":1,[^\n]*\"applied\":4,\"refused\":1,[^\n]*\"status\":\"instance removed\".*\"exit\":\"clean_stop\"")
     # A new scene (D449): typed under runners' scenes, made with its
     # sidecar, listed in order and chosen, and given an entity.
     add_test(NAME studio_makes_scenes

@@ -86,6 +86,14 @@ result::Status ShellParticipant::build() {
         if (catalog_.offers("scene.destroy_entity")) {
             RAWFRAME_TRY_ASSIGN(deleteNode_, button(kTools, "Delete"));
         }
+        // An instance's entity: one it removed taken back, or the whole
+        // instance removed (D450).
+        if (catalog_.offers("scene.restore_entity")) {
+            RAWFRAME_TRY_ASSIGN(restoreNode_, button(kTools, "Restore"));
+        }
+        if (catalog_.offers("scene.remove_instance")) {
+            RAWFRAME_TRY_ASSIGN(uninstanceNode_, button(kTools, "Remove instance"));
+        }
     }
     return showScenes();
 }
@@ -171,6 +179,7 @@ void ShellParticipant::showScene(std::size_t at) {
     entities_.clear();
     names_.clear();
     brought_.clear();
+    removed_.clear();
     entity_.clear();
     components_ = 0;
     const std::optional<Value> kList = read(scene_, "scene.list_entities");
@@ -182,6 +191,8 @@ void ShellParticipant::showScene(std::size_t at) {
         const Value* id = each.find("id");
         const Value* name = each.find("name");
         const Value* brought = each.find("brought");
+        const Value* removed = each.find("removed");
+        const bool kRemoved = removed != nullptr && removed->truth().value_or(false);
         if (id == nullptr || id->text() == nullptr) {
             continue;
         }
@@ -191,6 +202,9 @@ void ShellParticipant::showScene(std::size_t at) {
             label = "instance " + (instance != nullptr ? document::writeCompact(*instance) : std::string{"?"}) + "  " +
                     id->text()->substr(0, 8);
         }
+        if (kRemoved) {
+            label += "  (removed)";
+        }
         auto added = row(entitiesColumn_, label, brought != nullptr ? kQuiet : kText);
         if (!added.has_value()) {
             break;
@@ -199,6 +213,7 @@ void ShellParticipant::showScene(std::size_t at) {
         entities_.push_back(*id->text());
         names_.push_back(name != nullptr && name->text() != nullptr ? *name->text() : std::string{});
         brought_.push_back(brought != nullptr);
+        removed_.push_back(kRemoved);
     }
     // Under the scene's entities, the scene an instance placed in it is of.
     if (catalog_.offers("scene.add_instance")) {

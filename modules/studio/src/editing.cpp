@@ -39,10 +39,24 @@ void ShellParticipant::pressAt(float x, float y) {
         create();
     } else if (kNode == deleteNode_ && !entity_.empty()) {
         endEdit();
-        // An entity an instance brought goes with its whole instance.
+        // An entity an instance brought is removed through its patch, so
+        // Restore takes it back (D154, D450).
         const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
-        Value operation = operationOn(kBrought ? "scene.remove_instance" : "scene.destroy_entity");
-        commit(std::move(operation), kBrought ? "instance removed" : "entity deleted", std::nullopt);
+        commit(operationOn("scene.destroy_entity"),
+               kBrought ? "removed from its instance" : "entity deleted",
+               kBrought ? std::optional<std::string>{entity_} : std::nullopt);
+    } else if ((kNode == restoreNode_ || kNode == uninstanceNode_) && !entity_.empty()) {
+        endEdit();
+        const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
+        const bool kRemoved = entityAt_ < removed_.size() && removed_[entityAt_];
+        if (!kBrought || (kNode == restoreNode_ && !kRemoved)) {
+            ++refused_;
+            say(kBrought ? "its instance has not removed it" : "no instance brought it");
+        } else if (kNode == restoreNode_) {
+            commit(operationOn("scene.restore_entity"), "restored", entity_);
+        } else {
+            commit(operationOn("scene.remove_instance"), "instance removed", std::nullopt);
+        }
     } else if (const auto kAction = std::ranges::find(actions_, kNode, &ActionButton::node);
                kAction != actions_.end()) {
         endEdit();

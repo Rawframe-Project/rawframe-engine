@@ -260,8 +260,12 @@ private:
     Catalog catalog_;
     std::vector<std::string> names_;
     std::vector<bool> brought_;
+    /// Whether each brought entity is one its instance removed.
+    std::vector<bool> removed_;
     ui::Node newNode_{};
     ui::Node deleteNode_{};
+    ui::Node restoreNode_{};
+    ui::Node uninstanceNode_{};
     std::vector<ActionButton> actions_;
     view::UiPointing* pointing_ = nullptr;
     view::UiTyping* typing_ = nullptr;
