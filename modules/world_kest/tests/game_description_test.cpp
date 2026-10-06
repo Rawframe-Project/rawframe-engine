@@ -700,3 +700,12 @@ RAWFRAME_TEST(ANodesWordsAreDeclaredByLine) {
         RAWFRAME_EXPECT(!parseGame(kHead + std::string{kLines}).has_value());
     }
 }
+
+RAWFRAME_TEST(AGameNamesOneStylesDocument) {
+    const auto kGame = parseGame("program p.kest\nstyles g.styles\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->styles == "g.styles");
+    RAWFRAME_EXPECT(parseGame("program p.kest\n").has_value() && parseGame("program p.kest\n")->styles.empty());
+    for (const std::string_view kLines : {"styles a.styles\nstyles b.styles\n", "styles\n", "styles a b\n"}) {
+        RAWFRAME_EXPECT(!parseGame("program p.kest\n" + std::string{kLines}).has_value());
+    }
+}

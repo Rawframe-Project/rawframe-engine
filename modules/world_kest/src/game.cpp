@@ -174,6 +174,12 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.admission = kWords[1];
             admissionLine = number;
+        } else if (kKeyword == "styles") {
+            if (!game.styles.empty() || kWords.size() != 2) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a game names one styles document, `styles <file>`");
+            }
+            game.styles = kWords[1];
         } else if (kKeyword == "actions") {
             if (actionsLine != 0 || kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names one action set, `actions <file>`");

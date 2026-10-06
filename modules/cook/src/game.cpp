@@ -7,6 +7,7 @@
 #include "rawframe/cook/errors.h"
 #include "rawframe/input/actions.h"
 #include "rawframe/localization/catalog.h"
+#include "rawframe/ui/styles.h"
 #include "rawframe/world_kest/cooked_game.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/game_files.h"
@@ -224,6 +225,12 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
         RAWFRAME_TRY_ASSIGN(const std::string_view kActions, keep(reads, game, kDescription.controls->actions));
         if (!input::readActionSet(kActions).has_value()) {
             return refuse("an actions document does not read", kDescription.controls->actions);
+        }
+    }
+    if (!kDescription.styles.empty()) {
+        RAWFRAME_TRY_ASSIGN(const std::string_view kStyles, keep(reads, game, kDescription.styles));
+        if (!ui::readStyles(kStyles).has_value()) {
+            return refuse("a styles document does not read", kDescription.styles);
         }
     }
     if (kDescription.audio) {

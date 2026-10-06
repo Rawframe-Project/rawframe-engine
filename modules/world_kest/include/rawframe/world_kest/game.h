@@ -645,6 +645,9 @@ struct GameDescription {
     std::vector<std::string> texts;
     /// From `font <16 hex digits> <file>` lines.
     std::vector<GameFont> fonts;
+    /// The `ui.styles` document a client's UI classes come from (D431),
+    /// from a `styles <file>` line; empty for none.
+    std::string styles;
     /// From `label <16 hex digits> <table> <key> [<argument>]` lines, each
     /// table one a `text` line names.
     std::vector<GameLabel> labels;
