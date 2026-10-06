@@ -292,28 +292,40 @@ set(RAWFRAME_FUZZ_RUNS 50000 CACHE STRING "Inputs each fuzz target tries in the 
 # directory, written again only when the container changes.
 #
 #   rawframe_shader_containers(TARGET rawframe_render NAMES display)
-function(rawframe_shader_containers)
-    cmake_parse_arguments(arg "" "TARGET" "NAMES" ${ARGN})
-    foreach(name IN LISTS arg_NAMES)
-        set(source "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/${name}${RAWFRAME_SHADER_SUFFIX}.mrsc")
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
-        file(READ "${source}" hex HEX)
-        string(LENGTH "${hex}" digits)
-        math(EXPR size "${digits} / 2")
-        string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
-        string(SUBSTRING "${name}" 0 1 first)
-        string(TOUPPER "${first}" first)
-        string(SUBSTRING "${name}" 1 -1 rest)
-        file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${name}_container.h" CONTENT
+# A file's bytes in the program (D435): `HEADER`, under the target's
+# generated directory, holds `SYMBOL`, an array of them, remade when the
+# file changes.
+#
+#   rawframe_embedded_file(TARGET <target> FILE <file> HEADER <header.h> SYMBOL <kName>)
+function(rawframe_embedded_file)
+    cmake_parse_arguments(arg "" "TARGET;FILE;HEADER;SYMBOL" "" ${ARGN})
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${arg_FILE}")
+    file(READ "${arg_FILE}" hex HEX)
+    string(LENGTH "${hex}" digits)
+    math(EXPR size "${digits} / 2")
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
+    get_filename_component(name "${arg_FILE}" NAME)
+    file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${arg_HEADER}" CONTENT
 "#pragma once
 
-// ${name}${RAWFRAME_SHADER_SUFFIX}.mrsc, embedded by rawframe_shader_containers.
+// ${name}, embedded by rawframe_embedded_file.
 
 #include <array>
 #include <cstdint>
 
-alignas(8) inline constexpr std::array<std::uint8_t, ${size}> k${first}${rest}Container = {${bytes}};
+alignas(8) inline constexpr std::array<std::uint8_t, ${size}> ${arg_SYMBOL} = {${bytes}};
 " @ONLY)
-    endforeach()
     target_include_directories(${arg_TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+endfunction()
+
+function(rawframe_shader_containers)
+    cmake_parse_arguments(arg "" "TARGET" "NAMES" ${ARGN})
+    foreach(name IN LISTS arg_NAMES)
+        string(SUBSTRING "${name}" 0 1 first)
+        string(TOUPPER "${first}" first)
+        string(SUBSTRING "${name}" 1 -1 rest)
+        rawframe_embedded_file(TARGET ${arg_TARGET}
+                               FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/${name}${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                               HEADER "${name}_container.h" SYMBOL "k${first}${rest}Container")
+    endforeach()
 endfunction()
