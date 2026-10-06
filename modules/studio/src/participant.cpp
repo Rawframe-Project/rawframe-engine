@@ -13,6 +13,8 @@
 #include "records.h"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -141,6 +143,11 @@ public:
                 presses_.push_back({x, y});
             });
         }
+        if (pointing_ != nullptr) {
+            pointing_->onWheel([this](float x, float y, float deltaX, float deltaY) {
+                wheels_.push_back({x, y, deltaX, deltaY});
+            });
+        }
         if (typing_ != nullptr) {
             typing_->answer([this](const view::Typing& typing) {
                 typed_.push_back(typing);
@@ -159,7 +166,14 @@ public:
             take(kTyping);
         }
         typed_.clear();
-        if (!tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_)).has_value()) {
+        // Scroll steps ease over the layouts that follow, by this clock.
+        const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
+        for (const auto& [kX, kY, kDeltaX, kDeltaY] : wheels_) {
+            ++wheeled_;
+            static_cast<void>(tree_->wheel(root_, kX, kY, kDeltaX, kDeltaY, kSeconds));
+        }
+        wheels_.clear();
+        if (!tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_), kSeconds).has_value()) {
             return;
         }
         list_ = {};
@@ -177,6 +191,7 @@ public:
     void stop() noexcept override {
         if (pointing_ != nullptr) {
             pointing_->onPress({});
+            pointing_->onWheel({});
         }
         if (typing_ != nullptr) {
             typing_->focus(std::nullopt);
@@ -185,27 +200,30 @@ public:
         // Ending lets a preview go, the player's camera given back (D433).
         bool ended = false;
         static_cast<void>(session_->answer(R"({"kind":"authoring.end","id":0})", ended));
-        emitter_.log(diagnostics::Severity::Info,
-                     kSummary,
-                     "what Studio showed",
-                     {diagnostics::field("records", records_),
-                      diagnostics::field("scenes", static_cast<std::uint64_t>(scenes_.size())),
-                      diagnostics::field("scene", std::string_view{scene_}),
-                      diagnostics::field("entities", static_cast<std::uint64_t>(entities_.size())),
-                      diagnostics::field("entity", std::string_view{entity_}),
-                      diagnostics::field("components", components_),
-                      diagnostics::field("applied", applied_),
-                      diagnostics::field("refused", refused_),
-                      diagnostics::field("undone", undone_),
-                      diagnostics::field("redone", redone_),
-                      diagnostics::field("undoable", static_cast<std::uint64_t>(undoable_)),
-                      diagnostics::field("redoable", static_cast<std::uint64_t>(redoable_)),
-                      diagnostics::field("viewsSet", viewsSet_),
-                      diagnostics::field("previewing", previewing_),
-                      diagnostics::field("status", std::string_view{status_}),
-                      diagnostics::field("framesDrawn", framesDrawn_),
-                      diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),
-                      diagnostics::field("glyphs", static_cast<std::uint64_t>(list_.glyphs.size()))});
+        emitter_.log(
+            diagnostics::Severity::Info,
+            kSummary,
+            "what Studio showed",
+            {diagnostics::field("records", records_),
+             diagnostics::field("scenes", static_cast<std::uint64_t>(scenes_.size())),
+             diagnostics::field("scene", std::string_view{scene_}),
+             diagnostics::field("entities", static_cast<std::uint64_t>(entities_.size())),
+             diagnostics::field("entity", std::string_view{entity_}),
+             diagnostics::field("components", components_),
+             diagnostics::field("applied", applied_),
+             diagnostics::field("refused", refused_),
+             diagnostics::field("undone", undone_),
+             diagnostics::field("redone", redone_),
+             diagnostics::field("undoable", static_cast<std::uint64_t>(undoable_)),
+             diagnostics::field("redoable", static_cast<std::uint64_t>(redoable_)),
+             diagnostics::field("viewsSet", viewsSet_),
+             diagnostics::field("wheeled", wheeled_),
+             diagnostics::field("componentsScrolled", static_cast<double>(tree_->scrollOf(componentsColumn_)[1])),
+             diagnostics::field("previewing", previewing_),
+             diagnostics::field("status", std::string_view{status_}),
+             diagnostics::field("framesDrawn", framesDrawn_),
+             diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),
+             diagnostics::field("glyphs", static_cast<std::uint64_t>(list_.glyphs.size()))});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -255,11 +273,13 @@ private:
                                            .direction = ui::Direction::Column,
                                            .gap = 4,
                                            .grow = 1,
-                                           .padding = {8, 8, 8, 8}},
+                                           .padding = {8, 8, 8, 8},
+                                           .scroll = ui::Scroll::Vertical},
                                 kPanel));
-        // What does not fit is cut at the panel's edge.
-        RAWFRAME_TRY(tree_->setLook(kColumn, ui::Look{.fill = kPanel, .radius = 4, .clip = true}));
-        RAWFRAME_TRY_ASSIGN(const ui::Node kHeading, box(kColumn, ui::Layout{.height = ui::pixels(22)}, 0));
+        // A column scrolls what does not fit (D441), so its rows keep their
+        // heights rather than shrinking to fit.
+        RAWFRAME_TRY_ASSIGN(const ui::Node kHeading,
+                            box(kColumn, ui::Layout{.height = ui::pixels(22), .shrink = 0}, 0));
         RAWFRAME_TRY(words(kHeading, heading, kQuiet, 13));
         return kColumn;
     }
@@ -298,15 +318,18 @@ private:
         RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(showHistory());
-        RAWFRAME_TRY_ASSIGN(const ui::Node kColumns,
-                            box(root_, ui::Layout{.direction = ui::Direction::Row, .gap = 6, .grow = 1}, kBackground));
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kColumns,
+            box(root_,
+                ui::Layout{.minHeight = ui::pixels(0), .direction = ui::Direction::Row, .gap = 6, .grow = 1},
+                kBackground));
         RAWFRAME_TRY_ASSIGN(scenesColumn_, column(kColumns, "Scenes"));
         RAWFRAME_TRY_ASSIGN(entitiesColumn_, column(kColumns, "Entities"));
         RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kColumns, "Components"));
         // The entities' operations above their rows.
         if (catalog_.offers("scene.create_entity") || catalog_.offers("scene.destroy_entity")) {
             RAWFRAME_TRY_ASSIGN(const ui::Node kTools,
-                                box(entitiesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 6}, 0));
+                                box(entitiesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 6, .shrink = 0}, 0));
             if (catalog_.offers("scene.create_entity")) {
                 RAWFRAME_TRY_ASSIGN(newNode_, button(kTools, "New"));
             }
@@ -324,8 +347,9 @@ private:
     /// A row of `text` under `column`, its height fixed.
     result::Result<ui::Node>
     row(ui::Node column, std::string_view text, std::uint32_t color, std::uint32_t fill = kRow) {
-        RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
-                            box(column, ui::Layout{.height = ui::pixels(28), .padding = {8, 4, 8, 4}}, fill));
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kRowNode,
+            box(column, ui::Layout{.height = ui::pixels(28), .shrink = 0, .padding = {8, 4, 8, 4}}, fill));
         RAWFRAME_TRY(words(kRowNode, text, color, 14));
         return kRowNode;
     }
@@ -415,6 +439,7 @@ private:
         if (kChanged) {
             // A scene's view is the session's, unknown here until it says.
             view_.reset();
+            static_cast<void>(tree_->scrollTo(entitiesColumn_, 0, 0));
             showView();
             if (preview_.has_value()) {
                 const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));
@@ -471,6 +496,9 @@ private:
         endEdit();
         fields_.clear();
         entityAt_ = at;
+        if (entity_ != entities_[at]) {
+            static_cast<void>(tree_->scrollTo(componentsColumn_, 0, 0));
+        }
         entity_ = entities_[at];
         for (std::size_t each = 0; each < entityRows_.size(); ++each) {
             static_cast<void>(
@@ -539,6 +567,7 @@ private:
                                 ui::Layout{.height = ui::pixels(28),
                                            .justify = ui::Justify::SpaceBetween,
                                            .alignItems = ui::Align::Center,
+                                           .shrink = 0,
                                            .padding = {8, 0, 2, 0}},
                                 kRow));
         componentRows_.push_back(kHeading);
@@ -562,6 +591,7 @@ private:
                                            .direction = ui::Direction::Row,
                                            .alignItems = ui::Align::Center,
                                            .gap = 8,
+                                           .shrink = 0,
                                            .padding = {8, 2, 8, 2}},
                                 kPanel));
         RAWFRAME_TRY_ASSIGN(const ui::Node kName,
@@ -762,15 +792,19 @@ private:
         refresh(choose);
     }
 
-    /// The chosen scene listed again, `entity` chosen if it stands.
+    /// The chosen scene listed again, `entity` chosen if it stands, the
+    /// columns scrolled where they were: a change is not a new place.
     void refresh(const std::optional<std::string>& entity) {
+        const std::array<float, 2> kEntities = tree_->scrollOf(entitiesColumn_);
+        const std::array<float, 2> kComponents = tree_->scrollOf(componentsColumn_);
         showScene(sceneAt_);
-        if (!entity.has_value()) {
-            return;
+        if (entity.has_value()) {
+            if (const auto kAt = std::ranges::find(entities_, *entity); kAt != entities_.end()) {
+                showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
+            }
         }
-        if (const auto kAt = std::ranges::find(entities_, *entity); kAt != entities_.end()) {
-            showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
-        }
+        static_cast<void>(tree_->scrollTo(entitiesColumn_, kEntities[0], kEntities[1]));
+        static_cast<void>(tree_->scrollTo(componentsColumn_, kComponents[0], kComponents[1]));
     }
 
     /// The chosen scene's last change undone, or the last undone redone,
@@ -841,6 +875,9 @@ private:
     std::vector<ui::Node> viewRows_;
     std::vector<FieldRow> viewFields_;
     std::uint64_t viewsSet_ = 0;
+    std::vector<std::array<float, 4>> wheels_;
+    std::uint64_t wheeled_ = 0;
+    std::chrono::steady_clock::time_point began_ = std::chrono::steady_clock::now();
     std::size_t entityAt_ = 0;
     ui::Node statusNode_{};
     ui::Node undoNode_{};
