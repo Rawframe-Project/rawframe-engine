@@ -34,7 +34,8 @@ std::vector<EntityEntry> entriesOf(const scene::Scene& scene) {
     return made;
 }
 
-ComponentReading readingOf(const ComponentCatalog& catalog,
+ComponentReading readingOf(const scene::Scene& scene,
+                           const ComponentCatalog& catalog,
                            const std::string& name,
                            std::optional<scene::Override::Kind> patch,
                            const std::vector<scene::SceneField>& fields) {
@@ -43,6 +44,10 @@ ComponentReading readingOf(const ComponentCatalog& catalog,
                           .name = name,
                           .patch = patch,
                           .fields = {}};
+    if (schema != nullptr) {
+        const auto kRecorded = std::ranges::find(scene.schema, name, &scene::SchemaMark::component);
+        made.stale = kRecorded != scene.schema.end() && kRecorded->mark != schema->mark;
+    }
     for (const scene::SceneField& field : fields) {
         FieldReading reading{.name = field.name, .kind = std::nullopt, .cases = {}, .value = field.value};
         if (schema != nullptr) {
@@ -77,12 +82,12 @@ result::Result<Answer> answer(const scene::Scene& scene, const Query& query, con
     EntityReading made{.entity = std::move(*kFound), .components = {}};
     if (made.entity.place.has_value()) {
         for (const scene::SceneComponent& component : scene.entities[*made.entity.place].components) {
-            made.components.push_back(readingOf(catalog, component.name, std::nullopt, component.fields));
+            made.components.push_back(readingOf(scene, catalog, component.name, std::nullopt, component.fields));
         }
     } else {
         for (const scene::Override& each : scene.instances[made.entity.brought->instance].overrides) {
             if (each.entity == kEntity && !each.component.empty()) {
-                made.components.push_back(readingOf(catalog, each.component, each.kind, each.fields));
+                made.components.push_back(readingOf(scene, catalog, each.component, each.kind, each.fields));
             }
         }
     }

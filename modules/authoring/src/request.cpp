@@ -385,6 +385,11 @@ document::Value answerValue(const Answer& answer) {
         if (component.patch.has_value()) {
             made.add("patch", Value::string(std::string{kPatchNames[static_cast<std::size_t>(*component.patch)]}));
         }
+        // Said only when so, so a scene that matches its catalog reads as
+        // it always has.
+        if (component.stale) {
+            made.add("stale", Value::boolean(true));
+        }
         made.add("fields", std::move(fields));
         components.push(std::move(made));
     }

@@ -135,6 +135,34 @@ RAWFRAME_TEST(AnEntityIsReadWholeAndWhatIsUnknownIsMarked) {
     RAWFRAME_EXPECT(named);
 }
 
+RAWFRAME_TEST(AComponentAuthoredAgainstAnotherLayoutIsStale) {
+    // The room records game.position at the catalog's mark; a scene that
+    // recorded another is stale there, and is said so in the answer.
+    ComponentCatalog moved;
+    RAWFRAME_EXPECT(moved
+                        .add(ComponentSchema{.id = kPosition,
+                                             .name = "game.position",
+                                             .mark = 0xa2,
+                                             .fields = {{.name = "x", .kind = FieldKind::Real}}})
+                        .has_value());
+    const auto kCurrent = answer(room(), ReadEntity{.entity = kSpawn}, catalog());
+    const auto kStale = answer(room(), ReadEntity{.entity = kSpawn}, moved);
+    RAWFRAME_EXPECT(kCurrent.has_value() && kStale.has_value());
+    // The component the catalog does not know is never stale: there is
+    // nothing to carry it over to.
+    RAWFRAME_EXPECT(!std::get<EntityReading>(*kCurrent).components[1].stale &&
+                    std::get<EntityReading>(*kStale).components[1].stale &&
+                    !std::get<EntityReading>(*kStale).components[0].stale);
+    const document::Value kWritten = answerValue(*kStale);
+    const document::Value* components = kWritten.find("components");
+    RAWFRAME_EXPECT(components != nullptr && components->items()[1].find("stale") != nullptr &&
+                    components->items()[0].find("stale") == nullptr);
+    // An instance's patch reads the same mark.
+    const auto kCrateRead = answer(room(), ReadEntity{.entity = kCrate}, moved);
+    RAWFRAME_EXPECT(kCrateRead.has_value() && std::get<EntityReading>(*kCrateRead).components[1].stale &&
+                    !std::get<EntityReading>(*kCrateRead).components[0].stale);
+}
+
 RAWFRAME_TEST(AnAnswersValuesAreWhatARequestSets) {
     const ComponentCatalog kCatalog = catalog();
     const document::Value kSpawnAnswer = answerValue(*answer(room(), ReadEntity{.entity = kSpawn}, kCatalog));

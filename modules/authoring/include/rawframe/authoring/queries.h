@@ -69,6 +69,10 @@ struct ComponentReading {
     /// For an instance's entity, what its patch does to the component;
     /// none for the scene's own.
     std::optional<scene::Override::Kind> patch;
+    /// Whether the scene was authored against another layout of the
+    /// component than the catalog's (its recorded mark is not the
+    /// catalog's), so `scene.remark_component` would carry it over (D452).
+    bool stale = false;
     /// The values the scene gives, in name order: a field at its default
     /// is not given, except in a `set` entry.
     std::vector<FieldReading> fields;
