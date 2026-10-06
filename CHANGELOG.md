@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- UI nodes take presses: a `rawframe.ui.Node` whose `hit` is `HIT_SELF` takes a mouse or touch press that lands on it, which no game action then sees, and the sample function reads the node's `press` through `input.uiPressed()`. Nodes may root activation, modal, and overlay layers. A zeroed node passes every press on, so existing games are unchanged. Stalls' purse panel takes clicks, so clicking it builds nothing under it.
 - A server's self-signed QUIC identity is renewed a day before it ends (or after `network.quic.renew_ms`): connections made from then on are presented the new one and the fingerprint file is rewritten, while those already made keep theirs. A web server exported to run longer than thirteen days stays reachable from newly loaded pages.
 - An authoring session keeps each scene's selection: `authoring.select` sets it, undo and redo put back the one from around the change they undo, and every outcome carries it. Choosing never makes the scene dirty.
 - Shader containers are committed as binaries, one for each driver family, and a build embeds only the one its driver reads: the web client no longer carries Metal's or Direct3D 12's code (2,383,964 bytes of brotli, from 2,487,752).

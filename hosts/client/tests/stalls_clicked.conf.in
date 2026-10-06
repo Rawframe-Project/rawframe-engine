@@ -1,0 +1,6 @@
+# The client's own player at Stalls, drawn on the one device and shown in
+# its window, its HUD's words in the game's font from Stalls' content cooked
+# into the build tree (D421).
+bots.player = true
+render.device = any
+content.root = @TYCOON_CONTENT@

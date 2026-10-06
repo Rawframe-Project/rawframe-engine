@@ -485,7 +485,8 @@ fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
     }
 }
 
-// The owner's coins in its HUD: words along the top left of its view.
+// The owner's coins in its HUD: words along the top left of its view, a
+// panel a click on builds nothing under (D421).
 fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
     let i = 0
     while i < count {
@@ -499,6 +500,7 @@ fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
         huds[i].textSize = 18.0
         huds[i].textColor = u32(0xF4E9C8FF)
         huds[i].textWrap = ui.NO_WRAP
+        huds[i].hit = ui.HIT_SELF
         i = i + 1
     }
 }
