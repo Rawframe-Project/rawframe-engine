@@ -198,6 +198,7 @@ public:
                       diagnostics::field("readBacks", readBacks_),
                       diagnostics::field("coveredPixels", lastCovered_),
                       diagnostics::field("mostCovered", mostCovered_),
+                      diagnostics::field("mostColors", mostColors_),
                       diagnostics::field("colors", lastColors_),
                       diagnostics::field("captured", captured)});
     }
@@ -281,6 +282,7 @@ private:
             lastCovered_ = coveredOf(*pixels);
             mostCovered_ = std::max(mostCovered_, lastCovered_);
             lastColors_ = colorsOf(*pixels);
+            mostColors_ = std::max(mostColors_, lastColors_);
             if (capture_.has_value()) {
                 last_ = std::move(*pixels);
                 capturedWidth_ = readWidth_;
@@ -335,6 +337,9 @@ private:
     std::uint64_t lastCovered_ = 0;
     std::uint64_t mostCovered_ = 0;
     std::uint64_t lastColors_ = 0;
+    /// The most any read-back picture had, so a run whose last picture is
+    /// a camera against a wall still says what it drew (D433a).
+    std::uint64_t mostColors_ = 0;
     diagnostics::Emitter emitter_;
 };
 

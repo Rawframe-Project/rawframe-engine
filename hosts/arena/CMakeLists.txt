@@ -290,8 +290,9 @@ if(RAWFRAME_BUILD_TESTS)
         # The plaza drawn on the one device offscreen (D284): frames drawn,
         # its models in instanced calls, its meshes uploaded once each, its
         # ambient occlusion found (D327), the monitor's lens drawn into its
-        # render texture (D361), and the pictures read back lit in many
-        # shades.
+        # render texture (D361), and a picture read back lit in many shades;
+        # the bots wander, so the last may be a camera against the ramp
+        # (D433a).
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.tga)
         configure_file(tests/plaza_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf @ONLY)
         add_test(NAME plaza_drawn
@@ -302,7 +303,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"mostColors\":[1-9][0-9][0-9]+,[^\n]*\"captured\":true")
         # Two bots play Stalls while the first one's view is drawn (D389): the
         # lot, the stalls, and its cursor as models seen from above, its
         # coins' words given in the game's font and drawn (D398), and a picture
