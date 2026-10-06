@@ -88,6 +88,7 @@ font 8e12f827f47f7d51 Inter-Regular.ttf
 label f1182d0420cc09a0 tycoon.strings hud.coins coins
 label afcb66432b6d2152 tycoon.strings hud.won round
 label b777d548435986ab tycoon.strings hud.lost round
+label bdb5be7acb84d040 tycoon.strings hud.sign
 presentation tycoon.look on rawframe.physics3d.body
 present tycoon.dress dress read rawframe.physics3d.body write tycoon.look
 present tycoon.tint tint read tycoon.stall write tycoon.look

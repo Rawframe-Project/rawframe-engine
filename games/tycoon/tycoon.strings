@@ -11,6 +11,10 @@
       "message": "Round {$round :integer} went to another owner.",
       "description": "Shown to every other owner when a round ends."
     },
+    "hud.sign": {
+      "message": "Write your sign",
+      "description": "The sign field's placeholder while it is empty."
+    },
     "hud.won": {
       "message": "You won round {$round :integer}!",
       "description": "Shown to the owner that won a round, when it ends."

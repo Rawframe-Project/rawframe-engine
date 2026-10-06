@@ -161,8 +161,10 @@ struct Entry {
     /// The words it shows, as last read (D427).
     Typed words;
     bool seen = false;
-    /// Its node was made a text field (D426).
+    /// Its node was made a text field (D426), and shows its label as the
+    /// field's placeholder now, not what was typed (D428).
     bool editable = false;
+    bool placeholder = false;
 };
 
 /// The text field holding the keyboard, and its editing.
@@ -219,10 +221,15 @@ struct WorldUi::State {
     std::optional<view::UiTyping::Caret> caret;
     std::vector<view::Submitted> submitted;
 
-    /// The keyboard taken from the field holding it.
-    void letGo() noexcept {
+    /// The keyboard taken from the field holding it, which shows its
+    /// placeholder again if it is empty; `shown` false for a field going.
+    void letGo(bool shown = true) {
+        Entry* holding = focus.has_value() ? focus->entry : nullptr;
         focus.reset();
         caret.reset();
+        if (holding != nullptr && shown) {
+            static_cast<void>(giveFieldLook(*holding));
+        }
     }
 
     /// Where the caret of the field holding the keyboard is, in the window,
@@ -245,7 +252,7 @@ struct WorldUi::State {
             return;
         }
         if (focus.has_value() && focus->entry == &entry) {
-            letGo();
+            letGo(false);
         }
         if (const auto kChildren = attached.find(keyOf(*entry.node)); kChildren != attached.end()) {
             for (const ui::Node kChild : kChildren->second) {
@@ -290,7 +297,7 @@ struct WorldUi::State {
         if (!kLayout.has_value() || !kInteraction.has_value() || !tree->setLayout(*entry.node, *kLayout).has_value() ||
             !tree->setLook(*entry.node, lookOf(value)).has_value() ||
             !tree->setInteraction(*entry.node, *kInteraction).has_value() ||
-            !(kEditable ? giveFieldLook(*entry.node, value) : giveWords(*entry.node, value, wordsOf(entry.words)))) {
+            !(kEditable ? giveFieldLook(entry) : giveWords(*entry.node, value, wordsOf(entry.words)))) {
             drop(entry);
             return false;
         }
@@ -302,16 +309,30 @@ struct WorldUi::State {
         return true;
     }
 
-    /// A text field shows what was typed into it in `value`'s text look,
-    /// never a label; whether the tree took it.
-    bool giveFieldLook(ui::Node node, const Node& value) {
-        if (value.textAlign > 2 || value.textWrap > 1) {
+    /// A text field shows what was typed into it in its text look, never a
+    /// label (D426); empty and without the keyboard, its label's words as
+    /// its placeholder, at half its text's alpha (D428). Whether the tree
+    /// took it.
+    bool giveFieldLook(Entry& entry) {
+        const Node& kValue = entry.value;
+        if (kValue.textAlign > 2 || kValue.textWrap > 1) {
             return false;
         }
-        const auto kFont = fonts.find(value.font);
-        const std::string kTyped{tree->textOf(node)};
-        return tree->setText(node, kTyped, textLookOf(value, kFont != fonts.end() ? kFont->second : ui::Font{}))
-            .has_value();
+        const auto kFont = fonts.find(kValue.font);
+        ui::TextLook look = textLookOf(kValue, kFont != fonts.end() ? kFont->second : ui::Font{});
+        std::string text = entry.placeholder ? std::string{} : std::string{tree->textOf(*entry.node)};
+        const bool kHeld = focus.has_value() && focus->entry == &entry;
+        std::optional<std::string> label;
+        if (!kHeld && text.empty() && kValue.text != 0 && settings.words) {
+            label = settings.words(kValue.text, kValue.textValue);
+        }
+        entry.placeholder = label.has_value();
+        if (label.has_value()) {
+            text = std::move(*label);
+            const std::uint32_t kAlpha = look.color & 0xFFU;
+            look.color = (look.color & 0xFFFFFF00U) | (kAlpha / 2);
+        }
+        return tree->setText(*entry.node, text, look).has_value();
     }
 
     /// `value`'s words given to `node`, or none, the typed `shown` in place
@@ -614,7 +635,7 @@ result::Status WorldUi::addFont(std::uint64_t id, std::span<const std::byte> byt
             if (entry.node.has_value() && kShows &&
                 (entry.value.font == id || !state.fonts.contains(entry.value.font))) {
                 // A field keeps what was typed into it.
-                const bool kGiven = entry.editable ? state.giveFieldLook(*entry.node, entry.value)
+                const bool kGiven = entry.editable ? state.giveFieldLook(entry)
                                                    : state.giveWords(*entry.node, entry.value, wordsOf(entry.words));
                 if (!kGiven) {
                     state.drop(entry);
@@ -652,9 +673,13 @@ void WorldUi::pressAt(float x, float y) {
                     continue;
                 }
                 if (!state.focus.has_value() || state.focus->entry != &entry) {
-                    state.focus = Focus{
-                        .entry = &entry,
-                        .edit = std::make_unique<ui::TextEdit>(*state.tree, *entry.node, editSettingsOf(entry.value))};
+                    // Another field lets go first; this one's placeholder
+                    // goes before its caret is made.
+                    state.letGo();
+                    state.focus = Focus{.entry = &entry, .edit = nullptr};
+                    static_cast<void>(state.giveFieldLook(entry));
+                    state.focus->edit =
+                        std::make_unique<ui::TextEdit>(*state.tree, *entry.node, editSettingsOf(entry.value));
                     ++state.statistics.focused;
                 }
                 static_cast<void>(state.focus->edit->pointAt(kHit->x, kHit->y, false));

@@ -66,6 +66,7 @@ const HUD_FONT: u64 = 0x8e12f827f47f7d51
 const HUD_COINS: u64 = 0xf1182d0420cc09a0
 const HUD_WON: u64 = 0xafcb66432b6d2152
 const HUD_LOST: u64 = 0xb777d548435986ab
+const HUD_SIGN: u64 = 0xbdb5be7acb84d040
 
 // An owner: whether it has joined, its cursor on the ground, its coins, its
 // stalls and their levels together, whether the build it asked for is
@@ -338,7 +339,8 @@ fn sign(count: i32, owners: [Owner], signs: [ui.Typed], entities: [world.Entity]
 }
 
 // The sign field under the purse (D426): a line of at most 32 bytes the
-// player writes in, its text in the purse's look.
+// player writes in, its text in the purse's look, which asks for a sign
+// while it is empty (D428).
 fn field(count: i32, signs: [ui.Node]) {
     let i = 0
     while i < count {
@@ -355,6 +357,7 @@ fn field(count: i32, signs: [ui.Node]) {
         signs[i].textSize = 18.0
         signs[i].textColor = u32(0xF4E9C8FF)
         signs[i].textWrap = ui.NO_WRAP
+        signs[i].text = HUD_SIGN
         signs[i].press = controls.SIGN
         signs[i].edit = ui.EDIT_LINE
         signs[i].editLimit = u32(32)

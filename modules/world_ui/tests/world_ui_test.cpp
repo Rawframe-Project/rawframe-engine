@@ -9,7 +9,8 @@
 // field takes the keyboard by a press, shows what is typed with its caret,
 // and gives its text by Enter (D426); and a node shows the words of a
 // component of typed words in place of its label while it holds any
-// (D427).
+// (D427); and an empty field without the keyboard shows its label as its
+// placeholder (D428).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -423,4 +424,53 @@ RAWFRAME_TEST(ANodeShowsTypedWordsInPlaceOfItsLabel) {
     rig.put(rig.player, kWordsId, kTyped("x"));
     rig.put(rig.player, kMeterId, Node{.text = 0xA1, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 6);
+}
+
+RAWFRAME_TEST(AnEmptyFieldShowsItsLabelUntilItHasTheKeyboard) {
+    Rig rig;
+    rig.ui = *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId},
+                               .parents = {std::nullopt, 0, 0},
+                               .fonts = {0xF1},
+                               .words = [](std::uint64_t, std::int64_t) -> std::optional<std::string> {
+                                   return std::string{"NAME"};
+                               }});
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
+    rig.put(rig.player,
+            kHudId,
+            Node{.widthOffset = 200,
+                 .heightOffset = 20,
+                 .text = 0xA1,
+                 .font = 0xF1,
+                 .textSize = 10,
+                 .textColor = 0xFFFFFFFF,
+                 .press = 3,
+                 .edit = 1});
+    const auto kGlyphs = [&rig] {
+        return rig.frame() ? rig.ui->drawn().glyphs.size() : std::size_t{99};
+    };
+    const auto kKey = [&rig](view::TypingKey key) {
+        rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = key});
+    };
+    // Empty and without the keyboard: its label, at half its alpha.
+    RAWFRAME_EXPECT(kGlyphs() == 4 && !rig.ui->drawn().glyphRuns.empty() &&
+                    rig.ui->drawn().glyphRuns[0].color[3] < 0.6F);
+    // With the keyboard, nothing, the caret at its start.
+    rig.ui->pressAt(150, 55);
+    RAWFRAME_EXPECT(kGlyphs() == 0 && rig.ui->caret().has_value() && (*rig.ui->caret())[0] == 100);
+    // The placeholder is never given as text.
+    kKey(view::TypingKey::Submit);
+    auto given = rig.ui->takeSubmitted();
+    RAWFRAME_EXPECT(given.size() == 1 && given[0].text.empty() && kGlyphs() == 4);
+    // What is typed is kept when the keyboard goes; emptied, the label again.
+    rig.ui->pressAt(150, 55);
+    rig.ui->type(view::Typing{.kind = view::Typing::Kind::Text, .text = "ab"});
+    kKey(view::TypingKey::Dismiss);
+    RAWFRAME_EXPECT(kGlyphs() == 2);
+    rig.ui->pressAt(150, 55);
+    kKey(view::TypingKey::SelectAll);
+    kKey(view::TypingKey::Backspace);
+    RAWFRAME_EXPECT(kGlyphs() == 0);
+    rig.ui->pressAt(600, 300);
+    RAWFRAME_EXPECT(kGlyphs() == 4);
 }
