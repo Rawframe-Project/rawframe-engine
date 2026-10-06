@@ -1,5 +1,7 @@
 module controls
 
+import rawframe.ui
+
 // What an owner's player asks of it each tick, apart from the game so that
 // the game and a client's sample program (sample.kest) share the one type:
 // to move the cursor along x and z (each -1 to 1), to put it on the place
@@ -23,4 +25,13 @@ const PURSE: i64 = 1
 // nothing more than that it was asked.
 struct Collect {
     asked: u32
+}
+
+// The sign field's press code (D426): the field an owner's player writes
+// its stall's sign in, given to the server when the player presses Enter.
+const SIGN: i64 = 2
+
+// What an owner's player wrote on its sign.
+struct Sign {
+    typed: ui.Typed
 }

@@ -83,6 +83,12 @@ struct Owner {
     collected: i64
 }
 
+// An owner's sign, as its player last wrote it (D426): kept by the server,
+// shown nowhere yet.
+struct Named {
+    sign: ui.Typed
+}
+
 // A stall, by its owner and its plot, and its level, one to TOP.
 struct Stall {
     owner: world.Entity
@@ -131,6 +137,10 @@ struct Cheer {
 }
 
 extern fn Messages.won(to: world.Entity, value: Won)
+extern fn CommandCount.sign() -> i32
+extern fn Command.sign(index: i32) -> controls.Sign
+extern fn CommandFrom.sign(index: i32) -> world.Entity
+extern fn Named.insert(entity: world.Entity, value: Named)
 extern fn CommandCount.collect() -> i32
 extern fn Command.collect(index: i32) -> controls.Collect
 extern fn CommandFrom.collect(index: i32) -> world.Entity
@@ -312,6 +322,49 @@ fn collect(count: i32, owners: [Owner], entities: [world.Entity]) {
             }
         }
         a = a + 1
+    }
+}
+
+// What an owner's player wrote on its sign, kept with the owner; a sign
+// from a player who owns nothing here is no one's.
+fn sign(count: i32, owners: [Owner], entities: [world.Entity]) {
+    let asks = CommandCount.sign()
+    let a = 0
+    while a < asks {
+        let from = CommandFrom.sign(a)
+        let i = 0
+        while i < count {
+            if entities[i] == from && owners[i].joined == u32(1) {
+                Named.insert(from, Named(Command.sign(a).typed))
+            }
+            i = i + 1
+        }
+        a = a + 1
+    }
+}
+
+// The sign field under the purse (D426): a line of at most 32 bytes the
+// player writes in, its text in the purse's look.
+fn field(count: i32, signs: [ui.Node]) {
+    let i = 0
+    while i < count {
+        signs[i].widthOffset = 220.0
+        signs[i].heightOffset = 34.0
+        signs[i].padding = 6.0
+        signs[i].margin = 12.0
+        signs[i].fill = u32(0x101820C0)
+        signs[i].borderColor = u32(0xF4E9C880)
+        signs[i].border = 1.0
+        signs[i].radius = 6.0
+        signs[i].order = 1
+        signs[i].font = HUD_FONT
+        signs[i].textSize = 18.0
+        signs[i].textColor = u32(0xF4E9C8FF)
+        signs[i].textWrap = ui.NO_WRAP
+        signs[i].press = controls.SIGN
+        signs[i].edit = ui.EDIT_LINE
+        signs[i].editLimit = u32(32)
+        i = i + 1
     }
 }
 

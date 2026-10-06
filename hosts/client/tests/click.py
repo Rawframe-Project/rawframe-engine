@@ -7,10 +7,11 @@
 # events through the X server, so they reach the window as a real mouse's
 # do. Before each press it prints how bright a patch of five by five
 # pixels at the point was before the mouse came and after, and whether it
-# grew lighter by 8 or more of 255 (D422); then it waits for the process to
-# end.
+# grew lighter by 8 or more of 255 (D422). A point followed by `:` and
+# lower-case text has the text typed after its click, a key at a time,
+# then Return (D426). Then it waits for the process to end.
 #
-# usage: click.py <pid> <x>,<y> [<x>,<y>...]
+# usage: click.py <pid> <x>,<y>[:<text>] [<x>,<y>[:<text>]...]
 
 import ctypes
 import ctypes.util
@@ -49,7 +50,10 @@ def brightness(x, display, root, at, y):
 
 def main():
     pid = int(sys.argv[1])
-    points = [tuple(int(side) for side in point.split(",")) for point in sys.argv[2:]]
+    points = []
+    for argument in sys.argv[2:]:
+        place, _, text = argument.partition(":")
+        points.append((*(int(side) for side in place.split(",")), text))
     x = ctypes.CDLL(ctypes.util.find_library("X11"))
     xtest = ctypes.CDLL("libXtst.so.6")
     x.XOpenDisplay.restype = ctypes.c_void_p
@@ -61,6 +65,11 @@ def main():
     x.XFlush.argtypes = [ctypes.c_void_p]
     xtest.XTestFakeMotionEvent.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
     xtest.XTestFakeButtonEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+    xtest.XTestFakeKeyEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+    x.XStringToKeysym.restype = ctypes.c_ulong
+    x.XStringToKeysym.argtypes = [ctypes.c_char_p]
+    x.XKeysymToKeycode.restype = ctypes.c_ubyte
+    x.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
     display = x.XOpenDisplay(None)
     if not display:
         sys.exit("click.py: no X display")
@@ -73,7 +82,7 @@ def main():
             info = image.contents
             data = ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (info.bytes_per_line * info.height))).contents
             lit += 1 if any(bytes(data)) else 0
-    for at, y in points:
+    for at, y, text in points:
         if not alive(pid):
             break
         # Moved there first, so the press is where the pointer already is.
@@ -96,6 +105,17 @@ def main():
         x.XFlush(display)
         print(f"clicked at {at},{y}")
         time.sleep(1)
+        if text:
+            for name in [*text, "Return"]:
+                code = x.XKeysymToKeycode(display, x.XStringToKeysym(name.encode()))
+                xtest.XTestFakeKeyEvent(display, code, 1, 0)
+                x.XFlush(display)
+                time.sleep(0.05)
+                xtest.XTestFakeKeyEvent(display, code, 0, 0)
+                x.XFlush(display)
+                time.sleep(0.1)
+            print(f"typed {text} at {at},{y}")
+            time.sleep(1)
     while alive(pid):
         time.sleep(0.25)
 

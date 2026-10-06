@@ -6,7 +6,8 @@ module sample
 // points, the ray through its camera picks the place on the ground it
 // meets. A bot, and a player before its first frame, has no view to pick
 // through. A press on the purse asks the server to collect the owner's
-// takings (D425).
+// takings (D425); what the player writes in the sign field and gives by
+// Enter goes to the server as its sign (D426).
 
 import controls
 import rawframe.input
@@ -17,6 +18,7 @@ const BUILD: u64 = 0x42402c54c83df116
 const POINT: u64 = 0x60122f83dd6bbe0b
 
 extern fn Commands.collect(value: controls.Collect)
+extern fn Commands.sign(value: controls.Sign)
 
 fn sample(into: [controls.Hand]) {
     into[0].moveX = input.x(MOVE)
@@ -39,5 +41,8 @@ fn sample(into: [controls.Hand]) {
     }
     if input.uiPressed() == controls.PURSE {
         Commands.collect(controls.Collect(u32(1)))
+    }
+    if input.uiSubmitted() == controls.SIGN {
+        Commands.sign(controls.Sign(input.uiTyped()))
     }
 }
