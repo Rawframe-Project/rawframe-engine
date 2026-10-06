@@ -54,22 +54,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
         endif()
         # Stalls clicked on its HUD's purse, a panel that takes presses
-        # (D421): the UI takes the click, and the owner builds no stall under
-        # it, the World holding the owner's body alone. Taking nothing, the
-        # same click builds one there.
+        # (D421): lighter under the mouse once it is there (D422), the UI
+        # takes the click, and the owner builds no stall under it, the World
+        # holding the owner's body alone. Taking nothing, the same click
+        # builds one there.
         set(TYCOON_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/tycoon_content)
         configure_file(tests/stalls_clicked.conf.in ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf @ONLY)
         add_test(NAME client_clicks_stalls
                  COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game 30,25
+                         games/tycoon/tycoon.game 16,16
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_clicks_stalls PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"fontsRead\":1,[^\n]*\"presses\":1,")
+                             "at 16,16 [^\n]*: lighter.*\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"fontsRead\":1,[^\n]*\"presses\":1,")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(client_clicks_stalls PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

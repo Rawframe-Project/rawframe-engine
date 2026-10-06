@@ -5,7 +5,10 @@
 # top left (which is the screen's: no window manager runs), and its left
 # button is pressed there and let go, a second apart. XTest injects the
 # events through the X server, so they reach the window as a real mouse's
-# do. It waits for the process to end, then prints what it clicked.
+# do. Before each press it prints how bright a patch of five by five
+# pixels at the point was before the mouse came and after, and whether it
+# grew lighter by 8 or more of 255 (D422); then it waits for the process to
+# end.
 #
 # usage: click.py <pid> <x>,<y> [<x>,<y>...]
 
@@ -29,6 +32,19 @@ def alive(pid):
     except OSError:
         return False
     return True
+
+
+def brightness(x, display, root, at, y):
+    """The mean of the red, green, and blue of the five by five pixels
+    around a point."""
+    image = x.XGetImage(display, root, at - 2, y - 2, 5, 5, 0xFFFFFFFF, 2)
+    if not image:
+        return 0
+    info = image.contents
+    data = bytes(ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (info.bytes_per_line * info.height))).contents)
+    values = [data[row * info.bytes_per_line + column * 4 + channel]
+              for row in range(5) for column in range(5) for channel in range(3)]
+    return sum(values) / len(values)
 
 
 def main():
@@ -61,9 +77,18 @@ def main():
         if not alive(pid):
             break
         # Moved there first, so the press is where the pointer already is.
+        before = brightness(x, display, root, at, y)
         xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
         x.XFlush(display)
-        time.sleep(0.5)
+        # A loaded machine draws late: up to three seconds for it to show.
+        after = before
+        for _ in range(12):
+            time.sleep(0.25)
+            after = brightness(x, display, root, at, y)
+            if after >= before + 8:
+                break
+        print(f"at {at},{y} the screen was {before:.0f} bright before the mouse and {after:.0f} under it: "
+              f"{'lighter' if after >= before + 8 else 'not lighter'}")
         xtest.XTestFakeButtonEvent(display, 1, 1, 0)
         x.XFlush(display)
         time.sleep(0.2)

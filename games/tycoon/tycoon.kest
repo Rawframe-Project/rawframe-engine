@@ -66,6 +66,8 @@ const HUD_FONT: u64 = 0x8e12f827f47f7d51
 const HUD_COINS: u64 = 0xf1182d0420cc09a0
 const HUD_WON: u64 = 0xafcb66432b6d2152
 const HUD_LOST: u64 = 0xb777d548435986ab
+// The purse's press code (D421), which `ui.hovered()` names under the mouse.
+const PURSE: i64 = 1
 
 // An owner: whether it has joined, its cursor on the ground, its coins, its
 // stalls and their levels together, whether the build it asked for is
@@ -486,13 +488,17 @@ fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
 }
 
 // The owner's coins in its HUD: words along the top left of its view, a
-// panel a click on builds nothing under (D421).
+// panel a click on builds nothing under (D421), lighter under the mouse
+// (D422).
 fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
     let i = 0
     while i < count {
         huds[i].padding = 10.0
         huds[i].margin = 12.0
         huds[i].fill = u32(0x101820C0)
+        if ui.hovered() == PURSE {
+            huds[i].fill = u32(0x304860E0)
+        }
         huds[i].radius = 6.0
         huds[i].text = HUD_COINS
         huds[i].textValue = owners[i].coins
@@ -501,6 +507,7 @@ fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
         huds[i].textColor = u32(0xF4E9C8FF)
         huds[i].textWrap = ui.NO_WRAP
         huds[i].hit = ui.HIT_SELF
+        huds[i].press = PURSE
         i = i + 1
     }
 }
