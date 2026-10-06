@@ -1,7 +1,9 @@
 #include "rawframe/content/library.h"
 
 #include "directory.h"
+#include "rawframe/content/composition_record.h"
 #include "rawframe/content/errors.h"
+#include "rawframe/document/json.h"
 #include "source.h"
 
 #include <algorithm>
@@ -57,6 +59,59 @@ std::string releasePathOf(const base::Sha256Digest& release) {
 
 std::string channelPathOf(std::string_view subject, std::string_view channel) {
     return "channels/" + std::string{subject} + "/" + std::string{channel};
+}
+
+result::Result<std::string> writeInstalled(const Installed& installed) {
+    using document::Value;
+    Value retained = Value::array();
+    for (const base::Sha256Digest& each : installed.retained) {
+        retained.push(Value::string(ContentDigest{.bytes = each}.text()));
+    }
+    Value record = Value::object();
+    record.add("schema", Value::integer(1));
+    if (installed.active.has_value()) {
+        record.add("active", Value::string(ContentDigest{.bytes = *installed.active}.text()));
+    }
+    record.add("retained", std::move(retained));
+    return document::writeCanonicalRecord(record);
+}
+
+result::Result<Installed> readInstalled(std::string_view text) {
+    const auto kInvalid = [] {
+        return std::unexpected<result::Error>{
+            result::fail(result::ErrorClass::DataLoss,
+                         kContentDomain,
+                         code(ContentError::ManifestInvalid),
+                         "the installed pointer is not {schema: 1, active?, retained}")
+                .error()};
+    };
+    const auto kParsed = document::parseCanonicalRecord(text, {.maximumBytes = kMaximumInstalled});
+    if (!kParsed.has_value()) {
+        return kInvalid();
+    }
+    const document::Value* schema = kParsed->find("schema");
+    const document::Value* active = kParsed->find("active");
+    const document::Value* retained = kParsed->find("retained");
+    if (schema == nullptr || schema->integer() != 1 || retained == nullptr ||
+        retained->kind() != document::Value::Kind::Array || kParsed->names().size() != (active != nullptr ? 3U : 2U)) {
+        return kInvalid();
+    }
+    Installed read;
+    if (active != nullptr) {
+        const auto kActive = active->text() != nullptr ? ContentDigest::parse(*active->text()) : std::nullopt;
+        if (!kActive.has_value()) {
+            return kInvalid();
+        }
+        read.active = kActive->bytes;
+    }
+    for (const document::Value& each : retained->items()) {
+        const auto kRetained = each.text() != nullptr ? ContentDigest::parse(*each.text()) : std::nullopt;
+        if (!kRetained.has_value()) {
+            return kInvalid();
+        }
+        read.retained.push_back(kRetained->bytes);
+    }
+    return read;
 }
 
 #if RAWFRAME_FILE_SYSTEM
@@ -126,6 +181,33 @@ result::Result<BuildContent> Library::build(const base::Sha256Digest& root,
                                             const signature::PublisherKeySet& publisher) const {
     RAWFRAME_TRY_ASSIGN(BuildManifest read, manifest(root, publisher));
     return ContentSource::openBuild(files_, std::move(read));
+}
+
+result::Result<std::string> Library::activeComposition() const {
+    RAWFRAME_TRY_ASSIGN(
+        const std::vector<std::byte> kPointer,
+        readWithin(
+            *files_, kInstalledName, kMaximumInstalled, "the library has no installed pointer within its ceiling"));
+    RAWFRAME_TRY_ASSIGN(
+        const Installed kInstalled,
+        readInstalled(std::string_view{reinterpret_cast<const char*>(kPointer.data()), kPointer.size()}));
+    if (!kInstalled.active.has_value()) {
+        return unavailable("the library has no active Composition");
+    }
+    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kRecord,
+                        readWithin(*files_,
+                                   compositionPathOf(*kInstalled.active),
+                                   kMaximumCompositionRecord,
+                                   "the library does not keep its active Composition within its ceiling"));
+    std::string text{reinterpret_cast<const char*>(kRecord.data()), kRecord.size()};
+    if (compositionIdOf(text) != *kInstalled.active) {
+        return std::unexpected<result::Error>{result::fail(result::ErrorClass::DataLoss,
+                                                           kContentDomain,
+                                                           code(ContentError::DigestMismatch),
+                                                           "the library's active Composition is not the one it keeps")
+                                                  .error()};
+    }
+    return text;
 }
 
 } // namespace rawframe::content

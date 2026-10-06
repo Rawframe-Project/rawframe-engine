@@ -41,13 +41,6 @@ struct InstallLimits {
     std::uint64_t maximumFetchBytes = std::uint64_t{64} << 30U;
 };
 
-/// What the installed pointer names.
-struct Installed {
-    std::optional<base::Sha256Digest> active;
-    /// Newest first.
-    std::vector<base::Sha256Digest> retained;
-};
-
 struct UpdateReport {
     /// The Builds' blobs fetched, and their bytes.
     std::size_t fetched = 0;
@@ -73,7 +66,7 @@ public:
     [[nodiscard]] static result::Result<Installation> open(const std::filesystem::path& root,
                                                            const InstallLimits& limits = {});
 
-    [[nodiscard]] const Installed& installed() const noexcept {
+    [[nodiscard]] const content::Installed& installed() const noexcept {
         return installed_;
     }
 
@@ -138,12 +131,12 @@ private:
     /// Whether a Build is held and verifies.
     [[nodiscard]] bool whole(const content::BuildReference& build) const;
     /// Writes the installed pointer.
-    [[nodiscard]] result::Status point(Installed next);
+    [[nodiscard]] result::Status point(content::Installed next);
 
     std::filesystem::path root_;
     content::Library library_;
     InstallLimits limits_;
-    Installed installed_;
+    content::Installed installed_;
 };
 
 } // namespace rawframe::install

@@ -451,6 +451,37 @@ RAWFRAME_TEST(RollbackMovesThePointerAndCollectKeepsWhatItNeeds) {
     RAWFRAME_EXPECT(kWhole.has_value() && kWhole->fetched == 0);
 }
 
+// What a Runtime plays from a library named alone (D434): the record of the
+// Composition its pointer names active, following updates and rollbacks;
+// none without a pointer, and refused when the kept record is not the one
+// named.
+RAWFRAME_TEST(ALibraryAloneNamesItsActiveComposition) {
+    const Published kPublished;
+    const auto kOrigin = kPublished.origin();
+    Installation library = kPublished.library("alone");
+    const fs::path kRoot = kPublished.base / "alone";
+    const auto kActive = [&kRoot] {
+        return content::Library::directory(kRoot)->activeComposition();
+    };
+    RAWFRAME_EXPECT(!kActive().has_value());
+    RAWFRAME_EXPECT(library.update(kPublished.firstRecord, *kOrigin).has_value());
+    RAWFRAME_EXPECT(kActive() == kPublished.firstRecord);
+    RAWFRAME_EXPECT(library.update(kPublished.secondRecord, *kOrigin).has_value());
+    RAWFRAME_EXPECT(kActive() == kPublished.secondRecord);
+    RAWFRAME_EXPECT(library.rollback().has_value() && kActive() == kPublished.firstRecord);
+    // The pointer's record round trips, and a kept record changed under it
+    // is refused.
+    const content::Installed kInstalled = library.installed();
+    const auto kWritten = content::writeInstalled(kInstalled);
+    RAWFRAME_EXPECT(kWritten.has_value() && content::readInstalled(*kWritten)->active == kInstalled.active &&
+                    !content::readInstalled("{\"schema\":2,\"retained\":[]}").has_value());
+    const fs::path kKept = kRoot / content::compositionPathOf(*kInstalled.active);
+    std::ofstream{kKept, std::ios::binary | std::ios::trunc} << kPublished.secondRecord;
+    const auto kChanged = kActive();
+    RAWFRAME_EXPECT(!kChanged.has_value() &&
+                    kChanged.error().code() == content::code(content::ContentError::DigestMismatch));
+}
+
 // SPEC-0038's golden plans: the golden Build of SPEC-0021's corpus (D82)
 // planned against no store and against one holding its first resource and
 // the first chunk of its second, byte for byte. A change is a new plan

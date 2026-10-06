@@ -19,7 +19,6 @@ namespace {
 
 /// SPEC-0021's ceiling on a CompositionRecord.
 constexpr std::uint64_t kMaximumComposition = std::uint64_t{1} << 20U;
-constexpr std::uint64_t kMaximumInstalled = std::uint64_t{64} << 10U;
 
 std::unexpected<result::Error> failed(result::ErrorClass errorClass, InstallError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kInstallDomain, code(error), why).error()};
@@ -35,57 +34,6 @@ std::span<const std::byte> bytesOf(std::string_view text) {
 
 std::string hexOf(const base::Sha256Digest& digest) {
     return content::ContentDigest{.bytes = digest}.text().substr(7);
-}
-
-/// The installed pointer's canonical record.
-result::Result<std::string> writeInstalled(const Installed& installed) {
-    using document::Value;
-    Value retained = Value::array();
-    for (const base::Sha256Digest& each : installed.retained) {
-        retained.push(Value::string(content::ContentDigest{.bytes = each}.text()));
-    }
-    Value record = Value::object();
-    record.add("schema", Value::integer(1));
-    if (installed.active.has_value()) {
-        record.add("active", Value::string(content::ContentDigest{.bytes = *installed.active}.text()));
-    }
-    record.add("retained", std::move(retained));
-    return document::writeCanonicalRecord(record);
-}
-
-result::Result<Installed> readInstalled(std::string_view text) {
-    const auto kInvalid = [] {
-        return failed(result::ErrorClass::DataLoss,
-                      InstallError::LibraryInvalid,
-                      "the installed pointer is not {schema: 1, active?, retained}");
-    };
-    const auto kParsed = document::parseCanonicalRecord(text, {.maximumBytes = kMaximumInstalled});
-    if (!kParsed.has_value()) {
-        return kInvalid();
-    }
-    const document::Value* schema = kParsed->find("schema");
-    const document::Value* active = kParsed->find("active");
-    const document::Value* retained = kParsed->find("retained");
-    if (schema == nullptr || schema->integer() != 1 || retained == nullptr ||
-        retained->kind() != document::Value::Kind::Array || kParsed->names().size() != (active != nullptr ? 3U : 2U)) {
-        return kInvalid();
-    }
-    Installed read;
-    if (active != nullptr) {
-        const auto kActive = active->text() != nullptr ? content::ContentDigest::parse(*active->text()) : std::nullopt;
-        if (!kActive.has_value()) {
-            return kInvalid();
-        }
-        read.active = kActive->bytes;
-    }
-    for (const document::Value& each : retained->items()) {
-        const auto kRetained = each.text() != nullptr ? content::ContentDigest::parse(*each.text()) : std::nullopt;
-        if (!kRetained.has_value()) {
-            return kInvalid();
-        }
-        read.retained.push_back(kRetained->bytes);
-    }
-    return read;
 }
 
 /// A Build whose manifest was read, and the bytes to keep of it when it
@@ -125,9 +73,16 @@ result::Result<Installation> Installation::open(const fs::path& root, const Inst
     Installation made{root, std::move(library), limits};
     made.limits_.retained = std::max<std::size_t>(made.limits_.retained, 1);
     if (fs::exists(root / content::kInstalledName, error)) {
-        RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kText,
-                            readFile(root / content::kInstalledName, kMaximumInstalled, "the installed pointer"));
-        RAWFRAME_TRY_ASSIGN(made.installed_, readInstalled(textOf(kText)));
+        RAWFRAME_TRY_ASSIGN(
+            const std::vector<std::byte> kText,
+            readFile(root / content::kInstalledName, content::kMaximumInstalled, "the installed pointer"));
+        auto read = content::readInstalled(textOf(kText));
+        if (!read.has_value()) {
+            return failed(result::ErrorClass::DataLoss,
+                          InstallError::LibraryInvalid,
+                          "the installed pointer is not {schema: 1, active?, retained}");
+        }
+        made.installed_ = std::move(*read);
     }
     return made;
 }
@@ -277,7 +232,7 @@ result::Result<UpdateReport> Installation::update(std::string_view record, Origi
     RAWFRAME_TRY(publishFile(root_ / content::kStagingName / (hexOf(kId) + ".part"),
                              root_ / content::compositionPathOf(kId),
                              bytesOf(record)));
-    Installed next{.active = kId, .retained = {}};
+    content::Installed next{.active = kId, .retained = {}};
     if (installed_.active.has_value()) {
         next.retained.push_back(*installed_.active);
     }
@@ -340,7 +295,7 @@ result::Status Installation::rollback() {
             return kNotWhole();
         }
     }
-    Installed next{.active = kTarget, .retained = {}};
+    content::Installed next{.active = kTarget, .retained = {}};
     if (installed_.active.has_value()) {
         next.retained.push_back(*installed_.active);
     }
@@ -402,8 +357,8 @@ result::Result<std::size_t> Installation::collect() {
     return removed;
 }
 
-result::Status Installation::point(Installed next) {
-    RAWFRAME_TRY_ASSIGN(const std::string kRecord, writeInstalled(next));
+result::Status Installation::point(content::Installed next) {
+    RAWFRAME_TRY_ASSIGN(const std::string kRecord, content::writeInstalled(next));
     RAWFRAME_TRY(publishFile(
         root_ / content::kStagingName / "installed.part", root_ / content::kInstalledName, bytesOf(kRecord)));
     installed_ = std::move(next);

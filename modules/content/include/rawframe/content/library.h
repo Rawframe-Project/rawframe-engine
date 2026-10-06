@@ -21,6 +21,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -58,6 +59,24 @@ inline constexpr std::string_view kSequenceSuffix = ".sequence";
 /// The installed pointer, and where an update stages what it writes.
 inline constexpr std::string_view kInstalledName = "installed";
 inline constexpr std::string_view kStagingName = "staging";
+
+/// What the installed pointer says (SPEC-0038, D245): the Composition the
+/// library has active, if any, and those retained for rollback, newest
+/// first. A launcher writes it; a Runtime reads from it which Composition
+/// it plays (D434).
+struct Installed {
+    std::optional<base::Sha256Digest> active;
+    std::vector<base::Sha256Digest> retained;
+};
+
+/// The pointer's ceiling.
+inline constexpr std::uint64_t kMaximumInstalled = std::uint64_t{64} << 10U;
+
+/// The pointer's canonical record, `{schema: 1, active?, retained}`, each
+/// Composition by its `sha256:` digest.
+[[nodiscard]] result::Result<std::string> writeInstalled(const Installed& installed);
+/// Reads one; refused (`ManifestInvalid`) out of that form.
+[[nodiscard]] result::Result<Installed> readInstalled(std::string_view text);
 
 class Library {
 public:
@@ -97,6 +116,13 @@ public:
     /// publisher's fault, not the store's, and is refused (`DigestMismatch`).
     /// Blocks, and reads every blob.
     [[nodiscard]] result::Result<std::vector<ContentDigest>> damaged(const BuildManifest& manifest) const;
+
+    /// The record of the Composition the library has active (D434): its
+    /// installed pointer read, and the record it names under
+    /// `compositions/`, which must be the Composition the pointer names
+    /// (`DigestMismatch`). Refused (`SourceUnavailable`) where the library
+    /// has no pointer, or none active. Blocks.
+    [[nodiscard]] result::Result<std::string> activeComposition() const;
 
 private:
     explicit Library(std::shared_ptr<const ContentSource::Implementation> files) noexcept : files_(std::move(files)) {

@@ -13,7 +13,6 @@ namespace {
 
 using document::Value;
 
-constexpr std::size_t kMaximumRecord = std::size_t{1024} * 1024;
 constexpr std::size_t kMaximumPackages = 4'096;
 
 std::unexpected<result::Error> refuse(std::string_view why) {
@@ -71,10 +70,10 @@ Value valueOf(const BuildReference& reference) {
 } // namespace
 
 result::Result<CompositionRecord> readComposition(std::string_view text) {
-    if (text.size() > kMaximumRecord) {
+    if (text.size() > kMaximumCompositionRecord) {
         return refuse("a CompositionRecord is at most 1 MiB");
     }
-    auto parsed = document::parseCanonicalRecord(text, document::ReadLimits{.maximumBytes = kMaximumRecord});
+    auto parsed = document::parseCanonicalRecord(text, document::ReadLimits{.maximumBytes = kMaximumCompositionRecord});
     if (!parsed.has_value()) {
         return refuse("a CompositionRecord is a canonical record");
     }
