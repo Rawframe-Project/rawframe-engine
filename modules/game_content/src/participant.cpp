@@ -1,6 +1,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/content/errors.h"
+#include "rawframe/content/library.h"
 #include "rawframe/game_content/cooked_content.h"
 #include "rawframe/game_content/registrar.h"
 
@@ -80,6 +81,26 @@ public:
                                                                context.clock(),
                                                                kRecord,
                                                                std::filesystem::path{std::string{*kLibrary}}));
+            return {};
+        }
+        // A library alone plays the Composition it has active (D434), the
+        // one a launcher last installed, followed, or rolled back to.
+        if (const auto kLibrary = configuration.path("content.library")) {
+            if (root.has_value()) {
+                return std::unexpected<result::Error>{
+                    result::fail(result::ErrorClass::InvalidArgument,
+                                 content::kContentDomain,
+                                 code(content::ContentError::SourceUnavailable),
+                                 "content.library plays a Composition, not a cook's output")
+                        .error()};
+            }
+            const std::filesystem::path kRoot{std::string{*kLibrary}};
+            RAWFRAME_TRY_ASSIGN(const content::Library kHeld, content::Library::directory(kRoot));
+            RAWFRAME_TRY_ASSIGN(const std::string kRecord, kHeld.activeComposition());
+            RAWFRAME_TRY_ASSIGN(
+                content_,
+                CookedContent::openComposition(
+                    *context.blockingIoExecutor(), context.owner(), context.scope(), context.clock(), kRecord, kRoot));
             return {};
         }
         RAWFRAME_TRY_ASSIGN(

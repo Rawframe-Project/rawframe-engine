@@ -21,7 +21,9 @@ namespace rawframe::game_content {
 ///                          publishers' key sets, `keys/<publisher>.keys`,
 ///                          pinned there: a Build unsigned, signed by a key
 ///                          its publisher's set does not list or lists
-///                          revoked, or not the one named, is refused
+///                          revoked, or not the one named, is refused;
+///                          without content.composition, the Composition
+///                          its installed pointer names active (D434)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::Runtime);

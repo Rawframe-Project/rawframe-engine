@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # A player's library updated from a publisher's mirror (SPEC-0038), as a
-# launcher would: runners' cooked content is packed twice, as 0.1.0 and
-# 0.2.0, each signed and added to the mirror with its Composition. The
-# player's library, the publisher's key set pinned, is updated to 0.1.0 and
-# plays from it; updated to 0.2.0, whose resources are the same, it fetches
+# launcher would, and played from the library alone, which plays the
+# Composition it has active (D434): runners' cooked content is packed
+# twice, as 0.1.0 and 0.2.0, each signed and added to the mirror with its
+# Composition. The player's library, the publisher's key set pinned, is
+# updated to 0.1.0 and plays from it; updated to 0.2.0, whose resources are the same, it fetches
 # no blob; rolled back, it plays 0.1.0 again with the mirror gone; a blob
 # that rots is healed from the mirror; and collect removes nothing either
 # kept Composition needs. Then the same mirror, served over HTTPS by a web
@@ -54,7 +55,6 @@ host.maximum_iterations = 240
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game_resource = $game
-content.composition = $(active)
 content.library = $player
 network.loopback.latency_ms = 10
 replication.endpoint = arena
@@ -62,7 +62,8 @@ bots.count = 2
 bots.endpoint = arena
 CONF
     (cd "$work/elsewhere" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson" 2>"$work/errors.txt")
-    grep -q '"code":"composition_opened"' "$work/log.ndjson"
+    # The library alone names the Composition: the one active (D434).
+    grep -q "\"code\":\"composition_opened\".*\"composition\":\"sha256:$(basename "$(active)")\"" "$work/log.ndjson"
 }
 
 "$install" update "$player" "$work/0.1.0.composition" "$mirror" | tee "$work/first.txt"
