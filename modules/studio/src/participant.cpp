@@ -73,11 +73,16 @@ struct FieldRow {
     std::string kind;
 };
 
-/// A component's Remove button and the component it removes.
-struct RemoveButton {
+/// A button on a component or a field and the operation it asks: Remove,
+/// or an instance's Revert of a component or a field.
+struct ActionButton {
     ui::Node node{};
+    std::string operation;
     std::string component;
-    std::string name;
+    /// The field, for a field's.
+    std::string field;
+    /// What the header says once it is done.
+    std::string done;
 };
 
 /// The shell: a session on the game, and the UI that shows it.
@@ -396,12 +401,16 @@ private:
             endEdit();
             Value operation = operationOn("scene.destroy_entity");
             commit(std::move(operation), "entity deleted", std::nullopt);
-        } else if (const auto kRemove = std::ranges::find(removeButtons_, kNode, &RemoveButton::node);
-                   kRemove != removeButtons_.end()) {
+        } else if (const auto kAction = std::ranges::find(actions_, kNode, &ActionButton::node);
+                   kAction != actions_.end()) {
             endEdit();
-            Value operation = operationOn("scene.remove_component");
-            operation.add("component", Value::string(kRemove->component));
-            commit(std::move(operation), kRemove->name + " removed", entity_);
+            const ActionButton kAsked = *kAction;
+            Value operation = operationOn(kAsked.operation);
+            operation.add("component", Value::string(kAsked.component));
+            if (!kAsked.field.empty()) {
+                operation.add("field", Value::string(kAsked.field));
+            }
+            commit(std::move(operation), kAsked.done, entity_);
         } else if (const auto kScene = std::ranges::find(sceneRows_, kNode); kScene != sceneRows_.end()) {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         } else if (const auto kEntity = std::ranges::find(entityRows_, kNode); kEntity != entityRows_.end()) {
@@ -454,7 +463,7 @@ private:
         }
         clear(entityRows_);
         clear(componentRows_);
-        removeButtons_.clear();
+        actions_.clear();
         entities_.clear();
         names_.clear();
         brought_.clear();
@@ -502,7 +511,7 @@ private:
                 tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
         }
         clear(componentRows_);
-        removeButtons_.clear();
+        actions_.clear();
         components_ = 0;
         // Chosen in the session, so undo and redo keep it (D417).
         static_cast<void>(ask(selectRecord(next(), scene_, entity_)));
@@ -523,7 +532,8 @@ private:
             const Value* component = each.find("component");
             const std::string kComponent =
                 component != nullptr && component->text() != nullptr ? *component->text() : std::string{};
-            if (!componentHeading(name != nullptr && name->text() != nullptr ? *name->text() : "?", kComponent)
+            if (!componentHeading(
+                     name != nullptr && name->text() != nullptr ? *name->text() : "?", kComponent, brought_[at])
                      .has_value()) {
                 return;
             }
@@ -535,6 +545,15 @@ private:
                     return;
                 }
                 componentRows_.push_back(line->first);
+                // An instance's own value, which it may drop for its source's.
+                if (brought_[at] && kEach.text.has_value() && catalog_.offers("scene.revert_field")) {
+                    static_cast<void>(action(line->first,
+                                             "Revert",
+                                             ActionButton{.operation = "scene.revert_field",
+                                                          .component = kComponent,
+                                                          .field = kEach.name,
+                                                          .done = kEach.name + " reverted"}));
+                }
                 fields_.push_back(
                     FieldRow{.value = line->second, .component = kComponent, .field = kEach.name, .kind = kEach.kind});
             }
@@ -548,8 +567,9 @@ private:
         }
     }
 
-    /// A component's heading row: its name, and Remove if offered.
-    result::Status componentHeading(std::string_view name, const std::string& component) {
+    /// A component's heading row: its name, and Remove if offered, or for
+    /// an instance's entity Revert, which drops what its patch does.
+    result::Status componentHeading(std::string_view name, const std::string& component, bool brought) {
         RAWFRAME_TRY_ASSIGN(const ui::Node kHeading,
                             box(componentsColumn_,
                                 ui::Layout{.height = ui::pixels(28),
@@ -561,12 +581,22 @@ private:
         componentRows_.push_back(kHeading);
         RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{.padding = {0, 4, 0, 4}}, 0));
         RAWFRAME_TRY(words(kTitle, name, kText, 14));
-        if (catalog_.offers("scene.remove_component")) {
-            RAWFRAME_TRY_ASSIGN(const ui::Node kRemove,
-                                box(kHeading, ui::Layout{.padding = {8, 2, 8, 2}, .margin = {0, 2, 0, 2}}, kPanel));
-            RAWFRAME_TRY(words(kRemove, "Remove", kQuiet, 13));
-            removeButtons_.push_back(RemoveButton{kRemove, component, std::string{name}});
+        const std::string_view kOperation = brought ? "scene.revert_component" : "scene.remove_component";
+        if (catalog_.offers(kOperation)) {
+            RAWFRAME_TRY(action(kHeading,
+                                brought ? "Revert" : "Remove",
+                                ActionButton{.operation = std::string{kOperation},
+                                             .component = component,
+                                             .done = std::string{name} + (brought ? " reverted" : " removed")}));
         }
+        return {};
+    }
+
+    /// A small button reading `text` at the end of `row`, asking `asked`.
+    result::Status action(ui::Node row, std::string_view text, ActionButton asked) {
+        RAWFRAME_TRY_ASSIGN(asked.node, box(row, ui::Layout{.padding = {8, 2, 8, 2}, .margin = {0, 2, 0, 2}}, kPanel));
+        RAWFRAME_TRY(words(asked.node, text, kQuiet, 13));
+        actions_.push_back(std::move(asked));
         return {};
     }
 
@@ -854,7 +884,7 @@ private:
     std::vector<bool> brought_;
     ui::Node newNode_{};
     ui::Node deleteNode_{};
-    std::vector<RemoveButton> removeButtons_;
+    std::vector<ActionButton> actions_;
     view::UiPointing* pointing_ = nullptr;
     view::UiTyping* typing_ = nullptr;
     std::vector<view::Typing> typed_;
