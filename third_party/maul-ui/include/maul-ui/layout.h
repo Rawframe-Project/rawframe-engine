@@ -231,6 +231,20 @@ extern "C"
         mui_contentHost = 1,
     };
 
+    // The axes a node scrolls its children along. A node that scrolls in
+    // either is a scroll container: it clips its children at its rounded
+    // padding box, its automatic minimum size is 0, as CSS's, and layout
+    // measures the extent its children reach (maul-ui/scroll.h).
+    typedef uint8_t muiScrollAxes;
+
+    enum
+    {
+        mui_scrollNone = 0,
+        mui_scrollHorizontal = 1,
+        mui_scrollVertical = 2,
+        mui_scrollBoth = 3,
+    };
+
     // Every authored value layout reads. Build it with
     // muiDefaultLayoutStyle.
     typedef struct muiLayoutStyle
@@ -247,6 +261,7 @@ extern "C"
         muiPlacement placement;
         muiTextDirection textDirection;
         muiContentKind content;
+        muiScrollAxes scrollAxes;
     } muiLayoutStyle;
 
     // A rectangle: its origin and size.
@@ -291,7 +306,9 @@ extern "C"
 
     // Returns the content-box size of a node's host content. It runs inside
     // muiComputeLayout, on the calling thread, and may not change the
-    // context; a call that would is refused as misuse.
+    // context; a call that would is refused as misuse. It is never asked
+    // with both axes exact, as the size is then decided: a host lays its
+    // content out for painting at the node's rectangle.
     typedef muiSize (*muiMeasureFunction)(void* user, muiNodeId nodeId, uint64_t hostKey,
                                           muiMeasureAxis width, muiMeasureAxis height);
 
@@ -408,8 +425,9 @@ extern "C"
 
     /// Returns whether muiComputeLayout on a root has work to do: an edit
     /// below it since its last run, a node whose conditions read a size or
-    /// direction that run changed, which a following run styles again, or
-    /// a transition running below it.
+    /// direction that run changed, which a following run styles again, a
+    /// transition running below it, or a scroll step easing below it
+    /// (maul-ui/scroll.h).
     ///
     /// @param context  The context.
     /// @param rootId   The root.

@@ -10,6 +10,7 @@
 
 #include "draw_store.h"
 #include "layout_node.h"
+#include "scroll_store.h"
 #include "tree.h"
 
 typedef struct muiSolver muiSolver;
@@ -40,6 +41,8 @@ struct muiSolver
     muiTree* restyle;
     // What each node was last painted as, parallel to the tree's slots.
     const muiPaintState* painted;
+    // Each node's scroll state, whose extents layout measures.
+    muiScrollState* scrolls;
 };
 
 #endif // MAUL_UI_SRC_SOLVER_H

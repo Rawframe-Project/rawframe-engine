@@ -39,6 +39,7 @@ typedef struct muiPainter
     uint32_t clipCapacity;
     uint32_t gradientCapacity;
     uint32_t glyphCapacity;
+    uint32_t transformCapacity;
     float scale;
     bool full;
     muiPaintFunction paint;
@@ -61,9 +62,10 @@ float muiSnapEdge(float value, float scale);
 // empty keeps one device pixel.
 muiRect muiSnapRect(muiRect rect, float scale);
 
-// A zeroed command of the kind in the clip, or NULL, marking the painter
-// full, when the list has no room.
-muiDrawCommand* muiTakeCommand(muiPainter* painter, muiDrawKind kind, uint32_t clip);
+// A new command of a kind, in the clip and transform state's node is
+// drawn in, zeroed but for those; NULL, and the painter full, when the
+// list is.
+muiDrawCommand* muiTakeCommand(muiPainter* painter, muiDrawKind kind, const muiPaintState* state);
 
 // Paints a node's own commands at the origin, clip and inherited opacity
 // in state, and leaves in state the clip and opacity its children are

@@ -85,7 +85,7 @@ static void Insert(muiContext* context, uint32_t slot)
     store->entries[at] =
         (muiLayerEntry){slot, muiTreeIdOf(&context->tree, slot).generation, ++store->activations};
     store->count++;
-    muiTreeAt(&context->tree, slot)->apart = true;
+    muiTreeAt(&context->tree, slot)->flags |= MUI_TREE_APART;
 }
 
 void muiNoteLayer(muiContext* context, uint32_t slot, muiLayerKind before)
@@ -100,7 +100,7 @@ void muiNoteLayer(muiContext* context, uint32_t slot, muiLayerKind before)
     if (found != 0)
     {
         RemoveAt(store, found - 1);
-        muiTreeAt(&context->tree, slot)->apart = false;
+        muiTreeAt(&context->tree, slot)->flags &= (uint8_t)~MUI_TREE_APART;
     }
     if (kind != mui_layerNone)
     {

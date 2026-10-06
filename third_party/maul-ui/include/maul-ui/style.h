@@ -100,6 +100,7 @@ extern "C"
         // Enumerators.
         mui_propertyTextDirection = 38,
         mui_propertyContent = 39,
+        mui_propertyScrollAxes = 40,
         // Visual properties, named after the muiVisualStyle field they set
         // (maul-ui/visual.h). Colors.
         mui_propertyBackground = 64,
@@ -143,6 +144,11 @@ extern "C"
         mui_propertyHitMode = 192,
         mui_propertyPassThrough = 193,
         mui_propertyLayer = 194,
+        mui_propertyFocusMode = 195,
+        mui_propertyTabOrder = 196,
+        mui_propertyDrags = 197,
+        mui_propertyAccepts = 198,
+        mui_propertyExitLayout = 199,
     };
 
     // A group of properties: those of one values struct.
@@ -164,10 +170,10 @@ extern "C"
 #define MUI_PROPERTY_BIT(property)   ((muiPropertyMask)1 << ((property) & 63))
 // Every layout, visual, text and interaction property, in their groups'
 // masks.
-#define MUI_LAYOUT_PROPERTIES      ((muiPropertyMask)0xFFFFFFFFFFull)
+#define MUI_LAYOUT_PROPERTIES      ((muiPropertyMask)0x1FFFFFFFFFFull)
 #define MUI_VISUAL_PROPERTIES      ((muiPropertyMask)0x1FFFFull)
 #define MUI_TEXT_PROPERTIES        ((muiPropertyMask)0x1FFull)
-#define MUI_INTERACTION_PROPERTIES ((muiPropertyMask)0x7ull)
+#define MUI_INTERACTION_PROPERTIES ((muiPropertyMask)0xFFull)
 
     // The states a node can be in, as bits, weakest first: a later
     // state's variant wins over an earlier one's.
@@ -178,10 +184,13 @@ extern "C"
         mui_stateChecked = 1,
         mui_stateSelected = 2,
         mui_stateFocused = 4,
-        mui_stateHovered = 8,
-        mui_statePressed = 16,
-        mui_stateDisabled = 32,
-        mui_stateExiting = 64,
+        // Focused, and the focus is shown (CSS's :focus-visible).
+        mui_stateFocusVisible = 8,
+        mui_stateHovered = 16,
+        mui_statePressed = 32,
+        mui_stateDisabled = 64,
+        // Set and cleared by exits alone (maul-ui/exit.h).
+        mui_stateExiting = 128,
     };
 
     // Which values of a class a call reads or writes: its base values, the
@@ -194,13 +203,14 @@ extern "C"
         mui_variantChecked = 1,
         mui_variantSelected = 2,
         mui_variantFocused = 3,
-        mui_variantHovered = 4,
-        mui_variantPressed = 5,
-        mui_variantDisabled = 6,
-        mui_variantExiting = 7,
+        mui_variantFocusVisible = 4,
+        mui_variantHovered = 5,
+        mui_variantPressed = 6,
+        mui_variantDisabled = 7,
+        mui_variantExiting = 8,
         // The values of the class's first condition; condition i has
         // mui_variantCondition0 + i.
-        mui_variantCondition0 = 8,
+        mui_variantCondition0 = 9,
     };
 
     enum
@@ -564,20 +574,25 @@ extern "C"
                                                        const muiStyleId* classes, uint32_t count);
 
     /// Sets the states a node is in. The node is styled again at the next
-    /// muiComputeLayout when they change.
+    /// muiComputeLayout when they change. Pointer input's hover and press,
+    /// and the players' focus, join them, apart: setting states leaves
+    /// those. The exiting bit is the exits' (maul-ui/exit.h): setting
+    /// states keeps it as it is.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param states   muiState bits.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id, unknown bits or a call from a measure or paint function;
+    ///         null id or a call from a measure or paint function;
     ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetStates(muiContext* context, muiNodeId nodeId,
                                                       muiState states);
 
-    /// Returns the states a node is in.
+    /// Returns the states a node is in: those the host set, hover and
+    /// press from pointer input (muiPointerInput), and focus and its
+    /// showing from the players' focus (muiFocus_Set).
     ///
     /// @param context  The context.
     /// @param nodeId   The node.

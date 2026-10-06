@@ -10,11 +10,13 @@
 
 #include "animation.h"
 #include "condition.h"
+#include "focus.h"
 #include "layer.h"
 #include "layout_node.h"
 #include "notify.h"
 #include "pool.h"
 #include "property.h"
+#include "scroll_store.h"
 #include "style_store.h"
 #include "theme_store.h"
 #include "token_store.h"
@@ -377,6 +379,7 @@ static bool Commit(muiContext* context, uint32_t slot, const Resolution* resolut
     if (changed.words[mui_groupLayout] != 0)
     {
         muiSyncLayoutNode(layout);
+        muiSyncScroll(&context->scrolls[slot - 1], layout->style.scrollAxes);
         muiTreeMarkLayout(&context->tree, slot);
     }
     if (changed.words[mui_groupVisual] != 0)
@@ -468,6 +471,8 @@ static void Resolve(muiContext* context, uint32_t slot, uint64_t nowNs)
     {
         context->style.nodes[slot - 1].styled = true;
         Inherit(context, slot, node->direct.words[mui_groupText], false);
+        // A state the host set may have made a focused node unfocusable.
+        muiNoteFocus(context, slot);
         return;
     }
     Resolution resolution;
@@ -498,10 +503,12 @@ static void Resolve(muiContext* context, uint32_t slot, uint64_t nowNs)
                        muiIntersection(node->direct, carried));
     Classes classes = ClassesOf(store, node);
     ApplyVariant(context, &classes, mui_variantBase, free, &resolution);
-    for (uint32_t v = mui_variantChecked; v < mui_variantCondition0; v++)
+    muiState states = muiStatesOf(node);
+    // Up to the strongest state held: most nodes hold none.
+    for (uint32_t v = mui_variantChecked; (states >> (v - 1)) != 0; v++)
     {
         // Variant v belongs to state bit v - 1.
-        if ((node->states & (1u << (v - 1))) != 0)
+        if ((states & (1u << (v - 1))) != 0)
         {
             ApplyVariant(context, &classes, (muiVariant)v, free, &resolution);
         }
@@ -512,6 +519,7 @@ static void Resolve(muiContext* context, uint32_t slot, uint64_t nowNs)
         Watch(context, slot, &run);
     }
     bool textChanged = Commit(context, slot, &resolution, free, nowNs);
+    muiNoteFocus(context, slot);
     context->style.nodes[slot - 1].styled = true;
     Inherit(context, slot,
             resolution.given.words[mui_groupText] | node->direct.words[mui_groupText], textChanged);

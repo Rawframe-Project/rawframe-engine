@@ -70,7 +70,7 @@ muiResult muiDrawSink_AddGlyphRun(muiDrawSink* sink, const muiGlyphRun* run, con
         painter->full = true;
         return mui_errorCapacity;
     }
-    muiDrawCommand* command = muiTakeCommand(painter, mui_drawGlyphRun, sink->state->clip);
+    muiDrawCommand* command = muiTakeCommand(painter, mui_drawGlyphRun, sink->state);
     if (command == nullptr)
     {
         return mui_errorCapacity;
@@ -102,7 +102,7 @@ muiResult muiDrawSink_AddRect(muiDrawSink* sink, muiRect rect, muiColor color)
         painter->misuse++;
         return mui_errorInvalid;
     }
-    muiDrawCommand* command = muiTakeCommand(painter, mui_drawBox, sink->state->clip);
+    muiDrawCommand* command = muiTakeCommand(painter, mui_drawBox, sink->state);
     if (command == nullptr)
     {
         return mui_errorCapacity;

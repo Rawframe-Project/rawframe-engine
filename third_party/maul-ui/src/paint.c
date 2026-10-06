@@ -104,7 +104,7 @@ muiCorners muiCornersOf(const muiCornerRadii* radii, muiRect rect, bool rtl)
     return Radii(radii, rect, rtl);
 }
 
-muiDrawCommand* muiTakeCommand(muiPainter* painter, muiDrawKind kind, uint32_t clip)
+muiDrawCommand* muiTakeCommand(muiPainter* painter, muiDrawKind kind, const muiPaintState* state)
 {
     muiDrawTables* out = painter->out;
     if (out->commandCount == painter->commandCapacity)
@@ -115,7 +115,8 @@ muiDrawCommand* muiTakeCommand(muiPainter* painter, muiDrawKind kind, uint32_t c
     muiDrawCommand* command = &out->commands[out->commandCount++];
     memset(command, 0, sizeof *command);
     command->kind = kind;
-    command->clip = clip;
+    command->clip = state->clip;
+    command->transform = state->transform;
     return command;
 }
 
@@ -149,7 +150,7 @@ static void AddShadow(muiPainter* painter, const muiShadow* shadow, muiRect rect
     {
         return;
     }
-    muiDrawCommand* command = muiTakeCommand(painter, mui_drawShadow, state->clip);
+    muiDrawCommand* command = muiTakeCommand(painter, mui_drawShadow, state);
     if (command == nullptr)
     {
         return;
@@ -213,7 +214,7 @@ static void AddBox(muiPainter* painter, const muiVisualStyle* visual, const Bord
     {
         return;
     }
-    muiDrawCommand* command = muiTakeCommand(painter, mui_drawBox, state->clip);
+    muiDrawCommand* command = muiTakeCommand(painter, mui_drawBox, state);
     if (command == nullptr)
     {
         return;
@@ -243,7 +244,7 @@ static void AddImage(muiPainter* painter, const muiVisualStyle* visual, muiRect 
     {
         return;
     }
-    muiDrawCommand* command = muiTakeCommand(painter, mui_drawImage, state->clip);
+    muiDrawCommand* command = muiTakeCommand(painter, mui_drawImage, state);
     if (command == nullptr)
     {
         return;
@@ -271,22 +272,41 @@ static void PaddingBox(muiRect* rect, muiCorners* radii, const muiSides* widths)
     radii->bottomLeft = fmaxf(radii->bottomLeft - fmaxf(widths->left, widths->bottom), 0.0f);
 }
 
-// A clip of the node's rounded border box for its children, inside the
-// clip it is drawn in; that clip when none fits.
-static uint32_t AddClip(muiPainter* painter, muiRect rect, muiCorners radii, uint32_t parent)
+// A clip of a rounded rect for the node's children, inside the clip it is
+// drawn in and through its transform; that clip when none fits.
+static uint32_t AddClip(muiPainter* painter, muiRect rect, muiCorners radii,
+                        const muiPaintState* state)
 {
     muiDrawTables* out = painter->out;
     if (out->clipCount == painter->clipCapacity)
     {
         painter->full = true;
-        return parent;
+        return state->clip;
     }
     uint32_t index = out->clipCount++;
     muiDrawClip* clip = &out->clips[index];
     memset(clip, 0, sizeof *clip);
     clip->rect = muiSnapRect(rect, painter->scale);
     clip->radii = radii;
-    clip->parent = parent;
+    clip->parent = state->clip;
+    clip->transform = state->transform;
+    return index;
+}
+
+// A scroll container's transform for its children, after the one it is
+// drawn through; its value comes when the list is done. That one when
+// none fits.
+static uint32_t AddTransform(muiPainter* painter, uint32_t slot, uint32_t parent)
+{
+    muiDrawTables* out = painter->out;
+    if (out->transformCount == painter->transformCapacity)
+    {
+        painter->full = true;
+        return parent;
+    }
+    uint32_t index = out->transformCount++;
+    out->transformOwners[index] = slot;
+    out->transformParents[index] = parent;
     return index;
 }
 
@@ -305,14 +325,28 @@ bool muiPaintNode(muiPainter* painter, uint32_t slot, muiPaintState* state)
     Borders borders = BordersOf(layout, visual, painter->scale);
     AddShadow(painter, &visual->outerShadow, rect, radii, false, state);
     AddBox(painter, visual, &borders, rect, radii, state);
-    muiRect inner = rect;
-    muiCorners innerRadii = radii;
-    PaddingBox(&inner, &innerRadii, &borders.widths);
-    AddShadow(painter, &visual->innerShadow, inner, innerRadii, true, state);
+    // The padding box only where it is drawn in, which most nodes are not.
+    if (visual->innerShadow.color.a > 0.0f)
+    {
+        muiRect inner = rect;
+        muiCorners innerRadii = radii;
+        PaddingBox(&inner, &innerRadii, &borders.widths);
+        AddShadow(painter, &visual->innerShadow, inner, innerRadii, true, state);
+    }
     AddImage(painter, visual, rect, state);
     if (visual->clip)
     {
-        state->clip = AddClip(painter, rect, radii, state->clip);
+        state->clip = AddClip(painter, rect, radii, state);
+    }
+    // A scroll container clips at its padding box, and its children go
+    // through its offset (record mui-0007).
+    if (layout->style.scrollAxes != mui_scrollNone)
+    {
+        muiRect port = rect;
+        muiCorners portRadii = radii;
+        PaddingBox(&port, &portRadii, &borders.widths);
+        state->clip = AddClip(painter, port, portRadii, state);
+        state->inner = AddTransform(painter, slot, state->transform);
     }
     return true;
 }

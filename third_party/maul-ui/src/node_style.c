@@ -7,20 +7,19 @@
 
 #include "animation.h"
 #include "context.h"
+#include "focus.h"
 #include "inherit.h"
 #include "layer.h"
 #include "layout_node.h"
 #include "pool.h"
 #include "property.h"
+#include "scroll_store.h"
 #include "style_store.h"
 #include "tree.h"
 
 #include "maul-ui/style.h"
 #include "maul-ui/text_style.h"
 #include "maul-ui/visual.h"
-
-// The states muiState names.
-#define KNOWN_STATES 0x7Fu
 
 muiResult muiNode_SetType(muiContext* context, muiNodeId nodeId, muiNodeTypeId typeId)
 {
@@ -73,12 +72,12 @@ muiResult muiNode_SetStates(muiContext* context, muiNodeId nodeId, muiState stat
     {
         return mui_errorInvalid;
     }
-    if ((states & ~KNOWN_STATES) != 0)
-    {
-        return muiRefuse(context);
-    }
     muiResult status = mui_success;
     uint32_t slot = muiResolveEdit(context, nodeId, &status);
+    // Exiting is the library's (src/exit.c): kept as it is.
+    states = slot != 0 ? (muiState)((states & ~mui_stateExiting) |
+                                    (context->style.nodes[slot - 1].states & mui_stateExiting))
+                       : states;
     if (slot != 0 && context->style.nodes[slot - 1].states != states)
     {
         context->style.nodes[slot - 1].states = states;
@@ -91,7 +90,7 @@ muiResult muiNode_SetStates(muiContext* context, muiNodeId nodeId, muiState stat
 muiState muiNode_GetStates(const muiContext* context, muiNodeId nodeId)
 {
     uint32_t slot = context != nullptr ? muiTreeResolve(&context->tree, nodeId) : 0;
-    return slot != 0 ? context->style.nodes[slot - 1].states : 0;
+    return slot != 0 ? muiStatesOf(&context->style.nodes[slot - 1]) : 0;
 }
 
 // Writes the properties of a group mask names, within allowed, directly:
@@ -130,6 +129,7 @@ static muiResult SetDirect(muiContext* context, muiNodeId nodeId, muiConstValues
                                       &context->text[slot - 1], &context->interaction[slot - 1]},
                        values, properties);
     muiSyncLayoutNode(layout);
+    muiSyncScroll(&context->scrolls[slot - 1], layout->style.scrollAxes);
     muiNodeStyle* node = &context->style.nodes[slot - 1];
     node->direct = muiUnion(node->direct, properties);
     node->edited = true;
@@ -142,6 +142,7 @@ static muiResult SetDirect(muiContext* context, muiNodeId nodeId, muiConstValues
         muiTreeMark(&context->tree, slot, mui_stagePaint);
     }
     muiNoteLayer(context, slot, layer);
+    muiNoteFocus(context, slot);
     // The node's text, and its inheriting children's, take the write at
     // once; the style pass then weighs it with the node's classes.
     if (group == mui_groupText && mask != 0)

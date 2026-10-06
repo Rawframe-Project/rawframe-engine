@@ -8,11 +8,15 @@
 
 #include "animation.h"
 #include "context.h"
+#include "exit.h"
 #include "layout_node.h"
+#include "popup.h"
 #include "property.h"
 #include "restyle.h"
+#include "scroll.h"
 #include "solve.h"
 #include "tree.h"
+#include "virtual.h"
 
 #include "maul-ui/style.h"
 
@@ -127,6 +131,8 @@ muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayou
     muiAdvanceAnimations(&motion, now, finish);
     muiRestyle(context, root, now);
     muiAdvanceAnimations(&motion, now, finish);
+    // Exits whose transitions have ended, or never began, are reported.
+    muiExitAdvance(context, root);
     Invalidate(context, root);
     muiSolver solver = {
         .tree = &context->tree,
@@ -138,6 +144,7 @@ muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayou
         .baseline = muiSolveBaseline,
         .restyle = &context->tree,
         .painted = context->draw.states,
+        .scrolls = context->scrolls,
     };
     muiSizingInput sizingInput = muiRootInput(&context->layout[root - 1].style,
                                               input->availableWidth, input->availableHeight);
@@ -153,6 +160,14 @@ muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayou
     {
         muiTreeMark(&context->tree, root, mui_stagePaint);
     }
+    // Virtual lists measure and place their items and size their content;
+    // steps easing move to now, within the limits that leaves; the lists
+    // find their windows where scrolling left them.
+    muiVirtualPlace(context, root);
+    muiScrollAdvance(context, input->timeNs);
+    muiVirtualWindows(context, root);
+    // Popups go beside their anchors where layout and scrolling left them.
+    muiPlacePopups(context, root);
     return mui_success;
 }
 
@@ -167,5 +182,6 @@ bool muiIsUpdatePending(const muiContext* context, muiNodeId rootId)
     uint32_t slot = context != nullptr ? muiTreeResolve(&context->tree, rootId) : 0;
     return slot != 0 && ((muiTreeAt(&context->tree, slot)->dirty.subtree &
                           (mui_stageStyle | mui_stageLayout)) != 0 ||
-                         muiIsAnimatingUnder(&context->animations, &context->tree, slot));
+                         muiIsAnimatingUnder(&context->animations, &context->tree, slot) ||
+                         muiScrollIsEasingUnder(context, slot));
 }

@@ -23,6 +23,18 @@ option(MAUL_UI_SANITIZE "Instrument with AddressSanitizer and UBSan" OFF)
 option(MAUL_UI_TSAN "Instrument with ThreadSanitizer" OFF)
 option(MAUL_UI_COVERAGE "Instrument for gcov coverage" OFF)
 option(MAUL_UI_TEXT "Build the text component: fonts, shaping and paragraphs (record mui-0006)" ON)
+option(MAUL_UI_ACCESS_TREE
+    "Build the accessibility tree's consumer, which platform adapters read (record mui-0008)" ON)
+if(WIN32)
+    option(MAUL_UI_UIA "Build the UI Automation adapter (record mui-0008)" ON)
+else()
+    set(MAUL_UI_UIA OFF)
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    option(MAUL_UI_ATSPI "Build the AT-SPI adapter (record mui-0008)" ON)
+else()
+    set(MAUL_UI_ATSPI OFF)
+endif()
 option(MAUL_UI_TEXT_SYSTEM_LIBRARIES
     "Link the installed FreeType and HarfBuzz instead of building the pinned releases" OFF)
 
@@ -62,7 +74,20 @@ add_library(maul-ui ${MAUL_LIBRARY_KIND}
     src/flex_resolve.c
     src/hit.c
     src/inherit.c
+    src/event.c
+    src/focus.c
     src/layer.c
+    src/navigate.c
+    src/pointer.c
+    src/exit.c
+    src/popup.c
+    src/virtual.c
+    src/virtual_edit.c
+    src/access.c
+    src/access_build.c
+    src/access_action.c
+    src/range.c
+    src/scroll.c
     src/layout.c
     src/motion_math.c
     src/node.c
@@ -93,6 +118,33 @@ endif()
 if(MAUL_UI_TEXT)
     include(cmake/Text.cmake)
 endif()
+if(MAUL_UI_ACCESS_TREE)
+    target_sources(maul-ui PRIVATE src/access_apply.c src/access_tree.c src/access_view.c
+                                   src/id_map.c)
+endif()
+if(MAUL_UI_ATSPI)
+    if(NOT MAUL_UI_ACCESS_TREE)
+        message(FATAL_ERROR "The AT-SPI adapter reads the accessibility tree: set MAUL_UI_ACCESS_TREE")
+    endif()
+    # libdbus-1 is opened at run time; dlopen is in libdl before glibc 2.34.
+    target_sources(maul-ui PRIVATE src/atspi_app.c src/atspi_component.c src/atspi_objects.c
+                                   src/atspi_properties.c src/atspi_roles.c src/dbus_api.c)
+    target_link_libraries(maul-ui PUBLIC ${CMAKE_DL_LIBS})
+    if(CMAKE_DL_LIBS)
+        string(APPEND MAUL_PKG_LIBS_PRIVATE " -l${CMAKE_DL_LIBS}")
+    endif()
+endif()
+if(MAUL_UI_UIA)
+    if(NOT MAUL_UI_ACCESS_TREE)
+        message(FATAL_ERROR "The UI Automation adapter reads the accessibility tree: set MAUL_UI_ACCESS_TREE")
+    endif()
+    # UI Automation's own functions are loaded at run time, as MinGW has
+    # no import library of them; COM's come from ole32 and oleaut32.
+    target_sources(maul-ui PRIVATE src/uia_adapter.c src/uia_events.c src/uia_node.c
+                                   src/uia_patterns.c src/uia_props.c src/uia_values.c)
+    target_link_libraries(maul-ui PUBLIC ole32 oleaut32)
+    set(MAUL_PKG_LIBS_PRIVATE "-lole32 -loleaut32")
+endif()
 
 if(MAUL_UI_BUILD_TESTS)
     enable_testing()
@@ -101,6 +153,33 @@ if(MAUL_UI_BUILD_TESTS)
     maul_add_test(context WHITEBOX)
     maul_add_test(draw)
     maul_add_test(interaction)
+    maul_add_test(pointer)
+    maul_add_test(focus)
+    maul_add_test(navigate)
+    maul_add_test(event)
+    maul_add_test(scroll)
+    maul_add_test(wheel)
+    maul_add_test(scroll_keys)
+    maul_add_test(drag)
+    maul_add_test(range)
+    maul_add_test(popup)
+    maul_add_test(exit)
+    maul_add_test(virtual)
+    maul_add_test(access)
+    if(MAUL_UI_ACCESS_TREE)
+        maul_add_test(access_tree)
+        maul_add_test(id_map WHITEBOX)
+    endif()
+    if(MAUL_UI_ATSPI)
+        # On a private bus, the test playing the registry and the client.
+        maul_add_test(atspi WHITEBOX POSIX)
+    endif()
+    if(MAUL_UI_UIA)
+        # Driven through IUIAutomation from a second thread.
+        maul_add_test(uia WHITEBOX)
+        target_link_libraries(test_uia PRIVATE user32 ole32 oleaut32 uuid)
+    endif()
+    maul_add_test(pan)
     maul_add_test(layout)
     maul_add_test(layout_fixtures)
     maul_add_test(motion WHITEBOX)
@@ -189,5 +268,13 @@ if(MAUL_UI_TEXT)
 endif()
 
 if(MAUL_UI_INSTALL)
+    # Without the text component its headers would declare functions the
+    # library lacks (cmake/Install.cmake's MAUL_PUBLIC_HEADERS).
+    if(NOT MAUL_UI_TEXT)
+        file(GLOB MAUL_PUBLIC_HEADERS RELATIVE ${PROJECT_SOURCE_DIR}/include/maul-ui
+             ${PROJECT_SOURCE_DIR}/include/maul-ui/*.h)
+        list(REMOVE_ITEM MAUL_PUBLIC_HEADERS font.h glyph_atlas.h glyph_image.h text.h
+             text_block.h text_edit.h)
+    endif()
     include(cmake/Install.cmake)
 endif()

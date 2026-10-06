@@ -409,6 +409,16 @@ muiResult muiTextBlock_GetText(const muiTextService* service, muiTextBlockId blo
     return mui_success;
 }
 
+bool muiAccessTextOf(void* user, muiNodeId nodeId, uint64_t hostKey, const char** textOut,
+                     size_t* lengthOut)
+{
+    (void)nodeId;
+    const muiTextHost* host = user;
+    const muiTextBlockId blockId = {(uint32_t)hostKey, (uint32_t)(hostKey >> 32)};
+    return host != nullptr &&
+           muiTextBlock_GetText(host->service, blockId, textOut, lengthOut) == mui_success;
+}
+
 uint64_t muiTextBlock_GetKey(muiTextBlockId blockId)
 {
     return (uint64_t)blockId.generation << 32 | blockId.index1;

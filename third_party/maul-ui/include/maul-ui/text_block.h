@@ -238,6 +238,23 @@ extern "C"
                               float height, muiDrawSink* sink);
 
     /// Returns the baseline of a text block's first line, as a
+    /// maul-ui/access.h's muiAccessTextFunction: user is a muiTextHost,
+    /// and hostKey a block's key. The block's text, which the record
+    /// leaves out when it is not well-formed UTF-8.
+    ///
+    /// @param user       A muiTextHost.
+    /// @param nodeId     The node.
+    /// @param hostKey    The block's key.
+    /// @param textOut    Receives the text, valid until the block is
+    ///                   edited or destroyed.
+    /// @param lengthOut  Receives its length.
+    /// @return Whether the key names a block.
+    /// @par Thread safety
+    /// Safe from any thread; the service and context are used by one
+    /// thread at a time.
+    MUI_API bool muiAccessTextOf(void* user, muiNodeId nodeId, uint64_t hostKey,
+                                 const char** textOut, size_t* lengthOut);
+
     /// muiBaselineFunction: user is a muiTextHost, and hostKey a block's
     /// key. Lines are a line height apart from the content box's top, so
     /// the first baseline does not depend on the width.

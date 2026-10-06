@@ -27,7 +27,7 @@ void muiNoteLayer(muiContext* context, uint32_t slot, muiLayerKind before);
 // it.
 static inline bool muiIsLayerRoot(const muiTree* tree, uint32_t slot)
 {
-    return muiTreeAt(tree, slot)->apart;
+    return (muiTreeAt(tree, slot)->flags & MUI_TREE_APART) != 0;
 }
 
 // The slot of the layer at a place from the bottom, or 0 when the node

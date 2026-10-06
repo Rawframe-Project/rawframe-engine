@@ -55,8 +55,36 @@ extern "C"
         mui_layerOverlay = 3,
     };
 
+    // Where an exiting node (maul-ui/exit.h) stays in its parent's layout.
+    typedef uint8_t muiExitLayout;
+
+    enum
+    {
+        // In its place until it is destroyed: its siblings move then.
+        mui_exitKeep = 0,
+        // Out of its parent's flow at once, at its last rectangle, so its
+        // siblings close up while it plays out (Motion's popLayout).
+        mui_exitPop = 1,
+    };
+
+    // Whether a node takes a player's focus, and how.
+    typedef uint8_t muiFocusMode;
+
+    enum
+    {
+        // Never.
+        mui_focusNone = 0,
+        // By a pointer press and by code, but sequential navigation passes
+        // it over: the web's tabindex -1.
+        mui_focusPointer = 1,
+        // Also by sequential navigation.
+        mui_focusAll = 2,
+    };
+
     // A node's interaction values. Every field is a property
-    // (mui_propertyHitMode, mui_propertyPassThrough, mui_propertyLayer),
+    // (mui_propertyHitMode, mui_propertyPassThrough, mui_propertyLayer,
+    // mui_propertyFocusMode, mui_propertyTabOrder, mui_propertyDrags,
+    // mui_propertyAccepts, mui_propertyExitLayout),
     // set like any other through classes, states and direct writes, and
     // not inherited.
     typedef struct muiInteractionStyle
@@ -74,9 +102,28 @@ extern "C"
         // layers limit: a node that becomes a layer past it stays in its
         // parent's layer until its kind changes again.
         muiLayerKind layer;
+        // Disabled and exiting nodes take no focus whatever their mode.
+        muiFocusMode focusMode;
+        // Where sequential navigation reaches the node: 0 in tree order,
+        // after every node of 1 to 255, which come first, ascending, ties
+        // in tree order.
+        uint8_t tabOrder;
+        // Whether a press on the node, or below it where no nearer node
+        // takes drags, becomes a drag once it moves past the drag
+        // threshold (maul-ui/pointer.h).
+        bool drags;
+        // The kinds of thing dropped on the node it takes: a drag offering
+        // a kind in this mask (muiPointer_Offer) over the node, or over a
+        // node below it that takes none of that kind, may drop here. The
+        // bits are the application's; 0 takes nothing.
+        uint32_t accepts;
+        // Where the node stays in layout while it exits, read when its
+        // exit begins.
+        muiExitLayout exitLayout;
     } muiInteractionStyle;
 
-    /// Returns the default interaction values: hit in full, blocking.
+    /// Returns the default interaction values: hit in full, blocking, no
+    /// layer, taking no focus.
     ///
     /// @return The values.
     /// @par Thread safety
@@ -90,7 +137,7 @@ extern "C"
     /// @param styleId  The class.
     /// @param variant  The variant.
     /// @param values   The values; only the fields mask names are read: a
-    ///                 known hit mode and layer kind.
+    ///                 known hit mode, layer kind and focus mode.
     /// @param mask     The properties, within MUI_INTERACTION_PROPERTIES.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id, an unknown variant or property bit, a value outside

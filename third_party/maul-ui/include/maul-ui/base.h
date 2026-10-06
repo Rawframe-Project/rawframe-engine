@@ -38,8 +38,10 @@ extern "C"
 
 // MUI_NODISCARD marks a function whose result must be read: every
 // function that returns a status. The attribute is standard in C23 and
-// C++17 and left out for older dialects.
-#if defined(__cplusplus) && __cplusplus >= 201703L
+// C++17 and left out for older dialects. MSVC keeps __cplusplus at
+// 199711L unless /Zc:__cplusplus is given, so _MSVC_LANG is read too.
+#if (defined(__cplusplus) && __cplusplus >= 201703L) ||                                            \
+    (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
 #define MUI_NODISCARD [[nodiscard]]
 #elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
 #define MUI_NODISCARD [[nodiscard]]
@@ -69,6 +71,10 @@ extern "C"
         // Data is damaged, or in a format the call does not take, such as
         // a font that fails validation or a compressed web font.
         mui_errorFormat = -4,
+        // The platform refused: a call of its failed, or its state does
+        // not allow the call, such as a thread outside the apartment the
+        // platform requires.
+        mui_errorPlatform = -5,
     };
 
     // The allocator an owner object takes in its def and keeps for its

@@ -53,6 +53,31 @@ extern "C"
         uint32_t drawGlyphs;
         // Nodes that root a layer at once.
         uint32_t layers;
+        // Pointers known at once (at most 32), and pointer records
+        // waiting to be taken; past it, they are counted in a
+        // mui_pointerRecordDropped record.
+        uint32_t pointers;
+        uint32_t pointerRecords;
+        // Directional navigation links (muiNode_SetNeighbor) at once.
+        uint32_t neighbors;
+        // The transforms a draw list holds, the identity aside: one per
+        // scroll container painted.
+        uint32_t drawTransforms;
+        // Nodes that are ranges (muiNode_SetValueRange) at once.
+        uint32_t ranges;
+        // Nodes that are popups (muiNode_SetPopup) at once.
+        uint32_t popups;
+        // Nodes exiting (muiNode_BeginExit) at once.
+        uint32_t exits;
+        // Virtual lists at once (muiNode_SetVirtualList), and the items
+        // of estimated lists together, each list taking its count.
+        uint32_t virtualLists;
+        uint32_t virtualItems;
+        // Nodes with accessibility data from the host at once (a role,
+        // texts or flags), and roots building accessibility updates at
+        // once (maul-ui/access.h).
+        uint32_t accessNodes;
+        uint32_t accessRoots;
     } muiLimits;
 
     // How a context is made. Build it with muiDefaultContextDef.
@@ -67,7 +92,8 @@ extern "C"
     /// types, 1,024 property sets, 64 notifications, 64 transitions, 256
     /// running transitions, 256 tokens, 1,024 token names, 16 themes, 512
     /// theme overrides, draw lists of 8,192 commands, 256 clips, 256
-    /// gradients and 16,384 glyphs, 64 layers, and the C library's
+    /// gradients and 16,384 glyphs, 64 layers, 16 popups, 64 exits, 8 virtual lists of
+    /// 16,384 estimated items together, and the C library's
     /// allocator.
     ///
     /// @return The def, with a valid cookie.
@@ -110,6 +136,24 @@ extern "C"
         mui_notificationOscillation = 1,
         // count notifications were dropped here, past the limit.
         mui_notificationDropped = 2,
+        // A player's focus came to the node, or left it; count is the
+        // player.
+        mui_notificationFocusGained = 3,
+        mui_notificationFocusLost = 4,
+        // Input changed a range's value (maul-ui/range.h).
+        mui_notificationRangeChanged = 5,
+        // A popup should close (maul-ui/popup.h); count is the reason, a
+        // muiDismissReason.
+        mui_notificationPopupDismissed = 6,
+        // The node's exit (maul-ui/exit.h) has no transition running in
+        // its subtree any more.
+        mui_notificationExitFinished = 7,
+        // The window of a virtual list's items that should exist changed
+        // (maul-ui/virtual.h).
+        mui_notificationWindowChanged = 8,
+        // Assistive technology asked the node to do what the host does
+        // (maul-ui/access.h); count is the muiAccessAction.
+        mui_notificationAccessAction = 9,
     };
 
     // A record of something the host learns after the call that caused
@@ -119,7 +163,8 @@ extern "C"
         muiNotificationKind kind;
         // The node it is about; the null id for mui_notificationDropped.
         muiNodeId nodeId;
-        // For mui_notificationDropped, how many were dropped.
+        // For mui_notificationDropped, how many were dropped; for focus,
+        // the player; for a popup, the reason.
         uint32_t count;
     } muiNotification;
 

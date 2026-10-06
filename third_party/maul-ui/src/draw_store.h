@@ -25,7 +25,9 @@ typedef struct muiDrawRange
 // relative to its parent, its origin on the surface, the opacity it was
 // painted in, and the spans of the tables its subtree filled; and,
 // during the build that paints it, the clip and opacity it passes to its
-// children. A copied node's are not set, as its children are not visited.
+// children; the transform its commands go through and the one its
+// children's do, a scroll container's own (record mui-0007). A copied
+// node's clip and opacity are not set, as its children are not visited.
 typedef struct muiPaintState
 {
     uint64_t build;
@@ -35,9 +37,12 @@ typedef struct muiPaintState
     uint32_t clip;
     float opacity;
     float inherited;
+    uint32_t transform;
+    uint32_t inner;
     muiDrawRange commands;
     muiDrawRange clips;
     muiDrawRange gradients;
+    muiDrawRange transforms;
 } muiPaintState;
 
 // One list's tables. Entry 0 of the clips and gradients is the
@@ -48,10 +53,16 @@ typedef struct muiDrawTables
     muiDrawClip* clips;
     muiDrawGradient* gradients;
     muiGlyph* glyphs;
+    // Entry 0 is the identity; each other is a scroll container's (its
+    // owner's slot), a translation by its offset after its parent entry's.
+    muiDrawTransform* transforms;
+    uint32_t* transformOwners;
+    uint32_t* transformParents;
     uint32_t commandCount;
     uint32_t clipCount;
     uint32_t gradientCount;
     uint32_t glyphCount;
+    uint32_t transformCount;
 } muiDrawTables;
 
 typedef struct muiDrawStore
@@ -65,11 +76,11 @@ typedef struct muiDrawStore
     uint32_t clipCapacity;
     uint32_t gradientCapacity;
     uint32_t glyphCapacity;
+    uint32_t transformCapacity;
     // The root slot of the shown list. Its header's scale is 0 when there
     // is no list to take from: none was built yet, or the last build
     // failed.
     uint32_t rootIndex;
-    muiDrawTransform identity;
     // Per node, parallel to the tree's slots.
     muiPaintState* states;
 } muiDrawStore;

@@ -89,6 +89,7 @@ static void MarkSubtree(muiTree* tree, uint32_t node, muiStages stages)
 
 void muiTreeMark(muiTree* tree, uint32_t node, muiStages stages)
 {
+    stages |= mui_stageAccess;
     muiTreeAt(tree, node)->dirty.request |= stages;
     MarkSubtree(tree, node, stages);
 }
@@ -111,6 +112,16 @@ void muiTreeMarkLayout(muiTree* tree, uint32_t node)
     if (parent != 0)
     {
         muiTreeMark(tree, parent, mui_stageLayout | mui_stagePaint);
+    }
+}
+
+void muiTreeMarkWithChildren(muiTree* tree, uint32_t node, muiStages stages)
+{
+    muiTreeMark(tree, node, stages);
+    for (uint32_t c = muiTreeAt(tree, node)->links.firstChild; c != 0;
+         c = muiTreeAt(tree, c)->links.next)
+    {
+        muiTreeMark(tree, c, stages);
     }
 }
 
@@ -260,6 +271,24 @@ uint32_t muiTreeNextOwing(const muiTree* tree, uint32_t root, uint32_t at, muiSt
         if (sibling != 0)
         {
             return sibling;
+        }
+    }
+    return 0;
+}
+
+uint32_t muiTreeNextIn(const muiTree* tree, uint32_t root, uint32_t at)
+{
+    uint32_t child = muiTreeAt(tree, at)->links.firstChild;
+    if (child != 0)
+    {
+        return child;
+    }
+    for (uint32_t node = at; node != root; node = muiTreeAt(tree, node)->links.parent)
+    {
+        uint32_t next = muiTreeAt(tree, node)->links.next;
+        if (next != 0)
+        {
+            return next;
         }
     }
     return 0;

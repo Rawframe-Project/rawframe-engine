@@ -36,9 +36,9 @@ typedef struct Build
     muiPaintState top;
 } Build;
 
-// Where a copied subtree's indices land: its own clips and gradients
-// move by the difference of their first entries, and the clip it was
-// painted in becomes the one it is painted in now.
+// Where a copied subtree's indices land: its own clips, gradients and
+// transforms move by the difference of their first entries, and the clip
+// and transform it was painted in become those it is painted in now.
 typedef struct Renumbering
 {
     muiDrawRange clips;
@@ -46,13 +46,26 @@ typedef struct Renumbering
     uint32_t entryClip;
     muiDrawRange gradients;
     uint32_t gradientBase;
+    muiDrawRange transforms;
+    uint32_t transformBase;
+    uint32_t entryTransform;
 } Renumbering;
+
+// An index of a span moved to base, or entry for one outside the span.
+static uint32_t Moved(muiDrawRange own, uint32_t base, uint32_t entry, uint32_t index)
+{
+    return index >= own.first && index < own.end ? index - own.first + base : entry;
+}
 
 static uint32_t ClipOf(const Renumbering* renumbering, uint32_t clip)
 {
-    const muiDrawRange* own = &renumbering->clips;
-    return clip >= own->first && clip < own->end ? clip - own->first + renumbering->clipBase
-                                                 : renumbering->entryClip;
+    return Moved(renumbering->clips, renumbering->clipBase, renumbering->entryClip, clip);
+}
+
+static uint32_t TransformOf(const Renumbering* renumbering, uint32_t transform)
+{
+    return Moved(renumbering->transforms, renumbering->transformBase, renumbering->entryTransform,
+                 transform);
 }
 
 // Whether a node's subtree can be taken from the last list.
@@ -80,6 +93,7 @@ static bool CopyCommands(Build* build, const muiPaintState* old, const Renumberi
         muiDrawCommand* command = &to->commands[to->commandCount++];
         memcpy(command, &from->commands[i], sizeof *command);
         command->clip = ClipOf(renumbering, command->clip);
+        command->transform = TransformOf(renumbering, command->transform);
         if (command->kind == mui_drawBox && command->box.gradient != 0)
         {
             command->box.gradient =
@@ -102,6 +116,13 @@ static bool CopyCommands(Build* build, const muiPaintState* old, const Renumberi
         muiDrawClip* clip = &to->clips[to->clipCount++];
         memcpy(clip, &from->clips[i], sizeof *clip);
         clip->parent = ClipOf(renumbering, clip->parent);
+        clip->transform = TransformOf(renumbering, clip->transform);
+    }
+    for (uint32_t i = old->transforms.first; i < old->transforms.end; i++)
+    {
+        uint32_t at = to->transformCount++;
+        to->transformOwners[at] = from->transformOwners[i];
+        to->transformParents[at] = TransformOf(renumbering, from->transformParents[i]);
     }
     uint32_t gradients = old->gradients.end - old->gradients.first;
     memcpy(&to->gradients[to->gradientCount], &from->gradients[old->gradients.first],
@@ -144,6 +165,11 @@ static void Renumber(Build* build, uint32_t node, const muiPaintState* old,
             Shift(&state->commands, old->commands.first, now->commands.first);
             Shift(&state->clips, old->clips.first, now->clips.first);
             Shift(&state->gradients, old->gradients.first, now->gradients.first);
+            state->transform =
+                Moved(old->transforms, now->transforms.first, now->transform, state->transform);
+            state->inner =
+                Moved(old->transforms, now->transforms.first, now->transform, state->inner);
+            Shift(&state->transforms, old->transforms.first, now->transforms.first);
         }
         // The next node in preorder below node.
         if (!apart && muiTreeAt(tree, at)->links.firstChild != 0)
@@ -159,25 +185,32 @@ static void Renumber(Build* build, uint32_t node, const muiPaintState* old,
     }
 }
 
-// Takes a node's subtree, painted in entryClip now, from the last list
-// into state; false when it does not fit.
-static bool Copy(Build* build, uint32_t node, muiPaintState* state, uint32_t entryClip)
+// Takes a node's subtree, painted in entryClip and through
+// entryTransform now, from the last list into state; false when it does
+// not fit.
+static bool Copy(Build* build, uint32_t node, muiPaintState* state, uint32_t entryClip,
+                 uint32_t entryTransform)
 {
     const muiPaintState old = *state;
     muiDrawTables* to = build->painter.out;
     muiPainter* painter = &build->painter;
     if (old.commands.end - old.commands.first > painter->commandCapacity - to->commandCount ||
         old.clips.end - old.clips.first > painter->clipCapacity - to->clipCount ||
-        old.gradients.end - old.gradients.first > painter->gradientCapacity - to->gradientCount)
+        old.gradients.end - old.gradients.first > painter->gradientCapacity - to->gradientCount ||
+        old.transforms.end - old.transforms.first > painter->transformCapacity - to->transformCount)
     {
         painter->full = true;
         return false;
     }
-    const Renumbering renumbering = {old.clips, to->clipCount, entryClip, old.gradients,
-                                     to->gradientCount};
+    const Renumbering renumbering = {old.clips,          to->clipCount,     entryClip,
+                                     old.gradients,      to->gradientCount, old.transforms,
+                                     to->transformCount, entryTransform};
     state->commands = (muiDrawRange){to->commandCount, 0};
     state->clips = (muiDrawRange){to->clipCount, 0};
     state->gradients = (muiDrawRange){to->gradientCount, 0};
+    state->transforms = (muiDrawRange){to->transformCount, 0};
+    state->transform = entryTransform;
+    state->inner = TransformOf(&renumbering, old.inner);
     if (!CopyCommands(build, &old, &renumbering))
     {
         return false;
@@ -185,6 +218,7 @@ static bool Copy(Build* build, uint32_t node, muiPaintState* state, uint32_t ent
     state->commands.end = to->commandCount;
     state->clips.end = to->clipCount;
     state->gradients.end = to->gradientCount;
+    state->transforms.end = to->transformCount;
     state->build = build->build;
     Renumber(build, node, &old, state);
     return true;
@@ -203,10 +237,11 @@ static bool Visit(Build* build, const muiPaintState* top, uint32_t root, uint32_
     float x = above->x + rect->x;
     float y = above->y + rect->y;
     uint32_t clip = above->clip;
+    uint32_t transform = above->inner;
     float inherited = above->opacity;
     if (CanCopy(build, at, state, x, y, inherited))
     {
-        (void)Copy(build, at, state, clip);
+        (void)Copy(build, at, state, clip, transform);
         return false;
     }
     // Field by field: a whole struct built on the stack and copied stalls
@@ -222,6 +257,9 @@ static bool Visit(Build* build, const muiPaintState* top, uint32_t root, uint32_
     state->commands = (muiDrawRange){out->commandCount, 0};
     state->clips = (muiDrawRange){out->clipCount, 0};
     state->gradients = (muiDrawRange){out->gradientCount, 0};
+    state->transform = transform;
+    state->inner = transform;
+    state->transforms = (muiDrawRange){out->transformCount, 0};
     if (!muiPaintNode(&build->painter, at, state))
     {
         return false;
@@ -241,6 +279,7 @@ static void Leave(Build* build, uint32_t at)
     state->commands.end = out->commandCount;
     state->clips.end = out->clipCount;
     state->gradients.end = out->gradientCount;
+    state->transforms.end = out->transformCount;
 }
 
 // The first of a node and its next siblings that roots no layer, or 0.
@@ -318,6 +357,11 @@ static uint32_t NextLayer(Build* build, uint32_t root, uint32_t* place)
         if (layer != 0 && layer != root && muiTreeIsAncestor(&context->tree, root, layer))
         {
             ParentOrigin(context, root, layer, &build->top.x, &build->top.y);
+            // Through the transform its parent's children are, so that it
+            // scrolls with them; a parent not painted yet has none.
+            const muiPaintState* parent =
+                &build->store->states[muiTreeAt(&context->tree, layer)->links.parent - 1];
+            build->top.inner = parent->build == build->build ? parent->inner : 0;
             return layer;
         }
     }
@@ -342,6 +386,24 @@ static void Empty(muiDrawTables* tables)
     tables->clipCount = 1;
     tables->gradientCount = 1;
     tables->glyphCount = 0;
+    tables->transformCount = 1;
+}
+
+// Gives each scroll container's transform its value: its parent entry's,
+// translated by the container's offset, logical x leftward under right
+// to left, rounded to device pixels so that snapped edges stay snapped.
+static void SetTransforms(const muiContext* context, muiDrawTables* tables, float scale)
+{
+    for (uint32_t i = 1; i < tables->transformCount; i++)
+    {
+        uint32_t owner = tables->transformOwners[i];
+        const muiScrollState* scroll = &context->scrolls[owner - 1];
+        const muiLayoutNode* layout = &context->layout[owner - 1];
+        muiDrawTransform value = tables->transforms[tables->transformParents[i]];
+        value.e += roundf(muiScrollShiftX(layout, scroll) * scale) / scale;
+        value.f += roundf(muiScrollShiftY(layout, scroll) * scale) / scale;
+        tables->transforms[i] = value;
+    }
 }
 
 // Whether the last list stands for this build: of this root, surface and
@@ -375,6 +437,14 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
     muiDrawStore* store = &context->draw;
     if (IsUnchanged(store, &context->tree, root, input))
     {
+        // Scrolling alone moves the transforms: a list of its own, the same
+        // commands.
+        if (context->scrolled)
+        {
+            SetTransforms(context, &store->tables[store->current], input->scale);
+            store->header.generation++;
+            context->scrolled = false;
+        }
         return mui_success;
     }
     // Spans are taken only at the origin and opacity they were painted
@@ -392,6 +462,7 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
     build.painter.clipCapacity = store->clipCapacity;
     build.painter.gradientCapacity = store->gradientCapacity;
     build.painter.glyphCapacity = store->glyphCapacity;
+    build.painter.transformCapacity = store->transformCapacity;
     build.painter.paint = input->paint;
     build.painter.paintUser = input->paintUser;
     build.painter.scale = input->scale;
@@ -422,6 +493,8 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
         .scale = input->scale,
     };
     store->rootIndex = root;
+    SetTransforms(context, build.painter.out, input->scale);
+    context->scrolled = false;
     (void)muiTreeSweep(&context->tree, root, mui_stagePaint);
     return mui_success;
 }
@@ -440,8 +513,8 @@ muiResult muiGetDrawList(const muiContext* context, muiDrawList* listOut)
         .commandCount = tables->commandCount,
         .clipCount = tables->clipCount,
         .clips = tables->clips,
-        .transforms = &store->identity,
-        .transformCount = 1,
+        .transforms = tables->transforms,
+        .transformCount = tables->transformCount,
         .gradientCount = tables->gradientCount,
         .gradients = tables->gradients,
         .glyphs = tables->glyphs,

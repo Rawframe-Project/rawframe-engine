@@ -46,7 +46,18 @@ muiContextDef muiDefaultContextDef(void)
                    .drawClips = 256,
                    .drawGradients = 256,
                    .drawGlyphs = 16384,
-                   .layers = 64},
+                   .layers = 64,
+                   .pointers = 16,
+                   .pointerRecords = 64,
+                   .neighbors = 256,
+                   .drawTransforms = 64,
+                   .ranges = 64,
+                   .popups = 16,
+                   .exits = 64,
+                   .virtualLists = 8,
+                   .virtualItems = 16384,
+                   .accessNodes = 512,
+                   .accessRoots = 4},
     };
 }
 
@@ -59,7 +70,13 @@ static bool AreLimitsValid(const muiLimits* limits)
            limits->tokenNames <= MAX_SLOTS && limits->themes <= MAX_SLOTS &&
            limits->themeOverrides <= MAX_SLOTS && limits->drawCommands <= MAX_SLOTS &&
            limits->drawClips < MAX_SLOTS && limits->drawGradients < MAX_SLOTS &&
-           limits->drawGlyphs <= MAX_SLOTS && limits->layers <= MAX_SLOTS;
+           limits->drawGlyphs <= MAX_SLOTS && limits->layers <= MAX_SLOTS &&
+           limits->pointers <= MUI_MAX_POINTERS && limits->pointerRecords <= MAX_SLOTS &&
+           limits->neighbors <= MAX_SLOTS && limits->drawTransforms < MAX_SLOTS &&
+           limits->ranges <= MAX_SLOTS && limits->popups <= MAX_SLOTS &&
+           limits->exits <= MAX_SLOTS && limits->virtualLists <= MAX_SLOTS &&
+           limits->virtualItems <= MAX_SLOTS && limits->accessNodes <= MAX_SLOTS &&
+           limits->accessRoots <= MAX_SLOTS;
 }
 
 // Where each part of the context's block starts.
@@ -71,6 +88,7 @@ typedef struct Parts
     size_t text;
     size_t textRecords;
     size_t interaction;
+    size_t scrolls;
     size_t nodeStyles;
     size_t classSlots;
     size_t classes;
@@ -96,7 +114,23 @@ typedef struct Parts
     size_t drawClips;
     size_t drawGradients;
     size_t drawGlyphs;
+    size_t drawTransforms;
+    size_t drawTransformLinks;
+    size_t ranges;
+    size_t popups;
+    size_t exits;
+    size_t lists;
+    size_t listSizes;
+    size_t listSums;
+    size_t listItems;
     size_t layers;
+    size_t pointers;
+    size_t pointerRecords;
+    size_t neighbors;
+    size_t routes;
+    size_t accessEntries;
+    size_t accessEntryOf;
+    size_t accessRoots;
 } Parts;
 
 // A table per theme, an entry per token slot; a count past size_t marks
@@ -125,6 +159,7 @@ static Parts LayOut(muiLayout* layout, const muiLimits* limits)
         .text = muiLayoutAdd(layout, limits->nodes, sizeof(muiTextStyle), CACHE_LINE),
         .textRecords = muiLayoutAdd(layout, limits->nodes, sizeof(muiTextRecord), CACHE_LINE),
         .interaction = muiLayoutAdd(layout, limits->nodes, sizeof(muiInteractionStyle), CACHE_LINE),
+        .scrolls = muiLayoutAdd(layout, limits->nodes, sizeof(muiScrollState), CACHE_LINE),
         .nodeStyles = muiLayoutAdd(layout, limits->nodes, sizeof(muiNodeStyle), CACHE_LINE),
         .classSlots = muiLayoutAdd(layout, limits->styles, sizeof(muiPoolSlot), CACHE_LINE),
         .classes = muiLayoutAdd(layout, limits->styles, sizeof(muiStyleClass), CACHE_LINE),
@@ -160,7 +195,49 @@ static Parts LayOut(muiLayout* layout, const muiLimits* limits)
                                       sizeof(muiDrawGradient), CACHE_LINE),
         .drawGlyphs =
             muiLayoutAdd(layout, (size_t)limits->drawGlyphs * 2, sizeof(muiGlyph), CACHE_LINE),
+        .drawTransforms = muiLayoutAdd(layout, ((size_t)limits->drawTransforms + 1) * 2,
+                                       sizeof(muiDrawTransform), CACHE_LINE),
+        // Owners and parents, side by side.
+        .drawTransformLinks = muiLayoutAdd(layout, ((size_t)limits->drawTransforms + 1) * 4,
+                                           sizeof(uint32_t), CACHE_LINE),
+        .ranges = muiLayoutAdd(layout, limits->ranges, sizeof(muiRangeEntry), CACHE_LINE),
+        .popups = muiLayoutAdd(layout, limits->popups, sizeof(muiPopupEntry), CACHE_LINE),
+        .exits = muiLayoutAdd(layout, limits->exits, sizeof(muiExitEntry), CACHE_LINE),
+        .lists = muiLayoutAdd(layout, limits->virtualLists, sizeof(muiVirtualEntry), CACHE_LINE),
+        .listSizes = muiLayoutAdd(layout, limits->virtualItems, sizeof(float), CACHE_LINE),
+        .listSums = muiLayoutAdd(layout, limits->virtualItems, sizeof(double), CACHE_LINE),
+        .listItems = muiLayoutAdd(layout, limits->nodes, sizeof(uint32_t), CACHE_LINE),
         .layers = muiLayoutAdd(layout, limits->layers, sizeof(muiLayerEntry), CACHE_LINE),
+        .pointers = muiLayoutAdd(layout, limits->pointers, sizeof(muiPointer), CACHE_LINE),
+        .pointerRecords =
+            muiLayoutAdd(layout, limits->pointerRecords, sizeof(muiPointerRecord), CACHE_LINE),
+        .neighbors = muiLayoutAdd(layout, limits->neighbors, sizeof(muiNeighbor), CACHE_LINE),
+        .routes = muiLayoutAdd(layout, limits->nodes, sizeof(muiNodeId), CACHE_LINE),
+        .accessEntries =
+            muiLayoutAdd(layout, limits->accessNodes, sizeof(muiAccessEntry), CACHE_LINE),
+        .accessEntryOf = muiLayoutAdd(layout, limits->nodes, sizeof(uint32_t), CACHE_LINE),
+        .accessRoots = muiLayoutAdd(layout, limits->accessRoots, sizeof(muiAccessRoot), CACHE_LINE),
+    };
+}
+
+// Points the virtual lists' and accessibility's tables into the block.
+static void PlaceListsAndAccess(muiContext* context, unsigned char* base, const Parts* parts,
+                                const muiLimits* limits)
+{
+    context->lists = (muiVirtualStore){
+        .entries = (muiVirtualEntry*)(base + parts->lists),
+        .capacity = limits->virtualLists,
+        .sizes = (float*)(base + parts->listSizes),
+        .sums = (double*)(base + parts->listSums),
+        .itemCapacity = limits->virtualItems,
+        .items = (uint32_t*)(base + parts->listItems),
+    };
+    context->access = (muiAccessStore){
+        .entries = (muiAccessEntry*)(base + parts->accessEntries),
+        .capacity = limits->accessNodes,
+        .entryOf = (uint32_t*)(base + parts->accessEntryOf),
+        .roots = (muiAccessRoot*)(base + parts->accessRoots),
+        .rootCapacity = limits->accessRoots,
     };
 }
 
@@ -174,6 +251,7 @@ static void Place(muiContext* context, unsigned char* base, const Parts* parts,
     context->text = (muiTextStyle*)(base + parts->text);
     context->textRecords = (muiTextRecord*)(base + parts->textRecords);
     context->interaction = (muiInteractionStyle*)(base + parts->interaction);
+    context->scrolls = (muiScrollState*)(base + parts->scrolls);
     context->environment = muiDefaultEnvironment();
     muiStyleStore* style = &context->style;
     style->nodes = (muiNodeStyle*)(base + parts->nodeStyles);
@@ -208,6 +286,7 @@ static void Place(muiContext* context, unsigned char* base, const Parts* parts,
     draw->clipCapacity = limits->drawClips + 1;
     draw->gradientCapacity = limits->drawGradients + 1;
     draw->glyphCapacity = limits->drawGlyphs;
+    draw->transformCapacity = limits->drawTransforms + 1;
     for (uint32_t i = 0; i < 2; i++)
     {
         draw->tables[i] = (muiDrawTables){
@@ -216,12 +295,28 @@ static void Place(muiContext* context, unsigned char* base, const Parts* parts,
             .gradients =
                 (muiDrawGradient*)(base + parts->drawGradients) + i * draw->gradientCapacity,
             .glyphs = (muiGlyph*)(base + parts->drawGlyphs) + i * draw->glyphCapacity,
+            .transforms =
+                (muiDrawTransform*)(base + parts->drawTransforms) + i * draw->transformCapacity,
+            .transformOwners =
+                (uint32_t*)(base + parts->drawTransformLinks) + 2 * i * draw->transformCapacity,
+            .transformParents = (uint32_t*)(base + parts->drawTransformLinks) +
+                                (2 * i + 1) * draw->transformCapacity,
             .clipCount = 1,
             .gradientCount = 1,
+            .transformCount = 1,
         };
+        draw->tables[i].transforms[0] = (muiDrawTransform){1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
     }
-    draw->identity = (muiDrawTransform){1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+    muiScrollInit(&context->scrolling);
+    muiRangeInit(&context->ranges, (muiRangeEntry*)(base + parts->ranges), limits->ranges);
+    muiPopupInit(&context->popups, (muiPopupEntry*)(base + parts->popups), limits->popups);
+    muiExitInit(&context->exits, (muiExitEntry*)(base + parts->exits), limits->exits);
+    PlaceListsAndAccess(context, base, parts, limits);
     muiLayerInit(&context->layers, (muiLayerEntry*)(base + parts->layers), limits->layers);
+    muiEventInit(&context->events, (muiNodeId*)(base + parts->routes));
+    muiFocusInit(&context->focus, (muiNeighbor*)(base + parts->neighbors), limits->neighbors);
+    muiPointerInit(&context->pointers, (muiPointer*)(base + parts->pointers), limits->pointers,
+                   (muiPointerRecord*)(base + parts->pointerRecords), limits->pointerRecords);
 }
 
 muiResult muiCreateContext(const muiContextDef* def, muiContext** contextOut)
@@ -271,6 +366,7 @@ void muiDestroyContext(muiContext* context)
         return;
     }
     const muiAllocator allocator = context->allocator;
+    muiAccessRelease(&context->access, &allocator);
     muiRelease(&allocator, context, context->blockSize, alignof(max_align_t));
 }
 

@@ -45,6 +45,24 @@ static bool IsInside(float x, float y, float width, float height, muiCorners rad
     return true;
 }
 
+// Whether a point, from a box's top left, is in its rounded padding box:
+// the border box less the borders, its corners' radii less the wider
+// border at each.
+static bool IsInsidePadding(const muiLayoutNode* layout, float x, float y, muiCorners radii)
+{
+    const muiEdges* border = &layout->style.border;
+    float left = layout->rtl ? border->end : border->start;
+    float right = layout->rtl ? border->start : border->end;
+    const muiCorners inner = {
+        fmaxf(radii.topLeft - fmaxf(left, border->top), 0.0f),
+        fmaxf(radii.topRight - fmaxf(right, border->top), 0.0f),
+        fmaxf(radii.bottomRight - fmaxf(right, border->bottom), 0.0f),
+        fmaxf(radii.bottomLeft - fmaxf(left, border->bottom), 0.0f),
+    };
+    return IsInside(x - left, y - border->top, layout->rect.width - left - right,
+                    layout->rect.height - border->top - border->bottom, inner);
+}
+
 // One walk: the point, and the topmost node found so far with the point
 // in its border box.
 typedef struct Walk
@@ -71,15 +89,30 @@ static bool Visit(Walk* walk, uint32_t slot, double originX, double originY)
     float x = walk->x - (float)originX;
     float y = walk->y - (float)originY;
     muiRect rect = {0.0f, 0.0f, layout->rect.width, layout->rect.height};
-    bool inside =
-        IsInside(x, y, rect.width, rect.height, muiCornersOf(&visual->radius, rect, layout->rtl));
+    muiCorners radii = muiCornersOf(&visual->radius, rect, layout->rtl);
+    bool inside = IsInside(x, y, rect.width, rect.height, radii);
     if (inside && mode == mui_hitAuto)
     {
         walk->found = slot;
         walk->foundX = x;
         walk->foundY = y;
     }
+    if (layout->style.scrollAxes != mui_scrollNone)
+    {
+        // A scroll container's children are cut at its padding box.
+        return IsInsidePadding(layout, x, y, radii);
+    }
     return inside || !visual->clip;
+}
+
+static float ShiftX(const muiContext* context, uint32_t slot)
+{
+    return muiScrollShiftX(&context->layout[slot - 1], &context->scrolls[slot - 1]);
+}
+
+static float ShiftY(const muiContext* context, uint32_t slot)
+{
+    return muiScrollShiftY(&context->layout[slot - 1], &context->scrolls[slot - 1]);
 }
 
 // Walks a subtree from its parent's origin, leaving out the layers
@@ -94,11 +127,14 @@ static void WalkSubtree(Walk* walk, uint32_t root, double parentX, double parent
         double originX = parentX + (double)rect->x;
         double originY = parentY + (double)rect->y;
         const muiTreeNode* node = muiTreeAt(tree, at);
-        bool apart = at != root && muiIsLayerRoot(tree, at);
-        if (!apart && Visit(walk, at, originX, originY) && node->links.firstChild != 0)
+        // Layers are walked apart; exiting nodes take no input.
+        bool skip =
+            (at != root && muiIsLayerRoot(tree, at)) || (node->flags & MUI_TREE_EXITING) != 0;
+        if (!skip && Visit(walk, at, originX, originY) && node->links.firstChild != 0)
         {
-            parentX = originX;
-            parentY = originY;
+            // Children are where a scroll container moves them.
+            parentX = originX + (double)ShiftX(context, at);
+            parentY = originY + (double)ShiftY(context, at);
             at = node->links.firstChild;
             continue;
         }
@@ -106,15 +142,15 @@ static void WalkSubtree(Walk* walk, uint32_t root, double parentX, double parent
         while (at != root && muiTreeAt(tree, at)->links.next == 0)
         {
             at = muiTreeAt(tree, at)->links.parent;
-            parentX -= (double)context->layout[at - 1].rect.x;
-            parentY -= (double)context->layout[at - 1].rect.y;
+            parentX -= (double)ShiftX(context, at) + (double)context->layout[at - 1].rect.x;
+            parentY -= (double)ShiftY(context, at) + (double)context->layout[at - 1].rect.y;
         }
         at = at == root ? 0 : muiTreeAt(tree, at)->links.next;
     }
 }
 
-// The origin of a node's parent, its ancestors' places added up to the
-// root.
+// The origin of a node's parent's children: its ancestors' places and
+// shifts added up to the root.
 static void ParentOrigin(const muiContext* context, uint32_t root, uint32_t node, double* xOut,
                          double* yOut)
 {
@@ -124,8 +160,8 @@ static void ParentOrigin(const muiContext* context, uint32_t root, uint32_t node
     for (uint32_t at = node; at != root;)
     {
         at = muiTreeAt(tree, at)->links.parent;
-        x += (double)context->layout[at - 1].rect.x;
-        y += (double)context->layout[at - 1].rect.y;
+        x += (double)context->layout[at - 1].rect.x + (double)ShiftX(context, at);
+        y += (double)context->layout[at - 1].rect.y + (double)ShiftY(context, at);
     }
     *xOut = x;
     *yOut = y;
@@ -139,7 +175,8 @@ static bool WalkLayers(Walk* walk, uint32_t root, bool* blockedOut)
     for (uint32_t i = context->layers.count; i > 0; i--)
     {
         uint32_t layer = muiLayerAt(context, i - 1);
-        if (layer == 0 || layer == root || !muiTreeIsAncestor(&context->tree, root, layer))
+        if (layer == 0 || layer == root || !muiTreeIsAncestor(&context->tree, root, layer) ||
+            muiTreeIsExiting(&context->tree, layer))
         {
             continue;
         }

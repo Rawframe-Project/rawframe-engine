@@ -130,13 +130,19 @@ static float ContentMain(const Frame* frame, uint32_t child, muiMeasureMode mode
     return MainOf(frame, frame->solver->solve(frame->solver, child, &input, false));
 }
 
-// CSS Flexbox section 4.5: the smaller of the specified size and the
-// min-content size, each within the maximum. A size the aspect ratio
-// gives is not a specified size: the content wins over it, as CSS Sizing
-// 4 says for the ratio-dependent axis.
+// CSS Flexbox section 4.5: for any item but a scroll container, the
+// smaller of the specified size and the min-content size, each within
+// the maximum. A size the aspect ratio gives is not a specified size: the
+// content wins over it, as CSS Sizing 4 says for the ratio-dependent
+// axis.
 static float AutomaticMinimum(const Frame* frame, uint32_t child, const muiAxisSizing* main,
                               muiMeasureAxis cross)
 {
+    // A scroll container's is 0 (section 4.5): it shrinks and scrolls.
+    if (frame->solver->nodes[child - 1].style.scrollAxes != mui_scrollNone)
+    {
+        return 0.0f;
+    }
     float content = fminf(ContentMain(frame, child, mui_measureMinContent, cross), main->maximum);
     if (main->definite)
     {

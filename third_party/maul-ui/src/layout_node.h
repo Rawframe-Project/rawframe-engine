@@ -96,8 +96,9 @@ typedef struct muiLayoutNode
     muiRect rect;
     muiLayoutCache cache;
     muiFlexItemState item;
-    // style.placement.position == mui_positionAbsolute, kept beside item
-    // because every walk over a container's flex items reads it.
+    // style.placement.position == mui_positionAbsolute, or popped, kept
+    // beside item because every walk over a container's flex items reads
+    // it.
     bool absolute;
     // The direction the node was last laid out in: right to left when set.
     bool rtl;
@@ -111,6 +112,13 @@ typedef struct muiLayoutNode
     // between the two sizes here: layouts that give one of them do not
     // style it again, and any other size releases it.
     bool held;
+    // Set while the node exits popped (mui_exitPop): out of the flow at
+    // the rectangle it had. Here, in padding before heldSizes.
+    bool popped;
+    // Set while the node is bound to an item of a virtual list: out of
+    // the flow, stretched across the list, placed along it by
+    // src/virtual.c. In padding too.
+    bool listed;
     muiSize heldSizes[2];
 } muiLayoutNode;
 
@@ -127,7 +135,8 @@ static inline bool muiIsSameRect(muiRect a, muiRect b)
 // style changes.
 static inline void muiSyncLayoutNode(muiLayoutNode* node)
 {
-    node->absolute = node->style.placement.position == mui_positionAbsolute;
+    node->absolute =
+        node->style.placement.position == mui_positionAbsolute || node->popped || node->listed;
 }
 
 // The first child of a container that takes part in its flex layout, and
