@@ -10,12 +10,12 @@
 # how bright a patch of five by five pixels at the point was before the
 # mouse came and after, and whether it grew lighter by 8 or more of 255
 # (D422). A point followed by `:` and lower-case text has the text typed
-# after its click, a key at a time, then Return (D426); a dot, a minus, and
-# a space are typed as their keys. An argument `keys=` and X key names apart
-# by commas presses those keys alone, a third of a second apart, and waits a
-# second and a half after them (D430). Five seconds after, it stops the
-# program whose pid its pid file holds (D430), whose iterations only bound
-# it, and waits for the process it watches to end.
+# after its click, a key at a time, then Return (D426); a dot, a comma, a
+# minus, and a space are typed as their keys. An argument `keys=` and X key
+# names apart by commas presses those keys alone, a third of a second apart,
+# and waits a second and a half after them (D430). Five seconds after, it
+# stops the program whose pid its pid file holds (D430), whose iterations
+# only bound it, and waits for the process it watches to end.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...] [...]
@@ -36,7 +36,7 @@ class XImage(ctypes.Structure):
 
 
 # Characters typed whose X key names are words.
-KEYS = {".": "period", "-": "minus", " ": "space"}
+KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space"}
 
 
 def alive(pid):
