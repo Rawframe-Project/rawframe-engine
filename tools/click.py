@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# Clicks in a client's window as a user would (D421): once the client says
-# its player is admitted (its `bots_admitted` record) and the screen has
-# been lit for two seconds (a server started with a black root window, Xvfb
+# Clicks in a program's window as a user would (D421): once the program's
+# log holds the record that says it is ready (a client's `bots_admitted`,
+# Studio's `studio_shown`, D435) and the screen has been lit for two seconds (a server started with a black root window, Xvfb
 # -br), the mouse moves to each point given, in the window's pixels from its
 # top left (which is the screen's: no window manager runs), and its left
 # button is pressed there and let go, a second apart. XTest injects the
@@ -12,11 +12,11 @@
 # lower-case text has the text typed after its click, a key at a time,
 # then Return (D426). An argument `keys=` and X key names apart by commas
 # presses those keys alone, a third of a second apart, and waits a second
-# and a half after them (D430). Five seconds
-# after, it stops the client (D430), whose
-# iterations only bound it, and waits for play.sh to end.
+# and a half after them (D430). Five seconds after, it stops the program
+# whose pid its pid file holds (D430), whose iterations only bound it, and
+# waits for the process it watches to end.
 #
-# usage: click.py <play.sh pid> <play.sh work directory>
+# usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...] [...]
 
 import ctypes
@@ -42,14 +42,13 @@ def alive(pid):
     return True
 
 
-def admitted(pid, work):
-    """Waits until the client's log says its player is admitted, while
-    play.sh runs; whether it did."""
-    log = os.path.join(work, "bots-1.log")
+def ready(pid, log, code):
+    """Waits until the log holds the record `code`, while the watched
+    process runs; whether it did."""
     while alive(pid):
         try:
             with open(log, encoding="utf-8", errors="replace") as records:
-                if '"code":"bots_admitted"' in records.read():
+                if f'"code":"{code}"' in records.read():
                     return True
         except OSError:
             pass
@@ -57,10 +56,10 @@ def admitted(pid, work):
     return False
 
 
-def stop(work):
-    """Asks the client to stop, as a user closing it would."""
+def stop(pid_file):
+    """Asks the program to stop, as a user closing it would."""
     try:
-        with open(os.path.join(work, "bots-1.pid"), encoding="utf-8") as told:
+        with open(pid_file, encoding="utf-8") as told:
             os.kill(int(told.read().strip()), signal.SIGTERM)
     except (OSError, ValueError):
         pass
@@ -81,9 +80,11 @@ def brightness(x, display, root, at, y):
 
 def main():
     pid = int(sys.argv[1])
-    work = sys.argv[2]
+    log = sys.argv[2]
+    code = sys.argv[3]
+    pid_file = sys.argv[4]
     points = []
-    for argument in sys.argv[3:]:
+    for argument in sys.argv[5:]:
         if argument.startswith("keys="):
             points.append((None, None, argument[len("keys="):].split(",")))
             continue
@@ -109,8 +110,8 @@ def main():
     if not display:
         sys.exit("click.py: no X display")
     root = x.XDefaultRootWindow(display)
-    if not admitted(pid, work):
-        print("the client ended before its player was admitted")
+    if not ready(pid, log, code):
+        print(f"the program ended before it said {code}")
     lit = 0
     while alive(pid) and lit < 8:
         time.sleep(0.25)
@@ -164,7 +165,7 @@ def main():
             print(f"typed {text} at {at},{y}")
             time.sleep(1)
     time.sleep(5)
-    stop(work)
+    stop(pid_file)
     while alive(pid):
         time.sleep(0.25)
 

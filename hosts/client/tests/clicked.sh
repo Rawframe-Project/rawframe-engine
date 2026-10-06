@@ -19,7 +19,7 @@ trap 'rm -rf "$log" "$work"' EXIT
 RAWFRAME_PLAY_WORK="$work" bash "$here/../../bots/tests/play.sh" "$1" "$2" 0 1 36000 "$4" /dev/null "$3" \
     >"$log" 2>&1 &
 play=$!
-python3 "$here/click.py" "$play" "$work" "${@:5}"
+python3 "$here/../../../tools/click.py" "$play" "$work/bots-1.log" bots_admitted "$work/bots-1.pid" "${@:5}"
 wait "$play"
 status=$?
 if grep -q '"device_unavailable"' "$log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
