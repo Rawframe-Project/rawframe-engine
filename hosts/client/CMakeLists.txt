@@ -18,15 +18,15 @@ if(TARGET rawframe_render_canvas_gpu)
 endif()
 target_compile_definitions(rawframe_host_client PRIVATE RAWFRAME_CLIENT_DRAWS=$<BOOL:${RAWFRAME_CLIENT_DRAWS}>)
 
-# A window needs a display: an X server of its own, where xvfb-run can
-# start one.
-find_program(RAWFRAME_XVFB_RUN xvfb-run)
-if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
+# A window needs a display: an X server of its own, where Xvfb can start
+# one (tools/xvfb_run.sh, D428).
+find_program(RAWFRAME_XVFB Xvfb)
+if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # A dedicated server playing runners, and a client whose player joins
     # it from a real window: admitted, and, standing still, its predictions
     # confirmed all along until its iterations end.
     add_test(NAME client_plays_runners
-             COMMAND ${RAWFRAME_XVFB_RUN} -a ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/hosts/bots/tests/play.sh
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/hosts/bots/tests/play.sh
                      $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client> 0 1 480
                      games/runners/runners.game /dev/null ${CMAKE_CURRENT_SOURCE_DIR}/tests/player.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -40,7 +40,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/client_drawn.tga)
         configure_file(tests/drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/drawn.conf @ONLY)
         add_test(NAME client_drawn
-                 COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/drawn.conf
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -49,10 +49,6 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"viewWidth\":800,\"viewHeight\":600,.*\"code\":\"frame_summary\"[^\n]*\"width\":800,\"height\":600,[^\n]*\"framesShown\":[1-9][0-9]+,.*\"reconfigured\":[2-9]")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(client_drawn PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
         # Stalls clicked on its HUD's purse, a panel that takes presses
         # (D421): lighter under the mouse once it is there (D422), the UI
         # takes the click, and the owner builds no stall under it, the World
@@ -62,7 +58,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
         set(TYCOON_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/tycoon_content)
         configure_file(tests/stalls_clicked.conf.in ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf @ONLY)
         add_test(NAME client_clicks_stalls
-                 COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
                          games/tycoon/tycoon.game 16,16
@@ -72,17 +68,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "at 16,16 [^\n]*: lighter.*\"commandsTaken\":1,\"commandsLimited\":0.*\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"fontsRead\":1,[^\n]*\"presses\":1,.*\"commandsSent\":1,")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(client_clicks_stalls PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
         # Stalls' sign field written in (D426): a click gives it the
         # keyboard, the keys type into it and no action, Return gives its
         # text to the sample, which sends it to the server as the owner's
         # sign, a command the server takes; the sign comes back to the client
         # and its board shows it (D427).
         add_test(NAME client_types_stalls
-                 COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
                          games/tycoon/tycoon.game 60,95:ann
@@ -92,10 +84,6 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "typed ann at 60,95.*\"commandsTaken\":1,\"commandsLimited\":0.*\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"presses\":1,\"focused\":1,\"typed\":[4-9][0-9]*,\"submitted\":1,\"typedShown\":[1-9][0-9]*,.*\"commandsSent\":1,")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(client_types_stalls PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
         # The plaza, its walker's scene drawn in 3D and shown in the window
         # (D286): the scene's models drawn in frames the window showed,
         # antialiased over time, each reusing the picture before (D291), its
@@ -107,7 +95,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
         configure_file(tests/plaza_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf @ONLY)
         configure_file(tests/plaza_server.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_server.conf @ONLY)
         add_test(NAME client_plaza_drawn
-                 COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf
                          games/plaza/plaza.game ${CMAKE_CURRENT_BINARY_DIR}/plaza_server.conf
@@ -117,9 +105,5 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"output_record\"[^\n]*\"revision\":1,\"offered\":\"sdr_srgb[^\"]*\",\"active\":\"sdr_srgb\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"historyReused\":[1-9][0-9]+,\"framesMetered\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(client_plaza_drawn PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
     endif()
 endif()

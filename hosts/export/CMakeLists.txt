@@ -15,9 +15,9 @@ if(RAWFRAME_BUILD_TESTS)
     # admitted, frames shown, the server stopping cleanly, and the launcher
     # ending with the client's code (a clean stop, or under load a
     # controlled overload of the software rasterizer's window).
-    if(TARGET rawframe_host_client AND RAWFRAME_XVFB_RUN)
+    if(TARGET rawframe_host_client AND RAWFRAME_XVFB)
         add_test(NAME stalls_exported
-                 COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/exported.sh $<TARGET_FILE:rawframe_host_export_tool>
                          $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
@@ -27,9 +27,5 @@ if(RAWFRAME_BUILD_TESTS)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]+, client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(stalls_exported PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
     endif()
 endif()
