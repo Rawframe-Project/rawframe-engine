@@ -136,11 +136,12 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
-        // A press is taken as the window's records come, and acted on in
-        // the next presentation, between frames.
+        // A press is acted on as the window's records come, so the keys
+        // that follow it find the keyboard where it put it (D426): a field
+        // clicked takes what is typed next, however slowly frames come.
         if (pointing_ != nullptr) {
             pointing_->onPress([this](float x, float y) {
-                presses_.push_back({x, y});
+                pressAt(x, y);
             });
         }
         if (pointing_ != nullptr) {
@@ -158,10 +159,6 @@ public:
 
     void runHostPhase(composition::HostPhase, const composition::HostFrame&) noexcept override {
         drawn_ = nullptr;
-        for (const auto& [kX, kY] : presses_) {
-            pressAt(kX, kY);
-        }
-        presses_.clear();
         for (const view::Typing& kTyping : typed_) {
             take(kTyping);
         }
@@ -890,7 +887,6 @@ private:
     std::string status_;
     std::uint64_t applied_ = 0;
     std::uint64_t refused_ = 0;
-    std::vector<std::pair<float, float>> presses_;
     ui::Node scenesColumn_{};
     ui::Node entitiesColumn_{};
     ui::Node componentsColumn_{};
