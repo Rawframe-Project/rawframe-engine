@@ -130,6 +130,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kPlayerViews.name, composition::provideAs(views_)});
     lent_.push_back(composition::LentCapability{view::kUiPointing.name, composition::provideAs(pointing_)});
     lent_.push_back(composition::LentCapability{view::kUiTyping.name, composition::provideAs(typing_)});
+    lent_.push_back(composition::LentCapability{view::kUiNavigation.name, composition::provideAs(navigation_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
 }
@@ -152,6 +153,13 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     }
     while (std::optional<window::Event> event = windows.next()) {
         closing = closing || event->kind == window::EventKind::CloseRequested;
+        // Whether a field takes text, told among the keys (D430): a key
+        // typed into a field is never a gated action's, even when the
+        // field lets go before the input next reads.
+        if (typing_.editing() != toldEditing_) {
+            toldEditing_ = typing_.editing();
+            feed_.textEditing(toldEditing_);
+        }
         bridge_->take(*event);
         // Where the mouse is, for what the UI shows under it (D422), and
         // where a press went down, for the field that takes the keyboard

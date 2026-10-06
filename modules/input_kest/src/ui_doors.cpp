@@ -10,6 +10,7 @@ namespace rawframe::input_kest {
 namespace {
 
 constexpr std::array<kest::Parameter, 1> kCodeGives = {kest::Parameter{kest::Slot::I64}};
+constexpr std::array<kest::Parameter, 1> kTruthGives = {kest::Parameter{kest::Slot::Bool}};
 constexpr std::array<kest::Parameter, 1> kTypedGives = {kest::Parameter{kest::Slot::Value, "rawframe.ui.Typed"}};
 
 void pressedDoor(kest::DoorCall& call, void* context) noexcept {
@@ -24,6 +25,16 @@ void typedDoor(kest::DoorCall& call, void* context) noexcept {
     if (!call.answerValue(static_cast<const UiDoorContext*>(context)->typed)) {
         call.fail("the program's rawframe.ui.Typed is not the engine's");
     }
+}
+
+void navigateDoor(kest::DoorCall& call, void* context) noexcept {
+    const view::UiNavigation* navigation = static_cast<const UiDoorContext*>(context)->navigation;
+    call.answerBoolean(navigation != nullptr && navigation->enter());
+}
+
+void navigatingDoor(kest::DoorCall& call, void* context) noexcept {
+    const view::UiNavigation* navigation = static_cast<const UiDoorContext*>(context)->navigation;
+    call.answerBoolean(navigation != nullptr && navigation->focused());
 }
 
 void hoveredDoor(kest::DoorCall& call, void* context) noexcept {
@@ -47,6 +58,16 @@ result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context) 
                                       .safeForUntrusted = true}));
     RAWFRAME_TRY(doors.add(kest::Door{
         .name = "UI.typed", .function = &typedDoor, .context = lent, .gives = kTypedGives, .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "UI.navigate",
+                                      .function = &navigateDoor,
+                                      .context = lent,
+                                      .gives = kTruthGives,
+                                      .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "UI.navigating",
+                                      .function = &navigatingDoor,
+                                      .context = lent,
+                                      .gives = kTruthGives,
+                                      .safeForUntrusted = true}));
     // rawframe.ui's own wrapper asks for it wherever the module is imported.
     return doors.add(kest::Door{.name = "UI.hovered",
                                 .function = &hoveredDoor,

@@ -1,6 +1,7 @@
 #include "rawframe/input_kest/sources.h"
 
 #include "rawframe/input/actions.h"
+#include "rawframe/input/navigation.h"
 #include "rawframe/input/pairing.h"
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/world/random.h"
@@ -181,6 +182,11 @@ struct Shared {
     const view::PlayerViews* views = nullptr;
     const view::UiPointing* pointing = nullptr;
     view::UiTyping* typing = nullptr;
+    /// The UI's navigation, and the first local player's actions with the
+    /// engine's navigation actions added, where they are (D430).
+    const view::UiNavigation* navigation = nullptr;
+    std::optional<input::ActionSet> navigable;
+    input::Navigation navigationActions;
     diagnostics::Emitter emitter;
     /// The game's commands the sample program lays out (D425).
     std::vector<world_kest::CommandKind> commands;
@@ -245,7 +251,11 @@ public:
                          std::shared_ptr<Routing> routing = nullptr,
                          input::Feed* feed = nullptr,
                          std::size_t player = 0) {
-        RAWFRAME_TRY_ASSIGN(mapper_, input::Mapper::create(shared.actions, {.players = 1}));
+        // The first local player navigates the UI (D430); bots and other
+        // players have the game's actions alone.
+        const bool kNavigates = !seed.has_value() && player == 0 && shared.navigable.has_value();
+        RAWFRAME_TRY_ASSIGN(mapper_,
+                            input::Mapper::create(kNavigates ? *shared.navigable : shared.actions, {.players = 1}));
         local_ = !seed.has_value();
         player_ = player;
         emitter_ = shared.emitter;
@@ -261,8 +271,16 @@ public:
         }
         // A player is in every context the set declares, in the order
         // declared, until a game can switch them.
-        for (std::size_t context = 0; context < shared.actions.contexts.size(); ++context) {
+        for (std::size_t context = 0; context < mapper_->actions().contexts.size(); ++context) {
             RAWFRAME_TRY(mapper_->activate({}, context));
+        }
+        // The navigation actions claim their controls only while the UI
+        // holds focus.
+        if (kNavigates) {
+            navigation_ = shared.navigation;
+            navigationActions_ = shared.navigationActions;
+            mapper_->setEnabled({}, navigationActions_.context, false);
+            ui_.navigation = navigation_;
         }
         doors_ = InputDoorContext{.mapper = mapper_.get(), .player = {}};
         kest::DoorTable table;
@@ -320,16 +338,25 @@ public:
                 typedOf(given->text, ui_.typed);
             }
         }
-        if (typing_ != nullptr) {
-            mapper_->setTextEditing(typing_->editing());
+        const bool kNavigating = navigation_ != nullptr && navigation_->focused();
+        if (navigation_ != nullptr) {
+            mapper_->setEnabled({}, navigationActions_.context, kNavigating);
         }
         if (hand_.has_value()) {
             hand_->act(*mapper_);
         } else {
             routing_->route();
+            // The host places the text gate among the keys (D430); here it
+            // only ends as the UI is now.
             feed_->deliver(*mapper_, {});
+            if (typing_ != nullptr) {
+                mapper_->setTextEditing(typing_->editing());
+            }
         }
         mapper_->commit(tick);
+        if (kNavigating) {
+            navigate();
+        }
         mapper_->endFrame();
         std::ranges::fill(input, std::byte{0});
         RAWFRAME_TRY_ASSIGN(const kest::Value kLent, machine_->lend(input.data(), 1, element_, input.size()));
@@ -342,6 +369,37 @@ public:
                 result::ErrorClass::FailedPrecondition, InputKestError::SampleFailed, "the sample function refused");
         }
         return {};
+    }
+
+    /// The navigation actions pressed this tick, to the UI in their order:
+    /// a node activated is the sample's press, unless a pointer's came
+    /// first (D430).
+    void navigate() {
+        constexpr std::array<view::NavigationMove, 6> kMoves = {view::NavigationMove::Up,
+                                                                view::NavigationMove::Down,
+                                                                view::NavigationMove::Left,
+                                                                view::NavigationMove::Right,
+                                                                view::NavigationMove::Next,
+                                                                view::NavigationMove::Previous};
+        for (std::size_t each = 0; each < input::kNavigationActions; ++each) {
+            if (!mapper_->pressedThisTick({}, navigationActions_.actions[each])) {
+                continue;
+            }
+            switch (static_cast<input::NavigationAction>(each)) {
+            case input::NavigationAction::Activate:
+                if (const std::optional<std::int64_t> kCode = navigation_->activate();
+                    kCode.has_value() && ui_.pressed == 0) {
+                    ui_.pressed = *kCode;
+                }
+                break;
+            case input::NavigationAction::Dismiss:
+                navigation_->dismiss();
+                break;
+            default:
+                static_cast<void>(navigation_->move(kMoves[each]));
+                break;
+            }
+        }
     }
 
     void takeCommands(std::vector<world_replication::PostedCommand>& into) override {
@@ -367,6 +425,8 @@ private:
     diagnostics::Emitter emitter_;
     view::UiTyping* typing_ = nullptr;
     view::UiTyping* submissions_ = nullptr;
+    const view::UiNavigation* navigation_ = nullptr;
+    input::Navigation navigationActions_;
     CommandDoorContext commands_;
     std::unique_ptr<kest::Machine> machine_;
     kest::Entry entry_;
@@ -545,6 +605,11 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.views = settings.views;
     shared.pointing = settings.pointing;
     shared.typing = settings.typing;
+    if (settings.navigation != nullptr) {
+        shared.navigation = settings.navigation;
+        shared.navigable = shared.actions;
+        RAWFRAME_TRY_ASSIGN(shared.navigationActions, input::addNavigation(*shared.navigable));
+    }
     shared.emitter = settings.emitter;
     RAWFRAME_TRY_ASSIGN(shared.commands, world_kest::commandKindsOf(kGame, *shared.program, false));
     return std::unique_ptr<InputSources>{new Sources{std::move(shared)}};

@@ -18,6 +18,7 @@
 #include "rawframe/input/feed.h"
 #include "rawframe/input_window/bridge.h"
 #include "rawframe/result/result.h"
+#include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/view/typing.h"
@@ -66,6 +67,9 @@ private:
     view::PlayerViews views_;
     view::UiPointing pointing_;
     view::UiTyping typing_;
+    view::UiNavigation navigation_;
+    /// Whether the feed was last told a field takes text.
+    bool toldEditing_ = false;
     /// The caret the platform was last asked for text input at, none while
     /// it was not asked.
     std::optional<view::UiTyping::Caret> textInput_;

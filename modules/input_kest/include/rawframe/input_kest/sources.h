@@ -11,6 +11,7 @@
 #include "rawframe/kest/machine.h"
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
+#include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/view/typing.h"
@@ -80,17 +81,21 @@ struct CommandDoorContext {
 /// What the `UI.*` doors read: the press code the player's press since the
 /// last tick landed on, the first of them, nought for none (D421); the
 /// field whose text the player gave since, and that text as `ui.Typed`
-/// lays it out (D426); and what lies under the mouse (D422), none for a
-/// player whose mouse it is not.
+/// lays it out (D426); what lies under the mouse (D422), none for a
+/// player whose mouse it is not; and the UI's navigation (D430), none for
+/// a player whose UI it is not.
 struct UiDoorContext {
     std::int64_t pressed = 0;
     std::int64_t submitted = 0;
     std::array<std::byte, 256> typed{};
     const view::UiPointing* pointing = nullptr;
+    const view::UiNavigation* navigation = nullptr;
 };
 
-/// Adds `UI.pressed`, `UI.submitted`, `UI.typed`, and `UI.hovered`. They
-/// read and change nothing else, so they are safe for untrusted code.
+/// Adds `UI.pressed`, `UI.submitted`, `UI.typed`, `UI.hovered`,
+/// `UI.navigate`, and `UI.navigating`. They read nothing else and change
+/// only where the player's own UI holds focus, so they are safe for
+/// untrusted code.
 /// `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context);
 
@@ -147,6 +152,10 @@ struct SourceSettings {
     /// first local player takes what they give, and every player's keyboard
     /// actions are gated while one holds focus; outlives the sources.
     view::UiTyping* typing = nullptr;
+    /// The UI's navigation (D430), or null where the host lends none: the
+    /// first local player's mapper has the engine's navigation actions,
+    /// theirs while the UI holds focus; outlives the sources.
+    const view::UiNavigation* navigation = nullptr;
     /// Where a local player's source says, as it ends, what its devices
     /// gave and its mapper did with them.
     diagnostics::Emitter emitter;

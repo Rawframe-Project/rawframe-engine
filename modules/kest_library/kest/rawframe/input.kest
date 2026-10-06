@@ -42,7 +42,8 @@ extern fn UI.pressed() -> i64
 
 // The `press` of the UI node the player's press landed on during the tick,
 // the first if more than one, or nought for none (rawframe.ui, D421): a
-// press the UI took, which no action saw.
+// press the UI took, which no action saw, or the node the player activated
+// by navigation (D430).
 fn uiPressed() -> i64 {
     return UI.pressed()
 }
@@ -59,4 +60,23 @@ fn uiSubmitted() -> i64 {
 // What the player gave it, empty when nothing was given.
 fn uiTyped() -> ui.Typed {
     return UI.typed()
+}
+
+extern fn UI.navigate() -> bool
+extern fn UI.navigating() -> bool
+
+// The player's UI navigated without a pointer from the next tick (D430):
+// focus on the first node that takes presses or text of its view, in
+// reading order, unless one holds it. The engine's navigation actions (the
+// arrow keys and the d-pad, Tab and the shoulders, Enter, Space, and the
+// south face button, Escape and the east) are then the UI's, never the
+// game's, until it lets focus go. Whether a node holds focus now; false
+// with nothing to focus, and for any local player but the first.
+fn uiNavigate() -> bool {
+    return UI.navigate()
+}
+
+// Whether the player's UI holds focus, so the navigation actions are its.
+fn uiNavigating() -> bool {
+    return UI.navigating()
 }
