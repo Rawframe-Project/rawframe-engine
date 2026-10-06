@@ -260,7 +260,7 @@ try {
     const ended = Number(/page: ended (\d+)/.exec(clientLog)[1]);
     const gpuErrors = await tab.evaluate(() => window.rawframeGpuErrors());
     const summary = /"bots":\d+,"admitted":\d+[^}]*/.exec(clientLog);
-    console.log(summary ? summary[0] : 'page: no bots summary');
+    console.log(summary ? `page: bots ${summary[0]}` : 'page: no bots summary');
     const field = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(summary?.[0] ?? '')?.[1] ?? -1);
     // What the page took of the client's sound and played.
     const heard = await tab.evaluate(() => window.rawframeSound());
@@ -298,16 +298,37 @@ try {
         console.log(`page: the scene drew ${drawn3d ? drawn3d[1] : 'no'} models, ${seen3d ? seen3d[1] : 'no'} frames ` +
                     `through the player's camera`);
     }
-    const played = ended === 0 && field('admitted') === 1 && field('handed') === 1 && field('stalled') === 0 &&
-                   field('confirmed') > 100 && drawing !== null && Number(drawing[1]) > 0 && shown > 1000 &&
-                   gpuErrors.length === 0;
-    const runnersPlayed = felt !== null && Number(felt[1]) > 0 && drawn !== null && Number(drawn[1]) > 0 &&
-                          Number(drawn[2]) > 0 && Number(drawn[3]) === 3 && viewed !== null && Number(viewed[1]) > 0 &&
-                          heard.frames > 48000 && heard.peak > 0.05 && worded !== null && Number(worded[1]) > 0 &&
-                          Number(worded[3]) === 0;
-    const plazaPlayed = seen3d !== null && Number(seen3d[1]) > 0 && Number(seen3d[2]) > 0 && drawn3d !== null &&
-                        Number(drawn3d[1]) > 0 && /"code":"game_silent"/.test(clientLog);
-    verdict = played && (plaza ? plazaPlayed : runnersPlayed) ? 0 : 1;
+    // Each condition by name, so a failure says which.
+    const checks = {
+        ended: ended === 0,
+        admitted: field('admitted') === 1,
+        handed: field('handed') === 1,
+        notStalled: field('stalled') === 0,
+        confirmed: field('confirmed') > 100,
+        framesShown: drawing !== null && Number(drawing[1]) > 0,
+        lit: shown > 1000,
+        noGpuErrors: gpuErrors.length === 0,
+    };
+    if (plaza) {
+        Object.assign(checks, {
+            seen3d: seen3d !== null && Number(seen3d[1]) > 0 && Number(seen3d[2]) > 0,
+            drawn3d: drawn3d !== null && Number(drawn3d[1]) > 0,
+            silent: /"code":"game_silent"/.test(clientLog),
+        });
+    } else {
+        Object.assign(checks, {
+            felt: felt !== null && Number(felt[1]) > 0,
+            sprites: drawn !== null && Number(drawn[1]) > 0 && Number(drawn[2]) > 0 && Number(drawn[3]) === 3,
+            viewed: viewed !== null && Number(viewed[1]) > 0,
+            heard: heard.frames > 48000 && heard.peak > 0.05,
+            worded: worded !== null && Number(worded[1]) > 0 && Number(worded[3]) === 0,
+        });
+    }
+    const unmet = Object.keys(checks).filter((name) => !checks[name]);
+    if (unmet.length > 0) {
+        console.log(`page: unmet: ${unmet.join(', ')}`);
+    }
+    verdict = unmet.length === 0 ? 0 : 1;
 } catch (error) {
     console.log(`page: ${error.message}`);
 } finally {
@@ -331,6 +352,7 @@ const most = Number(/"mostConnections":(\d+)/.exec(serverLog)?.[1] ?? -1);
 console.log(`page: native bots admitted ${nativeField('admitted')}, confirmed ${nativeField('confirmed')}; ` +
             `the server held ${most} players at once`);
 if (nativeField('admitted') !== 2 || nativeField('confirmed') <= 100 || nativeField('stalled') !== 0 || most < 3) {
+    console.log('page: unmet: the native bots or the players held at once');
     verdict = 1;
 }
 // On failure, the client's last lines, every summary it gave, and its first
