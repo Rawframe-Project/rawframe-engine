@@ -7,7 +7,10 @@ module sample
 // meets. A bot, and a player before its first frame, has no view to pick
 // through. A press on the purse asks the server to collect the owner's
 // takings (D425); what the player writes in the sign field and gives by
-// Enter goes to the server as its sign (D426).
+// Enter goes to the server as its sign (D426). The menu action (Tab, or a
+// gamepad's Start) has the HUD navigated without the mouse: the arrows or
+// the d-pad, Tab or the shoulders, to the purse and the sign field, Enter
+// or the south button to press or write (D430).
 
 import controls
 import rawframe.input
@@ -16,6 +19,7 @@ import rawframe.view
 const MOVE: u64 = 0x553136d0f09c1542
 const BUILD: u64 = 0x42402c54c83df116
 const POINT: u64 = 0x60122f83dd6bbe0b
+const MENU: u64 = 0xdccd8b3fbc9eae0a
 
 extern fn Commands.collect(value: controls.Collect)
 extern fn Commands.sign(value: controls.Sign)
@@ -38,6 +42,9 @@ fn sample(into: [controls.Hand]) {
             into[0].pointX = f32(ray.originX + f64(ray.directionX) * ahead)
             into[0].pointZ = f32(ray.originZ + f64(ray.directionZ) * ahead)
         }
+    }
+    if input.pressed(MENU) {
+        input.uiNavigate()
     }
     if input.uiPressed() == controls.PURSE {
         Commands.collect(controls.Collect(u32(1)))

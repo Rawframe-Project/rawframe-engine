@@ -10,11 +10,14 @@
 # pixels at the point was before the mouse came and after, and whether it
 # grew lighter by 8 or more of 255 (D422). A point followed by `:` and
 # lower-case text has the text typed after its click, a key at a time,
-# then Return (D426). Five seconds after, it stops the client (D430), whose
+# then Return (D426). An argument `keys=` and X key names apart by commas
+# presses those keys alone, a third of a second apart, and waits a second
+# and a half after them (D430). Five seconds
+# after, it stops the client (D430), whose
 # iterations only bound it, and waits for play.sh to end.
 #
-# usage: click.py <play.sh pid> <play.sh work directory> <x>,<y>[:<text>]
-#                 [<x>,<y>[:<text>]...]
+# usage: click.py <play.sh pid> <play.sh work directory>
+#                 <x>,<y>[:<text>] | keys=<key>[,<key>...] [...]
 
 import ctypes
 import ctypes.util
@@ -81,6 +84,9 @@ def main():
     work = sys.argv[2]
     points = []
     for argument in sys.argv[3:]:
+        if argument.startswith("keys="):
+            points.append((None, None, argument[len("keys="):].split(",")))
+            continue
         place, _, text = argument.partition(":")
         points.append((*(int(side) for side in place.split(",")), text))
     x = ctypes.CDLL(ctypes.util.find_library("X11"))
@@ -113,9 +119,24 @@ def main():
             info = image.contents
             data = ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (info.bytes_per_line * info.height))).contents
             lit += 1 if any(bytes(data)) else 0
+    def press(name, held):
+        code = x.XKeysymToKeycode(display, x.XStringToKeysym(name.encode()))
+        xtest.XTestFakeKeyEvent(display, code, 1, 0)
+        x.XFlush(display)
+        time.sleep(held)
+        xtest.XTestFakeKeyEvent(display, code, 0, 0)
+        x.XFlush(display)
+
     for at, y, text in points:
         if not alive(pid):
             break
+        if at is None:
+            for name in text:
+                press(name, 0.1)
+                time.sleep(0.33)
+            print(f"pressed {','.join(text)}")
+            time.sleep(1.5)
+            continue
         # Moved there first, so the press is where the pointer already is.
         before = brightness(x, display, root, at, y)
         xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
@@ -138,12 +159,7 @@ def main():
         time.sleep(1)
         if text:
             for name in [*text, "Return"]:
-                code = x.XKeysymToKeycode(display, x.XStringToKeysym(name.encode()))
-                xtest.XTestFakeKeyEvent(display, code, 1, 0)
-                x.XFlush(display)
-                time.sleep(0.05)
-                xtest.XTestFakeKeyEvent(display, code, 0, 0)
-                x.XFlush(display)
+                press(name, 0.05)
                 time.sleep(0.1)
             print(f"typed {text} at {at},{y}")
             time.sleep(1)
