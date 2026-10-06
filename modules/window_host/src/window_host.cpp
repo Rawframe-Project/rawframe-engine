@@ -30,6 +30,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{input_kest::kFeed.name, composition::provideAs(feed_)});
     lent_.push_back(composition::LentCapability{window::kSurfaces.name, composition::provideAs(surfaces_)});
     lent_.push_back(composition::LentCapability{view::kPlayerViews.name, composition::provideAs(views_)});
+    lent_.push_back(composition::LentCapability{view::kUiPointing.name, composition::provideAs(pointing_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
 }
