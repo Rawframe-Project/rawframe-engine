@@ -10,6 +10,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/schema/component.h"
 #include "rawframe/ui/tree.h"
+#include "rawframe/view/navigation.h"
 #include "rawframe/view/typing.h"
 #include "rawframe/world/entity.h"
 #include "rawframe/world/world.h"
@@ -145,6 +146,9 @@ struct UiStatistics {
     std::uint64_t focused = 0;
     std::uint64_t typed = 0;
     std::uint64_t submitted = 0;
+    /// Moves of focus by navigation, and nodes it activated (D430).
+    std::uint64_t navigated = 0;
+    std::uint64_t activated = 0;
 };
 
 class WorldUi {
@@ -189,6 +193,24 @@ public:
     [[nodiscard]] std::optional<view::UiTyping::Caret> caret() const noexcept;
     /// The fields' texts given by Enter since last asked, oldest first.
     [[nodiscard]] std::vector<view::Submitted> takeSubmitted();
+
+    /// Navigation without a pointer (SPEC-0030, D430), among the nodes
+    /// that take presses and the text fields of a view, in one view: focus
+    /// to the first in reading order of the first view with any, unless a
+    /// node holds it; whether one holds it after.
+    bool enterNavigation();
+    /// Focus moved from the node holding it, the nearest node in a
+    /// direction or the next in reading order; whether it moved.
+    bool navigate(view::NavigationMove move);
+    /// The focused node activated: its press code for one that takes
+    /// presses; a field takes the keyboard, its caret at its end, and gives
+    /// none. Enter or Escape there gives it back, focus staying on it.
+    [[nodiscard]] std::optional<std::int64_t> activate();
+    /// The keyboard taken back from a field, focus staying; or, none held,
+    /// focus let go.
+    void dismiss();
+    /// Whether a node holds focus, by navigation or a field's keyboard.
+    [[nodiscard]] bool navigating() const noexcept;
 
     /// What the last update drew.
     [[nodiscard]] const ui::DrawList& drawn() const noexcept;

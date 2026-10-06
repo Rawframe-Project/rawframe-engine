@@ -4,6 +4,7 @@
 #include "rawframe/game_textures/asked.h"
 #include "rawframe/graph/graph.h"
 #include "rawframe/ui/font.h"
+#include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/world_kest/game_files.h"
@@ -43,6 +44,7 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kPlayerViews.name,
                                        view::kUiPointing.name,
                                        view::kUiTyping.name,
+                                       view::kUiNavigation.name,
                                        game_content::kGameContent.name,
                                        world_localization::kGameText.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
@@ -232,6 +234,9 @@ public:
         if (context.has(view::kUiTyping.name)) {
             RAWFRAME_TRY_ASSIGN(typing_, context.capability(view::kUiTyping));
         }
+        if (context.has(view::kUiNavigation.name)) {
+            RAWFRAME_TRY_ASSIGN(navigation_, context.capability(view::kUiNavigation));
+        }
         RAWFRAME_TRY_ASSIGN(ui_, WorldUi::create(std::move(*settings)));
         // The players' regions as the scene and the canvas have them (D364,
         // D369): the layout for their count, else the whole window.
@@ -307,9 +312,7 @@ public:
                     return;
                 }
                 ui_->pressAt(x, y);
-                if (typing_ != nullptr) {
-                    typing_->focus(ui_->caret());
-                }
+                followCaret();
             });
         }
         // What is typed, to the field holding the keyboard.
@@ -319,6 +322,40 @@ public:
                     ui_->type(typing);
                 }
             });
+        }
+        // Navigation without a pointer (D430); a field it activates or
+        // dismisses has the keyboard or gives it back at once, so the keys
+        // after find it there.
+        if (navigation_ != nullptr && ui_ != nullptr) {
+            navigation_->answer(view::UiNavigation::Answers{.enter =
+                                                                [this] {
+                                                                    return !failed_ && ui_->enterNavigation();
+                                                                },
+                                                            .move =
+                                                                [this](view::NavigationMove move) {
+                                                                    return !failed_ && ui_->navigate(move);
+                                                                },
+                                                            .activate =
+                                                                [this] {
+                                                                    if (failed_) {
+                                                                        return std::optional<std::int64_t>{};
+                                                                    }
+                                                                    const std::optional<std::int64_t> kPressed =
+                                                                        ui_->activate();
+                                                                    followCaret();
+                                                                    return kPressed;
+                                                                },
+                                                            .dismiss =
+                                                                [this] {
+                                                                    if (!failed_) {
+                                                                        ui_->dismiss();
+                                                                        followCaret();
+                                                                    }
+                                                                },
+                                                            .focused =
+                                                                [this] {
+                                                                    return !failed_ && ui_->navigating();
+                                                                }});
         }
         return {};
     }
@@ -403,6 +440,9 @@ public:
         if (typing_ != nullptr) {
             typing_->answer({});
         }
+        if (navigation_ != nullptr) {
+            navigation_->answer({});
+        }
         if (ui_ == nullptr) {
             return;
         }
@@ -430,8 +470,18 @@ public:
                       diagnostics::field("typed", kStatistics.typed),
                       diagnostics::field("submitted", kStatistics.submitted),
                       diagnostics::field("typedShown", kStatistics.typedShown),
+                      diagnostics::field("navigated", kStatistics.navigated),
+                      diagnostics::field("activated", kStatistics.activated),
                       diagnostics::field("atlasRevisions",
                                          drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0)});
+    }
+
+    /// The host told where the caret of the field holding the keyboard is
+    /// now, none while none holds it.
+    void followCaret() {
+        if (typing_ != nullptr) {
+            typing_->focus(ui_->caret());
+        }
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -514,6 +564,7 @@ private:
     view::PlayerViews* views_ = nullptr;
     view::UiPointing* pointing_ = nullptr;
     view::UiTyping* typing_ = nullptr;
+    view::UiNavigation* navigation_ = nullptr;
     std::unique_ptr<WorldUi> ui_;
     std::vector<world_kest::GameRegion> regions_;
     std::optional<world_kest::GameAspect> aspect_;

@@ -10,8 +10,8 @@
 // and gives its text by Enter (D426); and a node shows the words of a
 // component of typed words in place of its label while it holds any
 // (D427); and an empty field without the keyboard shows its label as its
-// placeholder (D428); and Tab moves the keyboard between a view's fields
-// (D429).
+// placeholder (D428); Tab moves the keyboard between a view's fields
+// (D429); and navigation moves focus without a pointer (D430).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -536,4 +536,61 @@ RAWFRAME_TEST(TabMovesTheKeyboardBetweenAViewsFields) {
     const std::uint64_t kFocused = rig.ui->statistics().focused;
     kTab(false);
     RAWFRAME_EXPECT(rig.ui->statistics().focused == kFocused && rig.ui->caret().has_value());
+}
+
+RAWFRAME_TEST(NavigationMovesFocusAndActivatesWhatItHolds) {
+    Rig rig;
+    rig.ui = *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId}, .parents = {std::nullopt, 0, 0}, .fonts = {0xF1}});
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
+    // In the panel, side by side: a node that takes presses (105, 55),
+    // then a field (215, 55).
+    rig.put(rig.player, kHudId, panel());
+    rig.put(rig.player, kMeterId, Node{.widthOffset = 100, .heightOffset = 20, .fill = 0x40C040FF, .press = 1});
+    rig.put(rig.player,
+            kRowId,
+            Node{.widthOffset = 100,
+                 .heightOffset = 20,
+                 .order = 1,
+                 .font = 0xF1,
+                 .textSize = 10,
+                 .textColor = 0xFFFFFFFF,
+                 .press = 2,
+                 .edit = 1});
+    RAWFRAME_EXPECT(rig.frame());
+    const auto kRinged = [&rig] {
+        return rig.frame() ? rig.ui->drawn().shadows.size() : std::size_t{99};
+    };
+    // Nothing holds focus: nothing moves, nothing is activated.
+    RAWFRAME_EXPECT(!rig.ui->navigating() && !rig.ui->navigate(view::NavigationMove::Right) &&
+                    !rig.ui->activate().has_value() && kRinged() == 0);
+    // Entered, the first in reading order, ringed; activated, its code.
+    RAWFRAME_EXPECT(rig.ui->enterNavigation() && rig.ui->navigating() && kRinged() == 1);
+    const auto kPressed = rig.ui->activate();
+    RAWFRAME_EXPECT(kPressed.has_value() && *kPressed == 1 && rig.ui->statistics().activated == 1);
+    // Nothing above it; the field to its right, which takes the keyboard.
+    RAWFRAME_EXPECT(!rig.ui->navigate(view::NavigationMove::Up) && rig.ui->navigate(view::NavigationMove::Right));
+    RAWFRAME_EXPECT(!rig.ui->activate().has_value() && kRinged() == 1 && rig.ui->caret().has_value() &&
+                    (*rig.ui->caret())[0] == 215);
+    rig.ui->type(view::Typing{.kind = view::Typing::Kind::Text, .text = "x"});
+    // Enter gives its text, and focus stays on it without the keyboard.
+    rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = view::TypingKey::Submit});
+    const auto kGiven = rig.ui->takeSubmitted();
+    RAWFRAME_EXPECT(kGiven.size() == 1 && kGiven[0].press == 2 && kGiven[0].text == "x");
+    RAWFRAME_EXPECT(rig.ui->navigating() && kRinged() == 1 && !rig.ui->caret().has_value());
+    // Escape too: the keyboard given back, focus kept.
+    RAWFRAME_EXPECT(!rig.ui->activate().has_value() && rig.ui->caret().has_value());
+    rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = view::TypingKey::Dismiss});
+    RAWFRAME_EXPECT(rig.ui->navigating() && kRinged() == 1 && !rig.ui->caret().has_value());
+    // Next goes round to the first; nothing left of it.
+    RAWFRAME_EXPECT(rig.ui->navigate(view::NavigationMove::Next) && !rig.ui->navigate(view::NavigationMove::Left));
+    RAWFRAME_EXPECT(rig.ui->navigate(view::NavigationMove::Previous) && rig.ui->navigate(view::NavigationMove::Left));
+    RAWFRAME_EXPECT(rig.ui->statistics().navigated == 5);
+    // Dismissed with no keyboard held, focus goes and so does the ring.
+    rig.ui->dismiss();
+    RAWFRAME_EXPECT(!rig.ui->navigating() && kRinged() == 0);
+    // A press elsewhere ends navigation too.
+    RAWFRAME_EXPECT(rig.ui->enterNavigation());
+    rig.ui->pressAt(600, 300);
+    RAWFRAME_EXPECT(!rig.ui->navigating());
 }
