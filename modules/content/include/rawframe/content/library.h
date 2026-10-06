@@ -46,6 +46,15 @@ inline constexpr std::string_view kBuildSignatureName = "build.manifest.sig";
 [[nodiscard]] std::string keysPathOf(std::string_view publisher);
 /// `compositions/` and the CompositionId's 64 hexadecimal digits.
 [[nodiscard]] std::string compositionPathOf(const base::Sha256Digest& composition);
+/// SPEC-0020's records a mirror serves (D424): `releases/` and a Release's
+/// 64 hexadecimal digits, and `channels/<publisher>/<name>/<channel>`, a
+/// subject's channel pointer. Each signature is beside its record, under
+/// the same name with `.sig`; a library keeps the sequence of the pointer
+/// it last followed under the pointer's name with `.sequence`.
+[[nodiscard]] std::string releasePathOf(const base::Sha256Digest& release);
+[[nodiscard]] std::string channelPathOf(std::string_view subject, std::string_view channel);
+inline constexpr std::string_view kSignatureSuffix = ".sig";
+inline constexpr std::string_view kSequenceSuffix = ".sequence";
 /// The installed pointer, and where an update stages what it writes.
 inline constexpr std::string_view kInstalledName = "installed";
 inline constexpr std::string_view kStagingName = "staging";

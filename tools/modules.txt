@@ -28,7 +28,7 @@ mesh_import: mesh material graph document result base
 cook: localization animation material graph mesh_import mesh texture_import texture font_import ui scene world_kest input kest_library kest audio_import audio content document execution result base
 build: signature content document result base
 release: content document result base
-install: content signature document result base
+install: release content signature document result base
 process: result base
 http: result base
 input: document result base

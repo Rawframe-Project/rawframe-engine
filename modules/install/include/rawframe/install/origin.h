@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::install {
@@ -33,6 +34,11 @@ public:
     /// The blob of digest `blob`, at most `ceiling` bytes. Blocks.
     [[nodiscard]] virtual result::Result<std::vector<std::byte>> blob(const content::ContentDigest& blob,
                                                                       std::uint64_t ceiling) = 0;
+    /// A record the origin serves at `path`, a library path its owner names
+    /// (`content::releasePathOf`, `channelPathOf`, `compositionPathOf`, and
+    /// their signatures), at most `ceiling` bytes (D424). Blocks.
+    [[nodiscard]] virtual result::Result<std::vector<std::byte>> record(std::string_view path,
+                                                                        std::uint64_t ceiling) = 0;
 };
 
 /// A mirror at `root`, laid out as a library. Refused (`FetchFailed`) when

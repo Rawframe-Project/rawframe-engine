@@ -18,6 +18,7 @@
 #include "rawframe/content/library.h"
 #include "rawframe/install/origin.h"
 #include "rawframe/install/plan.h"
+#include "rawframe/release/release.h"
 #include "rawframe/result/result.h"
 
 #include <cstddef>
@@ -25,6 +26,7 @@
 #include <filesystem>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -54,6 +56,15 @@ struct UpdateReport {
     std::size_t healed = 0;
 };
 
+/// What following a channel did (D424): the Release it installed, the
+/// pointer's sequence kept, and the update.
+struct Followed {
+    std::string version;
+    base::Sha256Digest release{};
+    std::int64_t sequence = 0;
+    UpdateReport update;
+};
+
 class Installation {
 public:
     /// The library at `root`, made if there is none, with what an earlier
@@ -79,6 +90,19 @@ public:
     /// version it names (`ManifestInvalid`), then the Composition kept and
     /// made active, the one active before retained for rollback.
     [[nodiscard]] result::Result<UpdateReport> update(std::string_view record, Origin& origin);
+
+    /// SPEC-0020's update check, then the update (D424): `subject`'s pointer
+    /// for `channel` and the Release it names fetched from `origin` with
+    /// their signatures, each verified against the key set pinned in the
+    /// library for the subject's publisher (a key it does not list,
+    /// `UnknownKey`, is for the caller to refresh and ask again); the
+    /// pointer past the sequence the library last followed
+    /// (`SequenceRegression`), a lower Release under a higher sequence
+    /// being a rollback; the Release's Composition fetched by its digest and
+    /// checked against the artifact's size and digest; then installed as
+    /// `update` installs it. The sequence is kept once the update is done,
+    /// so a refused or stopped follow can be retried.
+    [[nodiscard]] result::Result<Followed> follow(std::string_view subject, release::Channel channel, Origin& origin);
 
     /// Makes the newest retained Composition active again and retains the
     /// one that was, fetching nothing; refused (`NothingToRollBack`) when none

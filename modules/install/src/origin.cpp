@@ -34,6 +34,14 @@ public:
         return readFile(root_ / content::blobPathOf(blob), ceiling, "the origin has no such blob");
     }
 
+    // A packed Build holds no records.
+    result::Result<std::vector<std::byte>> record(std::string_view path, std::uint64_t ceiling) override {
+        if (packed_) {
+            return unfetched("a packed Build holds no records", root_ / path);
+        }
+        return readFile(root_ / path, ceiling, "the origin has no such record");
+    }
+
 private:
     [[nodiscard]] std::filesystem::path buildDirectory(const base::Sha256Digest& root) const {
         return packed_ ? root_ : root_ / content::buildDirectoryOf(root);

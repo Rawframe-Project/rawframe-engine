@@ -197,6 +197,9 @@ public:
         }
         return origin_.blob(blob, ceiling);
     }
+    result::Result<std::vector<std::byte>> record(std::string_view path, std::uint64_t ceiling) override {
+        return origin_.record(path, ceiling);
+    }
 
 private:
     Origin& origin_;
@@ -221,6 +224,9 @@ public:
             served->back() ^= std::byte{1};
         }
         return served;
+    }
+    result::Result<std::vector<std::byte>> record(std::string_view path, std::uint64_t ceiling) override {
+        return origin_.record(path, ceiling);
     }
 
 private:

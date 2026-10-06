@@ -4,8 +4,8 @@
 # collected. Launcher and packaging tooling; never part of a client or a
 # server, and never on the web, where a page fetches and holds its files.
 rawframe_module(NAME install
-    SOURCES src/files.cpp src/installation.cpp src/origin.cpp src/plan.cpp
-    DEPS content signature document result base
+    SOURCES src/files.cpp src/follow.cpp src/installation.cpp src/origin.cpp src/plan.cpp
+    DEPS release content signature document result base
 )
 
 # Its tests pack the Builds they install, so they are a scenario

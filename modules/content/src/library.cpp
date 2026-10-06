@@ -51,6 +51,14 @@ std::string compositionPathOf(const base::Sha256Digest& composition) {
     return "compositions/" + ContentDigest{.bytes = composition}.text().substr(7);
 }
 
+std::string releasePathOf(const base::Sha256Digest& release) {
+    return "releases/" + ContentDigest{.bytes = release}.text().substr(7);
+}
+
+std::string channelPathOf(std::string_view subject, std::string_view channel) {
+    return "channels/" + std::string{subject} + "/" + std::string{channel};
+}
+
 #if RAWFRAME_FILE_SYSTEM
 result::Result<Library> Library::directory(const std::filesystem::path& root) {
     RAWFRAME_TRY_ASSIGN(auto opened, DirectorySource::open(root, "the library is not a readable directory"));
