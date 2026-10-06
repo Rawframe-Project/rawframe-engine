@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 # Clicks in a program's window as a user would (D421): once the program's
 # log holds the record that says it is ready (a client's `bots_admitted`,
-# Studio's `studio_shown`, D435) and the screen has been lit for two seconds (a server started with a black root window, Xvfb
-# -br), the mouse moves to each point given, in the window's pixels from its
-# top left (which is the screen's: no window manager runs), and its left
-# button is pressed there and let go, a second apart. XTest injects the
-# events through the X server, so they reach the window as a real mouse's
-# do. Before each press it prints how bright a patch of five by five
-# pixels at the point was before the mouse came and after, and whether it
-# grew lighter by 8 or more of 255 (D422). A point followed by `:` and
-# lower-case text has the text typed after its click, a key at a time,
-# then Return (D426). An argument `keys=` and X key names apart by commas
-# presses those keys alone, a third of a second apart, and waits a second
-# and a half after them (D430). Five seconds after, it stops the program
-# whose pid its pid file holds (D430), whose iterations only bound it, and
-# waits for the process it watches to end.
+# Studio's `studio_shown`, D435) and the screen has been lit for two seconds
+# (a server started with a black root window, Xvfb -br), the mouse moves to
+# each point given, in the window's pixels from its top left (which is the
+# screen's: no window manager runs), and its left button is pressed there
+# and let go, a second apart. XTest injects the events through the X server,
+# so they reach the window as a real mouse's do. Before each press it prints
+# how bright a patch of five by five pixels at the point was before the
+# mouse came and after, and whether it grew lighter by 8 or more of 255
+# (D422). A point followed by `:` and lower-case text has the text typed
+# after its click, a key at a time, then Return (D426); a dot, a minus, and
+# a space are typed as their keys. An argument `keys=` and X key names apart
+# by commas presses those keys alone, a third of a second apart, and waits a
+# second and a half after them (D430). Five seconds after, it stops the
+# program whose pid its pid file holds (D430), whose iterations only bound
+# it, and waits for the process it watches to end.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...] [...]
@@ -32,6 +33,10 @@ class XImage(ctypes.Structure):
                 ("format", ctypes.c_int), ("data", ctypes.POINTER(ctypes.c_ubyte)), ("byte_order", ctypes.c_int),
                 ("bitmap_unit", ctypes.c_int), ("bitmap_bit_order", ctypes.c_int), ("bitmap_pad", ctypes.c_int),
                 ("depth", ctypes.c_int), ("bytes_per_line", ctypes.c_int), ("bits_per_pixel", ctypes.c_int)]
+
+
+# Characters typed whose X key names are words.
+KEYS = {".": "period", "-": "minus", " ": "space"}
 
 
 def alive(pid):
@@ -159,7 +164,7 @@ def main():
         print(f"clicked at {at},{y}")
         time.sleep(1)
         if text:
-            for name in [*text, "Return"]:
+            for name in [*(KEYS.get(letter, letter) for letter in text), "Return"]:
                 press(name, 0.05)
                 time.sleep(0.1)
             print(f"typed {text} at {at},{y}")
