@@ -14,14 +14,16 @@
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
+#include "rawframe/world_tooling/registrar.h"
 
 #include <array>
 
 namespace {
 
 // The server closure: QUIC, the World, a Kest game, 2D and 3D physics, the
-// simulation's animation, replication, and the World's saves.
-constexpr std::array<rawframe::composition::RegistrarEntry, 9> kRegistrars = {
+// simulation's animation, replication, the World's saves, and the tooling
+// endpoint a configuration may select (D408).
+constexpr std::array<rawframe::composition::RegistrarEntry, 10> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -40,6 +42,8 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 9> kRegistrars = {
         "world_runtime", &rawframe::world_runtime::registerParticipants, rawframe::world_runtime::kScopes},
     rawframe::composition::RegistrarEntry{
         "world_runtime.saves", &rawframe::world_runtime::registerSaves, rawframe::world_runtime::kScopes},
+    rawframe::composition::RegistrarEntry{
+        "world_tooling", &rawframe::world_tooling::registerParticipants, rawframe::world_tooling::kScopes},
 };
 
 } // namespace

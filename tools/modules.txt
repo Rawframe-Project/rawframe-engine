@@ -54,6 +54,7 @@ navigation: result base
 world_animation: animation world_runtime world composition schema execution diagnostics result base
 world_kest: world_animation animation mesh scene game_content content kest_library navigation physics2d physics3d physics world_replication world_runtime world_save world_snapshot kest network world composition schema execution diagnostics document result base
 world_replication: game_content world_runtime network world composition schema execution diagnostics result base
+world_tooling: world_runtime network world composition schema execution diagnostics document result base
 input_kest: view input document world_kest world_replication kest world composition execution diagnostics result base
 world_audio: game_content assets content audio physics2d physics3d world_replication world_kest kest world composition schema execution diagnostics document result base
 particles: world diagnostics result base
@@ -69,7 +70,7 @@ scene_bake: render_scene_gpu render_scene texture_import texture world_kest grap
 game_textures: world_kest assets content texture execution result base
 world_localization: localization world_kest game_content content composition execution diagnostics result base
 host: composition execution diagnostics result base
-dedicated_server: host game_content network_quic physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
+dedicated_server: host game_content network_quic physics2d physics3d world_animation world_replication world_tooling world_kest world_runtime composition diagnostics result base
 arena: host game_content input_kest world_audio world_localization audio network_loopback render render_canvas render_canvas_gpu world_ui render_scene render_scene_gpu physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 web_client: window_host window host game_content input_kest network_web render render_canvas render_canvas_gpu world_ui render_scene render_scene_gpu physics2d physics3d world_animation world_audio world_localization world_replication world_kest world_runtime composition execution diagnostics result base
 bots: host game_content input_kest world_animation world_audio world_localization audio network_quic world_replication render_canvas world_kest world_runtime composition diagnostics result base
@@ -81,6 +82,6 @@ install_tool: install content result base
 play_tool: process composition result base
 export_tool: process document result base
 scene_tool: world_kest scene kest result base
-author: authoring world_kest kest content scene schema document result base
+author: authoring world_tooling network_quic network world_kest kest content scene schema document execution result base
 animation_tool: animation_import animation content result base
 bake: scene_bake host game_content input_kest world_audio world_localization network_loopback render render_canvas render_canvas_gpu world_ui render_scene render_scene_gpu physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base

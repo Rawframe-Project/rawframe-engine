@@ -1,0 +1,98 @@
+#pragma once
+
+// The runtime's end of the tooling protocol (ADR-0032 section 4, D408): the
+// one protocol through which an authoring client, a test driver, or an
+// agent speaks to a running Runtime. It runs on a provider of its own whose
+// application protocol is `rawframe-tooling-v1`, never on a game's lanes.
+//
+// A client opens one bidirectional stream and sends records on it, one a
+// line, each the compact form of a strict JSON object, as an authoring
+// session does (D407); the server replies on the same stream, a line for
+// each. The first record is the hello, naming the protocol version and the
+// endpoint's token:
+//
+//   {"kind":"tooling.hello","id":1,"protocolVersion":1,"token":"..."}
+//   {"kind":"tooling.reply","id":1,"answer":{"kind":"tooling.welcome","protocolVersion":1,"grants":["inspect"]}}
+//
+// A wrong token or version, or anything else first, is answered with an
+// error record and the connection closed; so is a connection silent past
+// the hello's deadline. Every client the token admits holds the endpoint's
+// grants: in generation 1, `inspect`, which reads and never changes.
+//
+//   {"kind":"tooling.status","id":2}
+//     answer: {"kind":"tooling.status","tick":..,"entities":..,
+//              "components":[{"name":"..","entities":..},..]}
+//   {"kind":"tooling.end","id":3}
+//     answer: {"kind":"tooling.ended"}, and the server closes.
+//
+// Every reply is `tooling.reply` with the client's `id` and an `answer` or
+// an `error` ({code, message}).
+
+#include "rawframe/execution/time.h"
+#include "rawframe/network/provider.h"
+#include "rawframe/result/result.h"
+#include "rawframe/world/time.h"
+#include "rawframe/world/world.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+
+namespace rawframe::world_tooling {
+
+inline constexpr std::uint32_t kToolingProtocolVersion = 1;
+
+/// What a client the token admits may do.
+struct ToolingGrants {
+    /// Read the World and the Runtime; change nothing.
+    bool inspect = false;
+};
+
+struct ToolingSettings {
+    /// The secret a hello must name, at least 32 bytes.
+    std::string token;
+    ToolingGrants grants;
+    /// A record's bytes, either way (a limit point of SPEC-0040's kind).
+    std::size_t maximumRecord = std::size_t{1} << 20U;
+    /// How long a connection may go without a hello that admits it.
+    execution::MonotonicDuration helloWithin = execution::MonotonicDuration::fromSeconds(5);
+};
+
+/// The provider bounds a tooling endpoint asks for, `clients` at once.
+[[nodiscard]] network::ProviderProfile toolingProfile(std::size_t clients) noexcept;
+
+class ToolingServer {
+public:
+    /// A server on `provider`, which listens already or will; refuses
+    /// (`Configuration`) a token under 32 bytes.
+    [[nodiscard]] static result::Result<std::unique_ptr<ToolingServer>> create(network::Provider& provider,
+                                                                               ToolingSettings settings);
+
+    ToolingServer(const ToolingServer&) = delete;
+    ToolingServer& operator=(const ToolingServer&) = delete;
+    ~ToolingServer();
+
+    /// Takes what arrived, answers every whole record from `world` (none
+    /// while there is no World) as it is between ticks, `tick` the next to
+    /// run, and closes connections past their hello's deadline.
+    void serve(const world::World* world, world::TickIndex tick, execution::MonotonicInstant now);
+
+    struct Statistics {
+        std::uint64_t accepted = 0;
+        std::uint64_t admitted = 0;
+        /// Connections closed for a bad hello, a record out of form or past
+        /// the limit, or silence past the deadline.
+        std::uint64_t refused = 0;
+        std::uint64_t records = 0;
+    };
+    [[nodiscard]] Statistics statistics() const noexcept;
+
+    struct State;
+
+private:
+    explicit ToolingServer(std::unique_ptr<State> state) noexcept;
+    std::unique_ptr<State> state_;
+};
+
+} // namespace rawframe::world_tooling
