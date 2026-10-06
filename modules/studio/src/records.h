@@ -129,6 +129,12 @@ struct FieldShown {
 /// value's, else the catalog's.
 [[nodiscard]] std::vector<FieldShown> fieldsShown(const Catalog::Component* type, const Value* fields);
 
+/// The scene of `scenes` (paths) `text` names: by its whole path, its
+/// file's name, or its file's name without `.scene`, then by the start
+/// of either, when one alone matches; else none, and `why` says so.
+[[nodiscard]] std::optional<std::size_t>
+sceneNamed(std::span<const std::string> scenes, std::string_view text, std::string& why);
+
 /// The catalog's component `text` names: by its whole name, or by the
 /// part after its last dot, or by the start of either, when one alone
 /// matches; else none, and `why` says so.

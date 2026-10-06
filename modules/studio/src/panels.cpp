@@ -144,6 +144,8 @@ void ShellParticipant::showScene(std::size_t at) {
         static_cast<void>(tree_->setLook(sceneRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
     }
     clear(entityRows_);
+    clear(sceneFieldRows_);
+    sceneFields_.clear();
     clear(componentRows_);
     actions_.clear();
     entities_.clear();
@@ -177,6 +179,15 @@ void ShellParticipant::showScene(std::size_t at) {
         entities_.push_back(*id->text());
         names_.push_back(name != nullptr && name->text() != nullptr ? *name->text() : std::string{});
         brought_.push_back(brought != nullptr);
+    }
+    // Under the scene's entities, the scene an instance placed in it is of.
+    if (catalog_.offers("scene.add_instance")) {
+        auto line = fieldRow("instance of", "", entitiesColumn_);
+        if (line.has_value()) {
+            sceneFieldRows_.push_back(line->first);
+            sceneFields_.push_back(
+                FieldRow{.value = line->second, .role = FieldRow::Role::Instance, .field = "instance of"});
+        }
     }
 }
 

@@ -61,7 +61,9 @@ struct FieldRow {
         Field,
         Name,
         Add,
-        View
+        View,
+        /// The scene an instance placed in the chosen scene is of.
+        Instance
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -189,6 +191,9 @@ private:
     /// (D438), chosen once made.
     void create();
 
+    /// Places in the chosen scene an instance of the scene `text` names.
+    void place(const std::string& text);
+
     /// `why` in the header, nothing asked, the entity shown as it stands.
     void refuse(const std::string& why);
 
@@ -235,6 +240,11 @@ private:
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
     std::vector<std::string> scenes_;
+    /// Each scene's identity, from its sidecar, as 32 hex digits.
+    std::vector<std::string> sceneSources_;
+    /// The chosen scene's own field rows under its entities.
+    std::vector<ui::Node> sceneFieldRows_;
+    std::vector<FieldRow> sceneFields_;
     Catalog catalog_;
     std::vector<std::string> names_;
     std::vector<bool> brought_;

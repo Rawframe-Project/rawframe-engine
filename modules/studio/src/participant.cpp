@@ -65,11 +65,19 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     // What the session offers decides what Studio offers (ADR-0032).
     catalog_ = catalogOf(session_->answer(R"({"kind":"authoring.describe","id":2})", ended));
     ++records_;
+    std::vector<std::pair<std::string, std::string>> scenes;
     for (const auto& [kIdentity, kPath] : authoring_session::scenesBeside(kDescription)) {
         std::error_code error;
-        scenes_.push_back(std::filesystem::relative(kPath, kRoot, error).generic_string());
+        std::array<char, base::kBits128HexDigits> digits{};
+        base::formatBits128Hex(kIdentity, digits);
+        scenes.emplace_back(std::filesystem::relative(kPath, kRoot, error).generic_string(),
+                            std::string{digits.data(), digits.size()});
     }
-    std::ranges::sort(scenes_);
+    std::ranges::sort(scenes);
+    for (auto& [path, source] : scenes) {
+        scenes_.push_back(std::move(path));
+        sceneSources_.push_back(std::move(source));
+    }
     title_ = "Rawframe Studio  " + kDescription.filename().string();
     if (context.has(view::kUiPointing.name)) {
         RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));

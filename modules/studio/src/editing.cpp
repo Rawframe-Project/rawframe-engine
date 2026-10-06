@@ -39,8 +39,10 @@ void ShellParticipant::pressAt(float x, float y) {
         create();
     } else if (kNode == deleteNode_ && !entity_.empty()) {
         endEdit();
-        Value operation = operationOn("scene.destroy_entity");
-        commit(std::move(operation), "entity deleted", std::nullopt);
+        // An entity an instance brought goes with its whole instance.
+        const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
+        Value operation = operationOn(kBrought ? "scene.remove_instance" : "scene.destroy_entity");
+        commit(std::move(operation), kBrought ? "instance removed" : "entity deleted", std::nullopt);
     } else if (const auto kAction = std::ranges::find(actions_, kNode, &ActionButton::node);
                kAction != actions_.end()) {
         endEdit();
@@ -60,6 +62,9 @@ void ShellParticipant::pressAt(float x, float y) {
     } else if (const auto kViewAt = std::ranges::find(viewFields_, kNode, &FieldRow::value);
                kViewAt != viewFields_.end()) {
         beginEdit(*kViewAt);
+    } else if (const auto kSceneAt = std::ranges::find(sceneFields_, kNode, &FieldRow::value);
+               kSceneAt != sceneFields_.end()) {
+        beginEdit(*kSceneAt);
     } else {
         endEdit();
     }
@@ -104,14 +109,18 @@ void ShellParticipant::take(const view::Typing& typing) {
         endEdit();
         if (kEdited.role == FieldRow::Role::View) {
             setView(kEdited.field, kTyped);
+        } else if (kEdited.role == FieldRow::Role::Instance) {
+            place(kTyped);
         } else {
             apply(kEdited, kTyped);
         }
     } else if (kLeft == view::TypingKey::Dismiss) {
-        const bool kView = editing_->role == FieldRow::Role::View;
+        const FieldRow::Role kRole = editing_->role;
         endEdit();
-        if (kView) {
+        if (kRole == FieldRow::Role::View) {
             showViewText();
+        } else if (kRole == FieldRow::Role::Instance) {
+            refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
         } else {
             showEntity(entityAt_);
         }
@@ -204,6 +213,22 @@ void ShellParticipant::create() {
     operation.add("entity", Value::string(kIdentity));
     operation.add("name", Value::string("new entity"));
     commit(std::move(operation), "entity created", kIdentity);
+}
+
+void ShellParticipant::place(const std::string& text) {
+    std::string why;
+    const std::optional<std::size_t> kScene = sceneNamed(scenes_, text, why);
+    if (!kScene.has_value()) {
+        ++refused_;
+        say(why);
+        refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
+        return;
+    }
+    Value operation = Value::object();
+    operation.add("operation", Value::string("scene.add_instance"));
+    operation.add("scene", Value::string(sceneSources_[*kScene]));
+    operation.add("instance", Value::string(mintedIdentity()));
+    commit(std::move(operation), "instance of " + scenes_[*kScene] + " placed", std::nullopt);
 }
 
 void ShellParticipant::refuse(const std::string& why) {

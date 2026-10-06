@@ -66,6 +66,23 @@ RAWFRAME_TEST(AReferenceNamesOneEntityByNameOrIdentity) {
     RAWFRAME_EXPECT(!entityNamed(kIds, kNames, "", why).has_value());
 }
 
+RAWFRAME_TEST(AnInstanceNamesOneSceneByPathOrFile) {
+    const std::vector<std::string> kScenes = {"level.scene", "parts/crate.scene", "parts/cart.scene", "lobby.scene"};
+    std::string why;
+    RAWFRAME_EXPECT(sceneNamed(kScenes, "parts/crate.scene", why) == 1U);
+    RAWFRAME_EXPECT(sceneNamed(kScenes, "crate.scene", why) == 1U);
+    RAWFRAME_EXPECT(sceneNamed(kScenes, "crate", why) == 1U);
+    RAWFRAME_EXPECT(sceneNamed(kScenes, "lev", why) == 0U);
+    RAWFRAME_EXPECT(sceneNamed(kScenes, "parts/cart", why) == 2U);
+    // A start several scenes share is refused, as is one none has.
+    RAWFRAME_EXPECT(!sceneNamed(kScenes, "parts", why).has_value());
+    RAWFRAME_EXPECT(why == "2 scenes match parts");
+    RAWFRAME_EXPECT(!sceneNamed(kScenes, "l", why).has_value());
+    RAWFRAME_EXPECT(!sceneNamed(kScenes, "wall", why).has_value());
+    RAWFRAME_EXPECT(why == "no scene matches wall");
+    RAWFRAME_EXPECT(!sceneNamed(kScenes, "", why).has_value());
+}
+
 RAWFRAME_TEST(TypedTextIsAValueOfItsFieldsKindOrNone) {
     RAWFRAME_EXPECT(document::writeCompact(*typedValue("real", "2.5")) == R"({"real":2.5})");
     RAWFRAME_EXPECT(!typedValue("real", "x").has_value());

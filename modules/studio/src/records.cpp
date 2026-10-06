@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <functional>
 #include <iterator>
 #include <random>
 #include <span>
@@ -363,6 +364,45 @@ std::vector<FieldShown> fieldsShown(const Catalog::Component* type, const Value*
         }
     }
     return shownFields;
+}
+
+std::optional<std::size_t> sceneNamed(std::span<const std::string> scenes, std::string_view text, std::string& why) {
+    if (text.empty()) {
+        why = "name a scene";
+        return std::nullopt;
+    }
+    const auto kFile = [](std::string_view path) {
+        const std::size_t kSlash = path.rfind('/');
+        return kSlash == std::string_view::npos ? path : path.substr(kSlash + 1);
+    };
+    const auto kStem = [&kFile](std::string_view path) {
+        const std::string_view kName = kFile(path);
+        return kName.ends_with(".scene") ? kName.substr(0, kName.size() - 6) : kName;
+    };
+    const auto kWhole = [&](std::string_view path) {
+        return path == text || kFile(path) == text || kStem(path) == text;
+    };
+    const auto kStart = [&](std::string_view path) {
+        return path.starts_with(text) || kFile(path).starts_with(text);
+    };
+    for (const auto& kRule :
+         {std::function<bool(std::string_view)>{kWhole}, std::function<bool(std::string_view)>{kStart}}) {
+        std::vector<std::size_t> met;
+        for (std::size_t each = 0; each < scenes.size(); ++each) {
+            if (kRule(scenes[each])) {
+                met.push_back(each);
+            }
+        }
+        if (met.size() == 1) {
+            return met.front();
+        }
+        if (met.size() > 1) {
+            why = std::to_string(met.size()) + " scenes match " + std::string{text};
+            return std::nullopt;
+        }
+    }
+    why = "no scene matches " + std::string{text};
+    return std::nullopt;
 }
 
 std::optional<std::string> entityNamed(std::span<const std::string> ids,
