@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <iterator>
 #include <random>
 #include <span>
 #include <utility>
@@ -259,6 +260,11 @@ bool Catalog::offers(std::string_view operation) const {
     return std::ranges::find(operations, operation) != operations.end();
 }
 
+const Catalog::Component* Catalog::component(std::string_view id) const {
+    const auto kFound = std::ranges::find(components, id, &Component::id);
+    return kFound != components.end() ? &*kFound : nullptr;
+}
+
 Catalog catalogOf(std::string_view reply) {
     Catalog catalog;
     const auto kParsed = document::parse(reply);
@@ -277,9 +283,21 @@ Catalog catalogOf(std::string_view reply) {
                                  : std::span<const Value>{}) {
         const Value* id = each.find("id");
         const Value* name = each.find("name");
-        if (id != nullptr && id->text() != nullptr && name != nullptr && name->text() != nullptr) {
-            catalog.components.push_back({*id->text(), *name->text()});
+        if (id == nullptr || id->text() == nullptr || name == nullptr || name->text() == nullptr) {
+            continue;
         }
+        Catalog::Component made{.id = *id->text(), .name = *name->text(), .fields = {}};
+        const Value* fields = each.find("fields");
+        for (const Value& field :
+             fields != nullptr && fields->kind() == Value::Kind::Array ? fields->items() : std::span<const Value>{}) {
+            const Value* fieldName = field.find("name");
+            const Value* kind = field.find("kind");
+            if (fieldName != nullptr && fieldName->text() != nullptr) {
+                made.fields.push_back(
+                    {*fieldName->text(), kind != nullptr && kind->text() != nullptr ? *kind->text() : std::string{}});
+            }
+        }
+        catalog.components.push_back(std::move(made));
     }
     return catalog;
 }
@@ -318,6 +336,33 @@ std::optional<Catalog::Component> componentNamed(const Catalog& catalog, std::st
     }
     why = "no component matches " + std::string{text};
     return std::nullopt;
+}
+
+std::vector<FieldShown> fieldsShown(const Catalog::Component* type, const Value* fields) {
+    std::vector<FieldShown> shownFields;
+    if (type != nullptr) {
+        for (const Catalog::Field& kField : type->fields) {
+            shownFields.push_back({kField.name, kField.kind, std::nullopt});
+        }
+    }
+    for (const Value& each :
+         fields != nullptr && fields->kind() == Value::Kind::Array ? fields->items() : std::span<const Value>{}) {
+        const Value* name = each.find("name");
+        const Value* value = each.find("value");
+        if (name == nullptr || name->text() == nullptr) {
+            continue;
+        }
+        auto found = std::ranges::find(shownFields, *name->text(), &FieldShown::name);
+        if (found == shownFields.end()) {
+            shownFields.push_back({*name->text(), {}, std::nullopt});
+            found = std::prev(shownFields.end());
+        }
+        found->text = value != nullptr ? shown(*value) : std::string{};
+        if (value != nullptr && value->kind() == Value::Kind::Object && value->names().size() == 1) {
+            found->kind = value->names().front();
+        }
+    }
+    return shownFields;
 }
 
 std::string mintedIdentity() {

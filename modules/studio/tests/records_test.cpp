@@ -111,3 +111,21 @@ RAWFRAME_TEST(APreviewIsAskedForAndItsAnswerRead) {
         R"({"kind":"authoring.reply","id":6,"error":{"code":"capability_denied","message":"no view grant"}})");
     RAWFRAME_EXPECT(!kDenied.done && kDenied.message == "no view grant");
 }
+
+RAWFRAME_TEST(AComponentsFieldsAreTheCatalogsWithTheScenesValuesThenTheUnknown) {
+    Catalog::Component body{.id = "a",
+                            .name = "rawframe.physics2d.body",
+                            .fields = {{"motion", "unsigned"}, {"width", "real"}, {"height", "real"}}};
+    const auto kRead = document::parse(
+        R"([{"name":"height","value":{"real":0.5}},{"name":"width","value":{"real":40}},{"name":"legacy","value":{"signed":"3"}}])");
+    const std::vector<FieldShown> kShown = fieldsShown(&body, &*kRead);
+    RAWFRAME_EXPECT(kShown.size() == 4);
+    RAWFRAME_EXPECT(kShown[0].name == "motion" && kShown[0].kind == "unsigned" && !kShown[0].text.has_value());
+    RAWFRAME_EXPECT(kShown[1].name == "width" && kShown[1].text == "40");
+    RAWFRAME_EXPECT(kShown[2].name == "height" && kShown[2].kind == "real" && kShown[2].text == "0.5");
+    // Set, though the catalog does not know it: last, its kind its value's.
+    RAWFRAME_EXPECT(kShown[3].name == "legacy" && kShown[3].kind == "signed" && kShown[3].text == "3");
+    // No type in the catalog: what the scene sets alone.
+    RAWFRAME_EXPECT(fieldsShown(nullptr, &*kRead).size() == 3);
+    RAWFRAME_EXPECT(fieldsShown(&body, nullptr).size() == 3);
+}

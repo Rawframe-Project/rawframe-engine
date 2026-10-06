@@ -91,17 +91,42 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 /// What `authoring.describe` says Studio may do: the operations it offers
 /// by name, and the component catalog's types by identity and name.
 struct Catalog {
+    struct Field {
+        std::string name;
+        /// Its kind as a read value's key names it (`real`, `unsigned`...),
+        /// empty where the catalog has none.
+        std::string kind;
+    };
     struct Component {
         std::string id;
         std::string name;
+        /// Its fields in the catalog's order.
+        std::vector<Field> fields;
     };
     std::vector<std::string> operations;
     std::vector<Component> components;
 
     [[nodiscard]] bool offers(std::string_view operation) const;
+    /// The catalog's type of identity `id`, if it has one.
+    [[nodiscard]] const Component* component(std::string_view id) const;
 };
 
 [[nodiscard]] Catalog catalogOf(std::string_view reply);
+
+/// A component's field as Studio lists it: its name, its kind, and its
+/// value's text when the scene sets it.
+struct FieldShown {
+    std::string name;
+    std::string kind;
+    std::optional<std::string> text;
+};
+
+/// A component's fields as `read_entity` gave them (`fields`, may be
+/// null) over its type's in the catalog (`type`, may be null): the
+/// catalog's in its order, each with the scene's value when set, then any
+/// the scene sets that the catalog does not know. A field's kind is its
+/// value's, else the catalog's.
+[[nodiscard]] std::vector<FieldShown> fieldsShown(const Catalog::Component* type, const Value* fields);
 
 /// The catalog's component `text` names: by its whole name, or by the
 /// part after its last dot, or by the start of either, when one alone

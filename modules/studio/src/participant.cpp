@@ -528,24 +528,15 @@ private:
                 return;
             }
             ++components_;
-            const Value* fields = each.find("fields");
-            for (const Value& field : fields != nullptr ? fields->items() : std::span<const Value>{}) {
-                const Value* fieldName = field.find("name");
-                const Value* value = field.find("value");
-                if (fieldName == nullptr || fieldName->text() == nullptr) {
-                    continue;
-                }
-                auto line = fieldRow(*fieldName->text(), value != nullptr ? shown(*value) : std::string{});
+            for (const FieldShown& kEach : fieldsShown(catalog_.component(kComponent), each.find("fields"))) {
+                auto line =
+                    fieldRow(kEach.name, kEach.text.value_or(std::string{}), std::nullopt, kEach.text.has_value());
                 if (!line.has_value()) {
                     return;
                 }
                 componentRows_.push_back(line->first);
-                const bool kTyped =
-                    value != nullptr && value->kind() == Value::Kind::Object && value->names().size() == 1;
-                fields_.push_back(FieldRow{.value = line->second,
-                                           .component = kComponent,
-                                           .field = *fieldName->text(),
-                                           .kind = kTyped ? value->names().front() : std::string{}});
+                fields_.push_back(
+                    FieldRow{.value = line->second, .component = kComponent, .field = kEach.name, .kind = kEach.kind});
             }
         }
         if (catalog_.offers("scene.add_component")) {
@@ -580,8 +571,10 @@ private:
     }
 
     /// A field's line: its name, and its value in a node that edits.
-    result::Result<std::pair<ui::Node, ui::Node>>
-    fieldRow(std::string_view name, std::string_view value, std::optional<ui::Node> column = std::nullopt) {
+    result::Result<std::pair<ui::Node, ui::Node>> fieldRow(std::string_view name,
+                                                           std::string_view value,
+                                                           std::optional<ui::Node> column = std::nullopt,
+                                                           bool set = true) {
         RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
                             box(column.value_or(componentsColumn_),
                                 ui::Layout{.height = ui::pixels(28),
@@ -593,9 +586,11 @@ private:
                                 kPanel));
         RAWFRAME_TRY_ASSIGN(const ui::Node kName,
                             box(kLine, ui::Layout{.width = ui::pixels(120), .padding = {0, 2, 0, 2}}, 0));
-        RAWFRAME_TRY(words(kName, name, kQuiet, 14));
+        // A field the scene sets reads brighter than one at its default.
+        RAWFRAME_TRY(words(kName, name, set ? kText : kQuiet, 14));
         RAWFRAME_TRY_ASSIGN(const ui::Node kValue, tree_->addEditable(++keys_));
-        RAWFRAME_TRY(tree_->setLayout(kValue, ui::Layout{.grow = 1, .padding = {6, 2, 6, 2}}));
+        RAWFRAME_TRY(
+            tree_->setLayout(kValue, ui::Layout{.height = ui::pixels(22), .grow = 1, .padding = {6, 2, 6, 2}}));
         RAWFRAME_TRY(tree_->setLook(kValue, ui::Look{.fill = kField, .radius = 3}));
         RAWFRAME_TRY(tree_->attach(kLine, kValue));
         RAWFRAME_TRY(words(kValue, value, kText, 14));
