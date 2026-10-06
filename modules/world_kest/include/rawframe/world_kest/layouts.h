@@ -10,6 +10,7 @@
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_runtime/component_fields.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -17,6 +18,7 @@
 #include <span>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace rawframe::world_kest {
 
@@ -50,5 +52,18 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
                              std::string_view type,
                              std::size_t size,
                              std::initializer_list<std::pair<std::string_view, std::size_t>> fields);
+
+/// Whether the program's physics types are laid out as the engine's
+/// components and query answers; refused (`bad_game_line`) naming the type
+/// otherwise. `layouts` are the game's components', in their order.
+[[nodiscard]] result::Status checkPhysicsLayouts(const GameDescription& game,
+                                                 const kest::Program& program,
+                                                 std::span<const kest::TypeLayout> layouts);
+
+/// Each of the game's components field by field for a reader of the World
+/// (D409), from `layouts` in the components' order: an entity field whole,
+/// an enum by its cases, a field of no plain kind left out.
+[[nodiscard]] std::vector<world_runtime::ComponentFieldSet>
+componentFieldSets(const GameDescription& game, std::span<const kest::TypeLayout> layouts);
 
 } // namespace rawframe::world_kest

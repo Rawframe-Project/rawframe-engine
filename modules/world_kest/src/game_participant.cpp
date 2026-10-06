@@ -56,6 +56,7 @@ constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.na
                                           physics2d::kPhysics2DPlan.name,
                                           physics3d::kPhysics3DPlan.name,
                                           world_animation::kAnimationPlan.name,
+                                          world_runtime::kComponentFields.name,
                                           kPresentationPlan.name};
 /// A presenting client's machine (D260): its heap, and the fuel of one call.
 constexpr kest::MachineLimits kPresentationLimits{.heapBytes = std::size_t{4} << 20U, .fuelPerCall = 1'000'000};
@@ -102,6 +103,7 @@ class GameParticipant final : public composition::Participant,
                               public physics2d::Physics2DPlan,
                               public physics3d::Physics3DPlan,
                               public world_animation::AnimationPlan,
+                              public world_runtime::ComponentFields,
                               public PresentationPlan {
 public:
     GameParticipant() noexcept = default;
@@ -144,6 +146,7 @@ public:
             }
             layouts_.push_back(std::move(layout));
         }
+        fieldSets_ = componentFieldSets(game_, layouts_);
         const GameScenes kScenes{game_, layouts_};
         RAWFRAME_TRY(kScenes.addScenes(files, game_.spawns, references_));
         RAWFRAME_TRY(kScenes.addModScenes(files, game_.spawns));
@@ -599,6 +602,10 @@ public:
         return game_.playerSave.document.empty() ? nullptr : &persistence_.playerSave;
     }
 
+    std::span<const world_runtime::ComponentFieldSet> fieldSets() const noexcept override {
+        return fieldSets_;
+    }
+
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
         if (capability == world_replication::kReplicationPlan.name) {
             return composition::provideAs<world_replication::ReplicationPlan>(*this);
@@ -617,6 +624,9 @@ public:
         }
         if (capability == world_animation::kAnimationPlan.name) {
             return composition::provideAs<world_animation::AnimationPlan>(*this);
+        }
+        if (capability == world_runtime::kComponentFields.name) {
+            return composition::provideAs<world_runtime::ComponentFields>(*this);
         }
         if (capability == kPresentationPlan.name) {
             return composition::provideAs<PresentationPlan>(*this);
@@ -836,56 +846,7 @@ private:
         if (!game_.physics.has_value()) {
             return {};
         }
-        const PhysicsFacts kFacts = physicsFacts(game_.physics->dimensions);
-        const auto kType = [](kest::FieldKind kind) -> std::optional<schema::FieldType> {
-            switch (kind) {
-            case kest::FieldKind::U8:
-                return schema::FieldType::U8;
-            case kest::FieldKind::U32:
-                return schema::FieldType::U32;
-            case kest::FieldKind::U64:
-                return schema::FieldType::U64;
-            case kest::FieldKind::Bool:
-                return schema::FieldType::Bool;
-            case kest::FieldKind::F32:
-                return schema::FieldType::F32;
-            case kest::FieldKind::F64:
-                return schema::FieldType::F64;
-            default:
-                return std::nullopt;
-            }
-        };
-        std::vector<std::pair<const schema::ComponentLayout*, kest::TypeLayout>> checked;
-        for (const schema::ComponentLayout& engine : kFacts.components) {
-            const GameComponent& component = *componentNamed(engine.name);
-            checked.emplace_back(&engine, layouts_[static_cast<std::size_t>(&component - game_.components.data())]);
-        }
-        // The queries' answers, those the program uses.
-        for (const schema::ComponentLayout& answer : kFacts.answers) {
-            if (auto layout = program_->layout(answer.scriptType)) {
-                checked.emplace_back(&answer, std::move(*layout));
-            }
-        }
-        for (const auto& [kEngine, layout] : checked) {
-            const schema::ComponentLayout& engine = *kEngine;
-            bool same = layout.size == engine.size && layout.alignment == engine.alignment &&
-                        layout.fields.size() == engine.fields.size();
-            for (std::size_t index = 0; same && index < layout.fields.size(); ++index) {
-                const kest::Field& field = layout.fields[index];
-                same = field.name == engine.fields[index].name && field.offset == engine.fields[index].offset &&
-                       kType(field.kind) == engine.fields[index].type;
-            }
-            if (!same) {
-                return std::unexpected<result::Error>{
-                    refuse(result::ErrorClass::InvalidArgument,
-                           WorldKestError::BadGameLine,
-                           "the program's physics type is not laid out as the engine's component; import "
-                           "the engine's physics module rather than declaring it")
-                        .error()
-                        .withContext("type", engine.scriptType)
-                        .withContext("module", kFacts.module)};
-            }
-        }
+        RAWFRAME_TRY(checkPhysicsLayouts(game_, *program_, layouts_));
         if (!planOnly_ && game_.physics->dimensions == 3) {
             physics3d_ = physics3dSettings();
         } else if (!planOnly_) {
@@ -916,6 +877,8 @@ private:
     GameDescription game_;
     std::shared_ptr<const kest::Program> program_;
     std::vector<kest::TypeLayout> layouts_;
+    /// The components field by field, for a reader of the World (D409).
+    std::vector<world_runtime::ComponentFieldSet> fieldSets_;
     std::vector<schema::ComponentDescriptor> descriptors_;
     world_replication::ReplicationTable table_;
     std::vector<schema::ComponentTypeId> playerComponents_;
