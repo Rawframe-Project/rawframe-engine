@@ -32,6 +32,13 @@
 // component the game no longer has), or `failed`. A refused scene is left
 // as it was; nothing is dropped.
 //
+// `session` holds an authoring session on standard input and output
+// (D407, authoring/session.h): records a line, the game read once, scenes
+// under the scene root (the game's directory unless named) opened as
+// records name them and kept open with their undo histories, each change
+// written to its file as it commits. A scene whose file changed under the
+// session is opened again, its history let go, and the answer says so.
+//
 // Exit status 0 when everything succeeded, 1 otherwise, and 2 for a usage
 // error.
 
@@ -39,6 +46,7 @@
 #include "rawframe/authoring/operations.h"
 #include "rawframe/authoring/queries.h"
 #include "rawframe/authoring/request.h"
+#include "rawframe/authoring/session.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/document/json.h"
@@ -52,7 +60,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -450,6 +460,320 @@ int migrate(const char* game, std::span<char* const> scenes, bool dryRun) {
     return clean ? 0 : 1;
 }
 
+/// A scene a session holds open: the document with its history, and the
+/// digest of the bytes on disk as the session last read or wrote them.
+struct OpenScene {
+    std::unique_ptr<authoring::AuthoredScene> document;
+    std::string onDisk;
+};
+
+/// An authoring session (D407): the game read once, its scenes opened as
+/// records name them and kept open with their histories, each change
+/// written to its file as it commits.
+class Session {
+public:
+    Session(std::filesystem::path game, std::filesystem::path root)
+        : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)) {
+    }
+
+    /// Reads records from `in` and replies on `out` until `end` or the
+    /// input ends; 0 when every record succeeded.
+    int run(std::FILE* in, std::FILE* out) {
+        bool clean = true;
+        std::string line;
+        while (readLine(in, line)) {
+            Value id;
+            std::string reply;
+            bool ended = false;
+            if (line.size() > authoring::kMaximumSessionRecordBytes) {
+                reply = authoring::writeRefusal(id, limitError());
+                clean = false;
+            } else {
+                auto record = authoring::readSessionRecord(line, id);
+                if (!record.has_value()) {
+                    reply = authoring::writeRefusal(id, record.error());
+                    clean = false;
+                } else {
+                    ended = record->verb == authoring::SessionVerb::End;
+                    auto answer = handle(*record);
+                    reply = answer.has_value() ? authoring::writeReply(id, std::move(*answer))
+                                               : authoring::writeRefusal(id, answer.error());
+                    clean = clean && answer.has_value() && !failed_;
+                }
+            }
+            std::fputs(reply.c_str(), out);
+            std::fflush(out);
+            if (ended) {
+                break;
+            }
+        }
+        return clean ? 0 : 1;
+    }
+
+private:
+    /// One line of `in` without its line feed; false at the input's end.
+    /// A line past the record limit is read through and left that long, so
+    /// it is refused whole.
+    static bool readLine(std::FILE* in, std::string& line) {
+        line.clear();
+        int each = 0;
+        bool any = false;
+        while ((each = std::fgetc(in)) != EOF) {
+            any = true;
+            if (each == '\n') {
+                return true;
+            }
+            if (line.size() <= authoring::kMaximumSessionRecordBytes) {
+                line.push_back(static_cast<char>(each));
+            }
+        }
+        return any;
+    }
+
+    static result::Error limitError() {
+        return result::fail(result::ErrorClass::ResourceExhausted,
+                            authoring::kAuthoringDomain,
+                            code(authoring::AuthoringError::LimitExceeded),
+                            "a session record is at most 16 MiB")
+            .error();
+    }
+
+    static result::Error failure(authoring::AuthoringError error, result::ErrorClass kind, std::string_view why) {
+        return result::fail(kind, authoring::kAuthoringDomain, code(error), why).error();
+    }
+
+    result::Result<Value> handle(const authoring::SessionRecord& record) {
+        failed_ = false;
+        if (record.verb == authoring::SessionVerb::Hello) {
+            if (record.surfaceGeneration != authoring::kSurfaceGeneration) {
+                return std::unexpected{
+                    failure(authoring::AuthoringError::UnsupportedOperation,
+                            result::ErrorClass::InvalidArgument,
+                            "the session speaks only its own surface generation until a stability promise")
+                        .withContext("surfaceGeneration", std::to_string(authoring::kSurfaceGeneration))};
+            }
+            RAWFRAME_TRY(load());
+            greeted_ = true;
+            Value made = Value::object();
+            made.add("kind", Value::string("authoring.welcome"));
+            made.add("surfaceGeneration", Value::integer(authoring::kSurfaceGeneration));
+            return made;
+        }
+        if (!greeted_) {
+            return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                           result::ErrorClass::FailedPrecondition,
+                                           "a session begins with hello")};
+        }
+        switch (record.verb) {
+        case authoring::SessionVerb::Hello:
+            break;
+        case authoring::SessionVerb::Describe:
+            return rawframe::document::parse(authoring::writeDiscovery(&*catalog_));
+        case authoring::SessionVerb::End: {
+            Value made = Value::object();
+            made.add("kind", Value::string("authoring.ended"));
+            return made;
+        }
+        case authoring::SessionVerb::Apply:
+            return applied(record);
+        case authoring::SessionVerb::Read:
+            return answered(record);
+        case authoring::SessionVerb::Undo:
+        case authoring::SessionVerb::Redo:
+            return stepped(record, record.verb == authoring::SessionVerb::Undo);
+        }
+        return std::unexpected{failure(
+            authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
+    }
+
+    /// The game's catalog and the scenes an instance may name, read once.
+    result::Status load() {
+        if (catalog_.has_value()) {
+            return {};
+        }
+        auto files = rawframe::world_kest::GameFiles::fromDirectory(game_.string());
+        if (!files.has_value()) {
+            return std::unexpected<result::Error>{std::move(files).error()};
+        }
+        RAWFRAME_TRY_ASSIGN(catalog_, catalogOf(*files));
+        beside_ = scenesBeside(game_);
+        return {};
+    }
+
+    /// The scene a record names, opened if it is not; reopened, its
+    /// history let go, when its file changed under the session.
+    result::Result<OpenScene*> sceneOf(const std::string& name, bool& reopened) {
+        reopened = false;
+        const std::filesystem::path kPath = std::filesystem::weakly_canonical(root_ / name);
+        const auto [kRootEnd, kPathAt] = std::ranges::mismatch(root_, kPath);
+        if (kRootEnd != root_.end() || kPath.extension() != ".scene") {
+            return std::unexpected{failure(authoring::AuthoringError::TargetNotFound,
+                                           result::ErrorClass::NotFound,
+                                           "a session's scenes are .scene files under its root")
+                                       .withContext("scene", name)};
+        }
+        const auto kText = readFile(kPath);
+        if (!kText.has_value()) {
+            return std::unexpected{failure(authoring::AuthoringError::TargetNotFound,
+                                           result::ErrorClass::NotFound,
+                                           "the scene is a file that reads")
+                                       .withContext("scene", name)};
+        }
+        const std::string kDigest = digestOf(*kText);
+        OpenScene& open = scenes_[kPath.string()];
+        if (open.document != nullptr && open.onDisk == kDigest) {
+            return &open;
+        }
+        reopened = open.document != nullptr;
+        RAWFRAME_TRY_ASSIGN(
+            open.document,
+            authoring::AuthoredScene::open(sidecarIdentity(kPath).value_or(rawframe::base::Bits128{}), *kText));
+        open.onDisk = kDigest;
+        return &open;
+    }
+
+    /// Writes an open scene whose document changed, by rename.
+    result::Result<bool> save(const std::string& name, OpenScene& open) {
+        const std::string kText = open.document->text();
+        if (digestOf(kText) == open.onDisk) {
+            return false;
+        }
+        const std::filesystem::path kPath = std::filesystem::weakly_canonical(root_ / name);
+        const std::filesystem::path kStaged = kPath.string() + ".authoring";
+        std::ofstream{kStaged, std::ios::binary | std::ios::trunc} << kText;
+        std::error_code renamed;
+        std::filesystem::rename(kStaged, kPath, renamed);
+        if (renamed) {
+            return std::unexpected{failure(authoring::AuthoringError::Internal,
+                                           result::ErrorClass::Unavailable,
+                                           "the scene could not be replaced")};
+        }
+        open.onDisk = digestOf(kText);
+        open.document->markSaved();
+        return true;
+    }
+
+    rawframe::scene::SceneSource sources() const {
+        return [this](rawframe::base::Bits128 id) -> result::Result<rawframe::scene::Scene> {
+            const auto kFound =
+                std::ranges::find(beside_, id, &std::pair<rawframe::base::Bits128, std::filesystem::path>::first);
+            const auto kText = kFound != beside_.end() ? readFile(kFound->second) : std::nullopt;
+            if (!kText.has_value()) {
+                return result::fail(result::ErrorClass::NotFound,
+                                    authoring::kAuthoringDomain,
+                                    code(authoring::AuthoringError::TargetNotFound),
+                                    "no scene beside the game has that identity");
+            }
+            return rawframe::scene::readScene(*kText);
+        };
+    }
+
+    /// The outcome document `apply` writes, from a session's scene.
+    static Value outcome(const OpenScene& open, bool written, bool reopened, Value results, std::size_t skipped) {
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.outcome"));
+        made.add("document", Value::string(digestOf(open.document->text())));
+        made.add("written", Value::boolean(written));
+        made.add("reopened", Value::boolean(reopened));
+        made.add("undoable", Value::integer(static_cast<std::int64_t>(open.document->undoable())));
+        made.add("redoable", Value::integer(static_cast<std::int64_t>(open.document->redoable())));
+        made.add("results", std::move(results));
+        made.add("skipped", Value::integer(static_cast<std::int64_t>(skipped)));
+        return made;
+    }
+
+    result::Result<Value> applied(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        authoring::AuthoredScene& document = *open->document;
+        const authoring::Request& request = record.request;
+        const std::string kBefore = digestOf(document.text());
+        if (request.expects.has_value() && *request.expects != kBefore) {
+            return std::unexpected{failure(authoring::AuthoringError::TargetStale,
+                                           result::ErrorClass::FailedPrecondition,
+                                           "the request was computed against another generation of the scene")
+                                       .withContext("document", kBefore)};
+        }
+        const rawframe::scene::SceneSource kSources = sources();
+        Value results = Value::array();
+        std::size_t skipped = 0;
+        if (request.batch == authoring::Batch::Atomic) {
+            const auto kOutcome =
+                authoring::executeAtomic(document, document.generation(), request.operations, *catalog_, &kSources);
+            failed_ = !kOutcome.has_value();
+            results.push(slotValue(kOutcome));
+        } else {
+            const authoring::IndependentOutcome kOutcomes = authoring::executeIndependent(
+                document,
+                document.generation(),
+                request.operations,
+                *catalog_,
+                request.batch == authoring::Batch::HaltRemaining ? authoring::OnFailure::HaltRemaining
+                                                                 : authoring::OnFailure::ContinuePerItem,
+                &kSources);
+            for (const auto& each : kOutcomes.outcomes) {
+                failed_ = failed_ || !each.has_value();
+                results.push(slotValue(each));
+            }
+            skipped = kOutcomes.skipped;
+        }
+        RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
+        return outcome(*open, kWritten, reopened, std::move(results), skipped);
+    }
+
+    result::Result<Value> answered(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        Value answers = Value::array();
+        for (const authoring::Query& query : record.queries) {
+            const auto kAnswer = authoring::answer(open->document->scene(), query, *catalog_);
+            Value made = Value::object();
+            if (kAnswer.has_value()) {
+                made.add("answer", authoring::answerValue(*kAnswer));
+            } else {
+                failed_ = true;
+                made.add("error", authoring::errorRecord(kAnswer.error()));
+            }
+            answers.push(std::move(made));
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.answers"));
+        made.add("document", Value::string(digestOf(open->document->text())));
+        made.add("reopened", Value::boolean(reopened));
+        made.add("answers", std::move(answers));
+        return made;
+    }
+
+    result::Result<Value> stepped(const authoring::SessionRecord& record, bool undo) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        authoring::AuthoredScene& document = *open->document;
+        const std::string kBefore = digestOf(document.text());
+        if (record.expects.has_value() && *record.expects != kBefore) {
+            return std::unexpected{failure(authoring::AuthoringError::TargetStale,
+                                           result::ErrorClass::FailedPrecondition,
+                                           "the step was asked against another generation of the scene")
+                                       .withContext("document", kBefore)};
+        }
+        const auto kStep = undo ? document.undo(document.generation()) : document.redo(document.generation());
+        Value results = Value::array();
+        failed_ = !kStep.has_value();
+        results.push(slotValue(kStep));
+        RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
+        return outcome(*open, kWritten, reopened, std::move(results), 0);
+    }
+
+    std::filesystem::path game_;
+    std::filesystem::path root_;
+    std::optional<authoring::ComponentCatalog> catalog_;
+    std::vector<std::pair<rawframe::base::Bits128, std::filesystem::path>> beside_;
+    std::map<std::string, OpenScene> scenes_;
+    bool greeted_ = false;
+    /// Whether the last record's operations, queries, or step failed in a
+    /// slot of its answer.
+    bool failed_ = false;
+};
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -468,6 +792,11 @@ int main(int argc, char** argv) {
     if (kVerb == "apply" && (argc == 5 || kDryRun)) {
         return apply(argv[2], argv[3], argv[4], kDryRun);
     }
+    if (kVerb == "session" && (argc == 3 || argc == 4)) {
+        const std::filesystem::path kGame = argv[2];
+        Session session{kGame, argc == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path()};
+        return session.run(stdin, stdout);
+    }
     if (kVerb == "migrate" && argc >= 4) {
         const bool kDry = std::string_view{argv[argc - 1]} == "--dry-run";
         const std::span<char* const> kScenes{argv + 3, static_cast<std::size_t>(argc - 3 - (kDry ? 1 : 0))};
@@ -478,7 +807,8 @@ int main(int argc, char** argv) {
     std::fputs("usage: rawframe-author describe [<game description>]\n"
                "       rawframe-author apply <game description> <scene> <request> [--dry-run]\n"
                "       rawframe-author read <game description> <scene> <queries>\n"
-               "       rawframe-author migrate <game description> <scene>... [--dry-run]\n",
+               "       rawframe-author migrate <game description> <scene>... [--dry-run]\n"
+               "       rawframe-author session <game description> [<scene root>]\n",
                stderr);
     return 2;
 }

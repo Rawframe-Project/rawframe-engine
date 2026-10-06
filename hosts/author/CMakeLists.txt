@@ -43,4 +43,11 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_arena> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/author_cases)
     set_tests_properties(author_cases PROPERTIES PASS_REGULAR_EXPRESSION "authored patrol's cases")
+    # An authoring session on runners' level: undone to its very bytes,
+    # redone, a stale step refused, the file changed under it opened again,
+    # and records out of form or naming a scene outside its root refused.
+    add_test(NAME author_session
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_session.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_session)
+    set_tests_properties(author_session PROPERTIES PASS_REGULAR_EXPRESSION "authored runners in a session")
 endif()

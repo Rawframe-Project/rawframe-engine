@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- `rawframe-author session <game> [<scene root>]` holds an authoring session on standard input and output, one JSON record a line each way: scenes stay open with their undo histories between requests, and `undo` and `redo` step them. The records carry the same request, query, and discovery documents as the other verbs.
 - The client opens windows and reads input on macOS, through Maul Window 0.5.0's AppKit backend, and draws there through Maul RHI's Metal driver: every shader container carries its entries in Metal's language too.
 - A UI tree's glyph images are kept in Maul UI's glyph atlas: when it is full, the plot least recently drawn is emptied rather than the whole atlas, and `Tree::create` refuses an atlas side outside 64 to 16,384 or not a multiple of 4.
 - An exported game's default port is one of 20000 to 29999 taken from the game's resource identity instead of 47217 for every game, so two exported games can run at once on one machine; `--port` still names one.
