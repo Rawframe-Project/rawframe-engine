@@ -7,6 +7,8 @@
 #include "rawframe/authoring/session.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/authoring_session/link.h"
+#include "rawframe/base/bits128.h"
+#include "rawframe/content/sidecar.h"
 #include "rawframe/document/json.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/schema/stable_id.h"
@@ -19,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <random>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -132,6 +135,8 @@ private:
             return viewed(record);
         case authoring::SessionVerb::Preview:
             return previewed(record);
+        case authoring::SessionVerb::CreateScene:
+            return created(record);
         }
         return std::unexpected{failure(
             authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
@@ -152,10 +157,8 @@ private:
         return {};
     }
 
-    /// The scene a record names, opened if it is not; reopened, its
-    /// history let go, when its file changed under the session.
-    result::Result<OpenScene*> sceneOf(const std::string& name, bool& reopened) {
-        reopened = false;
+    /// Where the scene a record names is: a .scene file under the root.
+    result::Result<std::filesystem::path> pathOf(const std::string& name) const {
         const std::filesystem::path kPath = std::filesystem::weakly_canonical(root_ / name);
         const auto [kRootEnd, kPathAt] = std::ranges::mismatch(root_, kPath);
         if (kRootEnd != root_.end() || kPath.extension() != ".scene") {
@@ -164,6 +167,14 @@ private:
                                            "a session's scenes are .scene files under its root")
                                        .withContext("scene", name)};
         }
+        return kPath;
+    }
+
+    /// The scene a record names, opened if it is not; reopened, its
+    /// history let go, when its file changed under the session.
+    result::Result<OpenScene*> sceneOf(const std::string& name, bool& reopened) {
+        reopened = false;
+        RAWFRAME_TRY_ASSIGN(const std::filesystem::path kPath, pathOf(name));
         const auto kText = readFile(kPath);
         if (!kText.has_value()) {
             return std::unexpected{failure(authoring::AuthoringError::TargetNotFound,
@@ -218,6 +229,69 @@ private:
             }
             return rawframe::scene::readScene(*kText);
         };
+    }
+
+    /// A new scene (D449): empty, beside a sidecar giving it a fresh
+    /// resource identity, at a path under the root in a directory that is
+    /// there, where neither is. A new document, so no history holds it; the
+    /// scenes an instance may name gain it.
+    result::Result<Value> created(const authoring::SessionRecord& record) {
+        RAWFRAME_TRY_ASSIGN(const std::filesystem::path kPath, pathOf(record.scene));
+        const std::filesystem::path kSidecar = kPath.string() + std::string{content::kSidecarSuffix};
+        std::error_code error;
+        if (std::filesystem::exists(std::filesystem::symlink_status(kPath, error)) ||
+            std::filesystem::exists(std::filesystem::symlink_status(kSidecar, error))) {
+            return std::unexpected{failure(authoring::AuthoringError::Conflict,
+                                           result::ErrorClass::AlreadyExists,
+                                           "a new scene's path and its sidecar's are free")
+                                       .withContext("scene", record.scene)};
+        }
+        if (!std::filesystem::is_directory(kPath.parent_path(), error)) {
+            return std::unexpected{failure(authoring::AuthoringError::TargetNotFound,
+                                           result::ErrorClass::NotFound,
+                                           "a new scene goes in a directory that is there")
+                                       .withContext("scene", record.scene)};
+        }
+        std::random_device device;
+        const auto kWord = [&device] {
+            return (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
+        };
+        const content::ResourceId kIdentity{.value = base::Bits128{.high = kWord(), .low = kWord()}};
+        RAWFRAME_TRY_ASSIGN(const std::string kText, rawframe::scene::writeScene(rawframe::scene::Scene{}));
+        // Each file made where nothing is, so nothing put there meanwhile
+        // is followed or replaced; the sidecar last, so a scene without one
+        // is never named.
+        const auto kWritten = [](const std::filesystem::path& path, std::string_view text) {
+            std::FILE* file = std::fopen(path.string().c_str(), "wbx");
+            if (file == nullptr) {
+                return false;
+            }
+            const bool kWhole = std::fwrite(text.data(), 1, text.size(), file) == text.size();
+            return std::fclose(file) == 0 && kWhole;
+        };
+        if (!kWritten(kPath, kText)) {
+            return std::unexpected{failure(authoring::AuthoringError::Conflict,
+                                           result::ErrorClass::Unavailable,
+                                           "the new scene could not be written")
+                                       .withContext("scene", record.scene)};
+        }
+        if (!kWritten(kSidecar,
+                      content::writeSidecar(content::Sidecar{.id = kIdentity, .importer = "rawframe.scene"}))) {
+            std::filesystem::remove(kPath, error);
+            return std::unexpected{failure(authoring::AuthoringError::Conflict,
+                                           result::ErrorClass::Unavailable,
+                                           "the new scene's sidecar could not be written")
+                                       .withContext("scene", record.scene)};
+        }
+        beside_.emplace_back(kIdentity.value, kPath);
+        std::array<char, base::kBits128HexDigits> digits{};
+        base::formatBits128Hex(kIdentity.value, digits);
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.created"));
+        made.add("scene", Value::string(record.scene));
+        made.add("resource", Value::string(std::string{digits.data(), digits.size()}));
+        made.add("document", Value::string(digestOf(kText)));
+        return made;
     }
 
     /// The outcome document `apply` writes, from a session's scene.

@@ -43,6 +43,13 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     const auto kUndo =
         readSessionRecord(R"({"kind":"authoring.undo","id":4,"scene":"a.scene","expects":"sha256:00"})", id);
     RAWFRAME_EXPECT(kUndo.has_value() && kUndo->verb == SessionVerb::Undo && kUndo->expects == "sha256:00");
+    const auto kCreate = readSessionRecord(R"({"kind":"authoring.create_scene","id":5,"scene":"b.scene"})", id);
+    RAWFRAME_EXPECT(kCreate.has_value() && kCreate->verb == SessionVerb::CreateScene && kCreate->scene == "b.scene");
+    // A new scene is named by its path and nothing else.
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.create_scene","id":6})", id).has_value());
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.create_scene","scene":"b.scene","expects":"sha256:00"})", id)
+             .has_value());
     const auto kRedo = readSessionRecord(R"({"kind":"authoring.redo","scene":"a.scene"})", id);
     RAWFRAME_EXPECT(kRedo.has_value() && kRedo->verb == SessionVerb::Redo && !kRedo->expects.has_value());
     const auto kSelect = readSessionRecord(

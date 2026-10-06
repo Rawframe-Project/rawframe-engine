@@ -157,4 +157,36 @@ done
 reply 2 | grep -q '"code":"capability_denied".*"endpoint":"192.0.2.1:9"'
 reply 3 | grep -q '"code":"capability_denied".*"endpoint":"127.0.0.1.example:9"'
 reply 4 | grep -q '"said":"the pin and token files must read"'
+# A new scene (D449): empty, with a sidecar of its own identity; one where
+# a scene is, outside the root, or in a directory not there is refused. Given
+# an entity, it is found by that identity in a later session on the game,
+# and the level places an instance of it.
+cp -R "$repository/games/runners" "$work/runners"
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.create_scene","id":2,"scene":"crate.scene"}'
+    echo '{"kind":"authoring.create_scene","id":3,"scene":"crate.scene"}'
+    echo '{"kind":"authoring.create_scene","id":4,"scene":"../outside.scene"}'
+    echo '{"kind":"authoring.create_scene","id":5,"scene":"parts/crate.scene"}'
+    echo '{"kind":"authoring.create_scene","id":6,"scene":"level.scene"}'
+    echo '{"kind":"authoring.read","id":7,"scene":"crate.scene","queries":{"formatVersion":1,"kind":"authoring.query","queries":[{"operation":"scene.list_entities"}]}}'
+    echo '{"kind":"authoring.apply","id":8,"scene":"crate.scene","request":{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"scene.create_entity","entity":"3c9e1d40-7a2b-4f6e-8d15-0b4c2e9f7a63","name":"crate"}]}}'
+} | "$author" session "$work/runners/runners.game" "$work/runners" >"$work/replies" || true
+reply 2 | grep -q '"answer":{"kind":"authoring.created","scene":"crate.scene","resource":"[0-9a-f]\{32\}","document":"sha256:'
+reply 3 | grep -q '"code":"conflict","class":"already_exists"'
+reply 4 | grep -q '"class":"not_found"'
+reply 5 | grep -q '"class":"not_found"'
+reply 6 | grep -q '"code":"conflict","class":"already_exists"'
+reply 7 | grep -q '"entities":\[\]'
+reply 8 | grep -q '"written":true'
+grep -q '"importer": "rawframe.scene"' "$work/runners/crate.scene.rfmeta"
+[ ! -e "$work/outside.scene" ] && [ ! -e "$work/runners/parts" ]
+resource=$(reply 2 | grep -o '"resource":"[0-9a-f]*"' | cut -d'"' -f4)
+place='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"scene.add_instance","scene":"'"$resource"'","instance":"'"$crate"'"}]}'
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.apply","id":2,"scene":"level.scene","request":'"$place"'}'
+} | "$author" session "$work/runners/runners.game" "$work/runners" >"$work/replies" || true
+reply 2 | grep -q '"written":true'
+grep -q "\"scene\": \"$resource\"" "$work/runners/level.scene"
 echo "authored runners in a session"

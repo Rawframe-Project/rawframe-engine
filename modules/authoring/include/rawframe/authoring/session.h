@@ -60,6 +60,9 @@ enum class SessionVerb : std::uint8_t {
     Select,
     View,
     Preview,
+    /// A new, empty scene and its sidecar, at a path under the root that
+    /// holds neither (D449).
+    CreateScene,
     End,
 };
 
@@ -77,7 +80,7 @@ struct SessionRecord {
     /// The client's id for it; null when it gave none.
     document::Value id;
     /// The scene's path under the game's directory, for apply, read, undo,
-    /// and redo.
+    /// redo, and the verbs naming a scene.
     std::string scene;
     /// Hello's surface generation.
     std::uint32_t surfaceGeneration = 0;
