@@ -164,10 +164,11 @@ public:
     /// the game, else the press code of the node it lands on.
     [[nodiscard]] std::optional<std::int64_t> press(float x, float y) const;
 
-    /// As `press`, for a press (D426): one on a text field gives it the
-    /// keyboard, the caret where it landed; one anywhere else takes the
-    /// keyboard from the field that held it.
-    [[nodiscard]] std::optional<std::int64_t> pressAt(float x, float y);
+    /// A press went down at `x`, `y` (D426): on a text field it gives the
+    /// field the keyboard, the caret where it landed; anywhere else it
+    /// takes the keyboard from the field that held it. The caret is placed
+    /// at once, by the last layout.
+    void pressAt(float x, float y);
     /// What was typed, to the field holding the keyboard; nothing while
     /// none does. Enter gives a single line's text, Escape lets go.
     void type(const view::Typing& typing);

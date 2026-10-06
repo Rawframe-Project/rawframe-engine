@@ -149,7 +149,14 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     while (std::optional<window::Event> event = windows.next()) {
         closing = closing || event->kind == window::EventKind::CloseRequested;
         bridge_->take(*event);
-        // Where the mouse is, for what the UI shows under it (D422).
+        // Where the mouse is, for what the UI shows under it (D422), and
+        // where a press went down, for the field that takes the keyboard
+        // (D426).
+        if (event->kind == window::EventKind::ButtonDown) {
+            pointing_.pressed(event->pointer.position.x, event->pointer.position.y);
+        } else if (event->kind == window::EventKind::TouchDown) {
+            pointing_.pressed(event->touch.position.x, event->touch.position.y);
+        }
         if (event->kind == window::EventKind::CursorMoved) {
             pointing_.pointAt(event->pointer.position.x, event->pointer.position.y);
         } else if (event->kind == window::EventKind::CursorLeft || event->kind == window::EventKind::FocusLost) {

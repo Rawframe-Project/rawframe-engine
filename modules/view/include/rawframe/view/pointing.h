@@ -44,6 +44,24 @@ public:
         return answer_ ? answer_(x, y, true) : std::nullopt;
     }
 
+    /// What the UI does as a press goes down at `x`, `y` (D426): a text
+    /// field there takes the keyboard, one elsewhere lets it go.
+    using Pressed = std::function<void(float x, float y)>;
+
+    /// The UI's side: what a press going down does from now on; empty, as
+    /// the UI goes, for nothing.
+    void onPress(Pressed pressed) noexcept {
+        pressed_ = std::move(pressed);
+    }
+    /// The host's side: a mouse button or a touch went down at `x`, `y`,
+    /// told in the order of the window's records, so the keys that follow
+    /// find the keyboard where the press put it.
+    void pressed(float x, float y) const {
+        if (pressed_) {
+            pressed_(x, y);
+        }
+    }
+
     /// The host's side: the mouse is at `x`, `y` over the window, or has
     /// left it.
     void pointAt(float x, float y) noexcept {
@@ -62,6 +80,7 @@ public:
 
 private:
     Answer answer_;
+    Pressed pressed_;
     std::array<float, 2> pointer_{};
     bool pointed_ = false;
 };

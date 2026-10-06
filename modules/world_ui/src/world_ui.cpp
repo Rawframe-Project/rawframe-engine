@@ -212,6 +212,20 @@ struct WorldUi::State {
         caret.reset();
     }
 
+    /// Where the caret of the field holding the keyboard is, in the window,
+    /// as the tree was last laid out; none while none does.
+    void placeCaret() {
+        caret.reset();
+        if (!focus.has_value()) {
+            return;
+        }
+        const auto kPlace = tree->placeOf(window, focus->edit->node());
+        const auto kCaret = focus->edit->caretRect();
+        if (kPlace.has_value() && kCaret.has_value()) {
+            caret = view::UiTyping::Caret{kPlace->x + kCaret->x, kPlace->y + kCaret->y, kCaret->width, kCaret->height};
+        }
+    }
+
     /// `entry`'s node gone, its children first made roots so they live on.
     void drop(Entry& entry) {
         if (!entry.node.has_value()) {
@@ -532,17 +546,10 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
     RAWFRAME_TRY(state.tree->draw(state.window, scale, state.drawn));
     // The field holding the keyboard: its caret and selection drawn over
     // the tree, and where the caret is told for the input method (D426).
-    state.caret.reset();
     if (state.focus.has_value()) {
-        const ui::TextEdit& kEdit = *state.focus->edit;
-        static_cast<void>(kEdit.decorate(state.window, state.drawn));
-        const auto kPlace = state.tree->placeOf(state.window, kEdit.node());
-        const auto kCaret = kEdit.caretRect();
-        if (kPlace.has_value() && kCaret.has_value()) {
-            state.caret =
-                view::UiTyping::Caret{kPlace->x + kCaret->x, kPlace->y + kCaret->y, kCaret->width, kCaret->height};
-        }
+        static_cast<void>(state.focus->edit->decorate(state.window, state.drawn));
     }
+    state.placeCaret();
     ++state.statistics.frames;
     state.statistics.mostNodes = std::max<std::uint64_t>(state.statistics.mostNodes, state.held);
     return {};
@@ -594,7 +601,7 @@ std::optional<std::int64_t> WorldUi::press(float x, float y) const {
     return std::int64_t{0};
 }
 
-std::optional<std::int64_t> WorldUi::pressAt(float x, float y) {
+void WorldUi::pressAt(float x, float y) {
     State& state = *state_;
     const auto kHit = state.tree->hit(state.window, x, y);
     if (kHit.has_value() && kHit->node.has_value()) {
@@ -610,12 +617,12 @@ std::optional<std::int64_t> WorldUi::pressAt(float x, float y) {
                     ++state.statistics.focused;
                 }
                 static_cast<void>(state.focus->edit->pointAt(kHit->x, kHit->y, false));
-                return entry.value.press;
+                state.placeCaret();
+                return;
             }
         }
     }
     state.letGo();
-    return press(x, y);
 }
 
 void WorldUi::type(const view::Typing& typing) {

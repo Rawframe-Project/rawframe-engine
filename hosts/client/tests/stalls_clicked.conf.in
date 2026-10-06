@@ -4,3 +4,6 @@
 bots.player = true
 render.device = any
 content.root = @TYCOON_CONTENT@
+# What is checked is where presses and keys go, not how fast a loaded
+# machine draws: the client's World may fall behind without stopping it.
+world.overload_ms = 0

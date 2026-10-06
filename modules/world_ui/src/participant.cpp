@@ -273,11 +273,23 @@ public:
                 if (failed_) {
                     return std::nullopt;
                 }
-                // A press gives a text field the keyboard, or takes it
-                // (D426); the mouse only hovering changes nothing.
-                const std::optional<std::int64_t> kTaken = pressing ? ui_->pressAt(x, y) : ui_->press(x, y);
+                const std::optional<std::int64_t> kTaken = ui_->press(x, y);
                 presses_ += pressing && kTaken.has_value() ? 1 : 0;
                 return kTaken;
+            });
+        }
+        // A press going down gives a text field the keyboard, or takes it,
+        // as the host reads the window's records (D426): the keys after it
+        // find the keyboard where it put it.
+        if (pointing_ != nullptr && ui_ != nullptr) {
+            pointing_->onPress([this](float x, float y) {
+                if (failed_) {
+                    return;
+                }
+                ui_->pressAt(x, y);
+                if (typing_ != nullptr) {
+                    typing_->focus(ui_->caret());
+                }
             });
         }
         // What is typed, to the field holding the keyboard.
@@ -366,6 +378,7 @@ public:
     void stop() noexcept override {
         if (pointing_ != nullptr) {
             pointing_->answer({});
+            pointing_->onPress({});
         }
         if (typing_ != nullptr) {
             typing_->answer({});
