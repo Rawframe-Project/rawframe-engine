@@ -453,9 +453,19 @@ RAWFRAME_TEST(ARenewedIdentityServesNewConnectionsAndKeepsOldOnes) {
     RAWFRAME_EXPECT(before->connect({endpointAt(pair.port)}).has_value());
     std::vector<Event> serverEvents;
     std::vector<Event> beforeEvents;
-    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {before.get(), &beforeEvents}}, [&] {
-        return find(beforeEvents, EventKind::Connected) != nullptr;
-    }));
+    // Both sides of it: the server accepts at its own end of the handshake,
+    // which may come after the client's, and later than another's.
+    const bool kBoth = pumpUntil({{server.get(), &serverEvents}, {before.get(), &beforeEvents}}, [&] {
+        return find(beforeEvents, EventKind::Connected) != nullptr &&
+               find(serverEvents, EventKind::Accepted) != nullptr;
+    });
+    RAWFRAME_EXPECT(kBoth);
+    if (!kBoth) {
+        return;
+    }
+    // The ids are copied: pumping appends to the events, which moves them.
+    const network::ConnectionId kServerSide = find(serverEvents, EventKind::Accepted)->connection;
+    const network::ConnectionId kClientSide = find(beforeEvents, EventKind::Connected)->connection;
     const network_quic::Certificate kRenewed = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
     RAWFRAME_EXPECT(pair.server->renew(kRenewed).has_value());
     RAWFRAME_EXPECT(!pair.server->renew(network_quic::Certificate{}).has_value());
@@ -479,15 +489,6 @@ RAWFRAME_TEST(ARenewedIdentityServesNewConnectionsAndKeepsOldOnes) {
     RAWFRAME_EXPECT(untrusted != nullptr && untrusted->reason == CloseReason::Untrusted);
     // The connection from before still carries what is sent on it, on a
     // stream, which nothing on the way may lose.
-    // The ids are copied: pumping appends to the events, which moves them.
-    const Event* accepted = find(serverEvents, EventKind::Accepted);
-    const Event* connected = find(beforeEvents, EventKind::Connected);
-    RAWFRAME_EXPECT(accepted != nullptr && connected != nullptr);
-    if (accepted == nullptr || connected == nullptr) {
-        return;
-    }
-    const network::ConnectionId kServerSide = accepted->connection;
-    const network::ConnectionId kClientSide = connected->connection;
     const auto kStream = before->openStream(kClientSide, false);
     RAWFRAME_EXPECT(kStream.has_value() && before->send(kClientSide, *kStream, bytesOf("still here")).has_value());
     const auto kHeard = [&] {
