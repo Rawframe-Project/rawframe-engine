@@ -6,6 +6,8 @@
 #include "../src/records.h"
 #include "rawframe/test/test.h"
 
+#include <filesystem>
+#include <fstream>
 #include <set>
 #include <string>
 
@@ -147,4 +149,33 @@ RAWFRAME_TEST(APlayedProgramsSettingsKeepWhatTheyAreGivenAndAddWhatTheyLack) {
     // A key that only begins like one is not it.
     RAWFRAME_EXPECT(settingsOf("bots.count_extra = 2\n", {{"bots.count", "1"}}, {}).find("bots.count = 1") !=
                     std::string::npos);
+}
+
+RAWFRAME_TEST(APlayedGamesFilesAreItsOwnersAlone) {
+    std::error_code error;
+    const std::filesystem::path kRoot = std::filesystem::temp_directory_path() / ("studio-play-" + mintedIdentity());
+    const std::filesystem::path kDirectory = kRoot / "play";
+    std::filesystem::create_directories(kDirectory);
+    // A link where the token goes, to a file of someone else's.
+    const std::filesystem::path kElsewhere = kRoot / "elsewhere";
+    {
+        std::ofstream{kElsewhere} << "kept";
+    }
+    std::filesystem::create_symlink(kElsewhere, kDirectory / "token", error);
+    // Programs that are not there still find the files written first.
+    static_cast<void>(Play::start(
+        PlaySettings{.server = "/nonexistent", .client = "/nonexistent", .game = "g.game", .directory = kDirectory}));
+    std::string kept;
+    std::getline(std::ifstream{kElsewhere}, kept);
+    RAWFRAME_EXPECT(kept == "kept");
+    RAWFRAME_EXPECT(std::filesystem::is_regular_file(std::filesystem::symlink_status(kDirectory / "token")));
+    RAWFRAME_EXPECT(std::filesystem::status(kDirectory).permissions() == std::filesystem::perms::owner_all);
+    // A play directory that is a link is no directory of its own.
+    std::filesystem::create_directory_symlink(kDirectory, kRoot / "linked", error);
+    RAWFRAME_EXPECT(!Play::start(PlaySettings{.server = "/nonexistent",
+                                              .client = "/nonexistent",
+                                              .game = "g.game",
+                                              .directory = kRoot / "linked"})
+                         .has_value());
+    std::filesystem::remove_all(kRoot, error);
 }

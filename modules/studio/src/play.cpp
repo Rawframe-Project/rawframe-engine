@@ -20,18 +20,42 @@ result::Status failed(std::string_view why) {
         result::fail(result::ErrorClass::Unavailable, kStudioDomain, code(StudioError::PlayFailed), why).error()};
 }
 
-/// `text` as the whole of the file at `path`, readable by its owner alone
-/// where the system has owners.
+/// `text` as the whole of a new file at `path`, in the play directory its
+/// owner alone may enter. What was there is removed first, a link and not
+/// what it names, and the file is made anew or not at all ("x"), so no
+/// link put in its place is followed.
 result::Status written(const std::filesystem::path& path, const std::string& text) {
-    std::FILE* file = std::fopen(path.string().c_str(), "wb");
+    std::error_code error;
+    std::filesystem::remove(path, error);
+    std::FILE* file = std::fopen(path.string().c_str(), "wbx");
     if (file == nullptr) {
         return failed("a play file could not be written");
     }
     const bool kWhole = std::fwrite(text.data(), 1, text.size(), file) == text.size();
     const bool kClosed = std::fclose(file) == 0;
-    std::error_code error;
-    std::filesystem::permissions(path, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write, error);
     return kWhole && kClosed ? result::Status{} : failed("a play file could not be written");
+}
+
+/// The play directory, made if it is not there, a directory and no link,
+/// entered by its owner alone before anything is put in it: the token and
+/// the settings naming it are no one else's to read.
+result::Status privateDirectory(const std::filesystem::path& path) {
+    std::error_code error;
+    if (!std::filesystem::exists(std::filesystem::symlink_status(path, error))) {
+        std::filesystem::create_directories(path, error);
+        if (error) {
+            return failed("the play directory could not be made");
+        }
+    }
+    if (!std::filesystem::is_directory(std::filesystem::symlink_status(path, error))) {
+        return failed("the play directory is not a directory of its own");
+    }
+    std::filesystem::permissions(
+        path, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace, error);
+    if (error) {
+        return failed("the play directory could not be kept to its owner");
+    }
+    return {};
 }
 
 /// Whether the settings `text` give `key` a value.
@@ -88,11 +112,7 @@ std::string settingsOf(const std::string& given,
 }
 
 result::Result<Play> Play::start(const PlaySettings& settings) {
-    std::error_code error;
-    std::filesystem::create_directories(settings.directory, error);
-    if (error) {
-        return std::unexpected<result::Error>{failed("the play directory could not be made").error()};
-    }
+    RAWFRAME_TRY(privateDirectory(settings.directory));
     std::random_device device;
     // Two ports of the dynamic range, the endpoint's after the server's.
     const auto kServerPort = static_cast<std::uint16_t>(49152 + (device() % 16000) * 2);
