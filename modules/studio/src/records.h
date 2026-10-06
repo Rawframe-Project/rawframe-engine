@@ -37,9 +37,45 @@ struct Outcome {
     std::string message;
     std::int64_t undoable = 0;
     std::int64_t redoable = 0;
+    /// The scene's view after it, when the answer says (null for none).
+    std::optional<Value> view;
 };
 
 [[nodiscard]] Outcome outcomeOf(std::string_view reply);
+
+/// What `authoring.view` or `authoring.preview` answers: whether it was
+/// done, the session's message when not, the scene's view when said (null
+/// for none), and whether a preview of the scene is live.
+struct Answered {
+    bool done = false;
+    std::string message;
+    std::optional<Value> view;
+    bool previewing = false;
+};
+
+[[nodiscard]] Answered answeredOf(std::string_view reply);
+
+/// A running Runtime's tooling endpoint to preview a scene in (D433).
+struct Preview {
+    std::string endpoint;
+    std::string pinFile;
+    std::string tokenFile;
+};
+
+/// `authoring.view` of `scene`.
+[[nodiscard]] Value viewRecord(std::int64_t id, std::string_view scene, const Value& view);
+/// `authoring.preview` of `scene` in `preview`, or letting it go.
+[[nodiscard]] Value previewRecord(std::int64_t id, std::string_view scene, const Preview* preview);
+
+/// A whole view (`eye`, `target`, `fieldOfView`) with its part `part` as
+/// `text` says: three numbers apart by spaces or commas for a point, one
+/// for the field of view, the rest as `current` has them, or a view from
+/// above the origin when there is none; none when the text is not that.
+[[nodiscard]] std::optional<Value>
+viewWith(const std::optional<Value>& current, std::string_view part, std::string_view text);
+
+/// A view's part `part` as a field shows it, empty while there is none.
+[[nodiscard]] std::string viewText(const std::optional<Value>& view, std::string_view part);
 
 /// `authoring.read` of `scene`: one query, `operation`, with `entity` if
 /// given.

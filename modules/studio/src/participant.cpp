@@ -56,12 +56,13 @@ result::Status misconfigured(std::string_view why) {
 
 /// A field Studio edits and what the session needs to act on it: a
 /// component's field (its kind the read value's key), the chosen entity's
-/// name, or the name of a component to add.
+/// name, the name of a component to add, or a part of the scene's view.
 struct FieldRow {
     enum class Role : std::uint8_t {
         Field,
         Name,
-        Add
+        Add,
+        View
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -89,6 +90,15 @@ public:
         const std::filesystem::path kDescription{std::string{*kGame}};
         const std::filesystem::path kRoot{
             std::string{configuration.path("studio.root").value_or(kDescription.parent_path().string())}};
+        const auto kEndpoint = configuration.text("studio.preview.endpoint");
+        const auto kPin = configuration.path("studio.preview.pin_file");
+        const auto kToken = configuration.path("studio.preview.token_file");
+        if (kEndpoint.has_value() != kPin.has_value() || kEndpoint.has_value() != kToken.has_value()) {
+            return misconfigured("a preview needs studio.preview.endpoint, pin_file, and token_file together");
+        }
+        if (kEndpoint.has_value()) {
+            preview_ = Preview{std::string{*kEndpoint}, std::string{*kPin}, std::string{*kToken}};
+        }
         session_ = std::make_unique<authoring_session::Session>(kDescription, kRoot);
         bool ended = false;
         const std::string kWelcome =
@@ -172,6 +182,9 @@ public:
             typing_->focus(std::nullopt);
             typing_->answer({});
         }
+        // Ending lets a preview go, the player's camera given back (D433).
+        bool ended = false;
+        static_cast<void>(session_->answer(R"({"kind":"authoring.end","id":0})", ended));
         emitter_.log(diagnostics::Severity::Info,
                      kSummary,
                      "what Studio showed",
@@ -187,6 +200,8 @@ public:
                       diagnostics::field("redone", redone_),
                       diagnostics::field("undoable", static_cast<std::uint64_t>(undoable_)),
                       diagnostics::field("redoable", static_cast<std::uint64_t>(redoable_)),
+                      diagnostics::field("viewsSet", viewsSet_),
+                      diagnostics::field("previewing", previewing_),
                       diagnostics::field("status", std::string_view{status_}),
                       diagnostics::field("framesDrawn", framesDrawn_),
                       diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),
@@ -372,7 +387,10 @@ private:
             showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
         } else if (const auto kFieldAt = std::ranges::find(fields_, kNode, &FieldRow::value);
                    kFieldAt != fields_.end()) {
-            beginEdit(static_cast<std::size_t>(kFieldAt - fields_.begin()));
+            beginEdit(*kFieldAt);
+        } else if (const auto kViewAt = std::ranges::find(viewFields_, kNode, &FieldRow::value);
+                   kViewAt != viewFields_.end()) {
+            beginEdit(*kViewAt);
         } else {
             endEdit();
         }
@@ -381,14 +399,33 @@ private:
     void showScene(std::size_t at) {
         endEdit();
         fields_.clear();
-        if (scene_ != scenes_[at]) {
+        const bool kChanged = scene_ != scenes_[at];
+        if (kChanged) {
             // Each scene its own history.
             undoable_ = 0;
             redoable_ = 0;
             static_cast<void>(showHistory());
+            if (previewing_) {
+                static_cast<void>(ask(previewRecord(next(), scene_, nullptr)));
+                previewing_ = false;
+            }
         }
         scene_ = scenes_[at];
         sceneAt_ = at;
+        if (kChanged) {
+            // A scene's view is the session's, unknown here until it says.
+            view_.reset();
+            showView();
+            if (preview_.has_value()) {
+                const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));
+                previewing_ = kAttached.previewing;
+                if (kAttached.view.has_value()) {
+                    view_ = kAttached.view;
+                }
+                say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);
+                showViewText();
+            }
+        }
         for (std::size_t each = 0; each < sceneRows_.size(); ++each) {
             static_cast<void>(
                 tree_->setLook(sceneRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
@@ -517,9 +554,10 @@ private:
     }
 
     /// A field's line: its name, and its value in a node that edits.
-    result::Result<std::pair<ui::Node, ui::Node>> fieldRow(std::string_view name, std::string_view value) {
+    result::Result<std::pair<ui::Node, ui::Node>>
+    fieldRow(std::string_view name, std::string_view value, std::optional<ui::Node> column = std::nullopt) {
         RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
-                            box(componentsColumn_,
+                            box(column.value_or(componentsColumn_),
                                 ui::Layout{.height = ui::pixels(28),
                                            .direction = ui::Direction::Row,
                                            .alignItems = ui::Align::Center,
@@ -537,16 +575,16 @@ private:
         return std::pair{kLine, kValue};
     }
 
-    /// The field at `at` takes the keyboard, its text chosen whole.
-    void beginEdit(std::size_t at) {
+    /// `row`'s field takes the keyboard, its text chosen whole.
+    void beginEdit(const FieldRow& row) {
         endEdit();
-        editing_ = at;
+        editing_ = row;
         edit_ = std::make_unique<ui::TextEdit>(
-            *tree_, fields_[at].value, ui::EditSettings{.caretColor = kText, .selectionColor = 0x4A6FA5AAU});
+            *tree_, row.value, ui::EditSettings{.caretColor = kText, .selectionColor = 0x4A6FA5AAU});
         static_cast<void>(edit_->press(ui::EditKey::SelectAll, {}));
-        static_cast<void>(tree_->setLook(fields_[at].value, ui::Look{.fill = kEditing, .radius = 3}));
+        static_cast<void>(tree_->setLook(row.value, ui::Look{.fill = kEditing, .radius = 3}));
         if (typing_ != nullptr) {
-            const auto kPlace = tree_->placeOf(root_, fields_[at].value);
+            const auto kPlace = tree_->placeOf(root_, row.value);
             typing_->focus(kPlace.has_value()
                                ? view::UiTyping::Caret{kPlace->x, kPlace->y, kPlace->width, kPlace->height}
                                : view::UiTyping::Caret{});
@@ -559,9 +597,10 @@ private:
             return;
         }
         edit_.reset();
-        if (editing_ < fields_.size()) {
-            static_cast<void>(tree_->setLook(fields_[editing_].value, ui::Look{.fill = kField, .radius = 3}));
+        if (editing_.has_value() && tree_->contains(editing_->value)) {
+            static_cast<void>(tree_->setLook(editing_->value, ui::Look{.fill = kField, .radius = 3}));
         }
+        editing_.reset();
         if (typing_ != nullptr) {
             typing_->focus(std::nullopt);
         }
@@ -570,19 +609,80 @@ private:
     /// One thing typed into the field that holds the keyboard: Enter sets
     /// it, Escape puts back what the session holds.
     void take(const view::Typing& typing) {
-        if (edit_ == nullptr) {
+        if (edit_ == nullptr || !editing_.has_value()) {
             return;
         }
         const std::optional<view::TypingKey> kLeft = view::edit(*edit_, typing);
         if (kLeft == view::TypingKey::Submit) {
-            const FieldRow kEdited = fields_[editing_];
+            const FieldRow kEdited = *editing_;
             const std::string kTyped{tree_->textOf(kEdited.value)};
             endEdit();
-            apply(kEdited, kTyped);
+            if (kEdited.role == FieldRow::Role::View) {
+                setView(kEdited.field, kTyped);
+            } else {
+                apply(kEdited, kTyped);
+            }
         } else if (kLeft == view::TypingKey::Dismiss) {
+            const bool kView = editing_->role == FieldRow::Role::View;
             endEdit();
-            showEntity(entityAt_);
+            if (kView) {
+                showViewText();
+            } else {
+                showEntity(entityAt_);
+            }
         }
+    }
+
+    /// The chosen scene's view section under its rows: the view's eye,
+    /// target, and field of view, each a field.
+    void showView() {
+        clear(viewRows_);
+        viewFields_.clear();
+        auto heading = row(scenesColumn_, "View", kQuiet, kPanel);
+        if (!heading.has_value()) {
+            return;
+        }
+        viewRows_.push_back(*heading);
+        for (const std::string_view kPart : {"eye", "target", "fieldOfView"}) {
+            auto line = fieldRow(kPart == "fieldOfView" ? "field of view" : kPart, {}, scenesColumn_);
+            if (!line.has_value()) {
+                return;
+            }
+            viewRows_.push_back(line->first);
+            viewFields_.push_back(
+                FieldRow{.value = line->second, .role = FieldRow::Role::View, .field = std::string{kPart}});
+        }
+        showViewText();
+    }
+
+    /// The view's parts in their fields, as the session last said.
+    void showViewText() {
+        for (const FieldRow& kViewField : viewFields_) {
+            static_cast<void>(words(kViewField.value, viewText(view_, kViewField.field), kText, 14));
+        }
+    }
+
+    /// The scene's view with `part` as `text` says, set by the session
+    /// (`authoring.view`), which hands it to a live preview.
+    void setView(const std::string& part, const std::string& text) {
+        const std::optional<Value> kView = viewWith(view_, part, text);
+        if (!kView.has_value()) {
+            ++refused_;
+            say(part + ": " + (part == "fieldOfView" ? "one number" : "three numbers"));
+            showViewText();
+            return;
+        }
+        const Answered kAnswered = answeredOf(ask(viewRecord(next(), scene_, *kView)));
+        if (kAnswered.done) {
+            ++viewsSet_;
+            view_ = kAnswered.view;
+            previewing_ = kAnswered.previewing;
+            say(previewing_ ? "view set and previewed" : "view set");
+        } else {
+            ++refused_;
+            say(kAnswered.message);
+        }
+        showViewText();
     }
 
     /// `operation` with the chosen entity as its target.
@@ -696,6 +796,10 @@ private:
         undoable_ = outcome.undoable;
         redoable_ = outcome.redoable;
         static_cast<void>(showHistory());
+        if (outcome.view.has_value()) {
+            view_ = outcome.view;
+            showViewText();
+        }
     }
 
     /// Undo and redo, quiet when there is nothing to do.
@@ -730,7 +834,13 @@ private:
     std::vector<view::Typing> typed_;
     std::unique_ptr<ui::TextEdit> edit_;
     std::vector<FieldRow> fields_;
-    std::size_t editing_ = 0;
+    std::optional<FieldRow> editing_;
+    std::optional<Preview> preview_;
+    bool previewing_ = false;
+    std::optional<Value> view_;
+    std::vector<ui::Node> viewRows_;
+    std::vector<FieldRow> viewFields_;
+    std::uint64_t viewsSet_ = 0;
     std::size_t entityAt_ = 0;
     ui::Node statusNode_{};
     ui::Node undoNode_{};

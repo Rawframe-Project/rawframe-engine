@@ -74,7 +74,29 @@ Outcome outcomeOf(std::string_view reply) {
         const Value* count = answer != nullptr ? answer->find(kName) : nullptr;
         *kInto = count != nullptr ? count->integer().value_or(0) : 0;
     }
+    if (const Value* view = answer != nullptr ? answer->find("view") : nullptr; view != nullptr) {
+        outcome.view = *view;
+    }
     return outcome;
+}
+
+Answered answeredOf(std::string_view reply) {
+    Answered answered;
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    if (answer == nullptr) {
+        const Value* error = kParsed.has_value() ? kParsed->find("error") : nullptr;
+        const Value* message = error != nullptr ? error->find("message") : nullptr;
+        answered.message = message != nullptr && message->text() != nullptr ? *message->text() : "no answer";
+        return answered;
+    }
+    answered.done = true;
+    if (const Value* view = answer->find("view"); view != nullptr) {
+        answered.view = *view;
+    }
+    const Value* previewing = answer->find("previewing");
+    answered.previewing = previewing != nullptr && previewing->truth().value_or(false);
+    return answered;
 }
 
 namespace {
@@ -135,6 +157,102 @@ Value selectRecord(std::int64_t id, std::string_view scene, std::string_view ent
 
 Value stepRecord(std::int64_t id, std::string_view kind, std::string_view scene) {
     return recordOf(kind, id, scene);
+}
+
+Value viewRecord(std::int64_t id, std::string_view scene, const Value& view) {
+    Value record = recordOf("authoring.view", id, scene);
+    record.add("view", view);
+    return record;
+}
+
+Value previewRecord(std::int64_t id, std::string_view scene, const Preview* preview) {
+    Value record = recordOf("authoring.preview", id, scene);
+    if (preview == nullptr) {
+        record.add("preview", Value{});
+        return record;
+    }
+    Value made = Value::object();
+    made.add("endpoint", Value::string(preview->endpoint));
+    made.add("pinFile", Value::string(preview->pinFile));
+    made.add("tokenFile", Value::string(preview->tokenFile));
+    record.add("preview", std::move(made));
+    return record;
+}
+
+namespace {
+
+/// The numbers `text` holds apart by spaces or commas, if every part is one.
+std::optional<std::vector<double>> numbersOf(std::string_view text) {
+    std::vector<double> numbers;
+    std::size_t at = 0;
+    while (at < text.size()) {
+        const std::size_t kEnd = text.find_first_of(" ,", at);
+        const std::string_view kPart = text.substr(at, kEnd == std::string_view::npos ? text.size() - at : kEnd - at);
+        if (!kPart.empty()) {
+            const auto kParsed = document::parse(kPart);
+            if (!kParsed.has_value() || !kParsed->real().has_value()) {
+                return std::nullopt;
+            }
+            numbers.push_back(*kParsed->real());
+        }
+        if (kEnd == std::string_view::npos) {
+            break;
+        }
+        at = kEnd + 1;
+    }
+    return numbers;
+}
+
+Value point(double x, double y, double z) {
+    Value made = Value::array();
+    made.push(Value::real(x));
+    made.push(Value::real(y));
+    made.push(Value::real(z));
+    return made;
+}
+
+} // namespace
+
+std::optional<Value> viewWith(const std::optional<Value>& current, std::string_view part, std::string_view text) {
+    const auto kNumbers = numbersOf(text);
+    const std::size_t kWanted = part == "fieldOfView" ? 1 : 3;
+    if (!kNumbers.has_value() || kNumbers->size() != kWanted ||
+        (part != "eye" && part != "target" && part != "fieldOfView")) {
+        return std::nullopt;
+    }
+    Value made = Value::object();
+    for (const std::string_view kName : {"eye", "target", "fieldOfView"}) {
+        const Value* held = current.has_value() && !current->isNull() ? current->find(kName) : nullptr;
+        if (kName == part) {
+            made.add(std::string{kName},
+                     kWanted == 1 ? Value::real((*kNumbers)[0])
+                                  : point((*kNumbers)[0], (*kNumbers)[1], (*kNumbers)[2]));
+        } else if (held != nullptr) {
+            made.add(std::string{kName}, *held);
+        } else if (kName == "eye") {
+            made.add("eye", point(0, 10, 10));
+        } else if (kName == "target") {
+            made.add("target", point(0, 0, 0));
+        } else {
+            made.add("fieldOfView", Value::real(60));
+        }
+    }
+    return made;
+}
+
+std::string viewText(const std::optional<Value>& view, std::string_view part) {
+    const Value* held = view.has_value() && !view->isNull() ? view->find(part) : nullptr;
+    if (held == nullptr) {
+        return {};
+    }
+    if (held->kind() != Value::Kind::Array) {
+        return document::writeCompact(*held);
+    }
+    std::string text;
+    for (const Value& each : held->items()) {
+        text += (text.empty() ? "" : " ") + document::writeCompact(each);
+    }
+    return text;
 }
 
 bool Catalog::offers(std::string_view operation) const {

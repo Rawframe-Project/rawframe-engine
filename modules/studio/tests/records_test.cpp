@@ -77,3 +77,37 @@ RAWFRAME_TEST(AMintedIdentityIsAVersionFourUuidAndNotRepeated) {
     }
     RAWFRAME_EXPECT(minted.size() == 64);
 }
+
+RAWFRAME_TEST(AViewIsMadeWholeFromThePartTypedAndShownAsText) {
+    // None yet: the typed part over a view from above the origin.
+    const auto kFirst = viewWith(std::nullopt, "eye", "3 1 3");
+    RAWFRAME_EXPECT(document::writeCompact(*kFirst) == R"({"eye":[3,1,3],"target":[0,0,0],"fieldOfView":60})");
+    const auto kSecond = viewWith(kFirst, "fieldOfView", "70");
+    RAWFRAME_EXPECT(document::writeCompact(*kSecond) == R"({"eye":[3,1,3],"target":[0,0,0],"fieldOfView":70})");
+    RAWFRAME_EXPECT(viewWith(kSecond, "target", "0, 1.5,0").has_value());
+    RAWFRAME_EXPECT(!viewWith(kSecond, "eye", "1 2").has_value());
+    RAWFRAME_EXPECT(!viewWith(kSecond, "eye", "1 2 x").has_value());
+    RAWFRAME_EXPECT(!viewWith(kSecond, "fieldOfView", "60 70").has_value());
+    RAWFRAME_EXPECT(!viewWith(kSecond, "roll", "1").has_value());
+    RAWFRAME_EXPECT(viewText(kSecond, "eye") == "3 1 3" && viewText(kSecond, "fieldOfView") == "70");
+    RAWFRAME_EXPECT(viewText(std::nullopt, "eye").empty());
+    RAWFRAME_EXPECT(viewText(Value{}, "eye").empty());
+}
+
+RAWFRAME_TEST(APreviewIsAskedForAndItsAnswerRead) {
+    const Preview kPreview{"127.0.0.1:4433", "/tmp/pin", "/tmp/token"};
+    RAWFRAME_EXPECT(
+        document::writeCompact(previewRecord(3, "gate.scene", &kPreview)) ==
+        R"({"kind":"authoring.preview","id":3,"scene":"gate.scene","preview":{"endpoint":"127.0.0.1:4433","pinFile":"/tmp/pin","tokenFile":"/tmp/token"}})");
+    RAWFRAME_EXPECT(document::writeCompact(previewRecord(4, "gate.scene", nullptr)) ==
+                    R"({"kind":"authoring.preview","id":4,"scene":"gate.scene","preview":null})");
+    const Answered kLive =
+        answeredOf(R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.preview","previewing":true}})");
+    RAWFRAME_EXPECT(kLive.done && kLive.previewing && !kLive.view.has_value());
+    const Answered kViewed = answeredOf(
+        R"({"kind":"authoring.reply","id":5,"answer":{"kind":"authoring.view","view":{"eye":[1,2,3]},"previewing":false}})");
+    RAWFRAME_EXPECT(kViewed.done && !kViewed.previewing && viewText(kViewed.view, "eye") == "1 2 3");
+    const Answered kDenied = answeredOf(
+        R"({"kind":"authoring.reply","id":6,"error":{"code":"capability_denied","message":"no view grant"}})");
+    RAWFRAME_EXPECT(!kDenied.done && kDenied.message == "no view grant");
+}

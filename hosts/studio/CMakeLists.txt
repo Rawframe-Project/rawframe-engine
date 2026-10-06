@@ -37,7 +37,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_clicked PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "clicked at 200,126.*clicked at 640,129.*typed x at 1100,225.*typed 12 at 1100,225.*clicked at 1166,23.*clicked at 1236,23.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[1-9][0-9]*,\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",\"components\":4,\"applied\":1,\"refused\":1,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "clicked at 200,126.*clicked at 640,129.*typed x at 1100,225.*typed 12 at 1100,225.*clicked at 1166,23.*clicked at 1236,23.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[1-9][0-9]*,\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",\"components\":4,\"applied\":1,\"refused\":1,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,\"viewsSet\":0,\"previewing\":false,\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # Studio's operations, as describe offers them: in runners' level a new
     # entity is made and chosen, renamed crate, given runners.tile by its
     # name typed, the tile removed, and the entity deleted; Undo brings it
@@ -51,5 +51,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_operates PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed crate at 1100,97.*typed runners.tile at 1100,129.*clicked at 1236,129.*clicked at 517,97.*clicked at 1166,23.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":10,\"entity\":\"\",\"components\":0,\"applied\":5,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":4,\"redoable\":1,\"status\":\"undone\".*\"exit\":\"clean_stop\"")
+                         "typed crate at 1100,97.*typed runners.tile at 1100,129.*clicked at 1236,129.*clicked at 517,97.*clicked at 1166,23.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":10,\"entity\":\"\",\"components\":0,\"applied\":5,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":4,\"redoable\":1,\"viewsSet\":0,\"previewing\":false,\"status\":\"undone\".*\"exit\":\"clean_stop\"")
+    # Studio previewing the plaza (D433, D440): choosing its gate attaches
+    # the playing client's tooling endpoint as the scene's preview, and an
+    # eye typed is handed to it, so the client draws frames through the
+    # preview; Studio ending its session gives the camera back.
+    if(TARGET rawframe_host_client AND TARGET rawframe_host_dedicated_server)
+        add_test(NAME studio_previews_plaza
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/previewing.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> $<TARGET_FILE:rawframe_host_studio_tool>
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf games/plaza/plaza.game
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf 200,97 300,161:0,30,0.5
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_previews_plaza PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "clicked at 200,97.*typed 0,30,0.5 at 300,161.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"viewsSet\":1,\"previewing\":true,\"status\":\"view set and previewed\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
+    endif()
 endif()
