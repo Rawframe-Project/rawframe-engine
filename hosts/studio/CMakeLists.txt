@@ -24,15 +24,17 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":1,\"scenes\":3,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":9,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,.*\"exit\":\"clean_stop\"")
     # Studio clicked: runners' level chosen shows its entities, read from
-    # the session, and its ground chosen shows its four components; the
-    # ground is chosen in the session too.
+    # the session, and its ground chosen shows its four components and is
+    # chosen in the session; its body's width typed as 12 and given with
+    # Enter is set by the session, which writes the level; an x typed
+    # first is refused before it reaches the session.
     add_test(NAME studio_clicked
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game 200,126 640,94
+                     games/runners/runners.game level.scene 200,126 640,94 1100,190:x 1100,190:12
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_clicked PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "clicked at 200,126.*clicked at 640,94.*\"code\":\"studio_summary\"[^\n]*\"records\":4,\"scenes\":3,\"scene\":\"level.scene\",\"entities\":[1-9][0-9]*,\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",\"components\":4,.*\"exit\":\"clean_stop\"")
+                         "clicked at 200,126.*clicked at 640,94.*typed x at 1100,190.*typed 12 at 1100,190.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[1-9][0-9]*,\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",\"components\":4,\"applied\":1,\"refused\":1,\"status\":\"width set to 12\".*\"exit\":\"clean_stop\"")
 endif()

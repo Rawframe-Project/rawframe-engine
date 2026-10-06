@@ -7,8 +7,10 @@
 #include "rawframe/font_import/sanitize.h"
 #include "rawframe/studio/registrar.h"
 #include "rawframe/ui/frames.h"
+#include "rawframe/ui/text_edit.h"
 #include "rawframe/ui/tree.h"
 #include "rawframe/view/pointing.h"
+#include "rawframe/view/typing.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -29,7 +31,7 @@ namespace {
 constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
 constexpr std::string_view kProvided[] = {ui::kUiFrames.name};
-constexpr std::string_view kMaybe[] = {view::kUiPointing.name};
+constexpr std::string_view kMaybe[] = {view::kUiPointing.name, view::kUiTyping.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 /// Studio's colors, 0xRRGGBBAA: the window behind everything, a panel, a
@@ -38,6 +40,8 @@ constexpr std::uint32_t kBackground = 0x1E1F24FFU;
 constexpr std::uint32_t kPanel = 0x2A2C33FFU;
 constexpr std::uint32_t kRow = 0x3A3D47FFU;
 constexpr std::uint32_t kChosen = 0x4A6FA5FFU;
+constexpr std::uint32_t kField = 0x23252BFFU;
+constexpr std::uint32_t kEditing = 0x1A1C21FFU;
 constexpr std::uint32_t kHeaderFill = 0x30343FFFU;
 constexpr std::uint32_t kText = 0xE6E8EEFFU;
 constexpr std::uint32_t kQuiet = 0x9AA0ADFFU;
@@ -65,6 +69,32 @@ std::string shown(const Value& value) {
     return document::writeCompact(value);
 }
 
+/// What `text` typed into a field of `kind` (a read's value key) asks the
+/// session to set it to; none for a kind Studio does not edit, or text
+/// that is not one of its values. The session checks it again.
+std::optional<Value> typedValue(std::string_view kind, std::string_view text) {
+    if (kind == "real") {
+        const auto kParsed = document::parse(text);
+        if (!kParsed.has_value() || kParsed->kind() != Value::Kind::Number) {
+            return std::nullopt;
+        }
+        Value made = Value::object();
+        made.add("real", *kParsed);
+        return made;
+    }
+    if (kind == "signed" || kind == "unsigned" || kind == "case") {
+        Value made = Value::object();
+        made.add(std::string{kind}, Value::string(std::string{text}));
+        return made;
+    }
+    if (kind == "truth" && (text == "true" || text == "false")) {
+        Value made = Value::object();
+        made.add("truth", Value::boolean(text == "true"));
+        return made;
+    }
+    return std::nullopt;
+}
+
 /// The first answer of a read's reply, if it is one.
 std::optional<Value> firstAnswer(std::string_view reply) {
     auto parsed = document::parse(reply);
@@ -76,6 +106,14 @@ std::optional<Value> firstAnswer(std::string_view reply) {
     const Value* first = answers->items().front().find("answer");
     return first != nullptr ? std::optional<Value>{*first} : std::nullopt;
 }
+
+/// A field's value node and what the session needs to set it.
+struct FieldRow {
+    ui::Node value{};
+    std::string component;
+    std::string field;
+    std::string kind;
+};
 
 /// The shell: a session on the game, and the UI that shows it.
 class ShellParticipant final : public composition::Participant, public ui::UiFrames {
@@ -106,6 +144,9 @@ public:
         if (context.has(view::kUiPointing.name)) {
             RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
         }
+        if (context.has(view::kUiTyping.name)) {
+            RAWFRAME_TRY_ASSIGN(typing_, context.capability(view::kUiTyping));
+        }
         RAWFRAME_TRY_ASSIGN(tree_, ui::Tree::create());
         // Studio's own font, embedded, sanitized as the cook sanitizes a
         // game's (ADR-0049), never an unchecked font in the tree.
@@ -125,6 +166,11 @@ public:
                 presses_.push_back({x, y});
             });
         }
+        if (typing_ != nullptr) {
+            typing_->answer([this](const view::Typing& typing) {
+                typed_.push_back(typing);
+            });
+        }
         return {};
     }
 
@@ -134,11 +180,18 @@ public:
             pressAt(kX, kY);
         }
         presses_.clear();
+        for (const view::Typing& kTyping : typed_) {
+            take(kTyping);
+        }
+        typed_.clear();
         if (!tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_)).has_value()) {
             return;
         }
         list_ = {};
         if (tree_->draw(root_, 1.0F, list_).has_value()) {
+            if (edit_ != nullptr) {
+                static_cast<void>(edit_->decorate(root_, list_));
+            }
             drawn_ = &list_;
             if (framesDrawn_++ == 0) {
                 emitter_.log(diagnostics::Severity::Info, kShown, "Studio is shown");
@@ -150,6 +203,10 @@ public:
         if (pointing_ != nullptr) {
             pointing_->onPress({});
         }
+        if (typing_ != nullptr) {
+            typing_->focus(std::nullopt);
+            typing_->answer({});
+        }
         emitter_.log(diagnostics::Severity::Info,
                      kSummary,
                      "what Studio showed",
@@ -159,6 +216,9 @@ public:
                       diagnostics::field("entities", static_cast<std::uint64_t>(entities_.size())),
                       diagnostics::field("entity", std::string_view{entity_}),
                       diagnostics::field("components", components_),
+                      diagnostics::field("applied", applied_),
+                      diagnostics::field("refused", refused_),
+                      diagnostics::field("status", std::string_view{status_}),
                       diagnostics::field("framesDrawn", framesDrawn_),
                       diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),
                       diagnostics::field("glyphs", static_cast<std::uint64_t>(list_.glyphs.size()))});
@@ -231,7 +291,12 @@ private:
                                 kBackground));
         RAWFRAME_TRY_ASSIGN(const ui::Node kHeader,
                             box(root_, ui::Layout{.height = ui::pixels(34), .padding = {12, 6, 12, 6}}, kHeaderFill));
-        RAWFRAME_TRY(words(kHeader, title_, kText));
+        RAWFRAME_TRY(tree_->setLayout(
+            kHeader,
+            ui::Layout{.height = ui::pixels(34), .justify = ui::Justify::SpaceBetween, .padding = {12, 6, 12, 6}}));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeader, ui::Layout{}, 0));
+        RAWFRAME_TRY(words(kTitle, title_, kText));
+        RAWFRAME_TRY_ASSIGN(statusNode_, box(kHeader, ui::Layout{}, 0));
         RAWFRAME_TRY_ASSIGN(const ui::Node kColumns,
                             box(root_, ui::Layout{.direction = ui::Direction::Row, .gap = 6, .grow = 1}, kBackground));
         RAWFRAME_TRY_ASSIGN(scenesColumn_, column(kColumns, "Scenes"));
@@ -302,10 +367,17 @@ private:
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         } else if (const auto kEntity = std::ranges::find(entityRows_, kNode); kEntity != entityRows_.end()) {
             showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
+        } else if (const auto kFieldAt = std::ranges::find(fields_, kNode, &FieldRow::value);
+                   kFieldAt != fields_.end()) {
+            beginEdit(static_cast<std::size_t>(kFieldAt - fields_.begin()));
+        } else {
+            endEdit();
         }
     }
 
     void showScene(std::size_t at) {
+        endEdit();
+        fields_.clear();
         scene_ = scenes_[at];
         for (std::size_t each = 0; each < sceneRows_.size(); ++each) {
             static_cast<void>(
@@ -344,6 +416,9 @@ private:
     }
 
     void showEntity(std::size_t at) {
+        endEdit();
+        fields_.clear();
+        entityAt_ = at;
         entity_ = entities_[at];
         for (std::size_t each = 0; each < entityRows_.size(); ++each) {
             static_cast<void>(
@@ -374,20 +449,150 @@ private:
             }
             componentRows_.push_back(*added);
             ++components_;
+            const Value* component = each.find("component");
+            const std::string kComponent =
+                component != nullptr && component->text() != nullptr ? *component->text() : std::string{};
             const Value* fields = each.find("fields");
             for (const Value& field : fields != nullptr ? fields->items() : std::span<const Value>{}) {
                 const Value* fieldName = field.find("name");
                 const Value* value = field.find("value");
-                const std::string kLine =
-                    (fieldName != nullptr && fieldName->text() != nullptr ? *fieldName->text() : std::string{}) +
-                    " = " + (value != nullptr ? shown(*value) : std::string{});
-                auto line = row(componentsColumn_, kLine, kQuiet, kPanel);
+                if (fieldName == nullptr || fieldName->text() == nullptr) {
+                    continue;
+                }
+                auto line = fieldRow(*fieldName->text(), value != nullptr ? shown(*value) : std::string{});
                 if (!line.has_value()) {
                     return;
                 }
-                componentRows_.push_back(*line);
+                componentRows_.push_back(line->first);
+                const bool kTyped =
+                    value != nullptr && value->kind() == Value::Kind::Object && value->names().size() == 1;
+                fields_.push_back(FieldRow{.value = line->second,
+                                           .component = kComponent,
+                                           .field = *fieldName->text(),
+                                           .kind = kTyped ? value->names().front() : std::string{}});
             }
         }
+    }
+
+    /// A field's line: its name, and its value in a node that edits.
+    result::Result<std::pair<ui::Node, ui::Node>> fieldRow(std::string_view name, std::string_view value) {
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kLine,
+            box(componentsColumn_,
+                ui::Layout{
+                    .height = ui::pixels(28), .direction = ui::Direction::Row, .gap = 8, .padding = {8, 2, 8, 2}},
+                kPanel));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kName,
+                            box(kLine, ui::Layout{.width = ui::pixels(120), .padding = {0, 2, 0, 2}}, 0));
+        RAWFRAME_TRY(words(kName, name, kQuiet, 14));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kValue, tree_->addEditable(++keys_));
+        RAWFRAME_TRY(tree_->setLayout(kValue, ui::Layout{.grow = 1, .padding = {6, 2, 6, 2}}));
+        RAWFRAME_TRY(tree_->setLook(kValue, ui::Look{.fill = kField, .radius = 3}));
+        RAWFRAME_TRY(tree_->attach(kLine, kValue));
+        RAWFRAME_TRY(words(kValue, value, kText, 14));
+        return std::pair{kLine, kValue};
+    }
+
+    /// The field at `at` takes the keyboard, its text chosen whole.
+    void beginEdit(std::size_t at) {
+        endEdit();
+        editing_ = at;
+        edit_ = std::make_unique<ui::TextEdit>(
+            *tree_, fields_[at].value, ui::EditSettings{.caretColor = kText, .selectionColor = 0x4A6FA5AAU});
+        static_cast<void>(edit_->press(ui::EditKey::SelectAll, {}));
+        static_cast<void>(tree_->setLook(fields_[at].value, ui::Look{.fill = kEditing, .radius = 3}));
+        if (typing_ != nullptr) {
+            const auto kPlace = tree_->placeOf(root_, fields_[at].value);
+            typing_->focus(kPlace.has_value()
+                               ? view::UiTyping::Caret{kPlace->x, kPlace->y, kPlace->width, kPlace->height}
+                               : view::UiTyping::Caret{});
+        }
+    }
+
+    /// The keyboard let go.
+    void endEdit() {
+        if (edit_ == nullptr) {
+            return;
+        }
+        edit_.reset();
+        if (editing_ < fields_.size()) {
+            static_cast<void>(tree_->setLook(fields_[editing_].value, ui::Look{.fill = kField, .radius = 3}));
+        }
+        if (typing_ != nullptr) {
+            typing_->focus(std::nullopt);
+        }
+    }
+
+    /// One thing typed into the field that holds the keyboard: Enter sets
+    /// it, Escape puts back what the session holds.
+    void take(const view::Typing& typing) {
+        if (edit_ == nullptr) {
+            return;
+        }
+        const std::optional<view::TypingKey> kLeft = view::edit(*edit_, typing);
+        if (kLeft == view::TypingKey::Submit) {
+            const FieldRow kEdited = fields_[editing_];
+            const std::string kTyped{tree_->textOf(kEdited.value)};
+            endEdit();
+            apply(kEdited, kTyped);
+        } else if (kLeft == view::TypingKey::Dismiss) {
+            endEdit();
+            showEntity(entityAt_);
+        }
+    }
+
+    /// `text` set into the field by the session (`scene.set_field` in an
+    /// atomic `authoring.apply`), then the entity read again; what came of
+    /// it said in the header.
+    void apply(const FieldRow& row, const std::string& text) {
+        const std::optional<Value> kValue = typedValue(row.kind, text);
+        if (!kValue.has_value()) {
+            ++refused_;
+            say(row.field + ": " + (row.kind.empty() ? std::string{"not edited here"} : "not a " + row.kind));
+            showEntity(entityAt_);
+            return;
+        }
+        Value operation = Value::object();
+        operation.add("operation", Value::string("scene.set_field"));
+        operation.add("entity", Value::string(entity_));
+        operation.add("component", Value::string(row.component));
+        operation.add("field", Value::string(row.field));
+        operation.add("value", *kValue);
+        Value operations = Value::array();
+        operations.push(std::move(operation));
+        Value request = Value::object();
+        request.add("formatVersion", Value::integer(1));
+        request.add("kind", Value::string("authoring.request"));
+        request.add("batch", Value::string("atomic"));
+        request.add("operations", std::move(operations));
+        Value record = Value::object();
+        record.add("kind", Value::string("authoring.apply"));
+        record.add("id", Value::integer(static_cast<std::int64_t>(records_ + 1)));
+        record.add("scene", Value::string(scene_));
+        record.add("request", std::move(request));
+        const auto kParsed = document::parse(ask(record));
+        // Applied when the one slot holds deltas.
+        const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+        const Value* results = answer != nullptr ? answer->find("results") : nullptr;
+        const bool kSlot = results != nullptr && results->kind() == Value::Kind::Array && !results->items().empty();
+        const Value* slot = kSlot ? &results->items()[0] : nullptr;
+        if (slot != nullptr && slot->find("deltas") != nullptr) {
+            ++applied_;
+            say(row.field + " set to " + text);
+        } else {
+            ++refused_;
+            const Value* error =
+                slot != nullptr ? slot->find("error") : (kParsed.has_value() ? kParsed->find("error") : nullptr);
+            const Value* message = error != nullptr ? error->find("message") : nullptr;
+            say(row.field + ": " + (message != nullptr && message->text() != nullptr ? *message->text() : "refused"));
+        }
+        showEntity(entityAt_);
+    }
+
+    /// `text` in the header's status.
+    void say(std::string text) {
+        status_ = std::move(text);
+        static_cast<void>(words(statusNode_, status_, kQuiet, 14));
     }
 
     std::unique_ptr<authoring_session::Session> session_;
@@ -400,6 +605,16 @@ private:
     std::uint32_t height_ = 720;
     std::vector<std::string> scenes_;
     view::UiPointing* pointing_ = nullptr;
+    view::UiTyping* typing_ = nullptr;
+    std::vector<view::Typing> typed_;
+    std::unique_ptr<ui::TextEdit> edit_;
+    std::vector<FieldRow> fields_;
+    std::size_t editing_ = 0;
+    std::size_t entityAt_ = 0;
+    ui::Node statusNode_{};
+    std::string status_;
+    std::uint64_t applied_ = 0;
+    std::uint64_t refused_ = 0;
     std::vector<std::pair<float, float>> presses_;
     ui::Node scenesColumn_{};
     ui::Node entitiesColumn_{};
