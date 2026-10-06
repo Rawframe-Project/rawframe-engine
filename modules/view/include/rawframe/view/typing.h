@@ -24,7 +24,8 @@ namespace rawframe::view {
 
 /// The keys a field takes while it holds focus: those that edit, Enter
 /// (`Submit`: a line break in a field of lines, else the field's text
-/// given), and Escape (`Dismiss`: focus let go).
+/// given), Escape (`Dismiss`: focus let go), and Tab (`Next`: focus to the
+/// next field, the one before with `extend`, D429).
 enum class TypingKey : std::uint8_t {
     Backspace,
     Delete,
@@ -36,7 +37,8 @@ enum class TypingKey : std::uint8_t {
     End,
     SelectAll,
     Submit,
-    Dismiss
+    Dismiss,
+    Next
 };
 
 /// A styled part of a composition, in bytes of its text: plain, still to

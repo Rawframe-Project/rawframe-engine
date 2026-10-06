@@ -28,6 +28,7 @@ constexpr std::uint16_t kUsageA = 0x04;
 constexpr std::uint16_t kUsageEnter = 0x28;
 constexpr std::uint16_t kUsageEscape = 0x29;
 constexpr std::uint16_t kUsageBackspace = 0x2A;
+constexpr std::uint16_t kUsageTab = 0x2B;
 constexpr std::uint16_t kUsageHome = 0x4A;
 constexpr std::uint16_t kUsageDelete = 0x4C;
 constexpr std::uint16_t kUsageEnd = 0x4D;
@@ -77,6 +78,9 @@ std::optional<view::Typing> typingOf(const window::Key& key) {
     case kUsageEnter:
     case kUsageKeypadEnter:
         typing.key = view::TypingKey::Submit;
+        break;
+    case kUsageTab:
+        typing.key = view::TypingKey::Next;
         break;
     case kUsageEscape:
         typing.key = view::TypingKey::Dismiss;

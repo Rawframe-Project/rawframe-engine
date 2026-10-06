@@ -246,6 +246,67 @@ struct WorldUi::State {
         }
     }
 
+    /// The keyboard given to `entry`'s field, from any other field: its
+    /// placeholder goes before its caret is made.
+    void take(Entry& entry) {
+        if (focus.has_value() && focus->entry == &entry) {
+            return;
+        }
+        letGo();
+        focus = Focus{.entry = &entry, .edit = nullptr};
+        static_cast<void>(giveFieldLook(entry));
+        focus->edit = std::make_unique<ui::TextEdit>(*tree, *entry.node, editSettingsOf(entry.value));
+        ++statistics.focused;
+    }
+
+    /// The keyboard moved from the field holding it to the next field of
+    /// its view in reading order, top then left (`back`: the one before),
+    /// round from the last to the first; its text all selected (D429). A
+    /// view is one layer, and focus never leaves it.
+    void moveFocus(bool back) {
+        if (!focus.has_value()) {
+            return;
+        }
+        struct Field {
+            float y = 0;
+            float x = 0;
+            EntryKey key;
+            Entry* entry = nullptr;
+        };
+        std::vector<Field> fields;
+        bool found = false;
+        for (ViewState& view : views) {
+            fields.clear();
+            for (auto& [kKey, entry] : view.entries) {
+                found = found || &entry == focus->entry;
+                if (!entry.editable || !entry.node.has_value()) {
+                    continue;
+                }
+                if (const auto kPlace = tree->placeOf(window, *entry.node); kPlace.has_value()) {
+                    fields.push_back(Field{.y = kPlace->y, .x = kPlace->x, .key = kKey, .entry = &entry});
+                }
+            }
+            if (found) {
+                break;
+            }
+        }
+        if (!found || fields.size() < 2) {
+            return;
+        }
+        std::ranges::sort(fields, [](const Field& left, const Field& right) {
+            return std::tie(left.y, left.x, left.key) < std::tie(right.y, right.x, right.key);
+        });
+        const auto kHere = std::ranges::find(fields, focus->entry, &Field::entry);
+        if (kHere == fields.end()) {
+            return;
+        }
+        const auto kAt = static_cast<std::size_t>(kHere - fields.begin());
+        const std::size_t kNext = back ? (kAt + fields.size() - 1) % fields.size() : (kAt + 1) % fields.size();
+        take(*fields[kNext].entry);
+        static_cast<void>(focus->edit->press(ui::EditKey::SelectAll, {}));
+        placeCaret();
+    }
+
     /// `entry`'s node gone, its children first made roots so they live on.
     void drop(Entry& entry) {
         if (!entry.node.has_value()) {
@@ -672,16 +733,7 @@ void WorldUi::pressAt(float x, float y) {
                 if (entry.node != kHit->node || !entry.editable) {
                     continue;
                 }
-                if (!state.focus.has_value() || state.focus->entry != &entry) {
-                    // Another field lets go first; this one's placeholder
-                    // goes before its caret is made.
-                    state.letGo();
-                    state.focus = Focus{.entry = &entry, .edit = nullptr};
-                    static_cast<void>(state.giveFieldLook(entry));
-                    state.focus->edit =
-                        std::make_unique<ui::TextEdit>(*state.tree, *entry.node, editSettingsOf(entry.value));
-                    ++state.statistics.focused;
-                }
+                state.take(entry);
                 static_cast<void>(state.focus->edit->pointAt(kHit->x, kHit->y, false));
                 state.placeCaret();
                 return;
@@ -718,6 +770,10 @@ void WorldUi::type(const view::Typing& typing) {
     }
     if (typing.key == view::TypingKey::Dismiss) {
         state.letGo();
+        return;
+    }
+    if (typing.key == view::TypingKey::Next) {
+        state.moveFocus(typing.extend);
         return;
     }
     if (typing.key != view::TypingKey::Submit) {

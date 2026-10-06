@@ -10,7 +10,8 @@
 // and gives its text by Enter (D426); and a node shows the words of a
 // component of typed words in place of its label while it holds any
 // (D427); and an empty field without the keyboard shows its label as its
-// placeholder (D428).
+// placeholder (D428); and Tab moves the keyboard between a view's fields
+// (D429).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -473,4 +474,66 @@ RAWFRAME_TEST(AnEmptyFieldShowsItsLabelUntilItHasTheKeyboard) {
     RAWFRAME_EXPECT(kGlyphs() == 0);
     rig.ui->pressAt(600, 300);
     RAWFRAME_EXPECT(kGlyphs() == 4);
+}
+
+RAWFRAME_TEST(TabMovesTheKeyboardBetweenAViewsFields) {
+    Rig rig;
+    rig.ui = *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId}, .parents = {std::nullopt, 0, 0}, .fonts = {0xF1}});
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
+    // In the panel, side by side: the row's field first (105, 55), then
+    // the meter's (215, 55), whatever order they were made in.
+    const auto kField = [](std::int64_t press, std::int32_t order) {
+        return Node{.widthOffset = 100,
+                    .heightOffset = 20,
+                    .order = order,
+                    .font = 0xF1,
+                    .textSize = 10,
+                    .textColor = 0xFFFFFFFF,
+                    .press = press,
+                    .edit = 1};
+    };
+    rig.put(rig.player, kHudId, panel());
+    rig.put(rig.player, kMeterId, kField(1, 1));
+    rig.put(rig.player, kRowId, kField(2, 0));
+    RAWFRAME_EXPECT(rig.frame());
+    const auto kType = [&rig](std::string_view text) {
+        rig.ui->type(view::Typing{.kind = view::Typing::Kind::Text, .text = std::string{text}});
+    };
+    const auto kTab = [&rig](bool back) {
+        rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = view::TypingKey::Next, .extend = back});
+    };
+    const auto kCaretAt = [&rig](float x) {
+        return rig.ui->caret().has_value() && (*rig.ui->caret())[0] == x;
+    };
+    // Tab with no field holding the keyboard: nothing.
+    kTab(false);
+    RAWFRAME_EXPECT(rig.ui->statistics().focused == 0 && !rig.ui->caret().has_value());
+    rig.ui->pressAt(225, 60);
+    kType("m");
+    // From the last, round to the first.
+    kTab(false);
+    RAWFRAME_EXPECT(rig.ui->statistics().focused == 2 && kCaretAt(105));
+    kType("r");
+    // Reached by Tab, a field's text is all selected: typing replaces it.
+    kTab(false);
+    RAWFRAME_EXPECT(rig.ui->statistics().focused == 3);
+    kType("M");
+    // Shift+Tab, back to the row's, where Enter gives its text.
+    kTab(true);
+    RAWFRAME_EXPECT(rig.ui->statistics().focused == 4);
+    rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = view::TypingKey::End});
+    rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = view::TypingKey::Submit});
+    rig.ui->pressAt(225, 60);
+    rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = view::TypingKey::Submit});
+    const auto kGiven = rig.ui->takeSubmitted();
+    RAWFRAME_EXPECT(kGiven.size() == 2 && kGiven[0].press == 2 && kGiven[0].text == "r" && kGiven[1].press == 1 &&
+                    kGiven[1].text == "M");
+    // A field alone, now first in the panel, keeps the keyboard.
+    RAWFRAME_EXPECT(rig.world.removeErased(rig.player, *rig.schema->find(kRowId)).has_value());
+    RAWFRAME_EXPECT(rig.frame());
+    rig.ui->pressAt(150, 60);
+    const std::uint64_t kFocused = rig.ui->statistics().focused;
+    kTab(false);
+    RAWFRAME_EXPECT(rig.ui->statistics().focused == kFocused && rig.ui->caret().has_value());
 }
