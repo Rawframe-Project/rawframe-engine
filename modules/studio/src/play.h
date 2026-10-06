@@ -60,16 +60,28 @@ public:
     [[nodiscard]] bool running() noexcept;
     /// Whether both have ended.
     [[nodiscard]] bool ended() noexcept;
+
+    /// How many times the game has been launched.
+    [[nodiscard]] int launches() const noexcept {
+        return launches_;
+    }
     /// Asks both to stop, as a Host stops on a stop request.
     void stop() noexcept;
 
 private:
+    /// Picks the server's port and the client's endpoint's, writes the
+    /// settings naming them, and starts the server, letting go of whatever
+    /// a launch before left.
+    result::Status launch();
+
     Play() = default;
 
     std::optional<process::Child> server_;
     std::optional<process::Child> client_;
     std::filesystem::path directory_;
-    std::filesystem::path clientProgram_;
+    PlaySettings settings_;
+    /// How many times the server has been started, each on ports of its own.
+    int launches_ = 0;
     /// How far the client's log has been read, and whether it said its
     /// player is in.
     std::uintmax_t clientLogRead_ = 0;

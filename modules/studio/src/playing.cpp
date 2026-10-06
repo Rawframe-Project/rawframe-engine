@@ -42,12 +42,14 @@ void ShellParticipant::attachPlayed(double seconds) {
         return;
     }
     nextAttach_ = seconds + 0.5;
-    if (!playing_->running()) {
-        say("the game ended");
-        return;
-    }
+    // Advanced first: a game whose server or client ended as it started is
+    // launched again there, on other ports.
     if (auto started = playing_->advance(); !started.has_value()) {
         say(std::string{started.error().description()});
+        return;
+    }
+    if (!playing_->running()) {
+        say("the game ended");
         return;
     }
     const std::optional<Preview> kPreview = playing_->preview();

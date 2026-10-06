@@ -114,20 +114,44 @@ std::string settingsOf(const std::string& given,
 result::Result<Play> Play::start(const PlaySettings& settings) {
     RAWFRAME_TRY(privateDirectory(settings.directory));
     std::random_device device;
-    // Two ports of the dynamic range, the endpoint's after the server's.
-    const auto kServerPort = static_cast<std::uint16_t>(49152 + (device() % 16000) * 2);
-    const auto kEndpointPort = static_cast<std::uint16_t>(kServerPort + 1);
     std::string token;
     constexpr std::string_view kDigits = "0123456789abcdef";
     for (int each = 0; each < 48; ++each) {
         token += kDigits[device() % 16];
     }
-    const std::filesystem::path& kAt = settings.directory;
-    const std::string kGame = settings.game.string();
+    RAWFRAME_TRY(written(settings.directory / "token", token + "\n"));
+    Play play;
+    play.directory_ = settings.directory;
+    play.settings_ = settings;
+    RAWFRAME_TRY(play.launch());
+    return play;
+}
+
+result::Status Play::launch() {
+    for (std::optional<process::Child>* each : {&client_, &server_}) {
+        if (each->has_value() && !(*each)->exited().has_value()) {
+            (*each)->kill();
+        }
+        each->reset();
+    }
+    ++launches_;
+    admitted_ = false;
+    clientLogRead_ = 0;
+    std::random_device device;
+    // Two ports below every system's range for outgoing connections (Linux
+    // takes 32768 and up, Windows 49152 and up), so no socket of another
+    // process holds one by chance; the endpoint's after the server's.
+    const auto kServerPort = static_cast<std::uint16_t>(20000 + (device() % 6000) * 2);
+    const auto kEndpointPort = static_cast<std::uint16_t>(kServerPort + 1);
+    const std::filesystem::path& kAt = directory_;
+    for (const char* kLeft : {"server.fingerprint", "client.fingerprint"}) {
+        std::error_code error;
+        std::filesystem::remove(kAt / kLeft, error);
+    }
+    const std::string kGame = settings_.game.string();
     const std::string kPort = std::to_string(kServerPort);
-    RAWFRAME_TRY(written(kAt / "token", token + "\n"));
     RAWFRAME_TRY(written(kAt / "server.conf",
-                         settingsOf(contents(settings.serverSettings),
+                         settingsOf(contents(settings_.serverSettings),
                                     {{"host.iteration_rate", "120"},
                                      {"world.tick_rate", "60"},
                                      // Its scenes followed once a second: an edit Studio
@@ -139,7 +163,7 @@ result::Result<Play> Play::start(const PlaySettings& settings) {
                                      {"network.quic.fingerprint_file", (kAt / "server.fingerprint").string()},
                                      {"replication.endpoint", "127.0.0.1:" + kPort}})));
     RAWFRAME_TRY(written(kAt / "client.conf",
-                         settingsOf(contents(settings.clientSettings),
+                         settingsOf(contents(settings_.clientSettings),
                                     {{"host.iteration_rate", "120"},
                                      {"kest.plan_only", "true"},
                                      {"bots.count", "1"},
@@ -153,24 +177,30 @@ result::Result<Play> Play::start(const PlaySettings& settings) {
                                      {"tooling.endpoint", "127.0.0.1:" + std::to_string(kEndpointPort)},
                                      {"tooling.token_file", (kAt / "token").string()},
                                      {"tooling.grants", "view"}})));
-    Play play;
-    play.directory_ = kAt;
-    play.endpointPort_ = kEndpointPort;
-    play.clientProgram_ = settings.client;
-    RAWFRAME_TRY_ASSIGN(play.server_,
-                        process::Child::start({.program = settings.server,
+    endpointPort_ = kEndpointPort;
+    RAWFRAME_TRY_ASSIGN(server_,
+                        process::Child::start({.program = settings_.server,
                                                .arguments = {"--config", (kAt / "server.conf").string()},
                                                .output = kAt / "server.log"}));
-    return play;
+    return {};
 }
 
 result::Status Play::advance() {
+    // A port another process took ends the server or the client as it
+    // starts; until the client's player is in, the game is launched again
+    // on other ports, a few times.
+    constexpr int kLaunches = 5;
+    const bool kServerEnded = server_.has_value() && server_->exited().has_value();
+    const bool kClientEnded = client_.has_value() && client_->exited().has_value();
+    if ((kServerEnded || kClientEnded) && !admitted_ && launches_ < kLaunches) {
+        return launch();
+    }
     std::error_code error;
     if (client_.has_value() || std::filesystem::file_size(directory_ / "server.fingerprint", error) == 0 || error) {
         return {};
     }
     RAWFRAME_TRY_ASSIGN(client_,
-                        process::Child::start({.program = clientProgram_,
+                        process::Child::start({.program = settings_.client,
                                                .arguments = {"--config", (directory_ / "client.conf").string()},
                                                .output = directory_ / "client.log"}));
     return {};

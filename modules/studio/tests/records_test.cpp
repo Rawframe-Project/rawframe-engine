@@ -6,10 +6,12 @@
 #include "../src/records.h"
 #include "rawframe/test/test.h"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <set>
 #include <string>
+#include <thread>
 
 using namespace rawframe::studio;
 namespace document = rawframe::document;
@@ -186,6 +188,21 @@ RAWFRAME_TEST(APlayedProgramsSettingsKeepWhatTheyAreGivenAndAddWhatTheyLack) {
     // A key that only begins like one is not it.
     RAWFRAME_EXPECT(settingsOf("bots.count_extra = 2\n", {{"bots.count", "1"}}, {}).find("bots.count = 1") !=
                     std::string::npos);
+}
+
+RAWFRAME_TEST(AGameEndingAsItStartsIsLaunchedAgainAFewTimes) {
+    std::error_code error;
+    const std::filesystem::path kRoot = std::filesystem::temp_directory_path() / ("studio-play-" + mintedIdentity());
+    // A server that ends at once, as one whose port another process took.
+    auto play = Play::start(
+        PlaySettings{.server = "/bin/false", .client = "/bin/false", .game = "g.game", .directory = kRoot / "play"});
+    RAWFRAME_EXPECT(play.has_value());
+    for (int tries = 0; play.has_value() && tries < 2000 && !(play->launches() == 5 && play->ended()); ++tries) {
+        RAWFRAME_EXPECT(play->advance().has_value());
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    RAWFRAME_EXPECT(play.has_value() && play->launches() == 5 && play->ended() && !play->running());
+    std::filesystem::remove_all(kRoot, error);
 }
 
 RAWFRAME_TEST(APlayedGamesFilesAreItsOwnersAlone) {
