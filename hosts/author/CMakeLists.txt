@@ -58,4 +58,12 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/author_tooling)
     set_tests_properties(author_tooling PROPERTIES PASS_REGULAR_EXPRESSION "inspected runners through the tooling endpoint")
+    # A scene edited by an authoring session while a dedicated server plays
+    # it (D410): the running World makes, writes, and lets go of the crate
+    # as the scene changes, read through the tooling endpoint.
+    add_test(NAME author_live
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_live.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/author_live)
+    set_tests_properties(author_live PROPERTIES PASS_REGULAR_EXPRESSION "runners' level followed live")
 endif()
