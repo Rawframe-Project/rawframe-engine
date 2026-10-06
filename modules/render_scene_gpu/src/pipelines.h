@@ -208,6 +208,9 @@ private:
     result::Status makeShader(std::span<const std::uint8_t> container, mrhiShaderId& shader);
     result::Status ask(const mrhiGraphicsPipelineDef& def, Asked& asked);
     result::Status ask(const mrhiComputePipelineDef& def, Asked& asked);
+    /// A pipeline the device refused, named by its label, with Maul RHI's
+    /// diagnostic when it recorded one.
+    result::Status refused(mrhiResult outcome, const char* label, std::size_t labelLength);
 
     /// Which effects have been asked for, and the prepass's and the
     /// picture's pipelines, which the surfaces and FXAA are made from.

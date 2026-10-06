@@ -128,11 +128,24 @@ result::Status Pipelines::makeShader(std::span<const std::uint8_t> container, mr
     return {};
 }
 
+result::Status Pipelines::refused(mrhiResult outcome, const char* label, std::size_t labelLength) {
+    result::Error error = failed("a scene pipeline could not be asked for", outcome).error();
+    if (labelLength > 0) {
+        error = std::move(error).withContext("pipeline", std::string{label, labelLength});
+    }
+    // Maul RHI's own word on an input it refused (mrhi-0027).
+    mrhiDiagnostic diagnostic{};
+    if (mrhiNextDeviceDiagnostic(native, &diagnostic) == mrhi_success) {
+        error = std::move(error).withContext("diagnostic", mrhiDiagnosticText(diagnostic.code));
+    }
+    return std::unexpected<result::Error>{std::move(error)};
+}
+
 result::Status Pipelines::ask(const mrhiGraphicsPipelineDef& def, Asked& asked) {
     mrhiRequestId request{};
     if (const mrhiResult kMade = mrhiCreateGraphicsPipeline(native, &def, &asked.pipeline, &request);
         kMade != mrhi_success) {
-        return failed("a scene pipeline could not be asked for", kMade);
+        return refused(kMade, def.label, def.labelLength);
     }
     asked.request = render::requestKey(request.index1, request.generation);
     return {};
@@ -142,7 +155,7 @@ result::Status Pipelines::ask(const mrhiComputePipelineDef& def, Asked& asked) {
     mrhiRequestId request{};
     if (const mrhiResult kMade = mrhiCreateComputePipeline(native, &def, &asked.compute, &request);
         kMade != mrhi_success) {
-        return failed("a scene pipeline could not be asked for", kMade);
+        return refused(kMade, def.label, def.labelLength);
     }
     asked.request = render::requestKey(request.index1, request.generation);
     return {};

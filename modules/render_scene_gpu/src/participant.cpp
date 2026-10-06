@@ -68,10 +68,17 @@ public:
             auto made = SceneRenderer::create(*device);
             if (!made.has_value()) {
                 failed_ = true;
+                // The reason, and what it names: the device's outcome, the
+                // pipeline, Maul RHI's diagnostic.
+                std::string detail;
+                for (const auto& each : made.error().context()) {
+                    detail += (detail.empty() ? "" : ", ") + std::string{each.key} + " " + std::string{each.value};
+                }
                 emitter_.log(diagnostics::Severity::Error,
                              kFailed,
                              "the scene could not be drawn: nothing more is",
-                             {diagnostics::field("reason", std::string{made.error().description()})});
+                             {diagnostics::field("reason", std::string{made.error().description()}),
+                              diagnostics::field("detail", detail)});
                 return;
             }
             renderer_ = std::move(*made);
