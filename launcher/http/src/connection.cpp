@@ -59,8 +59,10 @@ std::unexpected<result::Error> failed(HttpError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(kClass, kHttpDomain, code(error), why).error()};
 }
 
+#if !defined(_WIN32)
 /// Where systems keep the authorities they trust, as one PEM file: Debian
 /// and Ubuntu, Fedora and RHEL, openSUSE, older RHEL, and Alpine and macOS.
+/// Windows keeps its own in a certificate store.
 constexpr std::array<const char*, 5> kSystemAuthorities = {
     "/etc/ssl/certs/ca-certificates.crt",
     "/etc/pki/tls/certs/ca-bundle.crt",
@@ -68,6 +70,7 @@ constexpr std::array<const char*, 5> kSystemAuthorities = {
     "/etc/pki/tls/cacert.pem",
     "/etc/ssl/cert.pem",
 };
+#endif
 
 /// Waits until `native` can be read (or written), at most `milliseconds`.
 bool ready(Native native, bool writing, std::uint32_t milliseconds) noexcept {
