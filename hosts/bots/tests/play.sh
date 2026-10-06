@@ -15,6 +15,10 @@
 # Iterations are the Host's, at 120 a second; the server ticks at 60. The
 # server runs until every bots process has stopped and is then asked to stop,
 # so a slow start (a sanitizer, a busy machine) cannot end play early.
+#
+# RAWFRAME_PLAY_WORK, when set, names the directory the logs are written to,
+# kept after, each bots process's id beside its log (bots-<n>.pid): for a
+# script that drives a client to wait on its records and stop it (D430).
 set -euo pipefail
 
 server="$1"
@@ -42,9 +46,15 @@ absolute() {
 }
 game="$(absolute "$game")"
 bots_game="$(absolute "$bots_game")"
-work="$(native "$(mktemp -d)")"
+if [ -n "${RAWFRAME_PLAY_WORK:-}" ]; then
+    work="$(native "$RAWFRAME_PLAY_WORK")"
+    kept=1
+else
+    work="$(native "$(mktemp -d)")"
+    kept=0
+fi
 pids=()
-trap 'kill ${pids[@]+"${pids[@]}"} 2>/dev/null || true; rm -rf "$work"' EXIT
+trap 'kill ${pids[@]+"${pids[@]}"} 2>/dev/null || true; [ "$kept" = 1 ] || rm -rf "$work"' EXIT
 
 # A port nothing holds right now.
 port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
@@ -80,6 +90,7 @@ done
 for index in $(seq "$processes"); do
     "$bots" --config "$work/bots.conf" >"$work/bots-$index.log" 2>&1 &
     pids+=($!)
+    echo "$!" >"$work/bots-$index.pid"
 done
 for pid in ${pids[@]+"${pids[@]}"}; do
     wait "$pid" || true

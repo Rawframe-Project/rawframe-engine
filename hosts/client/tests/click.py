@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# Clicks in a client's window as a user would (D421): once the screen has
+# Clicks in a client's window as a user would (D421): once the client says
+# its player is admitted (its `bots_admitted` record) and the screen has
 # been lit for two seconds (a server started with a black root window, Xvfb
 # -br), the mouse moves to each point given, in the window's pixels from its
 # top left (which is the screen's: no window manager runs), and its left
@@ -9,13 +10,16 @@
 # pixels at the point was before the mouse came and after, and whether it
 # grew lighter by 8 or more of 255 (D422). A point followed by `:` and
 # lower-case text has the text typed after its click, a key at a time,
-# then Return (D426). Then it waits for the process to end.
+# then Return (D426). Five seconds after, it stops the client (D430), whose
+# iterations only bound it, and waits for play.sh to end.
 #
-# usage: click.py <pid> <x>,<y>[:<text>] [<x>,<y>[:<text>]...]
+# usage: click.py <play.sh pid> <play.sh work directory> <x>,<y>[:<text>]
+#                 [<x>,<y>[:<text>]...]
 
 import ctypes
 import ctypes.util
 import os
+import signal
 import sys
 import time
 
@@ -35,6 +39,30 @@ def alive(pid):
     return True
 
 
+def admitted(pid, work):
+    """Waits until the client's log says its player is admitted, while
+    play.sh runs; whether it did."""
+    log = os.path.join(work, "bots-1.log")
+    while alive(pid):
+        try:
+            with open(log, encoding="utf-8", errors="replace") as records:
+                if '"code":"bots_admitted"' in records.read():
+                    return True
+        except OSError:
+            pass
+        time.sleep(0.25)
+    return False
+
+
+def stop(work):
+    """Asks the client to stop, as a user closing it would."""
+    try:
+        with open(os.path.join(work, "bots-1.pid"), encoding="utf-8") as told:
+            os.kill(int(told.read().strip()), signal.SIGTERM)
+    except (OSError, ValueError):
+        pass
+
+
 def brightness(x, display, root, at, y):
     """The mean of the red, green, and blue of the five by five pixels
     around a point."""
@@ -50,8 +78,9 @@ def brightness(x, display, root, at, y):
 
 def main():
     pid = int(sys.argv[1])
+    work = sys.argv[2]
     points = []
-    for argument in sys.argv[2:]:
+    for argument in sys.argv[3:]:
         place, _, text = argument.partition(":")
         points.append((*(int(side) for side in place.split(",")), text))
     x = ctypes.CDLL(ctypes.util.find_library("X11"))
@@ -74,6 +103,8 @@ def main():
     if not display:
         sys.exit("click.py: no X display")
     root = x.XDefaultRootWindow(display)
+    if not admitted(pid, work):
+        print("the client ended before its player was admitted")
     lit = 0
     while alive(pid) and lit < 8:
         time.sleep(0.25)
@@ -116,6 +147,8 @@ def main():
                 time.sleep(0.1)
             print(f"typed {text} at {at},{y}")
             time.sleep(1)
+    time.sleep(5)
+    stop(work)
     while alive(pid):
         time.sleep(0.25)
 
