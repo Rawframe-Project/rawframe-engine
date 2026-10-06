@@ -181,6 +181,17 @@ editorCommand(std::string_view command, const std::string& file, std::int64_t li
 /// Windows also with `.exe` or `.cmd` after it. None when nowhere.
 [[nodiscard]] std::optional<std::filesystem::path> programOnPath(const std::string& program, std::string_view path);
 
+/// Whether `program` is a batch file (`.cmd` or `.bat`, in any case),
+/// which Windows starts through cmd.exe, parsing its arguments again.
+[[nodiscard]] bool isBatch(const std::filesystem::path& program);
+
+/// Whether `word` is safe as a batch file's argument: ASCII letters,
+/// digits, and `space _ - . : / \ + , = @ # ~ { } [ ] '` alone, nothing
+/// cmd.exe acts on (`& | < > ^ % ! " ( )`), no control and no non-ASCII
+/// byte, so a game's file name cannot run a command through the editor's
+/// launcher (D453a).
+[[nodiscard]] bool batchSafe(std::string_view word);
+
 /// A new identity, a random version 4 UUID in its text form: a new entity's
 /// is the client's to choose (D438), and an identity is data, not
 /// simulation, so nothing needs it repeated.

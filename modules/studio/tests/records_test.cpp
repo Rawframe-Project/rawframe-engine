@@ -104,6 +104,18 @@ RAWFRAME_TEST(ADiagnosticIsReadAndOpenedAtItsLine) {
     RAWFRAME_EXPECT(editorCommand("", "/g/a.kest", 3, 1).empty());
 }
 
+RAWFRAME_TEST(ABatchFileEditorIsGivenNothingCmdWouldRun) {
+    RAWFRAME_EXPECT(isBatch("C:/Program Files/VS Code/bin/code.cmd") && isBatch("edit.BAT") && !isBatch("code") &&
+                    !isBatch("code.exe") && !isBatch("/usr/bin/code"));
+    RAWFRAME_EXPECT(batchSafe(R"(C:\games\my game\controls.kest:20:1)") && batchSafe("--goto") &&
+                    batchSafe("/g/a-b_c+d,e=f@g#h~i{j}[k]'l.kest:3:1"));
+    // What cmd.exe acts on, a control byte, and a byte past ASCII.
+    for (const std::string_view kHostile :
+         {"a&calc", "a|b", "a<b", "a>b", "a^b", "%PATH%", "a!b", "a\"b", "a(b)", "a\nb", "caf\xc3\xa9"}) {
+        RAWFRAME_EXPECT(!batchSafe(kHostile));
+    }
+}
+
 RAWFRAME_TEST(AnEditorIsFoundOnThePathAsAShellFindsIt) {
     std::error_code error;
     const std::filesystem::path kRoot = std::filesystem::temp_directory_path() / ("studio-path-" + mintedIdentity());

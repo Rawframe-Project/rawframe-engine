@@ -543,6 +543,23 @@ std::optional<std::filesystem::path> programOnPath(const std::string& program, s
     return std::nullopt;
 }
 
+bool isBatch(const std::filesystem::path& program) {
+    std::string ending = program.extension().string();
+    std::ranges::transform(ending, ending.begin(), [](unsigned char letter) {
+        return static_cast<char>(letter >= 'A' && letter <= 'Z' ? letter + ('a' - 'A') : letter);
+    });
+    return ending == ".cmd" || ending == ".bat";
+}
+
+bool batchSafe(std::string_view word) {
+    constexpr std::string_view kMarks = " _-.:/\\+,=@#~{}[]'";
+    return std::ranges::all_of(word, [&kMarks](char each) {
+        const auto kByte = static_cast<unsigned char>(each);
+        return (kByte >= '0' && kByte <= '9') || (kByte >= 'a' && kByte <= 'z') || (kByte >= 'A' && kByte <= 'Z') ||
+               kMarks.find(each) != std::string_view::npos;
+    });
+}
+
 std::string mintedIdentity() {
     std::random_device device;
     std::array<std::uint8_t, 16> bytes{};

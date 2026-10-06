@@ -1,5 +1,6 @@
 #include "shell.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace rawframe::studio {
@@ -272,8 +273,15 @@ void ShellParticipant::openEditor() {
         say("no editor " + kWords.front() + " is on the path; studio.editor names one");
         return;
     }
-    auto started = process::Child::start(
-        {.program = *kProgram, .arguments = std::vector<std::string>(kWords.begin() + 1, kWords.end())});
+    const std::vector<std::string> kArguments(kWords.begin() + 1, kWords.end());
+    // A batch file's arguments are parsed again by cmd.exe: a file name
+    // holding what it acts on would run as a command (D453a).
+    if (isBatch(*kProgram) && !std::ranges::all_of(kArguments, batchSafe)) {
+        say("the editor is a batch file and the file's path holds characters it would run; name the editor's own "
+            "program in studio.editor");
+        return;
+    }
+    auto started = process::Child::start({.program = *kProgram, .arguments = kArguments});
     if (!started.has_value()) {
         say("the editor did not start: " + std::string{started.error().description()});
         return;
