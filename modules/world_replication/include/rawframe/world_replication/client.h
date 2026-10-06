@@ -63,6 +63,8 @@ struct ClientReplicationStatistics {
     std::uint64_t acknowledgementsSent = 0;
     /// Game messages received (D266).
     std::uint64_t messagesReceived = 0;
+    /// The player's commands sent on the game's command lane (D425).
+    std::uint64_t commandsSent = 0;
 };
 
 class ReplicationClient {
@@ -99,6 +101,10 @@ public:
     /// The input for the next input tick, as a value of the input component
     /// (its in-memory bytes), sent with every command not yet consumed.
     [[nodiscard]] result::Status submitInput(std::span<const std::byte> value);
+    /// One of the player's commands, on the game's command lane, which the
+    /// sessions must declare; in the order sent, after the input it was
+    /// sampled with (D425).
+    [[nodiscard]] result::Status sendCommand(const PostedCommand& command);
 
     [[nodiscard]] ClientReplicationStatistics statistics() const noexcept;
     /// All zero without prediction.

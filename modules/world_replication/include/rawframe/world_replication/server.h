@@ -115,6 +115,13 @@ struct ServerReplicationSettings {
     /// (nought). What passes either is dropped unread (D225).
     std::size_t inputBytesPerSecond = 65'536;
     std::uint64_t inputWindowsPerSecond = 0;
+    /// Each of the game's commands' exact size, by its place among them; a
+    /// record of another kind or size strikes its connection (D425). None
+    /// for a game without commands.
+    std::vector<std::size_t> commandSizes;
+    /// Commands one connection may have waiting to be taken; past them each
+    /// is dropped unread and counted.
+    std::size_t maximumCommandsWaiting = 32;
 };
 
 /// SPEC-0041's `prediction_divergence`: a connection's checksum of its
@@ -169,6 +176,10 @@ struct ServerReplicationStatistics {
     std::uint64_t messagesUndelivered = 0;
     /// Sessions ended by the game or an operator (D267).
     std::uint64_t terminated = 0;
+    /// Players' commands taken for the game's systems, and those dropped
+    /// past `maximumCommandsWaiting` (D425).
+    std::uint64_t commandsTaken = 0;
+    std::uint64_t commandsLimited = 0;
 };
 
 class ReplicationServer final : public world_runtime::SystemContributor, public InterestHistory {
@@ -219,6 +230,10 @@ public:
     /// only for that to arrive, and the player leaves the World at once, as
     /// if it had gone. False for a player not connected.
     bool terminate(world::World& world, world::EntityHandle player, const network::Termination& termination) noexcept;
+    /// Appends the commands players sent since last asked, checked, in the
+    /// order they arrived, each for the tick the pump that took it was at
+    /// (D425). On the Host thread between ticks.
+    void takeCommands(std::vector<ReceivedCommand>& into);
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
     /// Divergences found since last asked, the oldest first, at most 64; a

@@ -702,6 +702,18 @@ std::uint64_t ReplicationClient::serverTick() const noexcept {
     return state_->serverTick;
 }
 
+result::Status ReplicationClient::sendCommand(const PostedCommand& command) {
+    State& state = *state_;
+    if (!state.accept || !state.connection) {
+        return refuse(result::ErrorClass::FailedPrecondition,
+                      ReplicationError::InputRefused,
+                      "a command needs an admitted session");
+    }
+    RAWFRAME_TRY(state.sessions->sendEvent(*state.connection, kGameCommandLane, command.kind, command.value));
+    ++state.statistics.commandsSent;
+    return {};
+}
+
 result::Status ReplicationClient::submitInput(std::span<const std::byte> value) {
     State& state = *state_;
     if (!state.accept || !state.settings.input || value.size() != state.settings.input->size) {

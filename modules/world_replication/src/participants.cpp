@@ -85,13 +85,18 @@ network::SessionProfile sessionProfile(std::size_t sessions) {
                                    .admissionTimeout = execution::MonotonicDuration::fromSeconds(5)};
 }
 
-/// The event lanes both sides declare: the engine's (D267), and the game's
-/// when it sends messages (D266), its bound checked when the game loaded.
+/// The event lanes both sides declare: the engine's (D267), the game's when
+/// it sends messages (D266), its bound checked when the game loaded, and
+/// its command lane when it has commands, bound by the largest (D425).
 std::vector<network::EventLaneDeclaration> lanesOf(const ReplicationPlan& plan) {
-    if (plan.messageRecord() == 0) {
-        return {engineLane()};
+    std::vector<network::EventLaneDeclaration> lanes = {engineLane()};
+    if (plan.messageRecord() != 0) {
+        lanes.push_back(gameMessageLane(plan.messageRecord()));
     }
-    return {engineLane(), gameMessageLane(plan.messageRecord())};
+    if (const std::span<const std::size_t> kSizes = plan.commandSizes(); !kSizes.empty()) {
+        lanes.push_back(gameCommandLane(*std::ranges::max_element(kSizes)));
+    }
+    return lanes;
 }
 
 network::ProviderProfile providerProfile(std::size_t connections) {
@@ -206,7 +211,8 @@ public:
                     .stateBytesPerPublish = static_cast<std::size_t>(kPerPublish),
                     .presence = presence,
                     .predicted = {plan->predictedComponents().begin(), plan->predictedComponents().end()},
-                    .captureDivergences = kCapture}));
+                    .captureDivergences = kCapture,
+                    .commandSizes = {plan->commandSizes().begin(), plan->commandSizes().end()}}));
         return simulation_->addSystems(*server_);
     }
 
@@ -238,6 +244,12 @@ public:
         plan_->takeMessages(posted_);
         for (const PostedMessage& message : posted_) {
             server_->post(message);
+        }
+        // What the players asked for, for the game's next tick (D425).
+        commands_.clear();
+        server_->takeCommands(commands_);
+        if (!commands_.empty()) {
+            plan_->deliverCommands(commands_);
         }
         // Sessions the game ended, after what it sent them (ADR-0073).
         ended_.clear();
@@ -320,7 +332,9 @@ public:
                       diagnostics::field("mostConnections", static_cast<std::uint64_t>(mostConnections_)),
                       diagnostics::field("messagesSent", kStatistics.messagesSent),
                       diagnostics::field("messagesUndelivered", kStatistics.messagesUndelivered),
-                      diagnostics::field("terminated", kStatistics.terminated)});
+                      diagnostics::field("terminated", kStatistics.terminated),
+                      diagnostics::field("commandsTaken", kStatistics.commandsTaken),
+                      diagnostics::field("commandsLimited", kStatistics.commandsLimited)});
     }
 
 private:
@@ -356,6 +370,7 @@ private:
     /// The most players connected at once.
     std::size_t mostConnections_ = 0;
     std::vector<PostedMessage> posted_;
+    std::vector<ReceivedCommand> commands_;
     std::vector<PostedTermination> ended_;
     std::set<world_runtime::PlayerIdentity> admitting_;
     bool noticed_ = false;
@@ -724,6 +739,14 @@ public:
                 for (int burst = 0; burst < 4 && bot.submitted < kDue; ++burst, ++bot.submitted) {
                     steer(bot, bot.submitted);
                     static_cast<void>(bot.client->submitInput(bot.input));
+                    // What the sample asked for with that input (D425).
+                    if (bot.source != nullptr) {
+                        commands_.clear();
+                        bot.source->takeCommands(commands_);
+                        for (const PostedCommand& command : commands_) {
+                            static_cast<void>(bot.client->sendCommand(command));
+                        }
+                    }
                 }
             }
         }
@@ -750,6 +773,7 @@ public:
         std::uint64_t mirrored = 0;
         std::uint64_t stateDatagrams = 0;
         std::uint64_t messagesReceived = 0;
+        std::uint64_t commandsSent = 0;
         std::uint64_t terminated = 0;
         PredictionStatistics predicted;
         InterpolationStatistics interpolated;
@@ -789,6 +813,7 @@ public:
             mirrored += bot.world->entityCount();
             stateDatagrams += bot.client->statistics().stateDatagrams;
             messagesReceived += bot.client->statistics().messagesReceived;
+            commandsSent += bot.client->statistics().commandsSent;
             terminated += bot.client->termination().has_value() ? 1 : 0;
             const PredictionStatistics kBot = bot.client->predictionStatistics();
             predicted.predictedTicks += kBot.predictedTicks;
@@ -831,6 +856,7 @@ public:
                       diagnostics::field("effectsCancelled", predicted.effectsCancelled),
                       diagnostics::field("effectsDropped", predicted.effectsDropped),
                       diagnostics::field("messagesReceived", messagesReceived),
+                      diagnostics::field("commandsSent", commandsSent),
                       diagnostics::field("terminated", terminated),
                       diagnostics::field("blended", interpolated.blended),
                       diagnostics::field("shownNewest", interpolated.newest),
@@ -879,6 +905,7 @@ private:
     std::string sessionPrefix_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     std::vector<Bot> bots_;
+    std::vector<PostedCommand> commands_;
     /// Whether the first bot is the process's own player.
     bool player_ = false;
     std::uint32_t checksumInterval_ = 60;

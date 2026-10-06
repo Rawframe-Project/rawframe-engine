@@ -7,11 +7,13 @@
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/result/result.h"
+#include "rawframe/world_replication/messages.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <vector>
 
 namespace rawframe::world_replication {
 
@@ -25,6 +27,11 @@ public:
     /// Fills `input` (the input component's bytes) for the client's tick
     /// `tick`.
     [[nodiscard]] virtual result::Status next(std::uint64_t tick, std::span<std::byte> input) = 0;
+    /// Appends the commands the last `next` sent (D425), in order; none by
+    /// default.
+    virtual void takeCommands(std::vector<PostedCommand>& into) {
+        static_cast<void>(into);
+    }
 };
 
 /// Makes input sources for a game's clients.

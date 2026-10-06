@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <deque>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <span>
@@ -282,6 +283,24 @@ Perception ReplicationServer::State::perceived(Peer& peer,
     return Perception{.baseTick = kKept.moment.baseTick, .fraction = kKept.moment.fraction, .viewer = peer.viewer};
 }
 
+void ReplicationServer::State::onCommand(Peer& peer, network::SessionEvent& event) {
+    const std::vector<std::size_t>& kSizes = settings.commandSizes;
+    if (event.payloadType >= kSizes.size() || event.payload.size() != kSizes[event.payloadType]) {
+        strike(peer);
+        return;
+    }
+    if (peer.commandsWaiting >= settings.maximumCommandsWaiting) {
+        ++statistics.commandsLimited;
+        return;
+    }
+    ++peer.commandsWaiting;
+    ++statistics.commandsTaken;
+    commands.push_back(ReceivedCommand{.player = peer.player,
+                                       .kind = static_cast<std::uint32_t>(event.payloadType),
+                                       .value = std::move(event.payload),
+                                       .tick = world::TickIndex{pumpTick}});
+}
+
 void ReplicationServer::State::onChecksum(Peer& peer, const network::SessionEvent& event) {
     const std::uint64_t kSeconds = std::max<std::uint64_t>(peer.accept.tickRateSeconds, 1);
     if (!peer.checksums.admit(
@@ -536,8 +555,14 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             break;
         }
         case network::SessionEventKind::Event:
-            // A server declares no lane a client sends on, so its sessions
-            // refuse every such stream and none arrives.
+            // The command lane is the only one a client sends on (D425):
+            // its sessions refuse a stream on any other.
+            if (kPeer != state.peers.end() && event.eventLane == kGameCommandLane) {
+                state.onCommand(kPeer->second, event);
+                if (kPeer->second.gone) {
+                    state.peers.erase(kPeer);
+                }
+            }
             break;
         case network::SessionEventKind::Frame:
             if (kPeer != state.peers.end()) {
@@ -702,6 +727,15 @@ bool ReplicationServer::terminate(world::World& world,
     state.forget(world, kPeer);
     ++state.statistics.terminated;
     return true;
+}
+
+void ReplicationServer::takeCommands(std::vector<ReceivedCommand>& into) {
+    State& state = *state_;
+    std::ranges::move(state.commands, std::back_inserter(into));
+    state.commands.clear();
+    for (auto& [kConnection, peer] : state.peers) {
+        peer.commandsWaiting = 0;
+    }
 }
 
 world::EntityHandle ReplicationServer::player(network::ConnectionId connection) const noexcept {

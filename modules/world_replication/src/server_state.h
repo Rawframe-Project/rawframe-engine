@@ -75,6 +75,8 @@ struct ReplicationServer::State {
     std::uint64_t scope = 0;
     std::vector<Divergence> divergences;
     std::vector<std::span<const std::byte>> scopeValues;
+    /// Players' commands checked and not yet taken by the game (D425).
+    std::vector<ReceivedCommand> commands;
 
     // Scratch reused every tick. Every replicated value is encoded once per
     // tick, in entity then component order, and copied to each connection.
@@ -210,6 +212,9 @@ struct ReplicationServer::State {
     /// limit, checked against the server's own checksum at its tick, and a
     /// mismatch recorded and counted, never acted on.
     void onChecksum(Peer& peer, const network::SessionEvent& event);
+    /// A record on the game's command lane: checked by kind and size, and
+    /// held for the game unless the connection has too many waiting.
+    void onCommand(Peer& peer, network::SessionEvent& event);
 
     /// The server's own checksum of the connection's predicted scope at the
     /// tick it publishes: its player's values as this tick encoded them.

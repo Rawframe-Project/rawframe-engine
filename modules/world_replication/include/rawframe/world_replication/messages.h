@@ -9,6 +9,7 @@
 #include "rawframe/network/close.h"
 #include "rawframe/network/session.h"
 #include "rawframe/world/entity.h"
+#include "rawframe/world/time.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -25,6 +26,31 @@ inline constexpr std::uint64_t kGameMessageLane = 1;
 [[nodiscard]] inline network::EventLaneDeclaration gameMessageLane(std::size_t record) noexcept {
     return {.id = kGameMessageLane, .fromServer = true, .maximumRecord = record};
 }
+
+/// The game's command lane (D425): a client's commands to the server, on
+/// the lane both sides declare when the game has commands, whose records
+/// are at most the largest command.
+inline constexpr std::uint64_t kGameCommandLane = 2;
+
+[[nodiscard]] inline network::EventLaneDeclaration gameCommandLane(std::size_t record) noexcept {
+    return {.id = kGameCommandLane, .fromServer = false, .maximumRecord = record};
+}
+
+/// A command a client's sample sent in a tick: which of the game's
+/// commands, by its place among them, and its value's bytes.
+struct PostedCommand {
+    std::uint32_t kind = 0;
+    std::vector<std::byte> value;
+};
+
+/// A command a server took from a player's connection, checked: whose,
+/// which, its value, and the tick whose systems first read it.
+struct ReceivedCommand {
+    world::EntityHandle player;
+    std::uint32_t kind = 0;
+    std::vector<std::byte> value;
+    world::TickIndex tick;
+};
 
 /// The engine's own lane, which both sides always declare: a session's
 /// termination (ADR-0073, D267).

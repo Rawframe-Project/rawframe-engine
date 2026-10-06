@@ -257,6 +257,8 @@ struct Peer {
     std::optional<std::int64_t> pendingLead;
     ChecksumBook checksums;
     InputAllowance allowance;
+    /// Its commands taken since the game last took them (D425).
+    std::size_t commandsWaiting = 0;
     /// Closed by this side, for breaking the protocol or striking out: to
     /// be forgotten once its event is handled (D223).
     bool gone = false;

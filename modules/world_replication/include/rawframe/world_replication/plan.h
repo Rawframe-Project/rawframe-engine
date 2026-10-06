@@ -60,6 +60,18 @@ public:
     virtual void takeTerminations(std::vector<PostedTermination>& into) noexcept {
         static_cast<void>(into);
     }
+    /// Each of the game's commands' exact size, by its place among them,
+    /// which a server checks every command it takes by; none for a game
+    /// without commands (D425).
+    [[nodiscard]] virtual std::span<const std::size_t> commandSizes() const noexcept {
+        return {};
+    }
+    /// Hands the game's systems the commands a server took from its
+    /// players, checked, each for the tick it names. On the Host thread
+    /// between ticks.
+    virtual void deliverCommands(std::span<const ReceivedCommand> commands) noexcept {
+        static_cast<void>(commands);
+    }
     /// The components a client shows remote entities' values of between
     /// states; empty for a game that shows every state as it arrives.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept = 0;
