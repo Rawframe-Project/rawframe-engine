@@ -52,9 +52,14 @@ struct Answered {
     std::string message;
     std::optional<Value> view;
     bool previewing = false;
+    /// A new scene's identity, as 32 hex digits (D449).
+    std::string resource;
 };
 
 [[nodiscard]] Answered answeredOf(std::string_view reply);
+
+/// `authoring.create_scene` for `scene` (D449).
+[[nodiscard]] Value createSceneRecord(std::int64_t id, std::string_view scene);
 
 /// A running Runtime's tooling endpoint to preview a scene in (D433).
 struct Preview {

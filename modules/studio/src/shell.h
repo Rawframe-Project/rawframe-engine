@@ -63,7 +63,9 @@ struct FieldRow {
         Add,
         View,
         /// The scene an instance placed in the chosen scene is of.
-        Instance
+        Instance,
+        /// The path of a new scene (D449).
+        NewScene
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -194,6 +196,14 @@ private:
     /// Places in the chosen scene an instance of the scene `text` names.
     void place(const std::string& text);
 
+    /// Makes a new scene at the path `text` gives, `.scene` added if it
+    /// has none, and chooses it.
+    void makeScene(std::string text);
+
+    /// The scenes' rows, in order, and the new scene's field under them;
+    /// the view's rows, if shown, after them again.
+    result::Status showScenes();
+
     /// `why` in the header, nothing asked, the entity shown as it stands.
     void refuse(const std::string& why);
 
@@ -245,6 +255,8 @@ private:
     /// The chosen scene's own field rows under its entities.
     std::vector<ui::Node> sceneFieldRows_;
     std::vector<FieldRow> sceneFields_;
+    ui::Node newSceneRow_{};
+    std::optional<FieldRow> newScene_;
     Catalog catalog_;
     std::vector<std::string> names_;
     std::vector<bool> brought_;

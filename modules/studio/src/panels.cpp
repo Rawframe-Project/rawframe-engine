@@ -87,9 +87,29 @@ result::Status ShellParticipant::build() {
             RAWFRAME_TRY_ASSIGN(deleteNode_, button(kTools, "Delete"));
         }
     }
+    return showScenes();
+}
+
+result::Status ShellParticipant::showScenes() {
+    clear(sceneRows_);
+    if (newScene_.has_value()) {
+        static_cast<void>(tree_->remove(newSceneRow_));
+        newScene_.reset();
+    }
     for (std::size_t each = 0; each < scenes_.size(); ++each) {
-        RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode, row(scenesColumn_, scenes_[each], kText));
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kRowNode,
+            row(scenesColumn_, scenes_[each], kText, each == sceneAt_ && !scene_.empty() ? kChosen : kRow));
         sceneRows_.push_back(kRowNode);
+    }
+    // A new scene is the session's own verb, not an operation the catalog
+    // lists, so it is always offered.
+    RAWFRAME_TRY_ASSIGN(const auto kLine, fieldRow("new scene", "", scenesColumn_));
+    newSceneRow_ = kLine.first;
+    newScene_ = FieldRow{.value = kLine.second, .role = FieldRow::Role::NewScene, .field = "new scene"};
+    if (!viewRows_.empty()) {
+        showView();
+        showViewText();
     }
     return {};
 }

@@ -98,6 +98,9 @@ Answered answeredOf(std::string_view reply) {
     }
     const Value* previewing = answer->find("previewing");
     answered.previewing = previewing != nullptr && previewing->truth().value_or(false);
+    if (const Value* resource = answer->find("resource"); resource != nullptr && resource->text() != nullptr) {
+        answered.resource = *resource->text();
+    }
     return answered;
 }
 
@@ -165,6 +168,10 @@ Value viewRecord(std::int64_t id, std::string_view scene, const Value& view) {
     Value record = recordOf("authoring.view", id, scene);
     record.add("view", view);
     return record;
+}
+
+Value createSceneRecord(std::int64_t id, std::string_view scene) {
+    return recordOf("authoring.create_scene", id, scene);
 }
 
 Value previewRecord(std::int64_t id, std::string_view scene, const Preview* preview) {

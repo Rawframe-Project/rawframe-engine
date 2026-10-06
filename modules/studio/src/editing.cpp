@@ -62,6 +62,8 @@ void ShellParticipant::pressAt(float x, float y) {
     } else if (const auto kViewAt = std::ranges::find(viewFields_, kNode, &FieldRow::value);
                kViewAt != viewFields_.end()) {
         beginEdit(*kViewAt);
+    } else if (newScene_.has_value() && kNode == newScene_->value) {
+        beginEdit(*newScene_);
     } else if (const auto kSceneAt = std::ranges::find(sceneFields_, kNode, &FieldRow::value);
                kSceneAt != sceneFields_.end()) {
         beginEdit(*kSceneAt);
@@ -111,6 +113,8 @@ void ShellParticipant::take(const view::Typing& typing) {
             setView(kEdited.field, kTyped);
         } else if (kEdited.role == FieldRow::Role::Instance) {
             place(kTyped);
+        } else if (kEdited.role == FieldRow::Role::NewScene) {
+            makeScene(kTyped);
         } else {
             apply(kEdited, kTyped);
         }
@@ -119,6 +123,8 @@ void ShellParticipant::take(const view::Typing& typing) {
         endEdit();
         if (kRole == FieldRow::Role::View) {
             showViewText();
+        } else if (kRole == FieldRow::Role::NewScene) {
+            static_cast<void>(showScenes());
         } else if (kRole == FieldRow::Role::Instance) {
             refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
         } else {
@@ -229,6 +235,31 @@ void ShellParticipant::place(const std::string& text) {
     operation.add("scene", Value::string(sceneSources_[*kScene]));
     operation.add("instance", Value::string(mintedIdentity()));
     commit(std::move(operation), "instance of " + scenes_[*kScene] + " placed", std::nullopt);
+}
+
+void ShellParticipant::makeScene(std::string text) {
+    if (!text.empty() && !text.ends_with(".scene")) {
+        text += ".scene";
+    }
+    const Answered kMade = answeredOf(ask(createSceneRecord(next(), text)));
+    if (!kMade.done || text.empty()) {
+        ++refused_;
+        say(kMade.done ? "name the new scene" : kMade.message);
+        static_cast<void>(showScenes());
+        return;
+    }
+    ++applied_;
+    const auto kAt = std::ranges::upper_bound(scenes_, text);
+    const auto kIndex = static_cast<std::size_t>(kAt - scenes_.begin());
+    scenes_.insert(kAt, text);
+    sceneSources_.insert(sceneSources_.begin() + static_cast<std::ptrdiff_t>(kIndex), kMade.resource);
+    // The chosen scene's row moves down when the new one sorts before it.
+    if (!scene_.empty() && kIndex <= sceneAt_) {
+        ++sceneAt_;
+    }
+    static_cast<void>(showScenes());
+    showScene(kIndex);
+    say(text + " made");
 }
 
 void ShellParticipant::refuse(const std::string& why) {
