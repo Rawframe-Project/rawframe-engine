@@ -191,6 +191,10 @@ int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
             const auto kReply = client.ask(line);
             ended = ending(line);
             line.clear();
+            // The endpoint closes on end, and the close may outrun its reply.
+            if (!kReply.has_value() && ended) {
+                break;
+            }
             if (!kReply.has_value()) {
                 complain("the endpoint closed");
                 return 1;
@@ -200,8 +204,9 @@ int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
             status = answered(*kReply) ? status : 1;
         }
         if (!ended) {
-            const auto kEnded = client.ask(R"({"kind":"tooling.end","id":null})");
-            status = kEnded.has_value() ? status : 1;
+            // Said for the client; whether its reply or the close comes first,
+            // the connection is over.
+            (void)client.ask(R"({"kind":"tooling.end","id":null})");
         }
         client.close();
     }
