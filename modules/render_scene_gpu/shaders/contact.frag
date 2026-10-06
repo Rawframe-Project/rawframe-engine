@@ -38,6 +38,8 @@ vec3 seenAt(vec3 place)
 
 void main()
 {
+    // Read for the interface alone (D418): Direct3D 12 links stages by place.
+    const float kInterface = inUv.x;
     outLit = 1.0;
     const ivec2 kAt = ivec2(gl_FragCoord.xy);
     const float kDepth = texelFetch(depth, kAt, 0).r;

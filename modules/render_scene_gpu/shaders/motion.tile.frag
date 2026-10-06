@@ -26,6 +26,8 @@ layout(location = 0) out vec2 outLongest;
 
 void main()
 {
+    // Read for the interface alone (D418): Direct3D 12 links stages by place.
+    const float kInterface = inUv.x;
     const int kSide = int(blur.settings.y);
     const ivec2 kSize = textureSize(motion, 0);
     const ivec2 kFirst = ivec2(gl_FragCoord.xy) * kSide;

@@ -20,7 +20,10 @@
    no localization (D147), no authoring transactions (D149), no client
    input, no loopback or browser transport, and no import, cook, or build
    tooling (D182).
-7. The launcher family (ADR-0060, ADR-0074, D414) lives under launcher/,
+7. A fragment shader reads every input it declares (D418): crossed to HLSL
+   for Direct3D 12, an input never read is left out and the rest no longer
+   line up with the vertex stage's outputs, which Direct3D 12 links by place.
+8. The launcher family (ADR-0060, ADR-0074, D414) lives under launcher/,
    outside every engine closure: no module or host depends on a launcher
    unit, and only launcher sources include OpenSSL's TLS (openssl/ssl.h).
 
@@ -221,6 +224,20 @@ def check_launcher(files, allowed, findings):
                 findings.append(f"{relative}: includes OpenSSL's TLS, which only the launcher may")
 
 
+FRAGMENT_INPUT = re.compile(r"layout\(location\s*=\s*\d+\)\s*(?:flat\s+)?in\s+\w+\s+(\w+)\s*;")
+
+
+def check_fragment_inputs(files, findings):
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[0] != "modules" or path.suffix != ".frag":
+            continue
+        text = path.read_text(errors="replace")
+        for name in FRAGMENT_INPUT.findall(text):
+            if len(re.findall(r"\b" + name + r"\b", text)) < 2:
+                findings.append(f"{relative}: input {name} is declared and never read (D418)")
+
+
 def check_owner_rules(files, findings):
     for path in files:
         # Vendored code is upstream's own text (third_party/README.md).
@@ -255,6 +272,7 @@ def main():
     check_providers(files, findings)
     check_clusters(files, findings)
     check_launcher(files, modules, findings)
+    check_fragment_inputs(files, findings)
     check_value_calls(files, findings)
     check_bounds_literals(files, findings)
     check_sizes(files, findings, notes)

@@ -24,6 +24,8 @@ layout(location = 0) out float outOcclusion;
 
 void main()
 {
+    // Read for the interface alone (D418): Direct3D 12 links stages by place.
+    const float kInterface = inUv.x;
     const ivec2 kAt = ivec2(gl_FragCoord.xy);
     const ivec2 kLast = textureSize(occluded, 0) - 1;
     const float kDepth = texelFetch(depth, kAt * 2, 0).r;

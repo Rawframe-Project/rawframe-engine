@@ -26,6 +26,8 @@ const float kGoldenAngle = 2.39996323;
 
 void main()
 {
+    // Read for the interface alone (D418): Direct3D 12 links stages by place.
+    const float kInterface = inUv.x;
     const vec2 kSize = vec2(textureSize(halved, 0));
     const vec4 kHere = texelFetch(halved, ivec2(gl_FragCoord.xy), 0);
     const float kOwn = abs(kHere.a);

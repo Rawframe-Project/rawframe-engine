@@ -47,6 +47,8 @@ const vec3 kKernel[12] = vec3[](
 
 void main()
 {
+    // Read for the interface alone (D418): Direct3D 12 links stages by place.
+    const float kInterface = inUv.x;
     const ivec2 kHalf = ivec2(gl_FragCoord.xy);
     const ivec2 kAt = kHalf * 2;
     const float kDepth = texelFetch(depth, kAt, 0).r;

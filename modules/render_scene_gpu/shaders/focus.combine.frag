@@ -27,6 +27,8 @@ layout(location = 0) out vec4 outColor;
 
 void main()
 {
+    // Read for the interface alone (D418): Direct3D 12 links stages by place.
+    const float kInterface = inUv.x;
     const ivec2 kAt = ivec2(gl_FragCoord.xy);
     const vec4 kSharp = texelFetch(scene, kAt, 0);
     const float kAhead = lens.settings.z / max(texelFetch(depth, kAt, 0).r, 1e-7);

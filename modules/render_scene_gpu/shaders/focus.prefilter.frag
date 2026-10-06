@@ -24,6 +24,8 @@ layout(location = 0) out vec4 outHalf;
 
 void main()
 {
+    // Read for the interface alone (D418): Direct3D 12 links stages by place.
+    const float kInterface = inUv.x;
     const ivec2 kSize = textureSize(scene, 0);
     const ivec2 kFirst = ivec2(gl_FragCoord.xy) * 2;
     vec3 light = vec3(0.0);
