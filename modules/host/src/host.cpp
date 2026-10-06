@@ -130,7 +130,8 @@ execution::MonotonicDuration shutdownBound(const Settings& settings) noexcept {
 }
 
 /// Reads the host keys. Returns the key at fault on failure.
-std::optional<std::string_view> readSettings(const composition::Configuration& configuration, Settings& settings) {
+std::optional<std::string_view>
+readSettings(const composition::Configuration& configuration, Settings& settings, std::uint32_t shutdownBudgetMs) {
     const auto kRate = configuration.unsignedInteger("host.iteration_rate", settings.iterationRate);
     if (!kRate.has_value() || *kRate == 0 || *kRate > 10'000) {
         return "host.iteration_rate";
@@ -153,7 +154,7 @@ std::optional<std::string_view> readSettings(const composition::Configuration& c
         return "host.io_workers";
     }
     settings.ioWorkers = static_cast<std::size_t>(*kIo);
-    const auto kBudget = configuration.unsignedInteger("host.shutdown_budget_ms", 5000);
+    const auto kBudget = configuration.unsignedInteger("host.shutdown_budget_ms", shutdownBudgetMs);
     if (!kBudget.has_value() || *kBudget == 0 || *kBudget > 600'000) {
         return "host.shutdown_budget_ms";
     }
@@ -243,7 +244,7 @@ struct Host::State {
                // (ADR-0063).
                diagnostics::Sensitivity::Personal,
                kLogBufferBytes),
-          badKey(readSettings(configuration, settings)), sinks{&sink},
+          badKey(readSettings(configuration, settings, given.defaultShutdownBudgetMs)), sinks{&sink},
           router(diagnostics::RouterSettings{.minimumSeverity = settings.minimumSeverity,
                                              .monotonic = &diagnostics::steadyClockNanoseconds,
                                              .wall = &wallNanoseconds},

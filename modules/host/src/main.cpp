@@ -121,6 +121,7 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
         .configuration = &*kConfiguration,
         .log = {.write = &writeStandardOutput, .context = nullptr},
         .stopRequested = &stopRequested,
+        .defaultShutdownBudgetMs = entry.defaultShutdownBudgetMs,
     };
     const HostExit kExit = entry.drive != nullptr ? entry.drive(kRequest) : runHost(kRequest);
     return exitCode(kExit);

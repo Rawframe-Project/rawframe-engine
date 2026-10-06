@@ -105,6 +105,10 @@ struct HostRequest {
     /// Objects the caller owns and lends the participants by capability,
     /// such as a client's raw input from its window; each outlives the Host.
     std::span<const composition::LentCapability> lent;
+    /// The shutdown budget a configuration naming none gets
+    /// (`host.shutdown_budget_ms`): its participants' stop budgets must sum
+    /// within it (SPEC-0048).
+    std::uint32_t defaultShutdownBudgetMs = 5000;
 };
 
 /// One Host run, driven by its caller one iteration at a time: a process's

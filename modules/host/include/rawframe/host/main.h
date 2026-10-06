@@ -33,6 +33,8 @@ struct ProcessEntry {
     composition::TargetRole role = composition::TargetRole::DedicatedServer;
     std::span<const composition::RegistrarEntry> registrars;
     HostDriver drive = nullptr;
+    /// The program's shutdown budget when its configuration names none.
+    std::uint32_t defaultShutdownBudgetMs = 5000;
 };
 
 [[nodiscard]] int hostMain(int argc, char** argv, const ProcessEntry& entry);
