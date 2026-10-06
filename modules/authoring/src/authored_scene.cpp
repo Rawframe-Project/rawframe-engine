@@ -2,6 +2,7 @@
 
 #include "rawframe/authoring/errors.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace rawframe::authoring {
@@ -10,6 +11,29 @@ namespace {
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AuthoringError error, std::string_view why) {
     return result::fail(errorClass, kAuthoringDomain, code(error), why);
+}
+
+/// Of `selected`, in id order, the entities `scene` holds.
+std::vector<base::Bits128> heldOf(const scene::Scene& scene, const std::vector<base::Bits128>& selected) {
+    std::vector<base::Bits128> ids;
+    ids.reserve(scene.entities.size());
+    for (const scene::SceneEntity& entity : scene.entities) {
+        ids.push_back(entity.id);
+    }
+    std::ranges::sort(ids);
+    std::vector<base::Bits128> held;
+    held.reserve(selected.size());
+    for (const base::Bits128& each : selected) {
+        if (std::ranges::binary_search(ids, each)) {
+            held.push_back(each);
+        }
+    }
+    return held;
+}
+
+/// What an entry's two selections weigh against the history's bytes.
+std::size_t selectionBytes(const std::vector<base::Bits128>& before, const std::vector<base::Bits128>& after) {
+    return (before.size() + after.size()) * sizeof(base::Bits128);
 }
 
 std::unexpected<result::Error> closed() {
@@ -123,7 +147,12 @@ result::Result<Transaction> AuthoredScene::begin(std::uint64_t generation, Coale
     if (open_.has_value()) {
         return Transaction{this, open_->serial, false};
     }
-    open_ = Open{.staged = scene_, .journal = {}, .journalBytes = 0, .serial = ++serials_, .coalescing = coalescing};
+    open_ = Open{.staged = scene_,
+                 .journal = {},
+                 .journalBytes = 0,
+                 .serial = ++serials_,
+                 .coalescing = coalescing,
+                 .selectedBefore = selection_};
     return Transaction{this, open_->serial, true};
 }
 
@@ -174,7 +203,11 @@ result::Result<Committed> AuthoredScene::commit() {
     scene_ = std::move(open.staged);
     ++generation_;
     const std::size_t kDeltas = open.journal.size();
-    append(Entry{.journal = std::move(open.journal), .bytes = open.journalBytes});
+    selection_ = heldOf(scene_, selection_);
+    append(Entry{.journal = std::move(open.journal),
+                 .bytes = open.journalBytes + selectionBytes(open.selectedBefore, selection_),
+                 .selectedBefore = std::move(open.selectedBefore),
+                 .selectedAfter = selection_});
     return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
@@ -228,7 +261,29 @@ result::Result<Committed> AuthoredScene::step(std::uint64_t generation, bool und
     }
     applied_ = undo ? applied_ - 1 : applied_ + 1;
     ++generation_;
+    selection_ = heldOf(scene_, undo ? entry.selectedBefore : entry.selectedAfter);
     return Committed{.generation = generation_, .deltas = entry.journal.size()};
+}
+
+result::Status AuthoredScene::select(std::span<const base::Bits128> entities) {
+    std::vector<base::Bits128> chosen{entities.begin(), entities.end()};
+    std::ranges::sort(chosen);
+    const auto kRepeated = std::ranges::unique(chosen);
+    chosen.erase(kRepeated.begin(), kRepeated.end());
+    if (chosen.size() > limits_.maximumSelection) {
+        return refuse(result::ErrorClass::ResourceExhausted,
+                      AuthoringError::LimitExceeded,
+                      "a selection holds at most its limit of entities");
+    }
+    // Inside a transaction, what it has staged: an entity it made can be
+    // chosen at once.
+    if (heldOf(open_.has_value() ? open_->staged : scene_, chosen).size() != chosen.size()) {
+        return refuse(result::ErrorClass::NotFound,
+                      AuthoringError::TargetNotFound,
+                      "a selection holds only entities the scene holds");
+    }
+    selection_ = std::move(chosen);
+    return {};
 }
 
 result::Result<Committed> AuthoredScene::undo(std::uint64_t generation) {

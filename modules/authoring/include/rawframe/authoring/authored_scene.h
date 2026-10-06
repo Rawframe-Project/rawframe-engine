@@ -17,6 +17,13 @@
 // the oldest entries, after which a clean place evicted is definitely
 // dirty, never falsely clean.
 //
+// A scene holds a selection of its entities, which is no part of the
+// document: choosing it changes neither the generation nor whether the
+// document is dirty, and no delta carries it. Each history entry keeps the
+// selection from before its transaction and after it, as a non-dirtying
+// payload (ADR-0065, SPEC-0040's `non_dirtying`), and undo and redo put
+// them back, less any entity the scene no longer holds.
+//
 // Opening a transaction while one is open joins it: only the outermost
 // token commits, and any token's cancel, or any failure, discards the
 // whole; a token outliving its transaction does nothing. A coalescing
@@ -34,8 +41,10 @@
 #include <deque>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::authoring {
 
@@ -45,6 +54,8 @@ struct HistoryLimits {
     std::size_t maximumBytes = std::size_t{64} * 1024 * 1024;
     std::size_t maximumJournalDeltas = 65536;
     std::size_t maximumJournalBytes = std::size_t{16} * 1024 * 1024;
+    /// Entities selected at most.
+    std::size_t maximumSelection = 65536;
 };
 
 enum class Coalescing : std::uint8_t {
@@ -135,6 +146,16 @@ public:
         return open_.has_value();
     }
 
+    /// The entities selected, in id order.
+    [[nodiscard]] const std::vector<base::Bits128>& selection() const noexcept {
+        return selection_;
+    }
+    /// Selects `entities`, in place of what was. Refuses (`TargetNotFound`)
+    /// an id the scene does not hold, or inside a transaction the scene it
+    /// has staged, and (`LimitExceeded`) more than the limit; a repeated id
+    /// counts once.
+    [[nodiscard]] result::Status select(std::span<const base::Bits128> entities);
+
     [[nodiscard]] bool canUndo() const noexcept {
         return applied_ > 0;
     }
@@ -169,6 +190,9 @@ private:
     struct Entry {
         Journal journal;
         std::size_t bytes = 0;
+        /// The selection before the transaction, and after it.
+        std::vector<base::Bits128> selectedBefore;
+        std::vector<base::Bits128> selectedAfter;
     };
     struct Open {
         scene::Scene staged;
@@ -176,6 +200,7 @@ private:
         std::size_t journalBytes = 0;
         std::uint64_t serial = 0;
         Coalescing coalescing = Coalescing::None;
+        std::vector<base::Bits128> selectedBefore;
     };
 
     AuthoredScene() = default;
@@ -197,6 +222,7 @@ private:
     /// Where the saved document is in the history; none once evicted.
     std::optional<std::size_t> clean_ = 0;
     std::optional<Open> open_;
+    std::vector<base::Bits128> selection_;
     /// Each transaction's number, so a token outliving one is inert.
     std::uint64_t serials_ = 0;
 };

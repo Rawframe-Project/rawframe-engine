@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 using namespace rawframe;
 using namespace rawframe::authoring;
@@ -197,4 +198,54 @@ RAWFRAME_TEST(ACoalescingTransactionKeepsFirstBeforeAndLastAfter) {
     const auto kNothing = back->commit();
     RAWFRAME_EXPECT(kNothing.has_value() && kNothing->deltas == 0 && kScene->generation() == 2 &&
                     kScene->redoable() == 1);
+}
+
+RAWFRAME_TEST(TheSelectionIsKeptBesideTheDocumentAndPutBackByUndo) {
+    std::unique_ptr<AuthoredScene> scene = opened();
+    // Choosing changes neither the generation nor whether it is dirty.
+    RAWFRAME_EXPECT(scene->selection().empty());
+    const base::Bits128 kSpawns[] = {kSpawn, kSpawn};
+    RAWFRAME_EXPECT(scene->select(kSpawns).has_value());
+    RAWFRAME_EXPECT(scene->selection() == std::vector<base::Bits128>{kSpawn} && scene->generation() == 0 &&
+                    !scene->dirty());
+    const base::Bits128 kStranger[] = {base::Bits128{9, 9}};
+    RAWFRAME_EXPECT(refusedWith(scene->select(kStranger), AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(scene->selection() == std::vector<base::Bits128>{kSpawn});
+    // A lamp is made and chosen alone: the entry keeps the spawn as chosen
+    // before and the lamp after.
+    const base::Bits128 kLamp{2, 2};
+    auto made = scene->begin(scene->generation());
+    RAWFRAME_EXPECT(made.has_value() &&
+                    made->stage(Delta{.kind = DeltaKind::CreateNode,
+                                      .entity = kLamp,
+                                      .after = {.node = NodeRecord{.place = 1, .name = "lamp", .components = {}}}})
+                        .has_value());
+    const base::Bits128 kLamps[] = {kLamp};
+    RAWFRAME_EXPECT(scene->select(kLamps).has_value() && made->commit().has_value());
+    RAWFRAME_EXPECT(scene->selection() == std::vector<base::Bits128>{kLamp});
+    // Undone, the lamp is gone and the spawn is chosen again; redone, the
+    // lamp is back and chosen.
+    RAWFRAME_EXPECT(scene->undo(scene->generation()).has_value() &&
+                    scene->selection() == std::vector<base::Bits128>{kSpawn});
+    RAWFRAME_EXPECT(scene->redo(scene->generation()).has_value() &&
+                    scene->selection() == std::vector<base::Bits128>{kLamp});
+    // The chosen lamp destroyed, it leaves the selection with the scene;
+    // undone, it is back and chosen.
+    auto gone = scene->begin(scene->generation());
+    RAWFRAME_EXPECT(gone.has_value() &&
+                    gone->stage(Delta{.kind = DeltaKind::DestroyNode,
+                                      .entity = kLamp,
+                                      .before = {.node = NodeRecord{.place = 1, .name = "lamp", .components = {}}}})
+                        .has_value() &&
+                    gone->commit().has_value());
+    RAWFRAME_EXPECT(scene->selection().empty());
+    RAWFRAME_EXPECT(scene->undo(scene->generation()).has_value() &&
+                    scene->selection() == std::vector<base::Bits128>{kLamp});
+}
+
+RAWFRAME_TEST(ASelectionPastItsLimitIsRefused) {
+    std::unique_ptr<AuthoredScene> scene = opened({.maximumSelection = 0});
+    const base::Bits128 kSpawns[] = {kSpawn};
+    RAWFRAME_EXPECT(refusedWith(scene->select(kSpawns), AuthoringError::LimitExceeded) && scene->selection().empty());
+    RAWFRAME_EXPECT(scene->select({}).has_value());
 }
