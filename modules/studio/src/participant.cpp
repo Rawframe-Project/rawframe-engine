@@ -3,7 +3,6 @@
 #include "rawframe/authoring_session/session.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
-#include "rawframe/document/json.h"
 #include "rawframe/font_import/sanitize.h"
 #include "rawframe/studio/registrar.h"
 #include "rawframe/ui/frames.h"
@@ -11,6 +10,7 @@
 #include "rawframe/ui/tree.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/view/typing.h"
+#include "records.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -54,98 +54,27 @@ result::Status misconfigured(std::string_view why) {
                                               .error()};
 }
 
-using document::Value;
-
-/// A field's value as a row shows it: a number or a text as itself,
-/// anything else as its compact JSON.
-std::string shown(const Value& value) {
-    if (value.kind() == Value::Kind::Object && value.names().size() == 1) {
-        const Value& kOnly = *value.find(value.names().front());
-        if (kOnly.kind() == Value::Kind::String) {
-            return *kOnly.text();
-        }
-        return document::writeCompact(kOnly);
-    }
-    return document::writeCompact(value);
-}
-
-/// What `text` typed into a field of `kind` (a read's value key) asks the
-/// session to set it to; none for a kind Studio does not edit, or text
-/// that is not one of its values. The session checks it again.
-std::optional<Value> typedValue(std::string_view kind, std::string_view text) {
-    if (kind == "real") {
-        const auto kParsed = document::parse(text);
-        if (!kParsed.has_value() || kParsed->kind() != Value::Kind::Number) {
-            return std::nullopt;
-        }
-        Value made = Value::object();
-        made.add("real", *kParsed);
-        return made;
-    }
-    if (kind == "signed" || kind == "unsigned" || kind == "case") {
-        Value made = Value::object();
-        made.add(std::string{kind}, Value::string(std::string{text}));
-        return made;
-    }
-    if (kind == "truth" && (text == "true" || text == "false")) {
-        Value made = Value::object();
-        made.add("truth", Value::boolean(text == "true"));
-        return made;
-    }
-    return std::nullopt;
-}
-
-/// The first answer of a read's reply, if it is one.
-std::optional<Value> firstAnswer(std::string_view reply) {
-    auto parsed = document::parse(reply);
-    const Value* answer = parsed.has_value() ? parsed->find("answer") : nullptr;
-    const Value* answers = answer != nullptr ? answer->find("answers") : nullptr;
-    if (answers == nullptr || answers->kind() != Value::Kind::Array || answers->items().empty()) {
-        return std::nullopt;
-    }
-    const Value* first = answers->items().front().find("answer");
-    return first != nullptr ? std::optional<Value>{*first} : std::nullopt;
-}
-
-/// What an outcome (`authoring.apply`, `authoring.undo`, `authoring.redo`)
-/// says: whether its one slot was done, the session's message when not,
-/// and what can be undone and redone after it.
-struct Outcome {
-    bool done = false;
-    std::string message;
-    std::int64_t undoable = 0;
-    std::int64_t redoable = 0;
-};
-
-Outcome outcomeOf(std::string_view reply) {
-    Outcome outcome;
-    const auto kParsed = document::parse(reply);
-    if (!kParsed.has_value()) {
-        outcome.message = "no answer";
-        return outcome;
-    }
-    const Value* answer = kParsed->find("answer");
-    const Value* results = answer != nullptr ? answer->find("results") : nullptr;
-    const bool kSlot = results != nullptr && results->kind() == Value::Kind::Array && !results->items().empty();
-    const Value* slot = kSlot ? &results->items()[0] : nullptr;
-    outcome.done = slot != nullptr && slot->find("deltas") != nullptr;
-    const Value* error = slot != nullptr ? slot->find("error") : kParsed->find("error");
-    const Value* message = error != nullptr ? error->find("message") : nullptr;
-    outcome.message = message != nullptr && message->text() != nullptr ? *message->text() : "refused";
-    for (const auto& [kName, kInto] :
-         {std::pair{"undoable", &outcome.undoable}, std::pair{"redoable", &outcome.redoable}}) {
-        const Value* count = answer != nullptr ? answer->find(kName) : nullptr;
-        *kInto = count != nullptr ? count->integer().value_or(0) : 0;
-    }
-    return outcome;
-}
-
-/// A field's value node and what the session needs to set it.
+/// A field Studio edits and what the session needs to act on it: a
+/// component's field (its kind the read value's key), the chosen entity's
+/// name, or the name of a component to add.
 struct FieldRow {
+    enum class Role : std::uint8_t {
+        Field,
+        Name,
+        Add
+    };
     ui::Node value{};
+    Role role = Role::Field;
     std::string component;
     std::string field;
     std::string kind;
+};
+
+/// A component's Remove button and the component it removes.
+struct RemoveButton {
+    ui::Node node{};
+    std::string component;
+    std::string name;
 };
 
 /// The shell: a session on the game, and the UI that shows it.
@@ -168,6 +97,9 @@ public:
         if (kWelcome.find("\"authoring.welcome\"") == std::string::npos) {
             return misconfigured("Studio's session did not welcome it: the game does not read");
         }
+        // What the session offers decides what Studio offers (ADR-0032).
+        catalog_ = catalogOf(session_->answer(R"({"kind":"authoring.describe","id":2})", ended));
+        ++records_;
         for (const auto& [kIdentity, kPath] : authoring_session::scenesBeside(kDescription)) {
             std::error_code error;
             scenes_.push_back(std::filesystem::relative(kPath, kRoot, error).generic_string());
@@ -310,9 +242,18 @@ private:
                                            .grow = 1,
                                            .padding = {8, 8, 8, 8}},
                                 kPanel));
+        // What does not fit is cut at the panel's edge.
+        RAWFRAME_TRY(tree_->setLook(kColumn, ui::Look{.fill = kPanel, .radius = 4, .clip = true}));
         RAWFRAME_TRY_ASSIGN(const ui::Node kHeading, box(kColumn, ui::Layout{.height = ui::pixels(22)}, 0));
         RAWFRAME_TRY(words(kHeading, heading, kQuiet, 13));
         return kColumn;
+    }
+
+    /// A button reading `text` under `parent`.
+    result::Result<ui::Node> button(ui::Node parent, std::string_view text) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kButton, box(parent, ui::Layout{.padding = {10, 4, 10, 4}}, kRow));
+        RAWFRAME_TRY(words(kButton, text, kText, 14));
+        return kButton;
     }
 
     /// The window: a header over three columns, the scenes' with a row for
@@ -326,15 +267,18 @@ private:
                                            .gap = 6,
                                            .padding = {6, 6, 6, 6}},
                                 kBackground));
-        RAWFRAME_TRY_ASSIGN(
-            const ui::Node kHeader,
-            box(root_,
-                ui::Layout{.height = ui::pixels(34), .justify = ui::Justify::SpaceBetween, .padding = {12, 4, 6, 4}},
-                kHeaderFill));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kHeader,
+                            box(root_,
+                                ui::Layout{.height = ui::pixels(34),
+                                           .justify = ui::Justify::SpaceBetween,
+                                           .alignItems = ui::Align::Center,
+                                           .padding = {12, 4, 6, 4}},
+                                kHeaderFill));
         RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeader, ui::Layout{.padding = {0, 2, 0, 2}}, 0));
         RAWFRAME_TRY(words(kTitle, title_, kText));
         // The status, then undo and redo, at the header's end.
-        RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kHeader, ui::Layout{.gap = 6}, 0));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kEnd,
+                            box(kHeader, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
         RAWFRAME_TRY_ASSIGN(statusNode_, box(kEnd, ui::Layout{.padding = {0, 2, 8, 2}}, 0));
         RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
@@ -344,6 +288,17 @@ private:
         RAWFRAME_TRY_ASSIGN(scenesColumn_, column(kColumns, "Scenes"));
         RAWFRAME_TRY_ASSIGN(entitiesColumn_, column(kColumns, "Entities"));
         RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kColumns, "Components"));
+        // The entities' operations above their rows.
+        if (catalog_.offers("scene.create_entity") || catalog_.offers("scene.destroy_entity")) {
+            RAWFRAME_TRY_ASSIGN(const ui::Node kTools,
+                                box(entitiesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 6}, 0));
+            if (catalog_.offers("scene.create_entity")) {
+                RAWFRAME_TRY_ASSIGN(newNode_, button(kTools, "New"));
+            }
+            if (catalog_.offers("scene.destroy_entity")) {
+                RAWFRAME_TRY_ASSIGN(deleteNode_, button(kTools, "Delete"));
+            }
+        }
         for (std::size_t each = 0; each < scenes_.size(); ++each) {
             RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode, row(scenesColumn_, scenes_[each], kText));
             sceneRows_.push_back(kRowNode);
@@ -375,29 +330,19 @@ private:
         return session_->answer(document::writeCompact(record), ended);
     }
 
+    /// The next record's id.
+    std::int64_t next() const noexcept {
+        return static_cast<std::int64_t>(records_ + 1);
+    }
+
     /// A read of `scene`: one query, `operation`, with `entity` if given.
     std::optional<Value> read(const std::string& scene, std::string_view operation, std::string_view entity = {}) {
-        Value query = Value::object();
-        query.add("operation", Value::string(std::string{operation}));
-        if (!entity.empty()) {
-            query.add("entity", Value::string(std::string{entity}));
-        }
-        Value queries = Value::array();
-        queries.push(std::move(query));
-        Value document = Value::object();
-        document.add("formatVersion", Value::integer(1));
-        document.add("kind", Value::string("authoring.query"));
-        document.add("queries", std::move(queries));
-        Value record = Value::object();
-        record.add("kind", Value::string("authoring.read"));
-        record.add("id", Value::integer(static_cast<std::int64_t>(records_ + 1)));
-        record.add("scene", Value::string(scene));
-        record.add("queries", std::move(document));
-        return firstAnswer(ask(record));
+        return firstAnswer(ask(readRecord(next(), scene, operation, entity)));
     }
 
     /// A press at `x`, `y`: a scene row shows its entities, an entity row
-    /// chooses it and shows its components.
+    /// chooses it and shows its components, a field takes the keyboard, and
+    /// a button does its operation.
     void pressAt(float x, float y) {
         const auto kHit = tree_->hit(root_, x, y);
         if (!kHit.has_value() || !kHit->node.has_value()) {
@@ -408,6 +353,19 @@ private:
         if (kNode == undoNode_ || kNode == redoNode_) {
             endEdit();
             step(kNode == undoNode_ ? "authoring.undo" : "authoring.redo");
+        } else if (kNode == newNode_ && !scene_.empty()) {
+            endEdit();
+            create();
+        } else if (kNode == deleteNode_ && !entity_.empty()) {
+            endEdit();
+            Value operation = operationOn("scene.destroy_entity");
+            commit(std::move(operation), "entity deleted", std::nullopt);
+        } else if (const auto kRemove = std::ranges::find(removeButtons_, kNode, &RemoveButton::node);
+                   kRemove != removeButtons_.end()) {
+            endEdit();
+            Value operation = operationOn("scene.remove_component");
+            operation.add("component", Value::string(kRemove->component));
+            commit(std::move(operation), kRemove->name + " removed", entity_);
         } else if (const auto kScene = std::ranges::find(sceneRows_, kNode); kScene != sceneRows_.end()) {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         } else if (const auto kEntity = std::ranges::find(entityRows_, kNode); kEntity != entityRows_.end()) {
@@ -437,7 +395,10 @@ private:
         }
         clear(entityRows_);
         clear(componentRows_);
+        removeButtons_.clear();
         entities_.clear();
+        names_.clear();
+        brought_.clear();
         entity_.clear();
         components_ = 0;
         const std::optional<Value> kList = read(scene_, "scene.list_entities");
@@ -464,6 +425,8 @@ private:
             }
             entityRows_.push_back(*added);
             entities_.push_back(*id->text());
+            names_.push_back(name != nullptr && name->text() != nullptr ? *name->text() : std::string{});
+            brought_.push_back(brought != nullptr);
         }
     }
 
@@ -477,33 +440,32 @@ private:
                 tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
         }
         clear(componentRows_);
+        removeButtons_.clear();
         components_ = 0;
         // Chosen in the session, so undo and redo keep it (D417).
-        Value entities = Value::array();
-        entities.push(Value::string(entity_));
-        Value select = Value::object();
-        select.add("kind", Value::string("authoring.select"));
-        select.add("id", Value::integer(static_cast<std::int64_t>(records_ + 1)));
-        select.add("scene", Value::string(scene_));
-        select.add("entities", std::move(entities));
-        static_cast<void>(ask(select));
-        const std::optional<Value> kRead = read(scene_, "scene.read_entity", entity_);
-        const Value* components = kRead.has_value() ? kRead->find("components") : nullptr;
-        if (components == nullptr || components->kind() != Value::Kind::Array) {
-            return;
-        }
-        for (const Value& each : components->items()) {
-            const Value* name = each.find("name");
-            auto added =
-                row(componentsColumn_, name != nullptr && name->text() != nullptr ? *name->text() : "?", kText);
-            if (!added.has_value()) {
+        static_cast<void>(ask(selectRecord(next(), scene_, entity_)));
+        // The scene's own entity is named; an instance's is its source's.
+        if (catalog_.offers("scene.rename_entity") && !brought_[at]) {
+            auto line = fieldRow("name", names_[at]);
+            if (!line.has_value()) {
                 return;
             }
-            componentRows_.push_back(*added);
-            ++components_;
+            componentRows_.push_back(line->first);
+            fields_.push_back(FieldRow{.value = line->second, .role = FieldRow::Role::Name, .field = "name"});
+        }
+        const std::optional<Value> kRead = read(scene_, "scene.read_entity", entity_);
+        const Value* components = kRead.has_value() ? kRead->find("components") : nullptr;
+        const bool kListed = components != nullptr && components->kind() == Value::Kind::Array;
+        for (const Value& each : kListed ? components->items() : std::span<const Value>{}) {
+            const Value* name = each.find("name");
             const Value* component = each.find("component");
             const std::string kComponent =
                 component != nullptr && component->text() != nullptr ? *component->text() : std::string{};
+            if (!componentHeading(name != nullptr && name->text() != nullptr ? *name->text() : "?", kComponent)
+                     .has_value()) {
+                return;
+            }
+            ++components_;
             const Value* fields = each.find("fields");
             for (const Value& field : fields != nullptr ? fields->items() : std::span<const Value>{}) {
                 const Value* fieldName = field.find("name");
@@ -524,16 +486,46 @@ private:
                                            .kind = kTyped ? value->names().front() : std::string{}});
             }
         }
+        if (catalog_.offers("scene.add_component")) {
+            auto line = fieldRow("add", "");
+            if (line.has_value()) {
+                componentRows_.push_back(line->first);
+                fields_.push_back(FieldRow{.value = line->second, .role = FieldRow::Role::Add, .field = "add"});
+            }
+        }
+    }
+
+    /// A component's heading row: its name, and Remove if offered.
+    result::Status componentHeading(std::string_view name, const std::string& component) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kHeading,
+                            box(componentsColumn_,
+                                ui::Layout{.height = ui::pixels(28),
+                                           .justify = ui::Justify::SpaceBetween,
+                                           .alignItems = ui::Align::Center,
+                                           .padding = {8, 0, 2, 0}},
+                                kRow));
+        componentRows_.push_back(kHeading);
+        RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{.padding = {0, 4, 0, 4}}, 0));
+        RAWFRAME_TRY(words(kTitle, name, kText, 14));
+        if (catalog_.offers("scene.remove_component")) {
+            RAWFRAME_TRY_ASSIGN(const ui::Node kRemove,
+                                box(kHeading, ui::Layout{.padding = {8, 2, 8, 2}, .margin = {0, 2, 0, 2}}, kPanel));
+            RAWFRAME_TRY(words(kRemove, "Remove", kQuiet, 13));
+            removeButtons_.push_back(RemoveButton{kRemove, component, std::string{name}});
+        }
+        return {};
     }
 
     /// A field's line: its name, and its value in a node that edits.
     result::Result<std::pair<ui::Node, ui::Node>> fieldRow(std::string_view name, std::string_view value) {
-        RAWFRAME_TRY_ASSIGN(
-            const ui::Node kLine,
-            box(componentsColumn_,
-                ui::Layout{
-                    .height = ui::pixels(28), .direction = ui::Direction::Row, .gap = 8, .padding = {8, 2, 8, 2}},
-                kPanel));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
+                            box(componentsColumn_,
+                                ui::Layout{.height = ui::pixels(28),
+                                           .direction = ui::Direction::Row,
+                                           .alignItems = ui::Align::Center,
+                                           .gap = 8,
+                                           .padding = {8, 2, 8, 2}},
+                                kPanel));
         RAWFRAME_TRY_ASSIGN(const ui::Node kName,
                             box(kLine, ui::Layout{.width = ui::pixels(120), .padding = {0, 2, 0, 2}}, 0));
         RAWFRAME_TRY(words(kName, name, kQuiet, 14));
@@ -593,45 +585,92 @@ private:
         }
     }
 
-    /// `text` set into the field by the session (`scene.set_field` in an
-    /// atomic `authoring.apply`), then the entity read again; what came of
-    /// it said in the header.
+    /// `operation` with the chosen entity as its target.
+    Value operationOn(std::string_view operation) const {
+        Value made = Value::object();
+        made.add("operation", Value::string(std::string{operation}));
+        made.add("entity", Value::string(entity_));
+        return made;
+    }
+
+    /// What `text`, given in `row`, asks of the session: the field set
+    /// (`scene.set_field`), the entity renamed, or a component added; text
+    /// that cannot be what the row asks is refused before it is asked.
     void apply(const FieldRow& row, const std::string& text) {
-        const std::optional<Value> kValue = typedValue(row.kind, text);
-        if (!kValue.has_value()) {
-            ++refused_;
-            say(row.field + ": " + (row.kind.empty() ? std::string{"not edited here"} : "not a " + row.kind));
-            showEntity(entityAt_);
-            return;
+        Value operation;
+        std::string done;
+        if (row.role == FieldRow::Role::Name) {
+            operation = operationOn("scene.rename_entity");
+            operation.add("name", Value::string(text));
+            done = "renamed " + text;
+        } else if (row.role == FieldRow::Role::Add) {
+            std::string why;
+            const std::optional<Catalog::Component> kAdded = componentNamed(catalog_, text, why);
+            if (!kAdded.has_value()) {
+                refuse(why);
+                return;
+            }
+            operation = operationOn("scene.add_component");
+            operation.add("component", Value::string(kAdded->id));
+            done = kAdded->name + " added";
+        } else {
+            const std::optional<Value> kValue = typedValue(row.kind, text);
+            if (!kValue.has_value()) {
+                refuse(row.field + ": " + (row.kind.empty() ? std::string{"not edited here"} : "not a " + row.kind));
+                return;
+            }
+            operation = operationOn("scene.set_field");
+            operation.add("component", Value::string(row.component));
+            operation.add("field", Value::string(row.field));
+            operation.add("value", *kValue);
+            done = row.field + " set to " + text;
         }
+        commit(std::move(operation), done, entity_);
+    }
+
+    /// A new entity at the end of the scene's own, its identity minted
+    /// (D438), chosen once made.
+    void create() {
+        const std::string kIdentity = mintedIdentity();
         Value operation = Value::object();
-        operation.add("operation", Value::string("scene.set_field"));
-        operation.add("entity", Value::string(entity_));
-        operation.add("component", Value::string(row.component));
-        operation.add("field", Value::string(row.field));
-        operation.add("value", *kValue);
-        Value operations = Value::array();
-        operations.push(std::move(operation));
-        Value request = Value::object();
-        request.add("formatVersion", Value::integer(1));
-        request.add("kind", Value::string("authoring.request"));
-        request.add("batch", Value::string("atomic"));
-        request.add("operations", std::move(operations));
-        Value record = Value::object();
-        record.add("kind", Value::string("authoring.apply"));
-        record.add("id", Value::integer(static_cast<std::int64_t>(records_ + 1)));
-        record.add("scene", Value::string(scene_));
-        record.add("request", std::move(request));
-        const Outcome kOutcome = outcomeOf(ask(record));
+        operation.add("operation", Value::string("scene.create_entity"));
+        operation.add("entity", Value::string(kIdentity));
+        operation.add("name", Value::string("new entity"));
+        commit(std::move(operation), "entity created", kIdentity);
+    }
+
+    /// `why` in the header, nothing asked, the entity shown as it stands.
+    void refuse(const std::string& why) {
+        ++refused_;
+        say(why);
+        showEntity(entityAt_);
+    }
+
+    /// One operation asked of the session for the chosen scene; `done` or
+    /// the session's message said; the scene shown again with `choose`
+    /// chosen if it stands.
+    void commit(Value operation, const std::string& done, const std::optional<std::string>& choose) {
+        const Outcome kOutcome = outcomeOf(ask(applyRecord(next(), scene_, std::move(operation))));
         told(kOutcome);
         if (kOutcome.done) {
             ++applied_;
-            say(row.field + " set to " + text);
+            say(done);
         } else {
             ++refused_;
-            say(row.field + ": " + kOutcome.message);
+            say(kOutcome.message);
         }
-        showEntity(entityAt_);
+        refresh(choose);
+    }
+
+    /// The chosen scene listed again, `entity` chosen if it stands.
+    void refresh(const std::optional<std::string>& entity) {
+        showScene(sceneAt_);
+        if (!entity.has_value()) {
+            return;
+        }
+        if (const auto kAt = std::ranges::find(entities_, *entity); kAt != entities_.end()) {
+            showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
+        }
     }
 
     /// The chosen scene's last change undone, or the last undone redone,
@@ -640,11 +679,7 @@ private:
         if (scene_.empty()) {
             return;
         }
-        Value record = Value::object();
-        record.add("kind", Value::string(std::string{kind}));
-        record.add("id", Value::integer(static_cast<std::int64_t>(records_ + 1)));
-        record.add("scene", Value::string(scene_));
-        const Outcome kOutcome = outcomeOf(ask(record));
+        const Outcome kOutcome = outcomeOf(ask(stepRecord(next(), kind, scene_)));
         told(kOutcome);
         const bool kUndo = kind == "authoring.undo";
         if (kOutcome.done) {
@@ -653,11 +688,7 @@ private:
         } else {
             say(kOutcome.message);
         }
-        const std::string kEntity = entity_;
-        showScene(sceneAt_);
-        if (const auto kAt = std::ranges::find(entities_, kEntity); kAt != entities_.end()) {
-            showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
-        }
+        refresh(entity_.empty() ? std::nullopt : std::optional{entity_});
     }
 
     /// What can be undone and redone, as an outcome says.
@@ -688,6 +719,12 @@ private:
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
     std::vector<std::string> scenes_;
+    Catalog catalog_;
+    std::vector<std::string> names_;
+    std::vector<bool> brought_;
+    ui::Node newNode_{};
+    ui::Node deleteNode_{};
+    std::vector<RemoveButton> removeButtons_;
     view::UiPointing* pointing_ = nullptr;
     view::UiTyping* typing_ = nullptr;
     std::vector<view::Typing> typed_;

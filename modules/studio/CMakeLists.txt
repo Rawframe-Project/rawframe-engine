@@ -2,9 +2,11 @@
 # process, shown as a UI of its own. Toolchain only; no client or server
 # closure contains it.
 rawframe_module(NAME studio
-    SOURCES src/participant.cpp
+    SOURCES src/participant.cpp src/records.cpp
     DEPS authoring_session font_import view ui texture document composition execution diagnostics result base
 )
 # Studio's own font (Inter, SIL Open Font License 1.1, fonts/Inter-LICENSE.txt).
 rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/fonts/Inter-Regular.ttf"
                        HEADER studio_font.h SYMBOL kStudioFont)
+
+rawframe_module_tests(NAME studio SOURCES tests/records_test.cpp)

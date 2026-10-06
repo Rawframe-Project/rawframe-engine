@@ -1,0 +1,229 @@
+#include "records.h"
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <random>
+#include <span>
+#include <utility>
+
+namespace rawframe::studio {
+
+std::string shown(const Value& value) {
+    if (value.kind() == Value::Kind::Object && value.names().size() == 1) {
+        const Value& kOnly = *value.find(value.names().front());
+        if (kOnly.kind() == Value::Kind::String) {
+            return *kOnly.text();
+        }
+        return document::writeCompact(kOnly);
+    }
+    return document::writeCompact(value);
+}
+
+std::optional<Value> typedValue(std::string_view kind, std::string_view text) {
+    if (kind == "real") {
+        const auto kParsed = document::parse(text);
+        if (!kParsed.has_value() || kParsed->kind() != Value::Kind::Number) {
+            return std::nullopt;
+        }
+        Value made = Value::object();
+        made.add("real", *kParsed);
+        return made;
+    }
+    if (kind == "signed" || kind == "unsigned" || kind == "case") {
+        Value made = Value::object();
+        made.add(std::string{kind}, Value::string(std::string{text}));
+        return made;
+    }
+    if (kind == "truth" && (text == "true" || text == "false")) {
+        Value made = Value::object();
+        made.add("truth", Value::boolean(text == "true"));
+        return made;
+    }
+    return std::nullopt;
+}
+
+std::optional<Value> firstAnswer(std::string_view reply) {
+    auto parsed = document::parse(reply);
+    const Value* answer = parsed.has_value() ? parsed->find("answer") : nullptr;
+    const Value* answers = answer != nullptr ? answer->find("answers") : nullptr;
+    if (answers == nullptr || answers->kind() != Value::Kind::Array || answers->items().empty()) {
+        return std::nullopt;
+    }
+    const Value* first = answers->items().front().find("answer");
+    return first != nullptr ? std::optional<Value>{*first} : std::nullopt;
+}
+
+Outcome outcomeOf(std::string_view reply) {
+    Outcome outcome;
+    const auto kParsed = document::parse(reply);
+    if (!kParsed.has_value()) {
+        outcome.message = "no answer";
+        return outcome;
+    }
+    const Value* answer = kParsed->find("answer");
+    const Value* results = answer != nullptr ? answer->find("results") : nullptr;
+    const bool kSlot = results != nullptr && results->kind() == Value::Kind::Array && !results->items().empty();
+    const Value* slot = kSlot ? &results->items()[0] : nullptr;
+    outcome.done = slot != nullptr && slot->find("deltas") != nullptr;
+    const Value* error = slot != nullptr ? slot->find("error") : kParsed->find("error");
+    const Value* message = error != nullptr ? error->find("message") : nullptr;
+    outcome.message = message != nullptr && message->text() != nullptr ? *message->text() : "refused";
+    for (const auto& [kName, kInto] :
+         {std::pair{"undoable", &outcome.undoable}, std::pair{"redoable", &outcome.redoable}}) {
+        const Value* count = answer != nullptr ? answer->find(kName) : nullptr;
+        *kInto = count != nullptr ? count->integer().value_or(0) : 0;
+    }
+    return outcome;
+}
+
+namespace {
+
+/// A component name's part after its last dot.
+std::string_view lastPart(std::string_view name) {
+    const std::size_t kDot = name.rfind('.');
+    return kDot == std::string_view::npos ? name : name.substr(kDot + 1);
+}
+
+Value recordOf(std::string_view kind, std::int64_t id, std::string_view scene) {
+    Value record = Value::object();
+    record.add("kind", Value::string(std::string{kind}));
+    record.add("id", Value::integer(id));
+    record.add("scene", Value::string(std::string{scene}));
+    return record;
+}
+
+} // namespace
+
+Value readRecord(std::int64_t id, std::string_view scene, std::string_view operation, std::string_view entity) {
+    Value query = Value::object();
+    query.add("operation", Value::string(std::string{operation}));
+    if (!entity.empty()) {
+        query.add("entity", Value::string(std::string{entity}));
+    }
+    Value queries = Value::array();
+    queries.push(std::move(query));
+    Value document = Value::object();
+    document.add("formatVersion", Value::integer(1));
+    document.add("kind", Value::string("authoring.query"));
+    document.add("queries", std::move(queries));
+    Value record = recordOf("authoring.read", id, scene);
+    record.add("queries", std::move(document));
+    return record;
+}
+
+Value applyRecord(std::int64_t id, std::string_view scene, Value operation) {
+    Value operations = Value::array();
+    operations.push(std::move(operation));
+    Value request = Value::object();
+    request.add("formatVersion", Value::integer(1));
+    request.add("kind", Value::string("authoring.request"));
+    request.add("batch", Value::string("atomic"));
+    request.add("operations", std::move(operations));
+    Value record = recordOf("authoring.apply", id, scene);
+    record.add("request", std::move(request));
+    return record;
+}
+
+Value selectRecord(std::int64_t id, std::string_view scene, std::string_view entity) {
+    Value entities = Value::array();
+    entities.push(Value::string(std::string{entity}));
+    Value record = recordOf("authoring.select", id, scene);
+    record.add("entities", std::move(entities));
+    return record;
+}
+
+Value stepRecord(std::int64_t id, std::string_view kind, std::string_view scene) {
+    return recordOf(kind, id, scene);
+}
+
+bool Catalog::offers(std::string_view operation) const {
+    return std::ranges::find(operations, operation) != operations.end();
+}
+
+Catalog catalogOf(std::string_view reply) {
+    Catalog catalog;
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* operations = answer != nullptr ? answer->find("operations") : nullptr;
+    const Value* components = answer != nullptr ? answer->find("components") : nullptr;
+    for (const Value& each : operations != nullptr && operations->kind() == Value::Kind::Array
+                                 ? operations->items()
+                                 : std::span<const Value>{}) {
+        if (const Value* name = each.find("name"); name != nullptr && name->text() != nullptr) {
+            catalog.operations.push_back(*name->text());
+        }
+    }
+    for (const Value& each : components != nullptr && components->kind() == Value::Kind::Array
+                                 ? components->items()
+                                 : std::span<const Value>{}) {
+        const Value* id = each.find("id");
+        const Value* name = each.find("name");
+        if (id != nullptr && id->text() != nullptr && name != nullptr && name->text() != nullptr) {
+            catalog.components.push_back({*id->text(), *name->text()});
+        }
+    }
+    return catalog;
+}
+
+std::optional<Catalog::Component> componentNamed(const Catalog& catalog, std::string_view text, std::string& why) {
+    if (text.empty()) {
+        why = "name a component";
+        return std::nullopt;
+    }
+    // A whole name, then a last part, then a start: the first rule one
+    // component alone meets decides.
+    const std::array<bool (*)(std::string_view, std::string_view), 3> kRules = {
+        [](std::string_view name, std::string_view typed) {
+            return name == typed;
+        },
+        [](std::string_view name, std::string_view typed) {
+            return lastPart(name) == typed;
+        },
+        [](std::string_view name, std::string_view typed) {
+            return name.starts_with(typed) || lastPart(name).starts_with(typed);
+        }};
+    for (const auto kRule : kRules) {
+        std::vector<const Catalog::Component*> met;
+        for (const Catalog::Component& each : catalog.components) {
+            if (kRule(each.name, text)) {
+                met.push_back(&each);
+            }
+        }
+        if (met.size() == 1) {
+            return *met.front();
+        }
+        if (met.size() > 1) {
+            why = std::to_string(met.size()) + " components match " + std::string{text};
+            return std::nullopt;
+        }
+    }
+    why = "no component matches " + std::string{text};
+    return std::nullopt;
+}
+
+std::string mintedIdentity() {
+    std::random_device device;
+    std::array<std::uint8_t, 16> bytes{};
+    for (std::size_t each = 0; each < bytes.size(); each += 4) {
+        const std::uint32_t kWord = device();
+        for (std::size_t part = 0; part < 4; ++part) {
+            bytes[each + part] = static_cast<std::uint8_t>(kWord >> (8U * part));
+        }
+    }
+    // Version 4, variant 1 (RFC 9562).
+    bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0FU) | 0x40U);
+    bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+    constexpr std::string_view kDigits = "0123456789abcdef";
+    std::string text;
+    for (std::size_t each = 0; each < bytes.size(); ++each) {
+        if (each == 4 || each == 6 || each == 8 || each == 10) {
+            text += '-';
+        }
+        text += kDigits[bytes[each] >> 4U];
+        text += kDigits[bytes[each] & 0x0FU];
+    }
+    return text;
+}
+
+} // namespace rawframe::studio
