@@ -178,6 +178,8 @@ struct Shared {
     std::optional<input::PairingPolicy> pairing;
     const view::PlayerViews* views = nullptr;
     const view::UiPointing* pointing = nullptr;
+    /// The game's commands the sample program lays out (D425).
+    std::vector<world_kest::CommandKind> commands;
     /// Each effect kind's haptic output and how it is felt, by kind.
     std::vector<std::optional<std::pair<std::size_t, input::Haptic>>> felt;
 };
@@ -240,6 +242,12 @@ public:
         view_ = ViewDoorContext{.views = seed.has_value() ? nullptr : shared.views, .player = player};
         RAWFRAME_TRY(addViewDoors(table, &view_));
         RAWFRAME_TRY(addUiDoors(table, &ui_));
+        for (const world_kest::CommandKind& command : shared.commands) {
+            auto kind = std::make_unique<CommandDoorContext::Kind>();
+            kind->command = command;
+            commands_.kinds.push_back(std::move(kind));
+        }
+        RAWFRAME_TRY(addCommandDoors(table, commands_));
         // The UI as the topmost routing node (D421): a press it takes is the
         // sample's to read, never an action's.
         if (const view::UiPointing* pointing = seed.has_value() ? nullptr : shared.pointing) {
@@ -266,6 +274,7 @@ public:
 
     result::Status next(std::uint64_t tick, std::span<std::byte> input) override {
         ui_.pressed = 0;
+        commands_.sent.clear();
         if (hand_.has_value()) {
             hand_->act(*mapper_);
         } else {
@@ -287,6 +296,11 @@ public:
         return {};
     }
 
+    void takeCommands(std::vector<world_replication::PostedCommand>& into) override {
+        std::ranges::move(commands_.sent, std::back_inserter(into));
+        commands_.sent.clear();
+    }
+
     /// The mapper, which the player's haptics share.
     [[nodiscard]] std::shared_ptr<input::Mapper> mapper() const noexcept {
         return mapper_;
@@ -300,6 +314,7 @@ private:
     InputDoorContext doors_;
     ViewDoorContext view_;
     UiDoorContext ui_;
+    CommandDoorContext commands_;
     std::unique_ptr<kest::Machine> machine_;
     kest::Entry entry_;
     std::vector<kest::Value> frame_;
@@ -476,6 +491,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.pairing = settings.pairing;
     shared.views = settings.views;
     shared.pointing = settings.pointing;
+    RAWFRAME_TRY_ASSIGN(shared.commands, world_kest::commandKindsOf(kGame, *shared.program, false));
     return std::unique_ptr<InputSources>{new Sources{std::move(shared)}};
 }
 

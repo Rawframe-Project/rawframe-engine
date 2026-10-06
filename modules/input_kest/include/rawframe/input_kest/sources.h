@@ -12,14 +12,18 @@
 #include "rawframe/result/result.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
+#include "rawframe/world_kest/commands.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/input_source.h"
+#include "rawframe/world_replication/messages.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace rawframe::input_kest {
 
@@ -50,6 +54,25 @@ struct ViewDoorContext {
 /// They read and change nothing else, so each is safe for untrusted code.
 /// `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addViewDoors(kest::DoorTable& doors, const ViewDoorContext* context);
+
+/// What the `Commands.*` doors keep: for each of the game's commands the
+/// sample program lays out, its door, and what one sample call sent, at
+/// most world_kest::kMaximumCommandsPerTick (D425).
+struct CommandDoorContext {
+    struct Kind {
+        CommandDoorContext* owner = nullptr;
+        world_kest::CommandKind command;
+        std::string send;
+        std::array<kest::Parameter, 1> takes{kest::Parameter{kest::Slot::Value, ""}};
+    };
+    std::vector<std::unique_ptr<Kind>> kinds;
+    std::vector<world_replication::PostedCommand> sent;
+};
+
+/// Adds `Commands.<name>(value)` for each kind `context` holds: the value
+/// sent to the server after the tick's input. Trusted code only, as the
+/// sample is. `context` outlives every machine started with the table.
+[[nodiscard]] result::Status addCommandDoors(kest::DoorTable& doors, CommandDoorContext& context);
 
 /// What the `UI.*` doors read: the press code the player's press since the
 /// last tick landed on, the first of them, nought for none (D421).
