@@ -74,6 +74,21 @@ public:
             released_();
         }
     }
+    /// What the UI does as a wheel turns (D441): `x`, `y` where the mouse
+    /// is, logical pixels from the window's top left, and `deltaX`,
+    /// `deltaY` detents, positive y away from the user.
+    using Wheeled = std::function<void(float x, float y, float deltaX, float deltaY)>;
+    void onWheel(Wheeled wheeled) noexcept {
+        wheeled_ = std::move(wheeled);
+    }
+    /// The host's side: a wheel turned by `deltaX`, `deltaY` detents with
+    /// the mouse over the window; told nowhere while it is off it.
+    void wheeled(float deltaX, float deltaY) const {
+        if (wheeled_ && pointed_) {
+            wheeled_(pointer_[0], pointer_[1], deltaX, deltaY);
+        }
+    }
+
     /// The host's side: the mouse is at `x`, `y` over the window, or has
     /// left it.
     void pointAt(float x, float y) noexcept {
@@ -98,6 +113,7 @@ private:
     Answer answer_;
     Pressed pressed_;
     Released released_;
+    Wheeled wheeled_;
     std::array<float, 2> pointer_{};
     bool pointed_ = false;
 };

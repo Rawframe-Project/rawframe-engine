@@ -161,15 +161,18 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             feed_.textEditing(toldEditing_);
         }
         bridge_->take(*event);
-        // Where the mouse is, for what the UI shows under it (D422), and
-        // where a press went down, for the field that takes the keyboard
-        // (D426).
+        // Where the mouse is, for what the UI shows under it (D422), where a
+        // press went down, for the field that takes the keyboard (D426),
+        // and the wheel turned there, for what scrolls (D441).
         if (event->kind == window::EventKind::ButtonDown) {
             pointing_.pressed(event->pointer.position.x, event->pointer.position.y);
         } else if (event->kind == window::EventKind::TouchDown) {
             pointing_.pressed(event->touch.position.x, event->touch.position.y);
         } else if (event->kind == window::EventKind::ButtonUp || event->kind == window::EventKind::TouchUp) {
             pointing_.released();
+        }
+        if (event->kind == window::EventKind::Wheel) {
+            pointing_.wheeled(event->motion.x, event->motion.y);
         }
         if (event->kind == window::EventKind::CursorMoved) {
             pointing_.pointAt(event->pointer.position.x, event->pointer.position.y);
