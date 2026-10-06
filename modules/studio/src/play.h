@@ -52,9 +52,10 @@ public:
     /// client pins; nothing before, or once started. Asked each frame.
     [[nodiscard]] result::Status advance();
 
-    /// The client's endpoint as a preview, once it has said who it is; none
-    /// before.
-    [[nodiscard]] std::optional<Preview> preview() const;
+    /// The client's endpoint as a preview, once it has said who it is and
+    /// its player is in, when its endpoint answers at once; none before.
+    /// Its log is read from where it was last read.
+    [[nodiscard]] std::optional<Preview> preview();
     /// Whether both still run.
     [[nodiscard]] bool running() noexcept;
     /// Whether both have ended.
@@ -69,6 +70,10 @@ private:
     std::optional<process::Child> client_;
     std::filesystem::path directory_;
     std::filesystem::path clientProgram_;
+    /// How far the client's log has been read, and whether it said its
+    /// player is in.
+    std::uintmax_t clientLogRead_ = 0;
+    bool admitted_ = false;
     std::uint16_t endpointPort_ = 0;
 };
 

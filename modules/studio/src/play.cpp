@@ -171,10 +171,33 @@ result::Status Play::advance() {
     return {};
 }
 
-std::optional<Preview> Play::preview() const {
+std::optional<Preview> Play::preview() {
     std::error_code error;
     if (std::filesystem::file_size(directory_ / "client.fingerprint", error) == 0 || error) {
         return std::nullopt;
+    }
+    // Attached before its player is in, a client still loading answers a
+    // session slowly, and the session waits for it.
+    if (!admitted_) {
+        const std::uintmax_t kSize = std::filesystem::file_size(directory_ / "client.log", error);
+        if (error || kSize <= clientLogRead_) {
+            return std::nullopt;
+        }
+        if (std::FILE* file = std::fopen((directory_ / "client.log").string().c_str(), "rb")) {
+            // Back a little, so a record split across reads is still found.
+            constexpr std::uintmax_t kOverlap = 64;
+            const std::uintmax_t kFrom = clientLogRead_ > kOverlap ? clientLogRead_ - kOverlap : 0;
+            std::string read(static_cast<std::size_t>(kSize - kFrom), '\0');
+            if (std::fseek(file, static_cast<long>(kFrom), SEEK_SET) == 0) {
+                read.resize(std::fread(read.data(), 1, read.size(), file));
+                admitted_ = read.find("\"code\":\"bots_admitted\"") != std::string::npos;
+                clientLogRead_ = kFrom + read.size();
+            }
+            std::fclose(file);
+        }
+        if (!admitted_) {
+            return std::nullopt;
+        }
     }
     return Preview{"127.0.0.1:" + std::to_string(endpointPort_),
                    (directory_ / "client.fingerprint").string(),
