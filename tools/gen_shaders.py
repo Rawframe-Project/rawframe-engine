@@ -5,8 +5,10 @@
 # spirv-val checks it for Vulkan 1.3, and Maul RHI's container writer
 # (third_party/maul-rhi/tools/mrhi_container.py) writes the container with
 # the same entries in WGSL, for WebGPU, in Metal's language, crossed from
-# the SPIR-V by Maul RHI's mrhi_msl.py through SPIRV-Cross (D406), and
-# their reflection, which lands in the module's src/generated as bytes. The
+# the SPIR-V by Maul RHI's mrhi_msl.py through SPIRV-Cross (D406), in
+# DXIL, for Direct3D 12, crossed to HLSL and compiled by DXC through its
+# mrhi_dxil.py (D415), and their reflection, which lands in the module's
+# src/generated as bytes. dxc must be on the path. The
 # check runs none of these tools; the headers are committed, and this is
 # run again whenever a source changes (D278).
 #
@@ -20,6 +22,7 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WRITER = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_container.py")
 METAL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_msl.py")
+DXIL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_dxil.py")
 # Each container: its module, its name, and its stages' sources and entries,
 # with any names a stage is compiled with defined.
 CONTAINERS = (
@@ -70,8 +73,11 @@ def build(work, shaders, name, stages):
     reflection = os.path.join(shaders, f"{name}.json")
     metal = os.path.join(work, f"{name}_metal")
     run(sys.executable, METAL, linked, reflection, metal)
+    dxil = os.path.join(work, f"{name}_dxil")
+    run(sys.executable, DXIL, linked, reflection, dxil)
     container = os.path.join(work, f"{name}.mrsc")
-    run(sys.executable, WRITER, "--msl", metal, linked, os.path.join(shaders, f"{name}.wgsl"), reflection, container)
+    run(sys.executable, WRITER, "--msl", metal, "--dxil", dxil, linked, os.path.join(shaders, f"{name}.wgsl"),
+        reflection, container)
     with open(container, "rb") as file:
         return file.read()
 
