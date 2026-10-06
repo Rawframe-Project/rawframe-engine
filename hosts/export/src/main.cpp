@@ -14,6 +14,7 @@
 //   rawframe-export <game directory> <output directory> [--game <file>]
 //                   [--port <port>] [--version <version>] [--tools <directory>]
 //                   [--key <secret key> --publisher <name>] [--target web]
+//                   [--follow <origin> [--channel <channel>]]
 //
 // With `--key`, the Build is signed by that secret (`rawframe-build key`
 // writes it beside `<publisher>.keys`, which the folder's library pins);
@@ -28,6 +29,17 @@
 // `--play`). The output directory must not exist, or be empty. Running the
 // folder's `rawframe-play` plays the game; `export.receipt` lists what was
 // written, each file's SHA-256, the Build's root, and the Composition.
+//
+// The folder's library is installed as `rawframe-install` leaves one: its
+// Composition kept under `compositions/` and named active by `installed`,
+// so the server and the client play the library's active Composition
+// (D434). With `--follow`, the game follows its subject's channel
+// (`stable` unless `--channel` names another) on that origin, a directory
+// or an http or https URL: `rawframe-install` is copied beside the
+// launcher, found as the other tools are (`--install`), and the launcher
+// runs its `follow` before each play, so a Release the publisher points the
+// channel at is installed, verified against the key set the library pins,
+// before the game starts.
 //
 // With `--target web` (D397) the game is packed for the web and the folder
 // holds a site and its server instead. `web/` is served as it is by any
@@ -45,9 +57,12 @@
 // `--maul-window`, `--maul-rhi`, `--page`).
 
 #include "rawframe/base/sha256.h"
+#include "rawframe/content/composition_record.h"
+#include "rawframe/content/library.h"
 #include "rawframe/document/json.h"
 #include "rawframe/process/child.h"
 #include "rawframe/process/self.h"
+#include "rawframe/release/release.h"
 
 #include <algorithm>
 #include <array>
@@ -210,13 +225,48 @@ std::string portOf(const std::string& gameResource) {
 /// What every export writes its configurations from.
 struct Exported {
     fs::path output;
-    /// The Composition's record, beside the library it names.
+    /// The Composition's record, beside the library it names (the web's).
     std::string record;
+    /// The game's subject, `<publisher>/<name>`.
+    std::string subject;
+    /// The origin and channel a native export follows, if any.
+    std::optional<std::string> follow;
+    std::string channel;
     std::string gameResource;
     std::string port;
     /// The programs' suffix on this system (`.exe` on Windows).
     std::string suffix;
 };
+
+/// Keeps the Composition record at `record` in `library`, under its digest,
+/// names it the active one in a fresh installed pointer, and removes it
+/// from where the build tool wrote it; the files are added to `written`,
+/// by their paths under `output`.
+bool installRecord(const fs::path& output,
+                   const fs::path& library,
+                   const fs::path& record,
+                   std::vector<std::string>& written) {
+    const auto kText = readText(record);
+    if (!kText.has_value() || !rawframe::content::readComposition(*kText).has_value()) {
+        std::fputs("rawframe-export: the Composition the build tool wrote does not read\n", stderr);
+        return false;
+    }
+    const rawframe::base::Sha256Digest kId = rawframe::content::compositionIdOf(*kText);
+    const auto kPointer = rawframe::content::writeInstalled({.active = kId, .retained = {}});
+    const std::string kKept = rawframe::content::compositionPathOf(kId);
+    std::error_code error;
+    fs::create_directories((library / kKept).parent_path(), error);
+    if (!kPointer.has_value() || !writeText(library / kKept, *kText) ||
+        !writeText(library / rawframe::content::kInstalledName, *kPointer)) {
+        std::fputs("rawframe-export: the library cannot be installed\n", stderr);
+        return false;
+    }
+    fs::remove(record, error);
+    const std::string kUnder = fs::relative(library, output, error).generic_string();
+    written.push_back(kUnder + "/" + kKept);
+    written.push_back(kUnder + "/" + std::string{rawframe::content::kInstalledName});
+    return true;
+}
 
 /// Copies `from` to `file` under the output and adds it to `written`.
 bool copyInto(const fs::path& from,
@@ -249,17 +299,20 @@ bool writeInto(const Exported& exported,
 
 /// The folder that plays on this machine: the server, the client, the
 /// launcher, and their configurations.
-bool writeNative(const Exported& exported, const std::array<fs::path, 3>& programs, std::vector<std::string>& written) {
+bool writeNative(const Exported& exported, const std::array<fs::path, 4>& programs, std::vector<std::string>& written) {
     const std::string& kSuffix = exported.suffix;
-    const std::array<std::string, 3> kFiles{
-        "rawframe-server" + kSuffix, "rawframe-client" + kSuffix, "rawframe-play" + kSuffix};
-    for (std::size_t at = 0; at < programs.size(); ++at) {
+    const std::array<std::string, 4> kFiles{"rawframe-server" + kSuffix,
+                                            "rawframe-client" + kSuffix,
+                                            "rawframe-play" + kSuffix,
+                                            "rawframe-install" + kSuffix};
+    // The install program only for a game that follows a channel.
+    for (std::size_t at = 0; at < (exported.follow.has_value() ? 4U : 3U); ++at) {
         if (!copyInto(programs[at], exported, kFiles[at], written)) {
             return false;
         }
     }
-    const std::string kContent = "kest.game_resource = " + exported.gameResource +
-                                 "\ncontent.composition = " + exported.record + "\ncontent.library = library\n";
+    // The library alone: its active Composition (D434).
+    const std::string kContent = "kest.game_resource = " + exported.gameResource + "\ncontent.library = library\n";
     const std::string kServer = "# The game's dedicated server, on this machine's loopback, with an identity\n"
                                 "# made as it starts.\n"
                                 "host.iteration_rate = 120\nworld.tick_rate = 60\n" +
@@ -274,18 +327,25 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 3>& progra
                                 "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
                                 "bots.endpoint = 127.0.0.1:" +
                                 exported.port + "\n";
-    const std::string kPlay = "# Run rawframe-play" + kSuffix +
-                              " to play: it starts the server, then the client.\n"
-                              "play.server = rawframe-server" +
-                              kSuffix + "\nplay.server_config = server.conf\nplay.server_log = server.log\n" +
-                              "play.client = rawframe-client" + kSuffix +
-                              "\nplay.client_config = client.conf\nplay.client_log = client.log\n"
-                              "play.fingerprint = fingerprint\n";
+    const std::string kPlay =
+        "# Run rawframe-play" + kSuffix +
+        " to play: it starts the server, then the client.\n"
+        "play.server = rawframe-server" +
+        kSuffix + "\nplay.server_config = server.conf\nplay.server_log = server.log\n" +
+        "play.client = rawframe-client" + kSuffix +
+        "\nplay.client_config = client.conf\nplay.client_log = client.log\n"
+        "play.fingerprint = fingerprint\n" +
+        (exported.follow.has_value()
+             ? "# Before each play, the game's channel followed and its Release installed.\n"
+               "play.installer = rawframe-install" +
+                   kSuffix + "\nplay.library = library\nplay.follow_subject = " + exported.subject +
+                   "\nplay.follow_channel = " + exported.channel + "\nplay.follow_origin = " + *exported.follow +
+                   "\nplay.follow_log = follow.log\n"
+             : std::string{});
     if (!writeInto(exported, "server.conf", kServer, written) ||
         !writeInto(exported, "client.conf", kClient, written) || !writeInto(exported, "play.conf", kPlay, written)) {
         return false;
     }
-    written.push_back(exported.record);
     return true;
 }
 
@@ -353,7 +413,8 @@ bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::s
 int usage() {
     std::fputs("usage: rawframe-export <game directory> <output directory> [--game <file>] [--port <port>]\n"
                "                       [--version <version>] [--tools <directory>] [--<tool> <path>]...\n"
-               "                       [--key <secret key> --publisher <name>] [--target web]\n",
+               "                       [--key <secret key> --publisher <name>] [--target web]\n"
+               "                       [--follow <origin> [--channel <channel>]]\n",
                stderr);
     return 2;
 }
@@ -375,6 +436,8 @@ int main(int argc, char** argv) {
     std::optional<fs::path> key;
     std::string publisher = "local";
     bool web = false;
+    std::optional<std::string> follow;
+    std::string channel = "stable";
     fs::path toolDirectory = kSelf.parent_path();
     std::map<std::string, fs::path, std::less<>> tools;
     for (int at = 3; at + 1 < argc; at += 2) {
@@ -394,15 +457,21 @@ int main(int argc, char** argv) {
             toolDirectory = kValue;
         } else if (kOption == "--target" && (kValue == "web" || kValue == "native")) {
             web = kValue == "web";
+        } else if (kOption == "--follow") {
+            follow = kValue;
+        } else if (kOption == "--channel") {
+            channel = kValue;
         } else if (kOption == "--cook" || kOption == "--build" || kOption == "--server" || kOption == "--client" ||
-                   kOption == "--play" || kOption == "--web-client" || kOption == "--maul-window" ||
-                   kOption == "--maul-rhi" || kOption == "--page") {
+                   kOption == "--play" || kOption == "--install" || kOption == "--web-client" ||
+                   kOption == "--maul-window" || kOption == "--maul-rhi" || kOption == "--page") {
             tools.emplace(kOption.substr(2), kValue);
         } else {
             return usage();
         }
     }
-    if (argc % 2 == 0 || (port.has_value() && !portLike(*port))) {
+    // A web export's page updates as its site does; following is native.
+    if (argc % 2 == 0 || (port.has_value() && !portLike(*port)) || (web && follow.has_value()) ||
+        !rawframe::release::channelNamed(channel).has_value()) {
         return usage();
     }
     const auto kTool = [&](const char* name) {
@@ -499,19 +568,32 @@ int main(int argc, char** argv) {
     if (!kComposition.has_value()) {
         return 1;
     }
+    // A native folder's library is installed as rawframe-install leaves one:
+    // the record kept by its digest and named active (D434).
+    std::vector<std::string> installed;
+    if (!web && !installRecord(kOutput, kLibrary, kSite / kRecord, installed)) {
+        return 1;
+    }
 
     // The programs, and what each reads: every path under the folder.
-    const Exported kExported{
-        .output = kOutput, .record = kRecord, .gameResource = kGameResource, .port = *port, .suffix = kSuffix};
-    std::vector<std::string> written;
-    const bool kWritten = web ? writeWeb(kExported,
-                                         {.client = kWebFile("web-client", "rawframe-web-client.wasm"),
-                                          .window = kWebFile("maul-window", "maul-window.mjs"),
-                                          .device = kWebFile("maul-rhi", "maul-rhi.mjs"),
-                                          .page = kWebFile("page", "page"),
-                                          .server = kTool("server")},
-                                         written)
-                              : writeNative(kExported, {kTool("server"), kTool("client"), kTool("play")}, written);
+    const Exported kExported{.output = kOutput,
+                             .record = kRecord,
+                             .subject = publisher + "/" + kName,
+                             .follow = follow,
+                             .channel = channel,
+                             .gameResource = kGameResource,
+                             .port = *port,
+                             .suffix = kSuffix};
+    std::vector<std::string> written = std::move(installed);
+    const bool kWritten =
+        web ? writeWeb(kExported,
+                       {.client = kWebFile("web-client", "rawframe-web-client.wasm"),
+                        .window = kWebFile("maul-window", "maul-window.mjs"),
+                        .device = kWebFile("maul-rhi", "maul-rhi.mjs"),
+                        .page = kWebFile("page", "page"),
+                        .server = kTool("server")},
+                       written)
+            : writeNative(kExported, {kTool("server"), kTool("client"), kTool("play"), kTool("install")}, written);
     if (!kWritten) {
         return 1;
     }

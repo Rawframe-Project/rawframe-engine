@@ -82,7 +82,7 @@ cook_tool: cook process localization animation material graph mesh_import mesh t
 build_tool: build install release signature content document result base
 install_tool: http install release content result base
 play_tool: process composition result base
-export_tool: process document result base
+export_tool: process release content document result base
 scene_tool: world_kest scene kest result base
 author: authoring world_tooling network_quic network world_kest kest content scene schema document execution result base
 animation_tool: animation_import animation content result base

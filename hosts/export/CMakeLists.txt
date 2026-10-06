@@ -3,7 +3,7 @@
 # no runtime closure contains it.
 rawframe_host(NAME export_tool OUTPUT rawframe-export
     SOURCES src/main.cpp
-    DEPS process document result base
+    DEPS process release content document result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
