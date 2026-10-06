@@ -191,7 +191,18 @@ def main():
             time.sleep(1.5)
             continue
         # Moved there first, so the press is where the pointer already is.
+        # The baseline is taken once the point has held still a second, up
+        # to ten: a loaded machine may still be drawing its first frames
+        # there, and a spot darkening as they come is no cursor's doing.
         before = brightness(x, display, root, at, y)
+        steady = 0
+        for _ in range(40):
+            if steady >= 4:
+                break
+            time.sleep(0.25)
+            now = brightness(x, display, root, at, y)
+            steady = steady + 1 if abs(now - before) < 2 else 0
+            before = now
         xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
         x.XFlush(display)
         # A loaded machine draws late: up to three seconds for it to show.
