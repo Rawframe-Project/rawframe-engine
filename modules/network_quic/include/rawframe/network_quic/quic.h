@@ -69,6 +69,12 @@ public:
     /// provider is one Runtime's; MsQuic's own threads feed its queue.
     [[nodiscard]] result::Result<std::unique_ptr<network::Provider>> provider(const network::ProviderProfile& profile);
 
+    /// Gives every listening provider a new identity (D419): connections made
+    /// from now on are presented `certificate`, while those made before keep
+    /// theirs. Refuses (`BadCertificate`) a certificate MsQuic cannot read,
+    /// changing nothing then.
+    [[nodiscard]] result::Status renew(const Certificate& certificate);
+
     struct State;
 
 private:

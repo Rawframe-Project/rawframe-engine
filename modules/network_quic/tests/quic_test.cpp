@@ -441,3 +441,52 @@ RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
         std::fprintf(stderr, "%s\n", said.c_str());
     }
 }
+
+// A server's identity renewed while it listens (D419): a connection made
+// before keeps going, a client pinned to the new identity is accepted, and
+// one pinned to the old is not.
+RAWFRAME_TEST(ARenewedIdentityServesNewConnectionsAndKeepsOldOnes) {
+    Pair pair;
+    auto server = *pair.server->provider(kProfile);
+    auto before = *pair.client->provider(kProfile);
+    RAWFRAME_EXPECT(server->listen({endpointAt(pair.port)}).has_value());
+    RAWFRAME_EXPECT(before->connect({endpointAt(pair.port)}).has_value());
+    std::vector<Event> serverEvents;
+    std::vector<Event> beforeEvents;
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {before.get(), &beforeEvents}}, [&] {
+        return find(beforeEvents, EventKind::Connected) != nullptr;
+    }));
+    const network_quic::Certificate kRenewed = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
+    RAWFRAME_EXPECT(pair.server->renew(kRenewed).has_value());
+    RAWFRAME_EXPECT(!pair.server->renew(network_quic::Certificate{}).has_value());
+
+    // Pinned to the new identity, a client is accepted.
+    auto renewedNetwork = *QuicNetwork::create(QuicSettings{.pin = *network_quic::fingerprintOf(kRenewed)});
+    auto renewed = *renewedNetwork->provider(kProfile);
+    std::vector<Event> renewedEvents;
+    RAWFRAME_EXPECT(renewed->connect({endpointAt(pair.port)}).has_value());
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {renewed.get(), &renewedEvents}}, [&] {
+        return find(renewedEvents, EventKind::Connected) != nullptr;
+    }));
+    // Pinned to the old, a new client is not.
+    auto stale = *pair.client->provider(kProfile);
+    std::vector<Event> staleEvents;
+    RAWFRAME_EXPECT(stale->connect({endpointAt(pair.port)}).has_value());
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {stale.get(), &staleEvents}}, [&] {
+        return find(staleEvents, EventKind::Closed) != nullptr;
+    }));
+    const Event* untrusted = find(staleEvents, EventKind::Closed);
+    RAWFRAME_EXPECT(untrusted != nullptr && untrusted->reason == CloseReason::Untrusted);
+    // The connection from before still carries what is sent on it.
+    const Event* accepted = find(serverEvents, EventKind::Accepted);
+    RAWFRAME_EXPECT(accepted != nullptr);
+    if (accepted == nullptr) {
+        return;
+    }
+    const std::vector<std::byte> kHello = bytesOf("still here");
+    RAWFRAME_EXPECT(server->sendDatagram(accepted->connection, kHello).has_value());
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {before.get(), &beforeEvents}}, [&] {
+        return find(beforeEvents, EventKind::Datagram) != nullptr;
+    }));
+    RAWFRAME_EXPECT(find(beforeEvents, EventKind::Closed) == nullptr);
+}

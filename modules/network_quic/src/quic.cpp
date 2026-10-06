@@ -86,6 +86,10 @@ struct QuicNetwork::State {
     QuicSettings settings;
     /// The server identity as MsQuic loads it; empty without a certificate.
     std::vector<std::byte> pkcs12;
+    /// The providers' cores, so a renewed identity reaches every listener
+    /// (D419); each provider adds its own and takes it away as it goes.
+    std::mutex coresMutex;
+    std::vector<Core*> cores;
 
     State() = default;
     State(const State&) = delete;
@@ -104,10 +108,16 @@ namespace {
 
 class QuicProvider final : public network::Provider {
 public:
-    explicit QuicProvider(std::unique_ptr<Core> core) noexcept : core_(std::move(core)) {
+    QuicProvider(std::unique_ptr<Core> core, QuicNetwork::State& network) : core_(std::move(core)), network_(&network) {
+        const std::lock_guard kLock{network_->coresMutex};
+        network_->cores.push_back(core_.get());
     }
 
     ~QuicProvider() override {
+        {
+            const std::lock_guard kLock{network_->coresMutex};
+            std::erase(network_->cores, core_.get());
+        }
         HQUIC listener = nullptr;
         {
             const std::lock_guard kLock{core_->mutex};
@@ -398,6 +408,7 @@ private:
     }
 
     std::unique_ptr<Core> core_;
+    QuicNetwork::State* network_;
 };
 
 } // namespace
@@ -472,6 +483,58 @@ result::Result<std::unique_ptr<QuicNetwork>> QuicNetwork::create(QuicSettings se
     return std::unique_ptr<QuicNetwork>{new QuicNetwork{std::move(state)}};
 }
 
+result::Status QuicNetwork::renew(const Certificate& certificate) {
+    State& state = *state_;
+    RAWFRAME_TRY_ASSIGN(std::vector<std::byte> pkcs12, pkcs12Of(certificate));
+    QUIC_CERTIFICATE_PKCS12 bundle{
+        reinterpret_cast<const std::uint8_t*>(pkcs12.data()), static_cast<std::uint32_t>(pkcs12.size()), nullptr};
+    QUIC_CREDENTIAL_CONFIG credential{};
+    credential.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_PKCS12;
+    credential.CertificatePkcs12 = &bundle;
+    const std::lock_guard kCores{state.coresMutex};
+    // Every listener's configuration is made first, so a refusal changes
+    // nothing.
+    std::vector<HQUIC> made;
+    for (Core* core : state.cores) {
+        if (core->serverConfiguration == nullptr) {
+            made.push_back(nullptr);
+            continue;
+        }
+        HQUIC configuration = openConfiguration(*state.api,
+                                                state.registration,
+                                                state.settings,
+                                                core->profile,
+                                                credential,
+                                                browsersOn(state.settings, core->profile));
+        if (configuration == nullptr) {
+            for (HQUIC each : made) {
+                if (each != nullptr) {
+                    state.api->ConfigurationClose(each);
+                }
+            }
+            return fail(result::ErrorClass::Unavailable, QuicError::BadCertificate, "MsQuic refused the certificate");
+        }
+        made.push_back(configuration);
+    }
+    // Connections made from now on present the new identity; each made
+    // before holds MsQuic's reference to its own configuration, so the old
+    // one closes once they are gone.
+    for (std::size_t at = 0; at < made.size(); ++at) {
+        if (made[at] == nullptr) {
+            continue;
+        }
+        Core& core = *state.cores[at];
+        HQUIC old = nullptr;
+        {
+            const std::lock_guard kLock{core.mutex};
+            old = std::exchange(core.serverConfiguration, made[at]);
+        }
+        state.api->ConfigurationClose(old);
+    }
+    state.pkcs12 = std::move(pkcs12);
+    return {};
+}
+
 result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const network::ProviderProfile& profile) {
     if (profile.application.empty() || profile.application.size() > 255 || profile.maximumConnections == 0 ||
         profile.maximumStreamsPerConnection == 0 || profile.maximumStreamSend == 0 || profile.maximumDatagram == 0 ||
@@ -486,10 +549,15 @@ result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const n
     core->registration = state_->registration;
     core->settings = &state_->settings;
     core->profile = profile;
-    if (!state_->pkcs12.empty()) {
-        QUIC_CERTIFICATE_PKCS12 bundle{reinterpret_cast<const std::uint8_t*>(state_->pkcs12.data()),
-                                       static_cast<std::uint32_t>(state_->pkcs12.size()),
-                                       nullptr};
+    // The identity as last renewed.
+    std::vector<std::byte> pkcs12;
+    {
+        const std::lock_guard kLock{state_->coresMutex};
+        pkcs12 = state_->pkcs12;
+    }
+    if (!pkcs12.empty()) {
+        QUIC_CERTIFICATE_PKCS12 bundle{
+            reinterpret_cast<const std::uint8_t*>(pkcs12.data()), static_cast<std::uint32_t>(pkcs12.size()), nullptr};
         QUIC_CREDENTIAL_CONFIG credential{};
         credential.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_PKCS12;
         credential.CertificatePkcs12 = &bundle;
@@ -521,7 +589,7 @@ result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const n
                 result::ErrorClass::Unavailable, QuicError::Unavailable, "MsQuic refused a client configuration");
         }
     }
-    return std::unique_ptr<network::Provider>{new QuicProvider{std::move(core)}};
+    return std::unique_ptr<network::Provider>{new QuicProvider{std::move(core), *state_}};
 }
 
 } // namespace rawframe::network_quic
