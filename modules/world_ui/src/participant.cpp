@@ -136,7 +136,8 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
                                 {"hit", offsetof(Node, hit)},
                                 {"layer", offsetof(Node, layer)},
                                 {"edit", offsetof(Node, edit)},
-                                {"editLimit", offsetof(Node, editLimit)}})) {
+                                {"editLimit", offsetof(Node, editLimit)},
+                                {"style", offsetof(Node, style)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -171,6 +172,15 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
     }
     for (const world_kest::GameFont& kFont : kGame.fonts) {
         settings.fonts.push_back(kFont.id);
+    }
+    // The game's style classes (D431).
+    if (!kGame.styles.empty()) {
+        RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.document(kGame.styles));
+        auto styles = ui::readStyles(kText);
+        if (!styles.has_value()) {
+            return std::unexpected<result::Error>{std::move(styles).error().withContext("name", kGame.styles)};
+        }
+        settings.styles = *std::move(styles);
     }
     return std::optional<UiSettings>{std::move(settings)};
 }
@@ -307,6 +317,11 @@ public:
         // as the host reads the window's records (D426): the keys after it
         // find the keyboard where it put it.
         if (pointing_ != nullptr && ui_ != nullptr) {
+            pointing_->onRelease([this] {
+                if (!failed_) {
+                    ui_->release();
+                }
+            });
             pointing_->onPress([this](float x, float y) {
                 if (failed_) {
                     return;
@@ -360,7 +375,7 @@ public:
         return {};
     }
 
-    void runHostPhase(composition::HostPhase /*phase*/, const composition::HostFrame& /*frame*/) noexcept override {
+    void runHostPhase(composition::HostPhase /*phase*/, const composition::HostFrame& frame) noexcept override {
         drawn_ = nullptr;
         if (ui_ == nullptr || failed_) {
             return;
@@ -388,7 +403,12 @@ public:
                                       .width = static_cast<float>(kPixels.width) / scale,
                                       .height = static_cast<float>(kPixels.height) / scale});
         }
-        if (const result::Status kDrawn = ui_->update(laidOut_, kWidth / scale, kHeight / scale, scale);
+        // The node under the mouse is hovered (D431).
+        if (pointing_ != nullptr) {
+            ui_->hoverAt(pointing_->pointer());
+        }
+        if (const result::Status kDrawn = ui_->update(
+                laidOut_, kWidth / scale, kHeight / scale, scale, static_cast<double>(frame.now.nanoseconds) / 1e9);
             !kDrawn.has_value()) {
             failed_ = true;
             emitter_.log(diagnostics::Severity::Error,
@@ -436,6 +456,7 @@ public:
         if (pointing_ != nullptr) {
             pointing_->answer({});
             pointing_->onPress({});
+            pointing_->onRelease({});
         }
         if (typing_ != nullptr) {
             typing_->answer({});
@@ -472,6 +493,7 @@ public:
                       diagnostics::field("typedShown", kStatistics.typedShown),
                       diagnostics::field("navigated", kStatistics.navigated),
                       diagnostics::field("activated", kStatistics.activated),
+                      diagnostics::field("stylesUnknown", kStatistics.stylesUnknown),
                       diagnostics::field("atlasRevisions",
                                          drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0)});
     }

@@ -11,10 +11,12 @@
 // component of typed words in place of its label while it holds any
 // (D427); and an empty field without the keyboard shows its label as its
 // placeholder (D428); Tab moves the keyboard between a view's fields
-// (D429); and navigation moves focus without a pointer (D430).
+// (D429); navigation moves focus without a pointer (D430); and a styled
+// node looks as its class says in each state it is in (D431).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
+#include "rawframe/ui/styles.h"
 #include "rawframe/world_ui/errors.h"
 #include "rawframe/world_ui/world_ui.h"
 
@@ -593,4 +595,84 @@ RAWFRAME_TEST(NavigationMovesFocusAndActivatesWhatItHolds) {
     RAWFRAME_EXPECT(rig.ui->enterNavigation());
     rig.ui->pressAt(600, 300);
     RAWFRAME_EXPECT(!rig.ui->navigating());
+}
+
+RAWFRAME_TEST(AStyledNodeLooksAsItsClassSaysInEachState) {
+    Rig rig;
+    const auto kStyles = ui::readStyles(R"({
+  "kind": "ui.styles",
+  "formatVersion": 1,
+  "styles": [
+    {
+      "styleId": "0000000000000011",
+      "name": "button",
+      "base": {
+        "fill": "#ff0000ff"
+      },
+      "focused": {
+        "outerShadow": {
+          "color": "#ffffffff",
+          "spread": 2
+        }
+      },
+      "hovered": {
+        "fill": "#00ff00ff"
+      },
+      "pressed": {
+        "fill": "#0000ffff"
+      }
+    }
+  ]
+}
+)");
+    RAWFRAME_EXPECT(kStyles.has_value());
+    if (!kStyles.has_value()) {
+        return;
+    }
+    rig.ui =
+        *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId}, .parents = {std::nullopt, 0, 0}, .styles = *kStyles});
+    // A button at the view's top left, (100, 50), 100 by 20.
+    Node button{.widthOffset = 100, .heightOffset = 20, .press = 1, .hit = 1, .style = 0x11};
+    rig.put(rig.player, kHudId, button);
+    // The button's box's fill as drawn: red, green, blue, nought to one.
+    const auto kFill = [&rig]() -> std::array<float, 3> {
+        if (!rig.frame()) {
+            return {-1, -1, -1};
+        }
+        for (const ui::Box& kBox : rig.ui->drawn().boxes) {
+            if (at(kBox, 100, 50, 100, 20)) {
+                return {kBox.fill[0], kBox.fill[1], kBox.fill[2]};
+            }
+        }
+        return {-1, -1, -1};
+    };
+    const auto kIs = [](std::array<float, 3> fill, float red, float green, float blue) {
+        return std::abs(fill[0] - red) < 0.02F && std::abs(fill[1] - green) < 0.02F && std::abs(fill[2] - blue) < 0.02F;
+    };
+    RAWFRAME_EXPECT(kIs(kFill(), 1, 0, 0));
+    // Hovered, pressed (which wins), let go, and left.
+    rig.ui->hoverAt(std::array<float, 2>{150, 60});
+    RAWFRAME_EXPECT(kIs(kFill(), 0, 1, 0));
+    rig.ui->pressAt(150, 60);
+    RAWFRAME_EXPECT(kIs(kFill(), 0, 0, 1));
+    rig.ui->release();
+    RAWFRAME_EXPECT(kIs(kFill(), 0, 1, 0));
+    rig.ui->hoverAt(std::nullopt);
+    RAWFRAME_EXPECT(kIs(kFill(), 1, 0, 0));
+    // Focused, the class's shadow, not the engine's ring.
+    RAWFRAME_EXPECT(rig.ui->enterNavigation() && rig.frame() && rig.ui->drawn().shadows.size() == 1);
+    rig.ui->dismiss();
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().shadows.empty());
+    // Its own fill wins in every state.
+    button.fill = 0xFFFF00FF;
+    rig.put(rig.player, kHudId, button);
+    rig.ui->hoverAt(std::array<float, 2>{150, 60});
+    RAWFRAME_EXPECT(kIs(kFill(), 1, 1, 0));
+    // A class the game's styles lack: counted, the node unstyled, with no
+    // fill of its own.
+    button.fill = 0;
+    button.style = 0x12;
+    rig.put(rig.player, kHudId, button);
+    const std::array<float, 3> kUnstyled = kFill();
+    RAWFRAME_EXPECT(!kIs(kUnstyled, 1, 0, 0) && !kIs(kUnstyled, 0, 1, 0) && rig.ui->statistics().stylesUnknown == 1);
 }

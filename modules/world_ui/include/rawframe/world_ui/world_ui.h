@@ -9,12 +9,14 @@
 
 #include "rawframe/result/result.h"
 #include "rawframe/schema/component.h"
+#include "rawframe/ui/styles.h"
 #include "rawframe/ui/tree.h"
 #include "rawframe/view/navigation.h"
 #include "rawframe/view/typing.h"
 #include "rawframe/world/entity.h"
 #include "rawframe/world/world.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -77,6 +79,7 @@ struct Node {
     std::uint32_t layer = 0;
     std::uint32_t edit = 0;
     std::uint32_t editLimit = 0;
+    std::uint64_t style = 0;
 };
 
 /// A text field's most bytes: what `rawframe.ui.Typed` holds (D426).
@@ -107,6 +110,8 @@ struct UiSettings {
     std::vector<std::optional<schema::ComponentTypeId>> shows;
     std::vector<std::uint64_t> fonts;
     Words words;
+    /// The game's style classes (D431), which nodes name by identity.
+    ui::StyleSheet styles;
     /// The most nodes held at once, every view's together; a node past them
     /// is left out and counted.
     std::uint32_t maximumNodes = 4096;
@@ -146,6 +151,8 @@ struct UiStatistics {
     std::uint64_t focused = 0;
     std::uint64_t typed = 0;
     std::uint64_t submitted = 0;
+    /// Nodes naming a class the game's styles do not have (D431).
+    std::uint64_t stylesUnknown = 0;
     /// Moves of focus by navigation, and nodes it activated (D430).
     std::uint64_t navigated = 0;
     std::uint64_t activated = 0;
@@ -167,7 +174,9 @@ public:
     /// The roots of a view are laid out in a column from its top left, in
     /// `order` and then by entity, each its own size, an absolute one where
     /// it says; children likewise in their parent.
-    [[nodiscard]] result::Status update(std::span<const UiView> views, float width, float height, float scale);
+    /// Classes' transitions move to `seconds` on a monotonic clock.
+    [[nodiscard]] result::Status
+    update(std::span<const UiView> views, float width, float height, float scale, double seconds = 0);
 
     /// Font `id`, one of the settings' fonts, read from a cooked font's
     /// bytes; the nodes that show words are given them again in it. Refused
@@ -185,6 +194,12 @@ public:
     /// takes the keyboard from the field that held it. The caret is placed
     /// at once, by the last layout.
     void pressAt(float x, float y);
+    /// The press let go: the node it went down on is no longer pressed
+    /// (D431).
+    void release();
+    /// Where the mouse is over the window, none off it: the node a press
+    /// there would land on is hovered (D431).
+    void hoverAt(std::optional<std::array<float, 2>> pointer);
     /// What was typed, to the field holding the keyboard; nothing while
     /// none does. Enter gives a single line's text, Escape lets go.
     void type(const view::Typing& typing);

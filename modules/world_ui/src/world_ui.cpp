@@ -166,6 +166,8 @@ struct Entry {
     /// field's placeholder now, not what was typed (D428).
     bool editable = false;
     bool placeholder = false;
+    /// The states its node was last given (D431).
+    ui::States states;
 };
 
 /// The node holding focus (D430): a text field given the keyboard, its
@@ -182,6 +184,24 @@ struct Focus {
 /// The ring a node holding focus shows in place of its outer shadow
 /// (D430), until a style's focused variant says otherwise.
 constexpr ui::ShadowLook kFocusRing{.color = 0xFFD24AFF, .spread = 2};
+
+/// The parts of its look a styled node sets itself (D431): those it gives
+/// a value other than nought. An inner shadow it has no field for.
+ui::LookParts ownPartsOf(const Node& node) noexcept {
+    ui::LookParts parts = 0;
+    const auto kOwn = [&parts](bool given, ui::LookPart part) {
+        parts |= given ? static_cast<ui::LookParts>(part) : 0;
+    };
+    kOwn(node.fill != 0, ui::LookPart::Fill);
+    kOwn(node.borderColor != 0, ui::LookPart::BorderColor);
+    kOwn(node.radius != 0, ui::LookPart::Radius);
+    kOwn(node.clip != 0, ui::LookPart::Clip);
+    kOwn(node.image != 0, ui::LookPart::Image);
+    kOwn(node.imageTint != 0, ui::LookPart::ImageTint);
+    kOwn(node.shadowColor != 0, ui::LookPart::OuterShadow);
+    kOwn(node.gradientKind != 0, ui::LookPart::Gradient);
+    return parts;
+}
 
 /// Whether `node` goes the way of `move` from `from`, and how far: along
 /// it, the distance across it counted twice, so the nearest in line wins.
@@ -264,6 +284,11 @@ struct WorldUi::State {
     std::optional<Focus> focus;
     std::optional<view::UiTyping::Caret> caret;
     std::vector<view::Submitted> submitted;
+    /// The game's classes by identity (D431); where the mouse is; and the
+    /// node a press went down on, until it is let go.
+    std::unordered_map<std::uint64_t, ui::Style> classes;
+    std::optional<std::array<float, 2>> pointer;
+    Entry* pressed = nullptr;
 
     /// Focus taken from the node holding it: its ring goes, and a field
     /// gives back the keyboard and shows its placeholder again if it is
@@ -281,10 +306,49 @@ struct WorldUi::State {
     /// field's text or placeholder; whether the tree took it.
     bool giveFocusLook(Entry& entry) {
         ui::Look look = lookOf(entry.value);
-        if (focus.has_value() && focus->entry == &entry) {
+        // A styled node's class says how it looks focused; an unstyled one
+        // is ringed.
+        const bool kStyled = classes.contains(entry.value.style);
+        if (!kStyled && focus.has_value() && focus->entry == &entry) {
             look.outerShadow = kFocusRing;
         }
-        return tree->setLook(*entry.node, look).has_value() && (!entry.editable || giveFieldLook(entry));
+        const ui::LookParts kOwn = kStyled ? ownPartsOf(entry.value) : ui::kEveryLookPart;
+        return tree->setLook(*entry.node, look, kOwn).has_value() && (!entry.editable || giveFieldLook(entry));
+    }
+
+    /// The entry whose node is `node`; null for none.
+    [[nodiscard]] Entry* entryOf(ui::Node node) noexcept {
+        for (ViewState& view : views) {
+            for (auto& [kKey, entry] : view.entries) {
+                if (entry.node == node) {
+                    return &entry;
+                }
+            }
+        }
+        return nullptr;
+    }
+
+    /// Each node given the states it is in now, where they changed: hovered
+    /// under the mouse as the last layout placed it, pressed while a press
+    /// on it is held, focused while it holds focus (D431).
+    void giveStates() {
+        Entry* hovered = nullptr;
+        if (pointer.has_value()) {
+            const auto kHit = tree->hit(window, (*pointer)[0], (*pointer)[1]);
+            if (kHit.has_value() && kHit->node.has_value()) {
+                hovered = entryOf(*kHit->node);
+            }
+        }
+        for (ViewState& view : views) {
+            for (auto& [kKey, entry] : view.entries) {
+                const ui::States kNow{.focused = focus.has_value() && focus->entry == &entry,
+                                      .hovered = &entry == hovered,
+                                      .pressed = &entry == pressed};
+                if (entry.node.has_value() && kNow != entry.states && tree->setStates(*entry.node, kNow).has_value()) {
+                    entry.states = kNow;
+                }
+            }
+        }
     }
 
     /// A field done with the keyboard, by Enter or Escape: focus stays on
@@ -423,6 +487,10 @@ struct WorldUi::State {
         if (focus.has_value() && focus->entry == &entry) {
             letGo(false);
         }
+        if (pressed == &entry) {
+            pressed = nullptr;
+        }
+        entry.states = {};
         if (const auto kChildren = attached.find(keyOf(*entry.node)); kChildren != attached.end()) {
             for (const ui::Node kChild : kChildren->second) {
                 if (tree->contains(kChild)) {
@@ -463,9 +531,17 @@ struct WorldUi::State {
         } else {
             ++statistics.changed;
         }
+        // Its class (D431), none for nought or one the game's styles lack.
+        const auto kClass = value.style != 0 ? classes.find(value.style) : classes.end();
+        if (value.style != 0 && kClass == classes.end()) {
+            ++statistics.stylesUnknown;
+        }
+        const std::size_t kClasses = kClass != classes.end() ? 1 : 0;
         if (!kLayout.has_value() || !kInteraction.has_value() || !tree->setLayout(*entry.node, *kLayout).has_value() ||
-            !tree->setInteraction(*entry.node, *kInteraction).has_value() || !giveFocusLook(entry) ||
-            (!kEditable && !giveWords(*entry.node, value, wordsOf(entry.words)))) {
+            !tree->setInteraction(*entry.node, *kInteraction).has_value() ||
+            !tree->setClasses(*entry.node, kClasses != 0 ? std::span{&kClass->second, 1} : std::span<const ui::Style>{})
+                 .has_value() ||
+            !giveFocusLook(entry) || (!kEditable && !giveWords(*entry.node, value, wordsOf(entry.words)))) {
             drop(entry);
             return false;
         }
@@ -721,11 +797,16 @@ result::Result<std::unique_ptr<WorldUi>> WorldUi::create(UiSettings settings) {
     RAWFRAME_TRY_ASSIGN(state->window, state->tree->add(0));
     RAWFRAME_TRY(state->tree->setLayout(state->window, {.width = ui::share(1), .height = ui::share(1)}));
     RAWFRAME_TRY(state->tree->setInteraction(state->window, kThrough));
+    // The game's classes, made once (D431).
+    RAWFRAME_TRY_ASSIGN(const std::vector<ui::Style> kMade, ui::addStyles(*state->tree, settings.styles));
+    for (std::size_t at = 0; at < kMade.size(); ++at) {
+        state->classes.emplace(settings.styles.styles[at].id, kMade[at]);
+    }
     state->settings = std::move(settings);
     return std::unique_ptr<WorldUi>{new WorldUi{std::move(state)}};
 }
 
-result::Status WorldUi::update(std::span<const UiView> views, float width, float height, float scale) {
+result::Status WorldUi::update(std::span<const UiView> views, float width, float height, float scale, double seconds) {
     State& state = *state_;
     // A view's root placed in the window over its rectangle, its roots in a
     // column from its top left, each its own size.
@@ -768,7 +849,8 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
         state.nest(view, kView.player, wanted);
     }
     RAWFRAME_TRY(state.attach(wanted));
-    RAWFRAME_TRY(state.tree->layOut(state.window, width, height));
+    state.giveStates();
+    RAWFRAME_TRY(state.tree->layOut(state.window, width, height, seconds));
     RAWFRAME_TRY(state.tree->draw(state.window, scale, state.drawn));
     // The field holding the keyboard: its caret and selection drawn over
     // the tree, and where the caret is told for the input method (D426).
@@ -834,20 +916,23 @@ std::optional<std::int64_t> WorldUi::press(float x, float y) const {
 void WorldUi::pressAt(float x, float y) {
     State& state = *state_;
     const auto kHit = state.tree->hit(state.window, x, y);
-    if (kHit.has_value() && kHit->node.has_value()) {
-        for (ViewState& view : state.views) {
-            for (auto& [kKey, entry] : view.entries) {
-                if (entry.node != kHit->node || !entry.editable) {
-                    continue;
-                }
-                state.focusOn(entry, true, false);
-                static_cast<void>(state.focus->edit->pointAt(kHit->x, kHit->y, false));
-                state.placeCaret();
-                return;
-            }
-        }
+    Entry* entry = kHit.has_value() && kHit->node.has_value() ? state.entryOf(*kHit->node) : nullptr;
+    state.pressed = entry;
+    if (entry != nullptr && entry->editable) {
+        state.focusOn(*entry, true, false);
+        static_cast<void>(state.focus->edit->pointAt(kHit->x, kHit->y, false));
+        state.placeCaret();
+        return;
     }
     state.letGo();
+}
+
+void WorldUi::release() {
+    state_->pressed = nullptr;
+}
+
+void WorldUi::hoverAt(std::optional<std::array<float, 2>> pointer) {
+    state_->pointer = pointer;
 }
 
 void WorldUi::type(const view::Typing& typing) {

@@ -168,6 +168,8 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             pointing_.pressed(event->pointer.position.x, event->pointer.position.y);
         } else if (event->kind == window::EventKind::TouchDown) {
             pointing_.pressed(event->touch.position.x, event->touch.position.y);
+        } else if (event->kind == window::EventKind::ButtonUp || event->kind == window::EventKind::TouchUp) {
+            pointing_.released();
         }
         if (event->kind == window::EventKind::CursorMoved) {
             pointing_.pointAt(event->pointer.position.x, event->pointer.position.y);

@@ -62,6 +62,18 @@ public:
         }
     }
 
+    /// What the UI does as a press is let go (D431): the node it went down
+    /// on is no longer pressed.
+    using Released = std::function<void()>;
+    void onRelease(Released released) noexcept {
+        released_ = std::move(released);
+    }
+    /// The host's side: a mouse button or a touch was let go.
+    void released() const {
+        if (released_) {
+            released_();
+        }
+    }
     /// The host's side: the mouse is at `x`, `y` over the window, or has
     /// left it.
     void pointAt(float x, float y) noexcept {
@@ -77,10 +89,15 @@ public:
     [[nodiscard]] std::optional<std::int64_t> hovered() const {
         return pointed_ && answer_ ? answer_(pointer_[0], pointer_[1], false) : std::nullopt;
     }
+    /// Where the mouse is over the window; none off it.
+    [[nodiscard]] std::optional<std::array<float, 2>> pointer() const noexcept {
+        return pointed_ ? std::optional{pointer_} : std::nullopt;
+    }
 
 private:
     Answer answer_;
     Pressed pressed_;
+    Released released_;
     std::array<float, 2> pointer_{};
     bool pointed_ = false;
 };
