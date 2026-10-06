@@ -66,6 +66,25 @@ Axes axesOf(float yaw, float pitch) noexcept {
     return {.right = kRight, .up = cross(kRight, kForward), .forward = kForward};
 }
 
+std::optional<Perspective>
+lookingAt(const std::array<double, 3>& eye, const std::array<double, 3>& target, float fovY) noexcept {
+    const double kX = target[0] - eye[0];
+    const double kY = target[1] - eye[1];
+    const double kZ = target[2] - eye[2];
+    const double kAcross = std::hypot(kX, kZ);
+    if (!std::isfinite(kAcross) || !std::isfinite(kY) || (kAcross == 0 && kY == 0) || !std::isfinite(fovY) ||
+        !std::ranges::all_of(eye, [](double each) {
+            return std::isfinite(each);
+        })) {
+        return std::nullopt;
+    }
+    // Forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch).
+    return Perspective{.eye = eye,
+                       .yaw = static_cast<float>(std::atan2(-kX, -kZ)),
+                       .pitch = static_cast<float>(std::atan2(kY, kAcross)),
+                       .fovY = fovY};
+}
+
 std::expected<Ray, Failure> pointToRay(const Perspective& view, ViewSize size, float x, float y) noexcept {
     if (auto kChecked = checked(view, size); !kChecked.has_value()) {
         return std::unexpected{kChecked.error()};

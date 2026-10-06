@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <expected>
+#include <optional>
 
 namespace rawframe::view {
 
@@ -36,6 +37,11 @@ struct Perspective {
     float fovY = 1;
     float near = 0.1F;
 };
+
+/// A perspective view from `eye` looking at `target`, `fovY` radians
+/// high (D432); none for an eye at its target or a value not finite.
+[[nodiscard]] std::optional<Perspective>
+lookingAt(const std::array<double, 3>& eye, const std::array<double, 3>& target, float fovY) noexcept;
 
 /// An orthographic view: the World point at its middle, and how many
 /// meters it sees from its top to its bottom.

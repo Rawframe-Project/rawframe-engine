@@ -1,10 +1,11 @@
 // A view's geometry (ADR-0052, D366): the eye's axes, the perspective and
-// orthographic verbs each the other's inverse, and every failure one of
-// the closed set.
+// orthographic verbs each the other's inverse, an eye aimed at a point
+// (D432), and every failure one of the closed set.
 
 #include "rawframe/test/test.h"
 #include "rawframe/view/view.h"
 
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -26,6 +27,23 @@ RAWFRAME_TEST(TheEyesAxesFollowItsAim) {
     const view::Axes kTurned = view::axesOf(1.5707964F, 0);
     RAWFRAME_EXPECT(near(kTurned.forward[0], -1) && near(kTurned.right[2], -1));
     RAWFRAME_EXPECT(view::axesOf(0, 3.0F).forward[1] < 1.0F);
+}
+
+RAWFRAME_TEST(AnEyeLookingAtATargetFacesIt) {
+    // From above and behind a point, the view's forward runs to it.
+    const std::array<double, 3> kEye{3, 4, 5};
+    const std::array<double, 3> kTarget{1, 1, -1};
+    const auto kView = view::lookingAt(kEye, kTarget, 1.0F);
+    RAWFRAME_EXPECT(kView.has_value());
+    if (kView.has_value()) {
+        const view::Axes kAxes = view::axesOf(kView->yaw, kView->pitch);
+        const double kLength = std::sqrt(4.0 + 9.0 + 36.0);
+        RAWFRAME_EXPECT(near(kAxes.forward[0], -2 / kLength) && near(kAxes.forward[1], -3 / kLength) &&
+                        near(kAxes.forward[2], -6 / kLength) && kView->eye == kEye && kView->fovY == 1.0F);
+    }
+    // At its target, or not finite: none.
+    RAWFRAME_EXPECT(!view::lookingAt(kEye, kEye, 1.0F).has_value());
+    RAWFRAME_EXPECT(!view::lookingAt({std::nan(""), 0, 0}, kTarget, 1.0F).has_value());
 }
 
 RAWFRAME_TEST(PerspectivePickingAndProjectionAreInverse) {

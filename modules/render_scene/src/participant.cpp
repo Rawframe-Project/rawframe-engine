@@ -10,6 +10,7 @@
 #include "rawframe/render_scene/registrar.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/view/players.h"
+#include "rawframe/view/preview.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/client_worlds.h"
@@ -37,7 +38,8 @@ constexpr diagnostics::EventIdentity kViewsSummary{"scene", "scene_views_summary
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        game_content::kGameContent.name,
-                                       view::kPlayerViews.name};
+                                       view::kPlayerViews.name,
+                                       view::kPreviewCamera.name};
 
 /// A material's texture as the scene binds it.
 SceneTexture sceneTextureOf(const material::SampledTexture& texture) {
@@ -236,6 +238,10 @@ public:
         // a scene of a client named by configuration is no player's.
         if (!client.has_value() && context.has(view::kPlayerViews.name)) {
             RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
+        }
+        // A preview's camera, where an authoring client sets one (D432).
+        if (!client.has_value() && context.has(view::kPreviewCamera.name)) {
+            RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
         }
         // Split-screen (D362): the process's local players, each in its
         // region by the game's layout for their count, the first in the
@@ -463,7 +469,8 @@ public:
             diagnostics::field("decalsDrawn", decalsDrawn_),
             diagnostics::field("decalsCulled", decalsCulled_),
             diagnostics::field("players", static_cast<std::uint64_t>(localPlayers_.size() + 1)),
-            diagnostics::field("playerFrames", playerFrames_)};
+            diagnostics::field("playerFrames", playerFrames_),
+            diagnostics::field("framesPreviewed", previewed_)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
         if (!textureViews_.empty()) {
             emitter_.log(diagnostics::Severity::Info,
@@ -575,6 +582,16 @@ private:
         }
         if (readCamera(*kView.world, kView.owned, camera_)) {
             ++viewed_;
+        }
+        // Seen from where the preview looks, exposed as the player's camera
+        // says (D432).
+        if (preview_ != nullptr && preview_->looking().has_value()) {
+            const view::Perspective& kLook = *preview_->looking();
+            camera_.eye = kLook.eye;
+            camera_.yaw = kLook.yaw;
+            camera_.pitch = kLook.pitch;
+            camera_.fovY = kLook.fovY;
+            ++previewed_;
         }
         extractViews(*kView.world);
         extractPlayers();
@@ -919,6 +936,8 @@ private:
     std::size_t gameMeshes_ = 0;
     /// Frames seen through the player's own camera.
     std::uint64_t viewed_ = 0;
+    /// Frames seen through a preview's camera (D432).
+    std::uint64_t previewed_ = 0;
     std::unique_ptr<Scene> scene_;
     bool extracted_ = false;
     const SceneFrame* queued_ = nullptr;
@@ -926,6 +945,7 @@ private:
     std::uint32_t height_ = 720;
     /// The local players' views, told each frame (D367).
     view::PlayerViews* views_ = nullptr;
+    view::PreviewCamera* preview_ = nullptr;
     /// Each local player's view drawn at this share of its region's pixels
     /// each way (D373).
     float renderScale_ = 1;
