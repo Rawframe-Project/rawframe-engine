@@ -171,7 +171,6 @@ add_subdirectory(hosts/client)
 add_subdirectory(hosts/import)
 add_subdirectory(hosts/cook)
 add_subdirectory(hosts/build)
-add_subdirectory(hosts/play)
 add_subdirectory(hosts/export)
 add_subdirectory(hosts/scene_tool)
 add_subdirectory(hosts/author)
@@ -181,6 +180,7 @@ add_subdirectory(hosts/animation_tool)
 # hosts/ depends on it.
 add_subdirectory(launcher/http)
 add_subdirectory(launcher/install)
+add_subdirectory(launcher/play)
 
 # Scenarios: several modules and hosts together, the way a game uses them.
 if(RAWFRAME_BUILD_TESTS)

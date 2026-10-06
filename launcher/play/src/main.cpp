@@ -21,6 +21,27 @@
 //   play.wait_ms         how long the server has to listen (30000)
 //   play.grace_ms        how long it has to stop (10000)
 //
+// A game that follows a release channel (D434) is updated before it plays:
+// with `play.installer`, the launcher first runs that program (an
+// rawframe-install) as `follow <library> <subject> <channel> <origin>`,
+// which installs the channel's Release if the pointer moved past the one
+// the library last followed and verifies. Whatever it ends with (an
+// update, nothing new, an origin out of reach, a refusal), the game then
+// plays what the library has active, as the server and the client read
+// it from `content.library` alone.
+//
+//   play.installer           the install program (optional)
+//   play.library             the library it updates
+//   play.follow_subject      the game's subject, `<publisher>/<name>`
+//   play.follow_channel      its channel (stable)
+//   play.follow_origin       its mirror: an http or https URL, or a
+//                            directory under the file's
+//   play.follow_authorities  a PEM file of the authorities an https
+//                            mirror's certificate is verified against,
+//                            instead of the system's (optional)
+//   play.follow_log          where the install program's output goes
+//   play.follow_ms           how long it has (60000)
+//
 // It ends with the client's exit code, or 1 when the server did not listen
 // or ended first, or 2 for a configuration it cannot read.
 
@@ -39,6 +60,7 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
+#include <vector>
 
 #if defined(_WIN32)
 // WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
@@ -107,7 +129,7 @@ bool written(const std::filesystem::path& path) {
 }
 
 /// Asks the child to stop and waits its grace, then kills it; its exit code.
-int stopWithin(process::Child& child, std::chrono::milliseconds grace) {
+int stopWithin(process::Child& child, std::chrono::milliseconds grace, std::string_view name = "server") {
     if (const auto kEnded = child.exited()) {
         return *kEnded;
     }
@@ -117,10 +139,90 @@ int stopWithin(process::Child& child, std::chrono::milliseconds grace) {
         std::this_thread::sleep_for(kPoll);
     }
     if (!child.exited().has_value()) {
-        std::fputs("rawframe-play: the server did not stop within its grace; it is killed\n", stderr);
+        std::fprintf(stderr,
+                     "rawframe-play: the %.*s did not stop within its grace; it is killed\n",
+                     static_cast<int>(name.size()),
+                     name.data());
         child.kill();
     }
     return child.exited().value_or(-1);
+}
+
+/// What following a channel needs, read from the configuration.
+struct Follow {
+    std::string installer;
+    std::string library;
+    std::string subject;
+    std::string channel;
+    std::string origin;
+    std::string authorities;
+    std::string log;
+    std::chrono::milliseconds within{};
+};
+
+/// The follow the configuration asks for, if any; false for one it names
+/// only in part.
+bool followOf(const composition::Configuration& configuration,
+              const std::filesystem::path& base,
+              std::optional<Follow>& follow) {
+    const auto kInstaller = configuration.path("play.installer");
+    if (!kInstaller.has_value()) {
+        return true;
+    }
+    const auto kLibrary = configuration.path("play.library");
+    const auto kSubject = configuration.text("play.follow_subject");
+    const auto kOrigin = configuration.text("play.follow_origin");
+    const auto kWithin = configuration.unsignedInteger("play.follow_ms", 60'000);
+    if (!kLibrary.has_value() || !kSubject.has_value() || !kOrigin.has_value() || !kWithin.has_value()) {
+        return false;
+    }
+    // A URL as it is; a directory under the file's, as every other path.
+    const std::string_view kOriginText = *kOrigin;
+    const bool kUrl = kOriginText.starts_with("http://") || kOriginText.starts_with("https://");
+    follow = Follow{.installer = std::string{*kInstaller},
+                    .library = std::string{*kLibrary},
+                    .subject = std::string{*kSubject},
+                    .channel = std::string{configuration.text("play.follow_channel").value_or("stable")},
+                    .origin = kUrl ? std::string{kOriginText} : (base / std::string{kOriginText}).string(),
+                    .authorities = std::string{configuration.path("play.follow_authorities").value_or("")},
+                    .log = std::string{configuration.path("play.follow_log").value_or("")},
+                    .within = std::chrono::milliseconds{*kWithin}};
+    return true;
+}
+
+/// Runs the install program's follow, within its time; false when a stop
+/// was asked meanwhile. What it ends with is said, never a reason not to
+/// play.
+bool followed(const Follow& follow, std::chrono::milliseconds grace) {
+    std::vector<std::string> arguments{"follow", follow.library, follow.subject, follow.channel, follow.origin};
+    if (!follow.authorities.empty()) {
+        arguments.insert(arguments.end(), {"--authorities", follow.authorities});
+    }
+    auto child =
+        process::Child::start({.program = follow.installer, .arguments = std::move(arguments), .output = follow.log});
+    if (!child.has_value()) {
+        std::fprintf(stderr,
+                     "rawframe-play: %s; playing what the library has\n",
+                     std::string{child.error().description()}.c_str());
+        return true;
+    }
+    const auto kUntil = std::chrono::steady_clock::now() + follow.within;
+    while (!child->exited().has_value() && !stopAsked.load(std::memory_order_acquire) &&
+           std::chrono::steady_clock::now() < kUntil) {
+        std::this_thread::sleep_for(kPoll);
+    }
+    const bool kInTime = child->exited().has_value();
+    const int kCode = stopWithin(*child, grace, "install program");
+    if (stopAsked.load(std::memory_order_acquire)) {
+        return false;
+    }
+    if (!kInTime) {
+        std::fputs("rawframe-play: following the channel took too long; playing what the library has\n", stderr);
+    } else if (kCode != 0) {
+        std::fprintf(
+            stderr, "rawframe-play: following the channel ended with %d; playing what the library has\n", kCode);
+    }
+    return true;
 }
 
 } // namespace
@@ -164,7 +266,15 @@ int main(int argc, char** argv) {
         return 2;
     }
     const std::chrono::milliseconds kGraceTime{*kGrace};
+    std::optional<Follow> follow;
+    if (!followOf(configuration, kBase, follow)) {
+        std::fputs("rawframe-play: a follow names the installer, the library, the subject, and the origin\n", stderr);
+        return 2;
+    }
     bridgeStops();
+    if (follow.has_value() && !followed(*follow, kGraceTime)) {
+        return 1;
+    }
 
     // A fingerprint left from an earlier run is not this server's.
     std::filesystem::remove(*kFingerprint, error);
