@@ -432,4 +432,57 @@ result::Status apply(scene::Scene& scene, const Journal& journal, bool forward) 
     return {};
 }
 
+std::string summaryOf(const Journal& journal) {
+    if (journal.empty()) {
+        return "no change";
+    }
+    const Delta& first = journal.front();
+    const auto kNamed = [](const SlotValue& slot) {
+        return slot.node.has_value() && !slot.node->name.empty() ? " " + slot.node->name : std::string{};
+    };
+    std::string made;
+    switch (first.kind) {
+    case DeltaKind::CreateNode:
+        made = "create entity" + kNamed(first.after);
+        break;
+    case DeltaKind::DestroyNode:
+        made = "delete entity" + kNamed(first.before);
+        break;
+    case DeltaKind::Reorder:
+        made = "move entity";
+        break;
+    case DeltaKind::SetName:
+        made = "rename to " + first.after.name.value_or(std::string{});
+        break;
+    case DeltaKind::AddComponent:
+        made = "add " + first.component;
+        break;
+    case DeltaKind::RemoveComponent:
+        made = "remove " + first.component;
+        break;
+    case DeltaKind::SetField:
+    case DeltaKind::SetReference:
+        made = "set " + first.field + " of " + first.component;
+        break;
+    case DeltaKind::SetMark:
+        made = "update " + first.component;
+        break;
+    case DeltaKind::SetOverride:
+        made = first.component.empty()
+                   ? (first.after.patch.has_value() ? "remove from its instance" : "restore to its instance")
+                   : "change " + first.component + " of an instance";
+        break;
+    case DeltaKind::CreateInstance:
+        made = "place an instance";
+        break;
+    case DeltaKind::DestroyInstance:
+        made = "remove an instance";
+        break;
+    }
+    if (journal.size() > 1) {
+        made += " and " + std::to_string(journal.size() - 1) + " more";
+    }
+    return made;
+}
+
 } // namespace rawframe::authoring

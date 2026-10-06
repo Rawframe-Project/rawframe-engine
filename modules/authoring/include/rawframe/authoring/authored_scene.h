@@ -205,6 +205,12 @@ public:
     [[nodiscard]] std::size_t redoable() const noexcept {
         return history_.size() - applied_;
     }
+    /// The journal of the history's entry at `entry`, oldest first: the
+    /// first `undoable()` applied, the rest redoable. `entry` is below
+    /// `undoable() + redoable()`.
+    [[nodiscard]] const Journal& journalAt(std::size_t entry) const noexcept {
+        return history_[entry].journal;
+    }
 
 private:
     friend class Transaction;

@@ -317,3 +317,26 @@ RAWFRAME_TEST(HostileJournalsAreReadOrRefusedWhole) {
     }
     RAWFRAME_EXPECT(read > 0);
 }
+
+RAWFRAME_TEST(AJournalIsSummedUpInALine) {
+    RAWFRAME_EXPECT(summaryOf(Journal{}) == "no change");
+    const Delta kWidth{
+        .kind = DeltaKind::SetField, .entity = base::Bits128{1, 1}, .component = "game.tile", .field = "width"};
+    RAWFRAME_EXPECT(summaryOf(Journal{kWidth}) == "set width of game.tile");
+    RAWFRAME_EXPECT(summaryOf(Journal{kWidth, kWidth, kWidth}) == "set width of game.tile and 2 more");
+    const Delta kRename{.kind = DeltaKind::SetName, .entity = base::Bits128{1, 1}, .after = {.name = "crate"}};
+    RAWFRAME_EXPECT(summaryOf(Journal{kRename}) == "rename to crate");
+    const Delta kMade{.kind = DeltaKind::CreateNode,
+                      .entity = base::Bits128{1, 1},
+                      .after = {.node = NodeRecord{.place = 0, .name = "crate", .components = {}}}};
+    RAWFRAME_EXPECT(summaryOf(Journal{kMade}) == "create entity crate");
+    const Delta kRemoved{.kind = DeltaKind::SetOverride,
+                         .entity = base::Bits128{1, 1},
+                         .after = {.patch = PatchRecord{.kind = scene::Override::Kind::Remove}}};
+    RAWFRAME_EXPECT(summaryOf(Journal{kRemoved}) == "remove from its instance");
+    RAWFRAME_EXPECT(summaryOf(Journal{Delta{.kind = DeltaKind::SetOverride}}) == "restore to its instance");
+    // Every kind says something.
+    for (const Delta& each : everyKind()) {
+        RAWFRAME_EXPECT(!summaryOf(Journal{each}).empty());
+    }
+}

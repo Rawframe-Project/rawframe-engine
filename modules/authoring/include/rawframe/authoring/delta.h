@@ -160,4 +160,9 @@ using Journal = std::vector<Delta>;
 [[nodiscard]] result::Result<std::string> writeJournal(const Journal& journal);
 [[nodiscard]] result::Result<Journal> readJournal(std::string_view bytes);
 
+/// What a journal does, in a line an author reads in a history (ADR-0066,
+/// D454): its first delta, as `set width of runners.tile`, and how many
+/// more there are; `no change` for an empty one.
+[[nodiscard]] std::string summaryOf(const Journal& journal);
+
 } // namespace rawframe::authoring

@@ -1,6 +1,7 @@
 #include "rawframe/authoring_session/session.h"
 
 #include "rawframe/authoring/authored_scene.h"
+#include "rawframe/authoring/delta.h"
 #include "rawframe/authoring/operations.h"
 #include "rawframe/authoring/queries.h"
 #include "rawframe/authoring/request.h"
@@ -137,6 +138,8 @@ private:
             return previewed(record);
         case authoring::SessionVerb::CreateScene:
             return created(record);
+        case authoring::SessionVerb::History:
+            return historyOf(record);
         }
         return std::unexpected{failure(
             authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
@@ -229,6 +232,29 @@ private:
             }
             return rawframe::scene::readScene(*kText);
         };
+    }
+
+    /// A scene's history (D454): each entry, oldest first, summed up, with
+    /// how many deltas it holds and whether it is applied (undoable) or
+    /// undone (redoable). A read: nothing staged, nothing written.
+    result::Result<Value> historyOf(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        const authoring::AuthoredScene& scene = *open->document;
+        Value entries = Value::array();
+        for (std::size_t at = 0; at < scene.undoable() + scene.redoable(); ++at) {
+            const authoring::Journal& journal = scene.journalAt(at);
+            Value entry = Value::object();
+            entry.add("summary", Value::string(authoring::summaryOf(journal)));
+            entry.add("deltas", Value::integer(static_cast<std::int64_t>(journal.size())));
+            entry.add("applied", Value::boolean(at < scene.undoable()));
+            entries.push(std::move(entry));
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.history"));
+        made.add("reopened", Value::boolean(reopened));
+        made.add("entries", std::move(entries));
+        return made;
     }
 
     /// A new scene (D449): empty, beside a sidecar giving it a fresh

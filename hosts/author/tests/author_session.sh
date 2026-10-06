@@ -189,4 +189,19 @@ place='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operation
 } | "$author" session "$work/runners/runners.game" "$work/runners" >"$work/replies" || true
 reply 2 | grep -q '"written":true'
 grep -q "\"scene\": \"$resource\"" "$work/runners/level.scene"
+# A scene's history (D454): each entry summed up, oldest first, the undone
+# one after the applied, on a level of its own.
+mkdir -p "$work/history"
+cp "$work/original.scene" "$work/history/level.scene"
+rename='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"scene.rename_entity","entity":"c5400cf8-4b07-4d16-84c2-951852c66b40","name":"floor"}]}'
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.history","id":2,"scene":"level.scene"}'
+    echo '{"kind":"authoring.apply","id":3,"scene":"level.scene","request":'"$rename"'}'
+    echo '{"kind":"authoring.apply","id":4,"scene":"level.scene","request":'"$create"'}'
+    echo '{"kind":"authoring.undo","id":5,"scene":"level.scene"}'
+    echo '{"kind":"authoring.history","id":6,"scene":"level.scene"}'
+} | "$author" session "$game" "$work/history" >"$work/replies" || true
+reply 2 | grep -q '"answer":{"kind":"authoring.history","reopened":false,"entries":\[\]}'
+reply 6 | grep -q '"entries":\[{"summary":"rename to floor","deltas":1,"applied":true},{"summary":"create entity crate[^"]*","deltas":[0-9]*,"applied":false}\]'
 echo "authored runners in a session"

@@ -63,6 +63,8 @@ enum class SessionVerb : std::uint8_t {
     /// A new, empty scene and its sidecar, at a path under the root that
     /// holds neither (D449).
     CreateScene,
+    /// A scene's history, oldest first, each entry summed up (D454).
+    History,
     End,
 };
 
