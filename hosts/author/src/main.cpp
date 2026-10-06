@@ -42,7 +42,9 @@
 // changed under the session is opened again, its history and selection
 // let go, and the answer says so. `preview` connects the session to a
 // running client's tooling endpoint granted `view` (D433), which then shows
-// one scene's game from that scene's view, handed it each time it changes.
+// one scene's game from that scene's view, handed it each time it changes;
+// the endpoint is a loopback address, so the token the record's file holds
+// goes to no other machine.
 //
 // `connect` is a client of a running Runtime's tooling endpoint (D408,
 // connect.h): records a line on standard input, the replies on standard
@@ -803,6 +805,14 @@ private:
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         letGo();
         if (record.preview.has_value()) {
+            // A preview is a client on this machine: its token never leaves
+            // it for an endpoint a record names.
+            if (!rawframe::author::onThisMachine(record.preview->endpoint)) {
+                return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
+                                               result::ErrorClass::PermissionDenied,
+                                               "a preview's endpoint is on this machine, by a loopback address")
+                                           .withContext("endpoint", record.preview->endpoint)};
+            }
             std::string said;
             preview_ = rawframe::author::ToolingLink::open(
                 record.preview->endpoint, record.preview->pinFile.c_str(), record.preview->tokenFile.c_str(), said);

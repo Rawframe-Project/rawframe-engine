@@ -141,4 +141,14 @@ reply 7 | grep -q '"view":{"eye":\[0,20,0.5\]'
 } | "$author" session "$game" "$work/root" >"$work/replies" || true
 reply 2 | grep -q '"code":"capability_denied".*"said":"the pin and token files must read"'
 reply 3 | grep -q '"answer":{"kind":"authoring.preview","reopened":false,"previewing":false}'
+# Nor is one off this machine, or a file that is not a small regular one.
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.preview","id":2,"scene":"level.scene","preview":{"endpoint":"192.0.2.1:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
+    echo '{"kind":"authoring.preview","id":3,"scene":"level.scene","preview":{"endpoint":"127.0.0.1.example:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
+    echo '{"kind":"authoring.preview","id":4,"scene":"level.scene","preview":{"endpoint":"127.0.0.1:9","pinFile":"/dev/zero","tokenFile":"/dev/zero"}}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+reply 2 | grep -q '"code":"capability_denied".*"endpoint":"192.0.2.1:9"'
+reply 3 | grep -q '"code":"capability_denied".*"endpoint":"127.0.0.1.example:9"'
+reply 4 | grep -q '"said":"the pin and token files must read"'
 echo "authored runners in a session"

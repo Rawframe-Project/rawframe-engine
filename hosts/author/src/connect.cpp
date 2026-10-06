@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <optional>
@@ -23,12 +24,24 @@ namespace {
 /// How long a reply may take before the client gives up on the endpoint.
 constexpr auto kReplyWithin = std::chrono::seconds(10);
 
+/// A pin or token file's bytes at most, as the endpoint's token file.
+constexpr std::size_t kMaximumLineFile = 4096;
+
+/// The first line of a regular file of at most 4 KiB; none for anything
+/// else, so a device or a large file is never read.
 std::optional<std::string> firstLine(const char* path) {
+    std::error_code failed;
+    if (!std::filesystem::is_regular_file(path, failed) ||
+        std::filesystem::file_size(path, failed) > kMaximumLineFile || failed) {
+        return std::nullopt;
+    }
     std::ifstream file{path, std::ios::binary};
     if (!file) {
         return std::nullopt;
     }
-    std::string text{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    std::string text(kMaximumLineFile, '\0');
+    file.read(text.data(), static_cast<std::streamsize>(text.size()));
+    text.resize(static_cast<std::size_t>(file.gcount()));
     text.resize(std::min(text.find('\n'), text.size()));
     if (!text.empty() && text.back() == '\r') {
         text.pop_back();
@@ -199,6 +212,38 @@ ToolingLink::open(std::string_view endpoint, const char* pinFile, const char* to
 
 std::optional<std::string> ToolingLink::ask(std::string_view record) {
     return client_->ask(record);
+}
+
+bool onThisMachine(std::string_view endpoint) {
+    const std::size_t kColon = endpoint.rfind(':');
+    if (kColon == std::string_view::npos || kColon + 1 == endpoint.size()) {
+        return false;
+    }
+    const std::string_view kHost = endpoint.substr(0, kColon);
+    if (kHost == "localhost" || kHost == "[::1]") {
+        return true;
+    }
+    // Four decimal parts, the first 127.
+    if (!kHost.starts_with("127.")) {
+        return false;
+    }
+    // 127 is the first part, and what follows its dot the second.
+    int parts = 2;
+    int digits = 0;
+    for (const char kEach : kHost.substr(4)) {
+        if (kEach == '.') {
+            if (digits == 0) {
+                return false;
+            }
+            ++parts;
+            digits = 0;
+        } else if (kEach >= '0' && kEach <= '9' && digits < 3) {
+            ++digits;
+        } else {
+            return false;
+        }
+    }
+    return parts == 4 && digits > 0;
 }
 
 int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {

@@ -22,7 +22,8 @@ public:
     ~ToolingLink();
 
     /// Connects to `endpoint`, trusting only the certificate `pinFile`
-    /// names, and says hello with the token in `tokenFile`. `said` is the
+    /// names, and says hello with the token in `tokenFile`, each the first
+    /// line of a regular file of at most 4 KiB. `said` is the
     /// welcome line, or the endpoint's refusal line, or why it could not be
     /// reached; the link only when welcomed.
     static std::unique_ptr<ToolingLink>
@@ -46,5 +47,9 @@ private:
 /// for a line, until the input ends (when it says `tooling.end`) or the
 /// endpoint closes. 0 when every reply was an answer.
 int connect(const char* endpoint, const char* pinFile, const char* tokenFile);
+
+/// Whether `endpoint` (`host:port`) names this machine by a loopback
+/// address: 127.0.0.0/8, `[::1]`, or `localhost`.
+bool onThisMachine(std::string_view endpoint);
 
 } // namespace rawframe::author
