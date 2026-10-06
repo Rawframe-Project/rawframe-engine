@@ -292,10 +292,16 @@ private:
     /// Reported once; no more frames are made.
     void fail(const result::Error& error) noexcept {
         failed_ = true;
-        emitter_.log(diagnostics::Severity::Error,
-                     kFailed,
-                     "a frame could not be made: no more are",
-                     {diagnostics::field("reason", std::string{error.description()})});
+        // The reason, and what it names (a device's outcome, a pipeline).
+        std::string detail;
+        for (const auto& each : error.context()) {
+            detail += (detail.empty() ? "" : ", ") + std::string{each.key} + " " + std::string{each.value};
+        }
+        emitter_.log(
+            diagnostics::Severity::Error,
+            kFailed,
+            "a frame could not be made: no more are",
+            {diagnostics::field("reason", std::string{error.description()}), diagnostics::field("detail", detail)});
     }
 
     DeviceHolder* devices_ = nullptr;

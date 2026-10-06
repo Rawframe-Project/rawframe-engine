@@ -96,6 +96,9 @@ inline std::optional<std::vector<std::byte>> drawn(render::Framer& framer,
         RAWFRAME_EXPECT(kMade.has_value());
         if (!kMade.has_value()) {
             std::printf("%s\n", std::string{kMade.error().description()}.c_str());
+            for (const auto& each : kMade.error().context()) {
+                std::printf("  %s: %s\n", std::string{each.key}.c_str(), std::string{each.value}.c_str());
+            }
             return std::nullopt;
         }
     }
