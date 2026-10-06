@@ -268,8 +268,11 @@ void ShellParticipant::showEntity(std::size_t at) {
         const Value* component = each.find("component");
         const std::string kComponent =
             component != nullptr && component->text() != nullptr ? *component->text() : std::string{};
-        if (!componentHeading(
-                 name != nullptr && name->text() != nullptr ? *name->text() : "?", kComponent, brought_[at])
+        const Value* stale = each.find("stale");
+        if (!componentHeading(name != nullptr && name->text() != nullptr ? *name->text() : "?",
+                              kComponent,
+                              brought_[at],
+                              stale != nullptr && stale->truth().value_or(false))
                  .has_value()) {
             return;
         }
@@ -310,7 +313,8 @@ void ShellParticipant::showEntity(std::size_t at) {
     }
 }
 
-result::Status ShellParticipant::componentHeading(std::string_view name, const std::string& component, bool brought) {
+result::Status
+ShellParticipant::componentHeading(std::string_view name, const std::string& component, bool brought, bool stale) {
     RAWFRAME_TRY_ASSIGN(const ui::Node kHeading,
                         box(componentsColumn_,
                             ui::Layout{.height = ui::pixels(28),
@@ -322,9 +326,21 @@ result::Status ShellParticipant::componentHeading(std::string_view name, const s
     componentRows_.push_back(kHeading);
     RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{.padding = {0, 4, 0, 4}}, 0));
     RAWFRAME_TRY(words(kTitle, name, kText, 14));
+    // The heading's buttons together at its end.
+    RAWFRAME_TRY_ASSIGN(const ui::Node kActions, box(kHeading, ui::Layout{.alignItems = ui::Align::Center}, 0));
+    // A component the scene was authored against another layout of is
+    // carried over to the catalog's, for every entity of the scene (D452).
+    if (stale && catalog_.offers("scene.remark_component")) {
+        RAWFRAME_TRY(action(kActions,
+                            "Update",
+                            ActionButton{.operation = "scene.remark_component",
+                                         .component = component,
+                                         .done = std::string{name} + " updated",
+                                         .whole = true}));
+    }
     const std::string_view kOperation = brought ? "scene.revert_component" : "scene.remove_component";
     if (catalog_.offers(kOperation)) {
-        RAWFRAME_TRY(action(kHeading,
+        RAWFRAME_TRY(action(kActions,
                             brought ? "Revert" : "Remove",
                             ActionButton{.operation = std::string{kOperation},
                                          .component = component,

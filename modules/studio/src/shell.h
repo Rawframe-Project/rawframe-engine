@@ -84,6 +84,8 @@ struct ActionButton {
     std::string field;
     /// What the header says once it is done.
     std::string done;
+    /// The scene's operation, naming no entity: a component's remark.
+    bool whole = false;
 };
 
 /// The shell: a session on the game, and the UI that shows it.
@@ -149,7 +151,7 @@ private:
 
     /// A component's heading row: its name, and Remove if offered, or for
     /// an instance's entity Revert, which drops what its patch does.
-    result::Status componentHeading(std::string_view name, const std::string& component, bool brought);
+    result::Status componentHeading(std::string_view name, const std::string& component, bool brought, bool stale);
 
     /// A small button reading `text` at the end of `row`, asking `asked`.
     result::Status action(ui::Node row, std::string_view text, ActionButton asked);

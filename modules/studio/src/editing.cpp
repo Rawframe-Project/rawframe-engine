@@ -64,7 +64,12 @@ void ShellParticipant::pressAt(float x, float y) {
                kAction != actions_.end()) {
         endEdit();
         const ActionButton kAsked = *kAction;
-        Value operation = operationOn(kAsked.operation);
+        Value operation = Value::object();
+        if (kAsked.whole) {
+            operation.add("operation", Value::string(kAsked.operation));
+        } else {
+            operation = operationOn(kAsked.operation);
+        }
         operation.add("component", Value::string(kAsked.component));
         if (!kAsked.field.empty()) {
             operation.add("field", Value::string(kAsked.field));

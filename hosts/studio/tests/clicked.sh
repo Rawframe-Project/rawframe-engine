@@ -15,6 +15,11 @@ here="$(dirname "$0")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 cp -R "$(dirname "$2")" "$work/game"
+# A test may change the copy's scene first: a sed expression in
+# STUDIO_SCENE_EDIT, as a scene authored against an older layout (D452).
+if [ -n "${STUDIO_SCENE_EDIT:-}" ]; then
+    sed -i "$STUDIO_SCENE_EDIT" "$work/game/$3"
+fi
 cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 7200
 host.iteration_rate = 120
