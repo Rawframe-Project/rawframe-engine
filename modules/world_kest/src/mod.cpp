@@ -1,5 +1,6 @@
 #include "rawframe/world_kest/mod.h"
 
+#include "description_words.h"
 #include "rawframe/content/product.h"
 #include "rawframe/world_kest/errors.h"
 
@@ -11,28 +12,6 @@
 namespace rawframe::world_kest {
 
 namespace {
-
-std::unexpected<result::Error> badLine(std::size_t line, std::string_view why) {
-    return std::unexpected<result::Error>{
-        result::fail(result::ErrorClass::InvalidArgument, kWorldKestDomain, code(WorldKestError::BadGameLine), why)
-            .error()
-            .withContext("line", std::to_string(line))};
-}
-
-std::vector<std::string_view> words(std::string_view line) {
-    std::vector<std::string_view> found;
-    std::size_t at = 0;
-    while (at < line.size()) {
-        const std::size_t kStart = line.find_first_not_of(" \t", at);
-        if (kStart == std::string_view::npos) {
-            break;
-        }
-        const std::size_t kEnd = std::min(line.find_first_of(" \t", kStart), line.size());
-        found.push_back(line.substr(kStart, kEnd - kStart));
-        at = kEnd;
-    }
-    return found;
-}
 
 /// One bound as written: a relation, then a version from 1.
 std::optional<ModApiBound> boundOf(std::string_view text) {
