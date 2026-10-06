@@ -84,9 +84,23 @@ struct Placement {
 /// flex container), and how it takes part in its parent's (a flex item, or
 /// placed apart from them). Sides are start, end, top, bottom: start and
 /// end follow the inline direction.
+/// The axes a node scrolls its children along, as Maul UI's scroll axes.
+enum class Scroll : std::uint8_t {
+    None,
+    Horizontal,
+    Vertical,
+    Both
+};
+
 struct Layout {
     Dimension width;
     Dimension height;
+    /// The least the node is, each automatic by default: as CSS's, the
+    /// automatic minimum of a flex item is what its content needs, or
+    /// nought for a scroll container, so a box holding scroll containers
+    /// sets nought to let them, and not it, take what does not fit (D441).
+    Dimension minWidth;
+    Dimension minHeight;
     Direction direction = Direction::Row;
     Justify justify = Justify::Start;
     Align alignItems = Align::Stretch;
@@ -99,6 +113,10 @@ struct Layout {
     /// The border's widths, inside the border box.
     std::array<float, 4> border{};
     Placement placement;
+    /// The axes the node scrolls its children along (D441): a node that
+    /// scrolls is a scroll container, clipping its children at its rounded
+    /// border box, and a wheel turned over it moves them.
+    Scroll scroll = Scroll::None;
 };
 
 /// A shadow of a node's rounded box, as CSS's box-shadow (D381): its color,
@@ -582,6 +600,19 @@ public:
     /// down, then the content they are not in, cut by every clip on the
     /// way, rounded corners included. Refused for a point not finite.
     [[nodiscard]] result::Result<Hit> hit(Node root, float x, float y) const;
+    /// A wheel turned at `x`, `y` (as `hit` takes points) by `deltaX`,
+    /// `deltaY` detents, positive y away from the user as the window gives
+    /// them, `seconds` a monotonic clock's time (D441): the scroll
+    /// container under the point that can move that way scrolls a step,
+    /// eased over the next layouts, the one it scrolled last while turns
+    /// keep coming; whether a container took it. Refused for a point or a
+    /// turn not finite.
+    [[nodiscard]] result::Result<bool> wheel(Node root, float x, float y, float deltaX, float deltaY, double seconds);
+    /// `node` scrolled to `x`, `y` at once, kept within what its children
+    /// reach as the last layout measured it.
+    [[nodiscard]] result::Status scrollTo(Node node, float x, float y);
+    /// `node`'s scroll offset; nought along an axis it does not scroll.
+    [[nodiscard]] std::array<float, 2> scrollOf(Node node) const noexcept;
     /// A font read from a TrueType or OpenType file's bytes, copied, or
     /// from `face` of a collection; refused for bytes that are not one,
     /// checked as hostile, and past the limit. The first becomes the

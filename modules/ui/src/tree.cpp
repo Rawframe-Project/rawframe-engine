@@ -8,11 +8,13 @@
 #include <cstring>
 #include <maul-ui/context.h>
 #include <maul-ui/draw.h>
+#include <maul-ui/event.h>
 #include <maul-ui/font.h>
 #include <maul-ui/glyph_atlas.h>
 #include <maul-ui/interaction.h>
 #include <maul-ui/layout.h>
 #include <maul-ui/node.h>
+#include <maul-ui/scroll.h>
 #include <maul-ui/style.h>
 #include <maul-ui/text.h>
 #include <maul-ui/text_block.h>
@@ -200,6 +202,8 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
     muiLayoutStyle style = muiDefaultLayoutStyle();
     style.sizing.width = dimensionOf(layout.width);
     style.sizing.height = dimensionOf(layout.height);
+    style.sizing.minWidth = dimensionOf(layout.minWidth);
+    style.sizing.minHeight = dimensionOf(layout.minHeight);
     style.container.direction = static_cast<muiFlexDirection>(layout.direction);
     style.container.justify = static_cast<muiJustify>(layout.justify);
     style.container.alignItems = alignOf(layout.alignItems);
@@ -211,6 +215,7 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
     style.padding = edgesOf(layout.padding);
     style.margin = edgesOf(layout.margin);
     style.border = edgesOf(layout.border);
+    style.scrollAxes = static_cast<muiScrollAxes>(layout.scroll);
     if (layout.placement.absolute) {
         style.placement.position = mui_positionAbsolute;
         style.placement.inset.start = dimensionOf(layout.placement.x);
@@ -297,6 +302,29 @@ result::Status Tree::setInteraction(Node node, const Interaction& interaction) {
                                      .layer = static_cast<muiLayerKind>(interaction.layer)};
     return checked(muiNode_SetInteractionValues(state_->context, idOf(node), &kStyle, MUI_INTERACTION_PROPERTIES),
                    "a UI node's interaction was refused");
+}
+
+result::Result<bool> Tree::wheel(Node root, float x, float y, float deltaX, float deltaY, double seconds) {
+    const muiWheelEvent kEvent{.timeNs = seconds > 0 ? static_cast<std::uint64_t>(seconds * 1e9) : 0,
+                               .x = x,
+                               .y = y,
+                               .deltaX = deltaX,
+                               .deltaY = deltaY,
+                               .modifiers = 0,
+                               .player = 0};
+    bool handled = false;
+    RAWFRAME_TRY(checked(muiWheelInput(state_->context, idOf(root), &kEvent, &handled), "a wheel turn was refused"));
+    return handled;
+}
+
+result::Status Tree::scrollTo(Node node, float x, float y) {
+    return checked(muiNode_SetScroll(state_->context, idOf(node), x, y), "a UI node could not be scrolled");
+}
+
+std::array<float, 2> Tree::scrollOf(Node node) const noexcept {
+    std::array<float, 2> offset{};
+    static_cast<void>(muiNode_GetScroll(state_->context, idOf(node), &offset[0], &offset[1]));
+    return offset;
 }
 
 result::Result<Hit> Tree::hit(Node root, float x, float y) const {
@@ -407,6 +435,34 @@ std::uint64_t Tree::textFailures() const noexcept {
     return muiGetTextServiceFailures(state_->text);
 }
 
+namespace {
+
+/// How far the transform at `index` moves what goes through it, when it
+/// only moves it (a scroll container's children are moved so, D441); none
+/// for any other transform, which the list does not carry.
+std::optional<std::array<float, 2>> shiftOf(const muiDrawList& list, std::uint32_t index) {
+    if (index == 0) {
+        return std::array<float, 2>{0, 0};
+    }
+    if (index >= list.transformCount) {
+        return std::nullopt;
+    }
+    const muiDrawTransform& kTransform = list.transforms[index];
+    if (kTransform.a != 1 || kTransform.b != 0 || kTransform.c != 0 || kTransform.d != 1) {
+        return std::nullopt;
+    }
+    return std::array<float, 2>{kTransform.e, kTransform.f};
+}
+
+Rect shifted(const muiRect& rect, const std::array<float, 2>& shift) {
+    Rect made = ui::rectOf(rect);
+    made.x += shift[0];
+    made.y += shift[1];
+    return made;
+}
+
+} // namespace
+
 result::Status Tree::draw(Node root, float scale, DrawList& into) {
     const muiDrawInput kInput{.surface = 0, .scale = scale, .paint = paintText, .paintUser = state_.get()};
     RAWFRAME_TRY(checked(muiBuildDrawList(state_->context, idOf(root), &kInput), "a UI tree could not be drawn"));
@@ -437,19 +493,27 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
     }
     for (std::uint32_t at = 0; at < list.clipCount; ++at) {
         const muiDrawClip& kClip = list.clips[at];
-        into.clips.push_back(Clip{.rect = ui::rectOf(kClip.rect),
-                                  .radii = cornersOf(kClip.radii),
-                                  .parent = kClip.parent,
-                                  .invert = kClip.invert != 0});
+        // A clip moved by a transform that is more than a move is kept
+        // unmoved: it is never the clip of anything drawn.
+        into.clips.push_back(
+            Clip{.rect = shifted(kClip.rect, shiftOf(list, kClip.transform).value_or(std::array<float, 2>{})),
+                 .radii = cornersOf(kClip.radii),
+                 .parent = kClip.parent,
+                 .invert = kClip.invert != 0});
     }
     for (std::uint32_t at = 0; at < list.commandCount; ++at) {
         const muiDrawCommand& kCommand = list.commands[at];
-        if (kCommand.kind == mui_drawImage && kCommand.transform == 0) {
+        const std::optional<std::array<float, 2>> kShift = shiftOf(list, kCommand.transform);
+        if (!kShift.has_value()) {
+            ++into.skipped;
+            continue;
+        }
+        if (kCommand.kind == mui_drawImage) {
             const muiDrawImage& kImage = kCommand.image;
             into.commands.push_back(
                 DrawCommand{.kind = DrawCommand::Kind::Image, .index = static_cast<std::uint32_t>(into.images.size())});
             into.images.push_back(
-                Image{.rect = ui::rectOf(kImage.rect),
+                Image{.rect = shifted(kImage.rect, *kShift),
                       .image = kImage.image,
                       .uv = ui::rectOf(kImage.uv),
                       .slice = {kImage.slice.top, kImage.slice.right, kImage.slice.bottom, kImage.slice.left},
@@ -457,11 +521,11 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
                       .clip = kCommand.clip});
             continue;
         }
-        if (kCommand.kind == mui_drawShadow && kCommand.transform == 0) {
+        if (kCommand.kind == mui_drawShadow) {
             const muiDrawShadow& kShadow = kCommand.shadow;
             into.commands.push_back(DrawCommand{.kind = DrawCommand::Kind::Shadow,
                                                 .index = static_cast<std::uint32_t>(into.shadows.size())});
-            into.shadows.push_back(Shadow{.rect = ui::rectOf(kShadow.rect),
+            into.shadows.push_back(Shadow{.rect = shifted(kShadow.rect, *kShift),
                                           .radii = cornersOf(kShadow.radii),
                                           .color = linearOf(kShadow.color),
                                           .x = kShadow.offsetX,
@@ -472,7 +536,7 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
                                           .clip = kCommand.clip});
             continue;
         }
-        if (kCommand.kind == mui_drawGlyphRun && kCommand.transform == 0) {
+        if (kCommand.kind == mui_drawGlyphRun) {
             const muiDrawGlyphRun& kRun = kCommand.glyphRun;
             if (kRun.firstGlyph > list.glyphCount || kRun.glyphCount > list.glyphCount - kRun.firstGlyph) {
                 ++into.skipped;
@@ -483,8 +547,8 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
             into.glyphRuns.push_back(GlyphRun{.font = Font{.key = kRun.font},
                                               .size = kRun.size,
                                               .color = linearOf(kRun.color),
-                                              .x = kRun.originX,
-                                              .y = kRun.originY,
+                                              .x = kRun.originX + (*kShift)[0],
+                                              .y = kRun.originY + (*kShift)[1],
                                               .first = static_cast<std::uint32_t>(into.glyphs.size()),
                                               .count = kRun.glyphCount,
                                               .clip = kCommand.clip});
@@ -494,14 +558,14 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
             }
             continue;
         }
-        if (kCommand.kind != mui_drawBox || kCommand.transform != 0) {
+        if (kCommand.kind != mui_drawBox) {
             ++into.skipped;
             continue;
         }
         into.commands.push_back(
             DrawCommand{.kind = DrawCommand::Kind::Box, .index = static_cast<std::uint32_t>(into.boxes.size())});
         const muiDrawBox& kBox = kCommand.box;
-        into.boxes.push_back(Box{.rect = ui::rectOf(kBox.rect),
+        into.boxes.push_back(Box{.rect = shifted(kBox.rect, *kShift),
                                  .radii = cornersOf(kBox.radii),
                                  .fill = linearOf(kBox.fill),
                                  .borderWidths = {kBox.borderWidths.top,
