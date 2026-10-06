@@ -183,7 +183,7 @@ private:
                          kNotBaked,
                          "a reflection probe's picture could not be written",
                          {diagnostics::field("texture", graph::nodeIdText(probe.environment)),
-                          diagnostics::field("path", kFile.string())});
+                          diagnostics::field("path", kFile.generic_string())});
             return;
         }
         ++baked_;
@@ -191,7 +191,7 @@ private:
                      kBaked,
                      "a reflection probe's picture baked",
                      {diagnostics::field("texture", graph::nodeIdText(probe.environment)),
-                      diagnostics::field("path", kFile.string()),
+                      diagnostics::field("path", kFile.generic_string()),
                       diagnostics::field("width", std::uint64_t{width_})});
     }
 
