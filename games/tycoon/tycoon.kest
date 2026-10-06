@@ -148,6 +148,7 @@ extern fn Stall.has(entity: world.Entity) -> bool
 extern fn Stall.count() -> i32
 extern fn Stall.entity(index: i32) -> world.Entity
 extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
+extern fn Agent.insert(entity: world.Entity, value: navigation.Agent)
 extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
 extern fn Velocity3D.insert(entity: world.Entity, value: physics3d.Velocity3D)
 
@@ -310,6 +311,9 @@ fn arrive(fromX: f64, x: f64, z: f64) {
                                              0.35, 0.35, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0))
     Pose3D.insert(customer, physics3d.Pose3D(fromX, 0.35, HALF, 0.0, 0.0, 0.0, 1.0))
     Velocity3D.insert(customer, physics3d.Velocity3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    // Steered round the other customers (D411), a little faster than it walks
+    // so it can step aside without falling behind.
+    Agent.insert(customer, navigation.Agent(f32(0.35), f32(STEP * f64(SECOND) * 1.25), f32(1.0), f32(0.0), f32(0.0)))
 }
 
 // Customers walk for their stall the way the navmesh gives round the

@@ -34,9 +34,11 @@ component da4daa93-8f6e-4f41-8ce5-ea5ae423e4a0 tycoon.banner rawframe.ui.Node
 system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step
 # Customers (D392): through the gate, walking before the step moves their
-# bodies; served by the stalls after it; their price taken by the owners.
+# bodies, each an agent the engine steers round the others (D411) between
+# the walk and the step; served by the stalls after it; their price taken
+# by the owners.
 system tycoon.open simulation open write tycoon.gate random arrivals lookup tycoon.stall after rawframe.physics3d.step
-system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d.pose write rawframe.physics3d.velocity entities before rawframe.physics3d.step
+system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d.pose write rawframe.physics3d.velocity entities before rawframe.navigation.avoid
 system tycoon.serve simulation serve read tycoon.stall write tycoon.till read rawframe.physics3d.pose after tycoon.tend
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
 # Rounds (D394): the first owner to the goal wins; every owner is told by
