@@ -27,8 +27,4 @@ if(RAWFRAME_BUILD_TESTS)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"probe_baked\"[^\n]*\"texture\":\"ac452b5e41f745bf\",\"path\":\"[^\"]*plaza_baked/hall.hdr\",\"width\":256.*\"code\":\"bake_summary\"[^\n]*\"probes\":1,\"baked\":1,\"notBaked\":0")
-    if(RAWFRAME_SANITIZE STREQUAL "thread")
-        set_tests_properties(plaza_baked PROPERTIES ENVIRONMENT
-                             "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-    endif()
 endif()

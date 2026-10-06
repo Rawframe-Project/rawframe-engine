@@ -186,3 +186,20 @@ add_subdirectory(launcher/install)
 if(RAWFRAME_BUILD_TESTS)
     add_subdirectory(tests/scenarios)
 endif()
+
+# Every test of a thread build reads ThreadSanitizer's suppressions for the
+# libraries built without it (tools/thread.tsan, D428).
+if(RAWFRAME_BUILD_TESTS AND RAWFRAME_SANITIZE STREQUAL "thread")
+    function(rawframe_suppress_threads directory)
+        get_property(tests DIRECTORY ${directory} PROPERTY TESTS)
+        foreach(each IN LISTS tests)
+            set_property(TEST ${each} DIRECTORY ${directory} APPEND PROPERTY ENVIRONMENT_MODIFICATION
+                         "TSAN_OPTIONS=set:suppressions=${PROJECT_SOURCE_DIR}/tools/thread.tsan")
+        endforeach()
+        get_property(below DIRECTORY ${directory} PROPERTY SUBDIRECTORIES)
+        foreach(each IN LISTS below)
+            rawframe_suppress_threads(${each})
+        endforeach()
+    endfunction()
+    rawframe_suppress_threads(${PROJECT_SOURCE_DIR})
+endif()

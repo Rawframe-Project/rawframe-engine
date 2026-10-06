@@ -221,12 +221,9 @@ function(rawframe_module_tests)
     add_executable(${target} ${arg_SOURCES})
     target_link_libraries(${target} PRIVATE rawframe::${arg_NAME} rawframe::test)
     add_test(NAME ${arg_NAME} COMMAND ${target})
-    # Tests that draw run Mesa's lavapipe, whose own threads the thread
-    # sanitizer cannot see ordered (D278).
-    if(RAWFRAME_SANITIZE STREQUAL "thread")
-        set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT
-                             "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-    elseif(RAWFRAME_SANITIZE MATCHES "address")
+    # A thread build's suppressions are every test's (tools/thread.tsan,
+    # the root CMakeLists.txt, D428).
+    if(RAWFRAME_SANITIZE MATCHES "address")
         # ALSA's configuration, held for the process's life (D401).
         set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT
                              "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/alsa.lsan")

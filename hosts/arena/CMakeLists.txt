@@ -173,10 +173,6 @@ if(RAWFRAME_BUILD_TESTS)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"boxes\":[1-9][0-9]+,\"images\":[1-9][0-9]+,[^\n]*\"shadows\":[1-9][0-9]+,\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,\"mostNodes\":12,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(runners_drawn PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
     endif()
     # Runners' 16:9 view drawn into a 4:3 picture is letterboxed (D369): the
     # captured picture's bars are the game's slate and its view is not.
@@ -191,10 +187,6 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION "boxed: 120 of 120 bar rows slate, 0 view rows slate")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(runners_boxed PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
     endif()
     # Four bots play runners and the first one's World is played on a null
     # device: its thread renders the mixer, and shots reach the master bus.
@@ -311,10 +303,6 @@ if(RAWFRAME_BUILD_TESTS)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(plaza_drawn PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
         # Two bots play Stalls while the first one's view is drawn (D389): the
         # lot, the stalls, and its cursor as models seen from above, its
         # coins' words given in the game's font and drawn (D398), and a picture
@@ -330,10 +318,6 @@ if(RAWFRAME_BUILD_TESTS)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"scene_drawing_summary\"[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9]+,\"captured\":true")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(tycoon_drawn PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
         # Both bots' scenes drawn split-screen (D362): each local player's
         # view drawn into its half, and the picture read back in many
         # shades. The second's frames are not required: under a loaded full
@@ -350,10 +334,6 @@ if(RAWFRAME_BUILD_TESTS)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,[^\n]*\"regionFrames\":[1-9][0-9]+.*\"code\":\"scene_summary\"[^\n]*\"players\":2,\"playerFrames\":[0-9]+.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
-        if(RAWFRAME_SANITIZE STREQUAL "thread")
-            set_tests_properties(plaza_split PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
-        endif()
     endif()
     # Four bots predict their walkers in 3D: at least a thousand ticks
     # confirmed, the rollbacks only those of admission, and no checksum

@@ -1,6 +1,0 @@
-# ThreadSanitizer suppressions for MsQuic (D427). tools/build_quic.sh builds
-# it as a Release library without ThreadSanitizer, so the atomics its
-# bindings order their teardown by are invisible: a binding's lock destroyed
-# after its worker last took it reads as a race though the worker's
-# reference was released first. It is MsQuic's to check.
-race:QuicBindingUninitialize
