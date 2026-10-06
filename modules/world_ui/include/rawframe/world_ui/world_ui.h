@@ -80,6 +80,10 @@ struct Node {
     std::uint32_t edit = 0;
     std::uint32_t editLimit = 0;
     std::uint64_t style = 0;
+    std::uint32_t scroll = 0;
+    /// The four bytes Kest's layout pads the node with, named and nought,
+    /// so a node compared byte for byte reads no stray padding.
+    std::uint32_t reserved = 0;
 };
 
 /// A text field's most bytes: what `rawframe.ui.Typed` holds (D426).
@@ -151,6 +155,8 @@ struct UiStatistics {
     std::uint64_t focused = 0;
     std::uint64_t typed = 0;
     std::uint64_t submitted = 0;
+    /// Wheel turns a scrolling node took (D444).
+    std::uint64_t wheeled = 0;
     /// Nodes naming a class the game's styles do not have (D431).
     std::uint64_t stylesUnknown = 0;
     /// Moves of focus by navigation, and nodes it activated (D430).
@@ -194,6 +200,10 @@ public:
     /// takes the keyboard from the field that held it. The caret is placed
     /// at once, by the last layout.
     void pressAt(float x, float y);
+    /// A wheel turned at `x`, `y` by `deltaX`, `deltaY` detents (D444):
+    /// the scrolling node under it moves its children a step, eased over
+    /// the frames that follow.
+    void wheelAt(float x, float y, float deltaX, float deltaY);
     /// The press let go: the node it went down on is no longer pressed
     /// (D431).
     void release();

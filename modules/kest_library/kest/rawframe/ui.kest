@@ -75,6 +75,11 @@ module rawframe.ui
 // hovered under the mouse, pressed while a press on it is held, focused
 // while it holds focus, each moving as the class's transitions say. An
 // unstyled node holding focus is ringed (D430).
+//
+// A node whose `scroll` is not NO_SCROLL scrolls its children along those
+// axes (D444): it clips them to its padding box, may be smaller than they
+// are, and a wheel turned over it moves them, easing, while it can move
+// that way; children that should keep their sizes set `shrink` to nought.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -126,7 +131,14 @@ struct Node {
     edit: u32
     editLimit: u32
     style: u64
+    scroll: u32
 }
+
+// A node's `scroll`.
+const NO_SCROLL: u32 = 0
+const SCROLL_HORIZONTAL: u32 = 1
+const SCROLL_VERTICAL: u32 = 2
+const SCROLL_BOTH: u32 = 3
 
 // A node's `direction`.
 const ROW: u32 = 0

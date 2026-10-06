@@ -213,6 +213,14 @@ std::optional<std::int64_t> WorldUi::press(float x, float y) const {
     return std::int64_t{0};
 }
 
+void WorldUi::wheelAt(float x, float y, float deltaX, float deltaY) {
+    State& state = *state_;
+    if (state.tree->contains(state.window) &&
+        state.tree->wheel(state.window, x, y, deltaX, deltaY, state.seconds).value_or(false)) {
+        ++state.statistics.wheeled;
+    }
+}
+
 void WorldUi::pressAt(float x, float y) {
     State& state = *state_;
     const auto kHit = state.tree->hit(state.window, x, y);

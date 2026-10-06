@@ -137,7 +137,8 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
                                 {"layer", offsetof(Node, layer)},
                                 {"edit", offsetof(Node, edit)},
                                 {"editLimit", offsetof(Node, editLimit)},
-                                {"style", offsetof(Node, style)}})) {
+                                {"style", offsetof(Node, style)},
+                                {"scroll", offsetof(Node, scroll)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -329,6 +330,11 @@ public:
                 ui_->pressAt(x, y);
                 followCaret();
             });
+            pointing_->onWheel([this](float x, float y, float deltaX, float deltaY) {
+                if (!failed_) {
+                    ui_->wheelAt(x, y, deltaX, deltaY);
+                }
+            });
         }
         // What is typed, to the field holding the keyboard.
         if (typing_ != nullptr && ui_ != nullptr) {
@@ -456,6 +462,7 @@ public:
         if (pointing_ != nullptr) {
             pointing_->answer({});
             pointing_->onPress({});
+            pointing_->onWheel({});
             pointing_->onRelease({});
         }
         if (typing_ != nullptr) {

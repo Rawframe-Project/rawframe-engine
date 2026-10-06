@@ -84,6 +84,8 @@ struct WorldUi::State {
     std::uint32_t held = 0;
     ui::DrawList drawn;
     UiStatistics statistics;
+    /// The last frame's time, which wheel steps ease by.
+    double seconds = 0;
     std::optional<Focus> focus;
     std::optional<view::UiTyping::Caret> caret;
     std::vector<view::Submitted> submitted;

@@ -31,7 +31,7 @@ ui::Dimension dimensionOf(float scale, float offset) noexcept {
 /// `node`'s layout as the tree takes it; none for a number past its
 /// constants.
 std::optional<ui::Layout> layoutOf(const Node& node) noexcept {
-    if (node.direction > 3 || node.justify > 5 || node.alignItems > 4 || node.alignSelf > 4) {
+    if (node.direction > 3 || node.justify > 5 || node.alignItems > 4 || node.alignSelf > 4 || node.scroll > 3) {
         return std::nullopt;
     }
     const auto kSides = [](float value) {
@@ -56,6 +56,7 @@ std::optional<ui::Layout> layoutOf(const Node& node) noexcept {
                       .y = {.automatic = false, .scale = node.yScale, .offset = node.yOffset},
                       .anchorX = node.anchorX,
                       .anchorY = node.anchorY},
+        .scroll = static_cast<ui::Scroll>(node.scroll),
     };
 }
 
@@ -92,9 +93,12 @@ std::optional<ui::Interaction> interactionOf(const Node& node) noexcept {
     constexpr std::array<ui::Interaction::Hits, 3> kHits = {
         ui::Interaction::Hits::Children, ui::Interaction::Hits::Itself, ui::Interaction::Hits::Nothing};
     // A text field takes the presses that land on it (D426), unless it is
-    // left out with its children.
+    // left out with its children. A node that scrolls is hit, so a wheel
+    // over it finds it, and passes on the presses it leaves, as its hit of
+    // nought says (D444).
     const bool kField = node.edit != 0 && node.hit != 2;
-    return ui::Interaction{.hits = kField ? ui::Interaction::Hits::Itself : kHits[node.hit],
+    const bool kScrolls = node.scroll != 0 && node.hit == 0;
+    return ui::Interaction{.hits = kField || kScrolls ? ui::Interaction::Hits::Itself : kHits[node.hit],
                            .passThrough = node.hit == 0 && !kField,
                            .layer = static_cast<ui::Interaction::Layer>(node.layer)};
 }
@@ -531,6 +535,7 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
     }
     RAWFRAME_TRY(state.attach(wanted));
     state.giveStates();
+    state.seconds = seconds;
     RAWFRAME_TRY(state.tree->layOut(state.window, width, height, seconds));
     RAWFRAME_TRY(state.tree->draw(state.window, scale, state.drawn));
     // The field holding the keyboard: its caret and selection drawn over

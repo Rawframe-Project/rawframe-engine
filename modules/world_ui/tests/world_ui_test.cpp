@@ -11,8 +11,9 @@
 // component of typed words in place of its label while it holds any
 // (D427); and an empty field without the keyboard shows its label as its
 // placeholder (D428); Tab moves the keyboard between a view's fields
-// (D429); navigation moves focus without a pointer (D430); and a styled
-// node looks as its class says in each state it is in (D431).
+// (D429); navigation moves focus without a pointer (D430); a styled node
+// looks as its class says in each state it is in (D431); and a node that
+// scrolls moves its children under a wheel turned over it (D444).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -68,11 +69,11 @@ struct Rig {
     }
 
     /// One frame of the player's view at (100, 50), 400 by 300, in a
-    /// window 640 by 360 at `scale`.
-    bool frame(float scale = 1) {
+    /// window 640 by 360 at `scale`, at `seconds`.
+    bool frame(float scale = 1, double seconds = 0) {
         const std::array<UiView, 1> kViews = {
             UiView{.world = &world, .player = player, .x = 100, .y = 50, .width = 400, .height = 300}};
-        return ui->update(kViews, 640, 360, scale).has_value();
+        return ui->update(kViews, 640, 360, scale, seconds).has_value();
     }
 };
 
@@ -675,4 +676,39 @@ RAWFRAME_TEST(AStyledNodeLooksAsItsClassSaysInEachState) {
     rig.put(rig.player, kHudId, button);
     const std::array<float, 3> kUnstyled = kFill();
     RAWFRAME_EXPECT(!kIs(kUnstyled, 1, 0, 0) && !kIs(kUnstyled, 0, 1, 0) && rig.ui->statistics().stylesUnknown == 1);
+}
+
+RAWFRAME_TEST(ANodeThatScrollsMovesItsChildrenUnderTheWheel) {
+    // The panel a column that scrolls, 30 pixels inside its padding; five
+    // rows of 20 in it, 10 apart, reach 140.
+    Rig rig;
+    Node scrolling = panel();
+    scrolling.direction = 2;
+    scrolling.scroll = 2;
+    rig.put(rig.player, kHudId, scrolling);
+    for (int each = 0; each < 5; ++each) {
+        rig.put(*rig.world.create(), kRowId, Node{.heightOffset = 20, .shrink = 0, .fill = 0xC04040FF});
+    }
+    RAWFRAME_EXPECT(rig.frame(1, 1.0));
+    const auto kFirstRow = [&rig]() {
+        const ui::DrawList& kDrawn = rig.ui->drawn();
+        return kDrawn.boxes.size() > 1 ? kDrawn.boxes[1].rect.y : -1.0F;
+    };
+    RAWFRAME_EXPECT(kFirstRow() == 55);
+    // It takes no press: one on it still reaches the game.
+    RAWFRAME_EXPECT(!rig.ui->press(150, 70).has_value());
+    // Over the panel, a turn toward the user moves the rows up, eased.
+    rig.ui->wheelAt(150, 70, 0, -1);
+    for (double seconds = 1.05; seconds < 2; seconds += 0.05) {
+        RAWFRAME_EXPECT(rig.frame(1, seconds));
+    }
+    RAWFRAME_EXPECT(rig.ui->statistics().wheeled == 1);
+    RAWFRAME_EXPECT(kFirstRow() < 55);
+    // Off it, nothing scrolls; a scroll past the constants is left out.
+    rig.ui->wheelAt(150, 200, 0, -1);
+    RAWFRAME_EXPECT(rig.ui->statistics().wheeled == 1);
+    scrolling.scroll = 4;
+    rig.put(rig.player, kHudId, scrolling);
+    RAWFRAME_EXPECT(rig.frame(1, 3.0));
+    RAWFRAME_EXPECT(rig.ui->statistics().leftOut > 0);
 }
