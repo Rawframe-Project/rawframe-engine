@@ -40,6 +40,8 @@ With `--target web`, the folder holds a site and its server instead. Serve `web/
 | Path | Holds |
 |---|---|
 | `modules/<name>/` | One engine module: `include/rawframe/<name>/`, `src/`, `tests/`. |
+| `hosts/<name>/` | One program over the modules: the server, the client, and their tools. |
+| `launcher/<name>/` | The launcher's own, outside every engine closure: its HTTPS client, and `rawframe-install`, which updates a library from a mirror on disk or at an `http` or `https` URL (`--authorities <PEM file>` to trust other than the system's). |
 | `tools/modules.txt` | The module graph: which module may depend on which. The build and the check enforce it. |
 | `tests/harness/` | The test harness. |
 | `cmake/` | Build policy: language, warnings, determinism, configurations. |
