@@ -43,7 +43,7 @@ kest_library: kest document result base
 scene: schema document result base
 authoring: scene schema document result base
 authoring_session: authoring world_tooling network_quic network world_kest kest content scene schema document execution result base
-studio: authoring_session font_import ui texture composition execution diagnostics result base
+studio: authoring_session font_import view ui texture document composition execution diagnostics result base
 network: composition execution diagnostics result base
 network_loopback: network composition execution diagnostics result base
 network_quic: network composition execution diagnostics result base
