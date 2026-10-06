@@ -4,10 +4,16 @@
 // says what is installed. Never part of a client or a server.
 //
 //   rawframe-install update <library> <record> <origin> [--authorities <file>]
+//   rawframe-install follow <library> <subject> <channel> <origin> [--authorities <file>]
 //   rawframe-install rollback <library>
 //   rawframe-install heal <library> <origin> [--authorities <file>]
 //   rawframe-install collect <library>
 //   rawframe-install status <library>
+//
+// `follow` checks a subject's channel on the origin (SPEC-0020, D424): its
+// pointer and the Release it names, each verified against the key set the
+// library pins for the subject's publisher, the pointer past the one the
+// library last followed, then updates to the Release's Composition.
 //
 // An origin is a mirror laid out as a library: a directory, or an http or
 // https URL (D414), whose certificate is verified against the system's
@@ -21,6 +27,7 @@
 #include "rawframe/content/identity.h"
 #include "rawframe/content/library.h"
 #include "rawframe/install/installation.h"
+#include "rawframe/release/release.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -99,6 +106,29 @@ int run(std::string_view command, const std::filesystem::path& library, int argc
         report("updated", *kDone);
         return 0;
     }
+    if (command == "follow" && argc == 6) {
+        const auto kChannel = rawframe::release::channelNamed(argv[4]);
+        if (!kChannel.has_value()) {
+            std::fputs("rawframe-install: a channel is stable, beta, or nightly\n", stderr);
+            return 1;
+        }
+        auto origin = originOf(argv[5], authorities);
+        const auto kDone = origin.has_value() ? installation->follow(argv[3], *kChannel, **origin)
+                                              : rawframe::result::Result<rawframe::install::Followed>{
+                                                    std::unexpected<rawframe::result::Error>{origin.error().clone()}};
+        if (!kDone.has_value()) {
+            print(kDone.error());
+            return 1;
+        }
+        std::printf("followed %s %s to %s, release %s, sequence %lld\n",
+                    argv[3],
+                    argv[4],
+                    kDone->version.c_str(),
+                    rawframe::content::ContentDigest{.bytes = kDone->release}.text().c_str(),
+                    static_cast<long long>(kDone->sequence));
+        report("updated", kDone->update);
+        return 0;
+    }
     if (command == "heal" && argc == 4) {
         auto origin = originOf(argv[3], authorities);
         const auto kDone = origin.has_value() ? installation->heal(**origin)
@@ -147,6 +177,7 @@ int main(int argc, char** argv) {
     const int kStatus = argc >= 3 ? run(argv[1], argv[2], argc, argv) : 2;
     if (kStatus == 2) {
         std::fputs("usage: rawframe-install update <library> <record> <origin> [--authorities <file>]\n"
+                   "       rawframe-install follow <library> <subject> <channel> <origin> [--authorities <file>]\n"
                    "       rawframe-install rollback <library>\n"
                    "       rawframe-install heal <library> <origin> [--authorities <file>]\n"
                    "       rawframe-install collect <library>\n"

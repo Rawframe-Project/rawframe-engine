@@ -9,6 +9,10 @@
 # kept Composition needs. Then the same mirror, served over HTTPS by a web
 # server whose certificate a test authority signed (D414), updates a second
 # library to the same blobs, once that authority is trusted and not before.
+# Last, the publisher releases each on the stable channel (SPEC-0020, D424),
+# and a third library follows it: through a release, past a replayed
+# pointer and one signed by a key it does not pin, both refused, to a
+# rollback, after which it plays.
 #
 # usage: runners_updated.sh <rawframe-install> <rawframe-build> <rawframe-arena> <repository> <cooked content> <work directory>
 set -euo pipefail
@@ -135,4 +139,48 @@ grep -q 'fetched 0 blobs' "$work/fetched-again.txt"
 diff -r "$player/sha256" "$fetched/sha256"
 player=$fetched
 play
-echo "runners updated, rolled back, healed, and played from the player's library, and fetched over HTTPS"
+
+# Channels (SPEC-0020, D424): the publisher releases 0.1.0 on stable, and a
+# third library follows it over HTTPS; then 0.2.0, which it follows with
+# nothing to fetch.
+over=("https://localhost:$port" --authorities "$keys/authority.pem")
+"$build" release "$mirror" "$work/0.1.0.composition" 0.1.0 stable "$work/keys/$kid.key" | tee "$work/release-1.txt"
+first_release=$(awk '{ print $2 }' "$work/release-1.txt")
+followed=$work/followed
+mkdir -p "$followed/keys"
+cp "$work/keys/rawframe.keys" "$followed/keys/"
+"$install" follow "$followed" rawframe/runners stable "${over[@]}" | tee "$work/follow-1.txt"
+grep -q "followed rawframe/runners stable to 0.1.0, release $first_release, sequence 1" "$work/follow-1.txt"
+mkdir -p "$work/replay"
+cp "$mirror/channels/rawframe/runners/stable" "$mirror/channels/rawframe/runners/stable.sig" "$work/replay/"
+"$build" release "$mirror" "$work/0.2.0.composition" 0.2.0 stable "$work/keys/$kid.key"
+"$install" follow "$followed" rawframe/runners stable "${over[@]}" | tee "$work/follow-2.txt"
+grep -q "to 0.2.0, .*sequence 2" "$work/follow-2.txt"
+grep -q 'fetched 0 blobs' "$work/follow-2.txt"
+# The first pointer served again is a replay, and changes nothing.
+mkdir -p "$work/current"
+cp "$mirror/channels/rawframe/runners/stable" "$mirror/channels/rawframe/runners/stable.sig" "$work/current/"
+cp "$work/replay/stable" "$work/replay/stable.sig" "$mirror/channels/rawframe/runners/"
+if "$install" follow "$followed" rawframe/runners stable "${over[@]}" 2>"$work/replayed.txt"; then
+    echo "a replayed channel pointer was followed"
+    exit 1
+fi
+grep -q 'a replay' "$work/replayed.txt"
+cp "$work/current/stable" "$work/current/stable.sig" "$mirror/channels/rawframe/runners/"
+# A pointer signed by a key the library does not pin is refused.
+"$build" key rawframe "$work/other" >/dev/null
+other=$(ls "$work/other"/*.key)
+"$build" point "$mirror" rawframe/runners stable "$first_release" "$other" >/dev/null
+if "$install" follow "$followed" rawframe/runners stable "${over[@]}" 2>"$work/unsigned.txt"; then
+    echo "a channel pointer signed by an unknown key was followed"
+    exit 1
+fi
+cp "$work/current/stable" "$work/current/stable.sig" "$mirror/channels/rawframe/runners/"
+# A rollback: stable points back at 0.1.0 under a higher sequence.
+"$build" point "$mirror" rawframe/runners stable "$first_release" "$work/keys/$kid.key"
+"$install" follow "$followed" rawframe/runners stable "${over[@]}" | tee "$work/follow-3.txt"
+grep -q "to 0.1.0, release $first_release, sequence 3" "$work/follow-3.txt"
+player=$followed
+play
+echo "runners updated, rolled back, healed, and played from the player's library, fetched over HTTPS," \
+    "and followed on a channel through a release, a replay, an unknown key, and a rollback"

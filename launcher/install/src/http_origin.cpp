@@ -28,6 +28,10 @@ public:
         return fetch(content::blobPathOf(blob), ceiling);
     }
 
+    result::Result<std::vector<std::byte>> record(std::string_view path, std::uint64_t ceiling) override {
+        return fetch(path, ceiling);
+    }
+
 private:
     /// The library's own relative path, below the base: the same names
     /// content::Library gives a library on disk.

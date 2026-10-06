@@ -3,7 +3,7 @@
 # A launcher program: no engine closure contains it.
 rawframe_host(NAME install_tool OUTPUT rawframe-install
     SOURCES src/http_origin.cpp src/main.cpp
-    DEPS http install content result base
+    DEPS http install release content result base
 )
 
 if(RAWFRAME_BUILD_TESTS)

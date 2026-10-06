@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- Releases and channels (SPEC-0020): `rawframe-build release` publishes a Composition to a mirror as a signed Release and points a channel (stable, beta, nightly) at it, and `rawframe-build point` re-points one, a rollback being a higher sequence naming an older Release. `rawframe-install follow <library> <subject> <channel> <origin>` checks the channel, every record verified against the publisher's pinned keys, refuses a replayed pointer, and installs the Release's Composition.
 - A present system reads the UI node under the mouse through `ui.hovered()`, its press code or nought, to light it; Stalls' purse is lighter under the mouse.
 - UI nodes take presses: a `rawframe.ui.Node` whose `hit` is `HIT_SELF` takes a mouse or touch press that lands on it, which no game action then sees, and the sample function reads the node's `press` through `input.uiPressed()`. Nodes may root activation, modal, and overlay layers. A zeroed node passes every press on, so existing games are unchanged. Stalls' purse panel takes clicks, so clicking it builds nothing under it.
 - A server's self-signed QUIC identity is renewed a day before it ends (or after `network.quic.renew_ms`): connections made from then on are presented the new one and the fingerprint file is rewritten, while those already made keep theirs. A web server exported to run longer than thirteen days stays reachable from newly loaded pages.
