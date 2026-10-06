@@ -22,7 +22,7 @@ component bd13f2d3-dc87-46f2-b480-ff2eaf5fcdf1 tycoon.customer Customer
 component 160c062b-09b3-46a0-8435-9575f99339c1 tycoon.till Till
 component 11a256e6-f691-4f0f-8feb-aef4694891f0 tycoon.gate Gate
 component 7c496087-7144-4230-85e9-fd119433276c tycoon.round Round
-component c6cf12bf-81c1-4db9-a042-e3883a084d52 tycoon.named Named
+component c6cf12bf-81c1-4db9-a042-e3883a084d52 tycoon.named rawframe.ui.Typed
 # A stall's owner is an entity: sent as one, each client reads its own
 # name for it (D390).
 entity tycoon.stall owner
@@ -32,6 +32,7 @@ component 991e8dec-fbd5-4790-954b-283eea27fe90 tycoon.view rawframe.model.Camera
 component 043c72ce-e948-490a-80d6-e3a22fbdb695 tycoon.purse rawframe.ui.Node
 component e7564868-c06a-4065-ad77-a8ab9ea2aa71 tycoon.cheer Cheer
 component da4daa93-8f6e-4f41-8ce5-ea5ae423e4a0 tycoon.banner rawframe.ui.Node
+component 3efabfb3-083d-491e-8aea-23c41ec92868 tycoon.board rawframe.ui.Node
 component 9547d96d-27fb-4ec0-950c-a990145d2d97 tycoon.sign rawframe.ui.Node
 system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step
@@ -44,7 +45,7 @@ system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d
 system tycoon.serve simulation serve read tycoon.stall write tycoon.till read rawframe.physics3d.pose after tycoon.tend
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
 system tycoon.collect simulation collect write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.earn
-system tycoon.sign simulation sign read tycoon.owner entities after tycoon.collect
+system tycoon.sign simulation sign read tycoon.owner write tycoon.named entities after tycoon.collect
 # Rounds (D394): the first owner to the goal wins; every owner is told by
 # message, and the lot starts afresh.
 system tycoon.judge simulation judge write tycoon.round lookup tycoon.owner lookup tycoon.stall lookup tycoon.customer after tycoon.earn
@@ -63,9 +64,9 @@ command sign controls.Sign
 # Networked play: every owner, stall, and customer is sent to every client,
 # which shows the customers walking between the states it receives (D392);
 # each player's hand is its input, and its pose the plot under its cursor.
-replicate tycoon.owner tycoon.stall rawframe.physics3d.body rawframe.physics3d.pose
+replicate tycoon.owner tycoon.stall tycoon.named rawframe.physics3d.body rawframe.physics3d.pose
 interpolate rawframe.physics3d.pose
-player tycoon.hand tycoon.owner rawframe.physics3d.pose
+player tycoon.hand tycoon.owner rawframe.physics3d.pose tycoon.named
 input tycoon.hand
 # A client makes its hand from its player's actions (tycoon.actions) with
 # sample.kest, from keys, a mouse, a gamepad, or a touch screen (the left
@@ -90,9 +91,12 @@ label b777d548435986ab tycoon.strings hud.lost round
 presentation tycoon.look on rawframe.physics3d.body
 present tycoon.dress dress read rawframe.physics3d.body write tycoon.look
 present tycoon.tint tint read tycoon.stall write tycoon.look
-presentation tycoon.mark tycoon.view tycoon.purse tycoon.cheer tycoon.banner tycoon.sign on player
+presentation tycoon.mark tycoon.view tycoon.purse tycoon.cheer tycoon.banner tycoon.sign tycoon.board on player
 present tycoon.mark mark read tycoon.owner write tycoon.mark
 present tycoon.frame frame read rawframe.physics3d.pose write tycoon.view
 present tycoon.purse purse read tycoon.owner write tycoon.purse
 present tycoon.cheer cheer write tycoon.cheer write tycoon.banner
 present tycoon.field field write tycoon.sign
+# The owner's sign as the server keeps it, shown under the field (D427).
+present tycoon.board board read tycoon.named write tycoon.board
+ui tycoon.board shows tycoon.named

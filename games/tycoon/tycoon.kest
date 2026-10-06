@@ -83,12 +83,6 @@ struct Owner {
     collected: i64
 }
 
-// An owner's sign, as its player last wrote it (D426): kept by the server,
-// shown nowhere yet.
-struct Named {
-    sign: ui.Typed
-}
-
 // A stall, by its owner and its plot, and its level, one to TOP.
 struct Stall {
     owner: world.Entity
@@ -140,7 +134,6 @@ extern fn Messages.won(to: world.Entity, value: Won)
 extern fn CommandCount.sign() -> i32
 extern fn Command.sign(index: i32) -> controls.Sign
 extern fn CommandFrom.sign(index: i32) -> world.Entity
-extern fn Named.insert(entity: world.Entity, value: Named)
 extern fn CommandCount.collect() -> i32
 extern fn Command.collect(index: i32) -> controls.Collect
 extern fn CommandFrom.collect(index: i32) -> world.Entity
@@ -325,9 +318,10 @@ fn collect(count: i32, owners: [Owner], entities: [world.Entity]) {
     }
 }
 
-// What an owner's player wrote on its sign, kept with the owner; a sign
-// from a player who owns nothing here is no one's.
-fn sign(count: i32, owners: [Owner], entities: [world.Entity]) {
+// What an owner's player wrote on its sign, kept with the owner and sent
+// to every client (D426, D427); a sign from a player who owns nothing here
+// is no one's.
+fn sign(count: i32, owners: [Owner], signs: [ui.Typed], entities: [world.Entity]) {
     let asks = CommandCount.sign()
     let a = 0
     while a < asks {
@@ -335,7 +329,7 @@ fn sign(count: i32, owners: [Owner], entities: [world.Entity]) {
         let i = 0
         while i < count {
             if entities[i] == from && owners[i].joined == u32(1) {
-                Named.insert(from, Named(Command.sign(a).typed))
+                signs[i] = Command.sign(a).typed
             }
             i = i + 1
         }
@@ -364,6 +358,28 @@ fn field(count: i32, signs: [ui.Node]) {
         signs[i].press = controls.SIGN
         signs[i].edit = ui.EDIT_LINE
         signs[i].editLimit = u32(32)
+        i = i + 1
+    }
+}
+
+// The owner's sign as the server keeps it (D427), in gold under the field:
+// its words are the sign's, which the `ui ... shows` line puts in place of
+// a label.
+fn board(count: i32, signs: [ui.Typed], boards: [ui.Node]) {
+    let i = 0
+    while i < count {
+        boards[i].padding = 6.0
+        boards[i].margin = 12.0
+        boards[i].order = 2
+        boards[i].fill = u32(0)
+        if signs[i].length > u32(0) {
+            boards[i].fill = u32(0x101820C0)
+        }
+        boards[i].radius = 6.0
+        boards[i].font = HUD_FONT
+        boards[i].textSize = 18.0
+        boards[i].textColor = u32(0xE8B83AFF)
+        boards[i].textWrap = ui.NO_WRAP
         i = i + 1
     }
 }

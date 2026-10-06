@@ -16,7 +16,7 @@ component bd13f2d3-dc87-46f2-b480-ff2eaf5fcdf1 tycoon.customer Customer
 component 160c062b-09b3-46a0-8435-9575f99339c1 tycoon.till Till
 component 11a256e6-f691-4f0f-8feb-aef4694891f0 tycoon.gate Gate
 component 7c496087-7144-4230-85e9-fd119433276c tycoon.round Round
-component c6cf12bf-81c1-4db9-a042-e3883a084d52 tycoon.named Named
+component c6cf12bf-81c1-4db9-a042-e3883a084d52 tycoon.named rawframe.ui.Typed
 entity tycoon.stall owner
 system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step

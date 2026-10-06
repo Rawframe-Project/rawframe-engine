@@ -79,7 +79,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
         # Stalls' sign field written in (D426): a click gives it the
         # keyboard, the keys type into it and no action, Return gives its
         # text to the sample, which sends it to the server as the owner's
-        # sign, a command the server takes.
+        # sign, a command the server takes; the sign comes back to the client
+        # and its board shows it (D427).
         add_test(NAME client_types_stalls
                  COMMAND ${RAWFRAME_XVFB_RUN} -a -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
@@ -90,7 +91,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "typed ann at 60,95.*\"commandsTaken\":1,\"commandsLimited\":0.*\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"presses\":1,\"focused\":1,\"typed\":[4-9][0-9]*,\"submitted\":1,.*\"commandsSent\":1,")
+                             "typed ann at 60,95.*\"commandsTaken\":1,\"commandsLimited\":0.*\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"presses\":1,\"focused\":1,\"typed\":[4-9][0-9]*,\"submitted\":1,\"typedShown\":[1-9][0-9]*,.*\"commandsSent\":1,")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(client_types_stalls PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")
