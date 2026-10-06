@@ -2,10 +2,10 @@
 # private to this module: a tree of nodes the engine keys, laid out by
 # Scale+Offset sizing and flexbox. Client and tools only: the dedicated
 # server links none of it.
-rawframe_module(NAME ui SOURCES src/tree.cpp DEPS result base)
+rawframe_module(NAME ui SOURCES src/text_edit.cpp src/tree.cpp src/tree_edit.cpp DEPS result base)
 target_link_libraries(rawframe_ui PRIVATE maul-ui)
 
-rawframe_module_tests(NAME ui SOURCES tests/text_test.cpp tests/tree_test.cpp)
+rawframe_module_tests(NAME ui SOURCES tests/edit_test.cpp tests/text_test.cpp tests/tree_test.cpp)
 if(TARGET rawframe_ui_tests)
     target_compile_definitions(rawframe_ui_tests PRIVATE RAWFRAME_UI_FONTS="${CMAKE_CURRENT_SOURCE_DIR}/tests/fonts/")
 endif()

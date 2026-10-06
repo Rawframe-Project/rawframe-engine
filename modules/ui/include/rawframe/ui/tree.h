@@ -13,6 +13,7 @@
 #include "rawframe/result/result.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -380,6 +381,61 @@ struct Hit {
     bool passThrough = true;
 };
 
+/// A place between grapheme clusters of a node's text (D426): a byte
+/// offset into its UTF-8 text, and whether it keeps to the text before it
+/// where the offset has two places (a wrapped line's end or the next one's
+/// start, either side of a change of direction).
+struct TextPosition {
+    std::uint32_t offset = 0;
+    bool upstream = false;
+    friend constexpr bool operator==(TextPosition, TextPosition) noexcept = default;
+};
+
+/// Where a position moves to in a node's text as it is drawn: by grapheme
+/// cluster in the text's order or on screen, by word (UAX #29 segments with
+/// a letter or a number), to its line's ends, a line up or down, or to the
+/// text's ends.
+enum class TextMove : std::uint8_t {
+    NextCluster,
+    PreviousCluster,
+    Left,
+    Right,
+    NextWordStart,
+    NextWordEnd,
+    PreviousWordStart,
+    LineStart,
+    LineEnd,
+    LineUp,
+    LineDown,
+    TextStart,
+    TextEnd
+};
+
+/// A styled part of an input method's composition, in bytes of its text:
+/// plain, still to convert (a thin underline), the part a conversion works
+/// on now (a thick one), or converted and not yet committed (a thin one).
+struct CompositionPart {
+    enum class Style : std::uint8_t {
+        Plain,
+        Underline,
+        Target,
+        Converted
+    };
+    std::uint32_t start = 0;
+    std::uint32_t length = 0;
+    Style style = Style::Underline;
+};
+
+/// The bytes of a node's text a range covers, `end` the byte after it.
+struct TextRange {
+    std::uint32_t start = 0;
+    std::uint32_t end = 0;
+    friend constexpr bool operator==(TextRange, TextRange) noexcept = default;
+};
+
+/// Composition parts one composition has at most.
+inline constexpr std::size_t kMaximumCompositionParts = 32;
+
 class Tree {
 public:
     /// A tree of at most `maximumNodes` nodes and `maximumFonts` fonts,
@@ -395,6 +451,10 @@ public:
 
     /// A new root, `key` its owner's; refused past the limit.
     [[nodiscard]] result::Result<Node> add(std::uint64_t key);
+    /// The same, its text editable (D426): only such a node's is, since
+    /// Maul UI's editing finds a node's text by a key the node is made
+    /// with. It shows its text once it is set.
+    [[nodiscard]] result::Result<Node> addEditable(std::uint64_t key);
     /// `child`, a root, becomes `parent`'s last child.
     [[nodiscard]] result::Status attach(Node parent, Node child);
     /// `node` becomes a root with its subtree; a root stays as it is.
@@ -446,6 +506,48 @@ public:
     /// The times text could not be laid out for want of memory, and so
     /// measured as empty and drew nothing.
     [[nodiscard]] std::uint64_t textFailures() const noexcept;
+
+    // Editing a node's text (D426), as it was last laid out; positions and
+    // rectangles in the node's border box, pixels from its top left. Each
+    // is refused for a node not added editable.
+
+    /// The text `node` shows, valid until it changes; empty for none.
+    [[nodiscard]] std::string_view textOf(Node node) const noexcept;
+    /// The position nearest the point: on the line at its y, at the edge of
+    /// the grapheme cluster nearer its x. Refused for a point not finite.
+    [[nodiscard]] result::Result<TextPosition> textAt(Node node, float x, float y) const;
+    /// Where the caret of `position` is drawn: a rectangle no wider than
+    /// nought, its line's top and height.
+    [[nodiscard]] result::Result<Rect> caretOf(Node node, TextPosition position) const;
+    /// `from` moved through the text; one that cannot move stays. Moving a
+    /// line up or down keeps `preferredX`, NaN for `from`'s own caret's.
+    [[nodiscard]] result::Result<TextPosition>
+    moved(Node node, TextPosition from, TextMove move, float preferredX) const;
+    /// The rectangles `range` covers, a line's side by side clusters as
+    /// one, lines from the top.
+    [[nodiscard]] result::Result<std::vector<Rect>> rangeRects(Node node, TextRange range) const;
+    /// What deleting from `offset` removes: back one code point as
+    /// Backspace does (a cluster with an emoji, a regional indicator, or a
+    /// keycap whole, a CR with its LF), or forward the next cluster.
+    [[nodiscard]] result::Result<TextRange> deletion(Node node, std::uint32_t offset, bool forward) const;
+    /// `range` of the text replaced by `text`, UTF-8; a composition before
+    /// or after it moves, and one it overlaps ends. Refused for a range
+    /// past the text.
+    [[nodiscard]] result::Status replaceText(Node node, TextRange range, std::string_view text);
+    /// The input method's composition: `text` replaces the one there is, or
+    /// goes in at `offset` when there is none, drawn underlined by `parts`
+    /// (all of it thinly when there are none); empty text removes it.
+    /// Refused for parts past the text or past kMaximumCompositionParts.
+    [[nodiscard]] result::Status
+    setComposition(Node node, std::uint32_t offset, std::string_view text, std::span<const CompositionPart> parts);
+    /// The composition ends, its text kept as typed.
+    [[nodiscard]] result::Status endComposition(Node node);
+    /// Where the composition is; the empty range at nought for none.
+    [[nodiscard]] result::Result<TextRange> composition(Node node) const;
+    /// `node`'s border box where the last layout placed it, in the space
+    /// points hit `root` in (the root at its own rectangle); refused for a
+    /// node not in `root`'s subtree.
+    [[nodiscard]] result::Result<Rect> placeOf(Node root, Node node) const;
 
     /// What `root`'s subtree, laid out, draws, into `into`, its last
     /// contents replaced; `scale` device pixels a pixel, which edges snap to.
