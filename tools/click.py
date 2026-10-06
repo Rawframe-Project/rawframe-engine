@@ -13,12 +13,16 @@
 # after its click, a key at a time, then Return (D426); a dot, a comma, a
 # minus, and a space are typed as their keys. An argument `keys=` and X key
 # names apart by commas presses those keys alone, a third of a second apart,
-# and waits a second and a half after them (D430). Five seconds after, it
-# stops the program whose pid its pid file holds (D430), whose iterations
-# only bound it, and waits for the process it watches to end.
+# and waits a second and a half after them (D430). An argument `wheel=`, a
+# point, and a count turns the wheel there that many detents toward the
+# user, or away for a count below nought, 0.15 seconds apart (D441). Five
+# seconds after, it stops the program whose pid its pid file holds (D430),
+# whose iterations only bound it, and waits for the process it watches to
+# end.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
-#                 <x>,<y>[:<text>] | keys=<key>[,<key>...] [...]
+#                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
+#                 | wheel=<x>,<y>,<turns> [...]
 
 import ctypes
 import ctypes.util
@@ -93,6 +97,10 @@ def main():
         if argument.startswith("keys="):
             points.append((None, None, argument[len("keys="):].split(",")))
             continue
+        if argument.startswith("wheel="):
+            at, y, turns = (int(part) for part in argument[len("wheel="):].split(","))
+            points.append((at, y, turns))
+            continue
         place, _, text = argument.partition(":")
         points.append((*(int(side) for side in place.split(",")), text))
     x = ctypes.CDLL(ctypes.util.find_library("X11"))
@@ -136,6 +144,19 @@ def main():
     for at, y, text in points:
         if not alive(pid):
             break
+        if isinstance(text, int):
+            # Button 5 turns the wheel toward the user, 4 away from them.
+            xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
+            x.XFlush(display)
+            time.sleep(0.25)
+            for _ in range(abs(text)):
+                xtest.XTestFakeButtonEvent(display, 5 if text > 0 else 4, 1, 0)
+                xtest.XTestFakeButtonEvent(display, 5 if text > 0 else 4, 0, 0)
+                x.XFlush(display)
+                time.sleep(0.15)
+            print(f"turned the wheel {text} at {at},{y}")
+            time.sleep(1)
+            continue
         if at is None:
             for name in text:
                 press(name, 0.1)
