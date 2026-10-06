@@ -149,3 +149,13 @@ const NO_LAYER: u32 = 0
 const ACTIVATION: u32 = 1
 const MODAL: u32 = 2
 const OVERLAY: u32 = 3
+
+extern fn UI.hovered() -> i64
+
+// The `press` of the UI node under the client's mouse, where a press would
+// land, or nought for none (D422): a present system lights it. Nought in
+// every simulation, on a server and in a client's prediction, and for any
+// local player but the first, whose mouse it is.
+fn hovered() -> i64 {
+    return UI.hovered()
+}

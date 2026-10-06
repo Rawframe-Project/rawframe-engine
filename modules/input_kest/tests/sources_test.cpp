@@ -363,7 +363,7 @@ RAWFRAME_TEST(APressTheUiTakesReachesTheSampleAndNoAction) {
     input::Feed feed;
     view::UiPointing pointing;
     // A panel over the window's left 100 pixels, whose press code is 7.
-    pointing.answer([](float x, float /*y*/) -> std::optional<std::int64_t> {
+    pointing.answer([](float x, float /*y*/, bool /*pressing*/) -> std::optional<std::int64_t> {
         return x < 100 ? std::optional<std::int64_t>{7} : std::nullopt;
     });
     auto sources = makeInputSources(

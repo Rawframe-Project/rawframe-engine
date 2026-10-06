@@ -68,6 +68,9 @@ public:
                                          world::TickRate rate,
                                          diagnostics::Emitter emitter = {});
 
+    /// The press code of the UI node under the mouse from now on, which
+    /// `UI.hovered` answers its present systems; nought for none (D422).
+    void hover(std::int64_t code) noexcept;
     [[nodiscard]] PresentationStatistics statistics() const noexcept;
     [[nodiscard]] world_animation::AnimationStatistics animationStatistics() const noexcept;
 

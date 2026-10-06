@@ -2,6 +2,7 @@
 
 #include "animation_doors.h"
 #include "effect_doors.h"
+#include "hover_doors.h"
 #include "message_doors.h"
 #include "mod_services.h"
 #include "navigation.h"
@@ -12,6 +13,7 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_kest/errors.h"
+#include "rawframe/world_kest/hover.h"
 #include "rawframe/world_kest/kest_systems.h"
 #include "rawframe/world_replication/client_worlds.h"
 
@@ -46,6 +48,7 @@ struct ClientPresentation::State {
     /// refuse, and no mod runs.
     AnimationDoorContext animationDoors;
     PlayerDoorContext playerDoor;
+    HoverDoorContext hoverDoor;
     PhysicsDoorContext physicsDoors;
     std::unique_ptr<ModServices> services;
     std::unique_ptr<EffectDoors> effects;
@@ -111,6 +114,7 @@ struct ClientPresentation::State {
             RAWFRAME_TRY(kest::addStandardMath(doors));
             RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors));
             RAWFRAME_TRY(addPlayerDoor(doors, &playerDoor));
+            RAWFRAME_TRY(addHoverDoor(doors, &hoverDoor));
             RAWFRAME_TRY(services->addDoors(doors));
             RAWFRAME_TRY(effects->addDoors(doors));
             RAWFRAME_TRY(messages->addDoors(doors));
@@ -249,6 +253,10 @@ result::Status ClientPresentation::present(world::World& mirror,
     return {};
 }
 
+void ClientPresentation::hover(std::int64_t code) noexcept {
+    state_->hoverDoor.hovered = code;
+}
+
 PresentationStatistics ClientPresentation::statistics() const noexcept {
     return state_->statistics;
 }
@@ -261,7 +269,8 @@ namespace {
 
 constexpr diagnostics::EventIdentity kPresentedSummary{"world_kest", "presented_summary"};
 constexpr diagnostics::EventIdentity kUnpresented{"world_kest", "presentation_unavailable"};
-constexpr std::string_view kPresentedMaybe[] = {kPresentationPlan.name, world_replication::kClientWorlds.name};
+constexpr std::string_view kPresentedMaybe[] = {
+    kPresentationPlan.name, world_replication::kClientWorlds.name, kUiHover.name};
 constexpr std::uint64_t kMostTicksPerFrame = 4;
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
@@ -287,6 +296,9 @@ public:
         RAWFRAME_TRY_ASSIGN(rate_,
                             world::TickRate::of(static_cast<std::uint32_t>(std::clamp<std::uint64_t>(kRate, 1, 1000))));
         clients_ = clients;
+        if (context.has(kUiHover.name)) {
+            RAWFRAME_TRY_ASSIGN(hover_, context.capability(kUiHover));
+        }
         return {};
     }
 
@@ -326,6 +338,8 @@ public:
             if (kTicks != 0) {
                 each.seenMessages = clients_->readMessages(kClient, each.seenMessages, each.arrived);
             }
+            // The mouse is the first player's (D422).
+            each.presentation->hover(player == 0 && hover_ != nullptr ? hover_->hovered() : 0);
             for (std::uint64_t tick = 0; tick < std::min(kTicks, kMostTicksPerFrame); ++tick) {
                 const std::span<const world_replication::ReceivedMessage> kArrived =
                     tick == 0 ? std::span{each.arrived} : std::span<const world_replication::ReceivedMessage>{};
@@ -367,6 +381,7 @@ public:
 
 private:
     world_replication::ClientWorlds* clients_ = nullptr;
+    const UiHover* hover_ = nullptr;
     /// Each local player's presentation, and the game messages it has read.
     struct Presented {
         std::unique_ptr<ClientPresentation> presentation;

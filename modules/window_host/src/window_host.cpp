@@ -54,6 +54,12 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     while (std::optional<window::Event> event = windows.next()) {
         closing = closing || event->kind == window::EventKind::CloseRequested;
         bridge_->take(*event);
+        // Where the mouse is, for what the UI shows under it (D422).
+        if (event->kind == window::EventKind::CursorMoved) {
+            pointing_.pointAt(event->pointer.position.x, event->pointer.position.y);
+        } else if (event->kind == window::EventKind::CursorLeft || event->kind == window::EventKind::FocusLost) {
+            pointing_.left();
+        }
     }
     if (closing) {
         return end();

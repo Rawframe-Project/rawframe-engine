@@ -7,6 +7,7 @@
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_kest/hover.h"
 #include "rawframe/world_kest/layouts.h"
 #include "rawframe/world_localization/text.h"
 #include "rawframe/world_replication/client_worlds.h"
@@ -36,7 +37,7 @@ constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 /// The fonts' bytes, all together (D386).
 constexpr std::uint64_t kFontBudgetBytes = std::uint64_t{64} * 1024 * 1024;
-constexpr std::string_view kProvided[] = {kUiFrames.name};
+constexpr std::string_view kProvided[] = {kUiFrames.name, world_kest::kUiHover.name};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        view::kPlayerViews.name,
@@ -151,7 +152,7 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
 
 /// Lays out each local player's UI in its view in `presentation_extract`
 /// and lends what it drew.
-class UiParticipant final : public composition::Participant, public UiFrames {
+class UiParticipant final : public composition::Participant, public UiFrames, public world_kest::UiHover {
 public:
     result::Status load(composition::ParticipantContext& context) {
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
@@ -262,9 +263,9 @@ public:
         // Presses anywhere in the window, a mouse being every local
         // player's, against the UI as last laid out (D421).
         if (pointing_ != nullptr && ui_ != nullptr) {
-            pointing_->answer([this](float x, float y) -> std::optional<std::int64_t> {
+            pointing_->answer([this](float x, float y, bool pressing) -> std::optional<std::int64_t> {
                 const std::optional<std::int64_t> kTaken = failed_ ? std::nullopt : ui_->press(x, y);
-                presses_ += kTaken.has_value() ? 1 : 0;
+                presses_ += pressing && kTaken.has_value() ? 1 : 0;
                 return kTaken;
             });
         }
@@ -370,6 +371,9 @@ public:
         if (capability == kUiFrames.name) {
             return composition::provideAs<UiFrames>(*this);
         }
+        if (capability == world_kest::kUiHover.name) {
+            return composition::provideAs<world_kest::UiHover>(*this);
+        }
         return {};
     }
 
@@ -386,6 +390,11 @@ public:
 
     std::shared_ptr<const texture::Texture> image(std::uint64_t id) const override {
         return images_.texture(id, tick_);
+    }
+
+    // What the host lends of the pointer, where the mouse is now (D422).
+    std::int64_t hovered() const override {
+        return pointing_ != nullptr ? pointing_->hovered().value_or(0) : 0;
     }
 
 private:
