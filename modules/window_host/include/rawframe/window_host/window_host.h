@@ -20,6 +20,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
+#include "rawframe/view/typing.h"
 #include "rawframe/window/surfaces.h"
 #include "rawframe/window/windows.h"
 
@@ -54,6 +55,9 @@ public:
 
 private:
     window::FrameOutcome end();
+    /// Asks the platform for text input, at the caret, while a UI field
+    /// holds focus, and to stop when none does (D426).
+    void followTextInput(window::Windows& windows);
 
     host::HostRequest request_;
     WindowHostSettings settings_;
@@ -61,6 +65,10 @@ private:
     window::Surfaces surfaces_;
     view::PlayerViews views_;
     view::UiPointing pointing_;
+    view::UiTyping typing_;
+    /// The caret the platform was last asked for text input at, none while
+    /// it was not asked.
+    std::optional<view::UiTyping::Caret> textInput_;
     window::WindowId window_;
     std::vector<composition::LentCapability> lent_;
     std::optional<input_window::Bridge> bridge_;
