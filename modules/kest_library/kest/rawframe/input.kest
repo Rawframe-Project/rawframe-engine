@@ -5,6 +5,8 @@ module rawframe.input
 // Only a game's sample program reads them, and only on a client: the server
 // has no actions, only the input they became.
 
+import rawframe.ui
+
 extern fn Input.on(action: u64) -> bool
 extern fn Input.pressed(action: u64) -> bool
 extern fn Input.released(action: u64) -> bool
@@ -43,4 +45,18 @@ extern fn UI.pressed() -> i64
 // press the UI took, which no action saw.
 fn uiPressed() -> i64 {
     return UI.pressed()
+}
+
+extern fn UI.submitted() -> i64
+extern fn UI.typed() -> ui.Typed
+
+// The `press` of the text field whose text the player gave during the tick
+// by Enter, or nought for none (rawframe.ui, D426).
+fn uiSubmitted() -> i64 {
+    return UI.submitted()
+}
+
+// What the player gave it, empty when nothing was given.
+fn uiTyped() -> ui.Typed {
+    return UI.typed()
 }

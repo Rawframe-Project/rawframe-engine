@@ -399,3 +399,55 @@ RAWFRAME_TEST(APressTheUiTakesReachesTheSampleAndNoAction) {
     pointing.answer({});
     RAWFRAME_EXPECT(kPress(40, true)[4] == 1.0F);
 }
+
+RAWFRAME_TEST(AFieldsTextReachesTheSampleAndItsKeysNoAction) {
+    // A sample that reads runners' run and the text a field gave (D426):
+    // its press code, its length, and its first byte.
+    const world_kest::GameFiles* game = &gameAt("runners/runners.game",
+                                                "sample sample.kest sample",
+                                                "sample typed.kest sample",
+                                                {{"typed.kest",
+                                                  "module typed\n"
+                                                  "import controls\n"
+                                                  "import rawframe.input\n"
+                                                  "fn sample(into: [controls.Stick]) {\n"
+                                                  "    into[0].run = input.x(0x9182d0b16cbd7c9c)\n"
+                                                  "    let given = input.uiTyped()\n"
+                                                  "    into[0].targetX = f32(input.uiSubmitted())\n"
+                                                  "    into[0].targetY = f32(given.length)\n"
+                                                  "    into[0].aimX = f32(given.bytes[0])\n"
+                                                  "}\n"}});
+    input::Feed feed;
+    view::UiTyping typing;
+    auto sources =
+        makeInputSources(SourceSettings{.game = game, .inputSize = sizeof(Stick), .feed = &feed, .typing = &typing});
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto source = (*sources)->playerSource(0);
+    RAWFRAME_EXPECT(source.has_value());
+    if (!source.has_value()) {
+        return;
+    }
+    // Given once, on the tick after: code 9, "hey".
+    typing.submit({.press = 9, .text = "hey"});
+    const Stick kGiven = play(**source, 1)[0];
+    RAWFRAME_EXPECT(kGiven[6] == 9.0F && kGiven[7] == 3.0F && kGiven[2] == static_cast<float>('h'));
+    const Stick kAfter = play(**source, 1)[0];
+    RAWFRAME_EXPECT(kAfter[6] == 0.0F && kAfter[7] == 0.0F);
+    // While a field holds the keyboard, D moves no runner; once it lets go,
+    // it does again.
+    constexpr input::DeviceId kKeyboard{1};
+    const input::Control kD = *input::controlNamed(input::DeviceClass::Keyboard, "key_d");
+    feed.connect(kKeyboard, input::DeviceClass::Keyboard);
+    typing.answer([](const view::Typing&) {});
+    typing.focus(view::UiTyping::Caret{0, 0, 1, 10});
+    feed.submit({.device = kKeyboard, .control = kD, .x = 1});
+    RAWFRAME_EXPECT(play(**source, 1)[0][0] == 0.0F);
+    typing.focus(std::nullopt);
+    feed.submit({.device = kKeyboard, .control = kD, .x = 0});
+    play(**source, 1);
+    feed.submit({.device = kKeyboard, .control = kD, .x = 1});
+    RAWFRAME_EXPECT(play(**source, 1)[0][0] == 1.0F);
+}

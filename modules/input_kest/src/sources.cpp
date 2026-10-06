@@ -178,6 +178,7 @@ struct Shared {
     std::optional<input::PairingPolicy> pairing;
     const view::PlayerViews* views = nullptr;
     const view::UiPointing* pointing = nullptr;
+    view::UiTyping* typing = nullptr;
     /// The game's commands the sample program lays out (D425).
     std::vector<world_kest::CommandKind> commands;
     /// Each effect kind's haptic output and how it is felt, by kind.
@@ -241,6 +242,12 @@ public:
         RAWFRAME_TRY(addInputDoors(table, &doors_));
         view_ = ViewDoorContext{.views = seed.has_value() ? nullptr : shared.views, .player = player};
         RAWFRAME_TRY(addViewDoors(table, &view_));
+        // The mouse is the first local player's; so is what fields give.
+        if (!seed.has_value() && player == 0) {
+            ui_.pointing = shared.pointing;
+            submissions_ = shared.typing;
+        }
+        typing_ = seed.has_value() ? nullptr : shared.typing;
         RAWFRAME_TRY(addUiDoors(table, &ui_));
         for (const world_kest::CommandKind& command : shared.commands) {
             auto kind = std::make_unique<CommandDoorContext::Kind>();
@@ -275,6 +282,19 @@ public:
     result::Status next(std::uint64_t tick, std::span<std::byte> input) override {
         ui_.pressed = 0;
         commands_.sent.clear();
+        // A field's text given, one a tick, and the keyboard's actions gated
+        // while a field holds focus (SPEC-0029, D426).
+        ui_.submitted = 0;
+        typedOf({}, ui_.typed);
+        if (submissions_ != nullptr) {
+            if (std::optional<view::Submitted> given = submissions_->takeSubmitted()) {
+                ui_.submitted = given->press;
+                typedOf(given->text, ui_.typed);
+            }
+        }
+        if (typing_ != nullptr) {
+            mapper_->setTextEditing(typing_->editing());
+        }
         if (hand_.has_value()) {
             hand_->act(*mapper_);
         } else {
@@ -314,6 +334,8 @@ private:
     InputDoorContext doors_;
     ViewDoorContext view_;
     UiDoorContext ui_;
+    view::UiTyping* typing_ = nullptr;
+    view::UiTyping* submissions_ = nullptr;
     CommandDoorContext commands_;
     std::unique_ptr<kest::Machine> machine_;
     kest::Entry entry_;
@@ -491,6 +513,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.pairing = settings.pairing;
     shared.views = settings.views;
     shared.pointing = settings.pointing;
+    shared.typing = settings.typing;
     RAWFRAME_TRY_ASSIGN(shared.commands, world_kest::commandKindsOf(kGame, *shared.program, false));
     return std::unique_ptr<InputSources>{new Sources{std::move(shared)}};
 }

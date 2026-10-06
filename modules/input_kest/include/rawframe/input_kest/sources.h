@@ -12,6 +12,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
+#include "rawframe/view/typing.h"
 #include "rawframe/world_kest/commands.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/input_source.h"
@@ -23,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::input_kest {
@@ -75,14 +77,25 @@ struct CommandDoorContext {
 [[nodiscard]] result::Status addCommandDoors(kest::DoorTable& doors, CommandDoorContext& context);
 
 /// What the `UI.*` doors read: the press code the player's press since the
-/// last tick landed on, the first of them, nought for none (D421).
+/// last tick landed on, the first of them, nought for none (D421); the
+/// field whose text the player gave since, and that text as `ui.Typed`
+/// lays it out (D426); and what lies under the mouse (D422), none for a
+/// player whose mouse it is not.
 struct UiDoorContext {
     std::int64_t pressed = 0;
+    std::int64_t submitted = 0;
+    std::array<std::byte, 256> typed{};
+    const view::UiPointing* pointing = nullptr;
 };
 
-/// Adds `UI.pressed`. It reads and changes nothing else, so it is safe for
-/// untrusted code. `context` outlives every machine started with the table.
+/// Adds `UI.pressed`, `UI.submitted`, `UI.typed`, and `UI.hovered`. They
+/// read and change nothing else, so they are safe for untrusted code.
+/// `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context);
+
+/// `text` as `ui.Typed` lays it out: its length, then at most 252 of its
+/// bytes, whole code points.
+void typedOf(std::string_view text, std::array<std::byte, 256>& into) noexcept;
 
 /// The devices of the process's own player, lent by a client host: what
 /// its window reported between two ticks.
@@ -129,6 +142,10 @@ struct SourceSettings {
     /// What the UI takes of the pointer (D421), or null where the host
     /// lends nothing; outlives the sources.
     const view::UiPointing* pointing = nullptr;
+    /// The UI's text fields (D426), or null where the host lends none: the
+    /// first local player takes what they give, and every player's keyboard
+    /// actions are gated while one holds focus; outlives the sources.
+    view::UiTyping* typing = nullptr;
 };
 
 /// The input sources of a game, and its player's haptics.
