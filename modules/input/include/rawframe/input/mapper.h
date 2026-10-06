@@ -120,7 +120,10 @@ public:
     void bringToFront(PlayerSlot player, std::size_t context);
 
     /// While a text field has focus, keyboard controls reach no action of a
-    /// context gated by text editing; an action they held is released.
+    /// context gated by text editing; an action they held is released. A
+    /// key that goes down meanwhile is the field's until it is let go
+    /// (D430). Events submitted before are applied first, as the gate was:
+    /// a feed's own record places it among them.
     void setTextEditing(bool editing);
     /// The UI as the topmost routing node (SPEC-0029, D421): as a mouse
     /// button or a touch control goes down, `takes` is asked whether the

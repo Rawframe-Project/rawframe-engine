@@ -19,6 +19,8 @@ enum class InputError : std::uint32_t {
     TooMany = 2,
     /// A device already paired.
     AlreadyPaired = 3,
+    /// A name or identity a set already has (D430).
+    Taken = 4,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(InputError error) noexcept {

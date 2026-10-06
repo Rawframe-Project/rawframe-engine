@@ -32,6 +32,10 @@ public:
     void submit(const ControlEvent& event);
     /// Focus was lost, or the platform lost input: let go of everything.
     void releaseAll();
+    /// A text field took the keyboard, or gave it back (D430), in order
+    /// with the keys around it: the mapper gates or ungates the keyboard
+    /// after the events before it, before those after.
+    void textEditing(bool editing);
 
     /// Applies every record, in order, to `mapper`: devices are paired to
     /// `player` or unpaired, events submitted, releases made. Empties the
@@ -77,7 +81,8 @@ private:
         Connect,
         Disconnect,
         Control,
-        ReleaseAll
+        ReleaseAll,
+        TextEditing
     };
     struct Record {
         Kind kind = Kind::Control;

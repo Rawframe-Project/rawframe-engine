@@ -25,6 +25,10 @@ void Feed::releaseAll() {
     add(Record{.kind = Kind::ReleaseAll});
 }
 
+void Feed::textEditing(bool editing) {
+    add(Record{.kind = Kind::TextEditing, .event = {.x = editing ? 1.0F : 0.0F}});
+}
+
 void Feed::add(const Record& record) {
     if (records_.size() >= capacity_) {
         dropped_ += static_cast<std::uint64_t>(std::ranges::count(records_, Kind::Control, &Record::kind));
@@ -60,6 +64,9 @@ void Feed::deliver(Mapper& mapper, PlayerSlot player) {
         case Kind::ReleaseAll:
             mapper.releaseAll();
             break;
+        case Kind::TextEditing:
+            mapper.setTextEditing(record.event.x != 0);
+            break;
         }
     }
     records_.clear();
@@ -92,6 +99,7 @@ void Feed::route(Pairing& pairing, std::span<Feed* const> players) {
             }
             break;
         case Kind::ReleaseAll:
+        case Kind::TextEditing:
             for (Feed* feed : players) {
                 if (feed != nullptr) {
                     feed->add(record);

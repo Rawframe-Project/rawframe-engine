@@ -2,7 +2,8 @@
 // once to each domain and never lost within a tick, deadzones and
 // thresholds as declared, routing by priority and recency with consumption
 // that blocks, the hygiene set, the text gate, players kept apart, and
-// presses the UI takes at the pointer hidden from every action (D421).
+// presses the UI takes at the pointer hidden from every action (D421), and
+// keys typed into a field hidden from gated actions until let go (D430).
 
 #include "rawframe/input/feed.h"
 #include "rawframe/input/mapper.h"
@@ -286,6 +287,37 @@ RAWFRAME_TEST(TextEditingGatesTheKeyboard) {
     // Editing ends with W still held: movement comes back.
     rig.mapper->setTextEditing(false);
     RAWFRAME_EXPECT(rig.now(kMove).on);
+}
+
+RAWFRAME_TEST(AKeyTypedIntoAFieldIsItsUntilLetGo) {
+    Rig rig;
+    RAWFRAME_EXPECT(rig.mapper->activate(kFirst, kChat).has_value());
+    // Space goes down into a field; the field lets go before it comes up:
+    // no jump, until space is pressed again (D430).
+    rig.mapper->setTextEditing(true);
+    rig.press(kKeyboard, key("space"));
+    rig.press(kKeyboard, key("key_t"));
+    RAWFRAME_EXPECT(!rig.now(kJump).on && rig.now(kType).on);
+    rig.mapper->setTextEditing(false);
+    rig.mapper->commit(1);
+    RAWFRAME_EXPECT(!rig.mapper->pressedThisTick(kFirst, kJump) && !rig.now(kJump).on && rig.now(kType).on);
+    rig.release(kKeyboard, key("space"));
+    rig.press(kKeyboard, key("space"));
+    RAWFRAME_EXPECT(rig.now(kJump).on);
+    rig.release(kKeyboard, key("space"));
+    rig.release(kKeyboard, key("key_t"));
+    rig.mapper->commit(2);
+    // A feed places the gate among the keys: what went down before the
+    // field took the keyboard was the game's, what went down after the
+    // field's, though the field let go again before the feed was read.
+    Feed feed;
+    feed.submit(ControlEvent{.device = kKeyboard, .control = key("key_w"), .x = 1});
+    feed.textEditing(true);
+    feed.submit(ControlEvent{.device = kKeyboard, .control = key("space"), .x = 1});
+    feed.textEditing(false);
+    feed.deliver(*rig.mapper, kFirst);
+    rig.mapper->commit(3);
+    RAWFRAME_EXPECT(rig.mapper->pressedThisTick(kFirst, kMove) && !rig.mapper->pressedThisTick(kFirst, kJump));
 }
 
 RAWFRAME_TEST(PlayersNeverShareActionState) {

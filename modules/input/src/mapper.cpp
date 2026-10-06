@@ -26,6 +26,10 @@ struct Held {
     /// it comes to rest itself, so the node sees no press it did not see
     /// begin.
     bool swallowed = false;
+    /// A key that went down while a text field took the keyboard (D430):
+    /// the field's until it is let go, so no gated action sees it, even
+    /// after the field gives the keyboard back.
+    bool typed = false;
 
     [[nodiscard]] bool resting() const noexcept {
         return x == 0 && y == 0;
@@ -114,7 +118,7 @@ struct Mapper::State {
             return {};
         }
         const Live& live = player.live[action];
-        if (textEditing && control.device == DeviceClass::Keyboard && live.gated) {
+        if ((textEditing || found->typed) && control.device == DeviceClass::Keyboard && live.gated) {
             return {};
         }
         if (live.pinned) {
@@ -361,6 +365,7 @@ struct Mapper::State {
     void apply(std::uint8_t slot, const ControlEvent& event) {
         const bool kTaken = takenByUi(slot, event);
         Held& state = held[{event.device.value, event.control}];
+        const bool kWasResting = state.resting();
         switch (shapeOf(event.control)) {
         case ControlShape::Digital:
             state.x = event.x != 0 ? 1.0F : 0.0F;
@@ -387,6 +392,11 @@ struct Mapper::State {
         if (!std::isfinite(state.x) || !std::isfinite(state.y)) {
             state.x = 0;
             state.y = 0;
+        }
+        if (state.resting()) {
+            state.typed = false;
+        } else if (kWasResting && textEditing && event.control.device == DeviceClass::Keyboard) {
+            state.typed = true;
         }
         if (state.resting()) {
             state.swallowed = false;
@@ -563,6 +573,8 @@ void Mapper::setTextEditing(bool editing) {
     if (state.textEditing == editing) {
         return;
     }
+    // What was submitted before is applied as the gate was (D430).
+    state.update();
     state.textEditing = editing;
     for (std::size_t slot = 0; slot < state.players.size(); ++slot) {
         state.evaluate(static_cast<std::uint8_t>(slot));
