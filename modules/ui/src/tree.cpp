@@ -224,12 +224,12 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
     return checked(muiNode_SetLayoutStyle(state_->context, idOf(node), &style), "a UI node's layout was refused");
 }
 
-result::Status Tree::layOut(Node root, float width, float height) {
+result::Status Tree::layOut(Node root, float width, float height, double seconds) {
     const muiLayoutInput kInput{.availableWidth = width,
                                 .availableHeight = height,
                                 .measure = measureText,
                                 .measureUser = state_.get(),
-                                .timeNs = 0};
+                                .timeNs = seconds > 0 ? static_cast<std::uint64_t>(seconds * 1e9) : 0};
     return checked(muiComputeLayout(state_->context, idOf(root), &kInput), "a UI tree could not be laid out");
 }
 
@@ -237,7 +237,7 @@ Rect Tree::rectOf(Node node) const noexcept {
     return ui::rectOf(muiNode_GetRect(state_->context, idOf(node)));
 }
 
-result::Status Tree::setLook(Node node, const Look& look) {
+muiVisualStyle visualOf(const Look& look) noexcept {
     muiVisualStyle style = muiDefaultVisualStyle();
     style.background = colorOf(look.fill);
     const muiColor kBorder = colorOf(look.borderColor);
@@ -269,8 +269,21 @@ result::Status Tree::setLook(Node node, const Look& look) {
                 muiGradientStop{.color = colorOf(look.gradient.colors[at]), .position = look.gradient.positions[at]};
         }
     }
-    return checked(muiNode_SetVisualValues(state_->context, idOf(node), &style, MUI_VISUAL_PROPERTIES),
-                   "a UI node's look was refused");
+    return style;
+}
+
+result::Status Tree::setLook(Node node, const Look& look, LookParts parts) {
+    const muiVisualStyle kStyle = visualOf(look);
+    const muiPropertyMask kOwn = maskOf(parts);
+    RAWFRAME_TRY(
+        checked(muiNode_SetVisualValues(state_->context, idOf(node), &kStyle, kOwn), "a UI node's look was refused"));
+    // The rest comes from its classes, as their variants say.
+    if (const muiPropertyMask kRest = MUI_VISUAL_PROPERTIES & ~kOwn & maskOf(kEveryLookPart); kRest != 0) {
+        RAWFRAME_TRY(checked(
+            muiNode_ResetProperties(state_->context, idOf(node), MUI_PROPERTY_GROUP(mui_propertyBackground), kRest),
+            "a UI node's look could not be given back to its classes"));
+    }
+    return {};
 }
 
 static_assert(static_cast<muiHitMode>(Interaction::Hits::Children) == mui_hitChildren &&

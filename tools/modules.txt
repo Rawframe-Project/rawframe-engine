@@ -61,7 +61,7 @@ input_kest: view input document world_kest world_replication kest world composit
 world_audio: game_content assets content audio physics2d physics3d world_replication world_kest kest world composition schema execution diagnostics document result base
 particles: world diagnostics result base
 view: composition execution diagnostics result base
-ui: result base
+ui: document result base
 world_ui: ui view game_textures assets game_content content texture graph world_localization localization world_replication world_kest kest world composition schema execution diagnostics result base
 particles_gpu: render particles result base
 render_canvas: view particles game_textures game_content assets content material texture physics2d world_replication world_kest kest world composition schema execution diagnostics result base

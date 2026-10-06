@@ -11,8 +11,10 @@
 #include <maul-ui/glyph_atlas.h>
 #include <maul-ui/layout.h>
 #include <maul-ui/node.h>
+#include <maul-ui/style.h>
 #include <maul-ui/text.h>
 #include <maul-ui/text_block.h>
+#include <maul-ui/visual.h>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -45,6 +47,12 @@ inline result::Status checked(muiResult outcome, std::string_view why) {
 inline muiNodeId idOf(Node node) noexcept {
     return muiNodeId{.index1 = node.index1, .generation = node.generation};
 }
+
+/// `look` as Maul UI's visual values, every part of it.
+[[nodiscard]] muiVisualStyle visualOf(const Look& look) noexcept;
+
+/// The visual properties `parts` name (D431).
+[[nodiscard]] muiPropertyMask maskOf(LookParts parts) noexcept;
 
 /// A node's text: its block in the text service, and the node, whose
 /// generation tells a node that took its slot after it was removed.

@@ -1,11 +1,13 @@
 # The engine's UI (ADR-0034, SPEC-0030, D374) over Maul UI's retained core,
 # private to this module: a tree of nodes the engine keys, laid out by
-# Scale+Offset sizing and flexbox. Client and tools only: the dedicated
+# Scale+Offset sizing and flexbox, styled by the classes of a game's
+# ui.styles document (D431). Client and tools only: the dedicated
 # server links none of it.
-rawframe_module(NAME ui SOURCES src/text_edit.cpp src/tree.cpp src/tree_edit.cpp DEPS result base)
+rawframe_module(NAME ui SOURCES src/text_edit.cpp src/tree.cpp src/tree_edit.cpp src/tree_style.cpp src/styles.cpp DEPS document result base)
 target_link_libraries(rawframe_ui PRIVATE maul-ui)
 
-rawframe_module_tests(NAME ui SOURCES tests/edit_test.cpp tests/text_test.cpp tests/tree_test.cpp)
+rawframe_module_tests(NAME ui SOURCES tests/edit_test.cpp tests/text_test.cpp tests/tree_test.cpp tests/style_test.cpp tests/styles_test.cpp)
 if(TARGET rawframe_ui_tests)
     target_compile_definitions(rawframe_ui_tests PRIVATE RAWFRAME_UI_FONTS="${CMAKE_CURRENT_SOURCE_DIR}/tests/fonts/")
 endif()
+rawframe_module_fuzz(NAME ui TARGET styles RUNS 20000 SEEDS tests/seeds SOURCES tests/fuzz_styles.cpp)

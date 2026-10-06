@@ -151,6 +151,82 @@ struct Look {
     GradientLook gradient;
 };
 
+/// The parts of a look, as bits (D431): which a style class sets, or a node
+/// sets for itself in place of its classes'. The image part is its key and
+/// slice.
+enum class LookPart : std::uint16_t {
+    Fill = 1U << 0U,
+    BorderColor = 1U << 1U,
+    Radius = 1U << 2U,
+    Clip = 1U << 3U,
+    Image = 1U << 4U,
+    ImageTint = 1U << 5U,
+    OuterShadow = 1U << 6U,
+    InnerShadow = 1U << 7U,
+    Gradient = 1U << 8U
+};
+
+using LookParts = std::uint16_t;
+
+inline constexpr LookParts kEveryLookPart = 0x1FF;
+
+[[nodiscard]] constexpr LookParts operator|(LookPart left, LookPart right) noexcept {
+    return static_cast<LookParts>(static_cast<LookParts>(left) | static_cast<LookParts>(right));
+}
+
+/// A style class a tree holds (SPEC-0030, D431): looks for a node's base and
+/// its states, and how a part moves to a new value. Never nought.
+struct Style {
+    std::uint64_t key = 0;
+    friend constexpr bool operator==(Style, Style) noexcept = default;
+};
+
+/// What a class sets a look for: a node in no state, or in one, SPEC-0030's
+/// closed set. A later state's look wins over an earlier one's, as listed.
+enum class Variant : std::uint8_t {
+    Base,
+    Focused,
+    Hovered,
+    Pressed,
+    Disabled
+};
+
+/// The states a node is in, which pick its classes' variants.
+struct States {
+    bool focused = false;
+    bool hovered = false;
+    bool pressed = false;
+    bool disabled = false;
+    friend constexpr bool operator==(const States&, const States&) noexcept = default;
+};
+
+/// How a part a class sets moves to a new value as a node's state or class
+/// changes (SPEC-0030's two kinds): over `seconds` along an easing curve
+/// after `delaySeconds`, the cubic Bezier's control points x1, y1, x2, y2
+/// with both x from 0 to 1; or as a damped spring of `frequency` hertz and
+/// `dampingRatio` (1 critical, below it overshoots), keeping its speed.
+struct Transition {
+    enum class Kind : std::uint8_t {
+        Timed,
+        Spring
+    };
+    enum class Easing : std::uint8_t {
+        Linear,
+        Ease,
+        EaseIn,
+        EaseOut,
+        EaseInOut,
+        CubicBezier
+    };
+    Kind kind = Kind::Timed;
+    float seconds = 0.25F;
+    float delaySeconds = 0;
+    Easing easing = Easing::Ease;
+    std::array<float, 4> bezier{};
+    float frequency = 2;
+    float dampingRatio = 1;
+};
+
 /// A font a tree holds (D384), by the key Maul UI's text service gives it,
 /// never nought; the null font, nought, names the tree's default.
 struct Font {
@@ -471,12 +547,33 @@ public:
     [[nodiscard]] result::Status setLayout(Node node, const Layout& layout);
     /// `root`'s subtree laid out in `width` by `height` pixels: a root's
     /// share is of that space, and an automatic root fits its content.
-    [[nodiscard]] result::Status layOut(Node root, float width, float height);
+    /// Classes' transitions move to `seconds`, a monotonic clock's time; an
+    /// earlier time than the last counts as none passed.
+    [[nodiscard]] result::Status layOut(Node root, float width, float height, double seconds = 0);
     /// `node`'s rectangle from the last layout that reached it.
     [[nodiscard]] Rect rectOf(Node node) const noexcept;
 
-    /// `node`'s look; refused for a negative radius.
-    [[nodiscard]] result::Status setLook(Node node, const Look& look);
+    /// `node`'s look; refused for a negative radius. Only its `parts` are
+    /// the node's own: the others come from its classes (D431).
+    [[nodiscard]] result::Status setLook(Node node, const Look& look, LookParts parts = kEveryLookPart);
+
+    /// A new style class, setting nothing.
+    [[nodiscard]] result::Result<Style> addStyle();
+    [[nodiscard]] result::Status removeStyle(Style style);
+    /// The `parts` of `look` `style` gives a node in `variant`; the others
+    /// it leaves as they were. Refused as setLook refuses a look.
+    [[nodiscard]] result::Status setStyleLook(Style style, Variant variant, const Look& look, LookParts parts);
+    /// How `parts` move as a node comes into `variant` of `style`; refused
+    /// for a time below nought, a spring of no frequency or damping, or
+    /// control points' x outside nought to one.
+    [[nodiscard]] result::Status
+    setStyleTransition(Style style, Variant variant, LookParts parts, const Transition& transition);
+    /// `node`'s classes, the later winning where two set a part; at most 8.
+    [[nodiscard]] result::Status setClasses(Node node, std::span<const Style> styles);
+    [[nodiscard]] result::Status setStates(Node node, States states);
+    /// Whether a part of `node` is moving to a new value, for a host that
+    /// draws only on change.
+    [[nodiscard]] bool transitioning(Node node) const noexcept;
     /// How `node` takes part in what points hit; a node is hit in full and
     /// blocks until told otherwise.
     [[nodiscard]] result::Status setInteraction(Node node, const Interaction& interaction);

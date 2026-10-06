@@ -1,0 +1,46 @@
+{
+  "kind": "ui.styles",
+  "formatVersion": 1,
+  "styles": [
+    {
+      "styleId": "6c1f0e3b9a2d4c57",
+      "name": "button",
+      "base": {
+        "fill": "#ff0000ff",
+        "radius": 6
+      },
+      "focused": {
+        "outerShadow": {
+          "color": "#ffd24aff",
+          "spread": 2
+        }
+      },
+      "hovered": {
+        "fill": "#00ff00ff"
+      },
+      "transitions": [
+        {
+          "parts": [
+            "fill"
+          ],
+          "seconds": 0.5,
+          "easing": "linear"
+        },
+        {
+          "parts": [
+            "outerShadow"
+          ],
+          "kind": "spring",
+          "frequency": 4
+        }
+      ]
+    },
+    {
+      "styleId": "0a7d2e9c41b85f36",
+      "name": "quiet",
+      "disabled": {
+        "fill": "#80808080"
+      }
+    }
+  ]
+}
