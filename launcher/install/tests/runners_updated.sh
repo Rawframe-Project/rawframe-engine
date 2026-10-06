@@ -99,26 +99,16 @@ printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\n' >"$keys/names.ext"
 openssl x509 -req -in "$keys/server.csr" -CA "$keys/authority.pem" -CAkey "$keys/authority.key" \
     -CAcreateserial -days 2 -extfile "$keys/names.ext" -out "$keys/server.pem" 2>/dev/null
 python=${PYTHON:-$(command -v python3 || command -v python)}
-"$python" - "$mirror" "$keys" "$work/port" <<'SERVE' &
-import functools, http.server, os, ssl, sys
-root, keys, port = sys.argv[1:4]
-class Handler(http.server.SimpleHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
-    def log_message(self, *arguments):
-        pass
-server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=root))
-context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-context.load_cert_chain(os.path.join(keys, "server.pem"), os.path.join(keys, "server.key"))
-server.socket = context.wrap_socket(server.socket, server_side=True)
-with open(port + ".part", "w") as written:
-    written.write(str(server.server_address[1]))
-os.replace(port + ".part", port)
-server.serve_forever()
-SERVE
+"$python" "$(dirname "$0")/serve_mirror.py" "$mirror" "$keys" "$work/port" 2>"$work/serve.txt" &
 server=$!
 trap 'kill "$server" 2>/dev/null || true' EXIT
-for _ in $(seq 100); do
+for _ in $(seq 300); do
     [ -s "$work/port" ] && break
+    if ! kill -0 "$server" 2>/dev/null; then
+        cat "$work/serve.txt"
+        echo "the mirror's web server ended before it listened"
+        exit 1
+    fi
     sleep 0.1
 done
 port=$(cat "$work/port")
