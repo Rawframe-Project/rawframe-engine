@@ -15,14 +15,15 @@
 # names apart by commas presses those keys alone, a third of a second apart,
 # and waits a second and a half after them (D430). An argument `wheel=`, a
 # point, and a count turns the wheel there that many detents toward the
-# user, or away for a count below nought, 0.15 seconds apart (D441). Five
+# user, or away for a count below nought, 0.15 seconds apart (D441). An
+# argument `wait=` and a number of seconds waits that long (D445). Five
 # seconds after, it stops the program whose pid its pid file holds (D430),
 # whose iterations only bound it, and waits for the process it watches to
 # end.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
-#                 | wheel=<x>,<y>,<turns> [...]
+#                 | wheel=<x>,<y>,<turns> | wait=<seconds> [...]
 
 import ctypes
 import ctypes.util
@@ -97,6 +98,9 @@ def main():
         if argument.startswith("keys="):
             points.append((None, None, argument[len("keys="):].split(",")))
             continue
+        if argument.startswith("wait="):
+            points.append((None, None, float(argument[len("wait="):])))
+            continue
         if argument.startswith("wheel="):
             at, y, turns = (int(part) for part in argument[len("wheel="):].split(","))
             points.append((at, y, turns))
@@ -144,6 +148,10 @@ def main():
     for at, y, text in points:
         if not alive(pid):
             break
+        if isinstance(text, float):
+            time.sleep(text)
+            print(f"waited {text:g} seconds")
+            continue
         if isinstance(text, int):
             # Button 5 turns the wheel toward the user, 4 away from them.
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
