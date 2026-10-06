@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::network {
@@ -47,9 +48,20 @@ struct StreamId {
     friend constexpr bool operator==(StreamId, StreamId) noexcept = default;
 };
 
+/// The application protocols a provider's connections may speak (D408): a
+/// game's, and the tooling protocol's (ADR-0032), which never shares a
+/// game's lanes.
+inline constexpr std::string_view kGameApplication = "rawframe-game-v1";
+inline constexpr std::string_view kToolingApplication = "rawframe-tooling-v1";
+
 /// Every bound a provider enforces. All are required: zero is refused, and
 /// nothing grows without one (SPEC-0010 finite profile values).
 struct ProviderProfile {
+    /// The application protocol its connections speak, QUIC's ALPN; a peer
+    /// speaking another is refused (`Closed`, `Refused` on loopback, the
+    /// handshake failing on QUIC). Never empty; one of the constants above,
+    /// or text that outlives the provider.
+    std::string_view application = kGameApplication;
     /// Connections open at once, connecting, admitted, or draining.
     std::size_t maximumConnections = 0;
     /// Streams one side may open on one connection.

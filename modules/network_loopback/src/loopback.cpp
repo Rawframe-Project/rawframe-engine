@@ -177,7 +177,10 @@ public:
         const std::int64_t kNow = state_->now();
         Link& mine = side_.links[kMine.value];
         mine.connector = true;
-        if (openLinks(server) >= server.profile.maximumConnections) {
+        // A listener of another application protocol refuses it, as a QUIC
+        // handshake with no common ALPN fails (D408).
+        if (openLinks(server) >= server.profile.maximumConnections ||
+            server.profile.application != side_.profile.application) {
             mine.open = false;
             state_->deliver(side_,
                             kMine,
@@ -371,11 +374,12 @@ LoopbackNetwork::LoopbackNetwork(const execution::MonotonicSource& clock, Loopba
 LoopbackNetwork::~LoopbackNetwork() = default;
 
 result::Result<std::unique_ptr<network::Provider>> LoopbackNetwork::provider(const network::ProviderProfile& profile) {
-    if (profile.maximumConnections == 0 || profile.maximumStreamsPerConnection == 0 || profile.maximumStreamSend == 0 ||
-        profile.maximumDatagram == 0 || profile.maximumQueuedEvents == 0 || profile.maximumQueuedBytes == 0) {
+    if (profile.application.empty() || profile.maximumConnections == 0 || profile.maximumStreamsPerConnection == 0 ||
+        profile.maximumStreamSend == 0 || profile.maximumDatagram == 0 || profile.maximumQueuedEvents == 0 ||
+        profile.maximumQueuedBytes == 0) {
         return refuse(result::ErrorClass::InvalidArgument,
                       NetworkError::InvalidProfile,
-                      "every provider bound is required and none may be zero");
+                      "every provider bound is required and none may be zero, and an application is named");
     }
     {
         const std::lock_guard kLock{state_->mutex};

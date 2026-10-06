@@ -158,6 +158,25 @@ RAWFRAME_TEST(EveryBoundIsKept) {
     const auto kRefused = drain(*second);
     RAWFRAME_EXPECT(kRefused.size() == 1 && kRefused[0].kind == EventKind::Closed &&
                     kRefused[0].reason == network::CloseReason::Refused);
+
+    // A listener refuses a connector speaking another application protocol
+    // (D408), and a profile names one.
+    network::ProviderProfile tooling = kProfile;
+    tooling.application = network::kToolingApplication;
+    auto toolingListener = *network.provider(tooling);
+    RAWFRAME_EXPECT(toolingListener->listen({"tooling"}).has_value());
+    auto game = *network.provider(kProfile);
+    RAWFRAME_EXPECT(game->connect({"tooling"}).has_value());
+    const auto kOtherApplication = drain(*game);
+    RAWFRAME_EXPECT(kOtherApplication.size() == 1 && kOtherApplication[0].kind == EventKind::Closed &&
+                    kOtherApplication[0].reason == network::CloseReason::Refused);
+    auto tool = *network.provider(tooling);
+    RAWFRAME_EXPECT(tool->connect({"tooling"}).has_value());
+    const auto kSameApplication = drain(*tool);
+    RAWFRAME_EXPECT(kSameApplication.size() == 1 && kSameApplication[0].kind == EventKind::Connected);
+    network::ProviderProfile nameless = kProfile;
+    nameless.application = {};
+    RAWFRAME_EXPECT(failedWith(network.provider(nameless), NetworkError::InvalidProfile));
 }
 
 RAWFRAME_TEST(AFullQueueDropsDatagramsAndClosesStreams) {

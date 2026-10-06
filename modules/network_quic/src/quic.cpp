@@ -47,6 +47,12 @@ std::unexpected<result::Error> fail(result::ErrorClass errorClass, QuicError err
     return result::fail(errorClass, kQuicDomain, code(error), why);
 }
 
+/// Whether a provider's listener also takes browsers: only a game's, where
+/// the network accepts them (D408).
+bool browsersOn(const QuicSettings& settings, const network::ProviderProfile& profile) noexcept {
+    return settings.webTransport && profile.application == network::kGameApplication;
+}
+
 struct HostPort {
     std::string host;
     std::uint16_t port = 0;
@@ -158,8 +164,8 @@ public:
         if (QUIC_FAILED(core_->api->ListenerOpen(core_->registration, &listenerCallback, core_.get(), &listener))) {
             return fail(result::ErrorClass::Unavailable, QuicError::Unavailable, "MsQuic could not open a listener");
         }
-        const bool kBrowsers = core_->settings->webTransport;
-        const std::array<QUIC_BUFFER, 2> kAlpns = alpnsFor(kBrowsers);
+        const bool kBrowsers = browsersOn(*core_->settings, core_->profile);
+        const std::array<QUIC_BUFFER, 2> kAlpns = alpnsFor(core_->profile.application, kBrowsers);
         if (QUIC_FAILED(core_->api->ListenerStart(listener, kAlpns.data(), kBrowsers ? 2U : 1U, &address))) {
             // Never started, so closing it waits for nothing.
             core_->api->ListenerClose(listener);
@@ -467,12 +473,13 @@ result::Result<std::unique_ptr<QuicNetwork>> QuicNetwork::create(QuicSettings se
 }
 
 result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const network::ProviderProfile& profile) {
-    if (profile.maximumConnections == 0 || profile.maximumStreamsPerConnection == 0 || profile.maximumStreamSend == 0 ||
-        profile.maximumDatagram == 0 || profile.maximumQueuedEvents == 0 || profile.maximumQueuedBytes == 0 ||
+    if (profile.application.empty() || profile.application.size() > 255 || profile.maximumConnections == 0 ||
+        profile.maximumStreamsPerConnection == 0 || profile.maximumStreamSend == 0 || profile.maximumDatagram == 0 ||
+        profile.maximumQueuedEvents == 0 || profile.maximumQueuedBytes == 0 ||
         profile.maximumStreamSend > std::numeric_limits<std::uint32_t>::max()) {
         return refuse(result::ErrorClass::InvalidArgument,
                       NetworkError::InvalidProfile,
-                      "every provider bound is required and none may be zero");
+                      "every provider bound is required and none may be zero, and an application is named");
     }
     auto core = std::make_unique<Core>();
     core->api = state_->api;
@@ -486,8 +493,12 @@ result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const n
         QUIC_CREDENTIAL_CONFIG credential{};
         credential.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_PKCS12;
         credential.CertificatePkcs12 = &bundle;
-        core->serverConfiguration = openConfiguration(
-            *state_->api, state_->registration, state_->settings, profile, credential, state_->settings.webTransport);
+        core->serverConfiguration = openConfiguration(*state_->api,
+                                                      state_->registration,
+                                                      state_->settings,
+                                                      profile,
+                                                      credential,
+                                                      browsersOn(state_->settings, profile));
         if (core->serverConfiguration == nullptr) {
             return fail(result::ErrorClass::Unavailable, QuicError::BadCertificate, "MsQuic refused the certificate");
         }

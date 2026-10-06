@@ -255,6 +255,34 @@ RAWFRAME_TEST(AFullListenerRefuses) {
     RAWFRAME_EXPECT(gone != nullptr && gone->reason == CloseReason::PeerGone);
 }
 
+// A listener speaks one application protocol, its ALPN (D408): a game's
+// client cannot reach a tooling listener, and a tooling client can.
+RAWFRAME_TEST(AnotherApplicationIsRefused) {
+    Pair pair;
+    network::ProviderProfile tooling = kProfile;
+    tooling.application = network::kToolingApplication;
+    auto server = *pair.server->provider(tooling);
+    auto game = *pair.client->provider(kProfile);
+    auto tool = *pair.client->provider(tooling);
+    RAWFRAME_EXPECT(server->listen({endpointAt(pair.port)}).has_value());
+    RAWFRAME_EXPECT(game->connect({endpointAt(pair.port)}).has_value());
+    std::vector<Event> serverEvents;
+    std::vector<Event> gameEvents;
+    std::vector<Event> toolEvents;
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {game.get(), &gameEvents}}, [&] {
+        return find(gameEvents, EventKind::Closed) != nullptr;
+    }));
+    RAWFRAME_EXPECT(find(gameEvents, EventKind::Connected) == nullptr);
+    RAWFRAME_EXPECT(find(serverEvents, EventKind::Accepted) == nullptr);
+    RAWFRAME_EXPECT(tool->connect({endpointAt(pair.port)}).has_value());
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {tool.get(), &toolEvents}}, [&] {
+        return find(toolEvents, EventKind::Connected) != nullptr && find(serverEvents, EventKind::Accepted) != nullptr;
+    }));
+    network::ProviderProfile nameless = kProfile;
+    nameless.application = {};
+    RAWFRAME_EXPECT(!pair.server->provider(nameless).has_value());
+}
+
 // SPEC-0013's egress queued ceilings (D239): what one provider has handed
 // MsQuic and MsQuic has not yet released is held across its connections as
 // well as per connection. Past the aggregate a datagram is lost and a stream

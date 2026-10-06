@@ -2,9 +2,10 @@
 
 // The QUIC provider (SPEC-0010, ADR-0015): the provider contract over MsQuic
 // with TLS 1.3 from OpenSSL. One reliable stream per contract stream, QUIC
-// datagrams for datagrams, ALPN `rawframe-game-v1`, and no 0-RTT: nothing a
-// peer sends is accepted before the handshake completes. MsQuic is private to
-// this module; nothing above it sees a QUIC type.
+// datagrams for datagrams, the provider's application protocol as its ALPN
+// (D408), and no 0-RTT: nothing a peer sends is accepted before the
+// handshake completes. MsQuic is private to this module; nothing above it
+// sees a QUIC type.
 //
 // Endpoints are `host:port`. A listener's host is an IP literal, or empty or
 // `*` for every address, and its port may be 0 for any free one; a
@@ -19,8 +20,6 @@
 #include <optional>
 
 namespace rawframe::network_quic {
-
-inline constexpr std::string_view kAlpn = "rawframe-game-v1";
 
 struct QuicSettings {
     /// Required to listen: the identity a server presents.

@@ -334,13 +334,14 @@ QUIC_STATUS listenerCallback(HQUIC, void* context, QUIC_LISTENER_EVENT* event) n
     return QUIC_STATUS_SUCCESS;
 }
 
-/// Rawframe's ALPN, and HTTP/3's after it where a server accepts browsers.
-std::array<QUIC_BUFFER, 2> alpnsFor(bool browsers) noexcept {
+/// The provider's application protocol as its ALPN, and HTTP/3's after it
+/// where a server accepts browsers.
+std::array<QUIC_BUFFER, 2> alpnsFor(std::string_view application, bool browsers) noexcept {
     const auto kBuffer = [](std::string_view alpn) {
         return QUIC_BUFFER{static_cast<std::uint32_t>(alpn.size()),
                            reinterpret_cast<std::uint8_t*>(const_cast<char*>(alpn.data()))};
     };
-    return {kBuffer(kAlpn), browsers ? kBuffer(kH3Alpn) : QUIC_BUFFER{}};
+    return {kBuffer(application), browsers ? kBuffer(kH3Alpn) : QUIC_BUFFER{}};
 }
 
 /// A configuration: ALPN, the settings a profile implies, and credentials.
@@ -368,7 +369,7 @@ HQUIC openConfiguration(const QUIC_API_TABLE& api,
     quic.ServerResumptionLevel = QUIC_SERVER_NO_RESUME;
     quic.IsSet.ServerResumptionLevel = 1;
 
-    const std::array<QUIC_BUFFER, 2> kAlpns = alpnsFor(browsers);
+    const std::array<QUIC_BUFFER, 2> kAlpns = alpnsFor(profile.application, browsers);
     HQUIC configuration = nullptr;
     if (QUIC_FAILED(api.ConfigurationOpen(
             registration, kAlpns.data(), browsers ? 2U : 1U, &quic, sizeof(quic), nullptr, &configuration))) {

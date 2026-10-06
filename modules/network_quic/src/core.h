@@ -181,8 +181,9 @@ QUIC_STATUS streamCallback(HQUIC handle, void* context, QUIC_STREAM_EVENT* event
 QUIC_STATUS connectionCallback(HQUIC handle, void* context, QUIC_CONNECTION_EVENT* event) noexcept;
 QUIC_STATUS listenerCallback(HQUIC handle, void* context, QUIC_LISTENER_EVENT* event) noexcept;
 
-/// Rawframe's ALPN, and HTTP/3's after it where a server accepts browsers.
-std::array<QUIC_BUFFER, 2> alpnsFor(bool browsers) noexcept;
+/// The provider's application protocol as its ALPN, and HTTP/3's after it
+/// where a server accepts browsers.
+std::array<QUIC_BUFFER, 2> alpnsFor(std::string_view application, bool browsers) noexcept;
 
 /// A configuration: ALPN, the settings a profile implies, and credentials.
 HQUIC openConfiguration(const QUIC_API_TABLE& api,
