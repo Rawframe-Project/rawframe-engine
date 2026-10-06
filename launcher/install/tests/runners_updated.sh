@@ -158,6 +158,9 @@ cp "$mirror/channels/rawframe/runners/stable" "$mirror/channels/rawframe/runners
 "$install" follow "$followed" rawframe/runners stable "${over[@]}" | tee "$work/follow-2.txt"
 grep -q "to 0.2.0, .*sequence 2" "$work/follow-2.txt"
 grep -q 'fetched 0 blobs' "$work/follow-2.txt"
+# The same pointer again is current, and changes nothing (D434).
+"$install" follow "$followed" rawframe/runners stable "${over[@]}" | tee "$work/follow-current.txt"
+grep -q "^current rawframe/runners stable, release .*, sequence 2$" "$work/follow-current.txt"
 # The first pointer served again is a replay, and changes nothing.
 mkdir -p "$work/current"
 cp "$mirror/channels/rawframe/runners/stable" "$mirror/channels/rawframe/runners/stable.sig" "$work/current/"

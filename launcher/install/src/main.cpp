@@ -13,7 +13,8 @@
 // `follow` checks a subject's channel on the origin (SPEC-0020, D424): its
 // pointer and the Release it names, each verified against the key set the
 // library pins for the subject's publisher, the pointer past the one the
-// library last followed, then updates to the Release's Composition.
+// library last followed, then updates to the Release's Composition. The
+// pointer it last followed is `current`, and nothing changes (D434).
 //
 // An origin is a mirror laid out as a library: a directory, or an http or
 // https URL (D414), whose certificate is verified against the system's
@@ -119,6 +120,14 @@ int run(std::string_view command, const std::filesystem::path& library, int argc
         if (!kDone.has_value()) {
             print(kDone.error());
             return 1;
+        }
+        if (kDone->current) {
+            std::printf("current %s %s, release %s, sequence %lld\n",
+                        argv[3],
+                        argv[4],
+                        rawframe::content::ContentDigest{.bytes = kDone->release}.text().c_str(),
+                        static_cast<long long>(kDone->sequence));
+            return 0;
         }
         std::printf("followed %s %s to %s, release %s, sequence %lld\n",
                     argv[3],

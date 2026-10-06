@@ -50,12 +50,15 @@ struct UpdateReport {
 };
 
 /// What following a channel did (D424): the Release it installed, the
-/// pointer's sequence kept, and the update.
+/// pointer's sequence kept, and the update; or, `current`, nothing, the
+/// pointer being the sequence already followed (D434), when only
+/// `release` and `sequence` are the pointer's.
 struct Followed {
     std::string version;
     base::Sha256Digest release{};
     std::int64_t sequence = 0;
     UpdateReport update;
+    bool current = false;
 };
 
 class Installation {
@@ -91,7 +94,8 @@ public:
     /// `UnknownKey`, is for the caller to refresh and ask again); the
     /// pointer past the sequence the library last followed
     /// (`SequenceRegression`), a lower Release under a higher sequence
-    /// being a rollback; the Release's Composition fetched by its digest and
+    /// being a rollback, and the very sequence followed last current, with
+    /// nothing fetched or changed (D434); the Release's Composition fetched by its digest and
     /// checked against the artifact's size and digest; then installed as
     /// `update` installs it. The sequence is kept once the update is done,
     /// so a refused or stopped follow can be retried.

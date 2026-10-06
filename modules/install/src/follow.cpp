@@ -74,6 +74,12 @@ result::Result<Followed> Installation::follow(std::string_view subject, release:
         }
         held = value;
     }
+    // The pointer the library already follows offers nothing new: a launcher
+    // that follows before every play is up to date, not replayed (D434).
+    // Nothing is installed or kept, so this is as safe as a refusal.
+    if (held == kPointer.sequence) {
+        return Followed{.release = kPointer.release, .sequence = kPointer.sequence, .current = true};
+    }
     RAWFRAME_TRY_ASSIGN(const std::string kReleaseText,
                         signedRecord(origin, content::releasePathOf(kPointer.release), kKeys));
     RAWFRAME_TRY_ASSIGN(const release::ReleaseRecord kRelease,
