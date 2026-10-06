@@ -4,6 +4,7 @@
 #include "effect_doors.h"
 #include "game_files_participant.h"
 #include "game_persistence.h"
+#include "game_plans.h"
 #include "game_scenes.h"
 #include "hover_doors.h"
 #include "message_doors.h"
@@ -162,7 +163,7 @@ public:
             mods_.push_back(world_snapshot::CheckpointMod{.subject = build.subject, .version = build.version});
         }
         RAWFRAME_TRY(planPrediction(configuration));
-        RAWFRAME_TRY(planInterest());
+        RAWFRAME_TRY_ASSIGN(interest_, interestOf(game_, layouts_));
         RAWFRAME_TRY(planPhysics());
         // A process that plays elsewhere animates the World it mirrors.
         RAWFRAME_TRY_ASSIGN(animation_, animationSettings(files, layouts_));
@@ -775,9 +776,9 @@ private:
         // static bodies; everything that moves besides it is the server's.
         if (game_.physics.has_value()) {
             if (game_.physics->dimensions == 3) {
-                predictedPhysics3d_ = physics3dSettings();
+                predictedPhysics3d_ = physics3dSettingsOf(game_, files_->meshes());
             } else {
-                predictedPhysics_ = physicsSettings();
+                predictedPhysics_ = physics2dSettingsOf(game_);
             }
             const PhysicsFacts kFacts = physicsFacts(game_.physics->dimensions);
             for (const GameSpawn& spawn : game_.spawns) {
@@ -807,73 +808,6 @@ private:
         return {};
     }
 
-    /// Who is sent what: the interest line's coordinate fields, each a
-    /// floating-point number of the position component. An entity leaves at
-    /// an eighth beyond the radius it entered at.
-    result::Status planInterest() {
-        if (!game_.interest.has_value()) {
-            return {};
-        }
-        const GameInterest& interest = *game_.interest;
-        const GameComponent& component = *componentNamed(interest.component);
-        const kest::TypeLayout& layout = layouts_[static_cast<std::size_t>(&component - game_.components.data())];
-        world_replication::InterestSettings settings{
-            .position = component.id, .axes = {}, .radius = interest.radius, .leaveRadius = interest.radius * 1.125};
-        for (const std::string& axis : interest.axes) {
-            const auto kField = std::ranges::find(layout.fields, axis, &kest::Field::name);
-            if (kField == layout.fields.end() ||
-                (kField->kind != kest::FieldKind::F32 && kField->kind != kest::FieldKind::F64)) {
-                return std::unexpected<result::Error>{
-                    refuse(result::ErrorClass::InvalidArgument,
-                           WorldKestError::UnknownName,
-                           "an interest line names a field that is not a floating-point number of its component")
-                        .error()
-                        .withContext("field", axis)};
-            }
-            settings.axes.push_back(world_replication::WireField{.offset = kField->offset,
-                                                                 .kind = kField->kind == kest::FieldKind::F32
-                                                                             ? world_replication::WireKind::F32
-                                                                             : world_replication::WireKind::F64});
-        }
-        interest_ = std::move(settings);
-        return {};
-    }
-
-    /// The game's collision document, by identity.
-    [[nodiscard]] physics::CollisionDocument collisionDocument() const {
-        physics::CollisionDocument document;
-        const auto kId = [this](const std::string& name) {
-            return std::ranges::find(game_.collision.classes, name, &GameCollisionClass::name)->id;
-        };
-        for (const GameCollisionClass& declared : game_.collision.classes) {
-            document.classes.push_back({.id = declared.id, .name = declared.name});
-        }
-        for (const GameCollisionRule& rule : game_.collision.rules) {
-            document.rules.push_back({.first = kId(rule.first), .second = kId(rule.second), .rule = rule.rule});
-        }
-        document.fallback = game_.collision.fallback;
-        return document;
-    }
-
-    /// The 2D physics the game describes: its world and its collision
-    /// document.
-    [[nodiscard]] physics2d::Physics2DSettings physicsSettings() const {
-        return physics2d::Physics2DSettings{.gravityX = game_.physics->gravityX,
-                                            .gravityY = game_.physics->gravityY,
-                                            .substeps = game_.physics->substeps,
-                                            .collision = collisionDocument()};
-    }
-
-    /// The same in three dimensions.
-    [[nodiscard]] physics3d::Physics3DSettings physics3dSettings() const {
-        return physics3d::Physics3DSettings{.gravityX = game_.physics->gravityX,
-                                            .gravityY = game_.physics->gravityY,
-                                            .gravityZ = game_.physics->gravityZ,
-                                            .substeps = game_.physics->substeps,
-                                            .meshes = files_->meshes(),
-                                            .collision = collisionDocument()};
-    }
-
     /// The values one spawn gives each of its components.
     [[nodiscard]] result::Result<SpawnValues> spawnValues(const GameSpawn& spawn) const {
         return GameScenes{game_, layouts_}.spawnValues(spawn);
@@ -888,9 +822,9 @@ private:
         }
         RAWFRAME_TRY(checkPhysicsLayouts(game_, *program_, layouts_));
         if (!planOnly_ && game_.physics->dimensions == 3) {
-            physics3d_ = physics3dSettings();
+            physics3d_ = physics3dSettingsOf(game_, files_->meshes());
         } else if (!planOnly_) {
-            physics2d_ = physicsSettings();
+            physics2d_ = physics2dSettingsOf(game_);
         }
         return {};
     }
