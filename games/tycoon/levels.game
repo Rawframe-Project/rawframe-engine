@@ -25,6 +25,8 @@ system tycoon.serve simulation serve read tycoon.stall write tycoon.till read ra
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
 system tycoon.judge simulation judge write tycoon.round lookup tycoon.owner lookup tycoon.stall lookup tycoon.customer after tycoon.earn
 message won Won
+# The program reads its players' collect command (D425).
+command collect controls.Collect
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity
 spawn 1 tycoon.hand pointed=1 pointX=-22 pointZ=-22 build=1 tycoon.owner rawframe.physics3d.pose
 spawn 1 tycoon.hand pointed=1 pointX=22 pointZ=22 tycoon.owner rawframe.physics3d.pose

@@ -66,8 +66,6 @@ const HUD_FONT: u64 = 0x8e12f827f47f7d51
 const HUD_COINS: u64 = 0xf1182d0420cc09a0
 const HUD_WON: u64 = 0xafcb66432b6d2152
 const HUD_LOST: u64 = 0xb777d548435986ab
-// The purse's press code (D421), which `ui.hovered()` names under the mouse.
-const PURSE: i64 = 1
 
 // An owner: whether it has joined, its cursor on the ground, its coins, its
 // stalls and their levels together, whether the build it asked for is
@@ -133,6 +131,9 @@ struct Cheer {
 }
 
 extern fn Messages.won(to: world.Entity, value: Won)
+extern fn CommandCount.collect() -> i32
+extern fn Command.collect(index: i32) -> controls.Collect
+extern fn CommandFrom.collect(index: i32) -> world.Entity
 extern fn ReceivedCount.won() -> i32
 extern fn Received.won(index: i32) -> Won
 extern fn Owner.insert(entity: world.Entity, value: Owner)
@@ -268,20 +269,49 @@ fn earn(count: i32, owners: [Owner], entities: [world.Entity]) {
         if owners[i].clock >= SECOND {
             owners[i].clock = u32(0)
             owners[i].coins = owners[i].coins + i64(owners[i].levels) * INCOME
-            let takings = i64(0)
-            let stalls = Stall.count()
-            let k = 0
-            while k < stalls {
-                let stall = Stall.entity(k)
-                if Stall.get(stall).owner == entities[i] {
-                    takings = takings + Till.get(stall).takings
-                }
-                k = k + 1
-            }
-            owners[i].coins = owners[i].coins + takings - owners[i].collected
-            owners[i].collected = takings
+            owners[i] = collectTakings(owners[i], entities[i])
         }
         i = i + 1
+    }
+}
+
+// The takings an owner's stalls hold past what it took before, which it
+// takes now: every stall looked up (D391, D393) and its own counted.
+fn collectTakings(owner: Owner, entity: world.Entity) -> Owner {
+    let taken = owner
+    let takings = i64(0)
+    let stalls = Stall.count()
+    let k = 0
+    while k < stalls {
+        let stall = Stall.entity(k)
+        if Stall.get(stall).owner == entity {
+            takings = takings + Till.get(stall).takings
+        }
+        k = k + 1
+    }
+    taken.coins = taken.coins + takings - taken.collected
+    taken.collected = takings
+    return taken
+}
+
+// An owner whose player pressed its purse (D425) collects its takings at
+// once, not at the second's end; a command from a player who owns nothing
+// here asks for nothing.
+fn collect(count: i32, owners: [Owner], entities: [world.Entity]) {
+    let asks = CommandCount.collect()
+    let a = 0
+    while a < asks {
+        let from = CommandFrom.collect(a)
+        if Command.collect(a).asked == u32(1) {
+            let i = 0
+            while i < count {
+                if entities[i] == from && owners[i].joined == u32(1) {
+                    owners[i] = collectTakings(owners[i], entities[i])
+                }
+                i = i + 1
+            }
+        }
+        a = a + 1
     }
 }
 
@@ -496,7 +526,7 @@ fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
         huds[i].padding = 10.0
         huds[i].margin = 12.0
         huds[i].fill = u32(0x101820C0)
-        if ui.hovered() == PURSE {
+        if ui.hovered() == controls.PURSE {
             huds[i].fill = u32(0x304860E0)
         }
         huds[i].radius = 6.0
@@ -507,7 +537,7 @@ fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
         huds[i].textColor = u32(0xF4E9C8FF)
         huds[i].textWrap = ui.NO_WRAP
         huds[i].hit = ui.HIT_SELF
-        huds[i].press = PURSE
+        huds[i].press = controls.PURSE
         i = i + 1
     }
 }

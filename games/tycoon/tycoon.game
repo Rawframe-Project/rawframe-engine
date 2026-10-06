@@ -41,6 +41,7 @@ system tycoon.open simulation open write tycoon.gate random arrivals lookup tyco
 system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d.pose write rawframe.physics3d.velocity entities before rawframe.navigation.avoid
 system tycoon.serve simulation serve read tycoon.stall write tycoon.till read rawframe.physics3d.pose after tycoon.tend
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
+system tycoon.collect simulation collect write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.earn
 # Rounds (D394): the first owner to the goal wins; every owner is told by
 # message, and the lot starts afresh.
 system tycoon.judge simulation judge write tycoon.round lookup tycoon.owner lookup tycoon.stall lookup tycoon.customer after tycoon.earn
@@ -50,6 +51,9 @@ spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 ra
 spawn 1 tycoon.gate
 spawn 1 tycoon.round
 message won Won
+# Pressing its purse asks the server to collect the owner's takings now
+# (D425).
+command collect controls.Collect
 
 # Networked play: every owner, stall, and customer is sent to every client,
 # which shows the customers walking between the states it receives (D392);

@@ -57,7 +57,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
         # (D421): lighter under the mouse once it is there (D422), the UI
         # takes the click, and the owner builds no stall under it, the World
         # holding the owner's body alone. Taking nothing, the same click
-        # builds one there.
+        # builds one there. The press is the player's one collect command,
+        # sent and taken by the server (D425).
         set(TYCOON_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/tycoon_content)
         configure_file(tests/stalls_clicked.conf.in ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf @ONLY)
         add_test(NAME client_clicks_stalls
@@ -70,7 +71,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB_RUN)
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "at 16,16 [^\n]*: lighter.*\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"fontsRead\":1,[^\n]*\"presses\":1,")
+                             "at 16,16 [^\n]*: lighter.*\"commandsTaken\":1,\"commandsLimited\":0.*\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"fontsRead\":1,[^\n]*\"presses\":1,.*\"commandsSent\":1,")
         if(RAWFRAME_SANITIZE STREQUAL "thread")
             set_tests_properties(client_clicks_stalls PROPERTIES ENVIRONMENT
                                  "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/lavapipe.tsan")

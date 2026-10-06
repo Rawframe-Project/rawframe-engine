@@ -13,3 +13,14 @@ struct Hand {
     pointZ: f32
     build: f32
 }
+
+// The purse's press code (D421), which `ui.hovered()` names under the mouse
+// and a client's sample reads a press of.
+const PURSE: i64 = 1
+
+// What an owner's player asks for by pressing its purse (D425): its stalls'
+// takings collected at once. A command carries a value; this one says
+// nothing more than that it was asked.
+struct Collect {
+    asked: u32
+}
