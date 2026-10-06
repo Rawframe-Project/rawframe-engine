@@ -4,6 +4,7 @@
 #include "rawframe/game_textures/asked.h"
 #include "rawframe/graph/graph.h"
 #include "rawframe/ui/font.h"
+#include "rawframe/ui/frames.h"
 #include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
@@ -13,7 +14,6 @@
 #include "rawframe/world_localization/text.h"
 #include "rawframe/world_replication/client_worlds.h"
 #include "rawframe/world_ui/errors.h"
-#include "rawframe/world_ui/frames.h"
 #include "rawframe/world_ui/registrar.h"
 #include "rawframe/world_ui/world_ui.h"
 
@@ -38,7 +38,7 @@ constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 /// The fonts' bytes, all together (D386).
 constexpr std::uint64_t kFontBudgetBytes = std::uint64_t{64} * 1024 * 1024;
-constexpr std::string_view kProvided[] = {kUiFrames.name, world_kest::kUiHover.name};
+constexpr std::string_view kProvided[] = {ui::kUiFrames.name, world_kest::kUiHover.name};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        view::kPlayerViews.name,
@@ -187,7 +187,7 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
 
 /// Lays out each local player's UI in its view in `presentation_extract`
 /// and lends what it drew.
-class UiParticipant final : public composition::Participant, public UiFrames, public world_kest::UiHover {
+class UiParticipant final : public composition::Participant, public ui::UiFrames, public world_kest::UiHover {
 public:
     result::Status load(composition::ParticipantContext& context) {
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
@@ -507,8 +507,8 @@ public:
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
-        if (capability == kUiFrames.name) {
-            return composition::provideAs<UiFrames>(*this);
+        if (capability == ui::kUiFrames.name) {
+            return composition::provideAs<ui::UiFrames>(*this);
         }
         if (capability == world_kest::kUiHover.name) {
             return composition::provideAs<world_kest::UiHover>(*this);

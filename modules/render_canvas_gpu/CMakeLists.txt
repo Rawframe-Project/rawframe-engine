@@ -6,7 +6,7 @@ if(NOT TARGET rawframe_render)
     return()
 endif()
 
-rawframe_module(NAME render_canvas_gpu SOURCES src/participant.cpp src/renderer.cpp src/ui.cpp DEPS render render_canvas world_ui ui particles_gpu particles texture composition diagnostics result base)
+rawframe_module(NAME render_canvas_gpu SOURCES src/participant.cpp src/renderer.cpp src/ui.cpp DEPS render render_canvas ui particles_gpu particles texture composition diagnostics result base)
 rawframe_shader_containers(TARGET rawframe_render_canvas_gpu NAMES sprite ui)
 
 rawframe_module_tests(NAME render_canvas_gpu SOURCES tests/renderer_test.cpp tests/ui_test.cpp)

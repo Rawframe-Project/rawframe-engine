@@ -4,7 +4,7 @@
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_canvas_gpu/renderer.h"
 #include "rawframe/render_canvas_gpu/ui.h"
-#include "rawframe/world_ui/frames.h"
+#include "rawframe/ui/frames.h"
 
 #include <array>
 #include <memory>
@@ -21,7 +21,7 @@ constexpr diagnostics::EventIdentity kFailed{"canvas", "drawing_failed"};
 constexpr diagnostics::EventIdentity kUiDrawingSummary{"ui", "ui_drawing_summary"};
 constexpr diagnostics::EventIdentity kUiFailed{"ui", "ui_drawing_failed"};
 constexpr std::string_view kMaybe[] = {render::kFrames.name, render_canvas::kCanvasFrames.name};
-constexpr std::string_view kMaybeUi[] = {render::kFrames.name, world_ui::kUiFrames.name};
+constexpr std::string_view kMaybeUi[] = {render::kFrames.name, ui::kUiFrames.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 /// The canvas's place in a frame: after the scene (SPEC-0024); the UI's,
 /// over everything, the scene's post processes over the composed picture
@@ -168,11 +168,11 @@ private:
 class UiDrawingParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context) {
-        if (!context.has(render::kFrames.name) || !context.has(world_ui::kUiFrames.name)) {
+        if (!context.has(render::kFrames.name) || !context.has(ui::kUiFrames.name)) {
             return {};
         }
         RAWFRAME_TRY_ASSIGN(frames_, context.capability(render::kFrames));
-        RAWFRAME_TRY_ASSIGN(ui_, context.capability(world_ui::kUiFrames));
+        RAWFRAME_TRY_ASSIGN(ui_, context.capability(ui::kUiFrames));
         return {};
     }
 
@@ -242,7 +242,7 @@ public:
 
 private:
     render::Frames* frames_ = nullptr;
-    world_ui::UiFrames* ui_ = nullptr;
+    ui::UiFrames* ui_ = nullptr;
     std::unique_ptr<UiRenderer> renderer_;
     bool failed_ = false;
     diagnostics::Emitter emitter_;

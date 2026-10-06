@@ -15,7 +15,7 @@ namespace rawframe::render_canvas_gpu {
 /// (offscreen or on a window, read back, captured) is `render`'s.
 ///
 /// And `rawframe.render_canvas_gpu.ui` (D376), which records what the UI
-/// drew (`rawframe.world_ui.frames`) into each frame over everything else,
+/// drew (`rawframe.ui.frames`) into each frame over everything else,
 /// sizing the UI to the frame, and logs `ui_drawing_summary`. Without frames
 /// or a game's UI it is idle.
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
