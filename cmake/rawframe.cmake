@@ -287,3 +287,36 @@ function(rawframe_module_fuzz)
              COMMAND ${target} -seed=1 -runs=${arg_RUNS} -max_len=${arg_MAX_LEN} ${seed_inputs})
 endfunction()
 set(RAWFRAME_FUZZ_RUNS 50000 CACHE STRING "Inputs each fuzz target tries in the check (D242)")
+
+# Embeds a module's shader containers (D416): of each NAME, the container
+# tools/gen_shaders.py wrote for the build's driver,
+# src/generated/NAME<RAWFRAME_SHADER_SUFFIX>.mrsc, becomes the array
+# k<Name>Container in generated/NAME_container.h under the module's build
+# directory, written again only when the container changes.
+#
+#   rawframe_shader_containers(TARGET rawframe_render NAMES display)
+function(rawframe_shader_containers)
+    cmake_parse_arguments(arg "" "TARGET" "NAMES" ${ARGN})
+    foreach(name IN LISTS arg_NAMES)
+        set(source "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/${name}${RAWFRAME_SHADER_SUFFIX}.mrsc")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+        file(READ "${source}" hex HEX)
+        string(LENGTH "${hex}" digits)
+        math(EXPR size "${digits} / 2")
+        string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
+        string(SUBSTRING "${name}" 0 1 first)
+        string(TOUPPER "${first}" first)
+        string(SUBSTRING "${name}" 1 -1 rest)
+        file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${name}_container.h" CONTENT
+"#pragma once
+
+// ${name}${RAWFRAME_SHADER_SUFFIX}.mrsc, embedded by rawframe_shader_containers.
+
+#include <array>
+#include <cstdint>
+
+alignas(8) inline constexpr std::array<std::uint8_t, ${size}> k${first}${rest}Container = {${bytes}};
+" @ONLY)
+    endforeach()
+    target_include_directories(${arg_TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+endfunction()

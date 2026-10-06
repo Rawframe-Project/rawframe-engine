@@ -19,3 +19,4 @@
 
 # Fuzz seeds are bytes, line endings included.
 **/tests/seeds/** binary
+*.mrsc binary

@@ -7,3 +7,4 @@ if(NOT TARGET rawframe_render)
 endif()
 
 rawframe_module(NAME particles_gpu SOURCES src/particles.cpp DEPS render particles result base)
+rawframe_shader_containers(TARGET rawframe_particles_gpu NAMES spawn particle)
