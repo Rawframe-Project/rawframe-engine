@@ -133,6 +133,11 @@ def main(server, bots):
         ]
         failed = [what for what, held in checks if not held]
         if failed:
+            # A sanitizer's report, last, where a failed test's last lines
+            # show it.
+            for name in ("server", "playing", "late"):
+                for report in re.findall(r"WARNING: \w+Sanitizer.*?SUMMARY:[^\n]*", text[name], re.DOTALL):
+                    sys.stdout.write(f"{name}: {report}\n")
             sys.exit("drain failed: " + ", ".join(f"expected {what}" for what in failed))
         print("drained in order")
 
