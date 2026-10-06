@@ -196,13 +196,7 @@ void ShellParticipant::showScene(std::size_t at) {
         static_cast<void>(tree_->scrollTo(entitiesColumn_, 0, 0));
         showView();
         if (preview_.has_value()) {
-            const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));
-            previewing_ = kAttached.previewing;
-            if (kAttached.view.has_value()) {
-                view_ = kAttached.view;
-            }
-            say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);
-            showViewText();
+            attachPreview();
         }
     }
     for (std::size_t each = 0; each < sceneRows_.size(); ++each) {

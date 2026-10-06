@@ -255,6 +255,10 @@ private:
     /// then admits a session once its player is in.
     void attachPlayed(double seconds);
 
+    /// Attaches the chosen scene's preview to `preview_`, saying how it
+    /// went and logging `studio_previewing` once it is live.
+    void attachPreview();
+
     /// `text` in the header's status.
     void say(std::string text);
 

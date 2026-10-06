@@ -38,7 +38,17 @@ void ShellParticipant::attachPlayed(double seconds) {
     if (stopping_.has_value() && stopping_->ended()) {
         stopping_.reset();
     }
-    if (!playing_.has_value() || previewing_ || seconds < nextAttach_) {
+    if (previewing_ || seconds < nextAttach_) {
+        return;
+    }
+    // A preview by configuration whose game did not answer, loaded or not
+    // yet started, is tried again now and then; each try may wait for its
+    // reply, so not often (D453b).
+    if (!playing_.has_value()) {
+        if (preview_.has_value() && !scene_.empty()) {
+            nextAttach_ = seconds + 2;
+            attachPreview();
+        }
         return;
     }
     nextAttach_ = seconds + 0.5;
@@ -60,17 +70,21 @@ void ShellParticipant::attachPlayed(double seconds) {
     if (scene_.empty()) {
         return;
     }
+    attachPreview();
+}
+
+void ShellParticipant::attachPreview() {
     const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));
     previewing_ = kAttached.previewing;
     if (kAttached.view.has_value()) {
         view_ = kAttached.view;
-        showViewText();
     }
+    showViewText();
+    say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);
     if (previewing_) {
-        say("previewing " + scene_);
         emitter_.log(diagnostics::Severity::Info,
                      kPreviewing,
-                     "a scene's preview is live in the game Studio plays",
+                     "a scene's preview is live in a running game",
                      {diagnostics::field("scene", std::string_view{scene_})});
     }
 }
