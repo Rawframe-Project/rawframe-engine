@@ -94,6 +94,11 @@ result::Status ShellParticipant::build() {
         if (catalog_.offers("scene.remove_instance")) {
             RAWFRAME_TRY_ASSIGN(uninstanceNode_, button(kTools, "Remove instance"));
         }
+        // The chosen entity's place among the scene's own (D451).
+        if (catalog_.offers("scene.move_entity")) {
+            RAWFRAME_TRY_ASSIGN(upNode_, button(kTools, "Up"));
+            RAWFRAME_TRY_ASSIGN(downNode_, button(kTools, "Down"));
+        }
     }
     return showScenes();
 }
@@ -180,6 +185,7 @@ void ShellParticipant::showScene(std::size_t at) {
     names_.clear();
     brought_.clear();
     removed_.clear();
+    places_.clear();
     entity_.clear();
     components_ = 0;
     const std::optional<Value> kList = read(scene_, "scene.list_entities");
@@ -214,6 +220,8 @@ void ShellParticipant::showScene(std::size_t at) {
         names_.push_back(name != nullptr && name->text() != nullptr ? *name->text() : std::string{});
         brought_.push_back(brought != nullptr);
         removed_.push_back(kRemoved);
+        const Value* place = each.find("place");
+        places_.push_back(place != nullptr ? place->integer() : std::nullopt);
     }
     // Under the scene's entities, the scene an instance placed in it is of.
     if (catalog_.offers("scene.add_instance")) {

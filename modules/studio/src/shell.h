@@ -193,6 +193,10 @@ private:
     /// (D438), chosen once made.
     void create();
 
+    /// Moves the chosen entity one place earlier (`by` -1) or later (+1)
+    /// among the scene's own entities.
+    void move(int by);
+
     /// Places in the chosen scene an instance of the scene `text` names.
     void place(const std::string& text);
 
@@ -262,10 +266,15 @@ private:
     std::vector<bool> brought_;
     /// Whether each brought entity is one its instance removed.
     std::vector<bool> removed_;
+    /// Each of the scene's own entities' place among them; none for one an
+    /// instance brought.
+    std::vector<std::optional<std::int64_t>> places_;
     ui::Node newNode_{};
     ui::Node deleteNode_{};
     ui::Node restoreNode_{};
     ui::Node uninstanceNode_{};
+    ui::Node upNode_{};
+    ui::Node downNode_{};
     std::vector<ActionButton> actions_;
     view::UiPointing* pointing_ = nullptr;
     view::UiTyping* typing_ = nullptr;

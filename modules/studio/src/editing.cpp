@@ -45,6 +45,9 @@ void ShellParticipant::pressAt(float x, float y) {
         commit(operationOn("scene.destroy_entity"),
                kBrought ? "removed from its instance" : "entity deleted",
                kBrought ? std::optional<std::string>{entity_} : std::nullopt);
+    } else if ((kNode == upNode_ || kNode == downNode_) && !entity_.empty()) {
+        endEdit();
+        move(kNode == upNode_ ? -1 : 1);
     } else if ((kNode == restoreNode_ || kNode == uninstanceNode_) && !entity_.empty()) {
         endEdit();
         const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
@@ -233,6 +236,21 @@ void ShellParticipant::create() {
     operation.add("entity", Value::string(kIdentity));
     operation.add("name", Value::string("new entity"));
     commit(std::move(operation), "entity created", kIdentity);
+}
+
+void ShellParticipant::move(int by) {
+    const std::optional<std::int64_t> kPlace = entityAt_ < places_.size() ? places_[entityAt_] : std::nullopt;
+    const auto kOwn = std::ranges::count_if(places_, [](const auto& place) {
+        return place.has_value();
+    });
+    if (!kPlace.has_value() || *kPlace + by < 0 || *kPlace + by >= kOwn) {
+        ++refused_;
+        say(!kPlace.has_value() ? "an instance places what it brings" : by < 0 ? "already first" : "already last");
+        return;
+    }
+    Value operation = operationOn("scene.move_entity");
+    operation.add("place", Value::integer(*kPlace + by));
+    commit(std::move(operation), by < 0 ? "moved up" : "moved down", entity_);
 }
 
 void ShellParticipant::place(const std::string& text) {
