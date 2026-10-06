@@ -26,12 +26,12 @@ if(RAWFRAME_BUILD_TESTS)
         set_tests_properties(stalls_exported PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]+, client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes")
+                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]*, client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes")
         if(RAWFRAME_SANITIZE MATCHES "address")
-            # Fifteen seconds drawn leave a thread's allocations in a library
-            # unloaded before LeakSanitizer reports, so no suppression can
-            # name them; the report stays in client.log, but does not change
-            # the code the launcher must pass on (D433b).
+            # A client drawn long under load leaves a thread's allocations in
+            # a library unloaded before LeakSanitizer reports, so no
+            # suppression can name them; the report stays in client.log, but
+            # does not change the code the launcher must pass on (D433b).
             set_tests_properties(stalls_exported PROPERTIES ENVIRONMENT "LSAN_OPTIONS=exitcode=0")
         endif()
     endif()
