@@ -233,7 +233,8 @@ RAWFRAME_TEST(ARibbonIsDrawnAcrossItsPoints) {
                     at(*kCrossed, 16, 31)[0],
                     at(*kCrossed, 32, 20)[0],
                     at(*kCrossed, 40, 34)[0]);
-        RAWFRAME_EXPECT(kMiddle[0] == 255 && kMiddle[1] == 0 && kMiddle[2] == 0);
+        // Within a step of red: Metal on Apple's GPU rounds green to 1 (D406).
+        RAWFRAME_EXPECT(kMiddle[0] == 255 && kMiddle[1] <= 1 && kMiddle[2] <= 1);
         RAWFRAME_EXPECT(at(*kCrossed, 16, 31)[0] == 255 && at(*kCrossed, 40, 34)[0] == 255);
         RAWFRAME_EXPECT(at(*kCrossed, 32, 20) == at(*kSky, 32, 20));
     }
