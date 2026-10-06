@@ -132,4 +132,13 @@ reply 4 | grep -q '"view":{"eye":\[0,20,0.5\]'
 reply 6 | grep -q '"view":{"eye":\[0,20,0.5\]'
 reply 5 | grep -q '"view":{"eye":\[3,1,3\],"target":\[0,1,0\],"fieldOfView":70}'
 reply 7 | grep -q '"view":{"eye":\[0,20,0.5\]'
+# A preview that cannot be reached is refused, and the session goes on
+# (D433).
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.preview","id":2,"scene":"level.scene","preview":{"endpoint":"127.0.0.1:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
+    echo '{"kind":"authoring.preview","id":3,"scene":"level.scene","preview":null}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+reply 2 | grep -q '"code":"capability_denied".*"said":"the pin and token files must read"'
+reply 3 | grep -q '"answer":{"kind":"authoring.preview","reopened":false,"previewing":false}'
 echo "authored runners in a session"

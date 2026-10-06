@@ -40,7 +40,22 @@ void complain(std::string_view why) {
     std::fprintf(stderr, "rawframe-author connect: %.*s\n", static_cast<int>(why.size()), why.data());
 }
 
-class Client {
+/// Whether a reply line is an answer rather than an error.
+bool answered(std::string_view reply) {
+    const auto kParsed = document::parse(reply);
+    return kParsed.has_value() && kParsed->find("answer") != nullptr;
+}
+
+/// Whether a record asks the endpoint to end the connection.
+bool ending(std::string_view record) {
+    const auto kParsed = document::parse(record);
+    const document::Value* kKind = kParsed.has_value() ? kParsed->find("kind") : nullptr;
+    return kKind != nullptr && kKind->text() != nullptr && *kKind->text() == "tooling.end";
+}
+
+} // namespace
+
+class ToolingLink::Client {
 public:
     explicit Client(network::Provider& provider) : provider_(provider) {
     }
@@ -122,93 +137,106 @@ private:
     bool closed_ = false;
 };
 
-/// Whether a reply line is an answer rather than an error.
-bool answered(std::string_view reply) {
-    const auto kParsed = document::parse(reply);
-    return kParsed.has_value() && kParsed->find("answer") != nullptr;
+ToolingLink::ToolingLink() = default;
+
+ToolingLink::~ToolingLink() {
+    if (client_ != nullptr) {
+        // Said for the endpoint; whether its reply or the close comes first,
+        // the connection is over.
+        (void)client_->ask(R"({"kind":"tooling.end","id":null})");
+        client_->close();
+    }
 }
 
-/// Whether a record asks the endpoint to end the connection.
-bool ending(std::string_view record) {
-    const auto kParsed = document::parse(record);
-    const document::Value* kKind = kParsed.has_value() ? kParsed->find("kind") : nullptr;
-    return kKind != nullptr && kKind->text() != nullptr && *kKind->text() == "tooling.end";
-}
-
-} // namespace
-
-int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
+std::unique_ptr<ToolingLink>
+ToolingLink::open(std::string_view endpoint, const char* pinFile, const char* tokenFile, std::string& said) {
     const auto kPin = firstLine(pinFile);
     const auto kToken = firstLine(tokenFile);
     if (!kPin.has_value() || !kToken.has_value()) {
-        complain("the pin and token files must read");
-        return 2;
+        said = "the pin and token files must read";
+        return nullptr;
     }
     auto pin = network_quic::parseFingerprint(*kPin);
     if (!pin.has_value()) {
-        complain("the pin file holds no certificate fingerprint");
-        return 2;
+        said = "the pin file holds no certificate fingerprint";
+        return nullptr;
     }
     auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin});
     if (!network.has_value()) {
-        complain("QUIC could not start");
-        return 1;
+        said = "QUIC could not start";
+        return nullptr;
     }
     auto provider = (*network)->provider(world_tooling::toolingProfile(1));
     if (!provider.has_value()) {
-        complain("no provider for the tooling protocol");
+        said = "no provider for the tooling protocol";
+        return nullptr;
+    }
+    std::unique_ptr<ToolingLink> link{new ToolingLink};
+    link->network_ = std::move(*network);
+    link->provider_ = std::move(*provider);
+    auto client = std::make_unique<Client>(*link->provider_);
+    if (!client->connected(endpoint)) {
+        said = "the endpoint could not be reached, or did not trust the pin";
+        return nullptr;
+    }
+    document::Value hello = document::Value::object();
+    hello.add("kind", document::Value::string("tooling.hello"));
+    hello.add("id", document::Value::integer(0));
+    hello.add("protocolVersion", document::Value::integer(world_tooling::kToolingProtocolVersion));
+    hello.add("token", document::Value::string(*kToken));
+    auto welcome = client->ask(document::writeCompact(hello));
+    if (!welcome.has_value()) {
+        said = "the endpoint closed before welcoming";
+        return nullptr;
+    }
+    said = std::move(*welcome);
+    if (!answered(said)) {
+        return nullptr;
+    }
+    link->client_ = std::move(client);
+    return link;
+}
+
+std::optional<std::string> ToolingLink::ask(std::string_view record) {
+    return client_->ask(record);
+}
+
+int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
+    std::string said;
+    std::unique_ptr<ToolingLink> link = ToolingLink::open(endpoint, pinFile, tokenFile, said);
+    if (link == nullptr && !said.starts_with('{')) {
+        complain(said);
+        return 1;
+    }
+    std::printf("%s\n", said.c_str());
+    std::fflush(stdout);
+    if (link == nullptr) {
         return 1;
     }
     int status = 0;
-    {
-        Client client{**provider};
-        if (!client.connected(endpoint)) {
-            complain("the endpoint could not be reached, or did not trust the pin");
+    std::string line;
+    for (int each = std::fgetc(stdin); each != EOF; each = std::fgetc(stdin)) {
+        if (each != '\n') {
+            line.push_back(static_cast<char>(each));
+            continue;
+        }
+        const auto kReply = link->ask(line);
+        const bool kEnded = ending(line);
+        line.clear();
+        // The endpoint closes on end, and the close may outrun its reply.
+        if (!kReply.has_value() && kEnded) {
+            return status;
+        }
+        if (!kReply.has_value()) {
+            complain("the endpoint closed");
             return 1;
         }
-        document::Value hello = document::Value::object();
-        hello.add("kind", document::Value::string("tooling.hello"));
-        hello.add("id", document::Value::integer(0));
-        hello.add("protocolVersion", document::Value::integer(world_tooling::kToolingProtocolVersion));
-        hello.add("token", document::Value::string(*kToken));
-        const auto kWelcome = client.ask(document::writeCompact(hello));
-        if (!kWelcome.has_value()) {
-            complain("the endpoint closed before welcoming");
-            return 1;
-        }
-        std::printf("%s\n", kWelcome->c_str());
+        std::printf("%s\n", kReply->c_str());
         std::fflush(stdout);
-        if (!answered(*kWelcome)) {
-            return 1;
+        status = answered(*kReply) ? status : 1;
+        if (kEnded) {
+            return status;
         }
-        bool ended = false;
-        std::string line;
-        for (int each = std::fgetc(stdin); each != EOF && !ended; each = std::fgetc(stdin)) {
-            if (each != '\n') {
-                line.push_back(static_cast<char>(each));
-                continue;
-            }
-            const auto kReply = client.ask(line);
-            ended = ending(line);
-            line.clear();
-            // The endpoint closes on end, and the close may outrun its reply.
-            if (!kReply.has_value() && ended) {
-                break;
-            }
-            if (!kReply.has_value()) {
-                complain("the endpoint closed");
-                return 1;
-            }
-            std::printf("%s\n", kReply->c_str());
-            std::fflush(stdout);
-            status = answered(*kReply) ? status : 1;
-        }
-        if (!ended) {
-            // Said for the client; whether its reply or the close comes first,
-            // the connection is over.
-            (void)client.ask(R"({"kind":"tooling.end","id":null})");
-        }
-        client.close();
     }
     return status;
 }

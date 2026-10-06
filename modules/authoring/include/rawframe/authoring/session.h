@@ -59,7 +59,16 @@ enum class SessionVerb : std::uint8_t {
     Redo,
     Select,
     View,
+    Preview,
     End,
+};
+
+/// Where a preview's tooling endpoint is (D433): its address, and the files
+/// holding the certificate fingerprint to trust and the token to say.
+struct PreviewTarget {
+    std::string endpoint;
+    std::string pinFile;
+    std::string tokenFile;
 };
 
 /// One record from a client, read whole.
@@ -82,6 +91,8 @@ struct SessionRecord {
     std::vector<base::Bits128> entities;
     /// View's (D432).
     SceneView view;
+    /// Preview's; none to let the preview go (D433).
+    std::optional<PreviewTarget> preview;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form

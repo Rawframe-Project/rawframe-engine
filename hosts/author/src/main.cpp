@@ -37,9 +37,12 @@
 // under the scene root (the game's directory unless named) opened as
 // records name them and kept open with their undo histories, each change
 // written to its file as it commits, and each with its selection, which
-// `select` sets and undo and redo put back (D417). A scene whose file
+// `select` sets and undo and redo put back (D417), and its view, which
+// `view` sets and undo and redo put back too (D432). A scene whose file
 // changed under the session is opened again, its history and selection
-// let go, and the answer says so.
+// let go, and the answer says so. `preview` connects the session to a
+// running client's tooling endpoint granted `view` (D433), which then shows
+// one scene's game from that scene's view, handed it each time it changes.
 //
 // `connect` is a client of a running Runtime's tooling endpoint (D408,
 // connect.h): records a line on standard input, the replies on standard
@@ -244,7 +247,8 @@ int apply(const char* game, const std::filesystem::path& scenePath, const char* 
                            .error()
                            .withContext("document", kBefore));
     }
-    auto files = rawframe::world_kest::GameFiles::fromDirectory(game);
+    auto files =
+        rawframe::world_kest::GameFiles::fromDirectory(game, nullptr, rawframe::world_kest::MeshReading::Named);
     if (!files.has_value()) {
         return refused(files.error());
     }
@@ -320,7 +324,8 @@ int apply(const char* game, const std::filesystem::path& scenePath, const char* 
 }
 
 int describe(const char* game) {
-    auto files = rawframe::world_kest::GameFiles::fromDirectory(game);
+    auto files =
+        rawframe::world_kest::GameFiles::fromDirectory(game, nullptr, rawframe::world_kest::MeshReading::Named);
     if (!files.has_value()) {
         return refused(files.error());
     }
@@ -346,7 +351,8 @@ int answerQueries(const char* game, const std::filesystem::path& scenePath, cons
     if (!queries.has_value()) {
         return refused(queries.error());
     }
-    auto files = rawframe::world_kest::GameFiles::fromDirectory(game);
+    auto files =
+        rawframe::world_kest::GameFiles::fromDirectory(game, nullptr, rawframe::world_kest::MeshReading::Named);
     if (!files.has_value()) {
         return refused(files.error());
     }
@@ -380,7 +386,8 @@ int answerQueries(const char* game, const std::filesystem::path& scenePath, cons
 }
 
 int migrate(const char* game, std::span<char* const> scenes, bool dryRun) {
-    auto files = rawframe::world_kest::GameFiles::fromDirectory(game);
+    auto files =
+        rawframe::world_kest::GameFiles::fromDirectory(game, nullptr, rawframe::world_kest::MeshReading::Named);
     if (!files.has_value()) {
         return refused(files.error());
     }
@@ -482,6 +489,11 @@ class Session {
 public:
     Session(std::filesystem::path game, std::filesystem::path root)
         : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)) {
+    }
+    Session(const Session&) = delete;
+    Session& operator=(const Session&) = delete;
+    ~Session() {
+        letGo();
     }
 
     /// Reads records from `in` and replies on `out` until `end` or the
@@ -593,6 +605,8 @@ private:
             return selected(record);
         case authoring::SessionVerb::View:
             return viewed(record);
+        case authoring::SessionVerb::Preview:
+            return previewed(record);
         }
         return std::unexpected{failure(
             authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
@@ -603,7 +617,8 @@ private:
         if (catalog_.has_value()) {
             return {};
         }
-        auto files = rawframe::world_kest::GameFiles::fromDirectory(game_.string());
+        auto files = rawframe::world_kest::GameFiles::fromDirectory(
+            game_.string(), nullptr, rawframe::world_kest::MeshReading::Named);
         if (!files.has_value()) {
             return std::unexpected<result::Error>{std::move(files).error()};
         }
@@ -775,7 +790,89 @@ private:
         made.add("document", Value::string(digestOf(open->document->text())));
         made.add("reopened", Value::boolean(reopened));
         made.add("view", viewOf(*open));
+        made.add("previewing", Value::boolean(forward(record.scene, *open)));
         return made;
+    }
+
+    /// `preview` (D433): a running Runtime's tooling endpoint, granted
+    /// `view`, shows the scene from its view from now on, each view the
+    /// scene is told or stepped back or forth to handed it by `tooling.look`;
+    /// a null preview lets it go. One preview at a time.
+    result::Result<Value> previewed(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        letGo();
+        if (record.preview.has_value()) {
+            std::string said;
+            preview_ = rawframe::author::ToolingLink::open(
+                record.preview->endpoint, record.preview->pinFile.c_str(), record.preview->tokenFile.c_str(), said);
+            if (preview_ == nullptr) {
+                return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
+                                               result::ErrorClass::Unavailable,
+                                               "the preview's endpoint could not be reached or did not welcome")
+                                           .withContext("said", said)};
+            }
+            const auto kWelcome = rawframe::document::parse(said);
+            const Value* kAnswer = kWelcome.has_value() ? kWelcome->find("answer") : nullptr;
+            const Value* kGrants = kAnswer != nullptr ? kAnswer->find("grants") : nullptr;
+            const bool kViewGranted = kGrants != nullptr && kGrants->kind() == Value::Kind::Array &&
+                                      std::ranges::any_of(kGrants->items(), [](const Value& each) {
+                                          return each.kind() == Value::Kind::String && *each.text() == "view";
+                                      });
+            if (!kViewGranted) {
+                preview_.reset();
+                return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
+                                               result::ErrorClass::PermissionDenied,
+                                               "the preview's endpoint does not grant view")};
+            }
+            previewScene_ = record.scene;
+            previewed_ = std::nullopt;
+            told_ = false;
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.preview"));
+        made.add("reopened", Value::boolean(reopened));
+        made.add("previewing", Value::boolean(forward(record.scene, *open)));
+        return made;
+    }
+
+    /// Gives a preview's player its camera back, and lets the preview go.
+    void letGo() {
+        if (preview_ != nullptr) {
+            (void)preview_->ask(R"({"kind":"tooling.look","id":0,"view":null})");
+        }
+        preview_.reset();
+        previewScene_.clear();
+    }
+
+    /// Hands the preview the scene's view where it previews that scene and
+    /// the view changed since it was last told; whether the preview is
+    /// live. A preview that does not answer is let go.
+    bool forward(const std::string& name, const OpenScene& open) {
+        if (preview_ == nullptr || name != previewScene_) {
+            return false;
+        }
+        const std::optional<authoring::SceneView>& kView = open.document->view();
+        if (told_ && kView == previewed_) {
+            return true;
+        }
+        Value look = Value::object();
+        look.add("kind", Value::string("tooling.look"));
+        look.add("id", Value::integer(static_cast<std::int64_t>(++looks_)));
+        look.add("view", viewOf(open));
+        const auto kReply = preview_->ask(rawframe::document::writeCompact(look));
+        const bool kAnswered = kReply.has_value() && [&kReply] {
+            const auto kParsed = rawframe::document::parse(*kReply);
+            return kParsed.has_value() && kParsed->find("answer") != nullptr;
+        }();
+        if (!kAnswered) {
+            preview_.reset();
+            previewScene_.clear();
+            return false;
+        }
+        previewed_ = kView;
+        told_ = true;
+        return true;
     }
 
     /// `select`: the scene's selection, in place of what was (D417).
@@ -830,6 +927,7 @@ private:
         failed_ = !kStep.has_value();
         results.push(slotValue(kStep));
         RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
+        (void)forward(record.scene, *open);
         return outcome(*open, kWritten, reopened, std::move(results), 0);
     }
 
@@ -839,6 +937,13 @@ private:
     std::vector<std::pair<rawframe::base::Bits128, std::filesystem::path>> beside_;
     std::map<std::string, OpenScene> scenes_;
     bool greeted_ = false;
+    /// The preview and the scene it shows (D433), the view it was last
+    /// told, and the looks asked of it.
+    std::unique_ptr<rawframe::author::ToolingLink> preview_;
+    std::string previewScene_;
+    std::optional<authoring::SceneView> previewed_;
+    bool told_ = false;
+    std::uint64_t looks_ = 0;
     /// Whether the last record's operations, queries, or step failed in a
     /// slot of its answer.
     bool failed_ = false;

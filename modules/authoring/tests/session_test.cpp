@@ -64,6 +64,20 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
          R"({"kind":"authoring.view","scene":"a.scene"})"}) {
         RAWFRAME_EXPECT(refusedWith(readSessionRecord(kWrong, id), AuthoringError::ValidationFailed));
     }
+    const auto kPreview = readSessionRecord(
+        R"({"kind":"authoring.preview","scene":"a.scene","preview":{"endpoint":"127.0.0.1:9000","pinFile":"pin","tokenFile":"token"}})",
+        id);
+    RAWFRAME_EXPECT(kPreview.has_value() && kPreview->verb == SessionVerb::Preview && kPreview->preview.has_value() &&
+                    kPreview->preview->endpoint == "127.0.0.1:9000" && kPreview->preview->tokenFile == "token");
+    const auto kLetGo = readSessionRecord(R"({"kind":"authoring.preview","scene":"a.scene","preview":null})", id);
+    RAWFRAME_EXPECT(kLetGo.has_value() && !kLetGo->preview.has_value());
+    for (const std::string_view kWrong :
+         {R"({"kind":"authoring.preview","scene":"a.scene","preview":{"endpoint":"127.0.0.1:9000","pinFile":"pin"}})",
+          R"({"kind":"authoring.preview","scene":"a.scene","preview":{"endpoint":"","pinFile":"pin","tokenFile":"t"}})",
+          R"({"kind":"authoring.preview","scene":"a.scene","preview":"127.0.0.1:9000"})",
+          R"({"kind":"authoring.preview","preview":null})"}) {
+        RAWFRAME_EXPECT(refusedWith(readSessionRecord(kWrong, id), AuthoringError::ValidationFailed));
+    }
     RAWFRAME_EXPECT(readSessionRecord(R"({"kind":"authoring.describe"})", id).has_value());
     RAWFRAME_EXPECT(readSessionRecord(R"({"kind":"authoring.end","id":null})", id).has_value());
 }

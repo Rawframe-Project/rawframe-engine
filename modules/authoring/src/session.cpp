@@ -27,15 +27,16 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 9> kVerbs = {VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
-                                            VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
-                                            VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
-                                            VerbName{.kind = "authoring.read", .verb = SessionVerb::Read},
-                                            VerbName{.kind = "authoring.undo", .verb = SessionVerb::Undo},
-                                            VerbName{.kind = "authoring.redo", .verb = SessionVerb::Redo},
-                                            VerbName{.kind = "authoring.select", .verb = SessionVerb::Select},
-                                            VerbName{.kind = "authoring.view", .verb = SessionVerb::View},
-                                            VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
+constexpr std::array<VerbName, 10> kVerbs = {VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
+                                             VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
+                                             VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
+                                             VerbName{.kind = "authoring.read", .verb = SessionVerb::Read},
+                                             VerbName{.kind = "authoring.undo", .verb = SessionVerb::Undo},
+                                             VerbName{.kind = "authoring.redo", .verb = SessionVerb::Redo},
+                                             VerbName{.kind = "authoring.select", .verb = SessionVerb::Select},
+                                             VerbName{.kind = "authoring.view", .verb = SessionVerb::View},
+                                             VerbName{.kind = "authoring.preview", .verb = SessionVerb::Preview},
+                                             VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
 /// it must.
@@ -55,6 +56,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Read:
     case SessionVerb::Select:
     case SessionVerb::View:
+    case SessionVerb::Preview:
         return Members{.required = 2, .optional = 0};
     case SessionVerb::Undo:
     case SessionVerb::Redo:
@@ -82,7 +84,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
     }
     if (named == nullptr) {
-        return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, view, or end");
+        return malformed(
+            "a session record's kind is hello, describe, apply, read, undo, redo, select, view, preview, or end");
     }
     SessionRecord record{.verb = named->verb, .id = idRead};
     const Members kMembers = membersOf(record.verb);
@@ -115,6 +118,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Redo:
     case SessionVerb::Select:
     case SessionVerb::View:
+    case SessionVerb::Preview:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -171,6 +175,21 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
         }
         record.view.fieldOfView = *kDegrees;
+    } else if (record.verb == SessionVerb::Preview) {
+        const Value* kPreview = parsed->find("preview");
+        if (kPreview != nullptr && kPreview->isNull()) {
+            return record;
+        }
+        const bool kObject =
+            kPreview != nullptr && kPreview->kind() == Value::Kind::Object && kPreview->names().size() == 3;
+        const std::string* kEndpoint = kObject ? textOf(kPreview->find("endpoint")) : nullptr;
+        const std::string* kPin = kObject ? textOf(kPreview->find("pinFile")) : nullptr;
+        const std::string* kToken = kObject ? textOf(kPreview->find("tokenFile")) : nullptr;
+        if (kEndpoint == nullptr || kPin == nullptr || kToken == nullptr || kEndpoint->empty() || kPin->empty() ||
+            kToken->empty()) {
+            return malformed("preview is null, or holds an endpoint, a pinFile, and a tokenFile");
+        }
+        record.preview = PreviewTarget{.endpoint = *kEndpoint, .pinFile = *kPin, .tokenFile = *kToken};
     }
     return record;
 }
