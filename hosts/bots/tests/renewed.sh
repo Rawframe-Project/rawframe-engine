@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# A server's self-signed identity renewed while it serves (D419): renewed a
-# second after it starts (`network.quic.renew_ms`), it writes the new
+# A server's self-signed identity renewed while it serves (D419): renewed
+# three seconds after it starts (`network.quic.renew_ms`), it writes the new
 # fingerprint over the old. Bots pinned before play on through it; bots
 # pinned to the new fingerprint are admitted, and bots still pinned to the
 # old one are refused. Run from the repository root.
@@ -24,7 +24,7 @@ host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = $here/games/arena/arena.game
 network.quic.self_signed = true
-network.quic.renew_ms = 1000
+network.quic.renew_ms = 3000
 network.quic.fingerprint_file = $work/fingerprint
 replication.endpoint = 127.0.0.1:$port
 CONF
@@ -49,9 +49,14 @@ for _ in $(seq 200); do
 done
 cp "$work/fingerprint" "$work/first"
 # Pinned before the renewal, and playing through it.
-bots_conf before "$work/first" 600
+bots_conf before "$work/first" 1200
 "$bots" --config "$work/before.conf" >"$work/before.log" 2>&1 &
 pids+=($!)
+# Admitted before the renewal, however slowly a process starts here.
+for _ in $(seq 200); do
+    grep -q '"code":"bots_admitted"' "$work/before.log" 2>/dev/null && break
+    sleep 0.05
+done
 for _ in $(seq 200); do
     grep -q '"code":"identity_renewed"' "$work/server.log" 2>/dev/null && break
     sleep 0.05
