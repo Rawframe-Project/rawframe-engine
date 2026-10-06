@@ -174,6 +174,12 @@ RAWFRAME_TEST(AServersSystemsReadEachCommandOnceFromItsTick) {
     // A tick skipped is no loss: what was due by then is read at the next.
     RAWFRAME_EXPECT(run.at(5) && run.x(2) == 9);
     RAWFRAME_EXPECT(run.at(6) && run.x(2) == 9);
+    // Unread while commands for two ticks on arrive, it never will be.
+    const std::array<world_replication::ReceivedCommand, 1> kStale = {push(run.entities[1], 100, 7)};
+    (*doors)->deliver(kStale);
+    const std::array<world_replication::ReceivedCommand, 1> kLater = {push(run.entities[0], 1, 9)};
+    (*doors)->deliver(kLater);
+    RAWFRAME_EXPECT(run.at(9) && run.x(1) == 2 && run.x(0) == 12);
 }
 
 RAWFRAME_TEST(ACommandReadPastItsCountFailsTheRun) {

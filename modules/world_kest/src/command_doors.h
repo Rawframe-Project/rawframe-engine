@@ -43,7 +43,8 @@ public:
     void end(bool kept) noexcept override;
 
     /// Read: commands checked by the replication server, each for the tick
-    /// it names.
+    /// it names. One still unread when commands for two ticks after its own
+    /// arrive is dropped.
     void deliver(std::span<const world_replication::ReceivedCommand> commands);
 
     /// Each command's exact size, by its place among the game's lines.

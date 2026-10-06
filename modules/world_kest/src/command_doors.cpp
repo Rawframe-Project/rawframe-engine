@@ -82,9 +82,19 @@ void CommandDoors::end(bool /*kept*/) noexcept {
 }
 
 void CommandDoors::deliver(std::span<const world_replication::ReceivedCommand> commands) {
-    if (role_ == Role::Read) {
-        delivered_.insert(delivered_.end(), commands.begin(), commands.end());
+    if (role_ != Role::Read || commands.empty()) {
+        return;
     }
+    // What no system read by the tick before the newest arriving never will
+    // be: a game whose systems do not run cannot hold its players' commands
+    // without bound.
+    const std::uint64_t kNewest = std::ranges::max(commands, {}, [](const auto& each) {
+                                      return each.tick.value;
+                                  }).tick.value;
+    std::erase_if(delivered_, [kNewest](const world_replication::ReceivedCommand& each) {
+        return each.tick.value + 1 < kNewest;
+    });
+    delivered_.insert(delivered_.end(), commands.begin(), commands.end());
 }
 
 const world_replication::ReceivedCommand* CommandDoors::at(kest::DoorCall& call, const Kind& kind) noexcept {
