@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <optional>
 #include <utility>
 
 #if RAWFRAME_THREADS
@@ -136,8 +138,24 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
 }
 
 result::Status WindowHost::start(window::Windows& windows) {
-    RAWFRAME_TRY_ASSIGN(const window::WindowId kWindow,
-                        windows.create(window::WindowSettings{.title = settings_.title}));
+    // The window's size and place, logical pixels (D445): a player's
+    // choice, or a tool's keeping a game it plays beside its own.
+    window::WindowSettings made{.title = settings_.title};
+    std::optional<window::Position> place;
+    if (const composition::Configuration* kConfiguration = request_.configuration) {
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kWidth, kConfiguration->unsignedInteger("window.width", 1280));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeight, kConfiguration->unsignedInteger("window.height", 720));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kX, kConfiguration->unsignedInteger("window.x", 0));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kY, kConfiguration->unsignedInteger("window.y", 0));
+        made.size = {.width = static_cast<float>(kWidth), .height = static_cast<float>(kHeight)};
+        if (kConfiguration->text("window.x").has_value() || kConfiguration->text("window.y").has_value()) {
+            place = window::Position{.x = static_cast<float>(kX), .y = static_cast<float>(kY)};
+        }
+    }
+    RAWFRAME_TRY_ASSIGN(const window::WindowId kWindow, windows.create(made));
+    if (place.has_value()) {
+        static_cast<void>(windows.requestPosition(kWindow, *place));
+    }
     surfaces_.watch(kWindow);
     window_ = kWindow;
     bridge_.emplace(feed_);

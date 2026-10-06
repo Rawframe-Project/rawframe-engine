@@ -13,6 +13,11 @@
 // The window system owns the loop on every platform, so a desktop client
 // and a page run the same program: `window::run` returns when it stops on
 // a desktop, and at once on the web, where the page's frames go on.
+//
+//   window.width, window.height   the window's size, logical pixels
+//                                 (1280 by 720)
+//   window.x, window.y            its place on the screen, either naming it;
+//                                 where the system places it otherwise (D445)
 
 #include "rawframe/host/host.h"
 #include "rawframe/input/feed.h"
