@@ -1,0 +1,66 @@
+{
+  "kind": "ui.styles",
+  "formatVersion": 1,
+  "styles": [
+    {
+      "styleId": "85ecf7b643b63d65",
+      "name": "button",
+      "base": {
+        "fill": "#101820c0",
+        "radius": 6
+      },
+      "focused": {
+        "outerShadow": {
+          "color": "#ffd24aff",
+          "spread": 2
+        }
+      },
+      "hovered": {
+        "fill": "#304860e0"
+      },
+      "pressed": {
+        "fill": "#080c14e0"
+      },
+      "transitions": [
+        {
+          "parts": [
+            "fill"
+          ],
+          "seconds": 0.12,
+          "easing": "ease_out"
+        },
+        {
+          "parts": [
+            "outerShadow"
+          ],
+          "seconds": 0.12,
+          "easing": "ease_out"
+        }
+      ]
+    },
+    {
+      "styleId": "139f1a51051d860e",
+      "name": "field",
+      "base": {
+        "fill": "#101820c0",
+        "borderColor": "#f4e9c880",
+        "radius": 6
+      },
+      "focused": {
+        "borderColor": "#ffd24aff"
+      },
+      "hovered": {
+        "borderColor": "#f4e9c8ff"
+      },
+      "transitions": [
+        {
+          "parts": [
+            "borderColor"
+          ],
+          "seconds": 0.12,
+          "easing": "ease_out"
+        }
+      ]
+    }
+  ]
+}

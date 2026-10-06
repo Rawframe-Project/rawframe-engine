@@ -67,6 +67,9 @@ const HUD_COINS: u64 = 0xf1182d0420cc09a0
 const HUD_WON: u64 = 0xafcb66432b6d2152
 const HUD_LOST: u64 = 0xb777d548435986ab
 const HUD_SIGN: u64 = 0xbdb5be7acb84d040
+// Classes of tycoon.styles (D431).
+const STYLE_BUTTON: u64 = 0x85ecf7b643b63d65
+const STYLE_FIELD: u64 = 0x139f1a51051d860e
 
 // An owner: whether it has joined, its cursor on the ground, its coins, its
 // stalls and their levels together, whether the build it asked for is
@@ -340,7 +343,8 @@ fn sign(count: i32, owners: [Owner], signs: [ui.Typed], entities: [world.Entity]
 
 // The sign field under the purse (D426): a line of at most 32 bytes the
 // player writes in, its text in the purse's look, which asks for a sign
-// while it is empty (D428).
+// while it is empty (D428); its panel and border are the field class's,
+// lit under the mouse and gold while it holds focus (D431).
 fn field(count: i32, signs: [ui.Node]) {
     let i = 0
     while i < count {
@@ -348,10 +352,8 @@ fn field(count: i32, signs: [ui.Node]) {
         signs[i].heightOffset = 34.0
         signs[i].padding = 6.0
         signs[i].margin = 12.0
-        signs[i].fill = u32(0x101820C0)
-        signs[i].borderColor = u32(0xF4E9C880)
         signs[i].border = 1.0
-        signs[i].radius = 6.0
+        signs[i].style = STYLE_FIELD
         signs[i].order = 1
         signs[i].font = HUD_FONT
         signs[i].textSize = 18.0
@@ -590,18 +592,15 @@ fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
 }
 
 // The owner's coins in its HUD: words along the top left of its view, a
-// panel a click on builds nothing under (D421), lighter under the mouse
-// (D422).
+// panel a click on builds nothing under (D421), a button that lights under
+// the mouse, darkens as it is pressed, and is ringed while it holds focus
+// (the button class, D431).
 fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
     let i = 0
     while i < count {
         huds[i].padding = 10.0
         huds[i].margin = 12.0
-        huds[i].fill = u32(0x101820C0)
-        if ui.hovered() == controls.PURSE {
-            huds[i].fill = u32(0x304860E0)
-        }
-        huds[i].radius = 6.0
+        huds[i].style = STYLE_BUTTON
         huds[i].text = HUD_COINS
         huds[i].textValue = owners[i].coins
         huds[i].font = HUD_FONT

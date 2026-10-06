@@ -85,6 +85,8 @@ sample sample.kest sample
 text tycoon.strings
 locale en
 font 8e12f827f47f7d51 Inter-Regular.ttf
+# The HUD's classes (D431).
+styles tycoon.styles
 label f1182d0420cc09a0 tycoon.strings hud.coins coins
 label afcb66432b6d2152 tycoon.strings hud.won round
 label b777d548435986ab tycoon.strings hud.lost round
