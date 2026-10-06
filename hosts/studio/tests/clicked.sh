@@ -26,6 +26,12 @@ host.iteration_rate = 120
 render.device = any
 studio.game = $work/game/$(basename "$2")
 CONF
+# And settings of its own, in STUDIO_SETTINGS, such as the editor it opens
+# a diagnostic in (D453), which says how it was opened in STUDIO_EDITED.
+if [ -n "${STUDIO_SETTINGS:-}" ]; then
+    printf '%s\n' "$STUDIO_SETTINGS" >>"$work/studio.conf"
+fi
+export STUDIO_EDITED="$work/edited"
 "$1" --config "$work/studio.conf" >"$work/log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"
@@ -41,5 +47,6 @@ if grep -q '"device_unavailable"' "$work/log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}
     echo "skip: no device"
     exit 0
 fi
+cat "$work/edited" 2>/dev/null
 cat "$work/log"
 exit "$status"

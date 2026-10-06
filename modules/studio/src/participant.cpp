@@ -56,28 +56,14 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
                                          .value_or((kTemporary / ("rawframe-studio-" + mintedIdentity())).string())}};
     }
     session_ = std::make_unique<authoring_session::Session>(kDescription, kRoot);
-    bool ended = false;
-    const std::string kWelcome = session_->answer(R"({"kind":"authoring.hello","id":1,"surfaceGeneration":1})", ended);
-    ++records_;
-    if (kWelcome.find("\"authoring.welcome\"") == std::string::npos) {
-        return misconfigured("Studio's session did not welcome it: the game does not read");
-    }
-    // What the session offers decides what Studio offers (ADR-0032).
-    catalog_ = catalogOf(session_->answer(R"({"kind":"authoring.describe","id":2})", ended));
-    ++records_;
-    std::vector<std::pair<std::string, std::string>> scenes;
-    for (const auto& [kIdentity, kPath] : authoring_session::scenesBeside(kDescription)) {
-        std::error_code error;
-        std::array<char, base::kBits128HexDigits> digits{};
-        base::formatBits128Hex(kIdentity, digits);
-        scenes.emplace_back(std::filesystem::relative(kPath, kRoot, error).generic_string(),
-                            std::string{digits.data(), digits.size()});
-    }
-    std::ranges::sort(scenes);
-    for (auto& [path, source] : scenes) {
-        scenes_.push_back(std::move(path));
-        sceneSources_.push_back(std::move(source));
-    }
+    description_ = kDescription;
+    sceneRoot_ = kRoot;
+    // VS Code by default; any editor that opens a file at a line by its
+    // arguments (ADR-0066, D453).
+    editor_ = std::string{configuration.text("studio.editor").value_or("code --goto {file}:{line}:{column}")};
+    // A game that does not read is shown so, its diagnostic opened in the
+    // author's editor, and read again when asked.
+    static_cast<void>(openGame());
     title_ = "Rawframe Studio  " + kDescription.filename().string();
     if (context.has(view::kUiPointing.name)) {
         RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
@@ -93,6 +79,38 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     RAWFRAME_TRY_ASSIGN(font_, tree_->addFont(kSanitized));
     RAWFRAME_TRY(tree_->setDefaultFont(font_));
     return build();
+}
+
+bool ShellParticipant::openGame() {
+    bool ended = false;
+    const std::string kWelcome = session_->answer(R"({"kind":"authoring.hello","id":1,"surfaceGeneration":1})", ended);
+    ++records_;
+    if (kWelcome.find("\"authoring.welcome\"") == std::string::npos) {
+        broken_ = answeredOf(kWelcome).message;
+        diagnostic_ = diagnosticOf(kWelcome);
+        return false;
+    }
+    broken_.reset();
+    diagnostic_.reset();
+    // What the session offers decides what Studio offers (ADR-0032).
+    catalog_ = catalogOf(session_->answer(R"({"kind":"authoring.describe","id":2})", ended));
+    ++records_;
+    std::vector<std::pair<std::string, std::string>> scenes;
+    for (const auto& [kIdentity, kPath] : authoring_session::scenesBeside(description_)) {
+        std::error_code error;
+        std::array<char, base::kBits128HexDigits> digits{};
+        base::formatBits128Hex(kIdentity, digits);
+        scenes.emplace_back(std::filesystem::relative(kPath, sceneRoot_, error).generic_string(),
+                            std::string{digits.data(), digits.size()});
+    }
+    std::ranges::sort(scenes);
+    scenes_.clear();
+    sceneSources_.clear();
+    for (auto& [path, source] : scenes) {
+        scenes_.push_back(std::move(path));
+        sceneSources_.push_back(std::move(source));
+    }
+    return true;
 }
 
 result::Status ShellParticipant::start(composition::ParticipantContext& context) noexcept {
@@ -183,6 +201,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("previewing", previewing_),
                   diagnostics::field("played", played_),
                   diagnostics::field("playing", playing_.has_value() && playing_->running()),
+                  diagnostics::field("opened", opened_),
                   diagnostics::field("status", std::string_view{status_}),
                   diagnostics::field("framesDrawn", framesDrawn_),
                   diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),

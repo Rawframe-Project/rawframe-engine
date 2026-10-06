@@ -1,5 +1,7 @@
 #include "shell.h"
 
+#include <cstdlib>
+
 namespace rawframe::studio {
 
 std::string ShellParticipant::ask(const Value& record) {
@@ -31,6 +33,18 @@ void ShellParticipant::pressAt(float x, float y) {
         } else {
             startPlaying();
         }
+    } else if (broken_.has_value() && kNode == openNode_) {
+        openEditor();
+    } else if (broken_.has_value() && kNode == retryNode_) {
+        // Read again; shown whole as it now reads, or still as it does not.
+        const bool kOpened = openGame();
+        static_cast<void>(tree_->remove(root_));
+        static_cast<void>(build());
+        if (kOpened) {
+            say("the game reads");
+        }
+    } else if (broken_.has_value()) {
+        return;
     } else if (kNode == undoNode_ || kNode == redoNode_) {
         endEdit();
         step(kNode == undoNode_ ? "authoring.undo" : "authoring.redo");
@@ -241,6 +255,34 @@ void ShellParticipant::create() {
     operation.add("entity", Value::string(kIdentity));
     operation.add("name", Value::string("new entity"));
     commit(std::move(operation), "entity created", kIdentity);
+}
+
+void ShellParticipant::openEditor() {
+    std::error_code error;
+    const std::filesystem::path kFile =
+        std::filesystem::absolute(description_.parent_path() / diagnostic_->file.substr(5), error);
+    const std::vector<std::string> kWords =
+        editorCommand(editor_, kFile.string(), diagnostic_->line, diagnostic_->column);
+    if (kWords.empty()) {
+        return;
+    }
+    const char* const kPath = std::getenv("PATH");
+    const auto kProgram = programOnPath(kWords.front(), kPath != nullptr ? kPath : "");
+    if (!kProgram.has_value()) {
+        say("no editor " + kWords.front() + " is on the path; studio.editor names one");
+        return;
+    }
+    auto started = process::Child::start(
+        {.program = *kProgram, .arguments = std::vector<std::string>(kWords.begin() + 1, kWords.end())});
+    if (!started.has_value()) {
+        say("the editor did not start: " + std::string{started.error().description()});
+        return;
+    }
+    // Kept until Studio ends, which ends what is still running: an editor's
+    // launcher, as VS Code's `code`, hands the file over and returns.
+    editors_.push_back(std::move(*started));
+    ++opened_;
+    say("opened " + diagnostic_->file.substr(5) + " at line " + std::to_string(diagnostic_->line));
 }
 
 void ShellParticipant::move(int by) {

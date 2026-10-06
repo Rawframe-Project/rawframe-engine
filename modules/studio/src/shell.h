@@ -13,6 +13,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/font_import/sanitize.h"
+#include "rawframe/process/child.h"
 #include "rawframe/studio/registrar.h"
 #include "rawframe/ui/frames.h"
 #include "rawframe/ui/text_edit.h"
@@ -206,6 +207,16 @@ private:
     /// has none, and chooses it.
     void makeScene(std::string text);
 
+    /// Greets the session and reads what it offers and the game's scenes;
+    /// false, with `broken_` set, when the game does not read (D453).
+    bool openGame();
+
+    /// The game that does not read: why, where, and what to do.
+    result::Status showBroken();
+
+    /// Opens the diagnostic's file at its line in the author's editor.
+    void openEditor();
+
     /// The scenes' rows, in order, and the new scene's field under them;
     /// the view's rows, if shown, after them again.
     result::Status showScenes();
@@ -255,6 +266,17 @@ private:
     const ui::DrawList* drawn_ = nullptr;
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
+    std::filesystem::path description_;
+    std::filesystem::path sceneRoot_;
+    /// Why the game does not read, while it does not; and where.
+    std::optional<std::string> broken_;
+    std::optional<Diagnostic> diagnostic_;
+    /// The author's editor, as `studio.editor` gives it (D453).
+    std::string editor_;
+    std::vector<process::Child> editors_;
+    ui::Node openNode_{};
+    ui::Node retryNode_{};
+    std::uint64_t opened_ = 0;
     std::vector<std::string> scenes_;
     /// Each scene's identity, from its sidecar, as 32 hex digits.
     std::vector<std::string> sceneSources_;

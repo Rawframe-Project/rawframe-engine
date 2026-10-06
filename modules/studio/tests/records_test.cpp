@@ -85,6 +85,40 @@ RAWFRAME_TEST(AnInstanceNamesOneSceneByPathOrFile) {
     RAWFRAME_EXPECT(!sceneNamed(kScenes, "", why).has_value());
 }
 
+RAWFRAME_TEST(ADiagnosticIsReadAndOpenedAtItsLine) {
+    const auto kRead = diagnosticOf(
+        R"({"kind":"authoring.reply","id":1,"error":{"code":"internal","message":"the Kest program does not compile",)"
+        R"("details":{"diagnostic":"game/a b/controls.kest:20:7: expected a declaration [K0202]"}}})");
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->file == "game/a b/controls.kest" && kRead->line == 20 &&
+                    kRead->column == 7 && kRead->message == "expected a declaration [K0202]");
+    // A refusal naming no place, or one not in the shape, gives none.
+    RAWFRAME_EXPECT(!diagnosticOf(R"({"error":{"message":"no","details":{}}})").has_value());
+    RAWFRAME_EXPECT(!diagnosticOf(R"({"error":{"details":{"diagnostic":"game/a.kest:x:1: no"}}})").has_value());
+    RAWFRAME_EXPECT(!diagnosticOf(R"({"error":{"details":{"diagnostic":"game/a.kest:0:1: no"}}})").has_value());
+    RAWFRAME_EXPECT(!diagnosticOf(R"({"error":{"details":{"diagnostic":"the first line"}}})").has_value());
+
+    const std::vector<std::string> kCode = editorCommand("code  --goto {file}:{line}:{column}", "/g/a b.kest", 20, 7);
+    RAWFRAME_EXPECT((kCode == std::vector<std::string>{"code", "--goto", "/g/a b.kest:20:7"}));
+    const std::vector<std::string> kVim = editorCommand("vim +{line} {file}", "/g/a.kest", 3, 1);
+    RAWFRAME_EXPECT((kVim == std::vector<std::string>{"vim", "+3", "/g/a.kest"}));
+    RAWFRAME_EXPECT(editorCommand("", "/g/a.kest", 3, 1).empty());
+}
+
+RAWFRAME_TEST(AnEditorIsFoundOnThePathAsAShellFindsIt) {
+    std::error_code error;
+    const std::filesystem::path kRoot = std::filesystem::temp_directory_path() / ("studio-path-" + mintedIdentity());
+    std::filesystem::create_directories(kRoot / "one");
+    std::filesystem::create_directories(kRoot / "two");
+    std::ofstream{kRoot / "two" / "edit"} << "#!/bin/sh\n";
+    const std::string kPath =
+        (kRoot / "none").string() + ":" + (kRoot / "one").string() + "::" + (kRoot / "two").string();
+    RAWFRAME_EXPECT(programOnPath("edit", kPath) == kRoot / "two" / "edit");
+    RAWFRAME_EXPECT(!programOnPath("missing", kPath).has_value());
+    // A program naming a directory is itself.
+    RAWFRAME_EXPECT(programOnPath("./edit", "") == std::filesystem::path{"./edit"});
+    std::filesystem::remove_all(kRoot, error);
+}
+
 RAWFRAME_TEST(TypedTextIsAValueOfItsFieldsKindOrNone) {
     RAWFRAME_EXPECT(document::writeCompact(*typedValue("real", "2.5")) == R"({"real":2.5})");
     RAWFRAME_EXPECT(!typedValue("real", "x").has_value());

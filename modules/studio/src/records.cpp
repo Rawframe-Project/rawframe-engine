@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstddef>
 #include <functional>
 #include <iterator>
@@ -449,6 +450,96 @@ std::optional<std::string> entityNamed(std::span<const std::string> ids,
         }
     }
     why = "no entity matches " + std::string{text};
+    return std::nullopt;
+}
+
+std::optional<Diagnostic> diagnosticOf(std::string_view reply) {
+    const auto kParsed = document::parse(reply);
+    const Value* error = kParsed.has_value() ? kParsed->find("error") : nullptr;
+    const Value* details = error != nullptr ? error->find("details") : nullptr;
+    const Value* text = details != nullptr ? details->find("diagnostic") : nullptr;
+    if (text == nullptr || text->text() == nullptr) {
+        return std::nullopt;
+    }
+    // `file:line:column: message`: the location ends at the first ": ".
+    const std::string_view kWhole = *text->text();
+    const std::size_t kEnd = kWhole.find(": ");
+    const std::string_view kWhere = kWhole.substr(0, kEnd);
+    const std::size_t kColumnAt = kWhere.rfind(':');
+    const std::size_t kLineAt = kColumnAt == std::string_view::npos || kColumnAt == 0
+                                    ? std::string_view::npos
+                                    : kWhere.rfind(':', kColumnAt - 1);
+    if (kEnd == std::string_view::npos || kLineAt == std::string_view::npos || kLineAt == 0) {
+        return std::nullopt;
+    }
+    const auto kNumber = [](std::string_view digits) -> std::optional<std::int64_t> {
+        std::int64_t value = 0;
+        const auto [kStop, kError] = std::from_chars(digits.data(), digits.data() + digits.size(), value);
+        return kError == std::errc{} && kStop == digits.data() + digits.size() && value > 0 ? std::optional{value}
+                                                                                            : std::nullopt;
+    };
+    const auto kLine = kNumber(kWhere.substr(kLineAt + 1, kColumnAt - kLineAt - 1));
+    const auto kColumn = kNumber(kWhere.substr(kColumnAt + 1));
+    if (!kLine.has_value() || !kColumn.has_value()) {
+        return std::nullopt;
+    }
+    return Diagnostic{.file = std::string{kWhere.substr(0, kLineAt)},
+                      .line = *kLine,
+                      .column = *kColumn,
+                      .message = std::string{kWhole.substr(kEnd + 2)}};
+}
+
+std::vector<std::string>
+editorCommand(std::string_view command, const std::string& file, std::int64_t line, std::int64_t column) {
+    std::vector<std::string> made;
+    std::size_t at = 0;
+    while (at < command.size()) {
+        const std::size_t kEnd = std::min(command.find(' ', at), command.size());
+        std::string word{command.substr(at, kEnd - at)};
+        at = kEnd + 1;
+        if (word.empty()) {
+            continue;
+        }
+        for (const auto& [kName, kValue] : {std::pair<std::string_view, std::string>{"{file}", file},
+                                            {"{line}", std::to_string(line)},
+                                            {"{column}", std::to_string(column)}}) {
+            for (std::size_t found = word.find(kName); found != std::string::npos;
+                 found = word.find(kName, found + kValue.size())) {
+                word.replace(found, kName.size(), kValue);
+            }
+        }
+        made.push_back(std::move(word));
+    }
+    return made;
+}
+
+std::optional<std::filesystem::path> programOnPath(const std::string& program, std::string_view path) {
+    if (program.find('/') != std::string::npos || program.find('\\') != std::string::npos) {
+        return std::filesystem::path{program};
+    }
+#if defined(_WIN32)
+    constexpr char kSeparator = ';';
+    constexpr std::array<std::string_view, 3> kEndings = {"", ".exe", ".cmd"};
+#else
+    constexpr char kSeparator = ':';
+    constexpr std::array<std::string_view, 1> kEndings = {""};
+#endif
+    std::size_t at = 0;
+    while (at <= path.size()) {
+        const std::size_t kEnd = std::min(path.find(kSeparator, at), path.size());
+        const std::string_view kDirectory = path.substr(at, kEnd - at);
+        at = kEnd + 1;
+        if (kDirectory.empty()) {
+            continue;
+        }
+        for (const std::string_view kEnding : kEndings) {
+            std::error_code error;
+            const std::filesystem::path kFound = std::filesystem::path{kDirectory} / (program + std::string{kEnding});
+            if (std::filesystem::is_regular_file(kFound, error)) {
+                return kFound;
+            }
+        }
+    }
     return std::nullopt;
 }
 

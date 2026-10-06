@@ -8,6 +8,7 @@
 #include "rawframe/document/json.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
@@ -154,6 +155,31 @@ componentNamed(const Catalog& catalog, std::string_view text, std::string& why);
                                                      std::span<const std::string> names,
                                                      std::string_view text,
                                                      std::string& why);
+
+/// Where a game's program does not compile, as the session's refusal of
+/// hello says it (`file:line:column: message`, D453).
+struct Diagnostic {
+    std::string file;
+    std::int64_t line = 0;
+    std::int64_t column = 0;
+    std::string message;
+};
+
+/// The diagnostic a refusal names (`details.diagnostic`), if it is in
+/// that shape.
+[[nodiscard]] std::optional<Diagnostic> diagnosticOf(std::string_view reply);
+
+/// The program and arguments that open `file` at a diagnostic's line and
+/// column in the author's editor: `command` split at its spaces, each
+/// `{file}`, `{line}`, and `{column}` in it written in (ADR-0066's
+/// open-at-line hand-off). None for an empty command.
+[[nodiscard]] std::vector<std::string>
+editorCommand(std::string_view command, const std::string& file, std::int64_t line, std::int64_t column);
+
+/// Where `program` is: itself when it names a directory, else the first
+/// directory of `path` (PATH's text) holding it, as a shell finds it; on
+/// Windows also with `.exe` or `.cmd` after it. None when nowhere.
+[[nodiscard]] std::optional<std::filesystem::path> programOnPath(const std::string& program, std::string_view path);
 
 /// A new identity, a random version 4 UUID in its text form: a new entity's
 /// is the client's to choose (D438), and an identity is data, not

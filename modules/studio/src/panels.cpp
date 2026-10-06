@@ -68,6 +68,9 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
     RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
     RAWFRAME_TRY(showHistory());
+    if (broken_.has_value()) {
+        return showBroken();
+    }
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kColumns,
         box(root_,
@@ -101,6 +104,35 @@ result::Status ShellParticipant::build() {
         }
     }
     return showScenes();
+}
+
+result::Status ShellParticipant::showBroken() {
+    RAWFRAME_TRY_ASSIGN(
+        const ui::Node kBroken,
+        box(root_,
+            ui::Layout{.direction = ui::Direction::Column, .gap = 8, .grow = 1, .padding = {16, 16, 16, 16}},
+            kPanel));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kHeading, box(kBroken, ui::Layout{.height = ui::pixels(24), .shrink = 0}, 0));
+    RAWFRAME_TRY(words(kHeading, "The game does not read", kText, 18));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kWhy, box(kBroken, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(words(kWhy, *broken_, kQuiet, 15));
+    if (diagnostic_.has_value()) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kWhere, box(kBroken, ui::Layout{.shrink = 0}, kField));
+        RAWFRAME_TRY(words(kWhere,
+                           diagnostic_->file + ":" + std::to_string(diagnostic_->line) + ":" +
+                               std::to_string(diagnostic_->column) + "  " + diagnostic_->message,
+                           kText,
+                           15));
+    }
+    RAWFRAME_TRY_ASSIGN(const ui::Node kTools,
+                        box(kBroken, ui::Layout{.height = ui::pixels(28), .gap = 6, .shrink = 0}, 0));
+    // Only the game's own files are the author's to open (D453).
+    if (diagnostic_.has_value() && diagnostic_->file.starts_with("game/") && !editor_.empty()) {
+        RAWFRAME_TRY_ASSIGN(openNode_, button(kTools, "Open in editor"));
+    }
+    RAWFRAME_TRY_ASSIGN(retryNode_, button(kTools, "Retry"));
+    say(*broken_);
+    return {};
 }
 
 result::Status ShellParticipant::showScenes() {
