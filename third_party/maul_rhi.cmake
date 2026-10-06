@@ -1,10 +1,10 @@
 # Maul RHI, vendored at the exact revision recorded in third_party/README.md
 # and built by its own CMake, unchanged: the one device layer (ADR-0029).
-# Natively its Vulkan driver is loaded at run time from the system's Vulkan
-# loader, so nothing links a GPU library; on Windows too, whose Direct3D 12
-# driver wants shader containers with DXIL, which the engine's do not carry
-# yet. On macOS its Metal driver, the engine's shader containers carrying
-# each entry in Metal's language (D406). On the web its WebGPU driver's JavaScript is imports the page gives
+# On Linux its Vulkan driver is loaded at run time from the system's Vulkan
+# loader, so nothing links a GPU library. On Windows its Direct3D 12
+# driver, the engine's shader containers carrying each entry's DXIL (D415).
+# On macOS its Metal driver, the engine's shader containers carrying each
+# entry in Metal's language (D406). On the web its WebGPU driver's JavaScript is imports the page gives
 # from the maul-rhi.mjs this build writes (mrhi-0016, D282). Only a client
 # that draws builds it: never the dedicated server's closure. Its test
 # driver, which renders nothing and answers as a test describes, is built
@@ -27,6 +27,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
 elseif(APPLE)
     set(MAUL_RHI_VULKAN_DRIVER OFF CACHE BOOL "" FORCE)
     set(MAUL_RHI_METAL_DRIVER ON CACHE BOOL "" FORCE)
+elseif(WIN32)
+    set(MAUL_RHI_VULKAN_DRIVER OFF CACHE BOOL "" FORCE)
+    set(MAUL_RHI_D3D12_DRIVER ON CACHE BOOL "" FORCE)
 else()
     set(MAUL_RHI_VULKAN_DRIVER ON CACHE BOOL "" FORCE)
     set(MAUL_RHI_D3D12_DRIVER OFF CACHE BOOL "" FORCE)

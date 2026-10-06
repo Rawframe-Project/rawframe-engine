@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- Windows draws through Direct3D 12: the engine's shader containers carry each entry's DXIL, compiled offline by DXC, and Windows builds take Maul RHI's Direct3D 12 driver in place of Vulkan.
 - `rawframe-install` updates and heals a library from a mirror over HTTP or HTTPS, verifying the server's certificate against the system's authorities or those given with `--authorities`; what it fetches is still verified by signature and digest. It moves to `launcher/`, the launcher's own, which no engine module or host may depend on.
 - Maul RHI 0.2.0, a release: coded diagnostics for every refusal, the WebGPU driver in a worker, multiview, counted indirect draws, pipeline statistics and buffer clears, none of which the engine needed a change for.
 - Agents steer round each other: a game with a `navigation` line has the `rawframe.navigation.agent` component (Kest's `rawframe.navigation.Agent`), and the `rawframe.navigation.avoid` system, before the 3D physics step, turns the velocity a game set into the nearest one that keeps clear of the other agents (ORCA, over Maul Nav's). Stalls' customers step aside for each other.
