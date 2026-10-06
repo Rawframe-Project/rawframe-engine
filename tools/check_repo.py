@@ -26,6 +26,9 @@
 8. The launcher family (ADR-0060, ADR-0074, D414) lives under launcher/,
    outside every engine closure: no module or host depends on a launcher
    unit, and only launcher sources include OpenSSL's TLS (openssl/ssl.h).
+9. No runtime's closure reaches authoring tooling (ADR-0032 section 5,
+   D435): the command layer, the session, and Studio are a tool's, never a
+   game's, a client's, or a server's.
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -64,6 +67,7 @@ NOT_IN_SERVER = {
 # that plays reaches an importer or the cook.
 RUNTIMES = ("dedicated_server", "client", "web_client", "bots", "arena")
 IMPORT_TOOLING = {"cook", "audio_import", "mesh_import", "animation_import", "texture_import", "font_import"}
+AUTHORING_TOOLING = {"authoring", "authoring_session", "studio"}
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 SOURCE_ROOTS = ("modules", "hosts", "launcher")
 TLS_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]openssl/(ssl|tls1)\.h', re.MULTILINE)
@@ -140,6 +144,9 @@ def check_runtime_closures(allowed, findings):
                     pending.append(dependency)
         for module in sorted(reached & IMPORT_TOOLING):
             findings.append(f"tools/modules.txt: {runtime}'s closure reaches import tooling '{module}', which it may not")
+        for module in sorted(reached & AUTHORING_TOOLING):
+            findings.append(
+                f"tools/modules.txt: {runtime}'s closure reaches authoring tooling '{module}', which it may not")
 
 
 def check_web_closure(allowed, findings):
