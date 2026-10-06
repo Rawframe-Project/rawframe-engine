@@ -75,8 +75,10 @@ struct ReplicationServer::State {
     std::uint64_t scope = 0;
     std::vector<Divergence> divergences;
     std::vector<std::span<const std::byte>> scopeValues;
-    /// Players' commands checked and not yet taken by the game (D425).
+    /// Players' commands checked and not yet taken by the game (D425), and
+    /// each one's connection: one gone by then is no one's to act on.
     std::vector<ReceivedCommand> commands;
+    std::vector<std::uint64_t> commandConnections;
 
     // Scratch reused every tick. Every replicated value is encoded once per
     // tick, in entity then component order, and copied to each connection.

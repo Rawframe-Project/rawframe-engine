@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstring>
 #include <deque>
-#include <iterator>
 #include <map>
 #include <optional>
 #include <span>
@@ -289,12 +288,19 @@ void ReplicationServer::State::onCommand(Peer& peer, network::SessionEvent& even
         strike(peer);
         return;
     }
-    if (peer.commandsWaiting >= settings.maximumCommandsWaiting) {
+    // A bound a tick, not a take: however often the host takes them, a
+    // connection asks for at most so many a tick.
+    if (peer.commandsTick != pumpTick) {
+        peer.commandsTick = pumpTick;
+        peer.commandsThisTick = 0;
+    }
+    if (peer.commandsThisTick >= settings.commandsPerTick) {
         ++statistics.commandsLimited;
         return;
     }
-    ++peer.commandsWaiting;
+    ++peer.commandsThisTick;
     ++statistics.commandsTaken;
+    commandConnections.push_back(peer.connection.value);
     commands.push_back(ReceivedCommand{.player = peer.player,
                                        .kind = static_cast<std::uint32_t>(event.payloadType),
                                        .value = std::move(event.payload),
@@ -560,7 +566,7 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             if (kPeer != state.peers.end() && event.eventLane == kGameCommandLane) {
                 state.onCommand(kPeer->second, event);
                 if (kPeer->second.gone) {
-                    state.peers.erase(kPeer);
+                    state.forget(world, kPeer);
                 }
             }
             break;
@@ -731,11 +737,16 @@ bool ReplicationServer::terminate(world::World& world,
 
 void ReplicationServer::takeCommands(std::vector<ReceivedCommand>& into) {
     State& state = *state_;
-    std::ranges::move(state.commands, std::back_inserter(into));
-    state.commands.clear();
-    for (auto& [kConnection, peer] : state.peers) {
-        peer.commandsWaiting = 0;
+    // A connection that ended, struck out, or was terminated since took its
+    // player out of the World: what it asked for goes with it, as a message
+    // to it would.
+    for (std::size_t index = 0; index < state.commands.size(); ++index) {
+        if (state.peers.contains(state.commandConnections[index])) {
+            into.push_back(std::move(state.commands[index]));
+        }
     }
+    state.commands.clear();
+    state.commandConnections.clear();
 }
 
 world::EntityHandle ReplicationServer::player(network::ConnectionId connection) const noexcept {

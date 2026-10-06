@@ -119,9 +119,10 @@ struct ServerReplicationSettings {
     /// record of another kind or size strikes its connection (D425). None
     /// for a game without commands.
     std::vector<std::size_t> commandSizes;
-    /// Commands one connection may have waiting to be taken; past them each
-    /// is dropped unread and counted.
-    std::size_t maximumCommandsWaiting = 32;
+    /// Commands one connection may send a tick: a sample's eight in each of
+    /// the four ticks a client late by a burst catches up at once. Past
+    /// them each is dropped unread and counted.
+    std::size_t commandsPerTick = 32;
 };
 
 /// SPEC-0041's `prediction_divergence`: a connection's checksum of its
@@ -177,7 +178,7 @@ struct ServerReplicationStatistics {
     /// Sessions ended by the game or an operator (D267).
     std::uint64_t terminated = 0;
     /// Players' commands taken for the game's systems, and those dropped
-    /// past `maximumCommandsWaiting` (D425).
+    /// past `commandsPerTick` (D425).
     std::uint64_t commandsTaken = 0;
     std::uint64_t commandsLimited = 0;
 };
