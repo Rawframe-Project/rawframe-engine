@@ -13,15 +13,18 @@
 //   {"kind":"authoring.read","id":3,"scene":"level.scene","queries":{...}}
 //   {"kind":"authoring.undo","id":4,"scene":"level.scene","expects":"sha256:..."}
 //   {"kind":"authoring.redo","id":5,"scene":"level.scene"}
-//   {"kind":"authoring.describe","id":6}
-//   {"kind":"authoring.end","id":7}
+//   {"kind":"authoring.select","id":6,"scene":"level.scene","entities":["...", ...]}
+//   {"kind":"authoring.describe","id":7}
+//   {"kind":"authoring.end","id":8}
 //
 // `hello` comes first and names the surface generation the client speaks;
 // before any public stability promise only the tool's own is accepted
 // (SPEC-0040's capability exchange, exact match). `id` is the client's, any
 // JSON value, given back in the reply; `scene` is a scene's path under the
 // game's directory; `expects`, on undo and redo, is the generation the
-// client last saw, as a request's is. Every reply is
+// client last saw, as a request's is. `select` chooses the scene's entities
+// by their SourceEntityIds, in place of what was chosen: no change to the
+// document, but what undo and redo put back with it (D417). Every reply is
 //
 //   {"kind":"authoring.reply","id":...,"answer":{...}}
 //
@@ -31,6 +34,7 @@
 
 #include "rawframe/authoring/queries.h"
 #include "rawframe/authoring/request.h"
+#include "rawframe/base/bits128.h"
 #include "rawframe/document/json.h"
 #include "rawframe/result/result.h"
 
@@ -52,6 +56,7 @@ enum class SessionVerb : std::uint8_t {
     Read,
     Undo,
     Redo,
+    Select,
     End,
 };
 
@@ -71,6 +76,8 @@ struct SessionRecord {
     Request request;
     /// Read's.
     std::vector<Query> queries;
+    /// Select's, as given.
+    std::vector<base::Bits128> entities;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form

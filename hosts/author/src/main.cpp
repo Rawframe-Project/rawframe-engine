@@ -36,8 +36,10 @@
 // (D407, authoring/session.h): records a line, the game read once, scenes
 // under the scene root (the game's directory unless named) opened as
 // records name them and kept open with their undo histories, each change
-// written to its file as it commits. A scene whose file changed under the
-// session is opened again, its history let go, and the answer says so.
+// written to its file as it commits, and each with its selection, which
+// `select` sets and undo and redo put back (D417). A scene whose file
+// changed under the session is opened again, its history and selection
+// let go, and the answer says so.
 //
 // `connect` is a client of a running Runtime's tooling endpoint (D408,
 // connect.h): records a line on standard input, the replies on standard
@@ -56,6 +58,7 @@
 #include "rawframe/content/sidecar.h"
 #include "rawframe/document/json.h"
 #include "rawframe/scene/scene.h"
+#include "rawframe/schema/stable_id.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/layouts.h"
 
@@ -586,6 +589,8 @@ private:
         case authoring::SessionVerb::Undo:
         case authoring::SessionVerb::Redo:
             return stepped(record, record.verb == authoring::SessionVerb::Undo);
+        case authoring::SessionVerb::Select:
+            return selected(record);
         }
         return std::unexpected{failure(
             authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
@@ -682,6 +687,7 @@ private:
         made.add("reopened", Value::boolean(reopened));
         made.add("undoable", Value::integer(static_cast<std::int64_t>(open.document->undoable())));
         made.add("redoable", Value::integer(static_cast<std::int64_t>(open.document->redoable())));
+        made.add("selection", selectionOf(open));
         made.add("results", std::move(results));
         made.add("skipped", Value::integer(static_cast<std::int64_t>(skipped)));
         return made;
@@ -724,6 +730,29 @@ private:
         }
         RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
         return outcome(*open, kWritten, reopened, std::move(results), skipped);
+    }
+
+    /// The entities an open scene has selected, by their ids.
+    static Value selectionOf(const OpenScene& open) {
+        Value made = Value::array();
+        for (const rawframe::base::Bits128& each : open.document->selection()) {
+            const auto kText = rawframe::schema::formatStableIdText(each);
+            made.push(Value::string(std::string{kText.data(), kText.size()}));
+        }
+        return made;
+    }
+
+    /// `select`: the scene's selection, in place of what was (D417).
+    result::Result<Value> selected(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        RAWFRAME_TRY(open->document->select(record.entities));
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.selection"));
+        made.add("document", Value::string(digestOf(open->document->text())));
+        made.add("reopened", Value::boolean(reopened));
+        made.add("selection", selectionOf(*open));
+        return made;
     }
 
     result::Result<Value> answered(const authoring::SessionRecord& record) {

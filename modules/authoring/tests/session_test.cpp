@@ -6,6 +6,7 @@
 #include "rawframe/test/test.h"
 
 #include <string>
+#include <vector>
 
 using namespace rawframe;
 using namespace rawframe::authoring;
@@ -43,6 +44,12 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     RAWFRAME_EXPECT(kUndo.has_value() && kUndo->verb == SessionVerb::Undo && kUndo->expects == "sha256:00");
     const auto kRedo = readSessionRecord(R"({"kind":"authoring.redo","scene":"a.scene"})", id);
     RAWFRAME_EXPECT(kRedo.has_value() && kRedo->verb == SessionVerb::Redo && !kRedo->expects.has_value());
+    const auto kSelect = readSessionRecord(
+        R"({"kind":"authoring.select","scene":"a.scene","entities":["00000000-0000-0000-0000-000000000001"]})", id);
+    RAWFRAME_EXPECT(kSelect.has_value() && kSelect->verb == SessionVerb::Select && kSelect->entities.size() == 1 &&
+                    kSelect->entities[0] == (base::Bits128{0, 1}));
+    RAWFRAME_EXPECT(
+        readSessionRecord(R"({"kind":"authoring.select","scene":"a.scene","entities":[]})", id)->entities.empty());
     RAWFRAME_EXPECT(readSessionRecord(R"({"kind":"authoring.describe"})", id).has_value());
     RAWFRAME_EXPECT(readSessionRecord(R"({"kind":"authoring.end","id":null})", id).has_value());
 }
@@ -64,6 +71,15 @@ RAWFRAME_TEST(ARecordOutOfItsFormIsRefusedNamingItsId) {
                                 AuthoringError::ValidationFailed));
     RAWFRAME_EXPECT(
         refusedWith(readSessionRecord(R"({"kind":"authoring.apply","scene":"a.scene","expects":"x","request":{}})", id),
+                    AuthoringError::ValidationFailed));
+    // A selection names entities by their ids, in an array.
+    RAWFRAME_EXPECT(refusedWith(readSessionRecord(R"({"kind":"authoring.select","scene":"a.scene"})", id),
+                                AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(
+        refusedWith(readSessionRecord(R"({"kind":"authoring.select","scene":"a.scene","entities":["spawn"]})", id),
+                    AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(
+        refusedWith(readSessionRecord(R"({"kind":"authoring.select","scene":"a.scene","entities":"x"})", id),
                     AuthoringError::ValidationFailed));
     // The request inside is read as the command line reads one.
     RAWFRAME_EXPECT(refusedWith(

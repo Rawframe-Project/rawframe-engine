@@ -4,7 +4,8 @@
 # and undone back to the level's very bytes, redone, a stale undo refused,
 # the file changed under the session and opened again with no history, and
 # records out of form, out of order, or naming a scene outside the root
-# refused, each answered by its own id.
+# refused, each answered by its own id; and a selection kept beside the
+# level, put back by undo (D417).
 #
 # usage: author_session.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -43,7 +44,7 @@ reply 1 | grep -q '"message":"a session begins with hello"'
 reply 2 | grep -q '"code":"unsupported_operation"'
 reply 3 | grep -q '"kind":"authoring.welcome"'
 reply 4 | grep -q '"name":"scene.set_reference"'
-reply 5 | grep -q '"written":true,"reopened":false,"undoable":1,"redoable":0,"results":\[{"deltas":2}\]'
+reply 5 | grep -q '"written":true,"reopened":false,"undoable":1,"redoable":0,"selection":\[\],"results":\[{"deltas":2}\]'
 # Undone within the session, the level is its very bytes again.
 reply 6 | grep -q '"undoable":0,"redoable":1'
 cmp "$work/root/level.scene" "$work/original.scene"
@@ -72,11 +73,39 @@ reply 2 | grep -q '"undoable":1,"redoable":0'
 reply 3 | grep -q '"undoable":0,"redoable":1'
 reply 4 | grep -q '"undoable":1,"redoable":0'
 reply 5 | grep -q '"code":"target_stale"'
-reply 6 | grep -q '"reopened":true,"undoable":0,"redoable":0,"results":\[{"error":{"code":"target_not_found"'
+reply 6 | grep -q '"reopened":true,"undoable":0,"redoable":0,"selection":\[\],"results":\[{"error":{"code":"target_not_found"'
 cmp "$work/root/level.scene" "$work/original.scene"
 reply 7 | grep -q '"kind":"authoring.answers"'
 ! reply 7 | grep -q "$crate"
 reply 8 | grep -q '"message":"a session'"'"'s scenes are .scene files under its root"'
 reply 9 | grep -q '"code":"validation_failed"'
 grep -q '"id":null,"error":{"code":"validation_failed"' "$work/replies"
+
+# A selection is no change to the level, and undo puts back the one from
+# before the change it undoes.
+cp "$work/original.scene" "$work/root/level.scene"
+rename='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[
+{"operation":"scene.rename_entity","entity":"'$crate'","name":"box"}]}'
+rename=$(tr -d '\n' <<<"$rename")
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.select","id":2,"scene":"level.scene","entities":["'$crate'"]}'
+    echo '{"kind":"authoring.apply","id":3,"scene":"level.scene","request":'"$create"'}'
+    echo '{"kind":"authoring.select","id":4,"scene":"level.scene","entities":["'$crate'","'$crate'"]}'
+    echo '{"kind":"authoring.apply","id":5,"scene":"level.scene","request":'"$rename"'}'
+    echo '{"kind":"authoring.select","id":6,"scene":"level.scene","entities":[]}'
+    echo '{"kind":"authoring.undo","id":7,"scene":"level.scene"}'
+    echo '{"kind":"authoring.undo","id":8,"scene":"level.scene"}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+# The crate is not there to choose until it is made.
+reply 2 | grep -q '"code":"target_not_found"'
+reply 3 | grep -q '"selection":\[\]'
+made=$(reply 3 | grep -o '"document":"[^"]*"')
+reply 4 | grep -q "\"kind\":\"authoring.selection\",$made,\"reopened\":false,\"selection\":\[\"$crate\"\]"
+reply 6 | grep -q '"selection":\[\]'
+# Undoing the rename chooses the crate again; undoing its making leaves
+# nothing chosen, the crate gone with it.
+reply 7 | grep -q "\"selection\":\[\"$crate\"\]"
+reply 8 | grep -q '"selection":\[\]'
+cmp "$work/root/level.scene" "$work/original.scene"
 echo "authored runners in a session"
