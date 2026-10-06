@@ -1,0 +1,1 @@
+{"kind":"authoring.read","id":"r","scene":"a.scene","queries":{"formatVersion":1,"kind":"authoring.query","queries":[{"operation":"scene.list_entities"},{"operation":"scene.read_entity","entity":"0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1"}]}}

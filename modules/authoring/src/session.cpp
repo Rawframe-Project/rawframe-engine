@@ -1,0 +1,149 @@
+#include "rawframe/authoring/session.h"
+
+#include "rawframe/authoring/errors.h"
+
+#include <array>
+#include <cstdint>
+#include <utility>
+
+namespace rawframe::authoring {
+
+namespace {
+
+using document::Value;
+
+std::unexpected<result::Error> malformed(std::string_view why) {
+    return result::fail(
+        result::ErrorClass::InvalidArgument, kAuthoringDomain, code(AuthoringError::ValidationFailed), why);
+}
+
+const std::string* textOf(const Value* value) {
+    return value != nullptr && value->kind() == Value::Kind::String ? value->text() : nullptr;
+}
+
+struct VerbName {
+    std::string_view kind;
+    SessionVerb verb;
+};
+
+constexpr std::array<VerbName, 7> kVerbs = {VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
+                                            VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
+                                            VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
+                                            VerbName{.kind = "authoring.read", .verb = SessionVerb::Read},
+                                            VerbName{.kind = "authoring.undo", .verb = SessionVerb::Undo},
+                                            VerbName{.kind = "authoring.redo", .verb = SessionVerb::Redo},
+                                            VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
+
+/// The members a verb's record may hold beside `kind` and `id`, and those
+/// it must.
+struct Members {
+    std::size_t required = 0;
+    std::size_t optional = 0;
+};
+
+Members membersOf(SessionVerb verb) {
+    switch (verb) {
+    case SessionVerb::Hello:
+        return Members{.required = 1, .optional = 0};
+    case SessionVerb::Describe:
+    case SessionVerb::End:
+        return Members{.required = 0, .optional = 0};
+    case SessionVerb::Apply:
+    case SessionVerb::Read:
+        return Members{.required = 2, .optional = 0};
+    case SessionVerb::Undo:
+    case SessionVerb::Redo:
+        return Members{.required = 1, .optional = 1};
+    }
+    return {};
+}
+
+} // namespace
+
+result::Result<SessionRecord> readSessionRecord(std::string_view line, document::Value& idRead) {
+    idRead = Value{};
+    auto parsed = document::parse(line, document::ReadLimits{.maximumBytes = kMaximumSessionRecordBytes});
+    if (!parsed.has_value() || parsed->kind() != Value::Kind::Object) {
+        return malformed("a session record is one strict JSON object a line");
+    }
+    if (const Value* kId = parsed->find("id"); kId != nullptr) {
+        idRead = *kId;
+    }
+    const std::string* kind = textOf(parsed->find("kind"));
+    const VerbName* named = nullptr;
+    for (const VerbName& each : kVerbs) {
+        if (kind != nullptr && *kind == each.kind) {
+            named = &each;
+        }
+    }
+    if (named == nullptr) {
+        return malformed("a session record's kind is hello, describe, apply, read, undo, redo, or end");
+    }
+    SessionRecord record{.verb = named->verb, .id = idRead};
+    const Members kMembers = membersOf(record.verb);
+    const Value* scene = parsed->find("scene");
+    const Value* expects = parsed->find("expects");
+    const std::size_t kGiven =
+        parsed->names().size() - 1 - (parsed->find("id") != nullptr ? 1 : 0) - (expects != nullptr ? 1 : 0);
+    if (kGiven != kMembers.required || (expects != nullptr && (kMembers.optional == 0 || textOf(expects) == nullptr))) {
+        return malformed("a session record holds its verb's members and no others");
+    }
+    if (expects != nullptr) {
+        record.expects = *expects->text();
+    }
+    switch (record.verb) {
+    case SessionVerb::Hello: {
+        const Value* kGeneration = parsed->find("surfaceGeneration");
+        const std::optional<std::int64_t> kNumber = kGeneration != nullptr ? kGeneration->integer() : std::nullopt;
+        if (!kNumber.has_value() || *kNumber < 0 || *kNumber > UINT32_MAX) {
+            return malformed("hello names the surface generation the client speaks");
+        }
+        record.surfaceGeneration = static_cast<std::uint32_t>(*kNumber);
+        return record;
+    }
+    case SessionVerb::Describe:
+    case SessionVerb::End:
+        return record;
+    case SessionVerb::Apply:
+    case SessionVerb::Read:
+    case SessionVerb::Undo:
+    case SessionVerb::Redo:
+        break;
+    }
+    if (textOf(scene) == nullptr || scene->text()->empty()) {
+        return malformed("the record names its scene by its path under the game's directory");
+    }
+    record.scene = *scene->text();
+    if (record.verb == SessionVerb::Apply) {
+        const Value* kRequest = parsed->find("request");
+        if (kRequest == nullptr) {
+            return malformed("apply holds a request");
+        }
+        RAWFRAME_TRY_ASSIGN(record.request, readRequest(document::writeCompact(*kRequest)));
+    } else if (record.verb == SessionVerb::Read) {
+        const Value* kQueries = parsed->find("queries");
+        if (kQueries == nullptr) {
+            return malformed("read holds a query document");
+        }
+        RAWFRAME_TRY_ASSIGN(record.queries, readQueries(document::writeCompact(*kQueries)));
+    }
+    return record;
+}
+
+std::string writeReply(const document::Value& id, document::Value answer) {
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.reply"));
+    made.add("id", id);
+    made.add("answer", std::move(answer));
+    return document::writeCompact(made) + "\n";
+}
+
+std::string writeRefusal(const document::Value& id, const result::Error& error) {
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.reply"));
+    made.add("id", id);
+    made.add("error", errorRecord(error));
+    return document::writeCompact(made) + "\n";
+}
+
+} // namespace rawframe::authoring
