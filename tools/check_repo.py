@@ -20,6 +20,9 @@
    no localization (D147), no authoring transactions (D149), no client
    input, no loopback or browser transport, and no import, cook, or build
    tooling (D182).
+7. The launcher family (ADR-0060, ADR-0074, D414) lives under launcher/,
+   outside every engine closure: no module or host depends on a launcher
+   unit, and only launcher sources include OpenSSL's TLS (openssl/ssl.h).
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -59,6 +62,8 @@ NOT_IN_SERVER = {
 RUNTIMES = ("dedicated_server", "client", "web_client", "bots", "arena")
 IMPORT_TOOLING = {"cook", "audio_import", "mesh_import", "animation_import", "texture_import", "font_import"}
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
+SOURCE_ROOTS = ("modules", "hosts", "launcher")
+TLS_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]openssl/(ssl|tls1)\.h', re.MULTILINE)
 
 
 def repository_files():
@@ -82,9 +87,10 @@ HOST_NAME = re.compile(r"rawframe_host\(NAME ([a-z0-9_]+)")
 
 def row_of(relative):
     """A module's row is its directory's name; a host's is the name its
-    CMakeLists.txt gives it, which may differ (hosts/build is build_tool)."""
-    if relative.parts[0] == "hosts":
-        found = HOST_NAME.search((ROOT / "hosts" / relative.parts[1] / "CMakeLists.txt").read_text())
+    CMakeLists.txt gives it, which may differ (hosts/build is build_tool),
+    and so is a launcher program's."""
+    if relative.parts[0] in ("hosts", "launcher"):
+        found = HOST_NAME.search((ROOT / relative.parts[0] / relative.parts[1] / "CMakeLists.txt").read_text())
         if found:
             return found.group(1)
     return relative.parts[1]
@@ -93,7 +99,7 @@ def row_of(relative):
 def check_boundaries(files, allowed, findings):
     for path in files:
         relative = path.relative_to(ROOT)
-        if relative.parts[0] not in ("modules", "hosts") or path.suffix not in SOURCE_SUFFIXES:
+        if relative.parts[0] not in SOURCE_ROOTS or path.suffix not in SOURCE_SUFFIXES:
             continue
         module = row_of(relative)
         if module not in allowed:
@@ -149,7 +155,7 @@ def check_web_closure(allowed, findings):
 def check_providers(files, findings):
     for path in files:
         relative = path.relative_to(ROOT)
-        if relative.parts[0] != "modules" or len(relative.parts) < 3 or relative.parts[2] != "include":
+        if relative.parts[0] not in ("modules", "launcher") or len(relative.parts) < 3 or relative.parts[2] != "include":
             continue
         for included in PROVIDER_INCLUDE.findall(path.read_text(errors="replace")):
             findings.append(f"{relative}: includes the provider {included} in a public header")
@@ -158,9 +164,9 @@ def check_providers(files, findings):
 def check_clusters(files, findings):
     for path in files:
         relative = path.relative_to(ROOT)
-        if relative.parts[0] not in ("modules", "hosts") or path.suffix not in SOURCE_SUFFIXES:
+        if relative.parts[0] not in SOURCE_ROOTS or path.suffix not in SOURCE_SUFFIXES:
             continue
-        owner = relative.parts[1] if relative.parts[0] == "modules" else row_of(relative)
+        owner = row_of(relative)
         for included in CLUSTER_INCLUDE.findall(path.read_text(errors="replace")):
             if owner not in CLUSTERS[included]:
                 findings.append(f"{relative}: includes {included} outside the modules that may declare it")
@@ -169,7 +175,7 @@ def check_clusters(files, findings):
 def check_value_calls(files, findings):
     for path in files:
         relative = path.relative_to(ROOT)
-        if relative.parts[0] not in ("modules", "hosts") or path.suffix not in SOURCE_SUFFIXES:
+        if relative.parts[0] not in SOURCE_ROOTS or path.suffix not in SOURCE_SUFFIXES:
             continue
         for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if VALUE_CALL.search(line.split("//")[0]):
@@ -196,6 +202,23 @@ def check_sizes(files, findings, notes):
             findings.append(f"{relative}: {lines} lines, the limit is {FAIL_LINES} (STD-0001)")
         elif lines >= REPORT_LINES:
             notes.append(f"{relative}: {lines} lines, stop adding unrelated behavior (STD-0001)")
+
+
+def check_launcher(files, allowed, findings):
+    launcher = set()
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[0] == "launcher" and len(relative.parts) > 2 and path.suffix in SOURCE_SUFFIXES:
+            launcher.add(row_of(relative))
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[0] in ("modules", "hosts") and path.suffix in SOURCE_SUFFIXES:
+            row = row_of(relative)
+            for dependency in sorted(allowed.get(row, set()) & launcher):
+                findings.append(f"tools/modules.txt: '{row}' depends on the launcher's '{dependency}', which no "
+                                "module or host may")
+            if TLS_INCLUDE.search(path.read_text(errors="replace")):
+                findings.append(f"{relative}: includes OpenSSL's TLS, which only the launcher may")
 
 
 def check_owner_rules(files, findings):
@@ -231,6 +254,7 @@ def main():
     check_web_closure(modules, findings)
     check_providers(files, findings)
     check_clusters(files, findings)
+    check_launcher(files, modules, findings)
     check_value_calls(files, findings)
     check_bounds_literals(files, findings)
     check_sizes(files, findings, notes)

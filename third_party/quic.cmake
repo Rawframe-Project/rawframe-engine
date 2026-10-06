@@ -23,12 +23,14 @@ if(WIN32)
     set(rawframe_quic_shell "${RAWFRAME_BASH}")
     set(rawframe_msquic_library "msquic.lib")
     set(rawframe_crypto_library "libcrypto.lib")
+    set(rawframe_ssl_library "libssl.lib")
 else()
     find_program(RAWFRAME_QUIC_C_COMPILER NAMES clang-20 clang cc REQUIRED)
     find_program(RAWFRAME_QUIC_CXX_COMPILER NAMES clang++-20 clang++ c++ REQUIRED)
     set(rawframe_quic_shell "")
     set(rawframe_msquic_library "libmsquic.a")
     set(rawframe_crypto_library "libcrypto.a")
+    set(rawframe_ssl_library "libssl.a")
 endif()
 
 if(DEFINED ENV{RAWFRAME_DEPENDENCY_CACHE})
@@ -90,3 +92,11 @@ set_target_properties(openssl::crypto PROPERTIES
 if(WIN32)
     set_property(TARGET openssl::crypto APPEND PROPERTY INTERFACE_LINK_LIBRARIES ws2_32 crypt32 advapi32 user32)
 endif()
+
+# OpenSSL's libssl, from the same build, for the launcher's HTTPS client
+# (D414) alone: no engine module or host links it (ADR-0074).
+add_library(openssl::ssl STATIC IMPORTED GLOBAL)
+set_target_properties(openssl::ssl PROPERTIES
+    IMPORTED_LOCATION "${RAWFRAME_QUIC_PREFIX}/lib/${rawframe_ssl_library}"
+    INTERFACE_INCLUDE_DIRECTORIES "${RAWFRAME_QUIC_PREFIX}/include"
+    INTERFACE_LINK_LIBRARIES "openssl::crypto")
