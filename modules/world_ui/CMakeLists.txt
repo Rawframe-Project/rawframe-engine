@@ -4,7 +4,7 @@
 # dedicated server carries the components as plain values and links none of
 # this.
 rawframe_module(NAME world_ui
-    SOURCES src/world_ui.cpp src/participant.cpp
+    SOURCES src/world_ui.cpp src/interaction.cpp src/participant.cpp
     DEPS ui view game_textures assets game_content content texture graph world_localization localization world_replication world_kest kest world composition schema execution diagnostics result base
 )
 
