@@ -33,6 +33,7 @@ namespace {
 
 constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
+constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previewing"};
 constexpr std::string_view kProvided[] = {ui::kUiFrames.name};
 constexpr std::string_view kMaybe[] = {view::kUiPointing.name, view::kUiTyping.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
@@ -952,6 +953,10 @@ private:
             say("the game ended");
             return;
         }
+        if (auto started = playing_->advance(); !started.has_value()) {
+            say(std::string{started.error().description()});
+            return;
+        }
         const std::optional<Preview> kPreview = playing_->preview();
         if (!kPreview.has_value()) {
             return;
@@ -968,6 +973,10 @@ private:
         }
         if (previewing_) {
             say("previewing " + scene_);
+            emitter_.log(diagnostics::Severity::Info,
+                         kPreviewing,
+                         "a scene's preview is live in the game Studio plays",
+                         {diagnostics::field("scene", std::string_view{scene_})});
         }
     }
 

@@ -45,9 +45,12 @@ struct PlaySettings {
 class Play {
 public:
     /// Writes the server's and the client's settings and a token, and
-    /// starts them: the server on a port of the dynamic range, the client's
-    /// endpoint on the next.
+    /// starts the server on a port of the dynamic range, the client's
+    /// endpoint to be on the next.
     [[nodiscard]] static result::Result<Play> start(const PlaySettings& settings);
+    /// Starts the client once the server has said who it is, which the
+    /// client pins; nothing before, or once started. Asked each frame.
+    [[nodiscard]] result::Status advance();
 
     /// The client's endpoint as a preview, once it has said who it is; none
     /// before.
@@ -65,6 +68,7 @@ private:
     std::optional<process::Child> server_;
     std::optional<process::Child> client_;
     std::filesystem::path directory_;
+    std::filesystem::path clientProgram_;
     std::uint16_t endpointPort_ = 0;
 };
 

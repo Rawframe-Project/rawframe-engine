@@ -96,7 +96,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              "clicked at 200,97.*typed 0,30,0.5 at 300,161.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"viewsSet\":1,\"wheeled\":0,\"componentsScrolled\":0,\"previewing\":true,\"played\":0,\"playing\":false,\"status\":\"view set and previewed\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
         # Studio playing the plaza itself (D445): Play starts a server and a
         # client with a tooling endpoint; once the client says who it is,
-        # the chosen gate's preview is attached to it, an eye typed is
+        # the chosen gate's preview is attached to it (the clicks wait for
+        # Studio to say so, however loaded the machine), an eye typed is
         # handed to it, and Stop lets it go and stops both, the client
         # having drawn frames through the preview.
         add_test(NAME studio_plays_plaza
@@ -104,13 +105,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
-                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 wait=20 300,161:0,30,0.5
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing 300,161:0,30,0.5
                          wait=3 1096,23
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_plays_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 1096,23.*waited 20 seconds.*typed 0,30,0.5 at 300,161.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
+                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,161.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
     endif()
 endif()

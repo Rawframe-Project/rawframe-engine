@@ -151,15 +151,24 @@ result::Result<Play> Play::start(const PlaySettings& settings) {
     Play play;
     play.directory_ = kAt;
     play.endpointPort_ = kEndpointPort;
+    play.clientProgram_ = settings.client;
     RAWFRAME_TRY_ASSIGN(play.server_,
                         process::Child::start({.program = settings.server,
                                                .arguments = {"--config", (kAt / "server.conf").string()},
                                                .output = kAt / "server.log"}));
-    RAWFRAME_TRY_ASSIGN(play.client_,
-                        process::Child::start({.program = settings.client,
-                                               .arguments = {"--config", (kAt / "client.conf").string()},
-                                               .output = kAt / "client.log"}));
     return play;
+}
+
+result::Status Play::advance() {
+    std::error_code error;
+    if (client_.has_value() || std::filesystem::file_size(directory_ / "server.fingerprint", error) == 0 || error) {
+        return {};
+    }
+    RAWFRAME_TRY_ASSIGN(client_,
+                        process::Child::start({.program = clientProgram_,
+                                               .arguments = {"--config", (directory_ / "client.conf").string()},
+                                               .output = directory_ / "client.log"}));
+    return {};
 }
 
 std::optional<Preview> Play::preview() const {
@@ -173,8 +182,8 @@ std::optional<Preview> Play::preview() const {
 }
 
 bool Play::running() noexcept {
-    return server_.has_value() && client_.has_value() && !server_->exited().has_value() &&
-           !client_->exited().has_value();
+    return server_.has_value() && !server_->exited().has_value() &&
+           (!client_.has_value() || !client_->exited().has_value());
 }
 
 bool Play::ended() noexcept {
