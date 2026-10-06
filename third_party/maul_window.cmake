@@ -2,9 +2,7 @@
 # third_party/README.md and built by their own CMake, unchanged. Only a
 # client that has windows builds them: never the dedicated server's closure.
 # On macOS its AppKit backend (mwin-0024) gives the client windows and input
-# since D405, without drawing: Maul RHI's Metal driver wants shader
-# containers with Metal's language, which the engine's do not carry yet
-# (third_party/maul_rhi.cmake). On the web (the
+# (D405), drawn through Maul RHI's Metal driver (D406). On the web (the
 # engine's wasm32-wasi client) the build also writes maul-window.mjs, the
 # page's side of the backend (Maul Window's mwin-0022). Maul Window finds
 # Maul Unicode through FetchContent; the source directory below points it
