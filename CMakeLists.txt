@@ -170,12 +170,16 @@ add_subdirectory(hosts/client)
 add_subdirectory(hosts/import)
 add_subdirectory(hosts/cook)
 add_subdirectory(hosts/build)
-add_subdirectory(hosts/install)
 add_subdirectory(hosts/play)
 add_subdirectory(hosts/export)
 add_subdirectory(hosts/scene_tool)
 add_subdirectory(hosts/author)
 add_subdirectory(hosts/animation_tool)
+# The launcher family (ADR-0060, ADR-0074, D414): what fetches, installs,
+# and updates games, outside every engine closure. Nothing in modules/ or
+# hosts/ depends on it.
+add_subdirectory(launcher/http)
+add_subdirectory(launcher/install)
 
 # Scenarios: several modules and hosts together, the way a game uses them.
 if(RAWFRAME_BUILD_TESTS)
