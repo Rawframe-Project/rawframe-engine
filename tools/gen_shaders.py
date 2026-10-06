@@ -4,7 +4,9 @@
 # each stage under its entry name, spirv-link joins them into one module,
 # spirv-val checks it for Vulkan 1.3, and Maul RHI's container writer
 # (third_party/maul-rhi/tools/mrhi_container.py) writes the container with
-# the same entries in WGSL, for WebGPU, and their reflection, which lands in the module's src/generated as bytes. The
+# the same entries in WGSL, for WebGPU, in Metal's language, crossed from
+# the SPIR-V by Maul RHI's mrhi_msl.py through SPIRV-Cross (D406), and
+# their reflection, which lands in the module's src/generated as bytes. The
 # check runs none of these tools; the headers are committed, and this is
 # run again whenever a source changes (D278).
 #
@@ -17,6 +19,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WRITER = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_container.py")
+METAL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_msl.py")
 # Each container: its module, its name, and its stages' sources and entries,
 # with any names a stage is compiled with defined.
 CONTAINERS = (
@@ -64,9 +67,11 @@ def build(work, shaders, name, stages):
     linked = os.path.join(work, f"{name}.spv")
     run("spirv-link", "--target-env", "vulkan1.3", *modules, "-o", linked)
     run("spirv-val", "--target-env", "vulkan1.3", linked)
+    reflection = os.path.join(shaders, f"{name}.json")
+    metal = os.path.join(work, f"{name}_metal")
+    run(sys.executable, METAL, linked, reflection, metal)
     container = os.path.join(work, f"{name}.mrsc")
-    run(sys.executable, WRITER, linked, os.path.join(shaders, f"{name}.wgsl"), os.path.join(shaders, f"{name}.json"),
-        container)
+    run(sys.executable, WRITER, "--msl", metal, linked, os.path.join(shaders, f"{name}.wgsl"), reflection, container)
     with open(container, "rb") as file:
         return file.read()
 
