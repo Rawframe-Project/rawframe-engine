@@ -556,8 +556,10 @@ result::Status GameFiles::readInstanced(const std::function<result::Result<std::
     return {};
 }
 
-result::Result<GameFiles>
-GameFiles::fromReader(std::string_view description, const Reader& reader, game_content::GameContent* content) {
+result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
+                                                const Reader& reader,
+                                                game_content::GameContent* content,
+                                                MeshReading reading) {
     GameFiles game;
     game.named_ = true;
     RAWFRAME_TRY_ASSIGN(game.text_, reader.read(description));
@@ -624,7 +626,9 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
             mapped.second.emplace_back(kKey, kId.value);
         }
     }
-    RAWFRAME_TRY(game.readMeshes(content, meshes));
+    if (reading == MeshReading::Cooked) {
+        RAWFRAME_TRY(game.readMeshes(content, meshes));
+    }
     // Each text document, by the resource its sidecar names.
     for (const std::string& text : game.description_.texts) {
         const auto kSidecarText = reader.read(text + std::string{content::kSidecarSuffix});
@@ -689,8 +693,8 @@ GameFiles::fromReader(std::string_view description, const Reader& reader, game_c
 }
 
 #if RAWFRAME_FILE_SYSTEM
-result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& path,
-                                                   game_content::GameContent* content) {
+result::Result<GameFiles>
+GameFiles::fromDirectory(const std::filesystem::path& path, game_content::GameContent* content, MeshReading meshes) {
     const std::filesystem::path kDirectory = path.parent_path().empty() ? "." : path.parent_path();
     const Reader kReader{.read =
                              [&kDirectory](std::string_view relative) {
@@ -704,7 +708,7 @@ result::Result<GameFiles> GameFiles::fromDirectory(const std::filesystem::path& 
                              [&kDirectory] {
                                  return filesUnder(kDirectory);
                              }};
-    RAWFRAME_TRY_ASSIGN(GameFiles game, fromReader(path.filename().string(), kReader, content));
+    RAWFRAME_TRY_ASSIGN(GameFiles game, fromReader(path.filename().string(), kReader, content, meshes));
     game.directory_ = kDirectory;
     return game;
 }

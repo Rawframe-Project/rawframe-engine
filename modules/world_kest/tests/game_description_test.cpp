@@ -386,6 +386,14 @@ RAWFRAME_TEST(AGameReadsItsMeshesCooked) {
     // runtime decodes no glTF.
     const auto kUncooked = world_kest::GameFiles::fromDirectory(kDirectory / "g.game");
     RAWFRAME_EXPECT(!kUncooked.has_value() && kUncooked.error().code() == code(WorldKestError::UnreadableFile));
+    // A tool that reads none names it, found by its sidecar (D433).
+    const auto kNamed =
+        world_kest::GameFiles::fromDirectory(kDirectory / "g.game", nullptr, world_kest::MeshReading::Named);
+    RAWFRAME_EXPECT(kNamed.has_value() && kNamed->description().meshes.size() == 1 && kNamed->meshes().empty());
+    std::filesystem::remove(kDirectory / "hill.gltf.rfmeta");
+    RAWFRAME_EXPECT(
+        !world_kest::GameFiles::fromDirectory(kDirectory / "g.game", nullptr, world_kest::MeshReading::Named)
+             .has_value());
     std::filesystem::remove_all(kDirectory);
 }
 

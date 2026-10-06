@@ -101,6 +101,15 @@ struct GameModProgram {
     std::vector<ModReplacement> replacements;
 };
 
+/// Whether a game read from its sources reads its meshes (D433): cooked,
+/// from the Runtime's content, as a Runtime must; or named only, each found
+/// by its sidecar and none read, for a tool that edits the game's scenes and
+/// draws or collides with nothing, so `meshes()` is empty.
+enum class MeshReading : std::uint8_t {
+    Cooked,
+    Named,
+};
+
 class GameFiles {
 public:
     /// No game: `named()` is false and nothing else is asked.
@@ -119,7 +128,8 @@ public:
     /// clips and masks it names and their skeletons by the sidecars under
     /// the description's directory that name them.
     [[nodiscard]] static result::Result<GameFiles> fromDirectory(const std::filesystem::path& path,
-                                                                 game_content::GameContent* content = nullptr);
+                                                                 game_content::GameContent* content = nullptr,
+                                                                 MeshReading meshes = MeshReading::Cooked);
 #endif
     /// The same game from its files held in memory, by their paths relative
     /// to the description's directory: `description` is the description's
@@ -257,8 +267,10 @@ private:
     /// How a game's files are read in development, from a directory or
     /// from memory (game_files.cpp).
     struct Reader;
-    [[nodiscard]] static result::Result<GameFiles>
-    fromReader(std::string_view description, const Reader& reader, game_content::GameContent* content);
+    [[nodiscard]] static result::Result<GameFiles> fromReader(std::string_view description,
+                                                              const Reader& reader,
+                                                              game_content::GameContent* content,
+                                                              MeshReading reading = MeshReading::Cooked);
     struct Named {
         std::string name;
         std::string text;
