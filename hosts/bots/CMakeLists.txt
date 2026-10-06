@@ -21,6 +21,15 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_same_session PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,.*\"bots\":1,\"admitted\":0,\"unavailable\":1|\"bots\":1,\"admitted\":0,\"unavailable\":1,.*\"bots\":1,\"admitted\":1,")
+    # A server's self-signed identity renewed while bots play (D419): those
+    # pinned before play on, those pinned to the new fingerprint are
+    # admitted, and those still pinned to the old one are not.
+    add_test(NAME bots_renewed
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/renewed.sh
+                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(bots_renewed PROPERTIES PASS_REGULAR_EXPRESSION
+                         "renewed: before \"bots\":2,\"admitted\":2, after \"bots\":2,\"admitted\":2, stale \"bots\":2,\"admitted\":0, renewals [1-9]")
     # A server asked to stop drains: it refuses new bots as unavailable and
     # stops once the bots it serves have left. Asked with SIGTERM on POSIX
     # and Ctrl+Break on Windows, which Python sends and a shell cannot (D237).

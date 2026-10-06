@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- A server's self-signed QUIC identity is renewed a day before it ends (or after `network.quic.renew_ms`): connections made from then on are presented the new one and the fingerprint file is rewritten, while those already made keep theirs. A web server exported to run longer than thirteen days stays reachable from newly loaded pages.
 - An authoring session keeps each scene's selection: `authoring.select` sets it, undo and redo put back the one from around the change they undo, and every outcome carries it. Choosing never makes the scene dirty.
 - Shader containers are committed as binaries, one for each driver family, and a build embeds only the one its driver reads: the web client no longer carries Metal's or Direct3D 12's code (2,383,964 bytes of brotli, from 2,487,752).
 - Windows draws through Direct3D 12: the engine's shader containers carry each entry's DXIL, compiled offline by DXC, and Windows builds take Maul RHI's Direct3D 12 driver in place of Vulkan.

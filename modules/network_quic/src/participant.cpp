@@ -18,6 +18,16 @@ using diagnostics::EventIdentity;
 
 constexpr EventIdentity kReady{"network_quic", "ready"};
 constexpr EventIdentity kUnwritten{"network_quic", "fingerprint_unwritten"};
+constexpr EventIdentity kRenewed{"network_quic", "identity_renewed"};
+constexpr EventIdentity kUnrenewed{"network_quic", "identity_unrenewed"};
+/// A self-signed identity's days: thirty, or thirteen where browsers
+/// connect, since a browser pins a certificate by its hash only if it lives
+/// at most fourteen.
+constexpr std::uint32_t kSelfSignedDays = 30;
+constexpr std::uint32_t kBrowserSelfSignedDays = 13;
+constexpr std::int64_t kMillisecondsPerDay = 86'400'000;
+/// After a renewal that failed, the next try.
+constexpr execution::MonotonicDuration kRenewAgain = execution::MonotonicDuration::fromSeconds(60);
 constexpr std::string_view kProvided[] = {network::kTransport.name};
 /// A PEM file or a fingerprint file larger than this is not one.
 constexpr std::size_t kMaximumFileBytes = 64 * 1024;
@@ -71,12 +81,21 @@ std::string_view trimmed(std::string_view text) noexcept {
     return text.substr(kFirst, text.find_last_not_of(kSpace) - kFirst + 1);
 }
 
+/// A self-signed identity's renewal (D419): how long after the first
+/// iteration, and for how many days each new one lives.
+struct Renewal {
+    execution::MonotonicDuration after;
+    std::uint32_t days = 0;
+};
+
 class QuicTransport final : public composition::Participant, public network::Transport {
 public:
     QuicTransport(std::unique_ptr<QuicNetwork> network,
                   std::optional<Fingerprint> identity,
-                  std::optional<std::string> fingerprintFile)
-        : network_(std::move(network)), identity_(identity), fingerprintFile_(std::move(fingerprintFile)) {
+                  std::optional<std::string> fingerprintFile,
+                  std::optional<Renewal> renewal)
+        : network_(std::move(network)), identity_(identity), fingerprintFile_(std::move(fingerprintFile)),
+          renewal_(renewal) {
     }
 
     result::Result<std::unique_ptr<network::Provider>> provider(const network::ProviderProfile& profile) override {
@@ -106,27 +125,74 @@ public:
     /// whatever listens through this transport is listening, and a launcher
     /// that waits for the file can start its client (D395).
     void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
-        if (context_ != nullptr && frame.iteration % 60 == 0) {
+        if (context_ == nullptr) {
+            return;
+        }
+        if (frame.iteration % 60 == 0) {
             context_->reportMemory(quicHeapBytes().value_or(0));
         }
-        if (context_ != nullptr && fingerprintFile_.has_value() && identity_.has_value()) {
-            const result::Status kWritten = writeFile(*fingerprintFile_, formatFingerprint(*identity_) + "\n");
-            if (!kWritten.has_value()) {
-                context_->emitter().log(diagnostics::Severity::Error,
-                                        kUnwritten,
-                                        "the fingerprint file cannot be written",
-                                        {diagnostics::field("path", std::string_view{*fingerprintFile_})});
+        if (!written_) {
+            written_ = true;
+            writeFingerprint();
+            if (renewal_.has_value()) {
+                renewAt_ = frame.now + renewal_->after;
             }
-            fingerprintFile_.reset();
+        }
+        if (renewAt_.has_value() && frame.now >= *renewAt_) {
+            renew(frame.now);
         }
     }
 
 private:
+    /// The fingerprint file, whole or not at all.
+    void writeFingerprint() {
+        if (!fingerprintFile_.has_value() || !identity_.has_value()) {
+            return;
+        }
+        if (!writeFile(*fingerprintFile_, formatFingerprint(*identity_) + "\n").has_value()) {
+            context_->emitter().log(diagnostics::Severity::Error,
+                                    kUnwritten,
+                                    "the fingerprint file cannot be written",
+                                    {diagnostics::field("path", std::string_view{*fingerprintFile_})});
+        }
+    }
+
+    /// A new self-signed identity, for connections from now on, and its
+    /// fingerprint in the file, so a page or launcher reading it pins the
+    /// identity the server now presents.
+    void renew(execution::MonotonicInstant now) {
+        auto made = makeSelfSignedCertificate("rawframe-server", renewal_->days);
+        auto fingerprint =
+            made.has_value() ? fingerprintOf(*made) : std::unexpected<result::Error>{made.error().clone()};
+        const result::Status kDone = fingerprint.has_value()
+                                         ? network_->renew(*made)
+                                         : result::Status{std::unexpected{fingerprint.error().clone()}};
+        if (!kDone.has_value()) {
+            renewAt_ = now + kRenewAgain;
+            context_->emitter().log(diagnostics::Severity::Error,
+                                    kUnrenewed,
+                                    "the server's identity could not be renewed; it is tried again in a minute",
+                                    {diagnostics::field("reason", std::string{kDone.error().description()})});
+            return;
+        }
+        identity_ = *fingerprint;
+        renewAt_ = now + renewal_->after;
+        writeFingerprint();
+        const std::string kFingerprint = formatFingerprint(*identity_);
+        context_->emitter().log(diagnostics::Severity::Info,
+                                kRenewed,
+                                "the server's identity is renewed: new connections are presented it",
+                                {diagnostics::field("fingerprint", std::string_view{kFingerprint})});
+    }
+
     composition::ParticipantContext* context_ = nullptr;
     std::unique_ptr<QuicNetwork> network_;
     std::optional<Fingerprint> identity_;
-    /// Where the fingerprint goes on the first iteration; nothing once there.
+    /// Where the fingerprint goes on the first iteration and each renewal.
     std::optional<std::string> fingerprintFile_;
+    bool written_ = false;
+    std::optional<Renewal> renewal_;
+    std::optional<execution::MonotonicInstant> renewAt_;
 };
 
 result::Result<std::optional<Certificate>> identityOf(const composition::Configuration& configuration, bool browsers) {
@@ -141,10 +207,9 @@ result::Result<std::optional<Certificate>> identityOf(const composition::Configu
         return badFile("a QUIC identity is a certificate and key file pair, or self-signed, not both");
     }
     if (kMake) {
-        // Thirty days: an identity made at start lives as long as the
-        // process. Thirteen where browsers connect: a browser pins a
-        // certificate by its hash only if it lives at most fourteen.
-        RAWFRAME_TRY_ASSIGN(Certificate made, makeSelfSignedCertificate("rawframe-server", browsers ? 13 : 30));
+        RAWFRAME_TRY_ASSIGN(
+            Certificate made,
+            makeSelfSignedCertificate("rawframe-server", browsers ? kBrowserSelfSignedDays : kSelfSignedDays));
         return std::optional<Certificate>{std::move(made)};
     }
     if (!kCertificateFile.has_value()) {
@@ -208,9 +273,28 @@ result::Result<composition::ParticipantOwner> makeQuic(composition::ParticipantC
     if (settings.certificate.has_value()) {
         RAWFRAME_TRY_ASSIGN(identity, fingerprintOf(*settings.certificate));
     }
+    // A self-signed identity is renewed a day before it would end, or
+    // `network.quic.renew_ms` after the first iteration and each renewal.
+    std::optional<Renewal> renewal;
+    const auto kRenewText = configuration.text("network.quic.renew_ms");
+    if (configuration.text("network.quic.self_signed") == "true") {
+        const std::uint32_t kDays = settings.webTransport ? kBrowserSelfSignedDays : kSelfSignedDays;
+        const std::int64_t kLongest = static_cast<std::int64_t>(kDays - 1) * kMillisecondsPerDay;
+        RAWFRAME_TRY_ASSIGN(
+            const std::uint64_t kRenewMs,
+            configuration.unsignedInteger("network.quic.renew_ms", static_cast<std::uint64_t>(kLongest)));
+        if (kRenewMs < 1000 || kRenewMs > static_cast<std::uint64_t>(kLongest)) {
+            return badFile("network.quic.renew_ms is at least 1000 and ends a day before the identity does");
+        }
+        renewal = Renewal{.after = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kRenewMs)),
+                          .days = kDays};
+    } else if (kRenewText.has_value()) {
+        return badFile("network.quic.renew_ms renews a self-signed identity alone");
+    }
     std::optional<std::string> fingerprintFile = configuration.path("network.quic.fingerprint_file");
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<QuicNetwork> network, QuicNetwork::create(std::move(settings)));
-    return composition::ParticipantOwner{new QuicTransport{std::move(network), identity, std::move(fingerprintFile)}};
+    return composition::ParticipantOwner{
+        new QuicTransport{std::move(network), identity, std::move(fingerprintFile), renewal}};
 }
 
 } // namespace
