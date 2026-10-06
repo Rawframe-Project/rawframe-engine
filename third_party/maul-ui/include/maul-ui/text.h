@@ -24,10 +24,11 @@ extern "C"
     // mui_errorCapacity.
     typedef struct muiTextLimits
     {
-        // Fonts and text blocks that exist at once. The service reserves
-        // their records when it is created.
+        // Fonts, text blocks and font families that exist at once. The
+        // service reserves their records when it is created.
         uint32_t fonts;
         uint32_t textBlocks;
+        uint32_t fontFamilies;
     } muiTextLimits;
 
     // How a service is made. Build it with muiDefaultTextServiceDef.
@@ -40,8 +41,8 @@ extern "C"
         muiTextLimits limits;
     } muiTextServiceDef;
 
-    /// Returns the default service def: 64 fonts, 1,024 text blocks and
-    /// the C library's allocator.
+    /// Returns the default service def: 64 fonts, 1,024 text blocks, 16
+    /// font families and the C library's allocator.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
@@ -51,8 +52,8 @@ extern "C"
     /// Creates a text service.
     ///
     /// @param def         The service: a valid cookie, an allocator with both
-    ///                    functions or neither, and a font limit from 1 to
-    ///                    65,536.
+    ///                    functions or neither, a font limit from 1 to
+    ///                    65,536 and a family limit up to 65,536.
     /// @param serviceOut  Receives the service; set to NULL on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
     ///         cookie, a half-set allocator or a limit out of range;

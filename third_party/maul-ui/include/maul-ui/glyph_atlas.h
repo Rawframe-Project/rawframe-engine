@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Glyph atlases (record mui-0006): glyph images of a text service's
-// fonts, rendered as muiRenderGlyph renders them and packed into pages of
-// 8-bit coverage a renderer uploads as textures. Pages are split into
+// fonts, rendered as muiRenderGlyph and muiRenderGlyphField render them
+// and packed into pages of 8-bit pixels a renderer uploads as textures;
+// a page may hold coverage and distance fields both. Pages are split into
 // plots; when no plot has room, the least recently used plot that the
 // current frame has not used is emptied and packed again. The atlas
 // keeps the pages' pixels and tells which rectangles changed; it uses no
@@ -40,9 +41,10 @@ extern "C"
     } muiGlyphAtlasDef;
 
     // A glyph's image in an atlas: its page, its top left there (u, v)
-    // and its size, and where it goes in device pixels (x, y the top left)
-    // for the pen and baseline it was asked for. An empty image has no
-    // size and nothing to draw.
+    // and its size, and where its top left goes in pixels (x, y, down):
+    // for coverage, in device pixels for the pen and baseline it was asked
+    // for; for a field, from the pen and baseline at the field's size. An
+    // empty image has no size and nothing to draw.
     typedef struct muiAtlasGlyph
     {
         uint32_t page;
@@ -138,6 +140,30 @@ extern "C"
     MUI_NODISCARD MUI_API muiResult muiGlyphAtlas_Get(muiGlyphAtlas* atlas, uint64_t font,
                                                       uint32_t glyph, float pixelSize, float penX,
                                                       float baselineY, muiAtlasGlyph* glyphOut);
+
+    /// Gets a glyph's distance field, rendering and packing it the first
+    /// time, as muiRenderGlyphField renders it; the font key 0 is the
+    /// default font's. A renderer draws it at any size s by scaling the
+    /// image and its place, x and y from the pen and baseline, by
+    /// s / pixelSize. The glyph's plot is kept until a later frame.
+    ///
+    /// @param atlas      The atlas.
+    /// @param font       A font key, as a glyph run carries.
+    /// @param glyph      A glyph id of the font.
+    /// @param pixelSize  The em in pixels of the field, as
+    ///                   muiRenderGlyphField takes.
+    /// @param spread     How far the field reaches past the outline, from
+    ///                   MUI_MIN_FIELD_SPREAD to MUI_MAX_FIELD_SPREAD
+    ///                   pixels.
+    /// @param glyphOut   Receives the image; when the image is larger than
+    ///                   a plot, its width and height only.
+    /// @return As muiGlyphAtlas_Get, with a spread out of range invalid.
+    /// @par Thread safety
+    /// Safe from any thread; the atlas is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiGlyphAtlas_GetField(muiGlyphAtlas* atlas, uint64_t font,
+                                                           uint32_t glyph, float pixelSize,
+                                                           uint32_t spread,
+                                                           muiAtlasGlyph* glyphOut);
 
     /// Returns how many pages the atlas has made.
     ///

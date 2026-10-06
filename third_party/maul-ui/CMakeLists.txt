@@ -60,7 +60,9 @@ add_library(maul-ui ${MAUL_LIBRARY_KIND}
     src/easing.c
     src/flex.c
     src/flex_resolve.c
+    src/hit.c
     src/inherit.c
+    src/layer.c
     src/layout.c
     src/motion_math.c
     src/node.c
@@ -98,6 +100,7 @@ if(MAUL_UI_BUILD_TESTS)
     maul_add_test(condition)
     maul_add_test(context WHITEBOX)
     maul_add_test(draw)
+    maul_add_test(interaction)
     maul_add_test(layout)
     maul_add_test(layout_fixtures)
     maul_add_test(motion WHITEBOX)
@@ -120,15 +123,43 @@ if(MAUL_UI_BUILD_TESTS)
             ${PROJECT_BINARY_DIR}/test_fonts/break_test.inc s_breakTest)
         mui_embed_file(${PROJECT_SOURCE_DIR}/test/fonts/MaulLargeGlyph.ttf
             ${PROJECT_BINARY_DIR}/test_fonts/large_glyph.inc s_largeGlyph)
+        mui_embed_file(${PROJECT_SOURCE_DIR}/test/fonts/MaulOverlap.ttf
+            ${PROJECT_BINARY_DIR}/test_fonts/overlap.inc s_overlap)
+        mui_embed_file(${PROJECT_SOURCE_DIR}/test/fonts/MaulVariable.ttf
+            ${PROJECT_BINARY_DIR}/test_fonts/variable.inc s_variable)
+        mui_embed_file(${PROJECT_SOURCE_DIR}/test/fonts/MaulVariableSlant.ttf
+            ${PROJECT_BINARY_DIR}/test_fonts/variable_slant.inc s_variableSlant)
+        mui_embed_file(${PROJECT_SOURCE_DIR}/test/fonts/MaulVariableItalic.ttf
+            ${PROJECT_BINARY_DIR}/test_fonts/variable_italic.inc s_variableItalic)
+        mui_embed_file(${PROJECT_SOURCE_DIR}/test/fonts/MaulItalic.ttf
+            ${PROJECT_BINARY_DIR}/test_fonts/italic.inc s_italic)
+        mui_embed_file(${PROJECT_SOURCE_DIR}/test/fonts/MaulCoverage.ttf
+            ${PROJECT_BINARY_DIR}/test_fonts/coverage.inc s_coverage)
         maul_add_test(text_block)
         target_include_directories(test_text_block PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+        maul_add_test(text_edit)
+        target_include_directories(test_text_edit PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
         maul_add_test(text_fuzz)
         target_include_directories(test_text_fuzz PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+        maul_add_test(font_fallback)
+        target_include_directories(test_font_fallback PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+        maul_add_test(font_family)
+        target_include_directories(test_font_family PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+        maul_add_test(font_instance)
+        target_include_directories(test_font_instance PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
         maul_add_test(glyph_image)
         target_include_directories(test_glyph_image PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
         maul_add_test(glyph_atlas)
         target_include_directories(test_glyph_atlas PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
         maul_add_test(skyline WHITEBOX)
+        maul_add_test(distance_field WHITEBOX)
+        # Whitebox tests are not built for a shared library.
+        if(TARGET test_distance_field AND TARGET maul_ui_freetype)
+            target_include_directories(test_distance_field SYSTEM PRIVATE
+                $<TARGET_PROPERTY:maul_ui_freetype,INTERFACE_INCLUDE_DIRECTORIES>)
+        elseif(TARGET test_distance_field)
+            target_link_libraries(test_distance_field PRIVATE Freetype::Freetype)
+        endif()
     endif()
     # winnls.h defines MUI_ macros; this checks that none clash (family
     # record 0007).

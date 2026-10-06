@@ -294,6 +294,26 @@ extern "C"
                                                             const muiGlyph* glyphs,
                                                             uint32_t glyphCount);
 
+    /// Adds a filled rectangle to the node being painted, after what it
+    /// added before, in the clip its children are drawn in: a box command
+    /// with no radii, borders or gradient. At the identity transform its
+    /// edges snap to device pixels, and a side that was not empty keeps
+    /// one, so a thin line never vanishes. Its color is converted as a
+    /// glyph run's.
+    ///
+    /// @param sink   The sink the paint function was given.
+    /// @param rect   The rectangle, relative to the content box's top left.
+    /// @param color  Its color, sRGB-encoded with straight alpha.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL sink, a
+    ///         rectangle not finite or of a negative size, or a color
+    ///         outside 0 to 1; `mui_errorCapacity` when the list needs more
+    ///         commands than the context's limits, which fails the build.
+    /// @par Thread safety
+    /// Safe from any thread; the sink is used by one thread at a time, and
+    /// only during the call of the paint function given it.
+    MUI_NODISCARD MUI_API muiResult muiDrawSink_AddRect(muiDrawSink* sink, muiRect rect,
+                                                        muiColor color);
+
     /// Paints a root's subtree, as its last muiComputeLayout left it, into
     /// the context's list, and clears the subtree's paint requests. When
     /// nothing below the root asked for paint since the last build of the

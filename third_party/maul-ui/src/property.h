@@ -10,6 +10,7 @@
 
 #include "property_bits.h"
 
+#include "maul-ui/interaction.h"
 #include "maul-ui/layout.h"
 #include "maul-ui/style.h"
 #include "maul-ui/text_style.h"
@@ -25,6 +26,7 @@ typedef struct muiStyleValues
     muiLayoutStyle layout;
     muiVisualStyle visual;
     muiTextStyle text;
+    muiInteractionStyle interaction;
 } muiStyleValues;
 
 // Values where they live: a node keeps its structs apart. A pointer may
@@ -34,6 +36,7 @@ typedef struct muiValuesRef
     muiLayoutStyle* layout;
     muiVisualStyle* visual;
     muiTextStyle* text;
+    muiInteractionStyle* interaction;
 } muiValuesRef;
 
 typedef struct muiConstValuesRef
@@ -41,6 +44,7 @@ typedef struct muiConstValuesRef
     const muiLayoutStyle* layout;
     const muiVisualStyle* visual;
     const muiTextStyle* text;
+    const muiInteractionStyle* interaction;
 } muiConstValuesRef;
 
 // A spec a variant gives a set of properties.
@@ -66,25 +70,27 @@ typedef struct muiPropertySet
 
 static inline muiValuesRef muiRefOf(muiStyleValues* values)
 {
-    return (muiValuesRef){&values->layout, &values->visual, &values->text};
+    return (muiValuesRef){&values->layout, &values->visual, &values->text, &values->interaction};
 }
 
 static inline muiConstValuesRef muiConstRefOf(const muiStyleValues* values)
 {
-    return (muiConstValuesRef){&values->layout, &values->visual, &values->text};
+    return (muiConstValuesRef){&values->layout, &values->visual, &values->text,
+                               &values->interaction};
 }
 
 static inline muiConstValuesRef muiConstRef(muiValuesRef values)
 {
-    return (muiConstValuesRef){values.layout, values.visual, values.text};
+    return (muiConstValuesRef){values.layout, values.visual, values.text, values.interaction};
 }
 
 // CSS's initial values, which muiDefaultLayoutStyle returns, and the
-// visual and text defaults muiDefaultVisualStyle and muiDefaultTextStyle
-// return.
+// visual, text and interaction defaults muiDefaultVisualStyle,
+// muiDefaultTextStyle and muiDefaultInteractionStyle return.
 const muiLayoutStyle* muiLayoutDefaults(void);
 const muiVisualStyle* muiVisualDefaults(void);
 const muiTextStyle* muiTextDefaults(void);
+const muiInteractionStyle* muiInteractionDefaults(void);
 
 // Whether an id names a property, and every property there is.
 bool muiIsPropertyKnown(muiProperty property);

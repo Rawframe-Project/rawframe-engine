@@ -120,9 +120,9 @@ muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayou
     // in this run.
     uint64_t now = input->timeNs > context->lastTimeNs ? input->timeNs : context->lastTimeNs;
     context->lastTimeNs = now;
-    const muiMotion motion = {&context->animations, context->layout, context->visual,
-                              context->style.nodes, &context->tree,  context->text,
-                              context->textRecords};
+    const muiMotion motion = {&context->animations, context->layout,     context->visual,
+                              context->style.nodes, &context->tree,      context->text,
+                              context->textRecords, context->interaction};
     bool finish = context->environment.reducedMotion;
     muiAdvanceAnimations(&motion, now, finish);
     muiRestyle(context, root, now);

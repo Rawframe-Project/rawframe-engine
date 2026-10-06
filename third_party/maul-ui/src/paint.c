@@ -62,7 +62,7 @@ static void SnapSpan(float* start, float* length, float scale)
     *length = last - first;
 }
 
-static muiRect SnapRect(muiRect rect, float scale)
+muiRect muiSnapRect(muiRect rect, float scale)
 {
     SnapSpan(&rect.x, &rect.width, scale);
     SnapSpan(&rect.y, &rect.height, scale);
@@ -97,6 +97,11 @@ static muiCorners Radii(const muiCornerRadii* radii, muiRect rect, bool rtl)
     float bottomStart = Radius(radii->bottomStart, shorter);
     return rtl ? (muiCorners){topEnd, topStart, bottomStart, bottomEnd}
                : (muiCorners){topStart, topEnd, bottomEnd, bottomStart};
+}
+
+muiCorners muiCornersOf(const muiCornerRadii* radii, muiRect rect, bool rtl)
+{
+    return Radii(radii, rect, rtl);
 }
 
 muiDrawCommand* muiTakeCommand(muiPainter* painter, muiDrawKind kind, uint32_t clip)
@@ -213,7 +218,7 @@ static void AddBox(muiPainter* painter, const muiVisualStyle* visual, const Bord
     {
         return;
     }
-    command->box.rect = SnapRect(rect, painter->scale);
+    command->box.rect = muiSnapRect(rect, painter->scale);
     command->box.radii = radii;
     command->box.fill = muiPaintColor(painter, visual->background, state->opacity);
     command->box.gradient = gradient ? AddGradient(painter, &visual->gradient, state->opacity) : 0;
@@ -244,7 +249,7 @@ static void AddImage(muiPainter* painter, const muiVisualStyle* visual, muiRect 
         return;
     }
     const muiEdges* slice = &visual->imageSlice;
-    command->image.rect = SnapRect(rect, painter->scale);
+    command->image.rect = muiSnapRect(rect, painter->scale);
     command->image.image = visual->image;
     command->image.uv = (muiRect){0.0f, 0.0f, 1.0f, 1.0f};
     // An image does not mirror: its slice's start and end are its left and
@@ -279,7 +284,7 @@ static uint32_t AddClip(muiPainter* painter, muiRect rect, muiCorners radii, uin
     uint32_t index = out->clipCount++;
     muiDrawClip* clip = &out->clips[index];
     memset(clip, 0, sizeof *clip);
-    clip->rect = SnapRect(rect, painter->scale);
+    clip->rect = muiSnapRect(rect, painter->scale);
     clip->radii = radii;
     clip->parent = parent;
     return index;

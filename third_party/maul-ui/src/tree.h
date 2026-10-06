@@ -53,6 +53,9 @@ typedef struct muiTreeNode
     uint32_t generation;
     muiTreeDirty dirty;
     bool live;
+    // Whether the node roots a layer, painted and hit apart from the
+    // content around it (record mui-0007); src/layer.c keeps it.
+    bool apart;
 } muiTreeNode;
 
 typedef struct muiTree

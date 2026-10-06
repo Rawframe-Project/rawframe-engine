@@ -15,6 +15,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_TRUETYPE_TABLES_H
+#include FT_MULTIPLE_MASTERS_H
 
 #include <stdint.h>
 #include <string.h>
@@ -25,7 +26,10 @@ enum
 {
     // The smallest file with an sfnt or collection header.
     HEADER_SIZE = 12,
-    // OS/2 fsSelection: the typographic metrics are the ones to use.
+    // OS/2 fsSelection: the face is italic; it is oblique; the
+    // typographic metrics are the ones to use.
+    ITALIC = 1u << 0,
+    OBLIQUE = 1u << 9,
     USE_TYPO_METRICS = 1u << 7,
 };
 
@@ -147,6 +151,44 @@ static void ReadMetrics(muiFont* font)
     }
 }
 
+// Reads the face's variation axes, up to MUI_MAX_FONT_AXES, and the
+// weight, width and slant OS/2 gives it; false when memory runs out.
+static bool ReadStyle(FT_Library library, muiFont* font)
+{
+    FT_Face face = font->face;
+    const TT_OS2* os2 = FT_Get_Sfnt_Table(face, FT_SFNT_OS2);
+    bool hasOs2 = os2 != nullptr && os2->version != 0xFFFFu;
+    font->weightClass = hasOs2 && os2->usWeightClass != 0 ? os2->usWeightClass : 400;
+    font->widthClass =
+        hasOs2 && os2->usWidthClass >= 1 && os2->usWidthClass <= 9 ? os2->usWidthClass : 5;
+    bool italic =
+        hasOs2 ? (os2->fsSelection & ITALIC) != 0 : (face->style_flags & FT_STYLE_FLAG_ITALIC) != 0;
+    bool oblique = hasOs2 && (os2->fsSelection & OBLIQUE) != 0;
+    font->faceSlant = oblique ? mui_slantOblique : (italic ? mui_slantItalic : mui_slantNormal);
+    if (!FT_HAS_MULTIPLE_MASTERS(face))
+    {
+        return true;
+    }
+    FT_MM_Var* variation = nullptr;
+    FT_Error error = FT_Get_MM_Var(face, &variation);
+    if (error != 0)
+    {
+        // A variation table FreeType does not take leaves the font
+        // without axes, as its default instance.
+        return FT_ERROR_BASE(error) != FT_Err_Out_Of_Memory;
+    }
+    uint32_t count =
+        variation->num_axis < MUI_MAX_FONT_AXES ? variation->num_axis : MUI_MAX_FONT_AXES;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        const FT_Var_Axis* axis = &variation->axis[i];
+        font->axes[i] = (muiFontAxis){(uint32_t)axis->tag, axis->minimum, axis->def, axis->maximum};
+    }
+    font->axisCount = count;
+    (void)FT_Done_MM_Var(library, variation);
+    return true;
+}
+
 // Opens a face of def's data into font, which is zeroed; what it made
 // stays in font for the caller to release on failure.
 static muiResult Open(muiTextService* service, const muiFontDef* def, muiFont* font)
@@ -209,7 +251,7 @@ static muiResult Open(muiTextService* service, const muiFontDef* def, muiFont* f
     hb_font_set_scale(font->shapingFont, scale, scale);
     hb_font_make_immutable(font->shapingFont);
     ReadMetrics(font);
-    return mui_success;
+    return ReadStyle(service->freetype, font) ? mui_success : mui_errorCapacity;
 }
 
 muiResult muiCreateFont(muiTextService* service, const muiFontDef* def, muiFontId* fontOut)

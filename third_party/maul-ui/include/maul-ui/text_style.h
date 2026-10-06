@@ -73,7 +73,10 @@ extern "C"
         // Added between letters: scale times the node's own size, plus
         // offset, either of which may be negative. Inherited as written.
         muiDimension letterSpacing;
-        // From 1 to 1000; 400 is regular and 700 bold.
+        // From 1 to 1000; 400 is regular and 700 bold. Maul UI's text
+        // service sets a variable font's axes from the weight, the slant
+        // and the size, and makes bold from 600 and an oblique where the
+        // font cannot (record mui-0006).
         float weight;
         muiFontSlant slant;
         muiTextAlign align;

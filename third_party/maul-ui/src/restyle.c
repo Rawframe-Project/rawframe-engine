@@ -10,6 +10,7 @@
 
 #include "animation.h"
 #include "condition.h"
+#include "layer.h"
 #include "layout_node.h"
 #include "notify.h"
 #include "pool.h"
@@ -244,16 +245,16 @@ static void NoteHostEdit(muiContext* context, uint32_t slot)
 
 static muiMotion MotionOf(muiContext* context)
 {
-    return (muiMotion){&context->animations, context->layout, context->visual,
-                       context->style.nodes, &context->tree,  context->text,
-                       context->textRecords};
+    return (muiMotion){&context->animations, context->layout,     context->visual,
+                       context->style.nodes, &context->tree,      context->text,
+                       context->textRecords, context->interaction};
 }
 
-// A node's resolved values, layout's, visual's and text's.
+// A node's resolved values, layout's, visual's, text's and interaction's.
 static muiValuesRef NodeValues(muiContext* context, uint32_t slot)
 {
     return (muiValuesRef){&context->layout[slot - 1].style, &context->visual[slot - 1],
-                          &context->text[slot - 1]};
+                          &context->text[slot - 1], &context->interaction[slot - 1]};
 }
 
 // Whether a node's property is to change: its new value differs from
@@ -265,7 +266,7 @@ static bool IsChange(const muiMotion* motion, uint32_t slot, const muiStyleValue
     if (record == 0)
     {
         const muiConstValuesRef now = {&motion->nodes[slot - 1].style, &motion->visuals[slot - 1],
-                                       &motion->texts[slot - 1]};
+                                       &motion->texts[slot - 1], &motion->interactions[slot - 1]};
         return muiDoPropertiesDiffer(muiConstRefOf(values), now, muiPropertyOf(property));
     }
     float target[MUI_MAX_CHANNELS] = {0};
@@ -317,6 +318,7 @@ static bool Transition(muiContext* context, uint32_t slot, const Resolution* res
 static bool Commit(muiContext* context, uint32_t slot, const Resolution* resolution,
                    muiPropertyBits free, uint64_t nowNs)
 {
+    muiLayerKind layer = context->interaction[slot - 1].layer;
     muiLayoutNode* layout = &context->layout[slot - 1];
     const muiConstValuesRef values = muiConstRefOf(&resolution->values);
     muiPropertyBits changed = {0};
@@ -346,6 +348,13 @@ static bool Commit(muiContext* context, uint32_t slot, const Resolution* resolut
             context->text[slot - 1] = resolution->values.text;
             changed = muiUnion(changed, textFree);
         }
+        const muiPropertyBits interactionFree =
+            muiPropertiesOf(mui_groupInteraction, free.words[mui_groupInteraction]);
+        if (interactionFree.words[mui_groupInteraction] != 0 &&
+            muiDoPropertiesDiffer(values, now, interactionFree))
+        {
+            context->interaction[slot - 1] = resolution->values.interaction;
+        }
     }
     else
     {
@@ -374,6 +383,7 @@ static bool Commit(muiContext* context, uint32_t slot, const Resolution* resolut
     {
         muiTreeMark(&context->tree, slot, mui_stagePaint);
     }
+    muiNoteLayer(context, slot, layer);
     return changed.words[mui_groupText] != 0;
 }
 
@@ -463,7 +473,7 @@ static void Resolve(muiContext* context, uint32_t slot, uint64_t nowNs)
     Resolution resolution;
     // Commit copies a whole struct whose free properties changed, so each
     // one that has any carries the node's direct writes; visual and text
-    // values are filled only when some are free.
+    // values, and interaction ones, are filled only when some are free.
     muiPropertyBits carried = muiPropertiesOf(mui_groupLayout, MUI_LAYOUT_PROPERTIES);
     resolution.values.layout = *muiLayoutDefaults();
     if (free.words[mui_groupVisual] != 0)
@@ -475,6 +485,11 @@ static void Resolve(muiContext* context, uint32_t slot, uint64_t nowNs)
     {
         resolution.values.text = *muiTextDefaults();
         carried.words[mui_groupText] = MUI_TEXT_PROPERTIES;
+    }
+    if (free.words[mui_groupInteraction] != 0)
+    {
+        resolution.values.interaction = *muiInteractionDefaults();
+        carried.words[mui_groupInteraction] = MUI_INTERACTION_PROPERTIES;
     }
     resolution.named = (muiPropertyBits){0};
     resolution.given = (muiPropertyBits){0};

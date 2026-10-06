@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Host content's glyph runs (record mui-0005). A run's glyphs are copied
-// into the list's glyph table as given; its baseline snaps to a device
-// pixel at the identity transform, and its x keeps subpixel precision.
+// Host content's glyph runs and rectangles (record mui-0005). A run's
+// glyphs are copied into the list's glyph table as given; its baseline
+// snaps to a device pixel at the identity transform, and its x keeps
+// subpixel precision. A rectangle is a box of one fill, snapped as boxes
+// are.
 
 #include "paint_host.h"
 
@@ -83,6 +85,32 @@ muiResult muiDrawSink_AddGlyphRun(muiDrawSink* sink, const muiGlyphRun* run, con
     drawn->color = muiPaintColor(painter, run->color, sink->state->opacity);
     memcpy(&out->glyphs[out->glyphCount], glyphs, glyphCount * sizeof *glyphs);
     out->glyphCount += glyphCount;
+    return mui_success;
+}
+
+muiResult muiDrawSink_AddRect(muiDrawSink* sink, muiRect rect, muiColor color)
+{
+    if (sink == nullptr)
+    {
+        return mui_errorInvalid;
+    }
+    muiPainter* painter = sink->painter;
+    if (!isfinite(rect.x) || !isfinite(rect.y) || !isfinite(rect.width) || !isfinite(rect.height) ||
+        rect.width < 0.0f || rect.height < 0.0f || !IsUnit(color.r) || !IsUnit(color.g) ||
+        !IsUnit(color.b) || !IsUnit(color.a))
+    {
+        painter->misuse++;
+        return mui_errorInvalid;
+    }
+    muiDrawCommand* command = muiTakeCommand(painter, mui_drawBox, sink->state->clip);
+    if (command == nullptr)
+    {
+        return mui_errorCapacity;
+    }
+    rect.x += sink->x;
+    rect.y += sink->y;
+    command->box = (muiDrawBox){.rect = muiSnapRect(rect, painter->scale),
+                                .fill = muiPaintColor(painter, color, sink->state->opacity)};
     return mui_success;
 }
 

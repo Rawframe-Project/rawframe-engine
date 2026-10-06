@@ -59,6 +59,8 @@ muiResult muiCreateNode(muiContext* context, const muiNodeDef* def, muiNodeId* n
     context->visual[slot - 1] = muiDefaultVisualStyle();
     context->text[slot - 1] = muiDefaultTextStyle();
     context->textRecords[slot - 1] = muiRootTextRecord();
+    // muiDefaultInteractionStyle's, written in place.
+    context->interaction[slot - 1] = (muiInteractionStyle){.hitMode = mui_hitAuto};
     *nodeIdOut = muiTreeIdOf(&context->tree, slot);
     return mui_success;
 }

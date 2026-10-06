@@ -41,7 +41,7 @@ uint32_t muiFindAnimation(const muiMotion* motion, uint32_t node, muiProperty pr
 static muiValuesRef NodeValues(const muiMotion* motion, uint32_t node)
 {
     return (muiValuesRef){&motion->nodes[node - 1].style, &motion->visuals[node - 1],
-                          &motion->texts[node - 1]};
+                          &motion->texts[node - 1], &motion->interactions[node - 1]};
 }
 
 // A moved layout property lays the node out again; a visual one only

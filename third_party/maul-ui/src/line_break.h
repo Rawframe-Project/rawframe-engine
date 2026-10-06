@@ -25,11 +25,11 @@ enum
     mui_breakEvery = 2,
 };
 
-// What a line's width is made of: advances times scale, plus spacing
-// after each cluster.
+// What a line's width is made of: advances in ems times the size, plus
+// spacing after each cluster.
 typedef struct muiLineScale
 {
-    float scale;
+    float size;
     float spacing;
 } muiLineScale;
 

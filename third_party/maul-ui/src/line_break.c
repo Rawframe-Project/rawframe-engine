@@ -19,9 +19,9 @@ enum
 float muiTextWidth(const muiTextBlock* block, const muiLineScale* scale, uint32_t start,
                    uint32_t end)
 {
-    const int64_t* advances = block->advances.data;
+    const double* advances = block->advances.data;
     const uint32_t* clusters = block->clusters.data;
-    return (float)(advances[end] - advances[start]) * scale->scale +
+    return (float)((advances[end] - advances[start]) * (double)scale->size) +
            (float)(clusters[end] - clusters[start]) * scale->spacing;
 }
 

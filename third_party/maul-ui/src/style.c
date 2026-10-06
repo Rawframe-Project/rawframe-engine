@@ -129,8 +129,9 @@ muiResult muiStyle_SetLayoutValues(muiContext* context, muiStyleId styleId, muiV
     {
         return context != nullptr ? muiRefuse(context) : mui_errorInvalid;
     }
-    return SetValues(context, styleId, variant, (muiConstValuesRef){values, nullptr, nullptr},
-                     mui_groupLayout, mask, MUI_LAYOUT_PROPERTIES);
+    return SetValues(context, styleId, variant,
+                     (muiConstValuesRef){values, nullptr, nullptr, nullptr}, mui_groupLayout, mask,
+                     MUI_LAYOUT_PROPERTIES);
 }
 
 muiResult muiStyle_SetVisualValues(muiContext* context, muiStyleId styleId, muiVariant variant,
@@ -140,8 +141,9 @@ muiResult muiStyle_SetVisualValues(muiContext* context, muiStyleId styleId, muiV
     {
         return context != nullptr ? muiRefuse(context) : mui_errorInvalid;
     }
-    return SetValues(context, styleId, variant, (muiConstValuesRef){nullptr, values, nullptr},
-                     mui_groupVisual, mask, MUI_VISUAL_PROPERTIES);
+    return SetValues(context, styleId, variant,
+                     (muiConstValuesRef){nullptr, values, nullptr, nullptr}, mui_groupVisual, mask,
+                     MUI_VISUAL_PROPERTIES);
 }
 
 muiResult muiStyle_ResetProperties(muiContext* context, muiStyleId styleId, muiVariant variant,
@@ -218,8 +220,9 @@ muiResult muiStyle_GetLayoutValues(const muiContext* context, muiStyleId styleId
         return mui_errorInvalid;
     }
     *valuesOut = muiDefaultLayoutStyle();
-    return GetValues(context, styleId, variant, (muiValuesRef){valuesOut, nullptr, nullptr},
-                     mui_groupLayout, maskOut);
+    return GetValues(context, styleId, variant,
+                     (muiValuesRef){valuesOut, nullptr, nullptr, nullptr}, mui_groupLayout,
+                     maskOut);
 }
 
 muiResult muiStyle_GetVisualValues(const muiContext* context, muiStyleId styleId,
@@ -231,8 +234,9 @@ muiResult muiStyle_GetVisualValues(const muiContext* context, muiStyleId styleId
         return mui_errorInvalid;
     }
     *valuesOut = muiDefaultVisualStyle();
-    return GetValues(context, styleId, variant, (muiValuesRef){nullptr, valuesOut, nullptr},
-                     mui_groupVisual, maskOut);
+    return GetValues(context, styleId, variant,
+                     (muiValuesRef){nullptr, valuesOut, nullptr, nullptr}, mui_groupVisual,
+                     maskOut);
 }
 
 muiResult muiStyle_SetTextValues(muiContext* context, muiStyleId styleId, muiVariant variant,
@@ -242,8 +246,9 @@ muiResult muiStyle_SetTextValues(muiContext* context, muiStyleId styleId, muiVar
     {
         return context != nullptr ? muiRefuse(context) : mui_errorInvalid;
     }
-    return SetValues(context, styleId, variant, (muiConstValuesRef){nullptr, nullptr, values},
-                     mui_groupText, mask, MUI_TEXT_PROPERTIES);
+    return SetValues(context, styleId, variant,
+                     (muiConstValuesRef){nullptr, nullptr, values, nullptr}, mui_groupText, mask,
+                     MUI_TEXT_PROPERTIES);
 }
 
 muiResult muiStyle_GetTextValues(const muiContext* context, muiStyleId styleId, muiVariant variant,
@@ -254,8 +259,34 @@ muiResult muiStyle_GetTextValues(const muiContext* context, muiStyleId styleId, 
         return mui_errorInvalid;
     }
     *valuesOut = muiDefaultTextStyle();
-    return GetValues(context, styleId, variant, (muiValuesRef){nullptr, nullptr, valuesOut},
-                     mui_groupText, maskOut);
+    return GetValues(context, styleId, variant,
+                     (muiValuesRef){nullptr, nullptr, valuesOut, nullptr}, mui_groupText, maskOut);
+}
+
+muiResult muiStyle_SetInteractionValues(muiContext* context, muiStyleId styleId, muiVariant variant,
+                                        const muiInteractionStyle* values, muiPropertyMask mask)
+{
+    if (values == nullptr)
+    {
+        return context != nullptr ? muiRefuse(context) : mui_errorInvalid;
+    }
+    return SetValues(context, styleId, variant,
+                     (muiConstValuesRef){nullptr, nullptr, nullptr, values}, mui_groupInteraction,
+                     mask, MUI_INTERACTION_PROPERTIES);
+}
+
+muiResult muiStyle_GetInteractionValues(const muiContext* context, muiStyleId styleId,
+                                        muiVariant variant, muiInteractionStyle* valuesOut,
+                                        muiPropertyMask* maskOut)
+{
+    if (valuesOut == nullptr)
+    {
+        return mui_errorInvalid;
+    }
+    *valuesOut = muiDefaultInteractionStyle();
+    return GetValues(context, styleId, variant,
+                     (muiValuesRef){nullptr, nullptr, nullptr, valuesOut}, mui_groupInteraction,
+                     maskOut);
 }
 
 muiVisualStyle muiDefaultVisualStyle(void)

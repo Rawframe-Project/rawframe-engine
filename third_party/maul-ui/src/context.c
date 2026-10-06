@@ -45,7 +45,8 @@ muiContextDef muiDefaultContextDef(void)
                    .drawCommands = 8192,
                    .drawClips = 256,
                    .drawGradients = 256,
-                   .drawGlyphs = 16384},
+                   .drawGlyphs = 16384,
+                   .layers = 64},
     };
 }
 
@@ -58,7 +59,7 @@ static bool AreLimitsValid(const muiLimits* limits)
            limits->tokenNames <= MAX_SLOTS && limits->themes <= MAX_SLOTS &&
            limits->themeOverrides <= MAX_SLOTS && limits->drawCommands <= MAX_SLOTS &&
            limits->drawClips < MAX_SLOTS && limits->drawGradients < MAX_SLOTS &&
-           limits->drawGlyphs <= MAX_SLOTS;
+           limits->drawGlyphs <= MAX_SLOTS && limits->layers <= MAX_SLOTS;
 }
 
 // Where each part of the context's block starts.
@@ -69,6 +70,7 @@ typedef struct Parts
     size_t visual;
     size_t text;
     size_t textRecords;
+    size_t interaction;
     size_t nodeStyles;
     size_t classSlots;
     size_t classes;
@@ -94,6 +96,7 @@ typedef struct Parts
     size_t drawClips;
     size_t drawGradients;
     size_t drawGlyphs;
+    size_t layers;
 } Parts;
 
 // A table per theme, an entry per token slot; a count past size_t marks
@@ -121,6 +124,7 @@ static Parts LayOut(muiLayout* layout, const muiLimits* limits)
         .visual = muiLayoutAdd(layout, limits->nodes, sizeof(muiVisualStyle), CACHE_LINE),
         .text = muiLayoutAdd(layout, limits->nodes, sizeof(muiTextStyle), CACHE_LINE),
         .textRecords = muiLayoutAdd(layout, limits->nodes, sizeof(muiTextRecord), CACHE_LINE),
+        .interaction = muiLayoutAdd(layout, limits->nodes, sizeof(muiInteractionStyle), CACHE_LINE),
         .nodeStyles = muiLayoutAdd(layout, limits->nodes, sizeof(muiNodeStyle), CACHE_LINE),
         .classSlots = muiLayoutAdd(layout, limits->styles, sizeof(muiPoolSlot), CACHE_LINE),
         .classes = muiLayoutAdd(layout, limits->styles, sizeof(muiStyleClass), CACHE_LINE),
@@ -156,6 +160,7 @@ static Parts LayOut(muiLayout* layout, const muiLimits* limits)
                                       sizeof(muiDrawGradient), CACHE_LINE),
         .drawGlyphs =
             muiLayoutAdd(layout, (size_t)limits->drawGlyphs * 2, sizeof(muiGlyph), CACHE_LINE),
+        .layers = muiLayoutAdd(layout, limits->layers, sizeof(muiLayerEntry), CACHE_LINE),
     };
 }
 
@@ -168,6 +173,7 @@ static void Place(muiContext* context, unsigned char* base, const Parts* parts,
     context->visual = (muiVisualStyle*)(base + parts->visual);
     context->text = (muiTextStyle*)(base + parts->text);
     context->textRecords = (muiTextRecord*)(base + parts->textRecords);
+    context->interaction = (muiInteractionStyle*)(base + parts->interaction);
     context->environment = muiDefaultEnvironment();
     muiStyleStore* style = &context->style;
     style->nodes = (muiNodeStyle*)(base + parts->nodeStyles);
@@ -215,6 +221,7 @@ static void Place(muiContext* context, unsigned char* base, const Parts* parts,
         };
     }
     draw->identity = (muiDrawTransform){1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+    muiLayerInit(&context->layers, (muiLayerEntry*)(base + parts->layers), limits->layers);
 }
 
 muiResult muiCreateContext(const muiContextDef* def, muiContext** contextOut)

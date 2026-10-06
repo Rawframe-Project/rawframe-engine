@@ -80,6 +80,7 @@ typedef struct muiMotion
     muiTree* tree;
     muiTextStyle* texts;
     muiTextRecord* textRecords;
+    muiInteractionStyle* interactions;
 } muiMotion;
 
 // The live spec an id names, or NULL.

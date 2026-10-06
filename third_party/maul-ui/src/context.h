@@ -9,6 +9,7 @@
 #include "animation.h"
 #include "draw_store.h"
 #include "inherit.h"
+#include "layer_store.h"
 #include "layout_node.h"
 #include "notify.h"
 #include "style_store.h"
@@ -33,6 +34,8 @@ struct muiContext
     // to with its parent's, parallel to the tree's slots.
     muiTextStyle* text;
     muiTextRecord* textRecords;
+    // A node's resolved interaction values.
+    muiInteractionStyle* interaction;
     // Whether a class, a token name or a direct write has ever given a
     // text property: until then every node's text is the defaults, and
     // the style pass leaves the records alone.
@@ -41,6 +44,8 @@ struct muiContext
     muiTokenStore tokens;
     muiThemeStore themes;
     muiDrawStore draw;
+    // The nodes that root a layer, in paint order.
+    muiLayerStore layers;
     // What conditions read of the world outside the tree.
     muiEnvironment environment;
     // How many times the host edited a class, a node type or the

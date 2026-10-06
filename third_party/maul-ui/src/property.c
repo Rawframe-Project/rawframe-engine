@@ -51,9 +51,10 @@ typedef uint8_t Group;
 
 enum
 {
-    groupLayout,
-    groupVisual,
-    groupText,
+    groupLayout = mui_groupLayout,
+    groupVisual = mui_groupVisual,
+    groupText = mui_groupText,
+    groupInteraction = mui_groupInteraction,
 };
 
 typedef struct Row
@@ -74,6 +75,13 @@ typedef struct Row
     {(uint16_t)offsetof(muiVisualStyle, field), (uint8_t)sizeof(type), kind, groupVisual, 0, 0}
 #define TEXT(field, type, kind, low, high)                                                         \
     {(uint16_t)offsetof(muiTextStyle, field), (uint8_t)sizeof(type), kind, groupText, low, high}
+#define INTERACTION(field, type, low, high)                                                        \
+    {(uint16_t)offsetof(muiInteractionStyle, field),                                               \
+     (uint8_t)sizeof(type),                                                                        \
+     kindEnum,                                                                                     \
+     groupInteraction,                                                                             \
+     low,                                                                                          \
+     high}
 #define DIMENSION(field)       LAYOUT(field, muiDimension, kindDimension, 0, 0)
 #define NUMBER(field, kind)    LAYOUT(field, float, kind, 0, 0)
 #define ENUM(field, low, high) LAYOUT(field, uint8_t, kindEnum, low, high)
@@ -154,6 +162,12 @@ static const Row s_textRows[] = {
     TEXT(wrap, uint8_t, kindEnum, mui_textWrap, mui_textNoWrap),
 };
 
+static const Row s_interactionRows[] = {
+    INTERACTION(hitMode, uint8_t, mui_hitAuto, mui_hitNone),
+    INTERACTION(passThrough, bool, 0, 1),
+    INTERACTION(layer, uint8_t, mui_layerNone, mui_layerOverlay),
+};
+
 typedef struct GroupRows
 {
     const Row* rows;
@@ -164,12 +178,18 @@ static const GroupRows s_groups[MUI_PROPERTY_GROUPS] = {
     {s_layoutRows, (uint32_t)(sizeof s_layoutRows / sizeof s_layoutRows[0])},
     {s_visualRows, (uint32_t)(sizeof s_visualRows / sizeof s_visualRows[0])},
     {s_textRows, (uint32_t)(sizeof s_textRows / sizeof s_textRows[0])},
+    {s_interactionRows, (uint32_t)(sizeof s_interactionRows / sizeof s_interactionRows[0])},
 };
 
 static_assert(sizeof s_layoutRows / sizeof s_layoutRows[0] == mui_propertyContent + 1 &&
                   sizeof s_visualRows / sizeof s_visualRows[0] == (mui_propertyClip & 63) + 1 &&
-                  sizeof s_textRows / sizeof s_textRows[0] == (mui_propertyTextWrap & 63) + 1,
+                  sizeof s_textRows / sizeof s_textRows[0] == (mui_propertyTextWrap & 63) + 1 &&
+                  sizeof s_interactionRows / sizeof s_interactionRows[0] ==
+                      (mui_propertyLayer & 63) + 1,
               "one row per property");
+static_assert(MUI_PROPERTY_GROUP(mui_propertyHitMode) == mui_groupInteraction &&
+                  (mui_propertyHitMode & 63) == 0,
+              "the interaction group starts at its first id");
 static_assert(MUI_PROPERTY_GROUP(mui_propertyTextColor) == mui_groupText &&
                   (mui_propertyTextColor & 63) == 0,
               "the text group starts at its first id");
@@ -187,7 +207,8 @@ static_assert(sizeof(muiColor) == 4 * sizeof(float) && sizeof(muiShadow) == 8 * 
               "compared as floats alone");
 static_assert(MUI_LAYOUT_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyContent) << 1) - 1 &&
                   MUI_VISUAL_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyClip) << 1) - 1 &&
-                  MUI_TEXT_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyTextWrap) << 1) - 1,
+                  MUI_TEXT_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyTextWrap) << 1) - 1 &&
+                  MUI_INTERACTION_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyLayer) << 1) - 1,
               "the masks name every property of their groups");
 
 // A known property's row.
@@ -201,8 +222,8 @@ bool muiIsPropertyKnown(muiProperty property)
     return (property & 63u) < s_groups[MUI_PROPERTY_GROUP(property)].count;
 }
 
-static const muiPropertyBits s_known = {
-    {MUI_LAYOUT_PROPERTIES, MUI_VISUAL_PROPERTIES, MUI_TEXT_PROPERTIES}};
+static const muiPropertyBits s_known = {{MUI_LAYOUT_PROPERTIES, MUI_VISUAL_PROPERTIES,
+                                         MUI_TEXT_PROPERTIES, MUI_INTERACTION_PROPERTIES}};
 
 bool muiIsGroupMaskKnown(muiPropertyGroup group, muiPropertyMask mask)
 {
@@ -279,35 +300,62 @@ muiTextStyle muiDefaultTextStyle(void)
     return s_textDefaults;
 }
 
+// Hit in full, blocking.
+static const muiInteractionStyle s_interactionDefaults = {.hitMode = mui_hitAuto};
+
+const muiInteractionStyle* muiInteractionDefaults(void)
+{
+    return &s_interactionDefaults;
+}
+
+muiInteractionStyle muiDefaultInteractionStyle(void)
+{
+    return s_interactionDefaults;
+}
+
 // The index of the lowest set bit of a mask that is not 0, by a de Bruijn
 // sequence: portable, and the same on every compiler.
+// The struct of a group's values, found once per group by the loops over
+// properties, so each property reads its own field at an offset.
+static const unsigned char* GroupOf(muiConstValuesRef values, uint32_t group)
+{
+    const void* base = group == groupLayout   ? (const void*)values.layout
+                       : group == groupVisual ? (const void*)values.visual
+                       : group == groupText   ? (const void*)values.text
+                                              : (const void*)values.interaction;
+    return base;
+}
+
+static unsigned char* MutableGroupOf(muiValuesRef values, uint32_t group)
+{
+    void* base = group == groupLayout   ? (void*)values.layout
+                 : group == groupVisual ? (void*)values.visual
+                 : group == groupText   ? (void*)values.text
+                                        : (void*)values.interaction;
+    return base;
+}
+
 static const void* At(muiConstValuesRef values, const Row* row)
 {
-    const void* base = row->group == groupLayout   ? (const void*)values.layout
-                       : row->group == groupVisual ? (const void*)values.visual
-                                                   : (const void*)values.text;
-    return (const unsigned char*)base + row->offset;
+    return GroupOf(values, row->group) + row->offset;
 }
 
 static void* AtMutable(muiValuesRef values, const Row* row)
 {
-    void* base = row->group == groupLayout   ? (void*)values.layout
-                 : row->group == groupVisual ? (void*)values.visual
-                                             : (void*)values.text;
-    return (unsigned char*)base + row->offset;
+    return MutableGroupOf(values, row->group) + row->offset;
 }
 
-static float NumberAt(muiConstValuesRef values, const Row* row)
+static float NumberAt(const void* at)
 {
     float value = 0.0f;
-    memcpy(&value, At(values, row), sizeof value);
+    memcpy(&value, at, sizeof value);
     return value;
 }
 
-static muiDimension DimensionAt(muiConstValuesRef values, const Row* row)
+static muiDimension DimensionAt(const void* at)
 {
     muiDimension value = {0};
-    memcpy(&value, At(values, row), sizeof value);
+    memcpy(&value, at, sizeof value);
     return value;
 }
 
@@ -364,9 +412,8 @@ static bool IsShadowValid(const muiShadow* shadow)
 }
 
 // The visual kinds, which a struct of their own holds.
-static bool IsCompoundValid(muiConstValuesRef values, const Row* row)
+static bool IsCompoundValid(const void* at, const Row* row)
 {
-    const void* at = At(values, row);
     switch (row->kind)
     {
     case kindColor:
@@ -400,21 +447,22 @@ static bool IsCompoundValid(muiConstValuesRef values, const Row* row)
     }
 }
 
-static bool IsValid(muiConstValuesRef values, const Row* row)
+// Whether the value at at is one the property of row allows.
+static bool IsValid(const void* at, const Row* row)
 {
     switch (row->kind)
     {
     case kindDimension:
-        return IsDimensionValid(DimensionAt(values, row));
+        return IsDimensionValid(DimensionAt(at));
     case kindRadius:
     {
         // A corner has no automatic radius.
-        muiDimension value = DimensionAt(values, row);
+        muiDimension value = DimensionAt(at);
         return value.kind == mui_dimensionValue && IsLength(value.scale) && IsLength(value.offset);
     }
     case kindAutoLength:
     {
-        muiDimension value = DimensionAt(values, row);
+        muiDimension value = DimensionAt(at);
         return value.kind == mui_dimensionAuto
                    ? value.scale == 0.0f && value.offset == 0.0f
                    : value.kind == mui_dimensionValue && IsLength(value.scale) &&
@@ -422,27 +470,27 @@ static bool IsValid(muiConstValuesRef values, const Row* row)
     }
     case kindSpacing:
     {
-        muiDimension value = DimensionAt(values, row);
+        muiDimension value = DimensionAt(at);
         return value.kind == mui_dimensionValue && isfinite(value.scale) && isfinite(value.offset);
     }
     case kindWeight:
     {
-        float value = NumberAt(values, row);
+        float value = NumberAt(at);
         return value >= 1.0f && value <= 1000.0f;
     }
     case kindFinite:
-        return isfinite(NumberAt(values, row));
+        return isfinite(NumberAt(at));
     case kindLength:
-        return IsLength(NumberAt(values, row));
+        return IsLength(NumberAt(at));
     case kindFraction:
-        return IsUnit(NumberAt(values, row));
+        return IsUnit(NumberAt(at));
     case kindEnum:
     {
-        uint8_t value = *(const uint8_t*)At(values, row);
+        uint8_t value = *(const uint8_t*)at;
         return value >= row->low && value <= row->high;
     }
     default:
-        return IsCompoundValid(values, row);
+        return IsCompoundValid(at, row);
     }
 }
 
@@ -479,7 +527,7 @@ static bool AreGradientsEqual(const muiGradient* a, const muiGradient* b)
     return true;
 }
 
-static bool AreEqual(muiConstValuesRef a, muiConstValuesRef b, const Row* row)
+static bool AreEqual(const void* a, const void* b, const Row* row)
 {
     switch (row->kind)
     {
@@ -489,24 +537,24 @@ static bool AreEqual(muiConstValuesRef a, muiConstValuesRef b, const Row* row)
     case kindSpacing:
     {
         // Compared by field: a dimension has padding bytes.
-        muiDimension x = DimensionAt(a, row);
-        muiDimension y = DimensionAt(b, row);
+        muiDimension x = DimensionAt(a);
+        muiDimension y = DimensionAt(b);
         return x.kind == y.kind && x.scale == y.scale && x.offset == y.offset;
     }
     case kindGradient:
     {
         muiGradient x;
         muiGradient y;
-        memcpy(&x, At(a, row), sizeof x);
-        memcpy(&y, At(b, row), sizeof y);
+        memcpy(&x, a, sizeof x);
+        memcpy(&y, b, sizeof y);
         return AreGradientsEqual(&x, &y);
     }
     case kindEnum:
     case kindKey:
-        return memcmp(At(a, row), At(b, row), row->size) == 0;
+        return memcmp(a, b, row->size) == 0;
     default:
         // A number, or a struct of floats alone.
-        return AreFloatsEqual(At(a, row), At(b, row), row->size / (uint32_t)sizeof(float));
+        return AreFloatsEqual(a, b, row->size / (uint32_t)sizeof(float));
     }
 }
 
@@ -518,10 +566,17 @@ bool muiArePropertiesValid(muiConstValuesRef values, muiPropertyBits properties)
     }
     for (uint32_t group = 0; group < MUI_PROPERTY_GROUPS; group++)
     {
-        const Row* rows = s_groups[group].rows;
-        for (uint64_t left = properties.words[group]; left != 0; left &= left - 1)
+        uint64_t left = properties.words[group];
+        if (left == 0)
         {
-            if (!IsValid(values, &rows[LowestBit(left)]))
+            continue;
+        }
+        const Row* rows = s_groups[group].rows;
+        const unsigned char* base = GroupOf(values, group);
+        for (; left != 0; left &= left - 1)
+        {
+            const Row* row = &rows[LowestBit(left)];
+            if (!IsValid(base + row->offset, row))
             {
                 return false;
             }
@@ -531,24 +586,24 @@ bool muiArePropertiesValid(muiConstValuesRef values, muiPropertyBits properties)
 }
 
 // Copies one property.
-static void ApplyRow(muiValuesRef target, muiConstValuesRef source, const Row* row)
+static void ApplyRow(void* to, const void* from, const Row* row)
 {
     // Constant sizes for layout's kinds, so each copy compiles to a move.
     switch (row->kind)
     {
     case kindDimension:
-        memcpy(AtMutable(target, row), At(source, row), sizeof(muiDimension));
+        memcpy(to, from, sizeof(muiDimension));
         break;
     case kindEnum:
-        memcpy(AtMutable(target, row), At(source, row), sizeof(uint8_t));
+        memcpy(to, from, sizeof(uint8_t));
         break;
     case kindFinite:
     case kindLength:
     case kindFraction:
-        memcpy(AtMutable(target, row), At(source, row), sizeof(float));
+        memcpy(to, from, sizeof(float));
         break;
     default:
-        memcpy(AtMutable(target, row), At(source, row), row->size);
+        memcpy(to, from, row->size);
         break;
     }
 }
@@ -557,10 +612,18 @@ void muiApplyProperties(muiValuesRef target, muiConstValuesRef source, muiProper
 {
     for (uint32_t group = 0; group < MUI_PROPERTY_GROUPS; group++)
     {
-        const Row* rows = s_groups[group].rows;
-        for (uint64_t left = properties.words[group]; left != 0; left &= left - 1)
+        uint64_t left = properties.words[group];
+        if (left == 0)
         {
-            ApplyRow(target, source, &rows[LowestBit(left)]);
+            continue;
+        }
+        const Row* rows = s_groups[group].rows;
+        unsigned char* to = MutableGroupOf(target, group);
+        const unsigned char* from = GroupOf(source, group);
+        for (; left != 0; left &= left - 1)
+        {
+            const Row* row = &rows[LowestBit(left)];
+            ApplyRow(to + row->offset, from + row->offset, row);
         }
     }
 }
@@ -569,10 +632,18 @@ bool muiDoPropertiesDiffer(muiConstValuesRef a, muiConstValuesRef b, muiProperty
 {
     for (uint32_t group = 0; group < MUI_PROPERTY_GROUPS; group++)
     {
-        const Row* rows = s_groups[group].rows;
-        for (uint64_t left = properties.words[group]; left != 0; left &= left - 1)
+        uint64_t left = properties.words[group];
+        if (left == 0)
         {
-            if (!AreEqual(a, b, &rows[LowestBit(left)]))
+            continue;
+        }
+        const Row* rows = s_groups[group].rows;
+        const unsigned char* x = GroupOf(a, group);
+        const unsigned char* y = GroupOf(b, group);
+        for (; left != 0; left &= left - 1)
+        {
+            const Row* row = &rows[LowestBit(left)];
+            if (!AreEqual(x + row->offset, y + row->offset, row))
             {
                 return true;
             }
@@ -611,7 +682,7 @@ uint32_t muiPropertyChannels(muiConstValuesRef values, muiProperty property,
     case kindAutoLength:
     case kindSpacing:
     {
-        muiDimension value = DimensionAt(values, row);
+        muiDimension value = DimensionAt(at);
         if (value.kind != mui_dimensionValue)
         {
             return 0;
@@ -802,7 +873,7 @@ bool muiApplyTokenValue(muiValuesRef values, muiProperty property, const muiToke
     void* at = AtMutable(values, row);
     memcpy(kept, at, row->size);
     memcpy(at, MemberOf(value), row->size);
-    if (IsValid(muiConstRef(values), row))
+    if (IsValid(at, row))
     {
         return true;
     }

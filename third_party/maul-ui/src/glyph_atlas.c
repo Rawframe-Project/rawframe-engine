@@ -30,7 +30,10 @@ enum
     MAX_PLOTS_PER_PAGE = 4096,
     MAX_PAGES = 64,
     // A pixel on each side of an image.
-    GUTTER = 2
+    GUTTER = 2,
+    // A key's form: a field's spread above its size and position.
+    SPREAD_SHIFT = 24,
+    SIZE_MASK = (1 << SPREAD_SHIFT) - 1
 };
 
 // The largest pen coordinate, so pixel positions stay exact.
@@ -344,15 +347,27 @@ static void MarkChanged(muiGlyphAtlas* atlas, uint32_t plot, uint32_t x, uint32_
     record->dirtyY1 = y1 > record->dirtyY1 ? y1 : record->dirtyY1;
 }
 
+// The form of a key: its size in 64ths of a pixel and, for coverage,
+// its quarter-pixel position, or, for a field, its spread.
+static uint32_t FormOf(uint32_t size, uint32_t quarter, uint32_t spread)
+{
+    return spread << SPREAD_SHIFT | size << 2 | quarter;
+}
+
 // Renders a glyph and packs it; the entry for key is set and given.
 static muiResult Add(muiGlyphAtlas* atlas, const muiGlyphKey* key, muiAtlasEntry** entryOut,
                      muiAtlasGlyph* glyphOut)
 {
     muiGlyphImage image = {0, 0, 0, 0};
+    float size = (float)((key->sizeBin & SIZE_MASK) >> 2) / 64.0f;
+    uint32_t spread = key->sizeBin >> SPREAD_SHIFT;
+    size_t capacity = (size_t)atlas->plotWidth * atlas->plotHeight;
     muiResult result =
-        muiRenderGlyph(atlas->service, key->font, key->glyph, (float)(key->sizeBin >> 2) / 64.0f,
-                       (float)(key->sizeBin & 3u) / 4.0f, &image, atlas->scratch,
-                       (size_t)atlas->plotWidth * atlas->plotHeight);
+        spread != 0
+            ? muiRenderGlyphField(atlas->service, key->font, key->glyph, size, spread, &image,
+                                  atlas->scratch, capacity)
+            : muiRenderGlyph(atlas->service, key->font, key->glyph, size,
+                             (float)(key->sizeBin & 3u) / 4.0f, &image, atlas->scratch, capacity);
     bool tooLarge =
         image.width + GUTTER > atlas->plotWidth || image.height + GUTTER > atlas->plotHeight;
     if ((result == mui_success || result == mui_errorCapacity) && tooLarge)
@@ -414,15 +429,12 @@ static int64_t FloorToInteger(float value)
     return truncated - ((float)truncated > value ? 1 : 0);
 }
 
-muiResult muiGlyphAtlas_Get(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, float pixelSize,
-                            float penX, float baselineY, muiAtlasGlyph* glyphOut)
+// Finds a glyph of a form, rendering and packing it the first time, and
+// keeps its plot until a later frame; glyphOut is given its page and
+// place in it.
+static muiResult Find(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, uint32_t form,
+                      const muiAtlasEntry** entryOut, muiAtlasGlyph* glyphOut)
 {
-    if (atlas == nullptr || glyphOut == nullptr ||
-        !(pixelSize >= 1.0f / 64.0f && pixelSize <= MUI_MAX_GLYPH_PIXEL_SIZE) ||
-        !(fabsf(penX) <= MAX_PEN) || !(fabsf(baselineY) <= MAX_PEN))
-    {
-        return mui_errorInvalid;
-    }
     uint64_t key = 0;
     const muiFont* record = muiFindFont(atlas->service, font, &key);
     if (record == nullptr)
@@ -433,41 +445,83 @@ muiResult muiGlyphAtlas_Get(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
     {
         return mui_errorInvalid;
     }
-    // The pen to the nearest quarter pixel, and the size as
-    // muiRenderGlyph rounds it.
-    int64_t quarters = FloorToInteger(penX * 4.0f + 0.5f);
-    int64_t bin = quarters & 3;
-    int64_t pen = (quarters - bin) / 4;
-    uint32_t size = (uint32_t)(pixelSize * 64.0f + 0.5f);
-    muiGlyphKey lookup = {key, glyph, size << 2 | (uint32_t)bin};
+    muiGlyphKey lookup = {key, glyph, form};
     muiAtlasEntry* entry =
         atlas->table.capacity != 0 ? muiFindEntry(&atlas->table, &lookup) : nullptr;
+    *glyphOut = (muiAtlasGlyph){0, 0, 0, 0, 0, 0, 0};
     if (entry == nullptr || entry->plot == 0 || muiIsEntryStale(entry, atlas->generations))
     {
-        *glyphOut = (muiAtlasGlyph){0, 0, 0, 0, 0, 0, 0};
         muiResult result = Add(atlas, &lookup, &entry, glyphOut);
         if (result != mui_success)
         {
             return result;
         }
     }
-    uint32_t page = 0;
     if (entry->plot != MUI_NO_PLOT)
     {
         Plot* plot = &atlas->plots[entry->plot - 1];
         plot->lastUse = atlas->frame;
-        page = plot->page;
+        glyphOut->page = plot->page;
     }
-    *glyphOut = (muiAtlasGlyph){
-        .page = page,
-        .u = entry->u,
-        .v = entry->v,
-        .width = entry->width,
-        .height = entry->height,
-        .x = (int32_t)pen + entry->left,
-        .y = (int32_t)FloorToInteger(baselineY + 0.5f) - entry->top,
-    };
+    glyphOut->u = entry->u;
+    glyphOut->v = entry->v;
+    glyphOut->width = entry->width;
+    glyphOut->height = entry->height;
+    *entryOut = entry;
     return mui_success;
+}
+
+static bool IsSizeValid(float pixelSize)
+{
+    return pixelSize >= 1.0f / 64.0f && pixelSize <= MUI_MAX_GLYPH_PIXEL_SIZE;
+}
+
+// The size as the renderers round it.
+static uint32_t SizeOf(float pixelSize)
+{
+    return (uint32_t)(pixelSize * 64.0f + 0.5f);
+}
+
+muiResult muiGlyphAtlas_Get(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, float pixelSize,
+                            float penX, float baselineY, muiAtlasGlyph* glyphOut)
+{
+    if (atlas == nullptr || glyphOut == nullptr || !IsSizeValid(pixelSize) ||
+        !(fabsf(penX) <= MAX_PEN) || !(fabsf(baselineY) <= MAX_PEN))
+    {
+        return mui_errorInvalid;
+    }
+    // The pen to the nearest quarter pixel.
+    int64_t quarters = FloorToInteger(penX * 4.0f + 0.5f);
+    int64_t bin = quarters & 3;
+    int64_t pen = (quarters - bin) / 4;
+    const muiAtlasEntry* entry = nullptr;
+    muiResult result =
+        Find(atlas, font, glyph, FormOf(SizeOf(pixelSize), (uint32_t)bin, 0), &entry, glyphOut);
+    if (result == mui_success)
+    {
+        glyphOut->x = (int32_t)pen + entry->left;
+        glyphOut->y = (int32_t)FloorToInteger(baselineY + 0.5f) - entry->top;
+    }
+    return result;
+}
+
+muiResult muiGlyphAtlas_GetField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
+                                 float pixelSize, uint32_t spread, muiAtlasGlyph* glyphOut)
+{
+    if (atlas == nullptr || glyphOut == nullptr || !IsSizeValid(pixelSize) ||
+        spread < MUI_MIN_FIELD_SPREAD || spread > MUI_MAX_FIELD_SPREAD)
+    {
+        return mui_errorInvalid;
+    }
+    const muiAtlasEntry* entry = nullptr;
+    muiResult result =
+        Find(atlas, font, glyph, FormOf(SizeOf(pixelSize), 0, spread), &entry, glyphOut);
+    if (result == mui_success)
+    {
+        glyphOut->x = entry->left;
+        glyphOut->y = -entry->top;
+    }
+    return result;
 }
 
 uint32_t muiGlyphAtlas_GetPageCount(const muiGlyphAtlas* atlas)

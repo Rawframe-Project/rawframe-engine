@@ -3,7 +3,7 @@
 //
 // Text blocks (record mui-0006): a block's text, what was found in it
 // when it was set (line break opportunities and script runs), and its
-// shaping for one font and direction, kept until either changes.
+// shaping for one font chain and direction, kept until either changes.
 
 #ifndef MAUL_UI_SRC_TEXT_BLOCK_H
 #define MAUL_UI_SRC_TEXT_BLOCK_H
@@ -49,8 +49,8 @@ typedef struct muiTextScript
     uint32_t script;
 } muiTextScript;
 
-// A glyph as HarfBuzz shaped it, in font units: its id, the byte offset
-// of its cluster, its advance and its offset, y up.
+// A glyph as HarfBuzz shaped it, in its font's units: its id, the byte
+// offset of its cluster, its advance and its offset, y up.
 typedef struct muiShapedGlyph
 {
     uint32_t id;
@@ -60,8 +60,9 @@ typedef struct muiShapedGlyph
     int32_t offsetY;
 } muiShapedGlyph;
 
-// Bytes of one bidi level and one script, and their glyphs, in visual
-// order.
+// Bytes of one bidi level, one script and one font, and their glyphs, in
+// visual order; face is the font's place in the chain they were shaped
+// with, and units its units per em.
 typedef struct muiTextItem
 {
     uint32_t start;
@@ -70,6 +71,8 @@ typedef struct muiTextItem
     uint32_t glyphCount;
     uint32_t level;
     uint32_t script;
+    uint32_t face;
+    uint32_t units;
 } muiTextItem;
 
 typedef struct muiTextBlock
@@ -83,10 +86,13 @@ typedef struct muiTextBlock
     // muiTextScript.
     muiBuffer scripts;
     uint32_t scriptCount;
-    // The shaping, valid when shaped, for shapedFont and shapedRtl.
+    // The shaping, valid when shaped, for the font chain of identity
+    // shapedChain and shapedRtl.
     bool shaped;
     bool shapedRtl;
-    uint64_t shapedFont;
+    uint64_t shapedChain;
+    // A byte per byte: the place in the chain of the font it is drawn in.
+    muiBuffer faces;
     // A bidi level per byte.
     muiBuffer levels;
     // muiTextItem, in logical order.
@@ -98,10 +104,18 @@ typedef struct muiTextBlock
     // A byte per byte: 1 where HarfBuzz marks the cluster starting there
     // unsafe to break.
     muiBuffer unsafe;
-    // length + 1 sums from the start of the text: of advances in font
-    // units (int64_t), and of clusters (uint32_t).
+    // length + 1 sums from the start of the text: of advances in ems
+    // (double), as glyphs of fonts of different units per em add, and of
+    // clusters (uint32_t).
     muiBuffer advances;
     muiBuffer clusters;
+    // An input method's composition, while compositionLength is not 0:
+    // its bytes from compositionStart, and segmentCount
+    // muiCompositionSegment in segments.
+    uint32_t compositionStart;
+    uint32_t compositionLength;
+    muiBuffer segments;
+    uint32_t segmentCount;
 } muiTextBlock;
 
 typedef struct muiTextBlockStore

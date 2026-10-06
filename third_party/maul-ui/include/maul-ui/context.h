@@ -51,6 +51,8 @@ extern "C"
         uint32_t drawClips;
         uint32_t drawGradients;
         uint32_t drawGlyphs;
+        // Nodes that root a layer at once.
+        uint32_t layers;
     } muiLimits;
 
     // How a context is made. Build it with muiDefaultContextDef.
@@ -65,7 +67,8 @@ extern "C"
     /// types, 1,024 property sets, 64 notifications, 64 transitions, 256
     /// running transitions, 256 tokens, 1,024 token names, 16 themes, 512
     /// theme overrides, draw lists of 8,192 commands, 256 clips, 256
-    /// gradients and 16,384 glyphs, and the C library's allocator.
+    /// gradients and 16,384 glyphs, 64 layers, and the C library's
+    /// allocator.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety

@@ -9,6 +9,13 @@
 
 void muiReleaseFont(const muiAllocator* allocator, muiFont* font)
 {
+    for (uint32_t i = 0; i < MUI_SHAPING_SLOTS; i++)
+    {
+        if (font->shapers[i] != nullptr)
+        {
+            hb_font_destroy(font->shapers[i]);
+        }
+    }
     if (font->shapingFont != nullptr)
     {
         hb_font_destroy(font->shapingFont);

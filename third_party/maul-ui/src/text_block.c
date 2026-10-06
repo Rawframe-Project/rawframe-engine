@@ -51,9 +51,9 @@ void muiFreeBuffer(const muiAllocator* allocator, muiBuffer* buffer)
 
 void muiReleaseTextBlock(const muiAllocator* allocator, muiTextBlock* block)
 {
-    muiBuffer* buffers[] = {&block->text,     &block->breaks,   &block->scripts,
-                            &block->levels,   &block->items,    &block->glyphs,
-                            &block->advances, &block->clusters, &block->unsafe};
+    muiBuffer* buffers[] = {&block->text,   &block->breaks, &block->scripts,  &block->levels,
+                            &block->items,  &block->glyphs, &block->advances, &block->clusters,
+                            &block->unsafe, &block->faces,  &block->segments};
     for (size_t i = 0; i < sizeof buffers / sizeof buffers[0]; i++)
     {
         muiFreeBuffer(allocator, buffers[i]);

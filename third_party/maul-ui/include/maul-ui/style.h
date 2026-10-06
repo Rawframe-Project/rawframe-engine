@@ -40,9 +40,9 @@ extern "C"
     } muiNodeTypeId;
 
     // One value a style can set, named after the muiLayoutStyle,
-    // muiVisualStyle or muiTextStyle field it sets. Ids come in groups of
-    // 64, one group per values struct: layout from 0, visual from 64,
-    // text from 128, and interaction (from 192) to come.
+    // muiVisualStyle, muiTextStyle or muiInteractionStyle field it sets.
+    // Ids come in groups of 64, one group per values struct: layout from
+    // 0, visual from 64, text from 128 and interaction from 192.
     typedef uint8_t muiProperty;
 
     enum
@@ -137,6 +137,12 @@ extern "C"
         mui_propertyFontSlant = 134,
         mui_propertyTextAlign = 135,
         mui_propertyTextWrap = 136,
+        // Interaction properties, named after the muiInteractionStyle
+        // field they set (maul-ui/interaction.h): an enumerator, a flag,
+        // an enumerator.
+        mui_propertyHitMode = 192,
+        mui_propertyPassThrough = 193,
+        mui_propertyLayer = 194,
     };
 
     // A group of properties: those of one values struct.
@@ -147,6 +153,7 @@ extern "C"
         mui_groupLayout = 0,
         mui_groupVisual = 1,
         mui_groupText = 2,
+        mui_groupInteraction = 3,
     };
 
     // A set of properties of one group, one bit each.
@@ -155,10 +162,12 @@ extern "C"
 // A property's group, and its bit in its group's mask.
 #define MUI_PROPERTY_GROUP(property) ((muiPropertyGroup)((property) >> 6))
 #define MUI_PROPERTY_BIT(property)   ((muiPropertyMask)1 << ((property) & 63))
-// Every layout, visual and text property, in their groups' masks.
-#define MUI_LAYOUT_PROPERTIES ((muiPropertyMask)0xFFFFFFFFFFull)
-#define MUI_VISUAL_PROPERTIES ((muiPropertyMask)0x1FFFFull)
-#define MUI_TEXT_PROPERTIES   ((muiPropertyMask)0x1FFull)
+// Every layout, visual, text and interaction property, in their groups'
+// masks.
+#define MUI_LAYOUT_PROPERTIES      ((muiPropertyMask)0xFFFFFFFFFFull)
+#define MUI_VISUAL_PROPERTIES      ((muiPropertyMask)0x1FFFFull)
+#define MUI_TEXT_PROPERTIES        ((muiPropertyMask)0x1FFull)
+#define MUI_INTERACTION_PROPERTIES ((muiPropertyMask)0x7ull)
 
     // The states a node can be in, as bits, weakest first: a later
     // state's variant wins over an earlier one's.

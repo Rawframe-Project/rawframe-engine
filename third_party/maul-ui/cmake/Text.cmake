@@ -5,7 +5,13 @@
 # modules read their headers.
 
 target_sources(maul-ui PRIVATE
+    src/distance_field.c
+    src/flatten.c
+    src/family_store.c
     src/font.c
+    src/font_chain.c
+    src/font_family.c
+    src/font_instance.c
     src/font_store.c
     src/glyph_atlas.c
     src/glyph_image.c
@@ -14,7 +20,12 @@ target_sources(maul-ui PRIVATE
     src/skyline.c
     src/text_block.c
     src/text_blocks.c
+    src/text_boxes.c
+    src/text_delete.c
+    src/text_hit.c
+    src/text_move.c
     src/text_layout.c
+    src/text_paragraph.c
     src/text_service.c
     src/text_shape.c
     $<TARGET_OBJECTS:maul-unicode>

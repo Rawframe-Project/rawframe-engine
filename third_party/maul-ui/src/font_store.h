@@ -11,10 +11,31 @@
 #include "pool.h"
 
 #include "maul-ui/font.h"
+#include "maul-ui/text_style.h"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <hb.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+enum
+{
+    // The axes a font's instances set; those past them keep their
+    // defaults.
+    MUI_MAX_FONT_AXES = 16,
+    // The instances other than the font's own kept made for shaping.
+    MUI_SHAPING_SLOTS = 4
+};
+
+// A variation axis: its tag and range, in 16.16.
+typedef struct muiFontAxis
+{
+    uint32_t tag;
+    FT_Fixed minimum;
+    FT_Fixed defaultValue;
+    FT_Fixed maximum;
+} muiFontAxis;
 
 typedef struct muiFont
 {
@@ -31,6 +52,22 @@ typedef struct muiFont
     // The size the face was last set to for glyph images, in 64ths of a
     // pixel; 0 before any.
     long imageSize;
+    // The instance the face was last set to for glyph images, as a key's
+    // top bits.
+    uint64_t imageInstance;
+    muiFontAxis axes[MUI_MAX_FONT_AXES];
+    uint32_t axisCount;
+    // OS/2 usWeightClass, 400 without one, usWidthClass, 5 (normal)
+    // without one, and the face's slant: mui_slantNormal, Italic or
+    // Oblique.
+    uint32_t weightClass;
+    uint32_t widthClass;
+    muiFontSlant faceSlant;
+    // Shaping fonts of other instances, by their key's top bits, replaced
+    // in turn.
+    uint64_t shaperInstances[MUI_SHAPING_SLOTS];
+    hb_font_t* shapers[MUI_SHAPING_SLOTS];
+    uint32_t nextShaper;
 } muiFont;
 
 typedef struct muiFontStore

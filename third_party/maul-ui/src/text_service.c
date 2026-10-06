@@ -6,6 +6,7 @@
 #include "text_service.h"
 
 #include "allocator.h"
+#include "font_instance.h"
 #include "pool.h"
 
 #include "maul-unicode/harfbuzz.h"
@@ -21,6 +22,7 @@
 enum
 {
     MAX_FONTS = 65536,
+    MAX_FAMILIES = 65536,
     MAX_BLOCKS = 1 << 24,
 };
 
@@ -88,7 +90,7 @@ muiTextServiceDef muiDefaultTextServiceDef(void)
 {
     return (muiTextServiceDef){
         .cookie = TEXT_SERVICE_DEF_COOKIE,
-        .limits = {.fonts = 64, .textBlocks = 1024},
+        .limits = {.fonts = 64, .textBlocks = 1024, .fontFamilies = 16},
     };
 }
 
@@ -98,6 +100,8 @@ typedef struct Parts
     size_t fonts;
     size_t blockSlots;
     size_t blocks;
+    size_t familySlots;
+    size_t families;
 } Parts;
 
 static Parts LayOut(muiLayout* layout, const muiTextLimits* limits)
@@ -111,6 +115,10 @@ static Parts LayOut(muiLayout* layout, const muiTextLimits* limits)
         muiLayoutAdd(layout, limits->textBlocks, sizeof(muiPoolSlot), alignof(muiPoolSlot));
     parts.blocks =
         muiLayoutAdd(layout, limits->textBlocks, sizeof(muiTextBlock), alignof(muiTextBlock));
+    parts.familySlots =
+        muiLayoutAdd(layout, limits->fontFamilies, sizeof(muiPoolSlot), alignof(muiPoolSlot));
+    parts.families =
+        muiLayoutAdd(layout, limits->fontFamilies, sizeof(muiFontFamily), alignof(muiFontFamily));
     return parts;
 }
 
@@ -137,6 +145,16 @@ static void Release(muiTextService* service)
     muiFreeBuffer(&service->allocator, &service->workspace);
     muiFreeBuffer(&service->allocator, &service->lineItems);
     muiFreeBuffer(&service->allocator, &service->lineGlyphs);
+    muiFreeBuffer(&service->allocator, &service->hitBoxes);
+    muiFreeBuffer(&service->allocator, &service->fieldSegments);
+    muiFreeBuffer(&service->allocator, &service->fieldPieces);
+    muiFreeBuffer(&service->allocator, &service->fieldOrigins);
+    muiFreeBuffer(&service->allocator, &service->fieldRows);
+    muiFreeBuffer(&service->allocator, &service->fieldCrossings);
+    muiFreeBuffer(&service->allocator, &service->fieldCells);
+    muiFreeBuffer(&service->allocator, &service->fieldCellPieces);
+    muiFreeBuffer(&service->allocator, &service->fieldEdge);
+    muiFreeBuffer(&service->allocator, &service->fieldDistances);
     if (service->unicode != nullptr)
     {
         hb_unicode_funcs_destroy(service->unicode);
@@ -157,7 +175,8 @@ muiResult muiCreateTextService(const muiTextServiceDef* def, muiTextService** se
     }
     if (def == nullptr || serviceOut == nullptr || def->cookie != TEXT_SERVICE_DEF_COOKIE ||
         !muiIsAllocatorValid(&def->allocator) || def->limits.fonts == 0 ||
-        def->limits.fonts > MAX_FONTS || def->limits.textBlocks > MAX_BLOCKS)
+        def->limits.fonts > MAX_FONTS || def->limits.textBlocks > MAX_BLOCKS ||
+        def->limits.fontFamilies > MAX_FAMILIES)
     {
         return mui_errorInvalid;
     }
@@ -182,6 +201,9 @@ muiResult muiCreateTextService(const muiTextServiceDef* def, muiTextService** se
     muiPoolInit(&service->blocks.pool, (muiPoolSlot*)(block + parts.blockSlots),
                 def->limits.textBlocks);
     service->blocks.blocks = (muiTextBlock*)(block + parts.blocks);
+    muiPoolInit(&service->families.pool, (muiPoolSlot*)(block + parts.familySlots),
+                def->limits.fontFamilies);
+    service->families.families = (muiFontFamily*)(block + parts.families);
     service->memory = (struct FT_MemoryRec_){
         .user = service,
         .alloc = FreeTypeAlloc,
@@ -233,16 +255,29 @@ void muiDestroyTextService(muiTextService* service)
             muiReleaseTextBlock(&service->allocator, &service->blocks.blocks[slot - 1]);
         }
     }
+    for (uint32_t slot = 1; slot <= service->families.pool.used; slot++)
+    {
+        if (service->families.pool.slots[slot - 1].live)
+        {
+            muiReleaseFontFamily(&service->allocator, &service->families.families[slot - 1]);
+        }
+    }
     Release(service);
 }
 
 muiFont* muiFindFont(const muiTextService* service, uint64_t key, uint64_t* keyOut)
 {
-    if (key == 0)
+    if (key == 0 && service->defaultFont.index1 != 0)
     {
-        key = ((uint64_t)service->defaultFont.generation << 32) | service->defaultFont.index1;
+        key = muiKeyOf(service->defaultFont.index1, service->defaultFont.generation);
     }
-    uint32_t slot = muiPoolResolve(&service->fonts.pool, (uint32_t)key, (uint32_t)(key >> 32));
     *keyOut = key;
-    return slot != 0 ? &service->fonts.fonts[slot - 1] : nullptr;
+    uint32_t slot = (uint32_t)(key & 0xFFFFu) + 1;
+    uint32_t generation = (uint32_t)(key >> 16) & 0xFFFFFFu;
+    const muiPool* pool = &service->fonts.pool;
+    // Bit 63 is kept for families' keys.
+    bool live = (key & MUI_FONT_PART_MASK) != 0 && key >> 63 == 0 && slot <= pool->used &&
+                pool->slots[slot - 1].live &&
+                muiKeyGeneration(pool->slots[slot - 1].generation) == generation;
+    return live ? &service->fonts.fonts[slot - 1] : nullptr;
 }

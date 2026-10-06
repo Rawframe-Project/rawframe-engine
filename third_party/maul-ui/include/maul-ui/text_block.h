@@ -89,6 +89,48 @@ extern "C"
                                                          muiTextBlockId blockId, const char* text,
                                                          size_t length);
 
+    /// Replaces the bytes of a block's text from start up to end with a
+    /// text, as editing does; its nodes are measured and painted anew
+    /// once marked changed. Offsets inside a UTF-8 sequence leave bytes
+    /// that read as U+FFFD; muiTextBlock_FindDeletion and muiTextMove give
+    /// offsets on grapheme cluster boundaries.
+    ///
+    /// @param service  The service.
+    /// @param blockId  The block.
+    /// @param start    The first byte replaced.
+    /// @param end      The byte after the last; start for an insertion.
+    /// @param text     The text put in its place, UTF-8. May be NULL when
+    ///                 length is 0, and may be part of the block's text.
+    /// @param length   Its length in bytes.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the
+    ///         null id, a NULL text with a length, start after end, end
+    ///         past the text, or a result of 2^31 bytes or more;
+    ///         `mui_errorStale` for a block that is gone;
+    ///         `mui_errorCapacity` when memory runs out, which keeps the
+    ///         old text.
+    /// @par Thread safety
+    /// Safe from any thread; the service is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiTextBlock_Replace(muiTextService* service,
+                                                         muiTextBlockId blockId, uint32_t start,
+                                                         uint32_t end, const char* text,
+                                                         size_t length);
+
+    /// Reads a block's text.
+    ///
+    /// @param service    The service.
+    /// @param blockId    The block.
+    /// @param textOut    Receives its bytes, valid until its text is set,
+    ///                   replaced or the block destroyed; never NULL.
+    /// @param lengthOut  Receives its length in bytes.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
+    ///         null id; `mui_errorStale` for a block that is gone. Nothing
+    ///         is written on failure.
+    /// @par Thread safety
+    /// Safe from any thread; the service is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiTextBlock_GetText(const muiTextService* service,
+                                                         muiTextBlockId blockId,
+                                                         const char** textOut, size_t* lengthOut);
+
     /// Returns a block's key, for a node's host key: never 0.
     ///
     /// @param blockId  The block.
@@ -98,13 +140,26 @@ extern "C"
     MUI_API uint64_t muiTextBlock_GetKey(muiTextBlockId blockId);
 
     /// Returns a font's key, for a text style's font: never 0, which names
-    /// the service's default font.
+    /// the service's default font. Text laid out in it draws glyph runs
+    /// whose keys name an instance of the font as well: the axes and the
+    /// bold or oblique the style's weight, slant and size make of it,
+    /// which glyph images and atlases rebuild from the key. A null id's
+    /// key is 0.
     ///
     /// @param fontId  The font.
     /// @return The key.
     /// @par Thread safety
     /// Safe from any thread.
     MUI_API uint64_t muiFont_GetKey(muiFontId fontId);
+
+    /// Returns a font family's key, for a text style's font: never 0, and
+    /// apart from every font's key.
+    ///
+    /// @param familyId  The family.
+    /// @return The key; 0 for the null id.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUI_API uint64_t muiFontFamily_GetKey(muiFontFamilyId familyId);
 
     /// Sets the font a text style's font key 0 names; the null id sets
     /// none, and text in font 0 then draws nothing.
@@ -116,6 +171,25 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiSetDefaultFont(muiTextService* service, muiFontId fontId);
+
+    /// Sets the fonts tried, in order, for characters a style's font or
+    /// family, and its family's fallbacks, lack: each grapheme cluster is
+    /// drawn in the first that has all its characters, characters of no
+    /// one script staying in the font before them when it has them.
+    /// Lines keep the metrics of the style's own font.
+    ///
+    /// @param service  The service.
+    /// @param keys     Keys of fonts and families; may be NULL when count
+    ///                 is 0.
+    /// @param count    Up to 8; 0 for none.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, NULL
+    ///         keys with a count, a count past 8 or a key that is no
+    ///         font's or family's; `mui_errorStale` for one that is gone.
+    ///         On failure the fallbacks stay as they were.
+    /// @par Thread safety
+    /// Safe from any thread; the service is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiSetFallbackFonts(muiTextService* service,
+                                                        const uint64_t* keys, uint32_t count);
 
     /// Counts the times a block could not be laid out for want of memory,
     /// and so measured as empty and painted nothing.

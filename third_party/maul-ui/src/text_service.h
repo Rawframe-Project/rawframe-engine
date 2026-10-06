@@ -8,6 +8,7 @@
 #ifndef MAUL_UI_SRC_TEXT_SERVICE_H
 #define MAUL_UI_SRC_TEXT_SERVICE_H
 
+#include "family_store.h"
 #include "font_store.h"
 #include "text_block.h"
 
@@ -30,8 +31,13 @@ struct muiTextService
     hb_unicode_funcs_t* unicode;
     muiFontStore fonts;
     muiTextBlockStore blocks;
+    muiFamilyStore families;
     // What font key 0 names; the null id for none.
     muiFontId defaultFont;
+    // Keys of fonts and families tried, in order, after a style's own for
+    // characters they lack.
+    uint64_t fallbacks[MUI_MAX_FALLBACKS];
+    uint32_t fallbackCount;
     // Blocks that could not be laid out for want of memory.
     uint64_t failures;
     // Scratch for laying out and painting: lines, bidi runs, glyphs and
@@ -43,6 +49,20 @@ struct muiTextService
     // A line shaped on its own: its items and glyphs.
     muiBuffer lineItems;
     muiBuffer lineGlyphs;
+    // A line's grapheme clusters as hit testing finds them.
+    muiBuffer hitBoxes;
+    // Scratch for distance fields: the outline's segments, their pieces
+    // with the segment of each, the row starts and crossings, the cell
+    // starts and pieces, the edge, and each pixel's squared distance.
+    muiBuffer fieldSegments;
+    muiBuffer fieldPieces;
+    muiBuffer fieldOrigins;
+    muiBuffer fieldRows;
+    muiBuffer fieldCrossings;
+    muiBuffer fieldCells;
+    muiBuffer fieldCellPieces;
+    muiBuffer fieldEdge;
+    muiBuffer fieldDistances;
 };
 
 // The font a key names, key 0 naming the default font, and the key it

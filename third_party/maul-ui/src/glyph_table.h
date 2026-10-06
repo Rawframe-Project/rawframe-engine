@@ -2,11 +2,11 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The glyph atlas's lookups (record mui-0006): entries keyed by font,
-// glyph, size and subpixel position, in an open-addressing table with
-// linear probing, at most half full. An entry names the plot it is in
-// and that plot's generation; evicting a plot raises its generation, so
-// its entries go stale at once and are dropped when the table is
-// rebuilt.
+// glyph, size and subpixel position or field spread, in an
+// open-addressing table with linear probing, at most half full. An entry
+// names the plot it is in and that plot's generation; evicting a plot
+// raises its generation, so its entries go stale at once and are dropped
+// when the table is rebuilt.
 
 #ifndef MAUL_UI_SRC_GLYPH_TABLE_H
 #define MAUL_UI_SRC_GLYPH_TABLE_H
@@ -16,18 +16,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-enum
-{
-    // An entry's plot when its glyph has no image to place.
-    MUI_NO_PLOT = UINT32_MAX
-};
+// An entry's plot when its glyph has no image to place: a macro, as an
+// enumerator this large is an int on some compilers.
+#define MUI_NO_PLOT UINT32_MAX
 
 typedef struct muiGlyphKey
 {
     uint64_t font;
     uint32_t glyph;
     // The size in 64ths of a pixel, times 4, plus the quarter-pixel
-    // position.
+    // position; for a distance field, plus its spread times 2^24, at
+    // position 0.
     uint32_t sizeBin;
 } muiGlyphKey;
 
