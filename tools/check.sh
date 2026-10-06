@@ -141,6 +141,9 @@ else
             if [ "$play_status" -eq 77 ]; then
                 echo "web play skipped: no Puppeteer or no browser for it"
             elif [ "$play_status" -ne 0 ]; then
+                # The page's own lines say which part failed; the tail is
+                # the client's summaries after them.
+                grep '^page:' "out/web-play-$game.log"
                 tail -30 "out/web-play-$game.log"; fail "web play $game"
             else
                 grep '^page:' "out/web-play-$game.log"
