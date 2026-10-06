@@ -221,7 +221,15 @@ void ShellParticipant::showEntity(std::size_t at) {
         }
         ++components_;
         for (const FieldShown& kEach : fieldsShown(catalog_.component(kComponent), each.find("fields"))) {
-            auto line = fieldRow(kEach.name, kEach.text.value_or(std::string{}), std::nullopt, kEach.text.has_value());
+            // A reference shows the name of the entity it names, if it has one.
+            std::string text = kEach.text.value_or(std::string{});
+            if (kEach.kind == "entity") {
+                const auto kAt = std::ranges::find(entities_, text);
+                if (kAt != entities_.end() && !names_[static_cast<std::size_t>(kAt - entities_.begin())].empty()) {
+                    text = names_[static_cast<std::size_t>(kAt - entities_.begin())];
+                }
+            }
+            auto line = fieldRow(kEach.name, text, std::nullopt, kEach.text.has_value());
             if (!line.has_value()) {
                 return;
             }

@@ -163,6 +163,25 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         operation = operationOn("scene.add_component");
         operation.add("component", Value::string(kAdded->id));
         done = kAdded->name + " added";
+    } else if (row.kind == "reference" || row.kind == "entity") {
+        // A reference, unset (its type's kind) or set (its value's), names
+        // an entity of the scene, or none when cleared.
+        operation = operationOn("scene.set_reference");
+        operation.add("component", Value::string(row.component));
+        operation.add("field", Value::string(row.field));
+        if (text.empty()) {
+            operation.add("target", Value{});
+            done = row.field + " cleared";
+        } else {
+            std::string why;
+            const std::optional<std::string> kTarget = entityNamed(entities_, names_, text, why);
+            if (!kTarget.has_value()) {
+                refuse(row.field + ": " + why);
+                return;
+            }
+            operation.add("target", Value::string(*kTarget));
+            done = row.field + " set to " + text;
+        }
     } else {
         const std::optional<Value> kValue = typedValue(row.kind, text);
         if (!kValue.has_value()) {

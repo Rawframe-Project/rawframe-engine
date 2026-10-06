@@ -365,6 +365,46 @@ std::vector<FieldShown> fieldsShown(const Catalog::Component* type, const Value*
     return shownFields;
 }
 
+std::optional<std::string> entityNamed(std::span<const std::string> ids,
+                                       std::span<const std::string> names,
+                                       std::string_view text,
+                                       std::string& why) {
+    if (text.empty()) {
+        why = "name an entity";
+        return std::nullopt;
+    }
+    const std::size_t kCount = std::min(ids.size(), names.size());
+    // A whole name, then an identity's start, then a name's start: the
+    // first rule one entity alone meets decides.
+    const std::array<bool (*)(std::string_view, std::string_view, std::string_view), 3> kRules = {
+        [](std::string_view, std::string_view name, std::string_view typed) {
+            return name == typed;
+        },
+        [](std::string_view id, std::string_view, std::string_view typed) {
+            return typed.size() >= 4 && id.starts_with(typed);
+        },
+        [](std::string_view, std::string_view name, std::string_view typed) {
+            return name.starts_with(typed);
+        }};
+    for (const auto kRule : kRules) {
+        std::vector<std::size_t> met;
+        for (std::size_t each = 0; each < kCount; ++each) {
+            if (kRule(ids[each], names[each], text)) {
+                met.push_back(each);
+            }
+        }
+        if (met.size() == 1) {
+            return ids[met.front()];
+        }
+        if (met.size() > 1) {
+            why = std::to_string(met.size()) + " entities match " + std::string{text};
+            return std::nullopt;
+        }
+    }
+    why = "no entity matches " + std::string{text};
+    return std::nullopt;
+}
+
 std::string mintedIdentity() {
     std::random_device device;
     std::array<std::uint8_t, 16> bytes{};

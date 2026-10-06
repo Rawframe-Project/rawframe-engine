@@ -46,6 +46,26 @@ RAWFRAME_TEST(AComponentIsFoundByItsNameItsLastPartOrAStartOnlyItHas) {
     RAWFRAME_EXPECT(kCatalog.offers("scene.set_field") && !kCatalog.offers("scene.destroy_entity"));
 }
 
+RAWFRAME_TEST(AReferenceNamesOneEntityByNameOrIdentity) {
+    const std::vector<std::string> kIds = {"c5400cf8-4b07", "c5401111-0000", "b4560e55-e4e2", "9a000000-0000"};
+    const std::vector<std::string> kNames = {"ground", "ground left", "gate", ""};
+    std::string why;
+    // A whole name, even where it starts another.
+    RAWFRAME_EXPECT(entityNamed(kIds, kNames, "ground", why) == "c5400cf8-4b07");
+    RAWFRAME_EXPECT(entityNamed(kIds, kNames, "b456", why) == "b4560e55-e4e2");
+    RAWFRAME_EXPECT(entityNamed(kIds, kNames, "9a00", why) == "9a000000-0000");
+    RAWFRAME_EXPECT(entityNamed(kIds, kNames, "ga", why) == "b4560e55-e4e2");
+    // An identity's start of four or more alone, and only of one.
+    RAWFRAME_EXPECT(!entityNamed(kIds, kNames, "c54", why).has_value());
+    RAWFRAME_EXPECT(!entityNamed(kIds, kNames, "c540", why).has_value());
+    RAWFRAME_EXPECT(why == "2 entities match c540");
+    RAWFRAME_EXPECT(!entityNamed(kIds, kNames, "gro", why).has_value());
+    RAWFRAME_EXPECT(why == "2 entities match gro");
+    RAWFRAME_EXPECT(!entityNamed(kIds, kNames, "wall", why).has_value());
+    RAWFRAME_EXPECT(why == "no entity matches wall");
+    RAWFRAME_EXPECT(!entityNamed(kIds, kNames, "", why).has_value());
+}
+
 RAWFRAME_TEST(TypedTextIsAValueOfItsFieldsKindOrNone) {
     RAWFRAME_EXPECT(document::writeCompact(*typedValue("real", "2.5")) == R"({"real":2.5})");
     RAWFRAME_EXPECT(!typedValue("real", "x").has_value());

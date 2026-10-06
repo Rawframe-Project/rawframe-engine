@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -133,6 +134,15 @@ struct FieldShown {
 /// matches; else none, and `why` says so.
 [[nodiscard]] std::optional<Catalog::Component>
 componentNamed(const Catalog& catalog, std::string_view text, std::string& why);
+
+/// The scene's entity `text` names, of `ids` and their `names` in the
+/// same order: by its whole name, by the start of its identity (four
+/// characters at least), or by the start of its name, when one alone
+/// matches; else none, and `why` says so (D447).
+[[nodiscard]] std::optional<std::string> entityNamed(std::span<const std::string> ids,
+                                                     std::span<const std::string> names,
+                                                     std::string_view text,
+                                                     std::string& why);
 
 /// A new identity, a random version 4 UUID in its text form: a new entity's
 /// is the client's to choose (D438), and an identity is data, not
