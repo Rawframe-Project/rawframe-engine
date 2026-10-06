@@ -17,9 +17,6 @@ namespace rawframe::world_kest {
 /// A line's words, split at spaces and tabs.
 [[nodiscard]] std::vector<std::string_view> words(std::string_view line);
 
-/// Sixteen hexadecimal digits, as identities are written in lines.
-[[nodiscard]] std::optional<std::uint64_t> parseHex64(std::string_view word) noexcept;
-
 /// A finite number within a range, as a word.
 [[nodiscard]] std::optional<double> parseReal(std::string_view word, double lowest, double highest) noexcept;
 

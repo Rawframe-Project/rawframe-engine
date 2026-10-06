@@ -138,7 +138,4 @@ struct ActionSetLimits {
 /// are `rawframe.document` errors naming the field by its path.
 [[nodiscard]] result::Result<ActionSet> readActionSet(std::string_view text, const ActionSetLimits& limits = {});
 
-/// A 16-digit lowercase hexadecimal identity, as actions and contexts have.
-[[nodiscard]] std::optional<std::uint64_t> parseIdentity(std::string_view text) noexcept;
-
 } // namespace rawframe::input

@@ -47,24 +47,6 @@ inline bool machineName(std::string_view name, std::size_t limit) noexcept {
     });
 }
 
-inline std::optional<std::uint64_t> parseIdentity(std::string_view text) noexcept {
-    if (text.size() != 16) {
-        return std::nullopt;
-    }
-    std::uint64_t value = 0;
-    for (const char kDigit : text) {
-        value <<= 4U;
-        if (kDigit >= '0' && kDigit <= '9') {
-            value |= static_cast<std::uint64_t>(kDigit - '0');
-        } else if (kDigit >= 'a' && kDigit <= 'f') {
-            value |= static_cast<std::uint64_t>(kDigit - 'a' + 10);
-        } else {
-            return std::nullopt;
-        }
-    }
-    return value;
-}
-
 /// A level in decibels, at most kMaximumDecibels.
 inline result::Result<float> decibels(const document::Record& record, std::string_view field) {
     RAWFRAME_TRY_ASSIGN(const double kLevel, record.real(field, 0.0));

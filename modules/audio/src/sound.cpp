@@ -1,6 +1,7 @@
 #include "rawframe/audio/sound.h"
 
 #include "fields.h"
+#include "rawframe/base/hex64.h"
 #include "rawframe/document/json.h"
 
 #include <algorithm>
@@ -158,7 +159,7 @@ result::Result<SoundDeclaration> readSound(std::string_view text, const Layout& 
     }
 
     RAWFRAME_TRY_ASSIGN(const std::string_view kBus, kRecord.text("bus"));
-    const auto kBusId = parseIdentity(kBus);
+    const auto kBusId = base::parseHex64(kBus);
     const auto kBusIndex = kBusId ? layout.busWithId(*kBusId) : std::nullopt;
     if (!kBusIndex) {
         return invalid(kRecord.pathOf("bus"), "the layout has no bus of that identity");

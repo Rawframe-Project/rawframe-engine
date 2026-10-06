@@ -1,6 +1,7 @@
 #include "rawframe/audio/layout.h"
 
 #include "fields.h"
+#include "rawframe/base/hex64.h"
 #include "rawframe/document/errors.h"
 #include "rawframe/document/json.h"
 #include "rawframe/document/record.h"
@@ -216,7 +217,7 @@ result::Result<Effect> readDynamics(const Record& record, std::optional<std::uin
         return document::notCanonical(record.pathOf("key"), "a field at its default is omitted");
     }
     if (kKey.has_value()) {
-        key = parseIdentity(*kKey);
+        key = base::parseHex64(*kKey);
         if (!key.has_value()) {
             return invalid(record.pathOf("key"), "a key is own_input or a bus identity");
         }
@@ -373,7 +374,7 @@ public:
         RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kBusFields, path));
         Bus made;
         RAWFRAME_TRY_ASSIGN(const std::string_view kId, kRecord.text("busId"));
-        const auto kParsed = parseIdentity(kId);
+        const auto kParsed = base::parseHex64(kId);
         if (!kParsed) {
             return invalid(kRecord.pathOf("busId"), "an identity is 16 lowercase hexadecimal digits");
         }
@@ -434,7 +435,7 @@ public:
                 RAWFRAME_TRY_ASSIGN(const Record kSend, Record::of(sends->items()[index], kSendFields, kPath));
                 PendingSend pending{.bus = kIndex, .target = 0, .send = {}, .path = kPath};
                 RAWFRAME_TRY_ASSIGN(const std::string_view kTarget, kSend.text("target"));
-                const auto kTargetId = parseIdentity(kTarget);
+                const auto kTargetId = base::parseHex64(kTarget);
                 if (!kTargetId) {
                     return invalid(kSend.pathOf("target"), "an identity is 16 lowercase hexadecimal digits");
                 }

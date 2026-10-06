@@ -1,6 +1,7 @@
 #include "rawframe/input/actions.h"
 
 #include "binding_document.h"
+#include "rawframe/base/hex64.h"
 #include "rawframe/document/errors.h"
 #include "rawframe/document/json.h"
 #include "rawframe/document/record.h"
@@ -70,7 +71,7 @@ bool machineName(std::string_view name, std::size_t limit) noexcept {
 
 result::Result<std::uint64_t> identityOf(const Record& record, std::string_view field) {
     RAWFRAME_TRY_ASSIGN(const std::string_view kText, record.text(field));
-    const auto kId = parseIdentity(kText);
+    const auto kId = base::parseHex64(kText);
     if (!kId) {
         return invalid(record.pathOf(field), "an identity is 16 lowercase hexadecimal digits");
     }
@@ -456,24 +457,6 @@ readContext(const Value& value, const std::string& path, const ActionSet& set, c
 }
 
 } // namespace
-
-std::optional<std::uint64_t> parseIdentity(std::string_view text) noexcept {
-    if (text.size() != 16) {
-        return std::nullopt;
-    }
-    std::uint64_t value = 0;
-    for (const char kDigit : text) {
-        value <<= 4U;
-        if (kDigit >= '0' && kDigit <= '9') {
-            value |= static_cast<std::uint64_t>(kDigit - '0');
-        } else if (kDigit >= 'a' && kDigit <= 'f') {
-            value |= static_cast<std::uint64_t>(kDigit - 'a' + 10);
-        } else {
-            return std::nullopt;
-        }
-    }
-    return value;
-}
 
 std::optional<std::size_t> ActionSet::actionNamed(std::string_view name) const noexcept {
     for (std::size_t index = 0; index < actions.size(); ++index) {

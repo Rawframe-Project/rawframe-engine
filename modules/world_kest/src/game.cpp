@@ -4,6 +4,7 @@
 #include "mod_api.h"
 #include "navigation.h"
 #include "physics_facts.h"
+#include "rawframe/base/hex64.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_animation/components.h"
 #include "rawframe/world_kest/errors.h"
@@ -33,7 +34,7 @@ std::optional<GameEffect> parseEffect(const std::vector<std::string_view>& words
                                                              : world_replication::EffectClass::ConfirmedOnly};
     std::size_t at = 3;
     if (at + 1 < words.size() && words[at] == "sound") {
-        const auto kSound = parseHex64(words[at + 1]);
+        const auto kSound = base::parseHex64(words[at + 1]);
         if (!kSound.has_value() || *kSound == 0) {
             return std::nullopt;
         }
@@ -180,7 +181,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             controls.actions = kWords[1];
             actionsLine = number;
         } else if (kKeyword == "prefab") {
-            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() == 3 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(number, WorldKestError::BadGameLine, "a prefab line is `prefab <16 hex digits> <file>`");
             }
@@ -190,7 +191,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.prefabs.push_back(GamePrefab{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "mesh") {
-            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() == 3 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(number, WorldKestError::BadGameLine, "a mesh line is `mesh <16 hex digits> <file>`");
             }
@@ -200,7 +201,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.meshes.push_back(GameMesh{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "texture") {
-            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() == 3 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(
                     number, WorldKestError::BadGameLine, "a texture line is `texture <16 hex digits> <file>`");
@@ -213,7 +214,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             game.textures.push_back(GameTexture{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "rendertexture") {
             const bool kShaped = kWords.size() == 4 || kWords.size() == 5;
-            const auto kId = kShaped ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kShaped ? base::parseHex64(kWords[1]) : std::nullopt;
             const auto kWidth = kShaped ? parseReal(kWords[2], 1, kMaximumRenderTextureSide) : std::nullopt;
             const auto kHeight = kShaped ? parseReal(kWords[3], 1, kMaximumRenderTextureSide) : std::nullopt;
             const std::string_view kUpdate = kWords.size() == 5 ? kWords[4] : std::string_view{"every_frame"};
@@ -295,7 +296,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             aspect.height = static_cast<std::uint32_t>(*kHeight);
             game.aspect = aspect;
         } else if (kKeyword == "material") {
-            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() == 3 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(
                     number, WorldKestError::BadGameLine, "a material line is `material <16 hex digits> <file>`");
@@ -310,7 +311,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             //     [subset <32 hex digits>]
             constexpr std::string_view kShape = "an animator line is `animator <16 hex digits> <graph file> "
                                                 "[parameters <component>] [subset <32 hex digits>]`";
-            const auto kId = kWords.size() >= 3 && kWords.size() % 2 == 1 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() >= 3 && kWords.size() % 2 == 1 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(number, WorldKestError::BadGameLine, kShape);
             }
@@ -355,7 +356,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.texts.emplace_back(kWords[1]);
         } else if (kKeyword == "font") {
-            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() == 3 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(number, WorldKestError::BadGameLine, "a font line is `font <16 hex digits> <file>`");
             }
@@ -365,7 +366,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.fonts.push_back(GameFont{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "label") {
-            const auto kId = kWords.size() == 4 || kWords.size() == 5 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() == 4 || kWords.size() == 5 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
@@ -391,7 +392,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             audio.mixer = kWords[1];
             mixerLine = number;
         } else if (kKeyword == "sound") {
-            const auto kId = kWords.size() == 3 ? parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() == 3 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(number, WorldKestError::BadGameLine, "a sound line is `sound <16 hex digits> <file>`");
             }

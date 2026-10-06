@@ -1,6 +1,7 @@
 #include "rawframe/input/overrides.h"
 
 #include "binding_document.h"
+#include "rawframe/base/hex64.h"
 #include "rawframe/document/errors.h"
 #include "rawframe/document/record.h"
 
@@ -145,7 +146,7 @@ readOverrides(std::string_view text, const ActionSet& set, std::string_view targ
         RAWFRAME_TRY_ASSIGN(const Record kEntry, Record::of(value, kEntryFields, kPath));
         OverrideEntry entry;
         RAWFRAME_TRY_ASSIGN(const std::string_view kAction, kEntry.text("actionId"));
-        const auto kId = parseIdentity(kAction);
+        const auto kId = base::parseHex64(kAction);
         if (!kId) {
             return invalid(kEntry.pathOf("actionId"), "an identity is 16 lowercase hexadecimal digits");
         }

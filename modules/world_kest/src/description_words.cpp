@@ -26,15 +26,6 @@ std::vector<std::string_view> words(std::string_view line) {
     return found;
 }
 
-std::optional<std::uint64_t> parseHex64(std::string_view word) noexcept {
-    std::uint64_t value = 0;
-    const auto kRead = std::from_chars(word.data(), word.data() + word.size(), value, 16);
-    if (word.size() != 16 || kRead.ec != std::errc{} || kRead.ptr != word.data() + word.size()) {
-        return std::nullopt;
-    }
-    return value;
-}
-
 std::optional<double> parseReal(std::string_view word, double lowest, double highest) noexcept {
     double value = 0;
     const auto kRead = std::from_chars(word.data(), word.data() + word.size(), value);
