@@ -70,6 +70,9 @@ struct Node {
     std::uint32_t textColor = 0;
     std::uint32_t textAlign = 0;
     std::uint32_t textWrap = 0;
+    std::int64_t press = 0;
+    std::uint32_t hit = 0;
+    std::uint32_t layer = 0;
 };
 
 /// The words of label `label` with `value` as its argument, in the player's
@@ -144,6 +147,11 @@ public:
     /// for a font not declared, one already read, or bytes the tree does not
     /// take.
     [[nodiscard]] result::Status addFont(std::uint64_t id, std::span<const std::byte> bytes);
+
+    /// What a press at `x`, `y`, logical pixels of the window, lands on as
+    /// the last update laid the UI out (D421): none when it passes through to
+    /// the game, else the press code of the node it lands on.
+    [[nodiscard]] std::optional<std::int64_t> press(float x, float y) const;
 
     /// What the last update drew.
     [[nodiscard]] const ui::DrawList& drawn() const noexcept;

@@ -11,6 +11,7 @@
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
 #include "rawframe/view/players.h"
+#include "rawframe/view/pointing.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/input_source.h"
 
@@ -49,6 +50,16 @@ struct ViewDoorContext {
 /// They read and change nothing else, so each is safe for untrusted code.
 /// `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addViewDoors(kest::DoorTable& doors, const ViewDoorContext* context);
+
+/// What the `UI.*` doors read: the press code the player's press since the
+/// last tick landed on, the first of them, nought for none (D421).
+struct UiDoorContext {
+    std::int64_t pressed = 0;
+};
+
+/// Adds `UI.pressed`. It reads and changes nothing else, so it is safe for
+/// untrusted code. `context` outlives every machine started with the table.
+[[nodiscard]] result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context);
 
 /// The devices of the process's own player, lent by a client host: what
 /// its window reported between two ticks.
@@ -92,6 +103,9 @@ struct SourceSettings {
     /// The local players' views (D367), or null where the host lends
     /// none; outlives the sources.
     const view::PlayerViews* views = nullptr;
+    /// What the UI takes of the pointer (D421), or null where the host
+    /// lends nothing; outlives the sources.
+    const view::UiPointing* pointing = nullptr;
 };
 
 /// The input sources of a game, and its player's haptics.

@@ -5,6 +5,7 @@
 #include "rawframe/graph/graph.h"
 #include "rawframe/ui/font.h"
 #include "rawframe/view/players.h"
+#include "rawframe/view/pointing.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/layouts.h"
 #include "rawframe/world_localization/text.h"
@@ -39,6 +40,7 @@ constexpr std::string_view kProvided[] = {kUiFrames.name};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        view::kPlayerViews.name,
+                                       view::kUiPointing.name,
                                        game_content::kGameContent.name,
                                        world_localization::kGameText.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
@@ -125,7 +127,10 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
                                 {"textSize", offsetof(Node, textSize)},
                                 {"textColor", offsetof(Node, textColor)},
                                 {"textAlign", offsetof(Node, textAlign)},
-                                {"textWrap", offsetof(Node, textWrap)}})) {
+                                {"textWrap", offsetof(Node, textWrap)},
+                                {"press", offsetof(Node, press)},
+                                {"hit", offsetof(Node, hit)},
+                                {"layer", offsetof(Node, layer)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -197,6 +202,9 @@ public:
         if (context.has(view::kPlayerViews.name)) {
             RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
         }
+        if (context.has(view::kUiPointing.name)) {
+            RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
+        }
         RAWFRAME_TRY_ASSIGN(ui_, WorldUi::create(std::move(*settings)));
         // The players' regions as the scene and the canvas have them (D364,
         // D369): the layout for their count, else the whole window.
@@ -251,6 +259,15 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        // Presses anywhere in the window, a mouse being every local
+        // player's, against the UI as last laid out (D421).
+        if (pointing_ != nullptr && ui_ != nullptr) {
+            pointing_->answer([this](float x, float y) -> std::optional<std::int64_t> {
+                const std::optional<std::int64_t> kTaken = failed_ ? std::nullopt : ui_->press(x, y);
+                presses_ += kTaken.has_value() ? 1 : 0;
+                return kTaken;
+            });
+        }
         return {};
     }
 
@@ -319,6 +336,9 @@ public:
     }
 
     void stop() noexcept override {
+        if (pointing_ != nullptr) {
+            pointing_->answer({});
+        }
         if (ui_ == nullptr) {
             return;
         }
@@ -341,6 +361,7 @@ public:
                       diagnostics::field("textsUnknown", kStatistics.textsUnknown),
                       diagnostics::field("glyphRuns", glyphRuns_),
                       diagnostics::field("glyphsLeftOut", glyphsLeftOut_),
+                      diagnostics::field("presses", presses_),
                       diagnostics::field("atlasRevisions",
                                          drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0)});
     }
@@ -415,6 +436,7 @@ private:
 
     world_replication::ClientWorlds* clients_ = nullptr;
     view::PlayerViews* views_ = nullptr;
+    view::UiPointing* pointing_ = nullptr;
     std::unique_ptr<WorldUi> ui_;
     std::vector<world_kest::GameRegion> regions_;
     std::optional<world_kest::GameAspect> aspect_;
@@ -431,6 +453,8 @@ private:
     std::uint64_t fontsRead_ = 0;
     std::uint64_t glyphRuns_ = 0;
     std::uint64_t glyphsLeftOut_ = 0;
+    /// Presses the UI took (D421).
+    std::uint64_t presses_ = 0;
     std::uint64_t tick_ = 0;
     bool failed_ = false;
     diagnostics::Emitter emitter_;

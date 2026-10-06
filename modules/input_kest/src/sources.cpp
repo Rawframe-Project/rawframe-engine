@@ -177,6 +177,7 @@ struct Shared {
     input::Feed* feed = nullptr;
     std::optional<input::PairingPolicy> pairing;
     const view::PlayerViews* views = nullptr;
+    const view::UiPointing* pointing = nullptr;
     /// Each effect kind's haptic output and how it is felt, by kind.
     std::vector<std::optional<std::pair<std::size_t, input::Haptic>>> felt;
 };
@@ -238,6 +239,18 @@ public:
         RAWFRAME_TRY(addInputDoors(table, &doors_));
         view_ = ViewDoorContext{.views = seed.has_value() ? nullptr : shared.views, .player = player};
         RAWFRAME_TRY(addViewDoors(table, &view_));
+        RAWFRAME_TRY(addUiDoors(table, &ui_));
+        // The UI as the topmost routing node (D421): a press it takes is the
+        // sample's to read, never an action's.
+        if (const view::UiPointing* pointing = seed.has_value() ? nullptr : shared.pointing) {
+            mapper_->setPointerTaker([this, pointing](input::PlayerSlot /*slot*/, float x, float y) {
+                const std::optional<std::int64_t> kCode = pointing->press(x, y);
+                if (kCode.has_value() && ui_.pressed == 0) {
+                    ui_.pressed = *kCode;
+                }
+                return kCode.has_value();
+            });
+        }
         RAWFRAME_TRY_ASSIGN(machine_, kest::Machine::start(shared.program, table, kest::Trust::Trusted, shared.limits));
         auto entry = machine_->entry(shared.entry);
         if (!entry.has_value()) {
@@ -252,6 +265,7 @@ public:
     }
 
     result::Status next(std::uint64_t tick, std::span<std::byte> input) override {
+        ui_.pressed = 0;
         if (hand_.has_value()) {
             hand_->act(*mapper_);
         } else {
@@ -285,6 +299,7 @@ private:
     input::Feed* feed_ = nullptr;
     InputDoorContext doors_;
     ViewDoorContext view_;
+    UiDoorContext ui_;
     std::unique_ptr<kest::Machine> machine_;
     kest::Entry entry_;
     std::vector<kest::Value> frame_;
@@ -460,6 +475,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.feed = settings.feed;
     shared.pairing = settings.pairing;
     shared.views = settings.views;
+    shared.pointing = settings.pointing;
     return std::unique_ptr<InputSources>{new Sources{std::move(shared)}};
 }
 

@@ -35,3 +35,12 @@ fn x(action: u64) -> f32 {
 fn y(action: u64) -> f32 {
     return Input.y(action)
 }
+
+extern fn UI.pressed() -> i64
+
+// The `press` of the UI node the player's press landed on during the tick,
+// the first if more than one, or nought for none (rawframe.ui, D421): a
+// press the UI took, which no action saw.
+fn uiPressed() -> i64 {
+    return UI.pressed()
+}

@@ -18,7 +18,7 @@ namespace {
 
 constexpr std::string_view kProvides[] = {world_replication::kInputSourcePlan.name, kPlayerHaptics.name};
 constexpr std::string_view kNeeds[] = {world_replication::kReplicationPlan.name, world_kest::kGameFiles.name};
-constexpr std::string_view kMayUse[] = {kFeed.name, view::kPlayerViews.name};
+constexpr std::string_view kMayUse[] = {kFeed.name, view::kPlayerViews.name, view::kUiPointing.name};
 
 /// Sources for a game without controls: every one refuses, bots steer at
 /// random, and nothing is felt.
@@ -64,6 +64,9 @@ public:
         }
         if (context.has(view::kPlayerViews.name)) {
             RAWFRAME_TRY_ASSIGN(settings.views, context.capability(view::kPlayerViews));
+        }
+        if (context.has(view::kUiPointing.name)) {
+            RAWFRAME_TRY_ASSIGN(settings.pointing, context.capability(view::kUiPointing));
         }
         // How the lent devices pair to the local players (D363).
         if (const auto kPairing = configuration.text("input.pairing")) {

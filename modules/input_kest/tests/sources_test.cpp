@@ -2,7 +2,8 @@
 // binds, its action set, and its Kest sample function, deterministic by
 // seed; games without controls, or whose sample does not fit, refused; the
 // player's effects felt on its gamepads (D251); the player's view read by
-// its sample through `rawframe.view` (D367).
+// its sample through `rawframe.view` (D367); and a press the UI takes read
+// by the sample as its node's press code, never by an action (D421).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -15,6 +16,7 @@
 #include <cstring>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -339,4 +341,61 @@ RAWFRAME_TEST(ARunnerAimsWhereTheMousePoints) {
         {.device = kKeyboard, .control = *input::controlNamed(input::DeviceClass::Keyboard, "arrow_up"), .x = 1});
     const Stick kAimed = play(**source, 1)[0];
     RAWFRAME_EXPECT(kAimed[5] == 0 && kAimed[3] == 1);
+}
+
+RAWFRAME_TEST(APressTheUiTakesReachesTheSampleAndNoAction) {
+    // Runners' fire is the mouse's left button; a sample that reads it, and
+    // the press code of the UI node a press lands on.
+    const world_kest::GameFiles* game = &gameAt("runners/runners.game",
+                                                "sample sample.kest sample",
+                                                "sample pressed.kest sample",
+                                                {{"pressed.kest",
+                                                  "module pressed\n"
+                                                  "import controls\n"
+                                                  "import rawframe.input\n"
+                                                  "fn sample(into: [controls.Stick]) {\n"
+                                                  "    into[0].fire = 0.0\n"
+                                                  "    if input.on(0xd1e5c72fda17a16f) {\n"
+                                                  "        into[0].fire = 1.0\n"
+                                                  "    }\n"
+                                                  "    into[0].targetX = f32(input.uiPressed())\n"
+                                                  "}\n"}});
+    input::Feed feed;
+    view::UiPointing pointing;
+    // A panel over the window's left 100 pixels, whose press code is 7.
+    pointing.answer([](float x, float /*y*/) -> std::optional<std::int64_t> {
+        return x < 100 ? std::optional<std::int64_t>{7} : std::nullopt;
+    });
+    auto sources = makeInputSources(
+        SourceSettings{.game = game, .inputSize = sizeof(Stick), .feed = &feed, .pointing = &pointing});
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto source = (*sources)->playerSource(0);
+    RAWFRAME_EXPECT(source.has_value());
+    if (!source.has_value()) {
+        return;
+    }
+    constexpr input::DeviceId kMouse{1};
+    const input::Control kLeft = *input::controlNamed(input::DeviceClass::Mouse, "left");
+    const input::Control kPointer = *input::controlNamed(input::DeviceClass::Mouse, "pointer");
+    feed.connect(kMouse, input::DeviceClass::Mouse);
+    const auto kPress = [&](float x, bool down) {
+        feed.submit({.device = kMouse, .control = kPointer, .x = x, .y = 30});
+        feed.submit({.device = kMouse, .control = kLeft, .x = down ? 1.0F : 0.0F});
+        return play(**source, 1)[0];
+    };
+    // On the panel: the sample reads its code, and fire never sees it.
+    const Stick kOnPanel = kPress(40, true);
+    RAWFRAME_EXPECT(kOnPanel[4] == 0.0F && kOnPanel[6] == 7.0F);
+    const Stick kLetGo = kPress(40, false);
+    RAWFRAME_EXPECT(kLetGo[4] == 0.0F && kLetGo[6] == 0.0F);
+    // Past it: the game's.
+    const Stick kInWorld = kPress(300, true);
+    RAWFRAME_EXPECT(kInWorld[4] == 1.0F && kInWorld[6] == 0.0F);
+    RAWFRAME_EXPECT(kPress(300, false)[4] == 0.0F);
+    // No UI answering: every press is the game's.
+    pointing.answer({});
+    RAWFRAME_EXPECT(kPress(40, true)[4] == 1.0F);
 }

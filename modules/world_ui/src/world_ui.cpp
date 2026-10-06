@@ -81,6 +81,23 @@ ui::Look lookOf(const Node& node) noexcept {
         .gradient = kGradient};
 }
 
+/// `node`'s part in what presses hit (D421); none for a number past its
+/// constants. Nought passes presses through to its children and past them.
+std::optional<ui::Interaction> interactionOf(const Node& node) noexcept {
+    if (node.hit > 2 || node.layer > 3) {
+        return std::nullopt;
+    }
+    constexpr std::array<ui::Interaction::Hits, 3> kHits = {
+        ui::Interaction::Hits::Children, ui::Interaction::Hits::Itself, ui::Interaction::Hits::Nothing};
+    return ui::Interaction{.hits = kHits[node.hit],
+                           .passThrough = node.hit == 0,
+                           .layer = static_cast<ui::Interaction::Layer>(node.layer)};
+}
+
+/// The window's root and each view's: what they do not cover passes
+/// through.
+constexpr ui::Interaction kThrough{.hits = ui::Interaction::Hits::Children, .passThrough = true};
+
 std::uint64_t keyOf(ui::Node node) noexcept {
     return (std::uint64_t{node.index1} << 32U) | node.generation;
 }
@@ -154,8 +171,9 @@ struct WorldUi::State {
     bool give(Entry& entry, world::EntityHandle entity, const Node& value) {
         entry.value = value;
         const std::optional<ui::Layout> kLayout = layoutOf(value);
+        const std::optional<ui::Interaction> kInteraction = interactionOf(value);
         if (!entry.node.has_value()) {
-            if (!kLayout.has_value() || held >= settings.maximumNodes) {
+            if (!kLayout.has_value() || !kInteraction.has_value() || held >= settings.maximumNodes) {
                 return false;
             }
             auto made = tree->add(keyOf(entity));
@@ -168,8 +186,9 @@ struct WorldUi::State {
         } else {
             ++statistics.changed;
         }
-        if (!kLayout.has_value() || !tree->setLayout(*entry.node, *kLayout).has_value() ||
-            !tree->setLook(*entry.node, lookOf(value)).has_value() || !giveWords(*entry.node, value)) {
+        if (!kLayout.has_value() || !kInteraction.has_value() || !tree->setLayout(*entry.node, *kLayout).has_value() ||
+            !tree->setLook(*entry.node, lookOf(value)).has_value() ||
+            !tree->setInteraction(*entry.node, *kInteraction).has_value() || !giveWords(*entry.node, value)) {
             drop(entry);
             return false;
         }
@@ -369,6 +388,7 @@ result::Result<std::unique_ptr<WorldUi>> WorldUi::create(UiSettings settings) {
     RAWFRAME_TRY_ASSIGN(state->tree, ui::Tree::create(settings.maximumNodes + 64));
     RAWFRAME_TRY_ASSIGN(state->window, state->tree->add(0));
     RAWFRAME_TRY(state->tree->setLayout(state->window, {.width = ui::share(1), .height = ui::share(1)}));
+    RAWFRAME_TRY(state->tree->setInteraction(state->window, kThrough));
     state->settings = std::move(settings);
     return std::unique_ptr<WorldUi>{new WorldUi{std::move(state)}};
 }
@@ -394,6 +414,7 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
         if (!view.root.has_value()) {
             RAWFRAME_TRY_ASSIGN(view.root, state.tree->add(0));
             RAWFRAME_TRY(state.tree->attach(state.window, *view.root));
+            RAWFRAME_TRY(state.tree->setInteraction(*view.root, kThrough));
         }
         if (const std::array<float, 4> kPlaced{kView.x, kView.y, kView.width, kView.height}; view.placed != kPlaced) {
             RAWFRAME_TRY(state.tree->setLayout(
@@ -449,6 +470,23 @@ result::Status WorldUi::addFont(std::uint64_t id, std::span<const std::byte> byt
         }
     }
     return {};
+}
+
+std::optional<std::int64_t> WorldUi::press(float x, float y) const {
+    const State& state = *state_;
+    const auto kHit = state.tree->hit(state.window, x, y);
+    if (!kHit.has_value() || !kHit->node.has_value() || kHit->passThrough) {
+        return std::nullopt;
+    }
+    for (const ViewState& kView : state.views) {
+        for (const auto& [kKey, kEntry] : kView.entries) {
+            if (kEntry.node == kHit->node) {
+                return kEntry.value.press;
+            }
+        }
+    }
+    // Blocked, by a node that says nothing.
+    return std::int64_t{0};
 }
 
 const ui::DrawList& WorldUi::drawn() const noexcept {

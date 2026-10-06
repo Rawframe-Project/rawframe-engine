@@ -44,8 +44,18 @@ module rawframe.ui
 // `textColor` (0xRRGGBBAA), their lines at the start, center, or end
 // (`textAlign`), wrapped to the node's width unless NO_WRAP. A node with
 // words is sized by them unless its size says otherwise; its children
-// inherit their look. A zeroed node, as presentation attaches it, is empty
-// and draws nothing.
+// inherit their look.
+//
+// A press of the mouse or a touch (D421) is the UI's where it lands on a
+// node whose `hit` is HIT_SELF, and then no game action sees it, nor its
+// release; the sample function reads that node's `press` through
+// `input.uiPressed()`. A node's `hit` of nought passes presses on to its
+// children and, past them, to the game; HIT_NONE leaves it and its
+// children out. A node may root a `layer`, drawn and hit above the content
+// it is in: a dialog's (ACTIVATION), a MODAL one that presses missing it
+// reach nothing below, or an OVERLAY above them all. A zeroed node, as
+// presentation attaches it, is empty, draws nothing, and passes every
+// press on.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -91,6 +101,9 @@ struct Node {
     textColor: u32
     textAlign: u32
     textWrap: u32
+    press: i64
+    hit: u32
+    layer: u32
 }
 
 // A node's `direction`.
@@ -125,3 +138,14 @@ const TEXT_CENTER: u32 = 1
 const TEXT_END: u32 = 2
 const WRAP: u32 = 0
 const NO_WRAP: u32 = 1
+
+// A node's `hit`: presses pass on to its children and the game, are its
+// own, or pass it and its children by.
+const HIT_CHILDREN: u32 = 0
+const HIT_SELF: u32 = 1
+const HIT_NONE: u32 = 2
+// A node's `layer`.
+const NO_LAYER: u32 = 0
+const ACTIVATION: u32 = 1
+const MODAL: u32 = 2
+const OVERLAY: u32 = 3

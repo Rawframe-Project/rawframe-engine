@@ -4,7 +4,8 @@
 // component does; nothing unchanged is laid out again; a new World starts
 // afresh; values the tree cannot take, a gradient of no kind among them,
 // are left out and counted; and a node shows its label's words in the
-// game's font once it is read, sized by them (D386).
+// game's font once it is read, sized by them (D386); and a press lands on
+// the node that takes it, with its code, or passes through (D421).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -14,6 +15,7 @@
 #include <array>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -248,4 +250,39 @@ RAWFRAME_TEST(ANodeShowsItsLabelsWordsInTheGamesFont) {
     // Font nought is the first declared font read so far: here the one.
     rig.put(rig.player, kHudId, Node{.text = 0xA1, .textValue = 2, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 2);
+}
+
+RAWFRAME_TEST(APressLandsOnANodeThatTakesIt) {
+    // The panel along the view's top at (100, 50), the meter in it at
+    // (105, 55): neither takes a press until it says so.
+    Rig rig;
+    rig.put(rig.player, kHudId, panel());
+    rig.put(rig.player, kMeterId, meter(100));
+    RAWFRAME_EXPECT(rig.frame());
+    RAWFRAME_EXPECT(!rig.ui->press(110, 60).has_value() && !rig.ui->press(10, 10).has_value());
+    // A meter that is its own, with a code: pressed on it, the code; on the
+    // panel around it, through.
+    Node pressing = meter(100);
+    pressing.hit = 1;
+    pressing.press = 42;
+    rig.put(rig.player, kMeterId, pressing);
+    RAWFRAME_EXPECT(rig.frame());
+    RAWFRAME_EXPECT(rig.ui->press(110, 60) == std::optional<std::int64_t>{42});
+    RAWFRAME_EXPECT(!rig.ui->press(350, 60).has_value());
+    // A panel that blocks and says nothing; one that leaves its subtree out.
+    Node blocking = panel();
+    blocking.hit = 1;
+    rig.put(rig.player, kHudId, blocking);
+    RAWFRAME_EXPECT(rig.frame());
+    RAWFRAME_EXPECT(rig.ui->press(350, 60) == std::optional<std::int64_t>{0});
+    RAWFRAME_EXPECT(rig.ui->press(110, 60) == std::optional<std::int64_t>{42});
+    blocking.hit = 2;
+    rig.put(rig.player, kHudId, blocking);
+    RAWFRAME_EXPECT(rig.frame());
+    RAWFRAME_EXPECT(!rig.ui->press(110, 60).has_value());
+    // A hit or a layer past the constants is left out.
+    blocking.hit = 3;
+    rig.put(rig.player, kHudId, blocking);
+    RAWFRAME_EXPECT(rig.frame());
+    RAWFRAME_EXPECT(!rig.ui->press(110, 60).has_value() && rig.ui->statistics().leftOut > 0);
 }
