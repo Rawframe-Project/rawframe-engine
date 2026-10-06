@@ -5,8 +5,8 @@
 # views as the presentation last derived them, lent by a client host
 # (D367). Client and tools only.
 rawframe_module(NAME view
-    SOURCES src/view.cpp src/players.cpp
-    DEPS composition execution diagnostics result base
+    SOURCES src/view.cpp src/players.cpp src/typing.cpp
+    DEPS ui composition execution diagnostics result base
 )
 
 rawframe_module_tests(NAME view SOURCES tests/view_test.cpp tests/players_test.cpp)

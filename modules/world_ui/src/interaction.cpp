@@ -16,29 +16,6 @@ namespace rawframe::world_ui {
 
 namespace {
 
-ui::EditKey editKeyOf(view::TypingKey key) noexcept {
-    switch (key) {
-    case view::TypingKey::Backspace:
-        return ui::EditKey::Backspace;
-    case view::TypingKey::Delete:
-        return ui::EditKey::Delete;
-    case view::TypingKey::Left:
-        return ui::EditKey::Left;
-    case view::TypingKey::Right:
-        return ui::EditKey::Right;
-    case view::TypingKey::Up:
-        return ui::EditKey::Up;
-    case view::TypingKey::Down:
-        return ui::EditKey::Down;
-    case view::TypingKey::Home:
-        return ui::EditKey::Home;
-    case view::TypingKey::End:
-        return ui::EditKey::End;
-    default:
-        return ui::EditKey::SelectAll;
-    }
-}
-
 /// Whether `node` goes the way of `move` from `from`, and how far: along
 /// it, the distance across it counted twice, so the nearest in line wins.
 std::optional<float> distanceOf(const ui::Rect& from, const ui::Rect& node, view::NavigationMove move) noexcept {
@@ -266,34 +243,17 @@ void WorldUi::type(const view::Typing& typing) {
     ui::TextEdit& edit = *state.focus->edit;
     const Node& kField = state.focus->entry->value;
     ++state.statistics.typed;
-    switch (typing.kind) {
-    case view::Typing::Kind::Text:
-        static_cast<void>(edit.type(typing.text));
-        return;
-    case view::Typing::Kind::Composition: {
-        std::vector<ui::CompositionPart> parts;
-        for (const view::TypingSpan& kSpan : typing.spans) {
-            parts.push_back(ui::CompositionPart{.start = kSpan.start,
-                                                .length = kSpan.length,
-                                                .style = static_cast<ui::CompositionPart::Style>(kSpan.style)});
-        }
-        static_cast<void>(edit.compose(typing.text, typing.caret, parts));
+    const std::optional<view::TypingKey> kLeft = view::edit(edit, typing);
+    if (!kLeft.has_value()) {
         return;
     }
-    case view::Typing::Kind::Key:
-        break;
-    }
-    if (typing.key == view::TypingKey::Dismiss) {
+    if (*kLeft == view::TypingKey::Dismiss) {
         state.endTyping();
         return;
     }
-    if (typing.key == view::TypingKey::Next) {
+    if (*kLeft == view::TypingKey::Next) {
         static_cast<void>(
             state.moveFocus(typing.extend ? view::NavigationMove::Previous : view::NavigationMove::Next, true));
-        return;
-    }
-    if (typing.key != view::TypingKey::Submit) {
-        static_cast<void>(edit.press(editKeyOf(typing.key), {.extend = typing.extend, .word = typing.word}));
         return;
     }
     // Enter: a line break in a field of lines, else the text given.

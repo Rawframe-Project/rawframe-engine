@@ -10,6 +10,7 @@
 // actions meanwhile.
 
 #include "rawframe/composition/participant.h"
+#include "rawframe/ui/text_edit.h"
 
 #include <array>
 #include <cstddef>
@@ -147,5 +148,11 @@ private:
 };
 
 inline constexpr composition::Capability<UiTyping> kUiTyping{"rawframe.view.ui_typing"};
+
+/// `typing` done to `edit`, the one way a UI turns what the host hands it
+/// into editing (D426, D436): text typed, the input method's composition,
+/// and the editing keys with their modifiers. The keys a field's owner
+/// decides on, Enter, Escape, and Tab, are returned for it, not done.
+[[nodiscard]] std::optional<TypingKey> edit(ui::TextEdit& edit, const Typing& typing);
 
 } // namespace rawframe::view
