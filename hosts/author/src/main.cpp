@@ -807,15 +807,16 @@ private:
         if (record.preview.has_value()) {
             // A preview is a client on this machine: its token never leaves
             // it for an endpoint a record names.
-            if (!rawframe::author::onThisMachine(record.preview->endpoint)) {
+            const std::optional<std::string> kEndpoint = rawframe::author::loopbackEndpoint(record.preview->endpoint);
+            if (!kEndpoint.has_value()) {
                 return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
                                                result::ErrorClass::PermissionDenied,
-                                               "a preview's endpoint is on this machine, by a loopback address")
+                                               "a preview's endpoint is a loopback address literal")
                                            .withContext("endpoint", record.preview->endpoint)};
             }
             std::string said;
             preview_ = rawframe::author::ToolingLink::open(
-                record.preview->endpoint, record.preview->pinFile.c_str(), record.preview->tokenFile.c_str(), said);
+                *kEndpoint, record.preview->pinFile.c_str(), record.preview->tokenFile.c_str(), said);
             if (preview_ == nullptr) {
                 return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
                                                result::ErrorClass::Unavailable,

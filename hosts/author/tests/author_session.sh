@@ -147,7 +147,13 @@ reply 3 | grep -q '"answer":{"kind":"authoring.preview","reopened":false,"previe
     echo '{"kind":"authoring.preview","id":2,"scene":"level.scene","preview":{"endpoint":"192.0.2.1:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
     echo '{"kind":"authoring.preview","id":3,"scene":"level.scene","preview":{"endpoint":"127.0.0.1.example:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
     echo '{"kind":"authoring.preview","id":4,"scene":"level.scene","preview":{"endpoint":"127.0.0.1:9","pinFile":"/dev/zero","tokenFile":"/dev/zero"}}'
+    echo '{"kind":"authoring.preview","id":5,"scene":"level.scene","preview":{"endpoint":"127.999.0.1:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
+    echo '{"kind":"authoring.preview","id":6,"scene":"level.scene","preview":{"endpoint":"127.0.0.010:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
+    echo '{"kind":"authoring.preview","id":7,"scene":"level.scene","preview":{"endpoint":"localhost:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
 } | "$author" session "$game" "$work/root" >"$work/replies" || true
+for refused in 5 6 7; do
+    reply $refused | grep -q '"code":"capability_denied","class":"permission_denied"'
+done
 reply 2 | grep -q '"code":"capability_denied".*"endpoint":"192.0.2.1:9"'
 reply 3 | grep -q '"code":"capability_denied".*"endpoint":"127.0.0.1.example:9"'
 reply 4 | grep -q '"said":"the pin and token files must read"'

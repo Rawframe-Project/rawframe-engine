@@ -5,6 +5,8 @@
 #include "rawframe/network_quic/quic.h"
 #include "rawframe/world_tooling/server.h"
 
+#include <array>
+#include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -214,36 +216,43 @@ std::optional<std::string> ToolingLink::ask(std::string_view record) {
     return client_->ask(record);
 }
 
-bool onThisMachine(std::string_view endpoint) {
+std::optional<std::string> loopbackEndpoint(std::string_view endpoint) {
     const std::size_t kColon = endpoint.rfind(':');
-    if (kColon == std::string_view::npos || kColon + 1 == endpoint.size()) {
-        return false;
+    if (kColon == std::string_view::npos) {
+        return std::nullopt;
     }
     const std::string_view kHost = endpoint.substr(0, kColon);
-    if (kHost == "localhost" || kHost == "[::1]") {
-        return true;
+    const std::string_view kPortText = endpoint.substr(kColon + 1);
+    unsigned port = 0;
+    const auto [kPortEnd, kPortError] = std::from_chars(kPortText.data(), kPortText.data() + kPortText.size(), port);
+    if (kPortError != std::errc{} || kPortEnd != kPortText.data() + kPortText.size() || port == 0 || port > 65535 ||
+        kPortText.front() == '0') {
+        return std::nullopt;
     }
-    // Four decimal parts, the first 127.
-    if (!kHost.starts_with("127.")) {
-        return false;
+    const std::string kPort = std::to_string(port);
+    if (kHost == "[::1]") {
+        return "[::1]:" + kPort;
     }
-    // 127 is the first part, and what follows its dot the second.
-    int parts = 2;
-    int digits = 0;
-    for (const char kEach : kHost.substr(4)) {
-        if (kEach == '.') {
-            if (digits == 0) {
-                return false;
-            }
-            ++parts;
-            digits = 0;
-        } else if (kEach >= '0' && kEach <= '9' && digits < 3) {
-            ++digits;
-        } else {
-            return false;
+    // Four decimal parts of 0 to 255 without leading zeros, the first 127:
+    // a literal every resolver reads as itself, never as a name.
+    std::array<unsigned, 4> parts{};
+    std::size_t at = 0;
+    for (std::size_t part = 0; part < parts.size(); ++part) {
+        const std::size_t kEnd = part + 1 < parts.size() ? kHost.find('.', at) : kHost.size();
+        if (kEnd == std::string_view::npos || kEnd == at || kEnd - at > 3 || (kEnd - at > 1 && kHost[at] == '0')) {
+            return std::nullopt;
         }
+        const auto [kDigitsEnd, kError] = std::from_chars(kHost.data() + at, kHost.data() + kEnd, parts[part]);
+        if (kError != std::errc{} || kDigitsEnd != kHost.data() + kEnd || parts[part] > 255) {
+            return std::nullopt;
+        }
+        at = kEnd + 1;
     }
-    return parts == 4 && digits > 0;
+    if (parts[0] != 127) {
+        return std::nullopt;
+    }
+    return std::to_string(parts[0]) + "." + std::to_string(parts[1]) + "." + std::to_string(parts[2]) + "." +
+           std::to_string(parts[3]) + ":" + kPort;
 }
 
 int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {

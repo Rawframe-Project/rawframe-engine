@@ -48,8 +48,10 @@ private:
 /// endpoint closes. 0 when every reply was an answer.
 int connect(const char* endpoint, const char* pinFile, const char* tokenFile);
 
-/// Whether `endpoint` (`host:port`) names this machine by a loopback
-/// address: 127.0.0.0/8, `[::1]`, or `localhost`.
-bool onThisMachine(std::string_view endpoint);
+/// `endpoint` (`host:port`) written again from what it was read as, where
+/// its host is a loopback literal: 127.0.0.0/8 in four plain decimal parts,
+/// or `[::1]`. None for anything else, a name such as `localhost` among
+/// them, since a name is resolved and may lead off this machine.
+std::optional<std::string> loopbackEndpoint(std::string_view endpoint);
 
 } // namespace rawframe::author
