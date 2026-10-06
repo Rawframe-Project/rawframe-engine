@@ -9,7 +9,9 @@
 # so they reach the window as a real mouse's do. Before each press it prints
 # how bright a patch of five by five pixels at the point was before the
 # mouse came and after, and whether it grew lighter by 8 or more of 255
-# (D422). A point followed by `:` and lower-case text has the text typed
+# (D422), waiting up to three seconds for that; with CLICK_CURSOR set, for
+# a program drawing its own cursor, it waits for the point to hold still
+# before and up to fifteen seconds after (D453b). A point followed by `:` and lower-case text has the text typed
 # after its click, a key at a time, then Return (D426); a dot, a comma, a
 # minus, and a space are typed as their keys. An argument `keys=` and X key
 # names apart by commas presses those keys alone, a third of a second apart,
@@ -191,12 +193,16 @@ def main():
             time.sleep(1.5)
             continue
         # Moved there first, so the press is where the pointer already is.
-        # The baseline is taken once the point has held still a second, up
-        # to ten: a loaded machine may still be drawing its first frames
-        # there, and a spot darkening as they come is no cursor's doing.
+        # A program that draws its own cursor is checked for it (CLICK_CURSOR
+        # set): the baseline is taken once the point has held still a second,
+        # up to ten, since a loaded machine may still be drawing its first
+        # frames there, and the cursor is waited for up to fifteen seconds (a
+        # sanitized client at load 130 drew 25 frames in a run). Otherwise a
+        # click waits up to three seconds, as it always has.
+        cursor = bool(os.environ.get("CLICK_CURSOR"))
         before = brightness(x, display, root, at, y)
         steady = 0
-        for _ in range(40):
+        for _ in range(40 if cursor else 0):
             if steady >= 4:
                 break
             time.sleep(0.25)
@@ -205,9 +211,8 @@ def main():
             before = now
         xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
         x.XFlush(display)
-        # A loaded machine draws late: up to three seconds for it to show.
         after = before
-        for _ in range(12):
+        for _ in range(60 if cursor else 12):
             time.sleep(0.25)
             after = brightness(x, display, root, at, y)
             if after >= before + 8:

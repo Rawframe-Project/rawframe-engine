@@ -64,6 +64,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          games/tycoon/tycoon.game 16,16
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_clicks_stalls PROPERTIES
+                             ENVIRONMENT CLICK_CURSOR=1
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
