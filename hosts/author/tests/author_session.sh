@@ -5,7 +5,8 @@
 # the file changed under the session and opened again with no history, and
 # records out of form, out of order, or naming a scene outside the root
 # refused, each answered by its own id; and a selection kept beside the
-# level, put back by undo (D417).
+# level, put back by undo (D417), as is where the level is looked at from
+# (D432).
 #
 # usage: author_session.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -44,7 +45,7 @@ reply 1 | grep -q '"message":"a session begins with hello"'
 reply 2 | grep -q '"code":"unsupported_operation"'
 reply 3 | grep -q '"kind":"authoring.welcome"'
 reply 4 | grep -q '"name":"scene.set_reference"'
-reply 5 | grep -q '"written":true,"reopened":false,"undoable":1,"redoable":0,"selection":\[\],"results":\[{"deltas":2}\]'
+reply 5 | grep -q '"written":true,"reopened":false,"undoable":1,"redoable":0,"selection":\[\],"view":null,"results":\[{"deltas":2}\]'
 # Undone within the session, the level is its very bytes again.
 reply 6 | grep -q '"undoable":0,"redoable":1'
 cmp "$work/root/level.scene" "$work/original.scene"
@@ -73,7 +74,7 @@ reply 2 | grep -q '"undoable":1,"redoable":0'
 reply 3 | grep -q '"undoable":0,"redoable":1'
 reply 4 | grep -q '"undoable":1,"redoable":0'
 reply 5 | grep -q '"code":"target_stale"'
-reply 6 | grep -q '"reopened":true,"undoable":0,"redoable":0,"selection":\[\],"results":\[{"error":{"code":"target_not_found"'
+reply 6 | grep -q '"reopened":true,"undoable":0,"redoable":0,"selection":\[\],"view":null,"results":\[{"error":{"code":"target_not_found"'
 cmp "$work/root/level.scene" "$work/original.scene"
 reply 7 | grep -q '"kind":"authoring.answers"'
 ! reply 7 | grep -q "$crate"
@@ -108,4 +109,27 @@ reply 6 | grep -q '"selection":\[\]'
 reply 7 | grep -q "\"selection\":\[\"$crate\"\]"
 reply 8 | grep -q '"selection":\[\]'
 cmp "$work/root/level.scene" "$work/original.scene"
+
+# A view is no change to the level either. Looked at from high as the
+# crate is made, then from low: undoing and redoing the making put back
+# the view from when it opened and from when it committed, high both.
+cp "$work/original.scene" "$work/root/level.scene"
+high='{"eye":[0,20,0.5],"target":[0,0,0],"fieldOfView":50}'
+low='{"eye":[3,1,3],"target":[0,1,0],"fieldOfView":70}'
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.view","id":2,"scene":"level.scene","view":'"$high"'}'
+    echo '{"kind":"authoring.view","id":3,"scene":"level.scene","view":{"eye":[1,1,1],"target":[1,1,1],"fieldOfView":60}}'
+    echo '{"kind":"authoring.apply","id":4,"scene":"level.scene","request":'"$create"'}'
+    echo '{"kind":"authoring.view","id":5,"scene":"level.scene","view":'"$low"'}'
+    echo '{"kind":"authoring.undo","id":6,"scene":"level.scene"}'
+    echo '{"kind":"authoring.redo","id":7,"scene":"level.scene"}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+original=$(reply 2 | grep -o '"document":"[^"]*"')
+reply 2 | grep -q "\"kind\":\"authoring.view\",$original,\"reopened\":false,\"view\":{\"eye\":\[0,20,0.5\],\"target\":\[0,0,0\],\"fieldOfView\":50}"
+reply 3 | grep -q '"code":"validation_failed"'
+reply 4 | grep -q '"view":{"eye":\[0,20,0.5\]'
+reply 6 | grep -q '"view":{"eye":\[0,20,0.5\]'
+reply 5 | grep -q '"view":{"eye":\[3,1,3\],"target":\[0,1,0\],"fieldOfView":70}'
+reply 7 | grep -q '"view":{"eye":\[0,20,0.5\]'
 echo "authored runners in a session"

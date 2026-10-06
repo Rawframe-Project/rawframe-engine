@@ -6,6 +6,7 @@
 #include "rawframe/test/test.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace rawframe;
@@ -50,6 +51,19 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
                     kSelect->entities[0] == (base::Bits128{0, 1}));
     RAWFRAME_EXPECT(
         readSessionRecord(R"({"kind":"authoring.select","scene":"a.scene","entities":[]})", id)->entities.empty());
+    const auto kView = readSessionRecord(
+        R"({"kind":"authoring.view","scene":"a.scene","view":{"eye":[0,5,10],"target":[0,0,0.5],"fieldOfView":60}})",
+        id);
+    RAWFRAME_EXPECT(kView.has_value() && kView->verb == SessionVerb::View && kView->view.target[2] == 0.5 &&
+                    kView->view.fieldOfView == 60);
+    for (
+        const std::string_view kWrong :
+        {R"({"kind":"authoring.view","scene":"a.scene","view":{"eye":[0,5],"target":[0,0,0],"fieldOfView":60}})",
+         R"({"kind":"authoring.view","scene":"a.scene","view":{"eye":[0,5,1],"target":[0,0,0]}})",
+         R"({"kind":"authoring.view","scene":"a.scene","view":{"eye":[0,5,1],"target":[0,0,0],"fieldOfView":60,"roll":1}})",
+         R"({"kind":"authoring.view","scene":"a.scene"})"}) {
+        RAWFRAME_EXPECT(refusedWith(readSessionRecord(kWrong, id), AuthoringError::ValidationFailed));
+    }
     RAWFRAME_EXPECT(readSessionRecord(R"({"kind":"authoring.describe"})", id).has_value());
     RAWFRAME_EXPECT(readSessionRecord(R"({"kind":"authoring.end","id":null})", id).has_value());
 }

@@ -6,6 +6,7 @@
 #include "rawframe/authoring/errors.h"
 #include "rawframe/test/test.h"
 
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -241,6 +242,36 @@ RAWFRAME_TEST(TheSelectionIsKeptBesideTheDocumentAndPutBackByUndo) {
     RAWFRAME_EXPECT(scene->selection().empty());
     RAWFRAME_EXPECT(scene->undo(scene->generation()).has_value() &&
                     scene->selection() == std::vector<base::Bits128>{kLamp});
+}
+
+RAWFRAME_TEST(TheViewIsKeptBesideTheDocumentAndPutBackByUndo) {
+    std::unique_ptr<AuthoredScene> scene = opened();
+    RAWFRAME_EXPECT(!scene->view().has_value());
+    const SceneView kHigh{.eye = {0, 20, 0.5}, .target = {0, 0, 0}, .fieldOfView = 50};
+    RAWFRAME_EXPECT(scene->setView(kHigh).has_value() && scene->view() == kHigh && scene->generation() == 0 &&
+                    !scene->dirty());
+    // An eye at its target, too far, not a number, or too narrow: refused,
+    // the view as it was.
+    for (const SceneView& kWrong : {SceneView{.eye = {1, 1, 1}, .target = {1, 1, 1}},
+                                    SceneView{.eye = {2e6, 0, 0}},
+                                    SceneView{.eye = {std::nan(""), 0, 0}},
+                                    SceneView{.fieldOfView = 0.5},
+                                    SceneView{.fieldOfView = 180}}) {
+        RAWFRAME_EXPECT(refusedWith(scene->setView(kWrong), AuthoringError::ValidationFailed));
+    }
+    RAWFRAME_EXPECT(scene->view() == kHigh);
+    // Looked at from low while a lamp is made: undone, from high again;
+    // redone, from low.
+    const SceneView kLow{.eye = {3, 1, 3}, .target = {0, 1, 0}, .fieldOfView = 70};
+    auto made = scene->begin(scene->generation());
+    RAWFRAME_EXPECT(made.has_value() &&
+                    made->stage(Delta{.kind = DeltaKind::CreateNode,
+                                      .entity = base::Bits128{2, 2},
+                                      .after = {.node = NodeRecord{.place = 1, .name = "lamp", .components = {}}}})
+                        .has_value());
+    RAWFRAME_EXPECT(scene->setView(kLow).has_value() && made->commit().has_value() && scene->view() == kLow);
+    RAWFRAME_EXPECT(scene->undo(scene->generation()).has_value() && scene->view() == kHigh);
+    RAWFRAME_EXPECT(scene->redo(scene->generation()).has_value() && scene->view() == kLow);
 }
 
 RAWFRAME_TEST(ASelectionPastItsLimitIsRefused) {

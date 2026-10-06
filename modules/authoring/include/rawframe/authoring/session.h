@@ -32,6 +32,7 @@
 //
 //   {"kind":"authoring.reply","id":...,"error":{<the one error record>}}
 
+#include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/queries.h"
 #include "rawframe/authoring/request.h"
 #include "rawframe/base/bits128.h"
@@ -57,6 +58,7 @@ enum class SessionVerb : std::uint8_t {
     Undo,
     Redo,
     Select,
+    View,
     End,
 };
 
@@ -78,6 +80,8 @@ struct SessionRecord {
     std::vector<Query> queries;
     /// Select's, as given.
     std::vector<base::Bits128> entities;
+    /// View's (D432).
+    SceneView view;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form

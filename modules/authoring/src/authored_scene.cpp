@@ -3,6 +3,7 @@
 #include "rawframe/authoring/errors.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace rawframe::authoring {
@@ -152,7 +153,8 @@ result::Result<Transaction> AuthoredScene::begin(std::uint64_t generation, Coale
                  .journalBytes = 0,
                  .serial = ++serials_,
                  .coalescing = coalescing,
-                 .selectedBefore = selection_};
+                 .selectedBefore = selection_,
+                 .viewBefore = view_};
     return Transaction{this, open_->serial, true};
 }
 
@@ -205,9 +207,11 @@ result::Result<Committed> AuthoredScene::commit() {
     const std::size_t kDeltas = open.journal.size();
     selection_ = heldOf(scene_, selection_);
     append(Entry{.journal = std::move(open.journal),
-                 .bytes = open.journalBytes + selectionBytes(open.selectedBefore, selection_),
+                 .bytes = open.journalBytes + selectionBytes(open.selectedBefore, selection_) + 2 * sizeof(SceneView),
                  .selectedBefore = std::move(open.selectedBefore),
-                 .selectedAfter = selection_});
+                 .selectedAfter = selection_,
+                 .viewBefore = open.viewBefore,
+                 .viewAfter = view_});
     return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
@@ -262,6 +266,7 @@ result::Result<Committed> AuthoredScene::step(std::uint64_t generation, bool und
     applied_ = undo ? applied_ - 1 : applied_ + 1;
     ++generation_;
     selection_ = heldOf(scene_, undo ? entry.selectedBefore : entry.selectedAfter);
+    view_ = undo ? entry.viewBefore : entry.viewAfter;
     return Committed{.generation = generation_, .deltas = entry.journal.size()};
 }
 
@@ -283,6 +288,23 @@ result::Status AuthoredScene::select(std::span<const base::Bits128> entities) {
                       "a selection holds only entities the scene holds");
     }
     selection_ = std::move(chosen);
+    return {};
+}
+
+result::Status AuthoredScene::setView(const SceneView& view) {
+    constexpr double kFarthest = 1e6;
+    const auto kPlace = [](const std::array<double, 3>& at) {
+        return std::ranges::all_of(at, [](double each) {
+            return std::isfinite(each) && std::abs(each) <= kFarthest;
+        });
+    };
+    if (!kPlace(view.eye) || !kPlace(view.target) || view.eye == view.target || !std::isfinite(view.fieldOfView) ||
+        view.fieldOfView < 1 || view.fieldOfView > 179) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      AuthoringError::ValidationFailed,
+                      "a view's eye and target are apart within a million metres, its field of view 1 to 179 degrees");
+    }
+    view_ = view;
     return {};
 }
 

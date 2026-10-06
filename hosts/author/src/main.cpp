@@ -591,6 +591,8 @@ private:
             return stepped(record, record.verb == authoring::SessionVerb::Undo);
         case authoring::SessionVerb::Select:
             return selected(record);
+        case authoring::SessionVerb::View:
+            return viewed(record);
         }
         return std::unexpected{failure(
             authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
@@ -688,6 +690,7 @@ private:
         made.add("undoable", Value::integer(static_cast<std::int64_t>(open.document->undoable())));
         made.add("redoable", Value::integer(static_cast<std::int64_t>(open.document->redoable())));
         made.add("selection", selectionOf(open));
+        made.add("view", viewOf(open));
         made.add("results", std::move(results));
         made.add("skipped", Value::integer(static_cast<std::int64_t>(skipped)));
         return made;
@@ -739,6 +742,39 @@ private:
             const auto kText = rawframe::schema::formatStableIdText(each);
             made.push(Value::string(std::string{kText.data(), kText.size()}));
         }
+        return made;
+    }
+
+    /// Where an open scene is looked at from, null until told (D432).
+    static Value viewOf(const OpenScene& open) {
+        const std::optional<authoring::SceneView>& kView = open.document->view();
+        if (!kView.has_value()) {
+            return Value{};
+        }
+        const auto kPoint = [](const std::array<double, 3>& at) {
+            Value made = Value::array();
+            for (const double kEach : at) {
+                made.push(Value::real(kEach));
+            }
+            return made;
+        };
+        Value made = Value::object();
+        made.add("eye", kPoint(kView->eye));
+        made.add("target", kPoint(kView->target));
+        made.add("fieldOfView", Value::real(kView->fieldOfView));
+        return made;
+    }
+
+    /// `view`: where the scene is looked at from, in place of what was.
+    result::Result<Value> viewed(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        RAWFRAME_TRY(open->document->setView(record.view));
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.view"));
+        made.add("document", Value::string(digestOf(open->document->text())));
+        made.add("reopened", Value::boolean(reopened));
+        made.add("view", viewOf(*open));
         return made;
     }
 

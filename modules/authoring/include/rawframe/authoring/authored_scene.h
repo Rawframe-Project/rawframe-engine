@@ -22,7 +22,8 @@
 // document is dirty, and no delta carries it. Each history entry keeps the
 // selection from before its transaction and after it, as a non-dirtying
 // payload (ADR-0065, SPEC-0040's `non_dirtying`), and undo and redo put
-// them back, less any entity the scene no longer holds.
+// them back, less any entity the scene no longer holds. Its view, the
+// camera an author looks at it through (D432), is kept the same way.
 //
 // Opening a transaction while one is open joins it: only the outermost
 // token commits, and any token's cancel, or any failure, discards the
@@ -36,6 +37,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/scene/scene.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -71,6 +73,17 @@ struct Committed {
     std::uint64_t generation = 0;
     /// The deltas it applied; none for a no-op.
     std::size_t deltas = 0;
+};
+
+/// Where an author looks at a scene from (ADR-0065's view state, declared
+/// here for scenes, D432): the camera a preview shows it through, its eye
+/// and the point it looks at in the scene's space, in metres, and its
+/// vertical field of view in degrees. No part of the document.
+struct SceneView {
+    std::array<double, 3> eye{0, 5, 10};
+    std::array<double, 3> target{};
+    double fieldOfView = 60;
+    friend bool operator==(const SceneView&, const SceneView&) = default;
 };
 
 class AuthoredScene;
@@ -156,6 +169,15 @@ public:
     /// counts once.
     [[nodiscard]] result::Status select(std::span<const base::Bits128> entities);
 
+    /// Where an author looks at the scene from (D432), none until told.
+    [[nodiscard]] const std::optional<SceneView>& view() const noexcept {
+        return view_;
+    }
+    /// Looks from `view`, in place of what was. Refuses (`ValidationFailed`)
+    /// a coordinate that is not finite or past a million metres, an eye at
+    /// its target, and a field of view outside one to 179 degrees.
+    [[nodiscard]] result::Status setView(const SceneView& view);
+
     [[nodiscard]] bool canUndo() const noexcept {
         return applied_ > 0;
     }
@@ -193,6 +215,9 @@ private:
         /// The selection before the transaction, and after it.
         std::vector<base::Bits128> selectedBefore;
         std::vector<base::Bits128> selectedAfter;
+        /// The view before it, and after it.
+        std::optional<SceneView> viewBefore;
+        std::optional<SceneView> viewAfter;
     };
     struct Open {
         scene::Scene staged;
@@ -201,6 +226,7 @@ private:
         std::uint64_t serial = 0;
         Coalescing coalescing = Coalescing::None;
         std::vector<base::Bits128> selectedBefore;
+        std::optional<SceneView> viewBefore;
     };
 
     AuthoredScene() = default;
@@ -223,6 +249,7 @@ private:
     std::optional<std::size_t> clean_ = 0;
     std::optional<Open> open_;
     std::vector<base::Bits128> selection_;
+    std::optional<SceneView> view_;
     /// Each transaction's number, so a token outliving one is inert.
     std::uint64_t serials_ = 0;
 };

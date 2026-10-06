@@ -27,13 +27,14 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 8> kVerbs = {VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
+constexpr std::array<VerbName, 9> kVerbs = {VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
                                             VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
                                             VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
                                             VerbName{.kind = "authoring.read", .verb = SessionVerb::Read},
                                             VerbName{.kind = "authoring.undo", .verb = SessionVerb::Undo},
                                             VerbName{.kind = "authoring.redo", .verb = SessionVerb::Redo},
                                             VerbName{.kind = "authoring.select", .verb = SessionVerb::Select},
+                                            VerbName{.kind = "authoring.view", .verb = SessionVerb::View},
                                             VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -53,6 +54,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Apply:
     case SessionVerb::Read:
     case SessionVerb::Select:
+    case SessionVerb::View:
         return Members{.required = 2, .optional = 0};
     case SessionVerb::Undo:
     case SessionVerb::Redo:
@@ -80,7 +82,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
     }
     if (named == nullptr) {
-        return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, or end");
+        return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, view, or end");
     }
     SessionRecord record{.verb = named->verb, .id = idRead};
     const Members kMembers = membersOf(record.verb);
@@ -112,6 +114,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Undo:
     case SessionVerb::Redo:
     case SessionVerb::Select:
+    case SessionVerb::View:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -143,6 +146,31 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             }
             record.entities.push_back(kId.value);
         }
+    } else if (record.verb == SessionVerb::View) {
+        // The scene's checks its ranges; the record only its form.
+        const Value* kView = parsed->find("view");
+        const auto kPoint = [](const Value* point, std::array<double, 3>& into) {
+            if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
+                return false;
+            }
+            for (std::size_t at = 0; at < 3; ++at) {
+                const std::optional<double> kNumber = point->items()[at].real();
+                if (!kNumber.has_value()) {
+                    return false;
+                }
+                into[at] = *kNumber;
+            }
+            return true;
+        };
+        const Value* kAngle =
+            kView != nullptr && kView->kind() == Value::Kind::Object ? kView->find("fieldOfView") : nullptr;
+        const std::optional<double> kDegrees = kAngle != nullptr ? kAngle->real() : std::nullopt;
+        if (kView == nullptr || kView->kind() != Value::Kind::Object || kView->names().size() != 3 ||
+            !kPoint(kView->find("eye"), record.view.eye) || !kPoint(kView->find("target"), record.view.target) ||
+            !kDegrees.has_value()) {
+            return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
+        }
+        record.view.fieldOfView = *kDegrees;
     }
     return record;
 }
