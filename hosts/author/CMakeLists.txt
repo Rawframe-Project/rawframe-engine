@@ -1,8 +1,8 @@
 # The authoring tool (ADR-0032, SPEC-0040): the operation surface from a
 # command line. Tooling only; no client or server closure contains it.
 rawframe_host(NAME author OUTPUT rawframe-author
-    SOURCES src/main.cpp src/connect.cpp src/game.cpp src/session.cpp
-    DEPS authoring world_tooling network_quic network world_kest kest content scene schema document execution result base
+    SOURCES src/main.cpp src/connect.cpp
+    DEPS authoring_session authoring world_kest kest content scene schema document execution result base
 )
 
 if(RAWFRAME_BUILD_TESTS)

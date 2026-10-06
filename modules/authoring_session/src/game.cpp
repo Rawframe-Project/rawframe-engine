@@ -1,4 +1,4 @@
-#include "game.h"
+#include "rawframe/authoring_session/game.h"
 
 #include "rawframe/authoring/request.h"
 #include "rawframe/base/sha256.h"
@@ -10,7 +10,7 @@
 #include <fstream>
 #include <iterator>
 
-namespace rawframe::author {
+namespace rawframe::authoring_session {
 
 namespace {
 
@@ -148,4 +148,4 @@ std::vector<std::pair<rawframe::base::Bits128, std::filesystem::path>> scenesBes
     return made;
 }
 
-} // namespace rawframe::author
+} // namespace rawframe::authoring_session

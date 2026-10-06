@@ -1,12 +1,12 @@
-#include "session.h"
+#include "rawframe/authoring_session/session.h"
 
-#include "connect.h"
-#include "game.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/operations.h"
 #include "rawframe/authoring/queries.h"
 #include "rawframe/authoring/request.h"
 #include "rawframe/authoring/session.h"
+#include "rawframe/authoring_session/game.h"
+#include "rawframe/authoring_session/link.h"
 #include "rawframe/document/json.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/schema/stable_id.h"
@@ -23,7 +23,7 @@
 #include <string_view>
 #include <vector>
 
-namespace rawframe::author {
+namespace rawframe::authoring_session {
 
 namespace {
 
@@ -39,71 +39,42 @@ struct OpenScene {
 /// An authoring session (D407): the game read once, its scenes opened as
 /// records name them and kept open with their histories, each change
 /// written to its file as it commits.
-class Session {
+class Held {
 public:
-    Session(std::filesystem::path game, std::filesystem::path root)
+    Held(std::filesystem::path game, std::filesystem::path root)
         : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)) {
     }
-    Session(const Session&) = delete;
-    Session& operator=(const Session&) = delete;
-    ~Session() {
+    Held(const Held&) = delete;
+    Held& operator=(const Held&) = delete;
+    ~Held() {
         letGo();
     }
 
-    /// Reads records from `in` and replies on `out` until `end` or the
-    /// input ends; 0 when every record succeeded.
-    int run(std::FILE* in, std::FILE* out) {
-        bool clean = true;
-        std::string line;
-        while (readLine(in, line)) {
-            Value id;
-            std::string reply;
-            bool ended = false;
-            if (line.size() > authoring::kMaximumSessionRecordBytes) {
-                reply = authoring::writeRefusal(id, limitError());
-                clean = false;
-            } else {
-                auto record = authoring::readSessionRecord(line, id);
-                if (!record.has_value()) {
-                    reply = authoring::writeRefusal(id, record.error());
-                    clean = false;
-                } else {
-                    ended = record->verb == authoring::SessionVerb::End;
-                    auto answer = handle(*record);
-                    reply = answer.has_value() ? authoring::writeReply(id, std::move(*answer))
-                                               : authoring::writeRefusal(id, answer.error());
-                    clean = clean && answer.has_value() && !failed_;
-                }
-            }
-            std::fputs(reply.c_str(), out);
-            std::fflush(out);
-            if (ended) {
-                break;
-            }
+    /// One record answered: its reply line, its line feed included.
+    std::string answer(std::string_view line, bool& ended) {
+        Value id;
+        ended = false;
+        if (line.size() > authoring::kMaximumSessionRecordBytes) {
+            clean_ = false;
+            return authoring::writeRefusal(id, limitError());
         }
-        return clean ? 0 : 1;
+        auto record = authoring::readSessionRecord(line, id);
+        if (!record.has_value()) {
+            clean_ = false;
+            return authoring::writeRefusal(id, record.error());
+        }
+        ended = record->verb == authoring::SessionVerb::End;
+        auto answered = handle(*record);
+        clean_ = clean_ && answered.has_value() && !failed_;
+        return answered.has_value() ? authoring::writeReply(id, std::move(*answered))
+                                    : authoring::writeRefusal(id, answered.error());
+    }
+
+    bool clean() const noexcept {
+        return clean_;
     }
 
 private:
-    /// One line of `in` without its line feed; false at the input's end.
-    /// A line past the record limit is read through and left that long, so
-    /// it is refused whole.
-    static bool readLine(std::FILE* in, std::string& line) {
-        line.clear();
-        int each = 0;
-        bool any = false;
-        while ((each = std::fgetc(in)) != EOF) {
-            any = true;
-            if (each == '\n') {
-                return true;
-            }
-            if (line.size() <= authoring::kMaximumSessionRecordBytes) {
-                line.push_back(static_cast<char>(each));
-            }
-        }
-        return any;
-    }
-
     static result::Error limitError() {
         return result::fail(result::ErrorClass::ResourceExhausted,
                             authoring::kAuthoringDomain,
@@ -359,7 +330,7 @@ private:
         if (record.preview.has_value()) {
             // A preview is a client on this machine: its token never leaves
             // it for an endpoint a record names.
-            const std::optional<std::string> kEndpoint = rawframe::author::loopbackEndpoint(record.preview->endpoint);
+            const std::optional<std::string> kEndpoint = loopbackEndpoint(record.preview->endpoint);
             if (!kEndpoint.has_value()) {
                 return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
                                                result::ErrorClass::PermissionDenied,
@@ -367,8 +338,8 @@ private:
                                            .withContext("endpoint", record.preview->endpoint)};
             }
             std::string said;
-            preview_ = rawframe::author::ToolingLink::open(
-                *kEndpoint, record.preview->pinFile.c_str(), record.preview->tokenFile.c_str(), said);
+            preview_ =
+                ToolingLink::open(*kEndpoint, record.preview->pinFile.c_str(), record.preview->tokenFile.c_str(), said);
             if (preview_ == nullptr) {
                 return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
                                                result::ErrorClass::Unavailable,
@@ -502,21 +473,37 @@ private:
     bool greeted_ = false;
     /// The preview and the scene it shows (D433), the view it was last
     /// told, and the looks asked of it.
-    std::unique_ptr<rawframe::author::ToolingLink> preview_;
+    std::unique_ptr<ToolingLink> preview_;
     std::string previewScene_;
     std::optional<authoring::SceneView> previewed_;
     bool told_ = false;
     std::uint64_t looks_ = 0;
     /// Whether the last record's operations, queries, or step failed in a
-    /// slot of its answer.
+    /// slot of its answer, and whether every record so far succeeded.
     bool failed_ = false;
+    bool clean_ = true;
 };
 
 } // namespace
 
-int session(const std::filesystem::path& game, const std::filesystem::path& root) {
-    Session held{game, root};
-    return held.run(stdin, stdout);
+struct Session::State {
+    State(std::filesystem::path game, std::filesystem::path root) : held(std::move(game), std::move(root)) {
+    }
+    Held held;
+};
+
+Session::Session(std::filesystem::path game, std::filesystem::path root)
+    : state_(std::make_unique<State>(std::move(game), std::move(root))) {
 }
 
-} // namespace rawframe::author
+Session::~Session() = default;
+
+std::string Session::answer(std::string_view line, bool& ended) {
+    return state_->held.answer(line, ended);
+}
+
+bool Session::clean() const noexcept {
+    return state_->held.clean();
+}
+
+} // namespace rawframe::authoring_session

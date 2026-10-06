@@ -54,12 +54,13 @@
 // error.
 
 #include "connect.h"
-#include "game.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/operations.h"
 #include "rawframe/authoring/queries.h"
 #include "rawframe/authoring/request.h"
 #include "rawframe/authoring/session.h"
+#include "rawframe/authoring_session/game.h"
+#include "rawframe/authoring_session/session.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/document/json.h"
@@ -67,7 +68,6 @@
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/layouts.h"
-#include "session.h"
 
 #include <algorithm>
 #include <array>
@@ -87,12 +87,12 @@ namespace {
 
 namespace authoring = rawframe::authoring;
 namespace result = rawframe::result;
-using rawframe::author::catalogOf;
-using rawframe::author::digestOf;
-using rawframe::author::readFile;
-using rawframe::author::scenesBeside;
-using rawframe::author::sidecarIdentity;
-using rawframe::author::slotValue;
+using rawframe::authoring_session::catalogOf;
+using rawframe::authoring_session::digestOf;
+using rawframe::authoring_session::readFile;
+using rawframe::authoring_session::scenesBeside;
+using rawframe::authoring_session::sidecarIdentity;
+using rawframe::authoring_session::slotValue;
 using rawframe::document::Value;
 
 /// The outcome of a request that could not be run at all.
@@ -356,6 +356,41 @@ int migrate(const char* game, std::span<char* const> scenes, bool dryRun) {
     return clean ? 0 : 1;
 }
 
+/// One line of `in` without its line feed; false at the input's end.
+/// A line past the record limit is read through and left that long, so
+/// it is refused whole.
+bool readLine(std::FILE* in, std::string& line) {
+    line.clear();
+    int each = 0;
+    bool any = false;
+    while ((each = std::fgetc(in)) != EOF) {
+        any = true;
+        if (each == '\n') {
+            return true;
+        }
+        if (line.size() <= authoring::kMaximumSessionRecordBytes) {
+            line.push_back(static_cast<char>(each));
+        }
+    }
+    return any;
+}
+
+/// `session`: records from standard input answered on standard output
+/// until `end` or the input ends; 0 when every record succeeded.
+int session(const std::filesystem::path& game, const std::filesystem::path& root) {
+    rawframe::authoring_session::Session held{game, root};
+    std::string line;
+    while (readLine(stdin, line)) {
+        bool ended = false;
+        std::fputs(held.answer(line, ended).c_str(), stdout);
+        std::fflush(stdout);
+        if (ended) {
+            break;
+        }
+    }
+    return held.clean() ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -379,7 +414,7 @@ int main(int argc, char** argv) {
     }
     if (kVerb == "session" && (argc == 3 || argc == 4)) {
         const std::filesystem::path kGame = argv[2];
-        return rawframe::author::session(kGame, argc == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path());
+        return session(kGame, argc == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path());
     }
     if (kVerb == "migrate" && argc >= 4) {
         const bool kDry = std::string_view{argv[argc - 1]} == "--dry-run";

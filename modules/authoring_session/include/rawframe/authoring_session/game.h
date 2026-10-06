@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace rawframe::author {
+namespace rawframe::authoring_session {
 
 /// A file's bytes, if it reads.
 std::optional<std::string> readFile(const std::filesystem::path& path);
@@ -40,4 +40,4 @@ std::optional<base::Bits128> sidecarIdentity(const std::filesystem::path& source
 /// sidecar gives it.
 std::vector<std::pair<base::Bits128, std::filesystem::path>> scenesBeside(const std::filesystem::path& game);
 
-} // namespace rawframe::author
+} // namespace rawframe::authoring_session
