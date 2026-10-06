@@ -2,7 +2,7 @@
 # process, shown as a UI of its own. Toolchain only; no client or server
 # closure contains it.
 rawframe_module(NAME studio
-    SOURCES src/participant.cpp src/play.cpp src/records.cpp
+    SOURCES src/editing.cpp src/panels.cpp src/participant.cpp src/play.cpp src/playing.cpp src/records.cpp
     DEPS authoring_session font_import process view ui texture document composition execution diagnostics result base
 )
 # Studio's own font (Inter, SIL Open Font License 1.1, fonts/Inter-LICENSE.txt).

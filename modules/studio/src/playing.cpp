@@ -1,0 +1,76 @@
+#include "shell.h"
+
+namespace rawframe::studio {
+
+void ShellParticipant::startPlaying() {
+    if (stopping_.has_value()) {
+        say("the last game is still stopping");
+        return;
+    }
+    auto started = Play::start(*play_);
+    if (!started.has_value()) {
+        say(std::string{started.error().description()});
+        return;
+    }
+    playing_.emplace(std::move(*started));
+    ++played_;
+    nextAttach_ = 0;
+    static_cast<void>(words(playNode_, "Stop", kText, 14));
+    say("starting the game");
+}
+
+void ShellParticipant::stopPlaying() {
+    if (previewing_ && !scene_.empty()) {
+        static_cast<void>(ask(previewRecord(next(), scene_, nullptr)));
+    }
+    previewing_ = false;
+    preview_.reset();
+    // Kept until both have ended: dropping a process kills it, and a
+    // stopping one ends as a Host does, its records written.
+    playing_->stop();
+    stopping_ = std::move(playing_);
+    playing_.reset();
+    static_cast<void>(words(playNode_, "Play", kText, 14));
+    say("game stopped");
+}
+
+void ShellParticipant::attachPlayed(double seconds) {
+    if (stopping_.has_value() && stopping_->ended()) {
+        stopping_.reset();
+    }
+    if (!playing_.has_value() || previewing_ || seconds < nextAttach_) {
+        return;
+    }
+    nextAttach_ = seconds + 0.5;
+    if (!playing_->running()) {
+        say("the game ended");
+        return;
+    }
+    if (auto started = playing_->advance(); !started.has_value()) {
+        say(std::string{started.error().description()});
+        return;
+    }
+    const std::optional<Preview> kPreview = playing_->preview();
+    if (!kPreview.has_value()) {
+        return;
+    }
+    preview_ = kPreview;
+    if (scene_.empty()) {
+        return;
+    }
+    const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));
+    previewing_ = kAttached.previewing;
+    if (kAttached.view.has_value()) {
+        view_ = kAttached.view;
+        showViewText();
+    }
+    if (previewing_) {
+        say("previewing " + scene_);
+        emitter_.log(diagnostics::Severity::Info,
+                     kPreviewing,
+                     "a scene's preview is live in the game Studio plays",
+                     {diagnostics::field("scene", std::string_view{scene_})});
+    }
+}
+
+} // namespace rawframe::studio
