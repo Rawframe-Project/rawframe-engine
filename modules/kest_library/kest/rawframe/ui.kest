@@ -170,6 +170,9 @@ const EDIT_MESSAGE: u32 = 2
 const EDIT_LINES: u32 = 3
 
 // What a player typed into a field: `length` bytes of UTF-8 in `bytes`.
+// As a component on a node's entity, a `ui <node> shows <words>` line has
+// the node show its words in its text look, in place of its label, while
+// it holds any (D427): a sign, a name, a line of chat.
 struct Typed {
     length: u32
     bytes: [u8; 252]

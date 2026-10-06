@@ -147,6 +147,26 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
         settings.parents[static_cast<std::size_t>(kNode - names.begin())] =
             static_cast<std::size_t>(kParent - names.begin());
     }
+    // What nodes show of typed words (D427): rawframe.ui.Typed's length,
+    // then its bytes, each laid out a byte.
+    if (!kGame.uiWords.empty()) {
+        const auto kTyped = program.layout("rawframe.ui.Typed");
+        if (!kTyped.has_value() || kTyped->size != sizeof(Typed) || kTyped->fields.size() < 2 ||
+            kTyped->fields[0].name != "length" || kTyped->fields[0].offset != offsetof(Typed, length) ||
+            kTyped->fields[1].offset != offsetof(Typed, bytes)) {
+            return refuse("the game's rawframe.ui.Typed is not as the engine reads it");
+        }
+        settings.shows.resize(settings.nodes.size());
+    }
+    for (const world_kest::GameUiWords& kLine : kGame.uiWords) {
+        const auto kNode = std::ranges::find(names, kLine.node);
+        const auto kWords = std::ranges::find(kGame.components, kLine.words, &world_kest::GameComponent::name);
+        if (kNode == names.end() || kWords == kGame.components.end() ||
+            !world_kest::ofEngineType(*kWords, "rawframe.ui.Typed")) {
+            return refuse("a ui shows line names a rawframe.ui.Node and a rawframe.ui.Typed component");
+        }
+        settings.shows[static_cast<std::size_t>(kNode - names.begin())] = kWords->id;
+    }
     for (const world_kest::GameFont& kFont : kGame.fonts) {
         settings.fonts.push_back(kFont.id);
     }
@@ -409,6 +429,7 @@ public:
                       diagnostics::field("focused", kStatistics.focused),
                       diagnostics::field("typed", kStatistics.typed),
                       diagnostics::field("submitted", kStatistics.submitted),
+                      diagnostics::field("typedShown", kStatistics.typedShown),
                       diagnostics::field("atlasRevisions",
                                          drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0)});
     }

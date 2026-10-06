@@ -158,6 +158,8 @@ std::uint64_t keyOf(world::EntityHandle entity) noexcept {
 struct Entry {
     std::optional<ui::Node> node;
     Node value;
+    /// The words it shows, as last read (D427).
+    Typed words;
     bool seen = false;
     /// Its node was made a text field (D426).
     bool editable = false;
@@ -177,8 +179,19 @@ struct ViewState {
     std::optional<ui::Node> root;
     std::array<float, 4> placed{-1, -1, -1, -1};
     std::vector<world::ColumnQuery> queries;
+    /// Each node component's words component in the World, if it shows one.
+    std::vector<std::optional<schema::ComponentRuntimeId>> shows;
     std::map<EntryKey, Entry> entries;
 };
+
+/// The words `typed` holds; none when it holds none or says more than it
+/// can hold.
+std::optional<std::string_view> wordsOf(const Typed& typed) noexcept {
+    if (typed.length == 0 || typed.length > kMostTypedBytes) {
+        return std::nullopt;
+    }
+    return std::string_view{reinterpret_cast<const char*>(typed.bytes.data()), typed.length};
+}
 
 /// A child in its parent's order: by `order`, then entity, then component.
 struct Placed {
@@ -277,7 +290,7 @@ struct WorldUi::State {
         if (!kLayout.has_value() || !kInteraction.has_value() || !tree->setLayout(*entry.node, *kLayout).has_value() ||
             !tree->setLook(*entry.node, lookOf(value)).has_value() ||
             !tree->setInteraction(*entry.node, *kInteraction).has_value() ||
-            !(kEditable ? giveFieldLook(*entry.node, value) : giveWords(*entry.node, value))) {
+            !(kEditable ? giveFieldLook(*entry.node, value) : giveWords(*entry.node, value, wordsOf(entry.words)))) {
             drop(entry);
             return false;
         }
@@ -301,13 +314,17 @@ struct WorldUi::State {
             .has_value();
     }
 
-    /// `value`'s words given to `node`, or none; whether the tree took them.
-    bool giveWords(ui::Node node, const Node& value) {
+    /// `value`'s words given to `node`, or none, the typed `shown` in place
+    /// of its label (D427); whether the tree took them.
+    bool giveWords(ui::Node node, const Node& value, std::optional<std::string_view> shown = std::nullopt) {
         if (value.textAlign > 2 || value.textWrap > 1) {
             return false;
         }
         std::optional<std::string> words;
-        if (value.text != 0) {
+        if (shown.has_value()) {
+            words = std::string{*shown};
+            ++statistics.typedShown;
+        } else if (value.text != 0) {
             words = settings.words ? settings.words(value.text, value.textValue) : std::nullopt;
             ++(words.has_value() ? statistics.texts : statistics.textsUnknown);
         }
@@ -350,6 +367,17 @@ struct WorldUi::State {
             RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(kTerms, world->registry()));
             view.queries.push_back(std::move(query));
         }
+        view.shows.assign(settings.nodes.size(), std::nullopt);
+        for (std::size_t at = 0; at < settings.shows.size() && at < settings.nodes.size(); ++at) {
+            if (!settings.shows[at].has_value()) {
+                continue;
+            }
+            const auto kWords = world->registry().find(*settings.shows[at]);
+            if (!kWords.has_value() || world->registry().descriptor(*kWords).size != sizeof(Typed)) {
+                return refuse("a UI node's words are not a rawframe.ui.Typed component in the World");
+            }
+            view.shows[at] = *kWords;
+        }
         return {};
     }
 
@@ -367,9 +395,18 @@ struct WorldUi::State {
                     auto [at, made] = view.entries.try_emplace(EntryKey{chunk.entities[row], component});
                     Entry& entry = at->second;
                     entry.seen = true;
+                    // Its words, read where it shows any (D427).
+                    Typed words;
+                    if (view.shows[component].has_value()) {
+                        if (const void* kHeld = view.world->getErased(chunk.entities[row], *view.shows[component])) {
+                            std::memcpy(&words, kHeld, sizeof(Typed));
+                        }
+                    }
+                    const bool kWordsChanged = std::memcmp(&entry.words, &words, sizeof(Typed)) != 0;
+                    entry.words = words;
                     // Unchanged, a node costs nothing; one refused is tried
                     // again only once it changes.
-                    if (!made && std::memcmp(&entry.value, &value, sizeof(Node)) == 0) {
+                    if (!made && !kWordsChanged && std::memcmp(&entry.value, &value, sizeof(Node)) == 0) {
                         if (!entry.node.has_value()) {
                             ++statistics.leftOut;
                         }
@@ -573,9 +610,13 @@ result::Status WorldUi::addFont(std::uint64_t id, std::span<const std::byte> byt
     }
     for (ViewState& view : state.views) {
         for (auto& [kKey, entry] : view.entries) {
-            if (entry.node.has_value() && entry.value.text != 0 &&
+            const bool kShows = entry.editable || entry.value.text != 0 || wordsOf(entry.words).has_value();
+            if (entry.node.has_value() && kShows &&
                 (entry.value.font == id || !state.fonts.contains(entry.value.font))) {
-                if (!state.giveWords(*entry.node, entry.value)) {
+                // A field keeps what was typed into it.
+                const bool kGiven = entry.editable ? state.giveFieldLook(*entry.node, entry.value)
+                                                   : state.giveWords(*entry.node, entry.value, wordsOf(entry.words));
+                if (!kGiven) {
                     state.drop(entry);
                 }
             }

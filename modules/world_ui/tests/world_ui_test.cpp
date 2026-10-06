@@ -7,7 +7,9 @@
 // game's font once it is read, sized by them (D386); a press lands on the
 // node that takes it, with its code, or passes through (D421); and a text
 // field takes the keyboard by a press, shows what is typed with its caret,
-// and gives its text by Enter (D426).
+// and gives its text by Enter (D426); and a node shows the words of a
+// component of typed words in place of its label while it holds any
+// (D427).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -29,6 +31,7 @@ namespace {
 constexpr auto kHudId = schema::ComponentTypeId::fromText("1d3c5b7a-0e2f-4a61-8b93-c5d7e9f1a203");
 constexpr auto kMeterId = schema::ComponentTypeId::fromText("2e4d6c8b-1f30-4b72-9ca4-d6e8f0a2b314");
 constexpr auto kRowId = schema::ComponentTypeId::fromText("3f5e7d9c-2041-4c83-adb5-e7f9a1b3c425");
+constexpr auto kWordsId = schema::ComponentTypeId::fromText("4a6f8e0d-3152-4d94-bec6-f80ab2c4d536");
 
 std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
@@ -37,6 +40,8 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         builder.add(schema::ComponentDescriptor{
             .id = kId, .name = kName, .size = sizeof(Node), .alignment = alignof(Node), .plainData = true});
     }
+    builder.add(schema::ComponentDescriptor{
+        .id = kWordsId, .name = "test.words", .size = sizeof(Typed), .alignment = alignof(Typed), .plainData = true});
     return *builder.freeze();
 }
 
@@ -49,13 +54,13 @@ struct Rig {
         *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId}, .parents = {std::nullopt, 0, 0}});
     world::EntityHandle player = *world.create();
 
-    void put(world::EntityHandle entity, schema::ComponentTypeId id, Node node) {
+    template <typename Value> void put(world::EntityHandle entity, schema::ComponentTypeId id, Value value) {
         const schema::ComponentRuntimeId kComponent = *schema->find(id);
         if (void* held = world.getErased(entity, kComponent)) {
-            std::memcpy(held, &node, sizeof(Node));
+            std::memcpy(held, &value, sizeof(Value));
             return;
         }
-        RAWFRAME_EXPECT(world.insertErased(entity, kComponent, &node).has_value());
+        RAWFRAME_EXPECT(world.insertErased(entity, kComponent, &value).has_value());
     }
 
     /// One frame of the player's view at (100, 50), 400 by 300, in a
@@ -381,4 +386,41 @@ RAWFRAME_TEST(ATextFieldTakesTheKeyboardAndGivesItsText) {
     RAWFRAME_EXPECT(rig.frame() && !rig.ui->caret().has_value());
     kType("x");
     RAWFRAME_EXPECT(rig.frame() && rig.ui->takeSubmitted().empty());
+}
+
+RAWFRAME_TEST(ANodeShowsTypedWordsInPlaceOfItsLabel) {
+    Rig rig;
+    rig.ui = *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId},
+                               .parents = {std::nullopt, 0, 0},
+                               .shows = {kWordsId, std::nullopt, std::nullopt},
+                               .fonts = {0xF1},
+                               .words = [](std::uint64_t, std::int64_t) -> std::optional<std::string> {
+                                   return std::string{"LABEL"};
+                               }});
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
+    const auto kTyped = [](std::string_view text) {
+        Typed typed{.length = static_cast<std::uint32_t>(text.size())};
+        std::memcpy(typed.bytes.data(), text.data(), text.size());
+        return typed;
+    };
+    rig.put(rig.player, kHudId, Node{.text = 0xA1, .textSize = 10, .textColor = 0xFFFFFFFF});
+    // Without words, the label.
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 5 && rig.ui->statistics().typedShown == 0);
+    // With them, the words; changed, the new ones, though the node is not.
+    rig.put(rig.player, kWordsId, kTyped("ann"));
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 3 && rig.ui->statistics().typedShown == 1);
+    rig.put(rig.player, kWordsId, kTyped("anna"));
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 4);
+    // Unchanged, nothing is given again.
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->statistics().typedShown == 2);
+    // Empty, or saying more than it holds, the label again.
+    rig.put(rig.player, kWordsId, Typed{});
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 5);
+    rig.put(rig.player, kWordsId, Typed{.length = 900});
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 5);
+    // A node with no words line shows its label beside it.
+    rig.put(rig.player, kWordsId, kTyped("x"));
+    rig.put(rig.player, kMeterId, Node{.text = 0xA1, .textSize = 10, .textColor = 0xFFFFFFFF});
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 6);
 }

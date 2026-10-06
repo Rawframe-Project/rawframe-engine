@@ -81,6 +81,12 @@ struct Node {
 /// A text field's most bytes: what `rawframe.ui.Typed` holds (D426).
 inline constexpr std::uint32_t kMostTypedBytes = 252;
 
+/// `rawframe.ui.Typed` as Kest lays it out: its length, then its bytes.
+struct Typed {
+    std::uint32_t length = 0;
+    std::array<std::byte, kMostTypedBytes> bytes{};
+};
+
 /// The words of label `label` with `value` as its argument, in the player's
 /// locale; none for a label the game does not have, or whose words cannot be
 /// made (D386).
@@ -94,6 +100,10 @@ using Words = std::function<std::optional<std::string>(std::uint64_t label, std:
 struct UiSettings {
     std::vector<schema::ComponentTypeId> nodes;
     std::vector<std::optional<std::size_t>> parents;
+    /// Each node's words (D427): a component of `rawframe.ui.Typed` on its
+    /// entity, by the `ui <node> shows <words>` line; none for a node that
+    /// shows only its label. As long as `nodes`, or empty for none at all.
+    std::vector<std::optional<schema::ComponentTypeId>> shows;
     std::vector<std::uint64_t> fonts;
     Words words;
     /// The most nodes held at once, every view's together; a node past them
@@ -128,6 +138,8 @@ struct UiStatistics {
     /// Words given to nodes, and labels that had none (D386).
     std::uint64_t texts = 0;
     std::uint64_t textsUnknown = 0;
+    /// Words given to nodes from a component of typed words (D427).
+    std::uint64_t typedShown = 0;
     /// Text fields given the keyboard, what was typed into them (each text,
     /// key, and composition), and their texts given by Enter (D426).
     std::uint64_t focused = 0;

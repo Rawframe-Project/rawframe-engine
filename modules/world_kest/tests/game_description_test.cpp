@@ -685,3 +685,18 @@ RAWFRAME_TEST(CommandsAreDeclaredByLine) {
     }
     RAWFRAME_EXPECT(!parseGame(many).has_value());
 }
+
+RAWFRAME_TEST(ANodesWordsAreDeclaredByLine) {
+    const std::string kHead =
+        "program p.kest\ncomponent 6b1f0c2e-1d4a-4f57-9a3e-0c2b7d5e8f10 g.board rawframe.ui.Node\n"
+        "component 7c2a1d3f-2e5b-4a68-8b4f-1d3c8e6f9a21 g.sign rawframe.ui.Typed\n";
+    const auto kGame = parseGame(kHead + "ui g.board shows g.sign\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->uiWords.size() == 1 && kGame->uiWords[0].node == "g.board" &&
+                    kGame->uiWords[0].words == "g.sign");
+    for (const std::string_view kLines : {"ui g.board shows g.board\n",
+                                          "ui g.board shows g.sign\nui g.board shows g.sign\n",
+                                          "ui g.board shows g.missing\n",
+                                          "ui g.board displays g.sign\n"}) {
+        RAWFRAME_EXPECT(!parseGame(kHead + std::string{kLines}).has_value());
+    }
+}

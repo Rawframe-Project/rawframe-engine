@@ -204,6 +204,15 @@ struct GameUiParent {
     std::string parent;
 };
 
+/// The words a UI node shows (D427), from a `ui <node> shows <words>`
+/// line: `words` a component of `rawframe.ui.Typed` on the node's entity,
+/// whose text the node shows in its text look in place of its label while
+/// it holds any. A node shows one at most.
+struct GameUiWords {
+    std::string node;
+    std::string words;
+};
+
 /// What the player feels of an effect (D251), from a trailing `felt
 /// <haptic> <amplitude> <hertz> <milliseconds>`: the haptic output of the
 /// game's action set, its amplitude above nought and at most one, its
@@ -599,6 +608,7 @@ struct GameDescription {
     std::optional<GameAspect> aspect;
     /// From `ui <node> in <parent>` lines (D376).
     std::vector<GameUiParent> uiParents;
+    std::vector<GameUiWords> uiWords;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
     /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;

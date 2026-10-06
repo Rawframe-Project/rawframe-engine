@@ -509,9 +509,19 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a present system's identity is its own");
             }
             game.presented.push_back(std::move(system));
+        } else if (kKeyword == "ui" && kWords.size() == 4 && kWords[2] == "shows") {
+            if (kWords[1] == kWords[3] || std::ranges::contains(game.uiWords, kWords[1], &GameUiWords::node)) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a UI node shows the words of one other component at most");
+            }
+            game.uiWords.push_back(GameUiWords{.node = std::string{kWords[1]}, .words = std::string{kWords[3]}});
+            uses.emplace_back(number, std::string{kWords[1]});
+            uses.emplace_back(number, std::string{kWords[3]});
         } else if (kKeyword == "ui") {
             if (kWords.size() != 4 || kWords[2] != "in" || kWords[1] == kWords[3]) {
-                return badLine(number, WorldKestError::BadGameLine, "a ui line is `ui <node> in <another node>`");
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a ui line is `ui <node> in <another node>` or `ui <node> shows <words>`");
             }
             if (std::ranges::contains(game.uiParents, kWords[1], &GameUiParent::node)) {
                 return badLine(number, WorldKestError::BadGameLine, "a UI node is inside one parent");
