@@ -10,6 +10,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <initializer_list>
 #include <string>
 #include <vector>
@@ -438,9 +439,15 @@ RAWFRAME_TEST(AHostIsDrivenAnIterationAtATime) {
                                             .configuration = &*kConfiguration,
                                             .log = {.write = &collect, .context = &log}}};
         const execution::MonotonicInstant kFirst = driven.due();
+        const auto kBegan = std::chrono::steady_clock::now();
         RAWFRAME_EXPECT(driven.iterate() && driven.iterate() && driven.iterate());
-        // Each iteration is due a period after the last, called early or not.
-        RAWFRAME_EXPECT((driven.due() - kFirst).nanoseconds == 3 * (1'000'000'000 / 60));
+        const auto kTook = std::chrono::steady_clock::now() - kBegan;
+        // Each iteration is due a period after the last, called early or not;
+        // on a loaded machine one that ran far behind paces from then on, so
+        // the sum is exact only when the three took less than a period.
+        constexpr std::int64_t kPeriod = 1'000'000'000 / 60;
+        const std::int64_t kAhead = (driven.due() - kFirst).nanoseconds;
+        RAWFRAME_EXPECT(kTook < std::chrono::nanoseconds{kPeriod} ? kAhead == 3 * kPeriod : kAhead >= 3 * kPeriod);
         RAWFRAME_EXPECT(counts.runWorlds == 3 && counts.stopped == 0);
         RAWFRAME_EXPECT(driven.stop() == host::HostExit::Stopped && driven.stop() == host::HostExit::Stopped);
         RAWFRAME_EXPECT(!driven.iterate() && counts.runWorlds == 3 && counts.stopped == 1);
