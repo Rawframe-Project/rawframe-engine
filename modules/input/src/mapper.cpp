@@ -94,6 +94,7 @@ struct Mapper::State {
     std::uint64_t serial = 0;
     std::uint64_t committedTick = 0;
     bool textEditing = false;
+    Mapper::PointerTaker pointerTaker;
 
     [[nodiscard]] Device* deviceOf(DeviceId id) noexcept {
         const auto kFound = std::ranges::find(devices, id, &Device::id);
@@ -343,7 +344,20 @@ struct Mapper::State {
         evaluate(slot);
     }
 
+    /// Whether the UI takes a press of `event`'s control at its device's
+    /// pointer: a mouse button or a touch control going down.
+    [[nodiscard]] bool takenByUi(std::uint8_t slot, const ControlEvent& event) const {
+        if (!pointerTaker || shapeOf(event.control) != ControlShape::Digital || event.x == 0 ||
+            (event.control.device != DeviceClass::Mouse && event.control.device != DeviceClass::Touch)) {
+            return false;
+        }
+        const std::optional<Control> kPointer = controlNamed(event.control.device, "pointer");
+        const Held* pointer = kPointer.has_value() ? heldOf(event.device, *kPointer) : nullptr;
+        return pointer != nullptr && pointerTaker(PlayerSlot{slot}, pointer->x, pointer->y);
+    }
+
     void apply(std::uint8_t slot, const ControlEvent& event) {
+        const bool kTaken = takenByUi(slot, event);
         Held& state = held[{event.device.value, event.control}];
         switch (shapeOf(event.control)) {
         case ControlShape::Digital:
@@ -374,6 +388,10 @@ struct Mapper::State {
         }
         if (state.resting()) {
             state.swallowed = false;
+        } else if (kTaken) {
+            // Read as rest until it comes to rest: the release is the UI's
+            // too.
+            state.swallowed = true;
         }
         evaluate(slot);
     }
@@ -546,6 +564,10 @@ void Mapper::setTextEditing(bool editing) {
     for (std::size_t slot = 0; slot < state.players.size(); ++slot) {
         state.evaluate(static_cast<std::uint8_t>(slot));
     }
+}
+
+void Mapper::setPointerTaker(PointerTaker takes) {
+    state_->pointerTaker = std::move(takes);
 }
 
 void Mapper::releaseAll() {

@@ -1,7 +1,8 @@
 // The mapping runtime against ADR-0037's validation list: edges accounted
 // once to each domain and never lost within a tick, deadzones and
 // thresholds as declared, routing by priority and recency with consumption
-// that blocks, the hygiene set, the text gate, and players kept apart.
+// that blocks, the hygiene set, the text gate, players kept apart, and
+// presses the UI takes at the pointer hidden from every action (D421).
 
 #include "rawframe/input/feed.h"
 #include "rawframe/input/mapper.h"
@@ -9,6 +10,7 @@
 
 #include <cmath>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace rawframe;
@@ -381,4 +383,66 @@ RAWFRAME_TEST(AHapticIsFeltOnThePlayersGamepadsAndTheLatestWins) {
         feed.feel({.device = DeviceId{100 + each}, .haptic = kFelt});
     }
     RAWFRAME_EXPECT(feed.feltDropped() == 1);
+}
+
+RAWFRAME_TEST(APressTheUiTakesIsNeverTheGames) {
+    // Shooting on the mouse's left button, a UI panel over the window's
+    // left 100 pixels.
+    ActionSet set;
+    Action shoot{.id = 1, .name = "shoot", .type = ValueType::Bool};
+    shoot.bindings = {single(*controlNamed(DeviceClass::Mouse, "left"))};
+    set.actions.push_back(shoot);
+    set.contexts.push_back(Context{.id = 1, .name = "play", .actions = {0}});
+    auto made = Mapper::create(set, {});
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    Mapper& mapper = **made;
+    RAWFRAME_EXPECT(mapper.pair(kMouse, DeviceClass::Mouse, kFirst).has_value());
+    RAWFRAME_EXPECT(mapper.activate(kFirst, 0).has_value());
+    std::vector<std::pair<float, float>> taken;
+    mapper.setPointerTaker([&taken](PlayerSlot /*player*/, float x, float y) {
+        if (x >= 100) {
+            return false;
+        }
+        taken.emplace_back(x, y);
+        return true;
+    });
+    const Control kLeft = *controlNamed(DeviceClass::Mouse, "left");
+    const Control kPointer = *controlNamed(DeviceClass::Mouse, "pointer");
+    const auto kClick = [&](std::uint64_t tick) {
+        mapper.submit({.device = kMouse, .control = kLeft, .x = 1});
+        mapper.commit(tick);
+        const bool kPressed = mapper.pressedThisTick(kFirst, 0);
+        mapper.submit({.device = kMouse, .control = kLeft, .x = 0});
+        mapper.commit(tick + 1);
+        return kPressed;
+    };
+
+    // No pointer told yet: the UI is not asked, and the game shoots.
+    RAWFRAME_EXPECT(kClick(1) && taken.empty());
+    // Over the panel: the UI's, press and release, and the game sees nothing.
+    mapper.submit({.device = kMouse, .control = kPointer, .x = 40, .y = 30});
+    RAWFRAME_EXPECT(!kClick(3));
+    RAWFRAME_EXPECT(taken.size() == 1 && taken[0] == (std::pair{40.0F, 30.0F}));
+    RAWFRAME_EXPECT(!mapper.releasedThisTick(kFirst, 0) && !mapper.committed(kFirst, 0).on);
+    // Held over the panel and dragged off it: still the UI's.
+    mapper.submit({.device = kMouse, .control = kLeft, .x = 1});
+    mapper.submit({.device = kMouse, .control = kPointer, .x = 300, .y = 30});
+    mapper.commit(5);
+    RAWFRAME_EXPECT(!mapper.committed(kFirst, 0).on);
+    mapper.submit({.device = kMouse, .control = kLeft, .x = 0});
+    mapper.commit(6);
+    RAWFRAME_EXPECT(!mapper.releasedThisTick(kFirst, 0));
+    // Past the panel: the game's.
+    RAWFRAME_EXPECT(kClick(7) && taken.size() == 2);
+    // Pressed in the world, then over the panel: the game keeps what it
+    // saw begin, and sees it end.
+    mapper.submit({.device = kMouse, .control = kLeft, .x = 1});
+    mapper.commit(9);
+    mapper.submit({.device = kMouse, .control = kPointer, .x = 40, .y = 30});
+    mapper.submit({.device = kMouse, .control = kLeft, .x = 0});
+    mapper.commit(10);
+    RAWFRAME_EXPECT(mapper.releasedThisTick(kFirst, 0) && taken.size() == 2);
 }

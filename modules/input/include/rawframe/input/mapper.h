@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <vector>
@@ -115,6 +116,14 @@ public:
     /// While a text field has focus, keyboard controls reach no action of a
     /// context gated by text editing; an action they held is released.
     void setTextEditing(bool editing);
+    /// The UI as the topmost routing node (SPEC-0029, D421): as a mouse
+    /// button or a touch control goes down, `takes` is asked whether the
+    /// UI takes the press at the player's pointer on that device, in
+    /// logical pixels of the window. A press it takes is the UI's alone:
+    /// no action sees it held, nor its release. Never asked while the
+    /// device has told no pointer. Empty (the default) takes nothing.
+    using PointerTaker = std::function<bool(PlayerSlot player, float x, float y)>;
+    void setPointerTaker(PointerTaker takes);
     /// Focus lost: every control of every device is released through the
     /// normal edge path.
     void releaseAll();
