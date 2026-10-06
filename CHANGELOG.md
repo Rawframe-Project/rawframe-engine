@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- A running dedicated server can be inspected through a tooling endpoint (`tooling.endpoint`, `tooling.token_file`): a protocol of its own (ALPN `rawframe-tooling-v1`) beside the game's, a client admitted by its token, reading the World's status. `rawframe-author connect <endpoint> <pin file> <token file>` is its client, records a line on standard input. A provider profile names its application protocol (`network::ProviderProfile::application`), and a listener refuses connectors speaking another.
 - `rawframe-author session <game> [<scene root>]` holds an authoring session on standard input and output, one JSON record a line each way: scenes stay open with their undo histories between requests, and `undo` and `redo` step them. The records carry the same request, query, and discovery documents as the other verbs.
 - The client opens windows and reads input on macOS, through Maul Window 0.5.0's AppKit backend, and draws there through Maul RHI's Metal driver: every shader container carries its entries in Metal's language too.
 - A UI tree's glyph images are kept in Maul UI's glyph atlas: when it is full, the plot least recently drawn is emptied rather than the whole atlas, and `Tree::create` refuses an atlas side outside 64 to 16,384 or not a multiple of 4.

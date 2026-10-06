@@ -1,8 +1,8 @@
 # The authoring tool (ADR-0032, SPEC-0040): the operation surface from a
 # command line. Tooling only; no client or server closure contains it.
 rawframe_host(NAME author OUTPUT rawframe-author
-    SOURCES src/main.cpp
-    DEPS authoring world_kest kest content scene schema document result base
+    SOURCES src/main.cpp src/connect.cpp
+    DEPS authoring world_tooling network_quic network world_kest kest content scene schema document execution result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
@@ -50,4 +50,12 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_session.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_session)
     set_tests_properties(author_session PROPERTIES PASS_REGULAR_EXPRESSION "authored runners in a session")
+    # A running dedicated server's World read through its tooling endpoint
+    # (D408): admitted by its token, status twice as it ticks, an unknown
+    # verb answered with an error, and another token refused.
+    add_test(NAME author_tooling
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_tooling.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/author_tooling)
+    set_tests_properties(author_tooling PROPERTIES PASS_REGULAR_EXPRESSION "inspected runners through the tooling endpoint")
 endif()

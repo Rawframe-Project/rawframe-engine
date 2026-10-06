@@ -39,9 +39,14 @@
 // written to its file as it commits. A scene whose file changed under the
 // session is opened again, its history let go, and the answer says so.
 //
+// `connect` is a client of a running Runtime's tooling endpoint (D408,
+// connect.h): records a line on standard input, the replies on standard
+// output, the hello said for it with the token from its file.
+//
 // Exit status 0 when everything succeeded, 1 otherwise, and 2 for a usage
 // error.
 
+#include "connect.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/operations.h"
 #include "rawframe/authoring/queries.h"
@@ -792,6 +797,9 @@ int main(int argc, char** argv) {
     if (kVerb == "apply" && (argc == 5 || kDryRun)) {
         return apply(argv[2], argv[3], argv[4], kDryRun);
     }
+    if (kVerb == "connect" && argc == 5) {
+        return rawframe::author::connect(argv[2], argv[3], argv[4]);
+    }
     if (kVerb == "session" && (argc == 3 || argc == 4)) {
         const std::filesystem::path kGame = argv[2];
         Session session{kGame, argc == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path()};
@@ -808,7 +816,8 @@ int main(int argc, char** argv) {
                "       rawframe-author apply <game description> <scene> <request> [--dry-run]\n"
                "       rawframe-author read <game description> <scene> <queries>\n"
                "       rawframe-author migrate <game description> <scene>... [--dry-run]\n"
-               "       rawframe-author session <game description> [<scene root>]\n",
+               "       rawframe-author session <game description> [<scene root>]\n"
+               "       rawframe-author connect <endpoint> <pin file> <token file>\n",
                stderr);
     return 2;
 }
