@@ -423,6 +423,28 @@ void ShellParticipant::showView() {
             FieldRow{.value = line->second, .role = FieldRow::Role::View, .field = std::string{kPart}});
     }
     showViewText();
+    showHistoryList();
+}
+
+void ShellParticipant::showHistoryList() {
+    clear(historyRows_);
+    entryRows_.clear();
+    if (scene_.empty()) {
+        return;
+    }
+    auto heading = row(scenesColumn_, "History", kQuiet, kPanel);
+    if (!heading.has_value()) {
+        return;
+    }
+    historyRows_.push_back(*heading);
+    for (const HistoryEntry& entry : historyOf(ask(historyRecord(next(), scene_)))) {
+        auto added = row(scenesColumn_, entry.summary, entry.applied ? kText : kQuiet, entry.applied ? kRow : kField);
+        if (!added.has_value()) {
+            return;
+        }
+        historyRows_.push_back(*added);
+        entryRows_.push_back(*added);
+    }
 }
 
 void ShellParticipant::showViewText() {

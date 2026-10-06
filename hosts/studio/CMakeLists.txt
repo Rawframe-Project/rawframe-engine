@@ -132,6 +132,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at 76,164.*clicked at 160,164.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":3,[^\n]*\"opened\":1,\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
+    # A scene's history (D454): ground renamed three times, the history
+    # lists the three; its first entry clicked undoes the two after it,
+    # and its last clicked redoes them.
+    add_test(NAME studio_steps_history
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene 200,129 640,129 1100,97:first 1100,97:second
+                     1100,97:third 200,385 200,449
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_steps_history PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed third at 1100,97.*clicked at 200,385.*clicked at 200,449.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # Studio scrolled (D441, D442): runners' west slope has more rows than
     # its column holds; six detents of the wheel over them scroll the
     # column 600 pixels, and the tile's width, clicked where scrolling

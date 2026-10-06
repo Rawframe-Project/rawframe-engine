@@ -90,6 +90,9 @@ void ShellParticipant::pressAt(float x, float y) {
             operation.add("field", Value::string(kAsked.field));
         }
         commit(std::move(operation), kAsked.done, entity_);
+    } else if (const auto kEntry = std::ranges::find(entryRows_, kNode); kEntry != entryRows_.end()) {
+        endEdit();
+        stepTo(static_cast<std::size_t>(kEntry - entryRows_.begin()));
     } else if (const auto kScene = std::ranges::find(sceneRows_, kNode); kScene != sceneRows_.end()) {
         showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
     } else if (const auto kEntity = std::ranges::find(entityRows_, kNode); kEntity != entityRows_.end()) {
@@ -379,6 +382,20 @@ void ShellParticipant::refresh(const std::optional<std::string>& entity) {
     }
     static_cast<void>(tree_->scrollTo(entitiesColumn_, kEntities[0], kEntities[1]));
     static_cast<void>(tree_->scrollTo(componentsColumn_, kComponents[0], kComponents[1]));
+    showHistoryList();
+}
+
+void ShellParticipant::stepTo(std::size_t entry) {
+    const auto kTarget = static_cast<std::int64_t>(entry) + 1;
+    // Each step is one record, as Undo and Redo are; a step the session
+    // refuses leaves the counts as they were and ends the walk.
+    while (undoable_ != kTarget) {
+        const std::int64_t kBefore = undoable_;
+        step(undoable_ > kTarget ? "authoring.undo" : "authoring.redo");
+        if (undoable_ == kBefore) {
+            break;
+        }
+    }
 }
 
 void ShellParticipant::step(std::string_view kind) {

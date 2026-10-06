@@ -214,6 +214,15 @@ private:
     /// The game that does not read: why, where, and what to do.
     result::Status showBroken();
 
+    /// The chosen scene's history under its view (D454): each entry a row,
+    /// the undone quiet, rebuilt after the view's rows, which are rebuilt
+    /// at the column's end.
+    void showHistoryList();
+
+    /// Undoes or redoes until the history's entry `entry` is the last one
+    /// applied.
+    void stepTo(std::size_t entry);
+
     /// Opens the diagnostic's file at its line in the author's editor.
     void openEditor();
 
@@ -278,6 +287,9 @@ private:
     /// The author's editor, as `studio.editor` gives it (D453).
     std::string editor_;
     std::vector<process::Child> editors_;
+    std::vector<ui::Node> historyRows_;
+    /// The rows of the history's entries alone, oldest first.
+    std::vector<ui::Node> entryRows_;
     ui::Node openNode_{};
     ui::Node retryNode_{};
     std::uint64_t opened_ = 0;

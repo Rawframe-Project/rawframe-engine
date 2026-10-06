@@ -85,6 +85,17 @@ RAWFRAME_TEST(AnInstanceNamesOneSceneByPathOrFile) {
     RAWFRAME_EXPECT(!sceneNamed(kScenes, "", why).has_value());
 }
 
+RAWFRAME_TEST(AHistoryIsReadEntryByEntry) {
+    const std::vector<HistoryEntry> kRead = historyOf(
+        R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.history","reopened":false,"entries":[)"
+        R"({"summary":"rename to floor","deltas":1,"applied":true},{"summary":"move entity","deltas":1,"applied":false}]}})");
+    RAWFRAME_EXPECT(kRead.size() == 2 && kRead[0].summary == "rename to floor" && kRead[0].applied &&
+                    kRead[1].summary == "move entity" && !kRead[1].applied);
+    RAWFRAME_EXPECT(historyOf(R"({"kind":"authoring.reply","id":3,"error":{"message":"no"}})").empty());
+    RAWFRAME_EXPECT(document::writeCompact(historyRecord(4, "level.scene")) ==
+                    R"({"kind":"authoring.history","id":4,"scene":"level.scene"})");
+}
+
 RAWFRAME_TEST(ADiagnosticIsReadAndOpenedAtItsLine) {
     const auto kRead = diagnosticOf(
         R"({"kind":"authoring.reply","id":1,"error":{"code":"internal","message":"the Kest program does not compile",)"

@@ -171,6 +171,28 @@ Value viewRecord(std::int64_t id, std::string_view scene, const Value& view) {
     return record;
 }
 
+Value historyRecord(std::int64_t id, std::string_view scene) {
+    return recordOf("authoring.history", id, scene);
+}
+
+std::vector<HistoryEntry> historyOf(std::string_view reply) {
+    std::vector<HistoryEntry> made;
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* entries = answer != nullptr ? answer->find("entries") : nullptr;
+    if (entries == nullptr || entries->kind() != Value::Kind::Array) {
+        return made;
+    }
+    for (const Value& each : entries->items()) {
+        const Value* summary = each.find("summary");
+        const Value* applied = each.find("applied");
+        made.push_back(
+            HistoryEntry{.summary = summary != nullptr && summary->text() != nullptr ? *summary->text() : "?",
+                         .applied = applied != nullptr && applied->truth().value_or(false)});
+    }
+    return made;
+}
+
 Value createSceneRecord(std::int64_t id, std::string_view scene) {
     return recordOf("authoring.create_scene", id, scene);
 }

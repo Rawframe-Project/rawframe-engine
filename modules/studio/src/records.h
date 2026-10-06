@@ -59,6 +59,18 @@ struct Answered {
 
 [[nodiscard]] Answered answeredOf(std::string_view reply);
 
+/// One entry of a scene's history (D454): what it did, and whether it is
+/// applied (undoable) or undone (redoable).
+struct HistoryEntry {
+    std::string summary;
+    bool applied = false;
+};
+
+/// `authoring.history` for `scene`, and the entries its answer lists,
+/// oldest first; none for a refusal.
+[[nodiscard]] Value historyRecord(std::int64_t id, std::string_view scene);
+[[nodiscard]] std::vector<HistoryEntry> historyOf(std::string_view reply);
+
 /// `authoring.create_scene` for `scene` (D449).
 [[nodiscard]] Value createSceneRecord(std::int64_t id, std::string_view scene);
 
