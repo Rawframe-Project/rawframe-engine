@@ -107,6 +107,39 @@ std::optional<Value> firstAnswer(std::string_view reply) {
     return first != nullptr ? std::optional<Value>{*first} : std::nullopt;
 }
 
+/// What an outcome (`authoring.apply`, `authoring.undo`, `authoring.redo`)
+/// says: whether its one slot was done, the session's message when not,
+/// and what can be undone and redone after it.
+struct Outcome {
+    bool done = false;
+    std::string message;
+    std::int64_t undoable = 0;
+    std::int64_t redoable = 0;
+};
+
+Outcome outcomeOf(std::string_view reply) {
+    Outcome outcome;
+    const auto kParsed = document::parse(reply);
+    if (!kParsed.has_value()) {
+        outcome.message = "no answer";
+        return outcome;
+    }
+    const Value* answer = kParsed->find("answer");
+    const Value* results = answer != nullptr ? answer->find("results") : nullptr;
+    const bool kSlot = results != nullptr && results->kind() == Value::Kind::Array && !results->items().empty();
+    const Value* slot = kSlot ? &results->items()[0] : nullptr;
+    outcome.done = slot != nullptr && slot->find("deltas") != nullptr;
+    const Value* error = slot != nullptr ? slot->find("error") : kParsed->find("error");
+    const Value* message = error != nullptr ? error->find("message") : nullptr;
+    outcome.message = message != nullptr && message->text() != nullptr ? *message->text() : "refused";
+    for (const auto& [kName, kInto] :
+         {std::pair{"undoable", &outcome.undoable}, std::pair{"redoable", &outcome.redoable}}) {
+        const Value* count = answer != nullptr ? answer->find(kName) : nullptr;
+        *kInto = count != nullptr ? count->integer().value_or(0) : 0;
+    }
+    return outcome;
+}
+
 /// A field's value node and what the session needs to set it.
 struct FieldRow {
     ui::Node value{};
@@ -218,6 +251,10 @@ public:
                       diagnostics::field("components", components_),
                       diagnostics::field("applied", applied_),
                       diagnostics::field("refused", refused_),
+                      diagnostics::field("undone", undone_),
+                      diagnostics::field("redone", redone_),
+                      diagnostics::field("undoable", static_cast<std::uint64_t>(undoable_)),
+                      diagnostics::field("redoable", static_cast<std::uint64_t>(redoable_)),
                       diagnostics::field("status", std::string_view{status_}),
                       diagnostics::field("framesDrawn", framesDrawn_),
                       diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),
@@ -289,14 +326,19 @@ private:
                                            .gap = 6,
                                            .padding = {6, 6, 6, 6}},
                                 kBackground));
-        RAWFRAME_TRY_ASSIGN(const ui::Node kHeader,
-                            box(root_, ui::Layout{.height = ui::pixels(34), .padding = {12, 6, 12, 6}}, kHeaderFill));
-        RAWFRAME_TRY(tree_->setLayout(
-            kHeader,
-            ui::Layout{.height = ui::pixels(34), .justify = ui::Justify::SpaceBetween, .padding = {12, 6, 12, 6}}));
-        RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeader, ui::Layout{}, 0));
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kHeader,
+            box(root_,
+                ui::Layout{.height = ui::pixels(34), .justify = ui::Justify::SpaceBetween, .padding = {12, 4, 6, 4}},
+                kHeaderFill));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeader, ui::Layout{.padding = {0, 2, 0, 2}}, 0));
         RAWFRAME_TRY(words(kTitle, title_, kText));
-        RAWFRAME_TRY_ASSIGN(statusNode_, box(kHeader, ui::Layout{}, 0));
+        // The status, then undo and redo, at the header's end.
+        RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kHeader, ui::Layout{.gap = 6}, 0));
+        RAWFRAME_TRY_ASSIGN(statusNode_, box(kEnd, ui::Layout{.padding = {0, 2, 8, 2}}, 0));
+        RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
+        RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
+        RAWFRAME_TRY(showHistory());
         RAWFRAME_TRY_ASSIGN(const ui::Node kColumns,
                             box(root_, ui::Layout{.direction = ui::Direction::Row, .gap = 6, .grow = 1}, kBackground));
         RAWFRAME_TRY_ASSIGN(scenesColumn_, column(kColumns, "Scenes"));
@@ -363,7 +405,10 @@ private:
         }
         // The row is the node hit or the one its words are on.
         const ui::Node kNode = *kHit->node;
-        if (const auto kScene = std::ranges::find(sceneRows_, kNode); kScene != sceneRows_.end()) {
+        if (kNode == undoNode_ || kNode == redoNode_) {
+            endEdit();
+            step(kNode == undoNode_ ? "authoring.undo" : "authoring.redo");
+        } else if (const auto kScene = std::ranges::find(sceneRows_, kNode); kScene != sceneRows_.end()) {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         } else if (const auto kEntity = std::ranges::find(entityRows_, kNode); kEntity != entityRows_.end()) {
             showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
@@ -378,7 +423,14 @@ private:
     void showScene(std::size_t at) {
         endEdit();
         fields_.clear();
+        if (scene_ != scenes_[at]) {
+            // Each scene its own history.
+            undoable_ = 0;
+            redoable_ = 0;
+            static_cast<void>(showHistory());
+        }
         scene_ = scenes_[at];
+        sceneAt_ = at;
         for (std::size_t each = 0; each < sceneRows_.size(); ++each) {
             static_cast<void>(
                 tree_->setLook(sceneRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
@@ -570,23 +622,55 @@ private:
         record.add("id", Value::integer(static_cast<std::int64_t>(records_ + 1)));
         record.add("scene", Value::string(scene_));
         record.add("request", std::move(request));
-        const auto kParsed = document::parse(ask(record));
-        // Applied when the one slot holds deltas.
-        const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
-        const Value* results = answer != nullptr ? answer->find("results") : nullptr;
-        const bool kSlot = results != nullptr && results->kind() == Value::Kind::Array && !results->items().empty();
-        const Value* slot = kSlot ? &results->items()[0] : nullptr;
-        if (slot != nullptr && slot->find("deltas") != nullptr) {
+        const Outcome kOutcome = outcomeOf(ask(record));
+        told(kOutcome);
+        if (kOutcome.done) {
             ++applied_;
             say(row.field + " set to " + text);
         } else {
             ++refused_;
-            const Value* error =
-                slot != nullptr ? slot->find("error") : (kParsed.has_value() ? kParsed->find("error") : nullptr);
-            const Value* message = error != nullptr ? error->find("message") : nullptr;
-            say(row.field + ": " + (message != nullptr && message->text() != nullptr ? *message->text() : "refused"));
+            say(row.field + ": " + kOutcome.message);
         }
         showEntity(entityAt_);
+    }
+
+    /// The chosen scene's last change undone, or the last undone redone,
+    /// then the scene shown again, its entity still chosen if it stands.
+    void step(std::string_view kind) {
+        if (scene_.empty()) {
+            return;
+        }
+        Value record = Value::object();
+        record.add("kind", Value::string(std::string{kind}));
+        record.add("id", Value::integer(static_cast<std::int64_t>(records_ + 1)));
+        record.add("scene", Value::string(scene_));
+        const Outcome kOutcome = outcomeOf(ask(record));
+        told(kOutcome);
+        const bool kUndo = kind == "authoring.undo";
+        if (kOutcome.done) {
+            ++(kUndo ? undone_ : redone_);
+            say(kUndo ? "undone" : "redone");
+        } else {
+            say(kOutcome.message);
+        }
+        const std::string kEntity = entity_;
+        showScene(sceneAt_);
+        if (const auto kAt = std::ranges::find(entities_, kEntity); kAt != entities_.end()) {
+            showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
+        }
+    }
+
+    /// What can be undone and redone, as an outcome says.
+    void told(const Outcome& outcome) {
+        undoable_ = outcome.undoable;
+        redoable_ = outcome.redoable;
+        static_cast<void>(showHistory());
+    }
+
+    /// Undo and redo, quiet when there is nothing to do.
+    result::Status showHistory() {
+        RAWFRAME_TRY(words(undoNode_, "Undo", undoable_ > 0 ? kText : kQuiet, 14));
+        return words(redoNode_, "Redo", redoable_ > 0 ? kText : kQuiet, 14);
     }
 
     /// `text` in the header's status.
@@ -612,6 +696,13 @@ private:
     std::size_t editing_ = 0;
     std::size_t entityAt_ = 0;
     ui::Node statusNode_{};
+    ui::Node undoNode_{};
+    ui::Node redoNode_{};
+    std::size_t sceneAt_ = 0;
+    std::int64_t undoable_ = 0;
+    std::int64_t redoable_ = 0;
+    std::uint64_t undone_ = 0;
+    std::uint64_t redone_ = 0;
     std::string status_;
     std::uint64_t applied_ = 0;
     std::uint64_t refused_ = 0;
