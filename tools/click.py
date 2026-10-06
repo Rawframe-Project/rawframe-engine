@@ -16,14 +16,15 @@
 # and waits a second and a half after them (D430). An argument `wheel=`, a
 # point, and a count turns the wheel there that many detents toward the
 # user, or away for a count below nought, 0.15 seconds apart (D441). An
-# argument `wait=` and a number of seconds waits that long (D445). Five
-# seconds after, it stops the program whose pid its pid file holds (D430),
-# whose iterations only bound it, and waits for the process it watches to
-# end.
+# argument `wait=` and a number of seconds waits that long, and `until=` and
+# a record's code waits, up to three minutes, until the log holds it (D445).
+# Five seconds after, it stops the program whose pid its pid file holds
+# (D430), whose iterations only bound it, and waits for the process it
+# watches to end.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
-#                 | wheel=<x>,<y>,<turns> | wait=<seconds> [...]
+#                 | wheel=<x>,<y>,<turns> | wait=<seconds> | until=<code> [...]
 
 import ctypes
 import ctypes.util
@@ -98,6 +99,9 @@ def main():
         if argument.startswith("keys="):
             points.append((None, None, argument[len("keys="):].split(",")))
             continue
+        if argument.startswith("until="):
+            points.append((None, None, ("until", argument[len("until="):])))
+            continue
         if argument.startswith("wait="):
             points.append((None, None, float(argument[len("wait="):])))
             continue
@@ -148,6 +152,20 @@ def main():
     for at, y, text in points:
         if not alive(pid):
             break
+        if isinstance(text, tuple):
+            # Up to three minutes for the record, however loaded the machine.
+            found = False
+            for _ in range(720):
+                try:
+                    with open(log, encoding="utf-8", errors="replace") as records:
+                        found = f'"code":"{text[1]}"' in records.read()
+                except OSError:
+                    pass
+                if found or not alive(pid):
+                    break
+                time.sleep(0.25)
+            print(f"{'saw' if found else 'never saw'} {text[1]}")
+            continue
         if isinstance(text, float):
             time.sleep(text)
             print(f"waited {text:g} seconds")
