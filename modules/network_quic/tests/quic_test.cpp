@@ -477,17 +477,27 @@ RAWFRAME_TEST(ARenewedIdentityServesNewConnectionsAndKeepsOldOnes) {
     }));
     const Event* untrusted = find(staleEvents, EventKind::Closed);
     RAWFRAME_EXPECT(untrusted != nullptr && untrusted->reason == CloseReason::Untrusted);
-    // The connection from before still carries what is sent on it.
+    // The connection from before still carries what is sent on it, on a
+    // stream, which nothing on the way may lose.
+    // The ids are copied: pumping appends to the events, which moves them.
     const Event* accepted = find(serverEvents, EventKind::Accepted);
-    RAWFRAME_EXPECT(accepted != nullptr);
-    if (accepted == nullptr) {
+    const Event* connected = find(beforeEvents, EventKind::Connected);
+    RAWFRAME_EXPECT(accepted != nullptr && connected != nullptr);
+    if (accepted == nullptr || connected == nullptr) {
         return;
     }
-    // A datagram may be lost, so one goes each time round until one comes.
-    const std::vector<std::byte> kHello = bytesOf("still here");
-    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {before.get(), &beforeEvents}}, [&] {
-        static_cast<void>(server->sendDatagram(accepted->connection, kHello));
-        return find(beforeEvents, EventKind::Datagram) != nullptr;
-    }));
+    const network::ConnectionId kServerSide = accepted->connection;
+    const network::ConnectionId kClientSide = connected->connection;
+    const auto kStream = before->openStream(kClientSide, false);
+    RAWFRAME_EXPECT(kStream.has_value() && before->send(kClientSide, *kStream, bytesOf("still here")).has_value());
+    const auto kHeard = [&] {
+        for (const Event& event : serverEvents) {
+            if (event.kind == EventKind::StreamBytes && event.connection == kServerSide) {
+                return true;
+            }
+        }
+        return false;
+    };
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {before.get(), &beforeEvents}}, kHeard));
     RAWFRAME_EXPECT(find(beforeEvents, EventKind::Closed) == nullptr);
 }
