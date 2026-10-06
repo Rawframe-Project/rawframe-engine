@@ -128,7 +128,12 @@ result::Result<Play> Play::start(const PlaySettings& settings) {
     RAWFRAME_TRY(written(kAt / "token", token + "\n"));
     RAWFRAME_TRY(written(kAt / "server.conf",
                          settingsOf(contents(settings.serverSettings),
-                                    {{"host.iteration_rate", "120"}, {"world.tick_rate", "60"}},
+                                    {{"host.iteration_rate", "120"},
+                                     {"world.tick_rate", "60"},
+                                     // Its scenes followed once a second: an edit Studio
+                                     // applies writes a scene, which the World then takes
+                                     // (D410, D446), as ADR-0032 has a live edit go.
+                                     {"kest.reload_every", "60"}},
                                     {{"kest.game", kGame},
                                      {"network.quic.self_signed", "true"},
                                      {"network.quic.fingerprint_file", (kAt / "server.fingerprint").string()},

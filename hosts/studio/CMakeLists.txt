@@ -98,20 +98,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # client with a tooling endpoint; once the client says who it is,
         # the chosen gate's preview is attached to it (the clicks wait for
         # Studio to say so, however loaded the machine), an eye typed is
-        # handed to it, and Stop lets it go and stops both, the client
-        # having drawn frames through the preview.
+        # handed to it; an entity made in the gate while it plays is taken
+        # by the played server's World from the written scene (D446); and
+        # Stop lets it go and stops both, the client having drawn frames
+        # through the preview.
         add_test(NAME studio_plays_plaza
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing 300,161:0,30,0.5
-                         wait=3 1096,23
+                         wait=3 463,97 wait=5 1096,23
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_plays_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,161.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
+                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,161.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1")
     endif()
 endif()
