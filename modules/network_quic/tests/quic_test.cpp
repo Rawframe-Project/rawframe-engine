@@ -483,9 +483,10 @@ RAWFRAME_TEST(ARenewedIdentityServesNewConnectionsAndKeepsOldOnes) {
     if (accepted == nullptr) {
         return;
     }
+    // A datagram may be lost, so one goes each time round until one comes.
     const std::vector<std::byte> kHello = bytesOf("still here");
-    RAWFRAME_EXPECT(server->sendDatagram(accepted->connection, kHello).has_value());
     RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {before.get(), &beforeEvents}}, [&] {
+        static_cast<void>(server->sendDatagram(accepted->connection, kHello));
         return find(beforeEvents, EventKind::Datagram) != nullptr;
     }));
     RAWFRAME_EXPECT(find(beforeEvents, EventKind::Closed) == nullptr);
