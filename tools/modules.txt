@@ -43,6 +43,7 @@ kest_library: kest document result base
 scene: schema document result base
 authoring: scene schema document result base
 authoring_session: authoring world_tooling network_quic network world_kest kest content scene schema document execution result base
+studio: authoring_session font_import ui texture composition execution diagnostics result base
 network: composition execution diagnostics result base
 network_loopback: network composition execution diagnostics result base
 network_quic: network composition execution diagnostics result base
@@ -85,6 +86,7 @@ install_tool: http install release content result base
 play_tool: process composition result base
 export_tool: process release content document result base
 scene_tool: world_kest scene kest result base
+studio_tool: studio window_host render render_canvas_gpu host window composition result base
 author: authoring_session authoring world_kest kest content scene schema document execution result base
 animation_tool: animation_import animation content result base
 bake: scene_bake host game_content input_kest world_audio world_localization network_loopback render render_canvas render_canvas_gpu world_ui render_scene render_scene_gpu physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
