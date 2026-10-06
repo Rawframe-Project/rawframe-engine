@@ -84,6 +84,9 @@ public:
 
 const std::string kToken(40, 't');
 
+/// Past the second a refused client has to read why.
+constexpr execution::MonotonicInstant kLater{execution::MonotonicDuration::fromMilliseconds(1500).nanoseconds};
+
 std::string hello(std::string_view token = kToken, int version = 1) {
     return R"({"kind":"tooling.hello","id":1,"protocolVersion":)" + std::to_string(version) + R"(,"token":")" +
            std::string{token} + "\"}\n";
@@ -114,6 +117,9 @@ RAWFRAME_TEST(AHelloAdmitsOnlyTheEndpointsTokenAndVersion) {
                  R"({"kind":"tooling.status","id":9})"
                  "\n");
     server.serve(nullptr, {}, {});
+    // Refused, each is closed once its client has had a second to read why.
+    RAWFRAME_EXPECT(provider.closed.empty());
+    server.serve(nullptr, {}, kLater);
     RAWFRAME_EXPECT(provider.sent[1] == R"({"kind":"tooling.reply","id":1,"answer":{"kind":"tooling.welcome",)"
                                         R"("protocolVersion":1,"grants":["inspect"]}})"
                                         "\n");
@@ -157,6 +163,7 @@ RAWFRAME_TEST(StatusReadsTheWorldBetweenTicks) {
                  R"({"kind":"tooling.end","id":4})"
                  "\n");
     server->serve(&world, world::TickIndex{121}, {});
+    server->serve(&world, world::TickIndex{122}, kLater);
     const std::string& kSent = provider.sent[7];
     RAWFRAME_EXPECT(kSent.find(R"({"kind":"tooling.reply","id":"s","answer":{"kind":"tooling.status","tick":121,)"
                                R"("world":true,"entities":3,"components":[{"name":"test.crate","entities":2}]}})") !=
@@ -186,6 +193,7 @@ RAWFRAME_TEST(AClientOutOfFormPastTheLimitOrSilentIsRefused) {
                  "\n",
                  4);
     server->serve(nullptr, {}, execution::MonotonicInstant{});
+    server->serve(nullptr, {}, kLater);
     RAWFRAME_EXPECT(provider.sent[1].find(R"("code":"malformed")") != std::string::npos);
     RAWFRAME_EXPECT(provider.sent[2].find(R"("code":"limit_exceeded")") != std::string::npos);
     RAWFRAME_EXPECT(provider.sent[3].find(R"("code":"malformed")") != std::string::npos);

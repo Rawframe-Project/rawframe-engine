@@ -155,8 +155,9 @@ struct Client {
     std::string pending;
     bool admitted = false;
     bool closing = false;
-    /// When it began closing: it closes once its peer has every byte sent,
-    /// or a second later, so a last reply is not cut off.
+    /// When it began closing: the client closes once it has read the last
+    /// reply, or the server does a second later. Closing at once can cut
+    /// the reply off: a provider hands bytes on before its peer has them.
     std::optional<execution::MonotonicInstant> closingSince;
 };
 
@@ -520,9 +521,7 @@ void ToolingServer::serve(const world::World* world, world::TickIndex tick, exec
         if (client.closing && !client.closingSince.has_value()) {
             client.closingSince = now;
         }
-        const bool kDelivered = !client.stream.has_value() ||
-                                state.provider->pendingBytes(network::ConnectionId{at->first}, *client.stream) == 0;
-        if (client.closing && (kDelivered || now - *client.closingSince > kLastReplyWithin)) {
+        if (client.closing && (!client.stream.has_value() || now - *client.closingSince > kLastReplyWithin)) {
             state.provider->close(network::ConnectionId{at->first});
             at = state.clients.erase(at);
         } else {
