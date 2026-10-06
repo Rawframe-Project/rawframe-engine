@@ -56,6 +56,17 @@ module rawframe.ui
 // reach nothing below, or an OVERLAY above them all. A zeroed node, as
 // presentation attaches it, is empty, draws nothing, and passes every
 // press on.
+//
+// A node whose `edit` is not NO_EDIT is a text field (D426): a press on it
+// gives it the keyboard, the caret where the press landed, and a press
+// anywhere else takes it away, as Escape does. It shows what is typed into
+// it, in its text look, not its label; at most `editLimit` bytes (nought
+// for 252), the input method's composition inline. Enter in an EDIT_LINE
+// field gives its text to the sample function (`input.uiSubmitted()`,
+// `input.uiTyped()`) and lets the keyboard go; in an EDIT_MESSAGE field it
+// gives the text, empties the field, and keeps the keyboard; in EDIT_LINES
+// it types a line break. While a field holds the keyboard, the keys type
+// and reach no action of a context gated by text editing (SPEC-0029).
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -104,6 +115,8 @@ struct Node {
     press: i64
     hit: u32
     layer: u32
+    edit: u32
+    editLimit: u32
 }
 
 // A node's `direction`.
@@ -149,6 +162,18 @@ const NO_LAYER: u32 = 0
 const ACTIVATION: u32 = 1
 const MODAL: u32 = 2
 const OVERLAY: u32 = 3
+
+// A node's `edit`.
+const NO_EDIT: u32 = 0
+const EDIT_LINE: u32 = 1
+const EDIT_MESSAGE: u32 = 2
+const EDIT_LINES: u32 = 3
+
+// What a player typed into a field: `length` bytes of UTF-8 in `bytes`.
+struct Typed {
+    length: u32
+    bytes: [u8; 252]
+}
 
 extern fn UI.hovered() -> i64
 

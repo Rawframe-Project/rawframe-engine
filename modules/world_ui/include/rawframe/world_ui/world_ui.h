@@ -10,6 +10,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/schema/component.h"
 #include "rawframe/ui/tree.h"
+#include "rawframe/view/typing.h"
 #include "rawframe/world/entity.h"
 #include "rawframe/world/world.h"
 
@@ -73,7 +74,12 @@ struct Node {
     std::int64_t press = 0;
     std::uint32_t hit = 0;
     std::uint32_t layer = 0;
+    std::uint32_t edit = 0;
+    std::uint32_t editLimit = 0;
 };
+
+/// A text field's most bytes: what `rawframe.ui.Typed` holds (D426).
+inline constexpr std::uint32_t kMostTypedBytes = 252;
 
 /// The words of label `label` with `value` as its argument, in the player's
 /// locale; none for a label the game does not have, or whose words cannot be
@@ -122,6 +128,11 @@ struct UiStatistics {
     /// Words given to nodes, and labels that had none (D386).
     std::uint64_t texts = 0;
     std::uint64_t textsUnknown = 0;
+    /// Text fields given the keyboard, what was typed into them (each text,
+    /// key, and composition), and their texts given by Enter (D426).
+    std::uint64_t focused = 0;
+    std::uint64_t typed = 0;
+    std::uint64_t submitted = 0;
 };
 
 class WorldUi {
@@ -152,6 +163,19 @@ public:
     /// the last update laid the UI out (D421): none when it passes through to
     /// the game, else the press code of the node it lands on.
     [[nodiscard]] std::optional<std::int64_t> press(float x, float y) const;
+
+    /// As `press`, for a press (D426): one on a text field gives it the
+    /// keyboard, the caret where it landed; one anywhere else takes the
+    /// keyboard from the field that held it.
+    [[nodiscard]] std::optional<std::int64_t> pressAt(float x, float y);
+    /// What was typed, to the field holding the keyboard; nothing while
+    /// none does. Enter gives a single line's text, Escape lets go.
+    void type(const view::Typing& typing);
+    /// Where the caret of the field holding the keyboard was last drawn,
+    /// logical pixels of the window; none while none does.
+    [[nodiscard]] std::optional<view::UiTyping::Caret> caret() const noexcept;
+    /// The fields' texts given by Enter since last asked, oldest first.
+    [[nodiscard]] std::vector<view::Submitted> takeSubmitted();
 
     /// What the last update drew.
     [[nodiscard]] const ui::DrawList& drawn() const noexcept;

@@ -1,5 +1,6 @@
 #include "rawframe/world_ui/world_ui.h"
 
+#include "rawframe/ui/text_edit.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_ui/errors.h"
 
@@ -84,14 +85,60 @@ ui::Look lookOf(const Node& node) noexcept {
 /// `node`'s part in what presses hit (D421); none for a number past its
 /// constants. Nought passes presses through to its children and past them.
 std::optional<ui::Interaction> interactionOf(const Node& node) noexcept {
-    if (node.hit > 2 || node.layer > 3) {
+    if (node.hit > 2 || node.layer > 3 || node.edit > 3) {
         return std::nullopt;
     }
     constexpr std::array<ui::Interaction::Hits, 3> kHits = {
         ui::Interaction::Hits::Children, ui::Interaction::Hits::Itself, ui::Interaction::Hits::Nothing};
-    return ui::Interaction{.hits = kHits[node.hit],
-                           .passThrough = node.hit == 0,
+    // A text field takes the presses that land on it (D426), unless it is
+    // left out with its children.
+    const bool kField = node.edit != 0 && node.hit != 2;
+    return ui::Interaction{.hits = kField ? ui::Interaction::Hits::Itself : kHits[node.hit],
+                           .passThrough = node.hit == 0 && !kField,
                            .layer = static_cast<ui::Interaction::Layer>(node.layer)};
+}
+
+/// `node`'s text look.
+ui::TextLook textLookOf(const Node& node, ui::Font font) noexcept {
+    return ui::TextLook{.font = font,
+                        .size = node.textSize > 0 ? node.textSize : 16,
+                        .color = node.textColor,
+                        .align = static_cast<ui::TextAlign>(node.textAlign),
+                        .wrap = node.textWrap == 0};
+}
+
+/// How a field's text is edited: its kind and room, and its caret and
+/// selection in its text's color.
+ui::EditSettings editSettingsOf(const Node& node) noexcept {
+    const std::uint32_t kColor = node.textColor != 0 ? node.textColor : 0x000000FF;
+    return ui::EditSettings{.multiline = node.edit == 3,
+                            .maximumBytes =
+                                node.editLimit == 0 ? kMostTypedBytes : std::min(node.editLimit, kMostTypedBytes),
+                            .caretColor = kColor,
+                            .selectionColor = (kColor & 0xFFFFFF00U) | 0x55U};
+}
+
+ui::EditKey editKeyOf(view::TypingKey key) noexcept {
+    switch (key) {
+    case view::TypingKey::Backspace:
+        return ui::EditKey::Backspace;
+    case view::TypingKey::Delete:
+        return ui::EditKey::Delete;
+    case view::TypingKey::Left:
+        return ui::EditKey::Left;
+    case view::TypingKey::Right:
+        return ui::EditKey::Right;
+    case view::TypingKey::Up:
+        return ui::EditKey::Up;
+    case view::TypingKey::Down:
+        return ui::EditKey::Down;
+    case view::TypingKey::Home:
+        return ui::EditKey::Home;
+    case view::TypingKey::End:
+        return ui::EditKey::End;
+    default:
+        return ui::EditKey::SelectAll;
+    }
 }
 
 /// The window's root and each view's: what they do not cover passes
@@ -112,6 +159,14 @@ struct Entry {
     std::optional<ui::Node> node;
     Node value;
     bool seen = false;
+    /// Its node was made a text field (D426).
+    bool editable = false;
+};
+
+/// The text field holding the keyboard, and its editing.
+struct Focus {
+    Entry* entry = nullptr;
+    std::unique_ptr<ui::TextEdit> edit;
 };
 
 using EntryKey = std::pair<world::EntityHandle, std::uint32_t>;
@@ -147,11 +202,23 @@ struct WorldUi::State {
     std::uint32_t held = 0;
     ui::DrawList drawn;
     UiStatistics statistics;
+    std::optional<Focus> focus;
+    std::optional<view::UiTyping::Caret> caret;
+    std::vector<view::Submitted> submitted;
+
+    /// The keyboard taken from the field holding it.
+    void letGo() noexcept {
+        focus.reset();
+        caret.reset();
+    }
 
     /// `entry`'s node gone, its children first made roots so they live on.
     void drop(Entry& entry) {
         if (!entry.node.has_value()) {
             return;
+        }
+        if (focus.has_value() && focus->entry == &entry) {
+            letGo();
         }
         if (const auto kChildren = attached.find(keyOf(*entry.node)); kChildren != attached.end()) {
             for (const ui::Node kChild : kChildren->second) {
@@ -172,11 +239,18 @@ struct WorldUi::State {
         entry.value = value;
         const std::optional<ui::Layout> kLayout = layoutOf(value);
         const std::optional<ui::Interaction> kInteraction = interactionOf(value);
+        // A node that becomes a text field, or stops being one, is made
+        // again: a field's text is found by a key its node is made with.
+        const bool kEditable = value.edit != 0;
+        if (entry.node.has_value() && entry.editable != kEditable) {
+            drop(entry);
+        }
         if (!entry.node.has_value()) {
             if (!kLayout.has_value() || !kInteraction.has_value() || held >= settings.maximumNodes) {
                 return false;
             }
-            auto made = tree->add(keyOf(entity));
+            auto made = kEditable ? tree->addEditable(keyOf(entity)) : tree->add(keyOf(entity));
+            entry.editable = kEditable;
             if (!made.has_value()) {
                 return false;
             }
@@ -188,11 +262,29 @@ struct WorldUi::State {
         }
         if (!kLayout.has_value() || !kInteraction.has_value() || !tree->setLayout(*entry.node, *kLayout).has_value() ||
             !tree->setLook(*entry.node, lookOf(value)).has_value() ||
-            !tree->setInteraction(*entry.node, *kInteraction).has_value() || !giveWords(*entry.node, value)) {
+            !tree->setInteraction(*entry.node, *kInteraction).has_value() ||
+            !(kEditable ? giveFieldLook(*entry.node, value) : giveWords(*entry.node, value))) {
             drop(entry);
             return false;
         }
+        // A field changed while it holds the keyboard is edited as it says
+        // now.
+        if (focus.has_value() && focus->entry == &entry) {
+            focus->edit->configure(editSettingsOf(value));
+        }
         return true;
+    }
+
+    /// A text field shows what was typed into it in `value`'s text look,
+    /// never a label; whether the tree took it.
+    bool giveFieldLook(ui::Node node, const Node& value) {
+        if (value.textAlign > 2 || value.textWrap > 1) {
+            return false;
+        }
+        const auto kFont = fonts.find(value.font);
+        const std::string kTyped{tree->textOf(node)};
+        return tree->setText(node, kTyped, textLookOf(value, kFont != fonts.end() ? kFont->second : ui::Font{}))
+            .has_value();
     }
 
     /// `value`'s words given to `node`, or none; whether the tree took them.
@@ -438,6 +530,19 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
     RAWFRAME_TRY(state.attach(wanted));
     RAWFRAME_TRY(state.tree->layOut(state.window, width, height));
     RAWFRAME_TRY(state.tree->draw(state.window, scale, state.drawn));
+    // The field holding the keyboard: its caret and selection drawn over
+    // the tree, and where the caret is told for the input method (D426).
+    state.caret.reset();
+    if (state.focus.has_value()) {
+        const ui::TextEdit& kEdit = *state.focus->edit;
+        static_cast<void>(kEdit.decorate(state.window, state.drawn));
+        const auto kPlace = state.tree->placeOf(state.window, kEdit.node());
+        const auto kCaret = kEdit.caretRect();
+        if (kPlace.has_value() && kCaret.has_value()) {
+            state.caret =
+                view::UiTyping::Caret{kPlace->x + kCaret->x, kPlace->y + kCaret->y, kCaret->width, kCaret->height};
+        }
+    }
     ++state.statistics.frames;
     state.statistics.mostNodes = std::max<std::uint64_t>(state.statistics.mostNodes, state.held);
     return {};
@@ -487,6 +592,88 @@ std::optional<std::int64_t> WorldUi::press(float x, float y) const {
     }
     // Blocked, by a node that says nothing.
     return std::int64_t{0};
+}
+
+std::optional<std::int64_t> WorldUi::pressAt(float x, float y) {
+    State& state = *state_;
+    const auto kHit = state.tree->hit(state.window, x, y);
+    if (kHit.has_value() && kHit->node.has_value()) {
+        for (ViewState& view : state.views) {
+            for (auto& [kKey, entry] : view.entries) {
+                if (entry.node != kHit->node || !entry.editable) {
+                    continue;
+                }
+                if (!state.focus.has_value() || state.focus->entry != &entry) {
+                    state.focus = Focus{
+                        .entry = &entry,
+                        .edit = std::make_unique<ui::TextEdit>(*state.tree, *entry.node, editSettingsOf(entry.value))};
+                    ++state.statistics.focused;
+                }
+                static_cast<void>(state.focus->edit->pointAt(kHit->x, kHit->y, false));
+                return entry.value.press;
+            }
+        }
+    }
+    state.letGo();
+    return press(x, y);
+}
+
+void WorldUi::type(const view::Typing& typing) {
+    State& state = *state_;
+    if (!state.focus.has_value()) {
+        return;
+    }
+    ui::TextEdit& edit = *state.focus->edit;
+    const Node& kField = state.focus->entry->value;
+    ++state.statistics.typed;
+    switch (typing.kind) {
+    case view::Typing::Kind::Text:
+        static_cast<void>(edit.type(typing.text));
+        return;
+    case view::Typing::Kind::Composition: {
+        std::vector<ui::CompositionPart> parts;
+        for (const view::TypingSpan& kSpan : typing.spans) {
+            parts.push_back(ui::CompositionPart{.start = kSpan.start,
+                                                .length = kSpan.length,
+                                                .style = static_cast<ui::CompositionPart::Style>(kSpan.style)});
+        }
+        static_cast<void>(edit.compose(typing.text, typing.caret, parts));
+        return;
+    }
+    case view::Typing::Kind::Key:
+        break;
+    }
+    if (typing.key == view::TypingKey::Dismiss) {
+        state.letGo();
+        return;
+    }
+    if (typing.key != view::TypingKey::Submit) {
+        static_cast<void>(edit.press(editKeyOf(typing.key), {.extend = typing.extend, .word = typing.word}));
+        return;
+    }
+    // Enter: a line break in a field of lines, else the text given.
+    if (kField.edit == 3) {
+        static_cast<void>(edit.type("\n"));
+        return;
+    }
+    state.submitted.push_back(
+        view::Submitted{.press = kField.press, .text = std::string{state.tree->textOf(edit.node())}});
+    ++state.statistics.submitted;
+    if (kField.edit == 2) {
+        // A message's field is emptied for the next.
+        static_cast<void>(edit.press(ui::EditKey::SelectAll, {}));
+        static_cast<void>(edit.type({}));
+        return;
+    }
+    state.letGo();
+}
+
+std::optional<view::UiTyping::Caret> WorldUi::caret() const noexcept {
+    return state_->caret;
+}
+
+std::vector<view::Submitted> WorldUi::takeSubmitted() {
+    return std::exchange(state_->submitted, {});
 }
 
 const ui::DrawList& WorldUi::drawn() const noexcept {

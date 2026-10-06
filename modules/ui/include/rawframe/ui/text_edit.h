@@ -60,6 +60,11 @@ public:
     [[nodiscard]] Node node() const noexcept {
         return node_;
     }
+    /// Edited from now on as `settings` say, the caret and the selection
+    /// kept: a field changed while it holds the keyboard.
+    void configure(EditSettings settings) noexcept {
+        settings_ = settings;
+    }
 
     /// Typed or committed text in place of the selection, the caret after
     /// it; a composition there ends first.

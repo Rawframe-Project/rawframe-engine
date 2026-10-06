@@ -4,8 +4,10 @@
 // component does; nothing unchanged is laid out again; a new World starts
 // afresh; values the tree cannot take, a gradient of no kind among them,
 // are left out and counted; and a node shows its label's words in the
-// game's font once it is read, sized by them (D386); and a press lands on
-// the node that takes it, with its code, or passes through (D421).
+// game's font once it is read, sized by them (D386); a press lands on the
+// node that takes it, with its code, or passes through (D421); and a text
+// field takes the keyboard by a press, shows what is typed with its caret,
+// and gives its text by Enter (D426).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -285,4 +287,91 @@ RAWFRAME_TEST(APressLandsOnANodeThatTakesIt) {
     rig.put(rig.player, kHudId, blocking);
     RAWFRAME_EXPECT(rig.frame());
     RAWFRAME_EXPECT(!rig.ui->press(110, 60).has_value() && rig.ui->statistics().leftOut > 0);
+}
+
+RAWFRAME_TEST(ATextFieldTakesTheKeyboardAndGivesItsText) {
+    Rig rig;
+    rig.ui = *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId}, .parents = {std::nullopt, 0, 0}, .fonts = {0xF1}});
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
+    // A field 200 by 20 at the view's top left, (100, 50), in Ahem at 10.
+    Node field{.widthOffset = 200,
+               .heightOffset = 20,
+               .font = 0xF1,
+               .textSize = 10,
+               .textColor = 0xFFFFFFFF,
+               .press = 7,
+               .edit = 1};
+    rig.put(rig.player, kHudId, field);
+    RAWFRAME_EXPECT(rig.frame() && !rig.ui->caret().has_value());
+    const auto kType = [&rig](std::string_view text) {
+        rig.ui->type(view::Typing{.kind = view::Typing::Kind::Text, .text = std::string{text}});
+    };
+    const auto kKey = [&rig](view::TypingKey key) {
+        rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = key});
+    };
+    const auto kCaretAt = [&rig](float x) {
+        return rig.ui->caret().has_value() && (*rig.ui->caret())[0] == x && (*rig.ui->caret())[1] == 50;
+    };
+    // Typed with no field holding the keyboard: nothing.
+    kType("no");
+    RAWFRAME_EXPECT(rig.ui->statistics().typed == 0);
+    // A press on it takes the press and the keyboard.
+    RAWFRAME_EXPECT(rig.ui->pressAt(105, 55) == std::optional<std::int64_t>{7});
+    RAWFRAME_EXPECT(rig.frame() && kCaretAt(100) && rig.ui->statistics().focused == 1);
+    kType("hi");
+    RAWFRAME_EXPECT(rig.frame() && kCaretAt(120) && rig.ui->drawn().glyphs.size() == 2);
+    kKey(view::TypingKey::Left);
+    RAWFRAME_EXPECT(rig.frame() && kCaretAt(110));
+    // Enter gives the text and lets the keyboard go.
+    kKey(view::TypingKey::Submit);
+    auto given = rig.ui->takeSubmitted();
+    RAWFRAME_EXPECT(given.size() == 1 && given[0].press == 7 && given[0].text == "hi");
+    RAWFRAME_EXPECT(rig.frame() && !rig.ui->caret().has_value() && rig.ui->statistics().submitted == 1);
+    RAWFRAME_EXPECT(rig.ui->takeSubmitted().empty());
+    // A press at the field's end puts the caret there; one elsewhere, or
+    // Escape, lets go.
+    RAWFRAME_EXPECT(rig.ui->pressAt(250, 55).has_value() && rig.frame() && kCaretAt(120));
+    RAWFRAME_EXPECT(!rig.ui->pressAt(600, 300).has_value() && rig.frame() && !rig.ui->caret().has_value());
+    RAWFRAME_EXPECT(rig.ui->pressAt(105, 55).has_value() && rig.frame() && rig.ui->caret().has_value());
+    kKey(view::TypingKey::Dismiss);
+    RAWFRAME_EXPECT(rig.frame() && !rig.ui->caret().has_value());
+
+    // A message's field gives its text, empties, and keeps the keyboard.
+    // Made a field of another kind, it keeps its text: here "hi".
+    field.edit = 2;
+    rig.put(rig.player, kHudId, field);
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->pressAt(105, 55).has_value());
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 2);
+    kKey(view::TypingKey::SelectAll);
+    kType("yo");
+    kKey(view::TypingKey::Submit);
+    given = rig.ui->takeSubmitted();
+    RAWFRAME_EXPECT(given.size() == 1 && given[0].text == "yo");
+    RAWFRAME_EXPECT(rig.frame() && kCaretAt(100) && rig.ui->drawn().glyphs.empty());
+
+    // Lines take Enter as a line break; a limit keeps the text within it.
+    field.edit = 3;
+    rig.put(rig.player, kHudId, field);
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->pressAt(105, 55).has_value());
+    kType("a");
+    kKey(view::TypingKey::Submit);
+    kType("b");
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->takeSubmitted().empty() && rig.ui->caret().has_value() &&
+                    (*rig.ui->caret())[1] == 60);
+    field.edit = 1;
+    field.editLimit = 3;
+    rig.put(rig.player, kHudId, field);
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->pressAt(105, 55).has_value());
+    kKey(view::TypingKey::SelectAll);
+    kType("abcdef");
+    kKey(view::TypingKey::Submit);
+    given = rig.ui->takeSubmitted();
+    RAWFRAME_EXPECT(given.size() == 1 && given[0].text == "abc");
+    // A field gone lets the keyboard go.
+    RAWFRAME_EXPECT(rig.ui->pressAt(105, 55).has_value());
+    RAWFRAME_EXPECT(rig.world.removeErased(rig.player, *rig.schema->find(kHudId)).has_value());
+    RAWFRAME_EXPECT(rig.frame() && !rig.ui->caret().has_value());
+    kType("x");
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->takeSubmitted().empty());
 }

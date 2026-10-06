@@ -42,6 +42,7 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        view::kPlayerViews.name,
                                        view::kUiPointing.name,
+                                       view::kUiTyping.name,
                                        game_content::kGameContent.name,
                                        world_localization::kGameText.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
@@ -131,7 +132,9 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
                                 {"textWrap", offsetof(Node, textWrap)},
                                 {"press", offsetof(Node, press)},
                                 {"hit", offsetof(Node, hit)},
-                                {"layer", offsetof(Node, layer)}})) {
+                                {"layer", offsetof(Node, layer)},
+                                {"edit", offsetof(Node, edit)},
+                                {"editLimit", offsetof(Node, editLimit)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -206,6 +209,9 @@ public:
         if (context.has(view::kUiPointing.name)) {
             RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
         }
+        if (context.has(view::kUiTyping.name)) {
+            RAWFRAME_TRY_ASSIGN(typing_, context.capability(view::kUiTyping));
+        }
         RAWFRAME_TRY_ASSIGN(ui_, WorldUi::create(std::move(*settings)));
         // The players' regions as the scene and the canvas have them (D364,
         // D369): the layout for their count, else the whole window.
@@ -264,9 +270,22 @@ public:
         // player's, against the UI as last laid out (D421).
         if (pointing_ != nullptr && ui_ != nullptr) {
             pointing_->answer([this](float x, float y, bool pressing) -> std::optional<std::int64_t> {
-                const std::optional<std::int64_t> kTaken = failed_ ? std::nullopt : ui_->press(x, y);
+                if (failed_) {
+                    return std::nullopt;
+                }
+                // A press gives a text field the keyboard, or takes it
+                // (D426); the mouse only hovering changes nothing.
+                const std::optional<std::int64_t> kTaken = pressing ? ui_->pressAt(x, y) : ui_->press(x, y);
                 presses_ += pressing && kTaken.has_value() ? 1 : 0;
                 return kTaken;
+            });
+        }
+        // What is typed, to the field holding the keyboard.
+        if (typing_ != nullptr && ui_ != nullptr) {
+            typing_->answer([this](const view::Typing& typing) {
+                if (!failed_) {
+                    ui_->type(typing);
+                }
             });
         }
         return {};
@@ -310,6 +329,14 @@ public:
             return;
         }
         drawn_ = &ui_->drawn();
+        // Where the field holding the keyboard has its caret, for the
+        // platform's input method, and what fields gave, for the sample.
+        if (typing_ != nullptr) {
+            typing_->focus(ui_->caret());
+            for (view::Submitted& given : ui_->takeSubmitted()) {
+                typing_->submit(std::move(given));
+            }
+        }
         boxes_ += drawn_->boxes.size();
         glyphRuns_ += drawn_->glyphRuns.size();
         glyphsLeftOut_ += drawn_->glyphsLeftOut;
@@ -340,6 +367,9 @@ public:
         if (pointing_ != nullptr) {
             pointing_->answer({});
         }
+        if (typing_ != nullptr) {
+            typing_->answer({});
+        }
         if (ui_ == nullptr) {
             return;
         }
@@ -363,6 +393,9 @@ public:
                       diagnostics::field("glyphRuns", glyphRuns_),
                       diagnostics::field("glyphsLeftOut", glyphsLeftOut_),
                       diagnostics::field("presses", presses_),
+                      diagnostics::field("focused", kStatistics.focused),
+                      diagnostics::field("typed", kStatistics.typed),
+                      diagnostics::field("submitted", kStatistics.submitted),
                       diagnostics::field("atlasRevisions",
                                          drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0)});
     }
@@ -446,6 +479,7 @@ private:
     world_replication::ClientWorlds* clients_ = nullptr;
     view::PlayerViews* views_ = nullptr;
     view::UiPointing* pointing_ = nullptr;
+    view::UiTyping* typing_ = nullptr;
     std::unique_ptr<WorldUi> ui_;
     std::vector<world_kest::GameRegion> regions_;
     std::optional<world_kest::GameAspect> aspect_;
