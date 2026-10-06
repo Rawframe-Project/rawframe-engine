@@ -22,8 +22,23 @@
 //   {"kind":"tooling.status","id":2}
 //     answer: {"kind":"tooling.status","tick":..,"entities":..,
 //              "components":[{"name":"..","entities":..},..]}
-//   {"kind":"tooling.end","id":3}
+//   {"kind":"tooling.entities","id":3,"after":"4:1","limit":64,"component":"runners.tile"}
+//     answer: {"kind":"tooling.entities","entities":[{"entity":"5:1","components":[".."]},..],
+//              "more":true}
+//   {"kind":"tooling.read_entity","id":4,"entity":"5:1"}
+//     answer: {"kind":"tooling.entity","entity":"5:1",
+//              "components":[{"name":"..","fields":{"x":1.5,"kind":"open","owner":"2:1"}},..]}
+//   {"kind":"tooling.end","id":5}
 //     answer: {"kind":"tooling.ended"}, and the server closes.
+//
+// An entity is named `slot:generation` (D409). `entities` lists the living
+// in slot order, at most `limit` (1 to 256, 64 by default) after the one
+// `after` names, holding the component named if one is; `more` says whether
+// another page follows. `read_entity` shows each component's fields by name
+// where the composition's ComponentFields knows them (an integer as a JSON
+// integer, or as text past 2^53; a real; a truth; an entity by its name or
+// null; an enum by its case's name), and a component it does not know by
+// its name alone.
 //
 // Every reply is `tooling.reply` with the client's `id` and an `answer` or
 // an `error` ({code, message}).
@@ -33,6 +48,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/world/time.h"
 #include "rawframe/world/world.h"
+#include "rawframe/world_runtime/component_fields.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -57,6 +73,9 @@ struct ToolingSettings {
     std::size_t maximumRecord = std::size_t{1} << 20U;
     /// How long a connection may go without a hello that admits it.
     execution::MonotonicDuration helloWithin = execution::MonotonicDuration::fromSeconds(5);
+    /// The World's components field by field, if the composition has them;
+    /// it outlives the server.
+    const world_runtime::ComponentFields* fields = nullptr;
 };
 
 /// The provider bounds a tooling endpoint asks for, `clients` at once.

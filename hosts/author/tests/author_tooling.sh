@@ -2,7 +2,8 @@
 # A running dedicated server inspected through its tooling endpoint (D408):
 # runners served with an endpoint and a token, rawframe-author connected to
 # it reading the World's status twice as it ticks, a verb it does not have
-# answered with an error, and a client with another token refused.
+# answered with an error, the hall found by its component and its age read
+# by name (D409), and a client with another token refused.
 #
 # usage: author_tooling.sh <rawframe-author> <rawframe-server> <repository> <work directory>
 set -euo pipefail
@@ -53,6 +54,19 @@ second=$(grep '"id":2,' "$work/replies" | python3 -c 'import json, sys; print(js
 grep '"id":1,' "$work/replies" | grep -q '"world":true'
 grep '"id":1,' "$work/replies" | grep -q '"name":"runners.age","entities":1'
 grep -q '"id":3,"error":{"code":"unsupported"' "$work/replies"
+
+# The hall found by its component and read by its fields (D409).
+echo '{"kind":"tooling.entities","id":1,"component":"runners.age"}' |
+    "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" >"$work/found"
+hall=$(grep '"id":1,' "$work/found" | python3 -c 'import json, sys; e = json.load(sys.stdin)["answer"]["entities"]; assert len(e) == 1; print(e[0]["entity"])')
+echo '{"kind":"tooling.read_entity","id":1,"entity":"'"$hall"'"}' |
+    "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" >"$work/read"
+grep '"id":1,' "$work/read" | python3 -c '
+import json, sys
+components = {c["name"]: c for c in json.load(sys.stdin)["answer"]["components"]}
+assert components["runners.age"]["fields"]["ticks"] > 0, components
+assert "rawframe.world.persistent" in components, components
+'
 
 # Another token is refused, and the client says so.
 ! echo '{"kind":"tooling.status","id":1}' |

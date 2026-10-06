@@ -1,5 +1,6 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/network/transport.h"
+#include "rawframe/world_runtime/component_fields.h"
 #include "rawframe/world_runtime/simulation.h"
 #include "rawframe/world_tooling/errors.h"
 #include "rawframe/world_tooling/registrar.h"
@@ -21,7 +22,7 @@ constexpr EventIdentity kListening{"tooling", "listening"};
 constexpr EventIdentity kSummary{"tooling", "summary"};
 
 constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
-constexpr std::string_view kMaybe[] = {network::kTransport.name};
+constexpr std::string_view kMaybe[] = {network::kTransport.name, world_runtime::kComponentFields.name};
 
 /// A token file's bytes at most.
 constexpr std::size_t kMaximumTokenBytes = 4096;
@@ -70,6 +71,9 @@ public:
             return misconfigured("tooling.grants is inspect: generation 1 grants nothing more");
         }
         settings.grants.inspect = true;
+        if (context.has(world_runtime::kComponentFields.name)) {
+            RAWFRAME_TRY_ASSIGN(settings.fields, context.capability(world_runtime::kComponentFields));
+        }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kClients,
                             context.configuration().unsignedInteger("tooling.maximum_clients", 4));
         if (kClients == 0 || kClients > 16) {

@@ -4,6 +4,7 @@
 #include "rawframe/world_tooling/errors.h"
 
 #include <algorithm>
+#include <cstring>
 #include <map>
 #include <optional>
 #include <span>
@@ -42,6 +43,8 @@ std::string_view codeName(ToolingError error) noexcept {
         return "limit_exceeded";
     case ToolingError::Configuration:
         return "configuration";
+    case ToolingError::NotFound:
+        return "not_found";
     }
     return "malformed";
 }
@@ -60,6 +63,90 @@ std::string errorLine(const Value& id, ToolingError error, std::string_view why)
     record.add("code", Value::string(std::string{codeName(error)}));
     record.add("message", Value::string(std::string{why}));
     return replyLine(id, "error", std::move(record));
+}
+
+std::string entityName(world::EntityHandle entity) {
+    return std::to_string(entity.slot) + ":" + std::to_string(entity.generation);
+}
+
+/// `slot:generation`, both decimal.
+std::optional<world::EntityHandle> entityNamed(std::string_view text) {
+    const std::size_t kColon = text.find(':');
+    if (kColon == std::string_view::npos || kColon == 0 || kColon + 1 == text.size()) {
+        return std::nullopt;
+    }
+    const auto kNumber = [](std::string_view digits) -> std::optional<std::uint32_t> {
+        std::uint64_t value = 0;
+        for (const char kDigit : digits) {
+            if (kDigit < '0' || kDigit > '9' || digits.size() > 10) {
+                return std::nullopt;
+            }
+            value = (value * 10) + static_cast<std::uint64_t>(kDigit - '0');
+        }
+        return value <= UINT32_MAX ? std::optional{static_cast<std::uint32_t>(value)} : std::nullopt;
+    };
+    const auto kSlot = kNumber(text.substr(0, kColon));
+    const auto kGeneration = kNumber(text.substr(kColon + 1));
+    if (!kSlot.has_value() || !kGeneration.has_value()) {
+        return std::nullopt;
+    }
+    return world::EntityHandle{.slot = *kSlot, .generation = *kGeneration};
+}
+
+/// An integer as JSON keeps it exactly: a number to 2^53, text past it.
+Value integerValue(std::int64_t number) {
+    constexpr std::int64_t kExact = std::int64_t{1} << 53U;
+    return number > -kExact && number < kExact ? Value::integer(number) : Value::string(std::to_string(number));
+}
+
+Value unsignedValue(std::uint64_t number) {
+    return number < (std::uint64_t{1} << 53U) ? Value::integer(static_cast<std::int64_t>(number))
+                                              : Value::string(std::to_string(number));
+}
+
+template <typename T> T read(const std::byte* at) noexcept {
+    T value{};
+    std::memcpy(&value, at, sizeof(T));
+    return value;
+}
+
+/// One field's value from a component's bytes.
+Value fieldValue(const world_runtime::ComponentFieldEntry& field, const std::byte* bytes) {
+    using K = world_runtime::ComponentFieldKind;
+    const std::byte* at = bytes + field.offset;
+    switch (field.kind) {
+    case K::I8:
+        return integerValue(read<std::int8_t>(at));
+    case K::I16:
+        return integerValue(read<std::int16_t>(at));
+    case K::I32:
+        return integerValue(read<std::int32_t>(at));
+    case K::I64:
+        return integerValue(read<std::int64_t>(at));
+    case K::U8:
+        return unsignedValue(read<std::uint8_t>(at));
+    case K::U16:
+        return unsignedValue(read<std::uint16_t>(at));
+    case K::U32:
+        return unsignedValue(read<std::uint32_t>(at));
+    case K::U64:
+        return unsignedValue(read<std::uint64_t>(at));
+    case K::F32:
+        return Value::real(read<float>(at));
+    case K::F64:
+        return Value::real(read<double>(at));
+    case K::Bool:
+        return Value::boolean(read<std::uint8_t>(at) != 0);
+    case K::Entity: {
+        const auto kEntity = read<world::EntityHandle>(at);
+        return kEntity.isNull() ? Value{} : Value::string(entityName(kEntity));
+    }
+    case K::Case: {
+        const auto kCase = read<std::uint32_t>(at);
+        return kCase < field.cases.size() ? Value::string(field.cases[kCase]) : unsignedValue(kCase);
+    }
+    }
+    return Value{};
 }
 
 struct Client {
@@ -128,6 +215,112 @@ struct ToolingServer::State {
         return made;
     }
 
+    /// The living entities in slot order, a page after `after`.
+    Value entities(const world::World& world, const Value& record, std::string& refusal) const {
+        std::optional<world::EntityHandle> after;
+        if (const Value* kAfter = record.find("after"); kAfter != nullptr) {
+            after = kAfter->kind() == Value::Kind::String ? entityNamed(*kAfter->text()) : std::nullopt;
+            if (!after.has_value()) {
+                refusal = "after names an entity as slot:generation";
+                return {};
+            }
+        }
+        std::int64_t limit = 64;
+        if (const Value* kLimit = record.find("limit"); kLimit != nullptr) {
+            limit = kLimit->integer().value_or(0);
+            if (limit < 1 || limit > 256) {
+                refusal = "limit is 1 to 256";
+                return {};
+            }
+        }
+        std::optional<schema::ComponentRuntimeId> holding;
+        if (const Value* kComponent = record.find("component"); kComponent != nullptr) {
+            const std::string* kName = kComponent->kind() == Value::Kind::String ? kComponent->text() : nullptr;
+            for (std::size_t at = 0; kName != nullptr && at < world.registry().components().size(); ++at) {
+                if (world.registry().components()[at].name == *kName) {
+                    holding = schema::ComponentRuntimeId{static_cast<std::uint32_t>(at)};
+                }
+            }
+            if (!holding.has_value()) {
+                refusal = "component names one of the World's components";
+                return {};
+            }
+        }
+        struct Row {
+            world::EntityHandle entity;
+            const world::detail::Archetype* archetype = nullptr;
+        };
+        std::vector<Row> rows;
+        for (const auto& archetype : world.archetypes()) {
+            if (holding.has_value() && !archetype->has(*holding)) {
+                continue;
+            }
+            for (const world::EntityHandle kEntity : archetype->entities()) {
+                if (!after.has_value() || kEntity.slot > after->slot) {
+                    rows.push_back(Row{.entity = kEntity, .archetype = archetype.get()});
+                }
+            }
+        }
+        std::ranges::sort(rows, {}, [](const Row& row) {
+            return row.entity.slot;
+        });
+        const auto kShown = std::min(rows.size(), static_cast<std::size_t>(limit));
+        Value listed = Value::array();
+        for (std::size_t at = 0; at < kShown; ++at) {
+            Value names = Value::array();
+            for (const schema::ComponentRuntimeId kComponent : rows[at].archetype->components()) {
+                names.push(Value::string(std::string{world.registry().descriptor(kComponent).name}));
+            }
+            Value each = Value::object();
+            each.add("entity", Value::string(entityName(rows[at].entity)));
+            each.add("components", std::move(names));
+            listed.push(std::move(each));
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("tooling.entities"));
+        made.add("entities", std::move(listed));
+        made.add("more", Value::boolean(rows.size() > kShown));
+        return made;
+    }
+
+    /// One living entity's components, field by field where known.
+    Value entity(const world::World& world, world::EntityHandle handle) const {
+        const world::detail::Archetype* holder = nullptr;
+        for (const auto& archetype : world.archetypes()) {
+            if (std::ranges::find(archetype->entities(), handle) != archetype->entities().end()) {
+                holder = archetype.get();
+            }
+        }
+        Value components = Value::array();
+        for (const schema::ComponentRuntimeId kComponent : holder->components()) {
+            const schema::ComponentDescriptor& descriptor = world.registry().descriptor(kComponent);
+            Value each = Value::object();
+            each.add("name", Value::string(std::string{descriptor.name}));
+            const world_runtime::ComponentFieldSet* known = nullptr;
+            if (settings.fields != nullptr) {
+                for (const world_runtime::ComponentFieldSet& set : settings.fields->fieldSets()) {
+                    if (set.id == descriptor.id && set.size == descriptor.size) {
+                        known = &set;
+                    }
+                }
+            }
+            const auto* kBytes = static_cast<const std::byte*>(world.getErased(handle, kComponent));
+            if (known != nullptr && kBytes != nullptr) {
+                Value fields = Value::object();
+                for (const world_runtime::ComponentFieldEntry& field : known->fields) {
+                    fields.add(field.name, fieldValue(field, kBytes));
+                }
+                each.add("fields", std::move(fields));
+            }
+            components.push(std::move(each));
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("tooling.entity"));
+        made.add("entity", Value::string(entityName(handle)));
+        made.add("components", std::move(components));
+        return made;
+    }
+
     /// One whole record from a client.
     void answer(network::ConnectionId connection,
                 Client& client,
@@ -184,6 +377,39 @@ struct ToolingServer::State {
                 return;
             }
             send(connection, client, replyLine(id, "answer", status(world, tick)));
+            return;
+        }
+        if (kind != nullptr && (*kind == "tooling.entities" || *kind == "tooling.read_entity")) {
+            if (!settings.grants.inspect) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "reading needs the inspect grant"));
+                return;
+            }
+            if (world == nullptr) {
+                send(connection, client, errorLine(id, ToolingError::NotFound, "no World is running"));
+                return;
+            }
+            if (*kind == "tooling.entities") {
+                std::string refusal;
+                Value made = entities(*world, *parsed, refusal);
+                send(connection,
+                     client,
+                     refusal.empty() ? replyLine(id, "answer", std::move(made))
+                                     : errorLine(id, ToolingError::Malformed, refusal));
+                return;
+            }
+            const Value* kEntity = parsed->find("entity");
+            const auto kHandle = kEntity != nullptr && kEntity->kind() == Value::Kind::String
+                                     ? entityNamed(*kEntity->text())
+                                     : std::nullopt;
+            if (!kHandle.has_value()) {
+                send(connection,
+                     client,
+                     errorLine(id, ToolingError::Malformed, "entity names an entity as slot:generation"));
+            } else if (!world->alive(*kHandle)) {
+                send(connection, client, errorLine(id, ToolingError::NotFound, "no such entity is alive"));
+            } else {
+                send(connection, client, replyLine(id, "answer", entity(*world, *kHandle)));
+            }
             return;
         }
         if (kind != nullptr && *kind == "tooling.end") {

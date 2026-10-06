@@ -24,6 +24,8 @@ enum class ToolingError : std::uint32_t {
     LimitExceeded = 5,
     /// A configuration the endpoint cannot run with.
     Configuration = 6,
+    /// An entity not alive in the World, or no World running.
+    NotFound = 7,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(ToolingError error) noexcept {

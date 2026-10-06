@@ -9,6 +9,7 @@
 #include "rawframe/world_tooling/server.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <string>
@@ -208,5 +209,116 @@ RAWFRAME_TEST(AVerbBeyondTheGrantsIsRefusedAndTheClientKept) {
     server->serve(nullptr, {}, {});
     RAWFRAME_EXPECT(provider.sent[1].find(R"("grants":[])") != std::string::npos);
     RAWFRAME_EXPECT(provider.sent[1].find(R"("id":2,"error":{"code":"not_granted")") != std::string::npos);
+    RAWFRAME_EXPECT(provider.closed.empty());
+}
+
+namespace {
+
+struct Door {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("8f2c0d41-77a3-4b5e-9c10-3e6b2a9d4f71");
+    static constexpr std::string_view kComponentName = "test.door";
+    world::EntityHandle opens;
+    std::uint32_t state = 0;
+    std::uint64_t serial = 0;
+    float width = 0;
+    std::uint8_t locked = 0;
+};
+
+/// The door's fields as a game's program would give them.
+class DoorFields final : public world_runtime::ComponentFields {
+public:
+    DoorFields() {
+        using K = world_runtime::ComponentFieldKind;
+        sets_.push_back(
+            {.id = Door::kComponentTypeId,
+             .size = sizeof(Door),
+             .fields = {{.name = "opens", .offset = offsetof(Door, opens), .kind = K::Entity},
+                        {.name = "state", .offset = offsetof(Door, state), .kind = K::Case, .cases = {"shut", "open"}},
+                        {.name = "serial", .offset = offsetof(Door, serial), .kind = K::U64},
+                        {.name = "width", .offset = offsetof(Door, width), .kind = K::F32},
+                        {.name = "locked", .offset = offsetof(Door, locked), .kind = K::Bool}}});
+    }
+    std::span<const world_runtime::ComponentFieldSet> fieldSets() const noexcept override {
+        return sets_;
+    }
+
+private:
+    std::vector<world_runtime::ComponentFieldSet> sets_;
+};
+
+/// The answer of the reply to the record of `id` in what was sent.
+std::string replyTo(const std::string& sent, std::string_view id) {
+    const std::string kNeedle = "\"id\":" + std::string{id} + ",";
+    const std::size_t kAt = sent.find(kNeedle);
+    if (kAt == std::string::npos) {
+        return {};
+    }
+    const std::size_t kStart = sent.rfind('\n', kAt);
+    const std::size_t kEnd = sent.find('\n', kAt);
+    return sent.substr(kStart == std::string::npos ? 0 : kStart + 1,
+                       kEnd - (kStart == std::string::npos ? 0 : kStart + 1));
+}
+
+} // namespace
+
+RAWFRAME_TEST(EntitiesAreListedInPagesAndReadByTheirFields) {
+    schema::RegistryBuilder builder;
+    builder.add<Crate>();
+    builder.add<Door>();
+    const auto kRegistry = builder.freeze();
+    RAWFRAME_EXPECT(kRegistry.has_value());
+    if (!kRegistry.has_value()) {
+        return;
+    }
+    world::World world{*kRegistry};
+    const auto kCrate = *(*kRegistry)->key<Crate>();
+    const auto kDoor = *(*kRegistry)->key<Door>();
+    std::vector<world::EntityHandle> made;
+    for (int at = 0; at < 5; ++at) {
+        made.push_back(*world.create());
+    }
+    RAWFRAME_EXPECT(world.insert(made[1], kCrate, Crate{.x = 1}).has_value());
+    RAWFRAME_EXPECT(world.insert(made[3], kCrate, Crate{.x = 2}).has_value());
+    RAWFRAME_EXPECT(
+        world
+            .insert(
+                made[3],
+                kDoor,
+                Door{.opens = made[1], .state = 1, .serial = (std::uint64_t{1} << 60U) + 1, .width = 1.5F, .locked = 1})
+            .has_value());
+    const DoorFields kFields;
+    FedProvider provider;
+    auto server = *ToolingServer::create(provider, {.token = kToken, .grants = {.inspect = true}, .fields = &kFields});
+    provider.accept(1);
+    const std::string kThird = std::to_string(made[3].slot) + ":" + std::to_string(made[3].generation);
+    const std::string kSecond = std::to_string(made[1].slot) + ":" + std::to_string(made[1].generation);
+    provider.say(1,
+                 hello() + R"({"kind":"tooling.entities","id":2,"limit":2})" + "\n" +
+                     R"({"kind":"tooling.entities","id":3,"after":")" + kSecond + R"(","component":"test.crate"})" +
+                     "\n" + R"({"kind":"tooling.read_entity","id":4,"entity":")" + kThird + "\"}\n" +
+                     R"({"kind":"tooling.read_entity","id":5,"entity":"99:1"})" + "\n" +
+                     R"({"kind":"tooling.entities","id":6,"limit":0})" + "\n" +
+                     R"({"kind":"tooling.entities","id":7,"component":"test.window"})" + "\n");
+    server->serve(&world, {}, {});
+    const std::string& kSent = provider.sent[1];
+    // Slot order, two a page, more to come.
+    const std::string kFirstPage = replyTo(kSent, "2");
+    RAWFRAME_EXPECT(kFirstPage.find(R"("entities":[{"entity":")" + std::to_string(made[0].slot) + ":") !=
+                    std::string::npos);
+    RAWFRAME_EXPECT(kFirstPage.find(R"("more":true)") != std::string::npos);
+    // After the second, holding a crate: the fourth alone, and no more.
+    RAWFRAME_EXPECT(replyTo(kSent, "3")
+                        .find(R"("entities":[{"entity":")" + kThird +
+                              R"(","components":["test.crate","test.door"]}],"more":false)") != std::string::npos);
+    // Fields by name: an entity by its name, an enum by its case, a wide
+    // integer as text, a real, a truth; a component not known by name only.
+    RAWFRAME_EXPECT(replyTo(kSent, "4")
+                        .find(R"({"name":"test.crate"},{"name":"test.door","fields":{"opens":")" + kSecond +
+                              R"(","state":"open","serial":"1152921504606846977","width":1.5,)"
+                              R"("locked":true}})") != std::string::npos);
+    RAWFRAME_EXPECT(replyTo(kSent, "5").find(R"("code":"not_found")") != std::string::npos);
+    RAWFRAME_EXPECT(replyTo(kSent, "6").find(R"("code":"malformed")") != std::string::npos);
+    RAWFRAME_EXPECT(replyTo(kSent, "7").find(R"("code":"malformed")") != std::string::npos);
     RAWFRAME_EXPECT(provider.closed.empty());
 }
