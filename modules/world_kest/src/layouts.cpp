@@ -1,5 +1,6 @@
 #include "rawframe/world_kest/layouts.h"
 
+#include "navigation.h"
 #include "physics_facts.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/world/persistent.h"
@@ -147,6 +148,8 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
                    std::ranges::find(world_animation::componentLayouts(), component.id, &schema::ComponentLayout::id);
                kAnimation != world_animation::componentLayouts().end()) {
         engine = engineLayout(*kAnimation);
+    } else if (component.id == NavigationAgent::kComponentTypeId) {
+        engine = engineLayout(navigationAgentLayout());
     } else if (game.physics.has_value()) {
         for (const schema::ComponentLayout& owned : physicsFacts(game.physics->dimensions).components) {
             if (owned.id == component.id) {

@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <optional>
@@ -374,4 +375,36 @@ RAWFRAME_TEST(CustomersFindTheirWayRoundTheStallsInIt) {
     const Till* const kCorner = valueOf<Till>(world, kStalls[0], kTillId);
     RAWFRAME_EXPECT(seen > 10'000 && inside == 0);
     RAWFRAME_EXPECT(kCorner != nullptr && kCorner->takings > 0);
+}
+
+RAWFRAME_TEST(CustomersStepAsideForEachOtherAtTheirStall) {
+    Played played;
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
+        return;
+    }
+    // Every customer comes for the one stall's front, from along the south
+    // edge, so their ways close in on each other there; each is an agent the
+    // engine steers round the others (D411), and no two of their bodies,
+    // 0.35 meters round, ever overlap much.
+    world::World& world = *simulation->world();
+    played.run(1);
+    const auto kPoseKey = *world.registry().find(physics3d::Pose3D::kComponentTypeId);
+    double closest = 100;
+    std::uint64_t pairs = 0;
+    for (int tick = 0; tick < 30 * 60; ++tick) {
+        played.run(1);
+        const std::vector<world::EntityHandle> kCustomers = holding(world, kCustomerId);
+        for (std::size_t first = 0; first < kCustomers.size(); ++first) {
+            const auto& kOne = *static_cast<const physics3d::Pose3D*>(world.getErased(kCustomers[first], kPoseKey));
+            for (std::size_t second = first + 1; second < kCustomers.size(); ++second) {
+                const auto& kOther =
+                    *static_cast<const physics3d::Pose3D*>(world.getErased(kCustomers[second], kPoseKey));
+                closest = std::min(closest, std::hypot(kOne.x - kOther.x, kOne.z - kOther.z));
+                ++pairs;
+            }
+        }
+    }
+    std::printf("customers: %llu pairs seen, closest %.3f m\n", static_cast<unsigned long long>(pairs), closest);
+    RAWFRAME_EXPECT(pairs > 1000 && closest > 0.6);
 }

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <optional>
 
 namespace rawframe::world_kest {
@@ -66,7 +67,42 @@ private:
 
 constexpr std::array<std::string_view, 1> kAfter = {physics3d::kStepSystem};
 
+/// The avoid system, before the 3D physics step.
+class AvoidSystem final : public world::System {
+public:
+    explicit AvoidSystem(GameNavmesh& owner) noexcept : owner_(&owner) {
+    }
+    result::Status run(world::SystemContext& context) noexcept override {
+        return owner_->avoid(context.world,
+                             static_cast<double>(context.rate.seconds) / static_cast<double>(context.rate.ticks));
+    }
+
+private:
+    GameNavmesh* owner_;
+};
+
+constexpr std::array<std::string_view, 1> kBeforeTheStep = {physics3d::kStepSystem};
+
+constexpr std::array<schema::ComponentField, 5> kAgentFields = {{
+    {"radius", offsetof(NavigationAgent, radius), schema::FieldType::F32},
+    {"maxSpeed", offsetof(NavigationAgent, maxSpeed), schema::FieldType::F32},
+    {"priority", offsetof(NavigationAgent, priority), schema::FieldType::F32},
+    {"velocityX", offsetof(NavigationAgent, velocityX), schema::FieldType::F32},
+    {"velocityZ", offsetof(NavigationAgent, velocityZ), schema::FieldType::F32},
+}};
+
+constexpr schema::ComponentLayout kAgentLayout{.id = NavigationAgent::kComponentTypeId,
+                                               .name = NavigationAgent::kComponentName,
+                                               .scriptType = "Agent",
+                                               .size = sizeof(NavigationAgent),
+                                               .alignment = alignof(NavigationAgent),
+                                               .fields = kAgentFields};
+
 } // namespace
+
+const schema::ComponentLayout& navigationAgentLayout() noexcept {
+    return kAgentLayout;
+}
 
 bool readNavigationLine(std::span<const std::string_view> words, GameNavigation& into) {
     for (std::size_t at = 0; at < words.size(); at += 2) {
@@ -102,12 +138,64 @@ void GameNavmesh::attach(const physics3d::Physics3DQueries* queries) noexcept {
     queries_ = queries;
 }
 
-result::Status GameNavmesh::declareSystems(const schema::SchemaRegistry& /*registry*/,
+result::Status GameNavmesh::declareSystems(const schema::SchemaRegistry& registry,
                                            std::vector<world::SystemDeclaration>& systems) noexcept {
     systems.push_back(world::SystemDeclaration{.identity = kNavigationBakeSystem,
                                                .phase = world::Phase::Simulation,
                                                .after = kAfter,
                                                .system = system_.get()});
+    // Agents, where the game has them (D411).
+    if (!registry.find(NavigationAgent::kComponentTypeId).has_value()) {
+        return {};
+    }
+    RAWFRAME_TRY_ASSIGN(agentQuery_, AgentQuery::resolve(registry));
+    RAWFRAME_TRY_ASSIGN(avoidance_, navigation::Avoidance::create({}));
+    avoidReads_ = agentQuery_->reads();
+    avoidWrites_ = agentQuery_->writes();
+    avoidSystem_ = std::make_unique<AvoidSystem>(*this);
+    systems.push_back(world::SystemDeclaration{.identity = kNavigationAvoidSystem,
+                                               .phase = world::Phase::Simulation,
+                                               .reads = avoidReads_,
+                                               .writes = avoidWrites_,
+                                               .before = kBeforeTheStep,
+                                               .system = avoidSystem_.get()});
+    return {};
+}
+
+result::Status GameNavmesh::avoid(world::World& world, double seconds) {
+    rows_.clear();
+    agentQuery_->forEach(world,
+                         [this](world::EntityHandle entity,
+                                NavigationAgent& agent,
+                                const physics3d::Pose3D& pose,
+                                physics3d::Velocity3D& velocity) {
+                             rows_.push_back(
+                                 AgentRow{.entity = entity, .agent = &agent, .pose = &pose, .velocity = &velocity});
+                         });
+    agents_.clear();
+    for (const AgentRow& row : rows_) {
+        // The game's velocity is where the agent would go; the World's
+        // ground is its (x, z).
+        agents_.push_back(
+            navigation::AvoidingAgent{.position = {.x = row.pose->x, .y = row.pose->z},
+                                      .velocity = {.x = row.agent->velocityX, .y = row.agent->velocityZ},
+                                      .preferred = {.x = row.velocity->x, .y = row.velocity->z},
+                                      .radius = row.agent->radius,
+                                      .maxSpeed = row.agent->maxSpeed,
+                                      .priority = row.agent->priority,
+                                      .id = (std::uint64_t{row.entity.slot} << 32U) | row.entity.generation});
+    }
+    velocities_.resize(agents_.size());
+    RAWFRAME_TRY(avoidance_->avoid(agents_, seconds, velocities_));
+    for (std::size_t at = 0; at < rows_.size(); ++at) {
+        const auto kX = static_cast<float>(velocities_[at].x);
+        const auto kZ = static_cast<float>(velocities_[at].y);
+        rows_[at].velocity->x = kX;
+        rows_[at].velocity->z = kZ;
+        rows_[at].agent->velocityX = kX;
+        rows_[at].agent->velocityZ = kZ;
+    }
+    avoided_ += rows_.size();
     return {};
 }
 
@@ -193,7 +281,7 @@ navigation::Navmesh* GameNavmesh::navmesh() noexcept {
 }
 
 GameNavmeshStatistics GameNavmesh::statistics() const noexcept {
-    GameNavmeshStatistics statistics{.bakesRefused = refused_};
+    GameNavmeshStatistics statistics{.avoided = avoided_, .bakesRefused = refused_};
     if (navmesh_ != nullptr) {
         const navigation::NavmeshStatistics& kBaked = navmesh_->statistics();
         statistics.bakes = kBaked.bakes;
@@ -221,6 +309,7 @@ void GameNavmesh::report(diagnostics::Emitter& emitter) const {
                  diagnostics::field("tiles", static_cast<std::uint64_t>(kNavigation.tiles)),
                  diagnostics::field("polygons", kNavigation.polygons),
                  diagnostics::field("searches", kNavigation.searches),
+                 diagnostics::field("avoided", kNavigation.avoided),
                  diagnostics::field("fingerprint", std::string_view{fingerprint.data(), fingerprint.size()})});
 }
 

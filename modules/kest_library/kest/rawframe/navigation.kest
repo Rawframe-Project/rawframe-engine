@@ -18,6 +18,20 @@ struct Step {
     found: bool
 }
 
+// An agent (D411), `rawframe.navigation.agent`, on an entity with a 3D pose
+// and velocity: the velocity a game's system sets (before
+// rawframe.navigation.avoid) is where it would go, and the engine makes it
+// the nearest that keeps clear of the other agents, at most maxSpeed.
+// Of two agents avoiding each other, each takes the other's priority over
+// both's share. velocityX and velocityZ are the engine's: what it last gave.
+struct Agent {
+    radius: f32
+    maxSpeed: f32
+    priority: f32
+    velocityX: f32
+    velocityZ: f32
+}
+
 extern fn Navigation.next(fromX: f64, fromY: f64, fromZ: f64, toX: f64, toY: f64, toZ: f64) -> Step
 
 fn next(fromX: f64, fromY: f64, fromZ: f64, toX: f64, toY: f64, toZ: f64) -> Step {

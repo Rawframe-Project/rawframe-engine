@@ -819,6 +819,12 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     game.components.push_back(GameComponent{.id = world::Persistent::kComponentTypeId,
                                             .name = std::string{world::Persistent::kComponentName},
                                             .kestType = "Persistent"});
+    // A game that navigates has agents to steer round each other (D411).
+    if (game.navigation.has_value()) {
+        game.components.push_back(GameComponent{.id = NavigationAgent::kComponentTypeId,
+                                                .name = std::string{NavigationAgent::kComponentName},
+                                                .kestType = "Agent"});
+    }
     // Animators play on the engine's components: the Animator, named by
     // their identity, and root motion.
     if (!game.animators.empty()) {
