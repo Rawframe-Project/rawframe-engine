@@ -21,8 +21,10 @@ using diagnostics::EventIdentity;
 constexpr EventIdentity kListening{"tooling", "listening"};
 constexpr EventIdentity kSummary{"tooling", "summary"};
 
-constexpr std::string_view kNeeds[] = {world_runtime::kSimulation.name};
-constexpr std::string_view kMaybe[] = {network::kTransport.name, world_runtime::kComponentFields.name};
+// A client has no simulation of its own, and a preview's endpoint reads no
+// World (D432).
+constexpr std::string_view kMaybe[] = {
+    world_runtime::kSimulation.name, network::kTransport.name, world_runtime::kComponentFields.name, kPreviewer.name};
 
 /// A token file's bytes at most.
 constexpr std::size_t kMaximumTokenBytes = 4096;
@@ -56,7 +58,12 @@ class EndpointParticipant final : public composition::Participant {
 public:
     result::Status load(composition::ParticipantContext& context, std::string endpoint) {
         endpoint_ = std::move(endpoint);
-        RAWFRAME_TRY_ASSIGN(simulation_, context.capability(world_runtime::kSimulation));
+        if (context.has(world_runtime::kSimulation.name)) {
+            RAWFRAME_TRY_ASSIGN(simulation_, context.capability(world_runtime::kSimulation));
+        }
+        if (context.has(kPreviewer.name)) {
+            RAWFRAME_TRY_ASSIGN(settings_.previewer, context.capability(kPreviewer));
+        }
         if (!context.has(network::kTransport.name)) {
             return misconfigured("a tooling endpoint needs a transport");
         }
@@ -64,13 +71,23 @@ public:
         if (!kTokenFile.has_value()) {
             return misconfigured("a tooling endpoint needs tooling.token_file");
         }
-        ToolingSettings settings;
+        ToolingSettings settings = std::move(settings_);
         RAWFRAME_TRY_ASSIGN(settings.token, tokenFrom(std::string{*kTokenFile}));
-        const auto kGrants = context.configuration().text("tooling.grants");
-        if (kGrants.has_value() && *kGrants != "inspect") {
-            return misconfigured("tooling.grants is inspect: generation 1 grants nothing more");
+        // Grants are words apart by spaces: inspect, and view (D432).
+        const std::string kGrants{context.configuration().text("tooling.grants").value_or("inspect")};
+        std::size_t at = 0;
+        while (at < kGrants.size()) {
+            const std::size_t kEnd = std::min(kGrants.find(' ', at), kGrants.size());
+            const std::string_view kGrant{kGrants.data() + at, kEnd - at};
+            if (kGrant == "inspect") {
+                settings.grants.inspect = true;
+            } else if (kGrant == "view") {
+                settings.grants.view = true;
+            } else if (!kGrant.empty()) {
+                return misconfigured("tooling.grants names inspect and view, apart by spaces");
+            }
+            at = kEnd + 1;
         }
-        settings.grants.inspect = true;
         if (context.has(world_runtime::kComponentFields.name)) {
             RAWFRAME_TRY_ASSIGN(settings.fields, context.capability(world_runtime::kComponentFields));
         }
@@ -100,7 +117,9 @@ public:
 
     void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
         if (server_ != nullptr) {
-            server_->serve(simulation_->world(), simulation_->tick(), frame.now);
+            server_->serve(simulation_ != nullptr ? simulation_->world() : nullptr,
+                           simulation_ != nullptr ? simulation_->tick() : world::TickIndex{},
+                           frame.now);
         }
     }
 
@@ -123,6 +142,7 @@ public:
 private:
     std::string endpoint_;
     world_runtime::Simulation* simulation_ = nullptr;
+    ToolingSettings settings_;
     std::unique_ptr<network::Provider> provider_;
     std::unique_ptr<ToolingServer> server_;
     diagnostics::Emitter emitter_;
@@ -144,9 +164,10 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .identity = "rawframe.tooling.endpoint",
         .factory = &makeEndpoint,
         .scope = composition::LifetimeScope::World,
-        .requiredCapabilities = kNeeds,
         .optionalCapabilities = kMaybe,
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
+        // Its stop logs and lets its provider go; a client's composition,
+        // where it waits unselected, has little shutdown budget to spare.
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(20)},
         .observabilityIdentity = "tooling.endpoint",
         .budgetOwner = "network",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::Ingress),

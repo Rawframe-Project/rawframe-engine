@@ -20,6 +20,7 @@
 #include "rawframe/network_quic/registrar.h"
 #include "rawframe/render_canvas/registrar.h"
 #include "rawframe/render_scene/registrar.h"
+#include "rawframe/view/preview.h"
 #include "rawframe/window/windows.h"
 #include "rawframe/window_host/window_host.h"
 #include "rawframe/world_animation/registrar.h"
@@ -28,6 +29,8 @@
 #include "rawframe/world_localization/registrar.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
+#include "rawframe/world_tooling/preview.h"
+#include "rawframe/world_tooling/registrar.h"
 #include "rawframe/world_ui/registrar.h"
 
 #if RAWFRAME_CLIENT_DRAWS
@@ -38,6 +41,8 @@
 
 #include <array>
 #include <cstdio>
+#include <numbers>
+#include <optional>
 
 namespace {
 
@@ -49,12 +54,13 @@ constexpr std::size_t kDrawing = 3;
 constexpr std::size_t kDrawing = 0;
 #endif
 
-constexpr std::array<composition::RegistrarEntry, 12 + kDrawing> kRegistrars = {
+constexpr std::array<composition::RegistrarEntry, 13 + kDrawing> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"network_quic", &network_quic::registerParticipants, network_quic::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
     composition::RegistrarEntry{"render_canvas", &render_canvas::registerParticipants, render_canvas::kScopes},
     composition::RegistrarEntry{"world_ui", &world_ui::registerParticipants, world_ui::kScopes},
+    composition::RegistrarEntry{"world_tooling", &world_tooling::registerParticipants, world_tooling::kScopes},
     composition::RegistrarEntry{"render_scene", &render_scene::registerParticipants, render_scene::kScopes},
     composition::RegistrarEntry{"world_animation", &world_animation::registerParticipants, world_animation::kScopes},
     composition::RegistrarEntry{"world_audio", &world_audio::registerParticipants, world_audio::kScopes},
@@ -72,8 +78,36 @@ constexpr std::array<composition::RegistrarEntry, 12 + kDrawing> kRegistrars = {
 #endif
 };
 
+/// A tooling client's look onto the preview's camera (D432): the client's
+/// own tooling endpoint hands it what an author looks from, and the scene
+/// renderer looks through the camera.
+class Previewer final : public world_tooling::Previewer {
+public:
+    bool look(const std::optional<world_tooling::Look>& look) override {
+        if (!look.has_value()) {
+            camera.look(std::nullopt);
+            return true;
+        }
+        const std::optional<view::Perspective> kView =
+            view::lookingAt(look->eye, look->target, static_cast<float>(look->fieldOfView * std::numbers::pi / 180));
+        if (!kView.has_value()) {
+            return false;
+        }
+        camera.look(kView);
+        return true;
+    }
+
+    view::PreviewCamera camera;
+};
+
 host::HostExit play(const host::HostRequest& request) noexcept {
-    window_host::WindowHost client{request};
+    Previewer previewer;
+    window_host::WindowHost client{
+        request,
+        window_host::WindowHostSettings{
+            .lent = {composition::LentCapability{view::kPreviewCamera.name, composition::provideAs(previewer.camera)},
+                     composition::LentCapability{world_tooling::kPreviewer.name,
+                                                 composition::provideAs<world_tooling::Previewer>(previewer)}}}};
     const result::Status kRan = window::run(client, window::RunSettings{});
     if (client.exit().has_value()) {
         return *client.exit();
@@ -96,5 +130,9 @@ int main(int argc, char** argv) {
                           {.name = "rawframe-client",
                            .role = composition::TargetRole::Client,
                            .registrars = kRegistrars,
-                           .drive = &play});
+                           .drive = &play,
+                           // Its participants' stop budgets came to the
+                           // default's whole 5 s before a preview's tooling
+                           // endpoint joined them (D432).
+                           .defaultShutdownBudgetMs = 5500});
 }

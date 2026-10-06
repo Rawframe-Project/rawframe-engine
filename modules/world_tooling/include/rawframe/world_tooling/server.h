@@ -17,7 +17,8 @@
 // A wrong token or version, or anything else first, is answered with an
 // error record and the connection closed; so is a connection silent past
 // the hello's deadline. Every client the token admits holds the endpoint's
-// grants: in generation 1, `inspect`, which reads and never changes.
+// grants: `inspect`, which reads and never changes, and `view` (D432), which
+// moves a preview's camera and nothing else.
 //
 //   {"kind":"tooling.status","id":2}
 //     answer: {"kind":"tooling.status","tick":..,"entities":..,
@@ -28,7 +29,11 @@
 //   {"kind":"tooling.read_entity","id":4,"entity":"5:1"}
 //     answer: {"kind":"tooling.entity","entity":"5:1",
 //              "components":[{"name":"..","fields":{"x":1.5,"kind":"open","owner":"2:1"}},..]}
-//   {"kind":"tooling.end","id":5}
+//   {"kind":"tooling.look","id":5,"view":{"eye":[0,8,10],"target":[0,0,0],"fieldOfView":60}}
+//     answer: {"kind":"tooling.looking","previewing":true}; a `view` of null
+//     gives the player's camera back. Refused where the Runtime has no
+//     preview camera (a dedicated server, a client lending none).
+//   {"kind":"tooling.end","id":6}
 //     answer: {"kind":"tooling.ended"}, and the server closes.
 //
 // An entity is named `slot:generation` (D409). `entities` lists the living
@@ -49,6 +54,7 @@
 #include "rawframe/world/time.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_runtime/component_fields.h"
+#include "rawframe/world_tooling/preview.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -63,6 +69,8 @@ inline constexpr std::uint32_t kToolingProtocolVersion = 1;
 struct ToolingGrants {
     /// Read the World and the Runtime; change nothing.
     bool inspect = false;
+    /// Move a preview's camera (D432).
+    bool view = false;
 };
 
 struct ToolingSettings {
@@ -76,6 +84,9 @@ struct ToolingSettings {
     /// The World's components field by field, if the composition has them;
     /// it outlives the server.
     const world_runtime::ComponentFields* fields = nullptr;
+    /// Where `tooling.look` goes, where the Runtime shows a preview; it
+    /// outlives the server.
+    Previewer* previewer = nullptr;
 };
 
 /// The provider bounds a tooling endpoint asks for, `clients` at once.

@@ -4,6 +4,8 @@
 #include "rawframe/world_tooling/errors.h"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <optional>
@@ -70,6 +72,41 @@ std::string entityName(world::EntityHandle entity) {
 }
 
 /// `slot:generation`, both decimal.
+/// What `tooling.look` asks: an eye looking at a target with a field of
+/// view in degrees (1 to 179), or none to give the player's camera back;
+/// nothing, with `refusal` said, for a record out of form (D432).
+std::optional<std::optional<Look>> lookOf(const Value& record, std::string& refusal) {
+    const Value* kView = record.find("view");
+    if (kView != nullptr && kView->isNull()) {
+        return std::optional<Look>{};
+    }
+    const auto kPoint = [](const Value* point) -> std::optional<std::array<double, 3>> {
+        if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
+            return std::nullopt;
+        }
+        std::array<double, 3> at{};
+        for (std::size_t each = 0; each < 3; ++each) {
+            const std::optional<double> kNumber = point->items()[each].real();
+            if (!kNumber.has_value() || !std::isfinite(*kNumber) || std::abs(*kNumber) > 1e6) {
+                return std::nullopt;
+            }
+            at[each] = *kNumber;
+        }
+        return at;
+    };
+    const bool kObject = kView != nullptr && kView->kind() == Value::Kind::Object && kView->names().size() == 3;
+    const auto kEye = kObject ? kPoint(kView->find("eye")) : std::nullopt;
+    const auto kTarget = kObject ? kPoint(kView->find("target")) : std::nullopt;
+    const Value* kAngle = kObject ? kView->find("fieldOfView") : nullptr;
+    const std::optional<double> kDegrees = kAngle != nullptr ? kAngle->real() : std::nullopt;
+    if (!kEye.has_value() || !kTarget.has_value() || !kDegrees.has_value() || !(*kDegrees >= 1 && *kDegrees <= 179)) {
+        refusal = "view is null, or an eye and a target of three numbers within a million metres and a fieldOfView "
+                  "of 1 to 179 degrees";
+        return std::nullopt;
+    }
+    return std::optional<Look>{Look{.eye = *kEye, .target = *kTarget, .fieldOfView = *kDegrees}};
+}
+
 std::optional<world::EntityHandle> entityNamed(std::string_view text) {
     const std::size_t kColon = text.find(':');
     if (kColon == std::string_view::npos || kColon == 0 || kColon + 1 == text.size()) {
@@ -365,6 +402,9 @@ struct ToolingServer::State {
             if (settings.grants.inspect) {
                 grants.push(Value::string("inspect"));
             }
+            if (settings.grants.view) {
+                grants.push(Value::string("view"));
+            }
             Value made = Value::object();
             made.add("kind", Value::string("tooling.welcome"));
             made.add("protocolVersion", Value::integer(kToolingProtocolVersion));
@@ -411,6 +451,31 @@ struct ToolingServer::State {
             } else {
                 send(connection, client, replyLine(id, "answer", entity(*world, *kHandle)));
             }
+            return;
+        }
+        if (kind != nullptr && *kind == "tooling.look") {
+            if (!settings.grants.view) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "looking needs the view grant"));
+                return;
+            }
+            if (settings.previewer == nullptr) {
+                send(connection, client, errorLine(id, ToolingError::NotFound, "this Runtime shows no preview"));
+                return;
+            }
+            std::string refusal;
+            const std::optional<std::optional<Look>> kLook = lookOf(*parsed, refusal);
+            if (!kLook.has_value()) {
+                send(connection, client, errorLine(id, ToolingError::Malformed, refusal));
+                return;
+            }
+            if (!settings.previewer->look(*kLook)) {
+                send(connection, client, errorLine(id, ToolingError::Malformed, "a view's eye is at its target"));
+                return;
+            }
+            Value made = Value::object();
+            made.add("kind", Value::string("tooling.looking"));
+            made.add("previewing", Value::boolean(kLook->has_value()));
+            send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }
         if (kind != nullptr && *kind == "tooling.end") {

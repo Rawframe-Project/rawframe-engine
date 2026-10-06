@@ -9,9 +9,11 @@
 #include "rawframe/world_tooling/server.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -218,6 +220,69 @@ RAWFRAME_TEST(AVerbBeyondTheGrantsIsRefusedAndTheClientKept) {
     RAWFRAME_EXPECT(provider.sent[1].find(R"("grants":[])") != std::string::npos);
     RAWFRAME_EXPECT(provider.sent[1].find(R"("id":2,"error":{"code":"not_granted")") != std::string::npos);
     RAWFRAME_EXPECT(provider.closed.empty());
+}
+
+namespace {
+
+/// A preview that keeps what it is told, refusing an eye at its target.
+class KeptPreview final : public Previewer {
+public:
+    bool look(const std::optional<Look>& look) override {
+        if (look.has_value() && look->eye == look->target) {
+            return false;
+        }
+        kept = look;
+        return true;
+    }
+    std::optional<Look> kept;
+};
+
+} // namespace
+
+RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
+    FedProvider provider;
+    KeptPreview preview;
+    auto server = *ToolingServer::create(provider, {.token = kToken, .grants = {.view = true}, .previewer = &preview});
+    provider.accept(1);
+    provider.say(1,
+                 hello() +
+                     R"({"kind":"tooling.look","id":2,"view":{"eye":[0,10,10],"target":[0,0,0],"fieldOfView":90}})"
+                     "\n"
+                     R"({"kind":"tooling.look","id":3,"view":{"eye":[1,1,1],"target":[1,1,1],"fieldOfView":60}})"
+                     "\n"
+                     R"({"kind":"tooling.look","id":4,"view":{"eye":[0,1,0],"target":[0,0,0]}})"
+                     "\n"
+                     R"({"kind":"tooling.status","id":5})"
+                     "\n");
+    server->serve(nullptr, {}, {});
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("grants":["view"])") != std::string::npos);
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":2,"answer":{"kind":"tooling.looking","previewing":true})") !=
+                    std::string::npos);
+    RAWFRAME_EXPECT(preview.kept.has_value() && preview.kept->eye == (std::array<double, 3>{0, 10, 10}) &&
+                    preview.kept->fieldOfView == 90);
+    // An eye at its target, a view out of form, and a verb past the grant
+    // refused; the camera kept.
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":3,"error":{"code":"malformed")") != std::string::npos);
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":4,"error":{"code":"malformed")") != std::string::npos);
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":5,"error":{"code":"not_granted")") != std::string::npos);
+    RAWFRAME_EXPECT(preview.kept.has_value() && preview.kept->fieldOfView == 90);
+    // A null view gives the player's camera back.
+    provider.say(1,
+                 R"({"kind":"tooling.look","id":6,"view":null})"
+                 "\n");
+    server->serve(nullptr, {}, {});
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":6,"answer":{"kind":"tooling.looking","previewing":false})") !=
+                        std::string::npos &&
+                    !preview.kept.has_value());
+    // Granted but with no preview here: not found.
+    FedProvider other;
+    auto bare = *ToolingServer::create(other, {.token = kToken, .grants = {.view = true}});
+    other.accept(1);
+    other.say(1,
+              hello() + R"({"kind":"tooling.look","id":2,"view":null})"
+                        "\n");
+    bare->serve(nullptr, {}, {});
+    RAWFRAME_EXPECT(other.sent[1].find(R"("id":2,"error":{"code":"not_found")") != std::string::npos);
 }
 
 namespace {

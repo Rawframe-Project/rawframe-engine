@@ -6,7 +6,7 @@ endif()
 
 rawframe_host(NAME client OUTPUT rawframe-client
     SOURCES src/main.cpp
-    DEPS window_host host game_content input_kest network_quic window world_animation world_audio render_canvas world_ui render_scene world_kest world_localization
+    DEPS window_host host view game_content input_kest network_quic world_tooling window world_animation world_audio render_canvas world_ui render_scene world_kest world_localization
          world_replication world_runtime composition diagnostics result base
 )
 # Where Maul RHI is built, the client draws its scene and canvas on the one
@@ -123,5 +123,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"output_record\"[^\n]*\"revision\":1,\"offered\":\"sdr_srgb[^\"]*\",\"active\":\"sdr_srgb\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"historyReused\":[1-9][0-9]+,\"framesMetered\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
+        # The plaza previewed as an authoring client would (D432): the
+        # client's own tooling endpoint, with the view grant, takes a look
+        # from above, and frames are drawn through it until it gives the
+        # player's camera back.
+        add_test(NAME client_previews_plaza
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/previewed.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> $<TARGET_FILE:rawframe_host_author>
+                         ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf games/plaza/plaza.game
+                         ${CMAKE_CURRENT_BINARY_DIR}/plaza_server.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_previews_plaza PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"id\":1,\"answer\":{\"kind\":\"tooling.looking\",\"previewing\":true}.*\"id\":2,\"answer\":{\"kind\":\"tooling.looking\",\"previewing\":false}.*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
     endif()
 endif()
