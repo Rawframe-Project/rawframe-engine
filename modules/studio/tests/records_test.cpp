@@ -2,6 +2,7 @@
 // a field's text made a value of its kind or refused, an outcome read, and
 // a minted identity in the form the session reads.
 
+#include "../src/play.h"
 #include "../src/records.h"
 #include "rawframe/test/test.h"
 
@@ -128,4 +129,22 @@ RAWFRAME_TEST(AComponentsFieldsAreTheCatalogsWithTheScenesValuesThenTheUnknown) 
     // No type in the catalog: what the scene sets alone.
     RAWFRAME_EXPECT(fieldsShown(nullptr, &*kRead).size() == 3);
     RAWFRAME_EXPECT(fieldsShown(&body, nullptr).size() == 3);
+}
+
+RAWFRAME_TEST(APlayedProgramsSettingsKeepWhatTheyAreGivenAndAddWhatTheyLack) {
+    const std::string kGiven =
+        "# a client of the plaza\nbots.player = true\nrender.device  =  any\ncontent.root = /c\n";
+    const std::string kMade = settingsOf(kGiven,
+                                         {{"render.device", "vulkan"}, {"bots.player", "false"}, {"bots.count", "1"}},
+                                         {{"tooling.grants", "view"}});
+    RAWFRAME_EXPECT(kMade.starts_with(kGiven));
+    // A default the given set is left out; one they lack is added.
+    RAWFRAME_EXPECT(kMade.find("render.device = vulkan") == std::string::npos);
+    RAWFRAME_EXPECT(kMade.find("bots.player = false") == std::string::npos);
+    RAWFRAME_EXPECT(kMade.find("bots.count = 1\n") != std::string::npos);
+    // Studio's own are always said.
+    RAWFRAME_EXPECT(kMade.ends_with("tooling.grants = view\n"));
+    // A key that only begins like one is not it.
+    RAWFRAME_EXPECT(settingsOf("bots.count_extra = 2\n", {{"bots.count", "1"}}, {}).find("bots.count = 1") !=
+                    std::string::npos);
 }

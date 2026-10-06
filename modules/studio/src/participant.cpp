@@ -1,4 +1,5 @@
 #include "generated/studio_font.h"
+#include "play.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/authoring_session/session.h"
 #include "rawframe/composition/composition.h"
@@ -106,6 +107,25 @@ public:
         if (kEndpoint.has_value()) {
             preview_ = Preview{std::string{*kEndpoint}, std::string{*kPin}, std::string{*kToken}};
         }
+        // A game Studio plays itself to preview it (D445).
+        const auto kPlayServer = configuration.path("studio.play.server");
+        const auto kPlayClient = configuration.path("studio.play.client");
+        if (kPlayServer.has_value() != kPlayClient.has_value()) {
+            return misconfigured("playing needs studio.play.server and studio.play.client together");
+        }
+        if (kPlayServer.has_value()) {
+            std::error_code error;
+            const std::filesystem::path kTemporary = std::filesystem::temp_directory_path(error);
+            play_ = PlaySettings{
+                .server = std::string{*kPlayServer},
+                .client = std::string{*kPlayClient},
+                .game = std::filesystem::absolute(kDescription, error),
+                .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
+                .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")},
+                .directory =
+                    std::string{configuration.path("studio.play.directory")
+                                    .value_or((kTemporary / ("rawframe-studio-" + mintedIdentity())).string())}};
+        }
         session_ = std::make_unique<authoring_session::Session>(kDescription, kRoot);
         bool ended = false;
         const std::string kWelcome =
@@ -170,6 +190,7 @@ public:
         typed_.clear();
         // Scroll steps ease over the layouts that follow, by this clock.
         const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
+        attachPlayed(kSeconds);
         for (const auto& [kX, kY, kDeltaX, kDeltaY] : wheels_) {
             ++wheeled_;
             static_cast<void>(tree_->wheel(root_, kX, kY, kDeltaX, kDeltaY, kSeconds));
@@ -199,6 +220,9 @@ public:
             typing_->focus(std::nullopt);
             typing_->answer({});
         }
+        if (playing_.has_value()) {
+            playing_->stop();
+        }
         // Ending lets a preview go, the player's camera given back (D433).
         bool ended = false;
         static_cast<void>(session_->answer(R"({"kind":"authoring.end","id":0})", ended));
@@ -222,6 +246,8 @@ public:
              diagnostics::field("wheeled", wheeled_),
              diagnostics::field("componentsScrolled", static_cast<double>(tree_->scrollOf(componentsColumn_)[1])),
              diagnostics::field("previewing", previewing_),
+             diagnostics::field("played", played_),
+             diagnostics::field("playing", playing_.has_value() && playing_->running()),
              diagnostics::field("status", std::string_view{status_}),
              diagnostics::field("framesDrawn", framesDrawn_),
              diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),
@@ -317,6 +343,11 @@ private:
         RAWFRAME_TRY_ASSIGN(const ui::Node kEnd,
                             box(kHeader, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
         RAWFRAME_TRY_ASSIGN(statusNode_, box(kEnd, ui::Layout{.padding = {0, 2, 8, 2}}, 0));
+        if (play_.has_value()) {
+            RAWFRAME_TRY_ASSIGN(playNode_,
+                                box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {12, 2, 10, 2}}, kRow));
+            RAWFRAME_TRY(words(playNode_, "Play", kText, 14));
+        }
         RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(showHistory());
@@ -391,7 +422,14 @@ private:
         }
         // The row is the node hit or the one its words are on.
         const ui::Node kNode = *kHit->node;
-        if (kNode == undoNode_ || kNode == redoNode_) {
+        if (play_.has_value() && kNode == playNode_) {
+            endEdit();
+            if (playing_.has_value()) {
+                stopPlaying();
+            } else {
+                startPlaying();
+            }
+        } else if (kNode == undoNode_ || kNode == redoNode_) {
             endEdit();
             step(kNode == undoNode_ ? "authoring.undo" : "authoring.redo");
         } else if (kNode == newNode_ && !scene_.empty()) {
@@ -864,6 +902,75 @@ private:
         return words(redoNode_, "Redo", redoable_ > 0 ? kText : kQuiet, 14);
     }
 
+    /// The game played to preview it: its server and client started, the
+    /// client attached as the chosen scene's preview once it says who it is.
+    void startPlaying() {
+        if (stopping_.has_value()) {
+            say("the last game is still stopping");
+            return;
+        }
+        auto started = Play::start(*play_);
+        if (!started.has_value()) {
+            say(std::string{started.error().description()});
+            return;
+        }
+        playing_.emplace(std::move(*started));
+        ++played_;
+        nextAttach_ = 0;
+        static_cast<void>(words(playNode_, "Stop", kText, 14));
+        say("starting the game");
+    }
+
+    /// The game let go and asked to stop.
+    void stopPlaying() {
+        if (previewing_ && !scene_.empty()) {
+            static_cast<void>(ask(previewRecord(next(), scene_, nullptr)));
+        }
+        previewing_ = false;
+        preview_.reset();
+        // Kept until both have ended: dropping a process kills it, and a
+        // stopping one ends as a Host does, its records written.
+        playing_->stop();
+        stopping_ = std::move(playing_);
+        playing_.reset();
+        static_cast<void>(words(playNode_, "Play", kText, 14));
+        say("game stopped");
+    }
+
+    /// While the game plays and no preview is live, its client attached as
+    /// the chosen scene's preview, tried twice a second: it says who it is,
+    /// then admits a session once its player is in.
+    void attachPlayed(double seconds) {
+        if (stopping_.has_value() && stopping_->ended()) {
+            stopping_.reset();
+        }
+        if (!playing_.has_value() || previewing_ || seconds < nextAttach_) {
+            return;
+        }
+        nextAttach_ = seconds + 0.5;
+        if (!playing_->running()) {
+            say("the game ended");
+            return;
+        }
+        const std::optional<Preview> kPreview = playing_->preview();
+        if (!kPreview.has_value()) {
+            return;
+        }
+        preview_ = kPreview;
+        if (scene_.empty()) {
+            return;
+        }
+        const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));
+        previewing_ = kAttached.previewing;
+        if (kAttached.view.has_value()) {
+            view_ = kAttached.view;
+            showViewText();
+        }
+        if (previewing_) {
+            say("previewing " + scene_);
+        }
+    }
+
     /// `text` in the header's status.
     void say(std::string text) {
         status_ = std::move(text);
@@ -897,6 +1004,12 @@ private:
     std::vector<ui::Node> viewRows_;
     std::vector<FieldRow> viewFields_;
     std::uint64_t viewsSet_ = 0;
+    std::optional<PlaySettings> play_;
+    std::optional<Play> playing_;
+    std::optional<Play> stopping_;
+    ui::Node playNode_{};
+    std::uint64_t played_ = 0;
+    double nextAttach_ = 0;
     std::vector<std::array<float, 4>> wheels_;
     std::uint64_t wheeled_ = 0;
     std::chrono::steady_clock::time_point began_ = std::chrono::steady_clock::now();
