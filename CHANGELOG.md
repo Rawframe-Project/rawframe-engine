@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- A server watching its game's sources (`kest.reload_every`) follows the game's scenes too: a scene edited while the game runs, by `rawframe-author session` or an editor, reaches the World as the difference between what it authored and what it authors now, entities made and destroyed and values written only where the scene changed them.
 - The tooling endpoint lists a World's entities a page at a time (`tooling.entities`, by component if asked) and reads one's components by field name (`tooling.read_entity`), from `world_runtime::ComponentFields`, which a Kest game provides from its program's layouts.
 - A running dedicated server can be inspected through a tooling endpoint (`tooling.endpoint`, `tooling.token_file`): a protocol of its own (ALPN `rawframe-tooling-v1`) beside the game's, a client admitted by its token, reading the World's status. `rawframe-author connect <endpoint> <pin file> <token file>` is its client, records a line on standard input. A provider profile names its application protocol (`network::ProviderProfile::application`), and a listener refuses connectors speaking another.
 - `rawframe-author session <game> [<scene root>]` holds an authoring session on standard input and output, one JSON record a line each way: scenes stay open with their undo histories between requests, and `undo` and `redo` step them. The records carry the same request, query, and discovery documents as the other verbs.

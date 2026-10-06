@@ -45,6 +45,15 @@ struct SceneSpawns {
     std::vector<base::Bits128> ids;
 };
 
+/// Where one of the game's scenes lies among the spawns `addScenes`
+/// appends (D410): its path, its first spawn, and each spawn's entity id in
+/// the scene, in order.
+struct SceneRange {
+    std::string path;
+    std::size_t first = 0;
+    std::vector<base::Bits128> ids;
+};
+
 /// Reads scenes for one game: `layouts` in the order of `game.components`.
 /// Both must outlive it.
 class GameScenes {
@@ -61,10 +70,18 @@ public:
     [[nodiscard]] result::Result<SceneSpawns>
     sceneSpawns(const GameFiles& files, std::string_view sceneText, const std::string& path) const;
 
+    /// A scene's text read as `sceneSpawns` reads it, its persistent
+    /// entities named as `addScenes` names them.
+    [[nodiscard]] result::Result<SceneSpawns>
+    namedSceneSpawns(const GameFiles& files, std::string_view sceneText, const std::string& path) const;
+
     /// Appends each scene the description names to `spawns`, its persistent
-    /// entities named and its references to `references`.
-    [[nodiscard]] result::Status
-    addScenes(const GameFiles& files, std::vector<GameSpawn>& spawns, std::vector<SceneReference>& references) const;
+    /// entities named and its references to `references`, and where each
+    /// scene lies among them to `ranges` if given.
+    [[nodiscard]] result::Status addScenes(const GameFiles& files,
+                                           std::vector<GameSpawn>& spawns,
+                                           std::vector<SceneReference>& references,
+                                           std::vector<SceneRange>* ranges = nullptr) const;
     /// Appends each scene a mod contributes (D180): every entity one spawn
     /// holding the point's component and nothing else, so a mod adds values
     /// and never a behavior, a reference, or a persistent name.

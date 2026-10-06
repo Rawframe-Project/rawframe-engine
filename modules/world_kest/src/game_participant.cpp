@@ -32,6 +32,7 @@
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_runtime/checkpoint.h"
 #include "rawframe/world_runtime/save.h"
+#include "scene_follower.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -64,6 +65,10 @@ constexpr kest::MachineLimits kPresentationLimits{.heapBytes = std::size_t{4} <<
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
 constexpr diagnostics::EventIdentity kGameReloaded{"world_kest", "game_reloaded"};
 constexpr diagnostics::EventIdentity kReloadRefused{"world_kest", "game_reload_refused"};
+#if RAWFRAME_FILE_SYSTEM
+constexpr diagnostics::EventIdentity kSceneFollowed{"world_kest", "scene_followed"};
+constexpr diagnostics::EventIdentity kSceneRefused{"world_kest", "scene_refused"};
+#endif
 constexpr diagnostics::EventIdentity kAdmissionFailed{"world_kest", "admission_rule_failed"};
 constexpr diagnostics::EventIdentity kKestSummary{"world_kest", "kest_summary"};
 
@@ -148,7 +153,7 @@ public:
         }
         fieldSets_ = componentFieldSets(game_, layouts_);
         const GameScenes kScenes{game_, layouts_};
-        RAWFRAME_TRY(kScenes.addScenes(files, game_.spawns, references_));
+        RAWFRAME_TRY(kScenes.addScenes(files, game_.spawns, references_, &sceneRanges_));
         RAWFRAME_TRY(kScenes.addModScenes(files, game_.spawns));
         RAWFRAME_TRY(kScenes.addPrefabs(files, prefabs_));
         RAWFRAME_TRY(planReplication(files.digest()));
@@ -341,6 +346,7 @@ public:
             }
         }
         std::size_t spawned = 0;
+        std::vector<SpawnValues> authored(game_.spawns.size());
         for (std::size_t index = 0; index < game_.spawns.size(); ++index) {
             RAWFRAME_TRY_ASSIGN(SpawnValues spawnedValues, spawnValues(game_.spawns[index]));
             for (const SceneReference& reference : references_) {
@@ -354,6 +360,7 @@ public:
                 std::memcpy(
                     kValue->second.data() + reference.generation, &kTarget.generation, sizeof kTarget.generation);
             }
+            authored[index] = spawnedValues;
             std::vector<std::pair<schema::ComponentRuntimeId, std::vector<std::byte>>> values;
             for (const auto& [kComponent, kBytes] : spawnedValues) {
                 RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, world.registry().find(kComponent));
@@ -366,6 +373,9 @@ public:
                 ++spawned;
             }
         }
+        // A game's own scenes are followed where its sources are watched
+        // (D410).
+        scenes_ = SceneFollower::spawned(*files_, sceneRanges_, made, authored);
         context.emitter().log(diagnostics::Severity::Info,
                               kGameLoaded,
                               "a Kest game was loaded into the World",
@@ -421,6 +431,7 @@ public:
         if (!files_->directory()) {
             return;
         }
+        followScenes(*files_->directory());
         const auto kWritten = newestSource(*files_->directory());
         if (!kWritten || kWritten == sourcesWritten_) {
             return;
@@ -461,6 +472,33 @@ public:
         }
         emitter_.log(diagnostics::Severity::Info, kGameReloaded, "the Kest program was reloaded");
     }
+
+#if RAWFRAME_FILE_SYSTEM
+    /// Applies to the World what changed in the game's scenes (D410).
+    void followScenes(const std::filesystem::path& directory) noexcept {
+        std::vector<result::Error> refusals;
+        const auto kChanges = scenes_.follow(*simulation_->world(),
+                                             GameScenes{game_, layouts_},
+                                             *files_,
+                                             readScenes(directory, scenes_.paths()),
+                                             refusals);
+        for (const SceneChanges& changes : kChanges) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kSceneFollowed,
+                         "a changed scene was applied to the World",
+                         {diagnostics::field("scene", std::string_view{changes.path}),
+                          diagnostics::field("created", changes.created),
+                          diagnostics::field("destroyed", changes.destroyed),
+                          diagnostics::field("changed", changes.changed)});
+        }
+        for (const result::Error& refusal : refusals) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kSceneRefused,
+                         "a changed scene was not applied; the World keeps what it had",
+                         {diagnostics::field("error", refusal.description())});
+        }
+    }
+#endif
 
     std::span<const schema::ComponentDescriptor> components() const noexcept override {
         return descriptors_;
@@ -895,6 +933,8 @@ private:
     std::optional<physics3d::Physics3DSettings> predictedPhysics3d_;
     std::vector<SpawnValues> level_;
     std::vector<SceneReference> references_;
+    std::vector<SceneRange> sceneRanges_;
+    SceneFollower scenes_;
     std::vector<KestPrefab> prefabs_;
     /// Each Kest component's entity fields, which its declaration views.
     std::vector<std::vector<std::size_t>> entityOffsets_;

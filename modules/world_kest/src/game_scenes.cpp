@@ -185,13 +185,24 @@ GameScenes::sceneSpawns(const GameFiles& files, std::string_view sceneText, cons
     return made;
 }
 
+result::Result<SceneSpawns>
+GameScenes::namedSceneSpawns(const GameFiles& files, std::string_view sceneText, const std::string& path) const {
+    RAWFRAME_TRY_ASSIGN(SceneSpawns scene, sceneSpawns(files, sceneText, path));
+    RAWFRAME_TRY(namePersistent(files, path, scene));
+    return scene;
+}
+
 result::Status GameScenes::addScenes(const GameFiles& files,
                                      std::vector<GameSpawn>& spawns,
-                                     std::vector<SceneReference>& references) const {
+                                     std::vector<SceneReference>& references,
+                                     std::vector<SceneRange>* ranges) const {
     for (const std::string& path : game_.scenes) {
         RAWFRAME_TRY_ASSIGN(SceneSpawns scene, sceneSpawns(files, path));
         RAWFRAME_TRY(namePersistent(files, path, scene));
         const std::size_t kFirst = spawns.size();
+        if (ranges != nullptr) {
+            ranges->push_back(SceneRange{.path = path, .first = kFirst, .ids = scene.ids});
+        }
         for (SceneReference& reference : scene.references) {
             reference.spawn += kFirst;
             reference.target += kFirst;

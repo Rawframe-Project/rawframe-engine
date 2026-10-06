@@ -3,7 +3,7 @@
 # succeeds), and a participant that loads a game description. Separate from
 # rawframe.world and rawframe.kest because neither should know the other.
 rawframe_module(NAME world_kest
-    SOURCES src/animation_doors.cpp src/animation_plan.cpp src/cooked_game.cpp src/cooked_mod.cpp src/effect_doors.cpp src/game.cpp src/admission.cpp src/game_files.cpp src/game_files_participant.cpp src/game_participant.cpp src/game_persistence.cpp src/field_kinds.cpp src/game_scenes.cpp src/kest_systems.cpp src/kest_timing.cpp src/layouts.cpp src/message_doors.cpp src/mod.cpp src/navigation.cpp src/mod_api.cpp src/mod_handlers.cpp src/mod_services.cpp src/mod_set.cpp src/spawn_scene.cpp src/physics_doors.cpp src/player_doors.cpp src/predictor.cpp src/presentation.cpp src/regions.cpp src/replication.cpp
+    SOURCES src/animation_doors.cpp src/animation_plan.cpp src/cooked_game.cpp src/cooked_mod.cpp src/effect_doors.cpp src/game.cpp src/admission.cpp src/game_files.cpp src/game_files_participant.cpp src/game_participant.cpp src/game_persistence.cpp src/field_kinds.cpp src/game_scenes.cpp src/kest_systems.cpp src/kest_timing.cpp src/layouts.cpp src/message_doors.cpp src/mod.cpp src/navigation.cpp src/mod_api.cpp src/mod_handlers.cpp src/mod_services.cpp src/mod_set.cpp src/spawn_scene.cpp src/physics_doors.cpp src/player_doors.cpp src/predictor.cpp src/presentation.cpp src/regions.cpp src/replication.cpp src/scene_follower.cpp
     DEPS world_animation animation mesh scene game_content content kest_library navigation physics2d physics3d physics world_replication world_runtime world_save world_snapshot kest network world composition schema execution diagnostics document result base
 )
 
