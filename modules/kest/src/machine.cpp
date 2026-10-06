@@ -147,9 +147,11 @@ result::Result<std::unique_ptr<Machine>> Machine::start(std::shared_ptr<const Pr
         const std::string_view kName = kest_build_extern(kBuild, at);
         const Door* const kDoor = doors.find(kName);
         if (kDoor == nullptr) {
-            return refuse(result::ErrorClass::NotFound,
-                          KestError::UnknownDoor,
-                          "the program asks for a door this table does not hold");
+            return std::unexpected<result::Error>{refuse(result::ErrorClass::NotFound,
+                                                         KestError::UnknownDoor,
+                                                         "the program asks for a door this table does not hold")
+                                                      .error()
+                                                      .withContext("door", kName)};
         }
         DoorCall::Shape shape;
         if (!shapeOf(kBuild, at, *kDoor, shape)) {
