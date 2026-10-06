@@ -4,6 +4,7 @@
 // the game's action set, committed per tick, and the game's Kest sample
 // function turning committed actions into its input component. Client only.
 
+#include "rawframe/diagnostics/emitter.h"
 #include "rawframe/input/feed.h"
 #include "rawframe/input/mapper.h"
 #include "rawframe/kest/doors.h"
@@ -146,6 +147,9 @@ struct SourceSettings {
     /// first local player takes what they give, and every player's keyboard
     /// actions are gated while one holds focus; outlives the sources.
     view::UiTyping* typing = nullptr;
+    /// Where a local player's source says, as it ends, what its devices
+    /// gave and its mapper did with them.
+    diagnostics::Emitter emitter;
 };
 
 /// The input sources of a game, and its player's haptics.

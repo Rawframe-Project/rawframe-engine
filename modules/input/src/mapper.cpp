@@ -214,6 +214,7 @@ struct Mapper::State {
     }
 
     void pushEdge(Player& player, std::size_t action, bool pressed) {
+        statistics.actionPresses += pressed ? 1 : 0;
         player.pendingTick.push_back(Edge{.action = action, .pressed = pressed, .ordinal = player.tickOrdinal++});
         player.frame.push_back(Edge{.action = action, .pressed = pressed, .ordinal = player.frameOrdinal++});
     }
@@ -335,6 +336,7 @@ struct Mapper::State {
     /// Every control of the player's devices at rest. The pointer is a
     /// place, not something held: it stays where it was last told (D367).
     void releasePlayer(std::uint8_t slot) {
+        ++statistics.releases;
         for (auto& [kKey, value] : held) {
             const Device* device = deviceOf(DeviceId{kKey.first});
             if (device != nullptr && device->player == slot && !positional(kKey.second)) {
@@ -392,6 +394,7 @@ struct Mapper::State {
             // Read as rest until it comes to rest: the release is the UI's
             // too.
             state.swallowed = true;
+            ++statistics.uiTaken;
         }
         evaluate(slot);
     }

@@ -20,6 +20,8 @@ namespace rawframe::input_kest {
 
 namespace {
 
+constexpr diagnostics::EventIdentity kInputSummary{"input", "input_summary"};
+
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, InputKestError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kInputKestDomain, code(error), why).error()};
 }
@@ -179,6 +181,7 @@ struct Shared {
     const view::PlayerViews* views = nullptr;
     const view::UiPointing* pointing = nullptr;
     view::UiTyping* typing = nullptr;
+    diagnostics::Emitter emitter;
     /// The game's commands the sample program lays out (D425).
     std::vector<world_kest::CommandKind> commands;
     /// Each effect kind's haptic output and how it is felt, by kind.
@@ -213,6 +216,28 @@ struct Routing {
 /// player, which pair themselves as they connect.
 class Source final : public world_replication::InputSource {
 public:
+    Source() = default;
+    Source(const Source&) = delete;
+    Source& operator=(const Source&) = delete;
+    /// A local player's source says what its devices gave and what its
+    /// mapper did with them: what a test that clicks and types reads when
+    /// a press reaches the game it should not have.
+    ~Source() override {
+        if (local_ && mapper_ != nullptr) {
+            const input::MapperStatistics& kMapped = mapper_->statistics();
+            emitter_.log(diagnostics::Severity::Info,
+                         kInputSummary,
+                         "what a local player's devices gave",
+                         {diagnostics::field("player", player_),
+                          diagnostics::field("actionPresses", kMapped.actionPresses),
+                          diagnostics::field("uiTaken", kMapped.uiTaken),
+                          diagnostics::field("releases", kMapped.releases),
+                          diagnostics::field("droppedEvents", kMapped.droppedEvents),
+                          diagnostics::field("unpairedEvents", kMapped.unpairedEvents),
+                          diagnostics::field("feedDropped", feed_ != nullptr ? feed_->dropped() : 0)});
+        }
+    }
+
     /// A bot's source with a seed, which sees no view; local player
     /// `player`'s without, its devices those `routing` gives it in `feed`.
     result::Status build(const Shared& shared,
@@ -221,6 +246,9 @@ public:
                          input::Feed* feed = nullptr,
                          std::size_t player = 0) {
         RAWFRAME_TRY_ASSIGN(mapper_, input::Mapper::create(shared.actions, {.players = 1}));
+        local_ = !seed.has_value();
+        player_ = player;
+        emitter_ = shared.emitter;
         if (seed.has_value()) {
             RAWFRAME_TRY(mapper_->pair(kKeyboard, input::DeviceClass::Keyboard, {}));
             RAWFRAME_TRY(mapper_->pair(kMouse, input::DeviceClass::Mouse, {}));
@@ -334,6 +362,9 @@ private:
     InputDoorContext doors_;
     ViewDoorContext view_;
     UiDoorContext ui_;
+    bool local_ = false;
+    std::size_t player_ = 0;
+    diagnostics::Emitter emitter_;
     view::UiTyping* typing_ = nullptr;
     view::UiTyping* submissions_ = nullptr;
     CommandDoorContext commands_;
@@ -514,6 +545,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.views = settings.views;
     shared.pointing = settings.pointing;
     shared.typing = settings.typing;
+    shared.emitter = settings.emitter;
     RAWFRAME_TRY_ASSIGN(shared.commands, world_kest::commandKindsOf(kGame, *shared.program, false));
     return std::unique_ptr<InputSources>{new Sources{std::move(shared)}};
 }

@@ -86,6 +86,12 @@ struct MapperStatistics {
     /// Events dropped, oldest first, from a full queue; each drop releases
     /// the player's controls so nothing stays held across the gap.
     std::uint64_t droppedEvents = 0;
+    /// Times a player's controls were all let go: asked for (focus lost,
+    /// the platform's records not fitting) or after a drop.
+    std::uint64_t releases = 0;
+    /// Presses the UI took (D421), and actions turned on.
+    std::uint64_t uiTaken = 0;
+    std::uint64_t actionPresses = 0;
 };
 
 class Mapper {

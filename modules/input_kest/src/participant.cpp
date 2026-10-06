@@ -60,6 +60,7 @@ public:
             return {};
         }
         SourceSettings settings{.game = game, .inputSize = plan->input()->size};
+        settings.emitter = context.emitter();
         if (context.has(kFeed.name)) {
             RAWFRAME_TRY_ASSIGN(settings.feed, context.capability(kFeed));
         }
