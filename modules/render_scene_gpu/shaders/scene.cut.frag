@@ -8,9 +8,18 @@
 
 #version 450
 
+// Every output of scene.vert, in its order, each read in main though this
+// entry needs only some: Direct3D 12 links stages by place, and an input
+// never read is left out of the entry when it is crossed to HLSL, so the
+// rest would not line up with the vertex entry's (D418).
+layout(location = 0) in vec3 inNormal;
 layout(location = 1) in vec4 inColor;
+layout(location = 2) in vec3 inPlaced;
+layout(location = 3) in vec3 inNow;
+layout(location = 4) in vec3 inBefore;
 layout(location = 5) flat in uint inMaterial;
 layout(location = 6) in vec2 inUv;
+layout(location = 7) in vec4 inTangent;
 
 // Every material's blob (D303), nine vectors each; the fourth holds the
 // opacity, the occlusion, the alpha cutoff, and the flags, the fifth the
@@ -25,6 +34,8 @@ layout(set = 0, binding = 11) uniform sampler baseSampler;
 
 void main()
 {
+    // Read for the interface alone (D418); nothing uses it.
+    const float kInterface = inNormal.x + inPlaced.x + inNow.x + inBefore.x + inTangent.x;
     const uint kAt = min(inMaterial, uint(materials.length()) / 9u - 1u) * 9u;
     const vec4 kRest = materials[kAt + 3u];
     // Where its texture is sampled: the coordinates scaled and moved (D311).
