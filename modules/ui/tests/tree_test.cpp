@@ -2,12 +2,16 @@
 // laid out in their parent's padding box, a column's share of its parent,
 // an automatic root fitting its content, an absolute node placed by its
 // anchor point and a detached one a root again, keys kept, values out of
-// range refused, a removed subtree's nodes stale, and a tree's looks drawn as
-// SPEC-0032's boxes in paint order.
+// range refused, a removed subtree's nodes stale, a tree's looks drawn as
+// SPEC-0032's boxes in paint order, and points hitting the topmost node
+// that takes part (D421): through containers, pass-through panels, and
+// past a modal layer.
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/errors.h"
 #include "rawframe/ui/tree.h"
+
+#include <limits>
 
 using namespace rawframe;
 using namespace rawframe::ui;
@@ -298,4 +302,62 @@ RAWFRAME_TEST(AGradientIsPaintedOverItsBoxsFill) {
                     kGradient.angle == 90 && kGradient.stops == 2 && kGradient.positions[1] == 1 &&
                     kGradient.colors[0] == (std::array<float, 4>{1, 0, 0, 1}) &&
                     kGradient.colors[1] == (std::array<float, 4>{0, 0, 1, 1}));
+}
+
+RAWFRAME_TEST(APointHitsTheTopmostNodeThatTakesPart) {
+    auto tree = Tree::create(16);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    // A screen, a panel on it, a button in the panel, and a dialog above
+    // them all.
+    const Node kScreen = *ui.add(1);
+    const Node kPanel = *ui.add(2);
+    const Node kButton = *ui.add(3);
+    const Node kDialog = *ui.add(4);
+    RAWFRAME_EXPECT(ui.attach(kScreen, kPanel).has_value());
+    RAWFRAME_EXPECT(ui.attach(kPanel, kButton).has_value());
+    RAWFRAME_EXPECT(ui.attach(kScreen, kDialog).has_value());
+    RAWFRAME_EXPECT(
+        ui.setLayout(kScreen, {.width = share(1), .height = share(1), .alignItems = Align::Start}).has_value());
+    RAWFRAME_EXPECT(
+        ui.setLayout(kPanel, {.width = pixels(200), .height = pixels(100), .padding = {10, 10, 10, 10}}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kButton, {.width = pixels(50), .height = pixels(20)}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kDialog,
+                                 {.width = pixels(40),
+                                  .height = pixels(40),
+                                  .placement = {.absolute = true, .x = pixels(300), .y = pixels(0)}})
+                        .has_value());
+    // The screen lets points through to the world where it has nothing.
+    RAWFRAME_EXPECT(ui.setInteraction(kScreen, {.hits = Interaction::Hits::Children, .passThrough = true}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kScreen, 640, 480).has_value());
+
+    const auto kKeyAt = [&](float x, float y) -> std::uint64_t {
+        const auto kHit = ui.hit(kScreen, x, y);
+        return kHit.has_value() && kHit->node.has_value() ? ui.keyOf(*kHit->node) : 0;
+    };
+    RAWFRAME_EXPECT(kKeyAt(15, 15) == 3);
+    const auto kOnButton = ui.hit(kScreen, 15, 15);
+    RAWFRAME_EXPECT(kOnButton.has_value() && kOnButton->x == 5 && kOnButton->y == 5 && !kOnButton->passThrough);
+    RAWFRAME_EXPECT(kKeyAt(150, 50) == 2);
+    RAWFRAME_EXPECT(kKeyAt(310, 10) == 4);
+    // Nothing there: the point passes through.
+    const auto kNowhere = ui.hit(kScreen, 600, 400);
+    RAWFRAME_EXPECT(kNowhere.has_value() && !kNowhere->node.has_value() && kNowhere->passThrough);
+    // A panel that passes what it leaves unused through.
+    RAWFRAME_EXPECT(ui.setInteraction(kPanel, {.passThrough = true}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kScreen, 640, 480).has_value());
+    const auto kThrough = ui.hit(kScreen, 150, 50);
+    RAWFRAME_EXPECT(kThrough.has_value() && kThrough->passThrough && kKeyAt(150, 50) == 2);
+    // A button that takes no part: the panel under it is hit.
+    RAWFRAME_EXPECT(ui.setInteraction(kButton, {.hits = Interaction::Hits::Nothing}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kScreen, 640, 480).has_value());
+    RAWFRAME_EXPECT(kKeyAt(15, 15) == 2);
+    // A modal dialog: points that miss it reach nothing below.
+    RAWFRAME_EXPECT(ui.setInteraction(kDialog, {.layer = Interaction::Layer::Modal}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kScreen, 640, 480).has_value());
+    const auto kBlocked = ui.hit(kScreen, 15, 15);
+    RAWFRAME_EXPECT(kBlocked.has_value() && kKeyAt(15, 15) == 4 && !kBlocked->passThrough);
+    RAWFRAME_EXPECT(!ui.hit(kScreen, std::numeric_limits<float>::quiet_NaN(), 0).has_value());
 }

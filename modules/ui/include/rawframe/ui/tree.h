@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -343,6 +344,42 @@ struct Node {
     friend constexpr bool operator==(Node, Node) noexcept = default;
 };
 
+/// How a node takes part in what points hit (D421): itself and its
+/// children, its children alone (a container points pass through where it
+/// has none), or neither with its subtree; whether input it is hit by and
+/// leaves unused passes to what lies behind the UI, such as a game's world;
+/// and whether it roots a layer, painted and hit above the content it is
+/// in: an activation layer (a dialog, a menu), a modal one that points
+/// missing it reach nothing below, or one in the overlay band above them
+/// all (a popup, a tooltip).
+struct Interaction {
+    enum class Hits : std::uint8_t {
+        Itself,
+        Children,
+        Nothing
+    };
+    enum class Layer : std::uint8_t {
+        None,
+        Activation,
+        Modal,
+        Overlay
+    };
+    Hits hits = Hits::Itself;
+    bool passThrough = false;
+    Layer layer = Layer::None;
+};
+
+/// What a point hits: the topmost node there, none for nothing, the point
+/// in that node's box, and whether input passes through to what lies
+/// behind the UI (always when nothing is hit, never when a modal layer
+/// blocks it).
+struct Hit {
+    std::optional<Node> node;
+    float x = 0;
+    float y = 0;
+    bool passThrough = true;
+};
+
 class Tree {
 public:
     /// A tree of at most `maximumNodes` nodes and `maximumFonts` fonts,
@@ -380,6 +417,14 @@ public:
 
     /// `node`'s look; refused for a negative radius.
     [[nodiscard]] result::Status setLook(Node node, const Look& look);
+    /// How `node` takes part in what points hit; a node is hit in full and
+    /// blocks until told otherwise.
+    [[nodiscard]] result::Status setInteraction(Node node, const Interaction& interaction);
+    /// What the point at `x`, `y` hits in `root`'s subtree as its last
+    /// layout left it, the root at its own rectangle: layers from the top
+    /// down, then the content they are not in, cut by every clip on the
+    /// way, rounded corners included. Refused for a point not finite.
+    [[nodiscard]] result::Result<Hit> hit(Node root, float x, float y) const;
     /// A font read from a TrueType or OpenType file's bytes, copied, or
     /// from `face` of a collection; refused for bytes that are not one,
     /// checked as hostile, and past the limit. The first becomes the

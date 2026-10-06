@@ -9,6 +9,7 @@
 #include <maul-ui/draw.h>
 #include <maul-ui/font.h>
 #include <maul-ui/glyph_atlas.h>
+#include <maul-ui/interaction.h>
 #include <maul-ui/layout.h>
 #include <maul-ui/node.h>
 #include <maul-ui/style.h>
@@ -398,6 +399,29 @@ result::Status Tree::setLook(Node node, const Look& look) {
     }
     return checked(muiNode_SetVisualValues(state_->context, idOf(node), &style, MUI_VISUAL_PROPERTIES),
                    "a UI node's look was refused");
+}
+
+static_assert(static_cast<muiHitMode>(Interaction::Hits::Children) == mui_hitChildren &&
+              static_cast<muiHitMode>(Interaction::Hits::Nothing) == mui_hitNone);
+static_assert(static_cast<muiLayerKind>(Interaction::Layer::Modal) == mui_layerModal &&
+              static_cast<muiLayerKind>(Interaction::Layer::Overlay) == mui_layerOverlay);
+
+result::Status Tree::setInteraction(Node node, const Interaction& interaction) {
+    const muiInteractionStyle kStyle{.hitMode = static_cast<muiHitMode>(interaction.hits),
+                                     .passThrough = interaction.passThrough,
+                                     .layer = static_cast<muiLayerKind>(interaction.layer)};
+    return checked(muiNode_SetInteractionValues(state_->context, idOf(node), &kStyle, MUI_INTERACTION_PROPERTIES),
+                   "a UI node's interaction was refused");
+}
+
+result::Result<Hit> Tree::hit(Node root, float x, float y) const {
+    muiHit found{};
+    RAWFRAME_TRY(checked(muiHitTest(state_->context, idOf(root), x, y, &found), "a UI point could not be hit"));
+    Hit made{.x = found.x, .y = found.y, .passThrough = found.passThrough};
+    if (found.node.index1 != 0) {
+        made.node = Node{.index1 = found.node.index1, .generation = found.node.generation};
+    }
+    return made;
 }
 
 result::Result<Font> Tree::addFont(std::span<const std::byte> bytes, std::uint32_t face) {
